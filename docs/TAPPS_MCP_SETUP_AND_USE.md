@@ -60,12 +60,14 @@ tool_timeout: 30
 1. **Cursor MCP config**  
    Add the server in Cursor’s MCP settings (e.g. **Settings → MCP** or `.cursor/mcp.json` in the project):
 
+   Use a **command** that is on your PATH (e.g. `uv`); do not use a local file path as the command. Recommended config:
+
    ```json
    {
      "mcpServers": {
        "tapps-mcp": {
          "command": "uv",
-         "args": ["--directory", "C:\\cursor\\TappMCP", "run", "tapps-mcp", "serve"],
+         "args": ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"],
          "env": {
            "TAPPS_MCP_CONTEXT7_API_KEY": "your-context7-api-key"
          }
@@ -74,11 +76,20 @@ tool_timeout: 30
    }
    ```
 
-   Replace `C:\cursor\TappMCP` with the actual path to the TappMCP repo. Set `TAPPS_MCP_CONTEXT7_API_KEY` to your Context7 API key so `tapps_lookup_docs` can fetch live docs; omit `env` to use cache-only.
+   - Replace `C:\cursor\TappMCP` with your actual TappMCP repo path.
+   - **`--no-sync`** makes `uv run` skip syncing the venv, which avoids “file is being used by another process” when Cursor starts the server.
+   - The subcommand must be **`serve`** (not `serv`).
+   - Set `TAPPS_MCP_CONTEXT7_API_KEY` so `tapps_lookup_docs` can fetch live docs; omit `env` to use cache-only.
 
 2. **Restart or reload Cursor** so it picks up the new MCP server.
 
 3. In chat/composer, the AI can call TappMCP tools (e.g. `tapps_score_file`, `tapps_quality_gate`) once the server is connected.
+
+### If Cursor shows "Error" for tapps-mcp
+
+- **Wrong subcommand:** The args must end with **`serve`** (not `serv`). In **Settings → Tools & MCP**, set the args to include `tapps-mcp` and **`serve`**.
+- **"File is being used by another process" (uv):** Add **`--no-sync`** to the args so uv doesn’t sync the venv on start, e.g. `["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"]`. The command must be a PATH command (e.g. `uv`), not a local file path.
+- **Show Output:** In **Settings → Tools & MCP**, click **"Error - Show Output"** next to tapps-mcp to see the exact error.
 
 ---
 
@@ -91,7 +102,7 @@ In **Claude Desktop** config (e.g. `claude_desktop_config.json`):
   "mcpServers": {
     "tapps-mcp": {
       "command": "uv",
-      "args": ["--directory", "C:\\cursor\\TappMCP", "run", "tapps-mcp", "serve"]
+      "args": ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"]
     }
   }
 }
@@ -137,6 +148,7 @@ Restart Claude Desktop after changing the config.
 | Run tests | `uv run pytest tests/` |
 | Lint | `uv run ruff check src/` |
 | **Docker** | `docker compose up --build -d` → http://localhost:8000 |
+| **Use Docker from another project** | Mount that project at `/workspace`, connect Cursor to http://localhost:8000/mcp (HTTP/SSE). See [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md#using-tappmcp-docker-from-another-project). |
 | Project config | `.tapps-mcp.yaml` in project root |
 | Cursor MCP config | Cursor Settings → MCP or `.cursor/mcp.json` |
 | Docker deployment | [docs/DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) |

@@ -49,6 +49,10 @@ class PathValidator:
         # Check for traversal patterns in the raw input
         self._check_traversal_patterns(path)
 
+        # Resolve relative paths against project root (so Docker/remote clients can send "src/foo.py")
+        if not path.is_absolute():
+            path = (self.project_root / path).resolve()
+
         # Resolve to an absolute, canonical path
         try:
             resolved = path.resolve()

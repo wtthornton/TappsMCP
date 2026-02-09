@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tapps-mcp": {
+      "command": "uv",
+      "args": ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"]
+    }
+  }
+}

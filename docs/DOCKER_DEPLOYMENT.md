@@ -73,6 +73,47 @@ The default `docker-compose.yml` mounts the **current directory** (TappMCP repo)
 
 ---
 
+## Using TappMCP Docker from another project
+
+To use the MCP server for a **different project** (e.g. `C:\projects\myapp`):
+
+### 1. Start the container with that project mounted
+
+Run Docker from the TappMCP repo but mount the **other project** as `/workspace` so the server can read its files:
+
+```bash
+# From the TappMCP repo
+cd c:\cursor\TappMCP
+
+# Override the volume for this run (Windows example)
+docker compose run -d -p 8000:8000 -v "C:\projects\myapp:/workspace:ro" tapps-mcp
+```
+
+Or create a **docker-compose.override.yml** in the TappMCP repo that overrides the volume:
+
+```yaml
+# docker-compose.override.yml (in TappMCP repo)
+services:
+  tapps-mcp:
+    volumes:
+      - C:\projects\myapp:/workspace:ro
+```
+
+Then from the TappMCP repo: `docker compose up -d`. The container will see the other project at `/workspace`.
+
+### 2. Connect Cursor (or another client) to the Docker MCP
+
+The server speaks **Streamable HTTP** at **http://localhost:8000/mcp**.
+
+- **Cursor**: In **Settings → Tools & MCP**, add an MCP server that uses the **HTTP/SSE** transport (not stdio) and set the URL to **http://localhost:8000/mcp**.
+- **File paths**: The server treats `/workspace` as the project root. Send **paths relative to the project** (e.g. `src/main.py`, `tests/test_foo.py`) so they resolve correctly inside the container.
+
+### 3. Optional: config in the other project
+
+In the other project you can add **`.tapps-mcp.yaml`** to set quality preset, timeouts, etc. The server will read it from the mounted `/workspace`.
+
+---
+
 ## Connecting clients to the Docker MCP server
 
 ### Streamable HTTP (Cursor / other MCP clients)
