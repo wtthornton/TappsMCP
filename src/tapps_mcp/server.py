@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from tapps_mcp.project.session_notes import SessionNoteStore
+
 import structlog
 from mcp.server.fastmcp import FastMCP
 
@@ -81,6 +83,8 @@ def tapps_server_info() -> dict[str, Any]:
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
+    from tapps_mcp.pipeline.models import STAGE_TOOLS, PipelineStage
+
     return {
         "tool": "tapps_server_info",
         "success": True,
@@ -106,6 +110,20 @@ def tapps_server_info() -> dict[str, Any]:
                 "Call tapps_lookup_docs before using a library to avoid hallucinated APIs; "
                 "call tapps_consult_expert for domain-specific decisions (security, testing, etc.)."
             ),
+            "pipeline": {
+                "name": "TAPPS Quality Pipeline",
+                "stages": [s.value for s in PipelineStage],
+                "current_hint": (
+                    "Start with tapps_pipeline_overview prompt, "
+                    "or follow stages in order."
+                ),
+                "stage_tools": {
+                    s.value: tools for s, tools in STAGE_TOOLS.items()
+                },
+                "handoff_file": "docs/TAPPS_HANDOFF.md",
+                "runlog_file": "docs/TAPPS_RUNLOG.md",
+                "prompts_available": True,
+            },
         },
     }
 
@@ -526,6 +544,359 @@ def tapps_checklist(
 
 
 # ---------------------------------------------------------------------------
+# Epic 4: Project Context & Session Management tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def tapps_project_profile(
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Call at session start (after tapps_server_info) to detect the project's
+    tech stack, type, CI, Docker, test frameworks, and package managers.
+
+    Returns quality recommendations tailored to the detected stack.
+
+    Args:
+        project_root: Project root path (default: server's configured root).
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_project_profile")
+
+    from tapps_mcp.project.profiler import detect_project_profile
+
+    settings = load_settings()
+    root = settings.project_root
+    if project_root:
+        from pathlib import Path
+
+        root = Path(project_root).resolve()
+
+    try:
+        profile = detect_project_profile(root)
+    except Exception as exc:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        return {
+            "tool": "tapps_project_profile",
+            "success": False,
+            "elapsed_ms": elapsed_ms,
+            "error": {"code": "profile_failed", "message": str(exc)},
+        }
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    return {
+        "tool": "tapps_project_profile",
+        "success": True,
+        "elapsed_ms": elapsed_ms,
+        "data": {
+            "project_root": str(root),
+            "tech_stack": profile.tech_stack.model_dump(),
+            "project_type": profile.project_type,
+            "project_type_confidence": round(profile.project_type_confidence, 2),
+            "project_type_reason": profile.project_type_reason,
+            "has_ci": profile.has_ci,
+            "ci_systems": profile.ci_systems,
+            "has_docker": profile.has_docker,
+            "has_tests": profile.has_tests,
+            "test_frameworks": profile.test_frameworks,
+            "package_managers": profile.package_managers,
+            "quality_recommendations": profile.quality_recommendations,
+        },
+    }
+
+
+# Session note store - singleton, created on first use
+_session_store: SessionNoteStore | None = None
+
+
+def _get_session_store() -> SessionNoteStore:
+    """Lazily create or return the session note store."""
+    global _session_store  # noqa: PLW0603
+    if _session_store is None:
+        from tapps_mcp.project.session_notes import SessionNoteStore
+
+        settings = load_settings()
+        _session_store = SessionNoteStore(settings.project_root)
+    return _session_store
+
+
+@mcp.tool()
+def tapps_session_notes(
+    action: str,
+    key: str = "",
+    value: str = "",
+) -> dict[str, Any]:
+    """Persist notes across the session to avoid losing context.
+
+    Use ``save`` to record a constraint or decision, ``get`` to recall one,
+    ``list`` to see all notes, or ``clear`` to reset.
+
+    Args:
+        action: "save" | "get" | "list" | "clear".
+        key: Note key (required for save/get, optional for clear).
+        value: Note value (required for save).
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_session_notes")
+
+    store = _get_session_store()
+    data: dict[str, Any] = {}
+
+    if action == "save":
+        if not key or not value:
+            return {
+                "tool": "tapps_session_notes",
+                "success": False,
+                "elapsed_ms": 0,
+                "error": {"code": "missing_params", "message": "save requires key and value"},
+            }
+        note = store.save(key, value)
+        data = {"action": "save", "note": note.model_dump()}
+
+    elif action == "get":
+        if not key:
+            return {
+                "tool": "tapps_session_notes",
+                "success": False,
+                "elapsed_ms": 0,
+                "error": {"code": "missing_params", "message": "get requires key"},
+            }
+        found = store.get(key)
+        note_data = found.model_dump() if found else None
+        data = {"action": "get", "note": note_data, "found": found is not None}
+
+    elif action == "list":
+        notes = store.list_all()
+        data = {"action": "list", "notes": [n.model_dump() for n in notes]}
+
+    elif action == "clear":
+        cleared = store.clear(key or None)
+        data = {"action": "clear", "cleared_count": cleared}
+
+    else:
+        return {
+            "tool": "tapps_session_notes",
+            "success": False,
+            "elapsed_ms": 0,
+            "error": {
+                "code": "invalid_action",
+                "message": f"Unknown action: {action}. Use save/get/list/clear.",
+            },
+        }
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    data.update(store.metadata())
+
+    return {
+        "tool": "tapps_session_notes",
+        "success": True,
+        "elapsed_ms": elapsed_ms,
+        "data": data,
+    }
+
+
+@mcp.tool()
+def tapps_impact_analysis(
+    file_path: str,
+    change_type: str = "modified",
+) -> dict[str, Any]:
+    """Call before a refactor or file deletion to understand the blast radius.
+
+    Uses AST-based import graph analysis to identify direct dependents,
+    transitive dependents, and test files that should be re-run.
+
+    Args:
+        file_path: Path to the file being changed.
+        change_type: "added" | "modified" | "removed".
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_impact_analysis")
+
+    try:
+        resolved = _validate_file_path(file_path)
+    except (ValueError, FileNotFoundError) as exc:
+        return {
+            "tool": "tapps_impact_analysis",
+            "success": False,
+            "elapsed_ms": 0,
+            "error": {"code": "path_denied", "message": str(exc)},
+        }
+
+    from tapps_mcp.project.impact_analyzer import analyze_impact
+
+    settings = load_settings()
+    report = analyze_impact(resolved, settings.project_root, change_type)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    return {
+        "tool": "tapps_impact_analysis",
+        "success": True,
+        "elapsed_ms": elapsed_ms,
+        "data": {
+            "changed_file": report.changed_file,
+            "change_type": report.change_type,
+            "severity": report.severity,
+            "total_affected": report.total_affected,
+            "direct_dependents": [d.model_dump() for d in report.direct_dependents],
+            "transitive_dependents": [d.model_dump() for d in report.transitive_dependents],
+            "test_files": [t.model_dump() for t in report.test_files],
+            "recommendations": report.recommendations,
+        },
+    }
+
+
+@mcp.tool()
+async def tapps_report(
+    file_path: str = "",
+    report_format: str = "json",
+) -> dict[str, Any]:
+    """Generate a quality report combining scoring and gate results.
+
+    When *file_path* is provided, scores that single file.
+    Supports JSON (default), markdown, and HTML output.
+
+    Args:
+        file_path: Path to a Python file (optional - project-wide if omitted).
+        report_format: "json" | "markdown" | "html".
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_report")
+
+    from tapps_mcp.gates.evaluator import evaluate_gate
+    from tapps_mcp.project.report import generate_report
+    from tapps_mcp.scoring.scorer import CodeScorer
+
+    settings = load_settings()
+    scorer = CodeScorer()
+
+    score_results = []
+    gate_results = []
+
+    if file_path:
+        try:
+            resolved = _validate_file_path(file_path)
+        except (ValueError, FileNotFoundError) as exc:
+            return {
+                "tool": "tapps_report",
+                "success": False,
+                "elapsed_ms": 0,
+                "error": {"code": "path_denied", "message": str(exc)},
+            }
+        result = await scorer.score_file(resolved)
+        score_results.append(result)
+        gate_results.append(evaluate_gate(result, preset=settings.quality_preset))
+    else:
+        # Project-wide: score all .py files in project root (max 20)
+        from pathlib import Path as _Path
+
+        _skip = {".venv", "venv", "node_modules", "__pycache__", ".git", "dist", "build"}
+        py_files = sorted(_Path(settings.project_root).rglob("*.py"))
+        py_files = [
+            f for f in py_files
+            if not any(part in _skip for part in f.parts)
+        ][:20]
+
+        for pf in py_files:
+            try:
+                result = await scorer.score_file(pf)
+                score_results.append(result)
+                gate_results.append(evaluate_gate(result, preset=settings.quality_preset))
+            except Exception:
+                logger.debug("report_file_skip", file=str(pf))
+
+    report_data = generate_report(
+        score_results, gate_results, report_format=report_format,
+    )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    return {
+        "tool": "tapps_report",
+        "success": True,
+        "elapsed_ms": elapsed_ms,
+        "data": report_data,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Epic 8: Pipeline Orchestration — MCP Prompts & Bootstrap Tool
+# ---------------------------------------------------------------------------
+
+
+@mcp.prompt()
+def tapps_pipeline(stage: str = "discover") -> str:
+    """TAPPS quality pipeline - structured 5-stage workflow.
+
+    Get instructions for a specific pipeline stage. Stages run in order:
+    discover -> research -> develop -> validate -> verify.
+
+    Args:
+        stage: Pipeline stage to get instructions for.
+               One of: discover, research, develop, validate, verify.
+    """
+    from tapps_mcp.prompts.prompt_loader import load_stage_prompt
+
+    return load_stage_prompt(stage)
+
+
+@mcp.prompt()
+def tapps_pipeline_overview() -> str:
+    """Get a summary of the full TAPPS 5-stage quality pipeline.
+
+    Returns stage names, tool assignments, flow diagram, and
+    handoff file format. Use this to understand the full pipeline
+    before starting.
+    """
+    from tapps_mcp.prompts.prompt_loader import load_overview
+
+    return load_overview()
+
+
+@mcp.tool()
+def tapps_init(
+    create_handoff: bool = True,
+    create_runlog: bool = True,
+    platform: str = "",
+) -> dict[str, Any]:
+    """Bootstrap TAPPS pipeline in the current project.
+
+    Creates handoff and runlog template files. Optionally generates
+    platform-specific rule files for Claude Code or Cursor.
+
+    Call once per project to set up the pipeline workflow.
+
+    Args:
+        create_handoff: Create docs/TAPPS_HANDOFF.md template.
+        create_runlog: Create docs/TAPPS_RUNLOG.md template.
+        platform: Generate platform rules. One of: "claude", "cursor", "".
+                  Empty string skips platform-specific files.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_init")
+
+    from tapps_mcp.pipeline.init import bootstrap_pipeline
+
+    settings = load_settings()
+    result = bootstrap_pipeline(
+        settings.project_root,
+        create_handoff=create_handoff,
+        create_runlog=create_runlog,
+        platform=platform,
+    )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    return {
+        "tool": "tapps_init",
+        "success": not result["errors"],
+        "elapsed_ms": elapsed_ms,
+        "data": result,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Server runner
 # ---------------------------------------------------------------------------
 
@@ -558,10 +929,9 @@ def run_server(
     elif transport == "http":
         # Streamable HTTP via uvicorn; wrap so GET / returns a simple "running" page
         import uvicorn
-        from starlette.applications import Starlette
         from starlette.requests import Request  # noqa: TC002
         from starlette.responses import HTMLResponse
-        from starlette.routing import Mount, Route
+        from starlette.routing import Route
 
         mcp_app = mcp.streamable_http_app()
 
@@ -573,13 +943,11 @@ def run_server(
                 status_code=200,
             )
 
-        app = Starlette(
-            routes=[
-                Route("/", _root),
-                Mount("/mcp", app=mcp_app),
-            ],
-        )
-        uvicorn.run(app, host=host, port=port)
+        # Add root route directly to the MCP app so its lifespan
+        # (task group init) runs properly — wrapping in a parent
+        # Starlette breaks the lifespan chain.
+        mcp_app.routes.insert(0, Route("/", _root))
+        uvicorn.run(mcp_app, host=host, port=port)
     else:
         msg = f"Unsupported transport: {transport}"
         raise ValueError(msg)

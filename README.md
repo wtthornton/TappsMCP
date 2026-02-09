@@ -39,7 +39,12 @@ LLMs writing code make repeatable mistakes: wrong APIs, missing tests, security 
 - **Documentation lookup** — Up-to-date library docs via [Context7](https://context7.com) with fuzzy matching and local cache.
 - **Config validation** — Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB patterns against best practices.
 - **Domain experts** — 16 built-in experts (security, testing, APIs, etc.) with RAG-backed answers and confidence scores.
+- **Project context** — Detect project type, tech stack, and structure for context-aware analysis.
+- **Session notes** — Persist key decisions and constraints across long AI sessions.
+- **Impact analysis** — Understand file dependencies before refactoring or changing APIs.
+- **Quality reports** — Generate JSON, Markdown, or HTML quality summaries.
 - **Session checklist** — Track which tools were used so the AI doesn't skip required steps.
+- **Adaptive learning** — Scoring weights and expert voting adapt based on usage patterns (internal).
 - **Path safety** — All file operations restricted to a configurable project root.
 
 ---
@@ -142,6 +147,10 @@ Quick index:
 | **tapps_consult_expert** | Ask a domain expert and get RAG-backed answer with confidence. |
 | **tapps_list_experts** | List the 16 built-in expert domains and their status. |
 | **tapps_checklist** | See which tools were called this session and what is still missing. |
+| **tapps_project_profile** | Detect project type, tech stack, and structure for context-aware analysis. |
+| **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. |
+| **tapps_impact_analysis** | Analyze the impact of changes on the codebase (imports, dependents). |
+| **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
 
 ---
 
@@ -217,6 +226,38 @@ Quick index:
 
 ---
 
+### tapps_project_profile
+
+**What it does:** Analyzes the project at `TAPPS_MCP_PROJECT_ROOT` to detect project type (web app, CLI tool, library, microservice, data pipeline), tech stack (languages, frameworks, databases), and structure (source layout, test framework, dependency management). Returns a profile with type, confidence score, detected technologies, and structural metadata.
+
+**Why use it:** Gives the AI context about the project before making changes. Prevents applying wrong patterns (e.g. web patterns to a CLI tool). Use at session start alongside `tapps_server_info` for context-aware analysis.
+
+---
+
+### tapps_session_notes
+
+**What it does:** Persists key decisions, constraints, and context across a session. Supports **save** (store a note with category and optional tags), **get** (retrieve notes, optionally filtered by category), and **clear** operations. Notes survive within a server session and are stored in `.tapps-mcp/session/`.
+
+**Why use it:** In long sessions, the AI may forget decisions made earlier. Session notes let the AI save constraints ("user wants sync-only, no async") and retrieve them later so earlier context is not lost. Use throughout the session to record and recall important decisions.
+
+---
+
+### tapps_impact_analysis
+
+**What it does:** Analyzes a Python file to determine its impact on the codebase. Returns the file's imports, what other files import it (dependents), exported symbols, and a dependency depth estimate. Accepts an optional `change_description` to scope the analysis.
+
+**Why use it:** Before modifying a file, understand what else could break. Use when refactoring, renaming, or changing public APIs so the AI knows which downstream files may need updates.
+
+---
+
+### tapps_report
+
+**What it does:** Generates a quality report for one or more scored files. Supports **json**, **markdown**, and **html** output formats. Combines scoring results, gate results, and optional metadata into a single structured report.
+
+**Why use it:** Produces a human-readable summary of quality analysis. Use after scoring and gating to give the user a clear, formatted overview of code quality status.
+
+---
+
 ### Scoring categories (tapps_score_file)
 
 | Category | Weight | Description |
@@ -278,6 +319,14 @@ Best results come with these tools installed; the server degrades gracefully wit
 | mypy | Type checking | `pip install mypy` or `uv add mypy` |
 | bandit | Security scanning | `pip install bandit` or `uv add bandit` |
 | radon | Complexity + maintainability | `pip install radon` or `uv add radon` |
+
+**Vector RAG (optional):** For semantic search over expert knowledge files, install the `rag` extras:
+
+```bash
+pip install tapps-mcp[rag]   # or: uv add tapps-mcp[rag]
+```
+
+This adds `faiss-cpu`, `sentence-transformers`, and `numpy`. When not installed, the expert system uses keyword-based RAG (no configuration needed).
 
 ---
 
@@ -341,7 +390,10 @@ src/tapps_mcp/
 ├── tools/                              # Ruff, mypy, bandit, radon, parallel, checklist
 ├── knowledge/                          # Context7 client, cache, lookup, warming, RAG safety
 ├── validators/                         # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
-└── experts/                            # Domain detector, engine, RAG, registry, confidence
+├── experts/                            # Domain detector, engine, RAG, registry, confidence,
+│                                       #   vector RAG, knowledge management, 119 knowledge files
+├── project/                            # Project profiling, session notes, impact analysis, reports
+└── adaptive/                           # Adaptive scoring, expert voting, weight distribution
 ```
 
 ---
@@ -356,7 +408,7 @@ src/tapps_mcp/
 | [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) | Architecture and design rationale. |
 | [docs/planning/epics/README.md](docs/planning/epics/README.md) | Epic index, dependency graph, tool delivery timeline. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context · Adaptive Learning · Distribution · Metrics & Dashboard
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution · Metrics & Dashboard
 
 ---
 

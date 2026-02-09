@@ -48,6 +48,28 @@ PRESETS: dict[str, dict[str, float]] = {
 }
 
 
+class AdaptiveSettings(BaseSettings):
+    """Settings for the adaptive learning subsystem."""
+
+    model_config = SettingsConfigDict(env_prefix="TAPPS_MCP_ADAPTIVE_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable adaptive weight adjustment.",
+    )
+    learning_rate: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Learning rate for weight adjustment (0.0-1.0).",
+    )
+    min_outcomes: int = Field(
+        default=10,
+        ge=1,
+        description="Minimum outcome records before adaptive adjustment activates.",
+    )
+
+
 class TappsMCPSettings(BaseSettings):
     """Root settings for TappsMCP server."""
 
@@ -84,6 +106,9 @@ class TappsMCPSettings(BaseSettings):
     # Scoring
     scoring_weights: ScoringWeights = Field(default_factory=ScoringWeights)
     quality_gate: QualityPreset = Field(default_factory=QualityPreset)
+
+    # Adaptive learning
+    adaptive: AdaptiveSettings = Field(default_factory=AdaptiveSettings)
 
     # Tool timeouts
     tool_timeout: int = Field(

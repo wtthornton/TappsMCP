@@ -14,3 +14,8 @@ scoring_weights:
   performance: 0.08
   structure: 0.05
   devex: 0.05
+
+adaptive:
+  enabled: false
+  learning_rate: 0.1
+  min_outcomes: 10

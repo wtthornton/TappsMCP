@@ -7,16 +7,17 @@
 
 | Epic | Name | Priority | LOE | Dependencies | Status |
 |---|---|---|---|---|---|
-| [Epic 0](EPIC-0-FOUNDATION.md) | Foundation & Security Hardening | P0 | ~1 week | None | Not Started |
-| [Epic 1](EPIC-1-CORE-QUALITY-MVP.md) | Core Quality MVP | P0 | ~2-3 weeks | Epic 0 | Not Started |
-| [Epic 2](EPIC-2-KNOWLEDGE-DOCS.md) | Knowledge & Documentation Lookup | P1 | ~2 weeks | Epic 0 | Not Started |
-| [Epic 3](EPIC-3-EXPERT-SYSTEM.md) | Expert System & Domain Knowledge | P1 | ~3-4 weeks | Epic 0 | Not Started |
-| [Epic 4](EPIC-4-PROJECT-CONTEXT.md) | Project Context & Session Management | P2 | ~2 weeks | Epic 0, Epic 1 | Not Started |
-| [Epic 5](EPIC-5-ADAPTIVE-LEARNING.md) | Adaptive Learning & Intelligence | P2 | ~2-3 weeks | Epic 1, Epic 3 | Not Started |
+| [Epic 0](EPIC-0-FOUNDATION.md) | Foundation & Security Hardening | P0 | ~1 week | None | **Complete** |
+| [Epic 1](EPIC-1-CORE-QUALITY-MVP.md) | Core Quality MVP | P0 | ~2-3 weeks | Epic 0 | **Complete** |
+| [Epic 2](EPIC-2-KNOWLEDGE-DOCS.md) | Knowledge & Documentation Lookup | P1 | ~2 weeks | Epic 0 | **Complete** |
+| [Epic 3](EPIC-3-EXPERT-SYSTEM.md) | Expert System & Domain Knowledge | P1 | ~3-4 weeks | Epic 0 | **Complete** |
+| [Epic 4](EPIC-4-PROJECT-CONTEXT.md) | Project Context & Session Management | P2 | ~2 weeks | Epic 0, Epic 1 | **Complete** |
+| [Epic 5](EPIC-5-ADAPTIVE-LEARNING.md) | Adaptive Learning & Intelligence | P2 | ~2-3 weeks | Epic 1, Epic 3 | **Complete** |
 | [Epic 6](EPIC-6-DISTRIBUTION.md) | Distribution & Production Readiness | P3 | ~2-3 weeks | Epic 1+ | Not Started |
 | [Epic 7](EPIC-7-METRICS-DASHBOARD.md) | Metrics, Observability & Dashboard | P1 | ~3-4 weeks | Epic 1, Epic 3, Epic 5 | Not Started |
+| [Epic 8](EPIC-8-PIPELINE-ORCHESTRATION.md) | Pipeline Orchestration & Workflow Prompts | P1 | ~1.5-2 weeks | Epic 0-4 | Not Started |
 
-**Total estimated LOE:** ~17-22 weeks (1 developer), ~9-12 weeks (2 developers with parallelized epics)
+**Total estimated LOE:** ~19-24 weeks (1 developer), ~10-13 weeks (2 developers with parallelized epics)
 
 ## Dependency Graph
 
@@ -24,6 +25,7 @@
 Epic 0 (Foundation)
   ├── Epic 1 (Core Quality MVP)
   │     ├── Epic 4 (Project Context)
+  │     │     └── Epic 8 (Pipeline Orchestration) ← also depends on Epic 0-3
   │     ├── Epic 5 (Adaptive Learning) ← also depends on Epic 3
   │     │     └── Epic 7 (Metrics & Dashboard) ← also depends on Epic 1, Epic 3
   │     └── Epic 6 (Distribution)
@@ -56,9 +58,12 @@ With 2 developers:
 | `tapps_session_notes` | Epic 4 | Week 10-12 |
 | `tapps_impact_analysis` | Epic 4 | Week 10-12 |
 | `tapps_report` | Epic 4 | Week 10-12 |
-| `tapps_feedback` | Epic 7 | Week 12-15 |
-| `tapps_stats` | Epic 7 | Week 12-15 |
-| `tapps_dashboard` | Epic 7 | Week 14-18 |
+| `tapps_pipeline` (prompt) | Epic 8 | Week 12-14 |
+| `tapps_pipeline_overview` (prompt) | Epic 8 | Week 12-14 |
+| `tapps_init` | Epic 8 | Week 12-14 |
+| `tapps_feedback` | Epic 7 | Week 14-17 |
+| `tapps_stats` | Epic 7 | Week 14-17 |
+| `tapps_dashboard` | Epic 7 | Week 16-20 |
 
 ## Metrics Infrastructure (Epic 7 — carried from TappsCodingAgents)
 

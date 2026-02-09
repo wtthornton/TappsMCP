@@ -58,9 +58,25 @@ tool_timeout: 30
 ## 3. Use with Cursor
 
 1. **Cursor MCP config**  
-   Add the server in Cursor’s MCP settings (e.g. **Settings → MCP** or `.cursor/mcp.json` in the project):
+   Add the server in Cursor’s MCP settings (e.g. **Settings → Tools & MCP** or `.cursor/mcp.json` in the project). Choose **one** of the following depending on how you run the server.
 
-   Use a **command** that is on your PATH (e.g. `uv`); do not use a local file path as the command. Recommended config:
+   **Option A — Docker (when the container is running)**  
+   Point Cursor at the HTTP endpoint. This repo’s `.cursor/mcp.json` is set up for this:
+
+   ```json
+   {
+     "mcpServers": {
+       "tapps-mcp": {
+         "url": "http://localhost:8000/mcp"
+       }
+     }
+   }
+   ```
+
+   Ensure the container is running (`docker compose up -d` from this repo) and port 8000 is free. No `command`/`args` are used; Cursor connects via HTTP/SSE.
+
+   **Option B — Local stdio (no Docker)**  
+   Cursor starts the server as a subprocess. Use a **command** that is on your PATH (e.g. `uv`); do not use a local file path as the command:
 
    ```json
    {
@@ -84,6 +100,10 @@ tool_timeout: 30
 2. **Restart or reload Cursor** so it picks up the new MCP server.
 
 3. In chat/composer, the AI can call TappMCP tools (e.g. `tapps_score_file`, `tapps_quality_gate`) once the server is connected.
+
+### If you see two "tapps-mcp" entries (one Error, one Disabled)
+
+Use **only one** transport. If you run TappMCP in Docker, use the **url** config (Option A) and remove or disable any **stdio** (command/args) entry for tapps-mcp from **Settings → Tools & MCP**. Duplicate entries often come from having both a project `.cursor/mcp.json` and a user-level MCP config; keep a single tapps-mcp entry that matches how you run the server (Docker → url, local → command/args).
 
 ### If Cursor shows "Error" for tapps-mcp
 
@@ -117,24 +137,34 @@ Restart Claude Desktop after changing the config.
 | Tool | Purpose |
 |------|--------|
 | **tapps_server_info** | Server version, available tools, which checkers (ruff, mypy, etc.) are installed. Call once at session start. |
-| **tapps_score_file** | Score a Python file 0–100 (complexity, security, maintainability, etc.). Use `quick: true` for fast checks, full for final pass. |
+| **tapps_score_file** | Score a Python file 0-100 (complexity, security, maintainability, etc.). Use `quick: true` for fast checks, full for final pass. |
 | **tapps_security_scan** | Security scan (e.g. bandit + secret detection). |
-| **tapps_quality_gate** | Pass/fail vs thresholds (e.g. overall ≥ 70 for `standard`). Use before “done”. |
-| **tapps_checklist** | See which TappMCP tools were used this session and what’s missing. Use before “done”. |
+| **tapps_quality_gate** | Pass/fail vs thresholds (e.g. overall >= 70 for `standard`). Use before "done". |
+| **tapps_lookup_docs** | Fetch current library docs via Context7. Use before writing code that calls library APIs. |
+| **tapps_validate_config** | Validate Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB configs against best practices. |
+| **tapps_consult_expert** | Ask a domain expert (16 domains) and get RAG-backed guidance with confidence scores. |
+| **tapps_list_experts** | List available expert domains and their knowledge base status. |
+| **tapps_project_profile** | Detect project type, tech stack, and structure. Call at session start for context-aware analysis. |
+| **tapps_session_notes** | Save/retrieve key decisions and constraints across a session. |
+| **tapps_impact_analysis** | Analyze what depends on a file and what could break from changes. |
+| **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
+| **tapps_checklist** | See which TappMCP tools were used this session and what's missing. Use before "done". |
 
 **Suggested workflow for the AI:**
 
-1. Call **tapps_server_info** at session start.
-2. Use **tapps_score_file** (quick) during edit–lint–fix loops.
-3. Use **tapps_score_file** (full) and **tapps_quality_gate** before marking work complete.
-4. Call **tapps_checklist** to ensure no required steps were skipped.
+1. Call **tapps_server_info** and **tapps_project_profile** at session start.
+2. Use **tapps_lookup_docs** before writing code that uses an external library.
+3. Use **tapps_session_notes** to record key decisions during the session.
+4. Use **tapps_score_file** (quick) during edit-lint-fix loops.
+5. Use **tapps_score_file** (full) and **tapps_quality_gate** before marking work complete.
+6. Call **tapps_checklist** to ensure no required steps were skipped.
 
 ---
 
 ## 6. Environment Variables (optional)
 
 - **TAPPS_MCP_PROJECT_ROOT** – Restrict file operations to this directory (recommended for security). If unset, current working directory is used.
-- **TAPPS_MCP_CONTEXT7_API_KEY** – Only needed for planned “knowledge/docs” features (e.g. doc lookup); not required for current scoring/gates/checklist.
+- **TAPPS_MCP_CONTEXT7_API_KEY** – Used by `tapps_lookup_docs` for live Context7 API fetches. Cache still works without it.
 
 ---
 
