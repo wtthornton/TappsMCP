@@ -1,5 +1,9 @@
 """Tests for config.settings."""
 
+import os
+
+import pytest
+
 from tapps_mcp.config.settings import (
     PRESETS,
     TappsMCPSettings,
@@ -8,7 +12,9 @@ from tapps_mcp.config.settings import (
 
 
 class TestTappsMCPSettings:
-    def test_defaults(self):
+    def test_defaults(self, monkeypatch):
+        # Isolate from runner env so default is None when key not set
+        monkeypatch.delenv("TAPPS_MCP_CONTEXT7_API_KEY", raising=False)
         settings = TappsMCPSettings()
         assert settings.quality_preset == "standard"
         assert settings.log_level == "INFO"

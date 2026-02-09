@@ -65,13 +65,16 @@ tool_timeout: 30
      "mcpServers": {
        "tapps-mcp": {
          "command": "uv",
-         "args": ["--directory", "C:\\cursor\\TappMCP", "run", "tapps-mcp", "serve"]
+         "args": ["--directory", "C:\\cursor\\TappMCP", "run", "tapps-mcp", "serve"],
+         "env": {
+           "TAPPS_MCP_CONTEXT7_API_KEY": "your-context7-api-key"
+         }
        }
      }
    }
    ```
 
-   Replace `C:\cursor\TappMCP` with the actual path to the TappMCP repo.
+   Replace `C:\cursor\TappMCP` with the actual path to the TappMCP repo. Set `TAPPS_MCP_CONTEXT7_API_KEY` to your Context7 API key so `tapps_lookup_docs` can fetch live docs; omit `env` to use cache-only.
 
 2. **Restart or reload Cursor** so it picks up the new MCP server.
 
@@ -120,7 +123,7 @@ Restart Claude Desktop after changing the config.
 ## 6. Environment Variables (optional)
 
 - **TAPPS_MCP_PROJECT_ROOT** – Restrict file operations to this directory (recommended for security). If unset, current working directory is used.
-- **CONTEXT7_API_KEY** – Only needed for planned “knowledge/docs” features (e.g. doc lookup); not required for current scoring/gates/checklist.
+- **TAPPS_MCP_CONTEXT7_API_KEY** – Only needed for planned “knowledge/docs” features (e.g. doc lookup); not required for current scoring/gates/checklist.
 
 ---
 
