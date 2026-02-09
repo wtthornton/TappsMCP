@@ -185,8 +185,13 @@ class TestMCPChecklistTool:
         assert "task_type" in data
         assert "called" in data
         assert "missing_required" in data
+        assert "missing_required_hints" in data
         assert "complete" in data
         assert "total_calls" in data
+        # Hints are lists of { tool, reason }
+        for hint in data.get("missing_required_hints", []):
+            assert "tool" in hint
+            assert "reason" in hint
 
     def test_checklist_tracks_session(self):
         """Checklist tracks calls across a session."""

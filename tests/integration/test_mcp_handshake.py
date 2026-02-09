@@ -35,6 +35,10 @@ class TestMCPHandshake:
         assert "project_root" in data["configuration"]
         assert "quality_preset" in data["configuration"]
 
+        assert "recommended_workflow" in data
+        assert isinstance(data["recommended_workflow"], str)
+        assert "tapps_quality_gate" in data["recommended_workflow"]
+
     def test_server_info_reports_installed_checkers(self):
         """Verify the installed_checkers field has expected tool entries."""
         result = tapps_server_info()

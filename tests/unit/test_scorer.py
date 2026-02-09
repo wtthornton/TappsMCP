@@ -301,7 +301,10 @@ class TestMaxNestingDepth:
     def test_mixed_nesting(self):
         import ast
 
-        code = "def f():\n    for i in range(10):\n        while True:\n            if i:\n                pass"
+        code = (
+            "def f():\n    for i in range(10):\n        while True:\n            "
+            "if i:\n                pass"
+        )
         tree = ast.parse(code)
         func = tree.body[0]
         depth = _max_nesting_depth(func)

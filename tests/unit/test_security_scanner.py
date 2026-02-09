@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 from tapps_mcp.scoring.models import SecurityIssue
-from tapps_mcp.security.secret_scanner import SecretFinding, SecretScanResult, SecretScanner
+from tapps_mcp.security.secret_scanner import SecretFinding, SecretScanResult
 from tapps_mcp.security.security_scanner import SecurityScanResult, run_security_scan
 
 

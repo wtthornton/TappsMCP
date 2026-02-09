@@ -18,7 +18,9 @@ def _make_score(
     """Helper to create a ScoreResult for testing."""
     cats = {
         "security": CategoryScore(name="security", score=security, weight=0.2),
-        "maintainability": CategoryScore(name="maintainability", score=maintainability, weight=0.15),
+        "maintainability": CategoryScore(
+            name="maintainability", score=maintainability, weight=0.15
+        ),
         "complexity": CategoryScore(name="complexity", score=complexity, weight=0.2),
         "test_coverage": CategoryScore(name="test_coverage", score=test_coverage, weight=0.1),
         "performance": CategoryScore(name="performance", score=performance, weight=0.15),

@@ -75,7 +75,10 @@ class TestParseRuffJson:
         assert issues[0].code == "unknown"
 
     def test_warning_severity_for_non_e_f(self):
-        raw = '[{"code": "W291", "message": "Trailing ws", "filename": "f.py", "location": {"row": 1}}]'
+        raw = (
+            '[{"code": "W291", "message": "Trailing ws", "filename": "f.py", '
+            '"location": {"row": 1}}]'
+        )
         issues = parse_ruff_json(raw)
         assert issues[0].severity == "warning"
 

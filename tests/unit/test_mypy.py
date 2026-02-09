@@ -70,9 +70,7 @@ class TestParseMypyOutput:
         assert "Something wrong" in issues[0].message
 
     def test_malformed_line_skipped(self):
-        raw = "not:a:proper:mypy:line\n"
-        # This has 5 parts (split on ":", 3), so it will try to parse
-        # but may fail. Let's use a truly malformed one:
+        # Use a truly malformed line (no file:line:level pattern)
         raw2 = "just some text\n"
         assert parse_mypy_output(raw2) == []
 

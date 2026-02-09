@@ -1,8 +1,6 @@
 """Tests for config.settings."""
 
-import os
-
-import pytest
+import pytest  # noqa: F401 (monkeypatch fixture)
 
 from tapps_mcp.config.settings import (
     PRESETS,

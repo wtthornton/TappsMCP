@@ -4,7 +4,6 @@ Ensures code works correctly on Windows, macOS, and Linux by
 testing path handling, subprocess wrappers, and tool detection.
 """
 
-import platform
 from pathlib import Path
 
 import pytest

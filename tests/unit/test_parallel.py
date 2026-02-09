@@ -1,6 +1,5 @@
 """Tests for tools.parallel — concurrent tool execution."""
 
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest

@@ -60,7 +60,11 @@ def _record_call(tool_name: str) -> None:
 
 @mcp.tool()
 def tapps_server_info() -> dict[str, Any]:
-    """Return TappsMCP server version, available tools, installed checkers, and configuration."""
+    """Call at session start to discover capabilities.
+
+    Returns TappsMCP server version, available tools, installed checkers
+    (ruff, mypy, bandit, radon), and configuration.
+    """
     start = time.perf_counter_ns()
     _record_call("tapps_server_info")
 
@@ -94,6 +98,13 @@ def tapps_server_info() -> dict[str, Any]:
             },
             "available_tools": available_tools,
             "installed_checkers": [t.model_dump() for t in installed],
+            "recommended_workflow": (
+                "Call tapps_server_info at session start; use tapps_score_file(quick=True) during edits; "
+                "before declaring work complete call tapps_score_file (full) and tapps_quality_gate "
+                "on changed files, then tapps_checklist to ensure no required steps were skipped. "
+                "Call tapps_lookup_docs before using a library to avoid hallucinated APIs; "
+                "call tapps_consult_expert for domain-specific decisions (security, testing, etc.)."
+            ),
         },
     }
 
@@ -104,7 +115,11 @@ async def tapps_score_file(
     quick: bool = False,
     fix: bool = False,
 ) -> dict[str, Any]:
-    """Score a Python file across 7 quality categories.
+    """Call when editing or reviewing a Python file to get objective quality metrics.
+
+    Use quick=True during edit-lint-fix loops; use full (quick=False) before
+    declaring work complete. Scores across 7 categories (complexity, security,
+    maintainability, test coverage, performance, structure, devex).
 
     Args:
         file_path: Path to the Python file to score.
@@ -181,7 +196,10 @@ def tapps_security_scan(
     file_path: str,
     scan_secrets: bool = True,
 ) -> dict[str, Any]:
-    """Run a security scan on a Python file (bandit + secret detection).
+    """Call when the change touches security-sensitive code or before security-focused review.
+
+    Runs bandit and secret detection on a Python file; returns findings with
+    redacted context.
 
     Args:
         file_path: Path to the Python file to scan.
@@ -237,9 +255,10 @@ async def tapps_quality_gate(
     file_path: str,
     preset: str = "standard",
 ) -> dict[str, Any]:
-    """Evaluate a Python file against quality gate thresholds.
+    """Call before declaring work complete to ensure the file passes the quality bar.
 
-    Runs full scoring then evaluates pass/fail against the specified preset.
+    Runs full scoring then evaluates pass/fail against the preset. Work is not
+    done until this passes (or the user explicitly accepts the risk).
 
     Args:
         file_path: Path to the Python file to evaluate.
@@ -291,11 +310,11 @@ async def tapps_lookup_docs(
     topic: str = "overview",
     mode: str = "code",
 ) -> dict[str, Any]:
-    """Look up current documentation for a library.
+    """Call before writing code that uses an external library to avoid hallucinated APIs.
 
-    Resolves library names via fuzzy matching, checks local cache first,
-    then fetches from Context7 API on cache miss.  All retrieved content
-    passes prompt-injection safety filtering before returning.
+    Returns current docs (Context7 + cache). Use the result when implementing
+    or fixing library usage. Resolves library names via fuzzy matching; content
+    is safety-filtered before return.
 
     Args:
         library: Library name (fuzzy-matched, e.g. "fastapi", "react").
@@ -356,11 +375,11 @@ def tapps_validate_config(
     file_path: str,
     config_type: str = "auto",
 ) -> dict[str, Any]:
-    """Validate a configuration file against best practices.
+    """Call when adding or changing Dockerfile, docker-compose, or infra config.
 
-    Supports Dockerfile, docker-compose.yml, and code files with
-    WebSocket, MQTT, or InfluxDB patterns.  When config_type is "auto",
-    the type is detected from the filename and content.
+    Validates against best practices (e.g. non-root user, resource limits).
+    Supports Dockerfile, docker-compose.yml, and WebSocket/MQTT/InfluxDB patterns.
+    Use config_type "auto" to detect type from filename and content.
 
     Args:
         file_path: Path to the config file to validate.
@@ -410,11 +429,11 @@ def tapps_consult_expert(
     question: str,
     domain: str = "",
 ) -> dict[str, Any]:
-    """Consult a domain expert with a technical question.
+    """Call when making domain-specific decisions (security, testing, APIs, DB, etc.).
 
-    Routes the question to the best-matching expert out of 16 technical
-    domains, retrieves relevant knowledge via RAG, and returns an
-    authoritative answer with confidence scoring.
+    Routes to one of 16 built-in experts, returns RAG-backed answer with
+    confidence and sources. Use when unsure about patterns or best practices
+    in that domain.
 
     Args:
         question: The technical question to ask (natural language).
@@ -452,10 +471,10 @@ def tapps_consult_expert(
 
 @mcp.tool()
 def tapps_list_experts() -> dict[str, Any]:
-    """List all available domain experts and their knowledge-base status.
+    """Call when you need to see which expert domains exist before consulting.
 
-    Returns the 16 built-in experts with their domain, description, and
-    the number of knowledge files loaded for each.
+    Returns the 16 built-in experts with domain, description, and
+    knowledge-base status. Use before tapps_consult_expert if unsure which domain fits.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_list_experts")
@@ -480,13 +499,14 @@ def tapps_list_experts() -> dict[str, Any]:
 def tapps_checklist(
     task_type: str = "review",
 ) -> dict[str, Any]:
-    """Check which TappsMCP tools have been called this session.
+    """Call before declaring work complete to see if any required steps were skipped.
 
-    Reports called, missing required, and missing recommended tools
-    for the given task type.
+    Reports which tools were called and which are missing (required/recommended/optional)
+    for this task type, with short reasons so you know what to do next.
 
     Args:
-        task_type: One of "feature", "bugfix", "refactor", "security", "review".
+        task_type: "feature" | "bugfix" | "refactor" | "security" | "review".
+            Use "review" for general code review.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_checklist")
@@ -538,12 +558,13 @@ def run_server(
         # Streamable HTTP via uvicorn; wrap so GET / returns a simple "running" page
         import uvicorn
         from starlette.applications import Starlette
+        from starlette.requests import Request  # noqa: TC002
         from starlette.responses import HTMLResponse
         from starlette.routing import Mount, Route
 
         mcp_app = mcp.streamable_http_app()
 
-        def _root(_request: Any) -> HTMLResponse:
+        def _root(_request: Request) -> HTMLResponse:
             return HTMLResponse(
                 "<!DOCTYPE html><html><head><title>TappMCP</title></head><body>"
                 "<h1>TappMCP is running</h1><p>MCP endpoint: <a href='/mcp'>/mcp</a></p>"
