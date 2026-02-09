@@ -1,9 +1,28 @@
 # TappsMCP: Standalone MCP Server for LLM Code Quality
 
-**Status:** Draft (Revised after code audit + architecture review)
+**Status:** Planning Complete — Broken into Epics
 **Created:** 2026-02-07
 **Revised:** 2026-02-07
-**Source:** TappsCodingAgents evaluation — extracting the highest-value components into a standalone MCP server
+**Source:** TappsCodingAgents (`C:\cursor\TappsCodingAgents`) — extracting the highest-value components into a standalone MCP server
+
+> **Epic Breakout (2026-02-07):** This monolithic plan has been broken into 8 separate
+> epic documents with 2026 best practices, story-level breakdowns, and acceptance criteria.
+> See **[docs/planning/epics/README.md](epics/README.md)** for the full epic index, dependency
+> graph, and tool delivery timeline. The epics are the source of truth for implementation;
+> this document is retained as the architectural reference and design rationale.
+>
+> **Key updates from epic breakout:**
+> 1. MCP Protocol version corrected: `2025-11-25` (not `2024-11-05`)
+> 2. FastMCP `@mcp.tool()` decorator pattern adopted (replaces low-level `Server` API)
+> 3. SSE transport deprecated — Streamable HTTP is the standard for remote deployments
+> 4. `tapps_feedback` and `tapps_stats` moved from Phase 4 to new Epic 7 (Metrics & Dashboard)
+> 5. New **Epic 7: Metrics, Observability & Dashboard** added — carries over 40+ metrics/analytics
+>    files from TappsCodingAgents (execution metrics, outcome tracking, expert performance,
+>    confidence calibration, RAG metrics, business ROI, alerting, trend detection, HTML dashboards,
+>    OpenTelemetry export)
+> 6. MCP resources (`@mcp.resource()`) and prompts (`@mcp.prompt()`) upgraded from "evaluate" to
+>    "implement" based on Context7 SDK research confirming protocol `2025-11-25` support
+> 7. Total LOE revised: ~17-22 weeks (1 dev), ~9-12 weeks (2 devs)
 
 > **Code Audit Note (2026-02-07):** This plan was revised after a deep review of
 > the actual TappsCodingAgents codebase (~200+ Python files across reviewer, quality,
@@ -59,7 +78,7 @@ LLMs writing code make predictable, repeatable mistakes. These aren't random —
 │  Tool calls: tapps_score_file, tapps_lookup_docs  │
 │              tapps_quality_gate, tapps_checklist  │
 └──────────────────┬──────────────────────────────┘
-                   │ MCP Protocol (stdio or SSE)
+                   │ MCP Protocol (stdio or Streamable HTTP)
                    ▼
 ┌─────────────────────────────────────────────────┐
 │              TappsMCP Server                      │
@@ -136,7 +155,7 @@ Return server version, capabilities, and installed tool checkers.
 ```json
 {
   "version": "0.1.0",
-  "protocol_version": "2024-11-05",
+  "protocol_version": "2025-11-25",
   "tools_available": ["tapps_server_info", "tapps_score_file", "tapps_security_scan", "tapps_quality_gate", "tapps_checklist"],
   "external_tools": {
     "ruff": {"installed": true, "version": "0.8.4"},
@@ -1025,10 +1044,11 @@ The `tapps_server_info` tool (Tier 0, Phase 0) provides version and capability d
 
 | TappsMCP Version | MCP Protocol | Python | Breaking Changes |
 |---|---|---|---|
-| 0.1.x (Phase 1) | 2024-11-05+ | ≥3.12 | N/A (initial release) |
-| 0.2.x (Phase 2) | 2024-11-05+ | ≥3.12 | None — additive tools only |
-| 0.3.x (Phase 3) | 2024-11-05+ | ≥3.12 | None — additive tools only |
-| 1.0.0 (Phase 5) | 2024-11-05+ | ≥3.12 | Stable API contract |
+| 0.1.x (Epic 1) | 2025-11-25+ | ≥3.12 | N/A (initial release) |
+| 0.2.x (Epic 2-3) | 2025-11-25+ | ≥3.12 | None — additive tools only |
+| 0.3.x (Epic 4-5) | 2025-11-25+ | ≥3.12 | None — additive tools only |
+| 0.4.x (Epic 7) | 2025-11-25+ | ≥3.12 | None — additive tools only |
+| 1.0.0 (Epic 6) | 2025-11-25+ | ≥3.12 | Stable API contract |
 
 ### Response Schema Stability
 

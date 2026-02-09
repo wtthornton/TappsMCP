@@ -1,0 +1,16 @@
+# TappsMCP default configuration
+# Override per-project in .tapps-mcp.yaml or via TAPPS_MCP_* env vars.
+
+quality_preset: standard
+log_level: INFO
+log_json: false
+tool_timeout: 30
+
+scoring_weights:
+  complexity: 0.18
+  security: 0.27
+  maintainability: 0.24
+  test_coverage: 0.13
+  performance: 0.08
+  structure: 0.05
+  devex: 0.05
