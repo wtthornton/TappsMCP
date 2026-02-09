@@ -80,8 +80,7 @@ class TestDockerfileValidator:
         content = "FROM python:3.12\nENV SECRET_KEY=mysecret\n"
         result = validate_dockerfile("Dockerfile", content)
         assert any(
-            f.severity == "critical" and "secret" in f.message.lower()
-            for f in result.findings
+            f.severity == "critical" and "secret" in f.message.lower() for f in result.findings
         )
 
     def test_healthcheck_suggestion(self):
@@ -180,10 +179,7 @@ class TestInfluxDBValidator:
         assert result.valid is True
 
     def test_missing_range(self):
-        content = (
-            "from(bucket: 'my-bucket')\n"
-            "  |> filter(fn: (r) => r._measurement == 'cpu')\n"
-        )
+        content = "from(bucket: 'my-bucket')\n  |> filter(fn: (r) => r._measurement == 'cpu')\n"
         result = validate_influxdb("query.py", content)
         assert any("range" in f.message.lower() for f in result.findings)
 

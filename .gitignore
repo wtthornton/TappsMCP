@@ -43,6 +43,7 @@ coverage.xml
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Environment
 .env

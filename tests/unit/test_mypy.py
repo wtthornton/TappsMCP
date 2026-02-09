@@ -100,8 +100,7 @@ class TestCalculateTypeScore:
 
     def test_many_errors_clamp_to_zero(self):
         issues = [
-            TypeIssue(file="t.py", line=i, message="err", severity="error")
-            for i in range(30)
+            TypeIssue(file="t.py", line=i, message="err", severity="error") for i in range(30)
         ]
         assert calculate_type_score(issues) == 0.0
 
@@ -128,9 +127,7 @@ class TestRunMypyCheck:
 
     @patch("tapps_mcp.tools.mypy.run_command")
     def test_timeout(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=-1, stdout="", stderr="", timed_out=True
-        )
+        mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
         issues = run_mypy_check("test.py")
         assert issues == []
 

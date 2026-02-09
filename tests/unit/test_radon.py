@@ -132,25 +132,19 @@ class TestCalculateMaintainabilityScore:
 class TestRunRadonCc:
     @patch("tapps_mcp.tools.radon.run_command")
     def test_success(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=0, stdout=SAMPLE_CC_JSON, stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=0, stdout=SAMPLE_CC_JSON, stderr="")
         entries = run_radon_cc("test.py")
         assert len(entries) == 2
 
     @patch("tapps_mcp.tools.radon.run_command")
     def test_timeout(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=-1, stdout="", stderr="", timed_out=True
-        )
+        mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
         entries = run_radon_cc("test.py")
         assert entries == []
 
     @patch("tapps_mcp.tools.radon.run_command")
     def test_empty_output(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=0, stdout="", stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
         entries = run_radon_cc("test.py")
         assert entries == []
 
@@ -158,32 +152,24 @@ class TestRunRadonCc:
 class TestRunRadonMi:
     @patch("tapps_mcp.tools.radon.run_command")
     def test_success(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=0, stdout=SAMPLE_MI_JSON, stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=0, stdout=SAMPLE_MI_JSON, stderr="")
         mi = run_radon_mi("test.py")
         assert abs(mi - 72.5) < 0.01
 
     @patch("tapps_mcp.tools.radon.run_command")
     def test_timeout_returns_default(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=-1, stdout="", stderr="", timed_out=True
-        )
+        mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
         mi = run_radon_mi("test.py")
         assert mi == 50.0
 
     @patch("tapps_mcp.tools.radon.run_command")
     def test_empty_output_returns_default(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=0, stdout="", stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
         mi = run_radon_mi("test.py")
         assert mi == 50.0
 
     @patch("tapps_mcp.tools.radon.run_command")
     def test_empty_json_returns_default(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=0, stdout="{}", stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="{}", stderr="")
         mi = run_radon_mi("test.py")
         assert mi == 50.0

@@ -1518,7 +1518,7 @@ tapps-mcp/
       "args": ["serve"],
       "env": {
         "TAPPS_MCP_PROJECT_ROOT": ".",
-        "CONTEXT7_API_KEY": "optional-key-here"
+        "TAPPS_MCP_CONTEXT7_API_KEY": "optional-key-here"
       }
     }
   }

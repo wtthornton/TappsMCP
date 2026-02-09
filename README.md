@@ -63,6 +63,8 @@ uv run tapps-mcp serve
 uv run tapps-mcp serve --transport http --port 8000
 ```
 
+With **pip**: from the repo root run `pip install -e .`, then `tapps-mcp serve` (or `tapps-mcp serve --transport http --port 8000` for HTTP).
+
 **One-liner with Docker:**
 
 ```bash
@@ -319,6 +321,8 @@ uv run mypy --strict src/tapps_mcp/
 uv run ruff check src/
 uv run ruff format --check src/
 ```
+
+Run all commands above from the **repository root** after `uv sync`. If you see `ModuleNotFoundError: No module named 'tapps_mcp'`, install the package first (`uv sync` or `pip install -e .`).
 
 Pre-commit hooks are configured (`.pre-commit-config.yaml`). CI runs on push/PR to `master`/`main` (lint + tests on Ubuntu, Windows, macOS × Python 3.12, 3.13).
 

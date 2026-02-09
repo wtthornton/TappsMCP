@@ -126,10 +126,7 @@ class TestCalculateLintScore:
         assert abs(score - expected) < 0.01
 
     def test_clamps_to_zero(self):
-        issues = [
-            LintIssue(code="F401", message="u", file="t.py", line=i)
-            for i in range(10)
-        ]
+        issues = [LintIssue(code="F401", message="u", file="t.py", line=i) for i in range(10)]
         score = calculate_lint_score(issues)
         assert score == 0.0
 
@@ -148,16 +145,12 @@ class TestRunRuffCheck:
 
     @patch("tapps_mcp.tools.ruff.run_command")
     def test_no_output(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=1, stdout="", stderr="error"
-        )
+        mock_cmd.return_value = CommandResult(returncode=1, stdout="", stderr="error")
         issues = run_ruff_check("test.py")
         assert issues == []
 
     @patch("tapps_mcp.tools.ruff.run_command")
     def test_clean_file(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=0, stdout="[]", stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="[]", stderr="")
         issues = run_ruff_check("test.py")
         assert issues == []

@@ -214,7 +214,7 @@ Implement configuration with clear precedence: env vars > YAML config > defaults
   - `TAPPS_MCP_PROJECT_ROOT` — project root boundary (default: cwd)
   - `TAPPS_MCP_QUALITY_PRESET` — standard/strict/framework
   - `TAPPS_MCP_LOG_LEVEL` — logging level
-  - `CONTEXT7_API_KEY` — optional, SecretStr
+  - `TAPPS_MCP_CONTEXT7_API_KEY` — optional, SecretStr
 - Support `.tapps-mcp.yaml` project-level config file
 - Config precedence: env vars > `.tapps-mcp.yaml` > `config/default.yaml`
 

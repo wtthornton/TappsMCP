@@ -68,11 +68,7 @@ class TestParsePyproject:
     def test_basic(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
-            '[project]\n'
-            'dependencies = [\n'
-            '    "fastapi>=0.100",\n'
-            '    "pydantic>=2.0",\n'
-            ']\n'
+            '[project]\ndependencies = [\n    "fastapi>=0.100",\n    "pydantic>=2.0",\n]\n'
         )
         result = _parse_pyproject(pyproject)
         assert "fastapi" in result
@@ -93,10 +89,14 @@ class TestParsePyproject:
 class TestParsePackageJson:
     def test_basic(self, tmp_path):
         pkg = tmp_path / "package.json"
-        pkg.write_text(json.dumps({
-            "dependencies": {"react": "^18.0", "next": "^13.0"},
-            "devDependencies": {"jest": "^29.0"},
-        }))
+        pkg.write_text(
+            json.dumps(
+                {
+                    "dependencies": {"react": "^18.0", "next": "^13.0"},
+                    "devDependencies": {"jest": "^29.0"},
+                }
+            )
+        )
         result = _parse_package_json(pkg)
         assert "react" in result
         assert "next" in result

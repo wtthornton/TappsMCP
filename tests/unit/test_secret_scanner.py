@@ -2,8 +2,8 @@
 
 from tapps_mcp.security.secret_scanner import (
     SecretFinding,
-    SecretScanResult,
     SecretScanner,
+    SecretScanResult,
 )
 
 

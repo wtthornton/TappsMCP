@@ -13,7 +13,6 @@ from tapps_mcp.gates.models import GateThresholds
 from tapps_mcp.scoring.scorer import CodeScorer
 from tapps_mcp.tools.parallel import ParallelResults
 
-
 SAMPLE_CODE = '''\
 """Clean module."""
 

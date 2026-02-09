@@ -99,9 +99,10 @@ def tapps_server_info() -> dict[str, Any]:
             "available_tools": available_tools,
             "installed_checkers": [t.model_dump() for t in installed],
             "recommended_workflow": (
-                "Call tapps_server_info at session start; use tapps_score_file(quick=True) during edits; "
-                "before declaring work complete call tapps_score_file (full) and tapps_quality_gate "
-                "on changed files, then tapps_checklist to ensure no required steps were skipped. "
+                "Call tapps_server_info at session start; use tapps_score_file(quick=True) "
+                "during edits; before declaring work complete call tapps_score_file (full) "
+                "and tapps_quality_gate on changed files, then tapps_checklist to ensure "
+                "no required steps were skipped. "
                 "Call tapps_lookup_docs before using a library to avoid hallucinated APIs; "
                 "call tapps_consult_expert for domain-specific decisions (security, testing, etc.)."
             ),

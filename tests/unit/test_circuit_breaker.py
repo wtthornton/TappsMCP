@@ -80,9 +80,7 @@ class TestCircuitBreakerTransitions:
 
     @pytest.mark.asyncio
     async def test_half_open_after_timeout(self):
-        config = CircuitBreakerConfig(
-            failure_threshold=1, reset_timeout_seconds=0.01
-        )
+        config = CircuitBreakerConfig(failure_threshold=1, reset_timeout_seconds=0.01)
         cb = CircuitBreaker(config)
 
         async def failing():
@@ -124,9 +122,7 @@ class TestCircuitBreakerTransitions:
 
     @pytest.mark.asyncio
     async def test_half_open_to_open_on_failure(self):
-        config = CircuitBreakerConfig(
-            failure_threshold=1, reset_timeout_seconds=0.01
-        )
+        config = CircuitBreakerConfig(failure_threshold=1, reset_timeout_seconds=0.01)
         cb = CircuitBreaker(config)
 
         async def failing():

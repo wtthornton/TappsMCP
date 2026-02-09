@@ -94,9 +94,7 @@ class TestTypeIssue:
 
 class TestSecurityIssue:
     def test_basic(self):
-        issue = SecurityIssue(
-            code="B101", message="Assert used", file="test.py", line=5
-        )
+        issue = SecurityIssue(code="B101", message="Assert used", file="test.py", line=5)
         assert issue.severity == "medium"
         assert issue.confidence == "medium"
         assert issue.owasp is None

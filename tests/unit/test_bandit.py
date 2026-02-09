@@ -87,35 +87,27 @@ class TestCalculateSecurityScore:
 
     def test_high_severity(self):
         issues = [
-            SecurityIssue(
-                code="B602", message="shell", file="t.py", line=1, severity="high"
-            ),
+            SecurityIssue(code="B602", message="shell", file="t.py", line=1, severity="high"),
         ]
         # high costs 3.0
         assert calculate_security_score(issues) == 7.0
 
     def test_critical_severity(self):
         issues = [
-            SecurityIssue(
-                code="B602", message="bad", file="t.py", line=1, severity="critical"
-            ),
+            SecurityIssue(code="B602", message="bad", file="t.py", line=1, severity="critical"),
         ]
         assert calculate_security_score(issues) == 7.0
 
     def test_medium_severity(self):
         issues = [
-            SecurityIssue(
-                code="B101", message="assert", file="t.py", line=1, severity="medium"
-            ),
+            SecurityIssue(code="B101", message="assert", file="t.py", line=1, severity="medium"),
         ]
         # medium costs 1.0
         assert calculate_security_score(issues) == 9.0
 
     def test_low_severity_no_penalty(self):
         issues = [
-            SecurityIssue(
-                code="B101", message="assert", file="t.py", line=1, severity="low"
-            ),
+            SecurityIssue(code="B101", message="assert", file="t.py", line=1, severity="low"),
         ]
         assert calculate_security_score(issues) == 10.0
 
@@ -139,24 +131,18 @@ class TestCalculateSecurityScore:
 class TestRunBanditCheck:
     @patch("tapps_mcp.tools.bandit.run_command")
     def test_with_issues(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=1, stdout=SAMPLE_BANDIT_JSON, stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=1, stdout=SAMPLE_BANDIT_JSON, stderr="")
         issues = run_bandit_check("test.py")
         assert len(issues) == 2
 
     @patch("tapps_mcp.tools.bandit.run_command")
     def test_clean_file(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=0, stdout='{"results": []}', stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=0, stdout='{"results": []}', stderr="")
         issues = run_bandit_check("test.py")
         assert issues == []
 
     @patch("tapps_mcp.tools.bandit.run_command")
     def test_empty_output(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=0, stdout="", stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
         issues = run_bandit_check("test.py")
         assert issues == []

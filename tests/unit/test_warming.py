@@ -35,9 +35,7 @@ class TestWarmCache:
     @pytest.mark.asyncio
     async def test_warms_libraries(self, project, cache):
         mock_client = AsyncMock()
-        mock_client.resolve_library.return_value = [
-            LibraryMatch(id="/test/lib", title="Test")
-        ]
+        mock_client.resolve_library.return_value = [LibraryMatch(id="/test/lib", title="Test")]
         mock_client.fetch_docs.return_value = "# Docs"
         mock_client.close = AsyncMock()
 
@@ -59,9 +57,7 @@ class TestWarmCache:
         cache.put(CacheEntry(library="fastapi", content="already cached"))
 
         mock_client = AsyncMock()
-        mock_client.resolve_library.return_value = [
-            LibraryMatch(id="/test/lib", title="Test")
-        ]
+        mock_client.resolve_library.return_value = [LibraryMatch(id="/test/lib", title="Test")]
         mock_client.fetch_docs.return_value = "# Docs"
         mock_client.close = AsyncMock()
 
@@ -96,9 +92,7 @@ class TestWarmCache:
         (tmp_path / "requirements.txt").write_text(libs)
 
         mock_client = AsyncMock()
-        mock_client.resolve_library.return_value = [
-            LibraryMatch(id="/test/lib", title="Test")
-        ]
+        mock_client.resolve_library.return_value = [LibraryMatch(id="/test/lib", title="Test")]
         mock_client.fetch_docs.return_value = "# Docs"
         mock_client.close = AsyncMock()
 
@@ -106,8 +100,6 @@ class TestWarmCache:
             "tapps_mcp.knowledge.warming.Context7Client",
             return_value=mock_client,
         ):
-            count = await warm_cache(
-                tmp_path, cache, api_key=SecretStr("key"), max_libraries=5
-            )
+            count = await warm_cache(tmp_path, cache, api_key=SecretStr("key"), max_libraries=5)
 
         assert count <= 5

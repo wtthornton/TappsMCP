@@ -161,10 +161,7 @@ class CallTracker:
         missing_optional = [t for t in optional if t not in called]
 
         def hints(tools: list[str]) -> list[ChecklistHint]:
-            return [
-                ChecklistHint(tool=t, reason=TOOL_REASONS.get(t, f"Call {t}."))
-                for t in tools
-            ]
+            return [ChecklistHint(tool=t, reason=TOOL_REASONS.get(t, f"Call {t}.")) for t in tools]
 
         return ChecklistResult(
             task_type=task_type,

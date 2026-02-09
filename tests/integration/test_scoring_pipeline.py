@@ -12,7 +12,6 @@ import pytest
 from tapps_mcp.scoring.scorer import CodeScorer
 from tapps_mcp.tools.parallel import ParallelResults
 
-
 SAMPLE_CODE = '''\
 """A sample module for scoring tests."""
 
