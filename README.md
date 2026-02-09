@@ -9,10 +9,13 @@ Standalone MCP Server for LLM Code Quality -- extracting the highest-value compo
 uv sync
 
 # Run via stdio (for Claude Desktop, Cursor, etc.)
-uv run tapps-mcp
+uv run tapps-mcp serve
 
 # Run via HTTP (for remote clients)
-uv run tapps-mcp --transport http --port 8000
+uv run tapps-mcp serve --transport http --port 8000
+
+# Or run via Docker (Streamable HTTP on port 8000)
+docker compose up --build -d
 ```
 
 ### Claude Desktop Configuration
@@ -24,7 +27,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "tapps-mcp": {
       "command": "uv",
-      "args": ["--directory", "/path/to/TappMCP", "run", "tapps-mcp"]
+      "args": ["--directory", "/path/to/TappMCP", "run", "tapps-mcp", "serve"]
     }
   }
 }
@@ -145,6 +148,16 @@ src/tapps_mcp/
   tools/     subprocess_utils.py, subprocess_runner.py, tool_detection.py,
              ruff.py, mypy.py, bandit.py, radon.py, parallel.py, checklist.py
 ```
+
+## Docker
+
+Run TappMCP as a local MCP server in a container (Streamable HTTP on port 8000):
+
+```bash
+docker compose up --build -d
+```
+
+See [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) for details, verification, and connecting clients.
 
 ## Roadmap
 

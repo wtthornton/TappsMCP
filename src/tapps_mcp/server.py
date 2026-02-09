@@ -535,10 +535,28 @@ def run_server(
     if transport == "stdio":
         mcp.run(transport="stdio")
     elif transport == "http":
-        # Streamable HTTP via uvicorn
+        # Streamable HTTP via uvicorn; wrap so GET / returns a simple "running" page
         import uvicorn
+        from starlette.applications import Starlette
+        from starlette.responses import HTMLResponse
+        from starlette.routing import Mount, Route
 
-        app = mcp.streamable_http_app()
+        mcp_app = mcp.streamable_http_app()
+
+        def _root(_request: Any) -> HTMLResponse:
+            return HTMLResponse(
+                "<!DOCTYPE html><html><head><title>TappMCP</title></head><body>"
+                "<h1>TappMCP is running</h1><p>MCP endpoint: <a href='/mcp'>/mcp</a></p>"
+                "<p>Version: " + __version__ + "</p></body></html>",
+                status_code=200,
+            )
+
+        app = Starlette(
+            routes=[
+                Route("/", _root),
+                Mount("/mcp", app=mcp_app),
+            ],
+        )
         uvicorn.run(app, host=host, port=port)
     else:
         msg = f"Unsupported transport: {transport}"

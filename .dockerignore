@@ -1,0 +1,47 @@
+# Git and IDE
+.git
+.gitignore
+.claude
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+env
+ENV
+*.egg-info
+*.egg
+.mypy_cache
+.pytest_cache
+.ruff_cache
+htmlcov
+.coverage
+coverage.xml
+*.cover
+
+# Tests and dev (keep for optional run in image; exclude to shrink image)
+# tests/
+
+# Docs and planning (README.md kept for build)
+docs/
+
+# OS and misc
+.DS_Store
+Thumbs.db
+nul
+.env
+.env.local
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
