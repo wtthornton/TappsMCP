@@ -317,22 +317,32 @@ class DashboardGenerator:
         return recommendations
 
     def _current_alert_metrics(self) -> dict[str, float]:
-        """Build the current metrics dict for alert evaluation."""
+        """Build the current metrics dict for alert evaluation.
+
+        Only includes metrics that have sufficient data behind them to
+        avoid false alerts on fresh sessions with zero data points.
+        """
         exec_summary = self._execution.get_summary()
         conf_stats = self._confidence.get_statistics()
         rag_metrics = self._rag.get_metrics()
 
-        metrics: dict[str, float] = {
-            "success_rate": exec_summary.success_rate,
-            "cache_hit_rate": rag_metrics.cache_hit_rate,
-            "avg_confidence": conf_stats.avg_confidence,
-        }
+        metrics: dict[str, float] = {}
+
+        # Only alert on rates when there are actual tool calls
+        if exec_summary.total_calls > 0:
+            metrics["success_rate"] = exec_summary.success_rate
+            metrics["error_rate"] = exec_summary.failed_count / exec_summary.total_calls
 
         if exec_summary.gate_pass_rate is not None:
             metrics["gate_pass_rate"] = exec_summary.gate_pass_rate
 
-        if exec_summary.total_calls > 0:
-            metrics["error_rate"] = exec_summary.failed_count / exec_summary.total_calls
+        # Only alert on cache hit rate when there have been RAG queries
+        if rag_metrics.total_queries > 0:
+            metrics["cache_hit_rate"] = rag_metrics.cache_hit_rate
+
+        # Only alert on confidence when there are confidence records
+        if conf_stats.total_records > 0:
+            metrics["avg_confidence"] = conf_stats.avg_confidence
 
         return metrics
 

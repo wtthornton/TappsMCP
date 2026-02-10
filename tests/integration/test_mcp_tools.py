@@ -293,7 +293,7 @@ class TestMCPLookupDocsTool:
 
         assert result["success"] is False
         assert "error" in result
-        assert result["error"]["code"] == "lookup_failed"
+        assert result["error"]["code"] == "api_key_missing"
 
 
 @pytest.mark.integration

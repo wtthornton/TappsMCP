@@ -16,7 +16,7 @@ services:
       TAPPS_MCP_QUALITY_PRESET: standard
       TAPPS_MCP_LOG_LEVEL: INFO
     volumes:
-      - .:/workspace:ro
+      - .:/workspace
       - tapps-state:/workspace/.tapps-mcp
     restart: unless-stopped
     healthcheck:

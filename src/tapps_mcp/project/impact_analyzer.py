@@ -201,6 +201,24 @@ def analyze_impact(
         if not frontier:
             break
 
+    # Heuristic: discover test files by naming convention
+    visited = {str(file_path)} | direct_files
+    for dep in transitive:
+        visited.add(dep.file_path)
+    for tf in tests:
+        visited.add(tf.file_path)
+    heuristic_tests = _find_test_files_by_name(file_path, project_root)
+    for test_fp in heuristic_tests:
+        if test_fp not in visited:
+            tests.append(
+                FileImpact(
+                    file_path=test_fp,
+                    impact_type="test",
+                    reason=f"test file matches module name ({file_path.stem})",
+                ),
+            )
+            visited.add(test_fp)
+
     total = len(direct) + len(transitive) + len(tests)
     severity = _assess_severity(total, change_type)
     recs = _recommendations(total, change_type, tests)
@@ -227,6 +245,26 @@ def analyze_impact(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _find_test_files_by_name(
+    file_path: Path,
+    project_root: Path,
+) -> list[str]:
+    """Find test files matching the module name by naming convention.
+
+    Looks for ``test_<stem>.py`` and ``<stem>_test.py`` patterns anywhere
+    under *project_root*.
+    """
+    stem = file_path.stem
+    candidates = {f"test_{stem}", f"{stem}_test"}
+    found: list[str] = []
+    for py in project_root.rglob("*.py"):
+        if _should_skip(py):
+            continue
+        if py.stem in candidates:
+            found.append(str(py))
+    return sorted(found)
 
 
 def _is_test_file(path: Path) -> bool:

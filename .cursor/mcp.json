@@ -1,3 +1,7 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "tapps-mcp": {
+      "url": "http://localhost:8000/mcp"
+    }
+  }
 }

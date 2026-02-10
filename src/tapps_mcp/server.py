@@ -56,6 +56,39 @@ def _record_call(tool_name: str) -> None:
     CallTracker.record(tool_name)
 
 
+def _record_execution(
+    tool_name: str,
+    start_ns: int,
+    *,
+    status: str = "success",
+    file_path: str | None = None,
+    gate_passed: bool | None = None,
+    score: float | None = None,
+    error_code: str | None = None,
+    degraded: bool = False,
+) -> None:
+    """Record tool execution metrics to the MetricsHub."""
+    from datetime import UTC, datetime, timedelta
+
+    elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000
+    now = datetime.now(tz=UTC)
+    started = now - timedelta(milliseconds=elapsed_ms)
+
+    hub = _get_metrics_hub()
+    hub.execution.record(
+        tool_name=tool_name,
+        started_at=started,
+        completed_at=now,
+        status=status,
+        file_path=file_path,
+        gate_passed=gate_passed,
+        score=score,
+        error_code=error_code,
+        degraded=degraded,
+        session_id=hub.session_id,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
@@ -102,6 +135,7 @@ def tapps_server_info() -> dict[str, Any]:
         ]
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_server_info", start)
 
     from tapps_mcp.pipeline.models import STAGE_TOOLS, PipelineStage
 
@@ -218,6 +252,14 @@ async def tapps_score_file(
     if result.security_issues:
         data["security_issues"] = [i.model_dump() for i in result.security_issues[:20]]
 
+    _record_execution(
+        "tapps_score_file",
+        start,
+        file_path=str(resolved),
+        score=round(result.overall_score, 2),
+        degraded=result.degraded,
+    )
+
     return {
         "tool": "tapps_score_file",
         "success": True,
@@ -265,6 +307,12 @@ def tapps_security_scan(
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution(
+        "tapps_security_scan",
+        start,
+        file_path=str(resolved),
+        degraded=not result.bandit_available,
+    )
 
     return {
         "tool": "tapps_security_scan",
@@ -321,6 +369,14 @@ async def tapps_quality_gate(
     gate_result = evaluate_gate(score_result, preset=preset)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution(
+        "tapps_quality_gate",
+        start,
+        file_path=str(resolved),
+        gate_passed=gate_result.passed,
+        score=round(score_result.overall_score, 2),
+        degraded=score_result.degraded,
+    )
 
     return {
         "tool": "tapps_quality_gate",
@@ -391,6 +447,13 @@ async def tapps_lookup_docs(
     if result.fuzzy_score is not None:
         data["fuzzy_score"] = result.fuzzy_score
 
+    _record_execution(
+        "tapps_lookup_docs",
+        start,
+        status="success" if result.success else "failed",
+        error_code="api_key_missing" if (result.error and "API key" in result.error) else None,
+    )
+
     response: dict[str, Any] = {
         "tool": "tapps_lookup_docs",
         "success": result.success,
@@ -399,7 +462,10 @@ async def tapps_lookup_docs(
     }
 
     if result.error:
-        response["error"] = {"code": "lookup_failed", "message": result.error}
+        error_code = "lookup_failed"
+        if "API key" in result.error:
+            error_code = "api_key_missing"
+        response["error"] = {"code": error_code, "message": result.error}
     if result.warning:
         response["warning"] = result.warning
 
@@ -442,6 +508,7 @@ def tapps_validate_config(
     result = validate_config(str(resolved), content, config_type=explicit_type)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_validate_config", start, file_path=str(resolved))
 
     return {
         "tool": "tapps_validate_config",
@@ -487,6 +554,7 @@ def tapps_consult_expert(
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_consult_expert", start)
 
     return {
         "tool": "tapps_consult_expert",
@@ -519,6 +587,7 @@ def tapps_list_experts() -> dict[str, Any]:
 
     experts = list_experts()
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_list_experts", start)
 
     return {
         "tool": "tapps_list_experts",
@@ -551,6 +620,7 @@ def tapps_checklist(
 
     result = CallTracker.evaluate(task_type)
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_checklist", start)
 
     return {
         "tool": "tapps_checklist",
@@ -593,6 +663,9 @@ def tapps_project_profile(
         profile = detect_project_profile(root)
     except Exception as exc:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution(
+            "tapps_project_profile", start, status="failed", error_code="profile_failed",
+        )
         return {
             "tool": "tapps_project_profile",
             "success": False,
@@ -601,6 +674,7 @@ def tapps_project_profile(
         }
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_project_profile", start)
 
     return {
         "tool": "tapps_project_profile",
@@ -703,6 +777,7 @@ def tapps_session_notes(
         }
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_session_notes", start)
     data.update(store.metadata())
 
     return {
@@ -746,6 +821,7 @@ def tapps_impact_analysis(
     report = analyze_impact(resolved, settings.project_root, change_type)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_impact_analysis", start, file_path=str(resolved))
 
     return {
         "tool": "tapps_impact_analysis",
@@ -827,6 +903,7 @@ async def tapps_report(
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_report", start, file_path=file_path or None)
 
     return {
         "tool": "tapps_report",
@@ -903,6 +980,11 @@ def tapps_init(
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution(
+        "tapps_init",
+        start,
+        status="success" if not result["errors"] else "failed",
+    )
 
     return {
         "tool": "tapps_init",
@@ -955,6 +1037,7 @@ async def tapps_dashboard(
         recent = hub.execution.get_recent(limit=100)
         otel_data = export_otel_trace(recent)
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_dashboard", start)
         return {
             "tool": "tapps_dashboard",
             "success": True,
@@ -977,6 +1060,7 @@ async def tapps_dashboard(
         data = dashboard.generate_json_dashboard(sections=sections)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_dashboard", start)
     return {
         "tool": "tapps_dashboard",
         "success": True,
@@ -1059,6 +1143,7 @@ def tapps_stats(
         ]
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_stats", start)
 
     return {
         "tool": "tapps_stats",
@@ -1112,6 +1197,7 @@ def tapps_feedback(
     overall_stats = tracker.get_statistics()
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_feedback", start)
 
     return {
         "tool": "tapps_feedback",

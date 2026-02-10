@@ -39,8 +39,10 @@ RUN apt-get update \
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash tapps
+# Create non-root user and pre-create state mountpoint
+RUN useradd --create-home --shell /bin/bash tapps \
+    && mkdir -p /workspace/.tapps-mcp \
+    && chown tapps:tapps /workspace/.tapps-mcp
 USER tapps
 
 # Config

@@ -155,7 +155,11 @@ class LookupEngine:
                 success=False,
                 library=lib_clean,
                 topic=topic,
-                error="No Context7 API key configured. Cache miss.",
+                error=(
+                    "No Context7 API key configured and no cached docs available. "
+                    "Set TAPPS_MCP_CONTEXT7_API_KEY env var or add context7_api_key "
+                    "to .tapps-mcp.yaml to enable live documentation lookup."
+                ),
                 response_time_ms=round(elapsed, 1),
             )
 
