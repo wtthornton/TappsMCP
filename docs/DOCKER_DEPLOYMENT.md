@@ -57,6 +57,7 @@ The MCP server is available at **http://localhost:8000** (Streamable HTTP endpoi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TAPPS_MCP_PROJECT_ROOT` | `/workspace` | Directory used for file scoring; must match the mounted volume if you mount a project. |
+| `TAPPS_MCP_HOST_PROJECT_ROOT` | *(none)* | **Optional.** Host path the client/IDE uses for the same project (e.g. `C:\projects\myapp`). When set, absolute paths sent by Cursor under this path are mapped to `project_root`, so you can use host paths without "path denied" errors. |
 | `TAPPS_MCP_QUALITY_PRESET` | `standard` | `standard` \| `strict` \| `framework` |
 | `TAPPS_MCP_LOG_LEVEL` | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` |
 
@@ -101,12 +102,24 @@ services:
 
 Then from the TappMCP repo: `docker compose up -d`. The container will see the other project at `/workspace`.
 
+**Optional — accept host paths from Cursor:** Set `TAPPS_MCP_HOST_PROJECT_ROOT` to the same path the IDE uses (e.g. `C:\projects\myapp`). Then Cursor can send absolute paths like `C:\projects\myapp\src\main.py` and the server will map them to `/workspace/src/main.py`. Example override:
+
+```yaml
+# docker-compose.override.yml
+services:
+  tapps-mcp:
+    environment:
+      TAPPS_MCP_HOST_PROJECT_ROOT: "C:\\projects\\myapp"
+    volumes:
+      - C:\projects\myapp:/workspace:ro
+```
+
 ### 2. Connect Cursor (or another client) to the Docker MCP
 
 The server speaks **Streamable HTTP** at **http://localhost:8000/mcp**.
 
 - **Cursor**: In **Settings → Tools & MCP**, add an MCP server that uses the **HTTP/SSE** transport (not stdio) and set the URL to **http://localhost:8000/mcp**.
-- **File paths**: The server treats `/workspace` as the project root. Send **paths relative to the project** (e.g. `src/main.py`, `tests/test_foo.py`) so they resolve correctly inside the container.
+- **File paths**: You can send **relative paths** (e.g. `src/main.py`) or, if `TAPPS_MCP_HOST_PROJECT_ROOT` is set to your project path, **absolute host paths** (e.g. `C:\projects\myapp\src\main.py`); the server will map them to the project root.
 
 ### 3. Optional: config in the other project
 

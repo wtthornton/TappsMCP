@@ -37,16 +37,42 @@ mcp = FastMCP("TappsMCP")
 # ---------------------------------------------------------------------------
 
 
+def _normalize_path_for_mapping(path: str) -> str:
+    """Normalize a path string for host-root prefix comparison (cross-platform)."""
+    s = path.strip().replace("\\", "/")
+    if s and s[1:2] == ":" and len(s) > 2 and s[2:3] == "/":
+        s = s[0].lower() + s[1:]
+    return s.rstrip("/") or "/"
+
+
 def _validate_file_path(file_path: str) -> Path:
     """Validate *file_path* against the project root boundary.
 
-    Raises ``ValueError`` (surfaced by FastMCP as a tool error) on failure.
+    When ``host_project_root`` is set (e.g. in Docker), paths that look like
+    absolute host paths under that root are mapped to project_root so Cursor
+    and other clients can send host paths without "path denied" errors.
     """
     from tapps_mcp.security.path_validator import PathValidator
 
     settings = load_settings()
     validator = PathValidator(settings.project_root)
-    return validator.validate_read_path(file_path)
+    path_str = file_path.strip()
+
+    if settings.host_project_root:
+        host_norm = _normalize_path_for_mapping(settings.host_project_root)
+        input_norm = _normalize_path_for_mapping(path_str)
+        if host_norm and (
+            input_norm == host_norm
+            or input_norm.startswith(host_norm + "/")
+            or (input_norm + "/").startswith(host_norm + "/")
+        ):
+            suffix = input_norm[len(host_norm) :].lstrip("/")
+            if suffix:
+                path_str = suffix
+            else:
+                path_str = "."
+
+    return validator.validate_read_path(path_str)
 
 
 def _record_call(tool_name: str) -> None:

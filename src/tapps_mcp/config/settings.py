@@ -84,6 +84,11 @@ class TappsMCPSettings(BaseSettings):
         default_factory=Path.cwd,
         description="Project root boundary — all file paths must be within this directory.",
     )
+    host_project_root: str | None = Field(
+        default=None,
+        description="Optional host path the client uses for the same project (e.g. C:\\projects\\myapp). "
+        "When set, absolute paths under this are mapped to project_root so Cursor/Docker work together.",
+    )
     quality_preset: str = Field(
         default="standard",
         description="Quality gate preset: standard, strict, or framework.",

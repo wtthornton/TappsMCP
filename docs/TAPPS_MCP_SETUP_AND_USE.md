@@ -168,6 +168,7 @@ Restart Claude Desktop after changing the config.
 ## 6. Environment Variables (optional)
 
 - **TAPPS_MCP_PROJECT_ROOT** – Restrict file operations to this directory (recommended for security). If unset, current working directory is used.
+- **TAPPS_MCP_HOST_PROJECT_ROOT** – Optional. When the server runs with a different root (e.g. Docker `/workspace`), set this to the **host path** the client/IDE uses (e.g. `C:\projects\myapp`). Then the server will accept absolute host paths from Cursor and map them to the project root, avoiding "path denied" errors.
 - **TAPPS_MCP_CONTEXT7_API_KEY** – Used by `tapps_lookup_docs` for live Context7 API fetches. Cache still works without it.
 
 ---
