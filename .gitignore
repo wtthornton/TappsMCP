@@ -49,5 +49,9 @@ nul
 .env
 .env.local
 
+# MCP config (local API keys, paths)
+.cursor/mcp.json
+.mcp.json
+
 # UV
 .python-version
