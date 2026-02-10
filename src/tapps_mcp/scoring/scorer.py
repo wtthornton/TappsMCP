@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 import asyncio
 from pathlib import Path  # noqa: TC003 — used at runtime
+from typing import ClassVar
 
 import structlog
 
@@ -245,11 +246,18 @@ class CodeScorer:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _parse_ast_safe(code: str) -> ast.Module | None:
+        """Parse code into an AST, returning None on SyntaxError."""
+        try:
+            return ast.parse(code)
+        except SyntaxError:
+            return None
+
+    @staticmethod
     def _ast_complexity(code: str) -> float:
         """Fallback complexity from AST cyclomatic complexity."""
-        try:
-            tree = ast.parse(code)
-        except SyntaxError:
+        tree = CodeScorer._parse_ast_safe(code)
+        if tree is None:
             return 10.0
         max_cc = 1
         for node in ast.walk(tree):
@@ -262,6 +270,26 @@ class CodeScorer:
         """Fallback security score from pattern matching."""
         issues = sum(1 for p in _INSECURE_PATTERNS if p in code)
         return clamp_individual(10.0 - issues * INSECURE_PATTERN_PENALTY)
+
+    @staticmethod
+    def _check_project_signals(
+        file_path: Path,
+        signals: list[tuple[float, list[str]]],
+    ) -> float:
+        """Score based on project file existence.
+
+        *signals* is a list of ``(points, file_names)`` tuples.
+        Returns a 0-10 clamped score.
+        """
+        root = _find_project_root(file_path)
+        if root is None:
+            return 5.0
+        pts = sum(
+            points
+            for points, names in signals
+            if any((root / n).exists() for n in names)
+        )
+        return clamp_individual(min(10.0, pts * 2.0))
 
     @staticmethod
     def _ast_maintainability(code: str) -> float:
@@ -302,24 +330,24 @@ class CodeScorer:
                         return 5.0
         return 0.0
 
+    _STRUCTURE_SIGNALS: ClassVar[list[tuple[float, list[str]]]] = [
+        (2.5, ["pyproject.toml", "package.json"]),
+        (2.0, ["README", "README.md", "README.rst"]),
+        (2.0, ["tests", "test"]),
+        (1.0, [".git"]),
+        (1.5, ["requirements.txt", "setup.py"]),
+    ]
+
+    _DEVEX_SIGNALS: ClassVar[list[tuple[float, list[str]]]] = [
+        (3.0, ["AGENTS.md", "CLAUDE.md"]),
+        (2.0, ["docs"]),
+        (2.0, [".tapps-agents", ".cursor"]),
+    ]
+
     @staticmethod
     def _structure_score(file_path: Path) -> float:
         """Score project layout (0-10)."""
-        root = _find_project_root(file_path)
-        if root is None:
-            return 5.0
-        pts = 0.0
-        if (root / "pyproject.toml").exists() or (root / "package.json").exists():
-            pts += 2.5
-        if any((root / n).exists() for n in ("README", "README.md", "README.rst")):
-            pts += 2.0
-        if (root / "tests").exists() or (root / "test").exists():
-            pts += 2.0
-        if (root / ".git").exists():
-            pts += 1.0
-        if (root / "requirements.txt").exists() or (root / "setup.py").exists():
-            pts += 1.5
-        return clamp_individual(min(10.0, pts * 2.0))
+        return CodeScorer._check_project_signals(file_path, CodeScorer._STRUCTURE_SIGNALS)
 
     @staticmethod
     def _devex_score(file_path: Path) -> float:
@@ -327,13 +355,10 @@ class CodeScorer:
         root = _find_project_root(file_path)
         if root is None:
             return 5.0
-        pts = 0.0
-        if any((root / n).exists() for n in ("AGENTS.md", "CLAUDE.md")):
-            pts += 3.0
-        if (root / "docs").is_dir():
-            pts += 2.0
-        if any((root / n).exists() for n in (".tapps-agents", ".cursor")):
-            pts += 2.0
+        pts = sum(
+            p for p, names in CodeScorer._DEVEX_SIGNALS
+            if any((root / n).exists() for n in names)
+        )
         pyproject = root / "pyproject.toml"
         if pyproject.exists():
             try:
@@ -347,36 +372,17 @@ class CodeScorer:
     @staticmethod
     def _ast_performance(code: str) -> float:
         """AST-based performance scoring."""
-        try:
-            tree = ast.parse(code)
-        except SyntaxError:
+        tree = CodeScorer._parse_ast_safe(code)
+        if tree is None:
             return 0.0
         seen: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef):
-                if hasattr(node, "end_lineno") and node.end_lineno is not None:
-                    func_lines = node.end_lineno - node.lineno
-                else:
-                    func_lines = 50  # estimate
-                if func_lines > VERY_LARGE_FUNCTION_LINES:
-                    seen.add("very_large_function")
-                elif func_lines > LARGE_FUNCTION_LINES:
-                    seen.add("large_function")
-                depth = _max_nesting_depth(node)
-                if depth > VERY_DEEP_NESTING_THRESHOLD:
-                    seen.add("very_deep_nesting")
-                elif depth > DEEP_NESTING_THRESHOLD:
-                    seen.add("deep_nesting")
+                _check_function_size(node, seen)
             if isinstance(node, ast.For):
-                for child in ast.walk(node):
-                    if isinstance(child, ast.For) and child is not node:
-                        seen.add("nested_loops")
-                        break
+                _check_nested_for(node, seen)
             if isinstance(node, ast.ListComp):
-                calls = sum(1 for n in ast.walk(node) if isinstance(n, ast.Call))
-                expensive_call_threshold = 5
-                if calls > expensive_call_threshold:
-                    seen.add("expensive_comprehension")
+                _check_expensive_comp(node, seen)
         penalty = sum(PERFORMANCE_PENALTY_MAP.get(i, 0.5) for i in seen)
         return clamp_individual(10.0 - penalty)
 
@@ -393,6 +399,40 @@ class CodeScorer:
 # ------------------------------------------------------------------
 # Module-level helpers
 # ------------------------------------------------------------------
+
+_EXPENSIVE_CALL_THRESHOLD = 5
+
+
+def _check_function_size(node: ast.FunctionDef, seen: set[str]) -> None:
+    """Flag oversized functions and deeply nested control flow."""
+    if hasattr(node, "end_lineno") and node.end_lineno is not None:
+        func_lines = node.end_lineno - node.lineno
+    else:
+        func_lines = 50  # estimate
+    if func_lines > VERY_LARGE_FUNCTION_LINES:
+        seen.add("very_large_function")
+    elif func_lines > LARGE_FUNCTION_LINES:
+        seen.add("large_function")
+    depth = _max_nesting_depth(node)
+    if depth > VERY_DEEP_NESTING_THRESHOLD:
+        seen.add("very_deep_nesting")
+    elif depth > DEEP_NESTING_THRESHOLD:
+        seen.add("deep_nesting")
+
+
+def _check_nested_for(node: ast.For, seen: set[str]) -> None:
+    """Flag nested for-loops."""
+    for child in ast.walk(node):
+        if isinstance(child, ast.For) and child is not node:
+            seen.add("nested_loops")
+            break
+
+
+def _check_expensive_comp(node: ast.ListComp, seen: set[str]) -> None:
+    """Flag list comprehensions with many function calls."""
+    calls = sum(1 for n in ast.walk(node) if isinstance(n, ast.Call))
+    if calls > _EXPENSIVE_CALL_THRESHOLD:
+        seen.add("expensive_comprehension")
 
 
 def _find_project_root(file_path: Path) -> Path | None:

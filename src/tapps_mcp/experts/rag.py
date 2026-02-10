@@ -135,13 +135,7 @@ class SimpleKnowledgeBase:
 
     def list_files(self) -> list[str]:
         """Return relative paths of all loaded knowledge files."""
-        result: list[str] = []
-        for f in self.files:
-            try:
-                result.append(str(f.relative_to(self.knowledge_dir)))
-            except ValueError:
-                result.append(str(f))
-        return result
+        return [_relative_path(f, self.knowledge_dir) for f in self.files]
 
     # ------------------------------------------------------------------
     # Search
@@ -238,57 +232,18 @@ class SimpleKnowledgeBase:
         line_scores: dict[int, float] = {}
 
         for i, line in enumerate(lines):
-            line_lower = line.lower()
-            base = sum(1.0 for kw in keywords if kw in line_lower)
-            if base == 0:
-                continue
-
-            # Boost headers.
-            if line.strip().startswith("#"):
-                level = len(line) - len(line.lstrip("#"))
-                base *= 2.0 - level * 0.2
-
-            # Boost code blocks.
-            if line.strip().startswith("```"):
-                base *= 1.4
-
-            # Boost list items.
-            stripped = line.strip()
-            if stripped.startswith("- ") or stripped.startswith("* "):
-                base *= 1.2
-
-            line_scores[i] = base
+            score = _score_line(line, keywords)
+            if score > 0:
+                line_scores[i] = score
 
         if not line_scores:
             return []
 
-        # Group consecutive scoring lines into chunks.
         chunks: list[KnowledgeChunk] = []
-        sorted_indices = sorted(line_scores)
-        chunk_start = sorted_indices[0]
-        chunk_end = sorted_indices[0]
-
-        for idx in sorted_indices[1:]:
-            if idx - chunk_end <= context_lines:
-                chunk_end = idx
-            else:
-                chunk = self._build_chunk(
-                    file_path,
-                    lines,
-                    chunk_start,
-                    chunk_end,
-                    context_lines,
-                    keywords,
-                )
-                if chunk:
-                    chunks.append(chunk)
-                chunk_start = idx
-                chunk_end = idx
-
-        # Final group.
-        chunk = self._build_chunk(file_path, lines, chunk_start, chunk_end, context_lines, keywords)
-        if chunk:
-            chunks.append(chunk)
+        for start, end in _group_indices(sorted(line_scores), context_lines):
+            chunk = self._build_chunk(file_path, lines, start, end, context_lines, keywords)
+            if chunk:
+                chunks.append(chunk)
 
         return chunks
 
@@ -314,14 +269,10 @@ class SimpleKnowledgeBase:
         if not text:
             return None
 
-        text_lower = text.lower()
-        hits = sum(1.0 for kw in keywords if kw in text_lower)
+        hits = _count_keyword_matches(keywords, text.lower())
         score = hits / len(keywords) if keywords else 0.0
 
-        try:
-            rel = str(file_path.relative_to(self.knowledge_dir))
-        except ValueError:
-            rel = str(file_path)
+        rel = _relative_path(file_path, self.knowledge_dir)
 
         return KnowledgeChunk(
             content=text,
@@ -335,6 +286,58 @@ class SimpleKnowledgeBase:
 # -----------------------------------------------------------------------
 # Module-level helpers
 # -----------------------------------------------------------------------
+
+
+def _count_keyword_matches(keywords: set[str], text_lower: str) -> float:
+    """Count how many *keywords* appear in *text_lower*."""
+    return sum(1.0 for kw in keywords if kw in text_lower)
+
+
+def _relative_path(file_path: Path, base_dir: Path) -> str:
+    """Return *file_path* relative to *base_dir*, falling back to str."""
+    try:
+        return str(file_path.relative_to(base_dir))
+    except ValueError:
+        return str(file_path)
+
+
+def _score_line(line: str, keywords: set[str]) -> float:
+    """Score a single line against *keywords* with markdown boosts."""
+    base = _count_keyword_matches(keywords, line.lower())
+    if base == 0:
+        return 0.0
+
+    stripped = line.strip()
+    if stripped.startswith("#"):
+        level = len(line) - len(line.lstrip("#"))
+        base *= 2.0 - level * 0.2
+    if stripped.startswith("```"):
+        base *= 1.4
+    if stripped.startswith("- ") or stripped.startswith("* "):
+        base *= 1.2
+
+    return base
+
+
+def _group_indices(sorted_indices: list[int], gap: int) -> list[tuple[int, int]]:
+    """Group sorted line indices into ``(start, end)`` ranges.
+
+    Lines within *gap* of each other are merged into one range.
+    """
+    if not sorted_indices:
+        return []
+    ranges: list[tuple[int, int]] = []
+    start = sorted_indices[0]
+    end = sorted_indices[0]
+    for idx in sorted_indices[1:]:
+        if idx - end <= gap:
+            end = idx
+        else:
+            ranges.append((start, end))
+            start = idx
+            end = idx
+    ranges.append((start, end))
+    return ranges
 
 
 def _extract_keywords(query: str) -> set[str]:

@@ -11,7 +11,7 @@ import threading
 import uuid
 from collections import deque
 from dataclasses import asdict, dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
@@ -24,10 +24,6 @@ _BUFFER_SIZE = 100
 
 # Default retention days
 _DEFAULT_RETENTION_DAYS = 90
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC)
 
 
 @dataclass

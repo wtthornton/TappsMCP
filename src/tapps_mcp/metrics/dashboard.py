@@ -7,12 +7,12 @@ collected metrics data.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
 import structlog
 
+from tapps_mcp.common.utils import utc_now
 from tapps_mcp.metrics.alerts import AlertManager
 from tapps_mcp.metrics.business_metrics import BusinessMetricsCollector
 from tapps_mcp.metrics.confidence_metrics import ConfidenceMetricsTracker
@@ -24,10 +24,6 @@ from tapps_mcp.metrics.trends import calculate_trend
 from tapps_mcp.metrics.visualizer import AnalyticsVisualizer
 
 logger = structlog.get_logger(__name__)
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC)
 
 
 class DashboardGenerator:
@@ -80,34 +76,24 @@ class DashboardGenerator:
             "recommendations",
         ]
 
-        data: dict[str, Any] = {"timestamp": _utc_now().isoformat()}
+        data: dict[str, Any] = {"timestamp": utc_now().isoformat()}
 
-        if "summary" in all_sections:
-            data["summary"] = self._build_summary()
+        builders: dict[str, Any] = {
+            "summary": self._build_summary,
+            "tool_metrics": self._build_tool_metrics,
+            "scoring_trends": self._build_scoring_trends,
+            "expert_metrics": self._build_expert_metrics,
+            "cache_metrics": self._build_cache_metrics,
+            "quality_distribution": self._build_quality_distribution,
+            "alerts": self._build_alerts,
+            "business_metrics": self._build_business_metrics,
+            "recommendations": self._build_recommendations,
+        }
 
-        if "tool_metrics" in all_sections:
-            data["tool_metrics"] = self._build_tool_metrics()
-
-        if "scoring_trends" in all_sections:
-            data["scoring_trends"] = self._build_scoring_trends()
-
-        if "expert_metrics" in all_sections:
-            data["expert_metrics"] = self._build_expert_metrics()
-
-        if "cache_metrics" in all_sections:
-            data["cache_metrics"] = self._build_cache_metrics()
-
-        if "quality_distribution" in all_sections:
-            data["quality_distribution"] = self._build_quality_distribution()
-
-        if "alerts" in all_sections:
-            data["alerts"] = self._build_alerts()
-
-        if "business_metrics" in all_sections:
-            data["business_metrics"] = self._build_business_metrics()
-
-        if "recommendations" in all_sections:
-            data["recommendations"] = self._build_recommendations()
+        for section in all_sections:
+            builder = builders.get(section)
+            if builder is not None:
+                data[section] = builder()
 
         return data
 
@@ -257,22 +243,26 @@ class DashboardGenerator:
             "by_domain": rag_metrics.by_domain,
         }
 
+    @staticmethod
+    def _score_bin(score: float) -> str:
+        """Map a score to its distribution bin label."""
+        if score >= 90:
+            return "90-100"
+        if score >= 80:
+            return "80-89"
+        if score >= 70:
+            return "70-79"
+        if score >= 60:
+            return "60-69"
+        return "0-59"
+
     def _build_quality_distribution(self) -> dict[str, int]:
         recent = self._execution.get_recent(limit=100)
         scores = [m.score for m in recent if m.score is not None]
 
-        distribution = {"90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "0-59": 0}
+        distribution: dict[str, int] = {"90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "0-59": 0}
         for s in scores:
-            if s >= 90:
-                distribution["90-100"] += 1
-            elif s >= 80:
-                distribution["80-89"] += 1
-            elif s >= 70:
-                distribution["70-79"] += 1
-            elif s >= 60:
-                distribution["60-69"] += 1
-            else:
-                distribution["0-59"] += 1
+            distribution[self._score_bin(s)] += 1
 
         return distribution
 
@@ -354,26 +344,24 @@ class DashboardGenerator:
         tool_metrics = data.get("tool_metrics", [])
         recommendations = data.get("recommendations", [])
 
-        alert_html = ""
+        severity_colors = {"critical": "#dc3545", "warning": "#ffc107", "info": "#17a2b8"}
+        alert_parts = []
         for alert in alerts:
-            severity = alert.get("severity", "info")
-            color = {"critical": "#dc3545", "warning": "#ffc107", "info": "#17a2b8"}.get(
-                severity, "#17a2b8"
-            )
-            alert_html += (
+            color = severity_colors.get(alert.get("severity", "info"), "#17a2b8")
+            alert_parts.append(
                 f'<div style="background:{color};color:#fff;padding:8px;'
                 f'margin:4px 0;border-radius:4px">'
                 f"{alert.get('message', '')}</div>"
             )
+        alert_html = "".join(alert_parts)
 
-        tool_rows = ""
-        for t in tool_metrics:
-            tool_rows += (
-                f"<tr><td>{t.get('tool_name', '')}</td>"
-                f"<td>{t.get('call_count', 0)}</td>"
-                f"<td>{t.get('success_rate', 0):.0%}</td>"
-                f"<td>{t.get('avg_duration_ms', 0):.0f}ms</td></tr>"
-            )
+        tool_rows = "".join(
+            f"<tr><td>{t.get('tool_name', '')}</td>"
+            f"<td>{t.get('call_count', 0)}</td>"
+            f"<td>{t.get('success_rate', 0):.0%}</td>"
+            f"<td>{t.get('avg_duration_ms', 0):.0f}ms</td></tr>"
+            for t in tool_metrics
+        )
 
         rec_html = "".join(f"<li>{r}</li>" for r in recommendations)
 

@@ -9,19 +9,16 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
 import structlog
 
+from tapps_mcp.common.utils import utc_now
+
 logger = structlog.get_logger(__name__)
 
 _MAX_RECORDS = 1000
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC)
 
 
 @dataclass
@@ -90,7 +87,7 @@ class ConfidenceMetricsTracker:
             agreement_level=agreement_level,
             num_experts=num_experts,
             session_id=session_id,
-            timestamp=_utc_now().isoformat(),
+            timestamp=utc_now().isoformat(),
         )
 
         with self._write_lock:

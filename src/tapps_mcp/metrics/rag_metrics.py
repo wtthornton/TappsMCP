@@ -10,19 +10,16 @@ import json
 import threading
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
 import structlog
 
+from tapps_mcp.common.utils import utc_now
+
 logger = structlog.get_logger(__name__)
 
 _MAX_RECORDS = 100
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC)
 
 
 @dataclass
@@ -94,7 +91,7 @@ class RAGMetricsTracker:
             cache_hit=cache_hit,
             backend_type=backend_type,
             session_id=session_id,
-            timestamp=_utc_now().isoformat(),
+            timestamp=utc_now().isoformat(),
         )
 
         with self._write_lock:

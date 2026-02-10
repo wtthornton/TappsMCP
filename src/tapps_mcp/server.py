@@ -21,6 +21,7 @@ from mcp.server.fastmcp import FastMCP
 from tapps_mcp import __version__
 from tapps_mcp.common.logging import setup_logging
 from tapps_mcp.config.settings import load_settings
+from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
 from tapps_mcp.tools.tool_detection import detect_installed_tools
 
 logger = structlog.get_logger(__name__)
@@ -37,10 +38,13 @@ mcp = FastMCP("TappsMCP")
 # ---------------------------------------------------------------------------
 
 
+_MIN_DRIVE_PATH_LEN = 2
+
+
 def _normalize_path_for_mapping(path: str) -> str:
     """Normalize a path string for host-root prefix comparison (cross-platform)."""
     s = path.strip().replace("\\", "/")
-    if s and s[1:2] == ":" and len(s) > 2 and s[2:3] == "/":
+    if s and s[1:2] == ":" and len(s) > _MIN_DRIVE_PATH_LEN and s[2:3] == "/":
         s = s[0].lower() + s[1:]
     return s.rstrip("/") or "/"
 
@@ -67,10 +71,7 @@ def _validate_file_path(file_path: str) -> Path:
             or (input_norm + "/").startswith(host_norm + "/")
         ):
             suffix = input_norm[len(host_norm) :].lstrip("/")
-            if suffix:
-                path_str = suffix
-            else:
-                path_str = "."
+            path_str = suffix or "."
 
     return validator.validate_read_path(path_str)
 
@@ -174,45 +175,40 @@ def tapps_server_info() -> dict[str, Any]:
 
     from tapps_mcp.pipeline.models import STAGE_TOOLS, PipelineStage
 
-    return {
-        "tool": "tapps_server_info",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
-            "server": {
-                "name": "TappsMCP",
-                "version": __version__,
-                "protocol_version": "2025-11-25",
-            },
-            "configuration": {
-                "project_root": str(settings.project_root),
-                "quality_preset": settings.quality_preset,
-                "log_level": settings.log_level,
-            },
-            "available_tools": available_tools,
-            "installed_checkers": [t.model_dump() for t in installed],
-            "diagnostics": diagnostics.model_dump(),
-            "recommended_workflow": (
-                "Call tapps_server_info at session start; use tapps_score_file(quick=True) "
-                "during edits; before declaring work complete call tapps_score_file (full) "
-                "and tapps_quality_gate on changed files, then tapps_checklist to ensure "
-                "no required steps were skipped. "
-                "Call tapps_lookup_docs before using a library to avoid hallucinated APIs; "
-                "call tapps_consult_expert for domain-specific decisions (security, testing, etc.)."
-            ),
-            "pipeline": {
-                "name": "TAPPS Quality Pipeline",
-                "stages": [s.value for s in PipelineStage],
-                "current_hint": (
-                    "Start with tapps_pipeline_overview prompt, or follow stages in order."
-                ),
-                "stage_tools": {s.value: tools for s, tools in STAGE_TOOLS.items()},
-                "handoff_file": "docs/TAPPS_HANDOFF.md",
-                "runlog_file": "docs/TAPPS_RUNLOG.md",
-                "prompts_available": True,
-            },
+    return success_response("tapps_server_info", elapsed_ms, {
+        "server": {
+            "name": "TappsMCP",
+            "version": __version__,
+            "protocol_version": "2025-11-25",
         },
-    }
+        "configuration": {
+            "project_root": str(settings.project_root),
+            "quality_preset": settings.quality_preset,
+            "log_level": settings.log_level,
+        },
+        "available_tools": available_tools,
+        "installed_checkers": [t.model_dump() for t in installed],
+        "diagnostics": diagnostics.model_dump(),
+        "recommended_workflow": (
+            "Call tapps_server_info at session start; use tapps_score_file(quick=True) "
+            "during edits; before declaring work complete call tapps_score_file (full) "
+            "and tapps_quality_gate on changed files, then tapps_checklist to ensure "
+            "no required steps were skipped. "
+            "Call tapps_lookup_docs before using a library to avoid hallucinated APIs; "
+            "call tapps_consult_expert for domain-specific decisions (security, testing, etc.)."
+        ),
+        "pipeline": {
+            "name": "TAPPS Quality Pipeline",
+            "stages": [s.value for s in PipelineStage],
+            "current_hint": (
+                "Start with tapps_pipeline_overview prompt, or follow stages in order."
+            ),
+            "stage_tools": {s.value: tools for s, tools in STAGE_TOOLS.items()},
+            "handoff_file": "docs/TAPPS_HANDOFF.md",
+            "runlog_file": "docs/TAPPS_RUNLOG.md",
+            "prompts_available": True,
+        },
+    })
 
 
 @mcp.tool()
@@ -238,12 +234,7 @@ async def tapps_score_file(
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
-        return {
-            "tool": "tapps_score_file",
-            "success": False,
-            "elapsed_ms": 0,
-            "error": {"code": "path_denied", "message": str(exc)},
-        }
+        return error_response("tapps_score_file", "path_denied", str(exc))
 
     from tapps_mcp.scoring.scorer import CodeScorer
 
@@ -282,11 +273,11 @@ async def tapps_score_file(
         data["fixes_applied"] = fixes_applied
 
     if result.lint_issues:
-        data["lint_issues"] = [i.model_dump() for i in result.lint_issues[:20]]
+        data["lint_issues"] = serialize_issues(result.lint_issues)
     if result.type_issues:
-        data["type_issues"] = [i.model_dump() for i in result.type_issues[:20]]
+        data["type_issues"] = serialize_issues(result.type_issues)
     if result.security_issues:
-        data["security_issues"] = [i.model_dump() for i in result.security_issues[:20]]
+        data["security_issues"] = serialize_issues(result.security_issues)
 
     _record_execution(
         "tapps_score_file",
@@ -296,13 +287,7 @@ async def tapps_score_file(
         degraded=result.degraded,
     )
 
-    return {
-        "tool": "tapps_score_file",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": data,
-        "degraded": result.degraded,
-    }
+    return success_response("tapps_score_file", elapsed_ms, data, degraded=result.degraded)
 
 
 @mcp.tool()
@@ -325,12 +310,7 @@ def tapps_security_scan(
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
-        return {
-            "tool": "tapps_security_scan",
-            "success": False,
-            "elapsed_ms": 0,
-            "error": {"code": "path_denied", "message": str(exc)},
-        }
+        return error_response("tapps_security_scan", "path_denied", str(exc))
 
     from tapps_mcp.security.security_scanner import run_security_scan
 
@@ -350,11 +330,10 @@ def tapps_security_scan(
         degraded=not result.bandit_available,
     )
 
-    return {
-        "tool": "tapps_security_scan",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
+    return success_response(
+        "tapps_security_scan",
+        elapsed_ms,
+        {
             "file_path": str(resolved),
             "passed": result.passed,
             "total_issues": result.total_issues,
@@ -363,11 +342,11 @@ def tapps_security_scan(
             "medium_count": result.medium_count,
             "low_count": result.low_count,
             "bandit_available": result.bandit_available,
-            "bandit_issues": [i.model_dump() for i in result.bandit_issues[:30]],
-            "secret_findings": [f.model_dump() for f in result.secret_findings[:30]],
+            "bandit_issues": serialize_issues(result.bandit_issues, limit=30),
+            "secret_findings": serialize_issues(result.secret_findings, limit=30),
         },
-        "degraded": not result.bandit_available,
-    }
+        degraded=not result.bandit_available,
+    )
 
 
 @mcp.tool()
@@ -390,12 +369,7 @@ async def tapps_quality_gate(
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
-        return {
-            "tool": "tapps_quality_gate",
-            "success": False,
-            "elapsed_ms": 0,
-            "error": {"code": "path_denied", "message": str(exc)},
-        }
+        return error_response("tapps_quality_gate", "path_denied", str(exc))
 
     from tapps_mcp.gates.evaluator import evaluate_gate
     from tapps_mcp.scoring.scorer import CodeScorer
@@ -414,11 +388,10 @@ async def tapps_quality_gate(
         degraded=score_result.degraded,
     )
 
-    return {
-        "tool": "tapps_quality_gate",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
+    return success_response(
+        "tapps_quality_gate",
+        elapsed_ms,
+        {
             "file_path": str(resolved),
             "passed": gate_result.passed,
             "preset": gate_result.preset,
@@ -428,8 +401,8 @@ async def tapps_quality_gate(
             "failures": [f.model_dump() for f in gate_result.failures],
             "warnings": gate_result.warnings,
         },
-        "degraded": score_result.degraded,
-    }
+        degraded=score_result.degraded,
+    )
 
 
 @mcp.tool()
@@ -490,18 +463,12 @@ async def tapps_lookup_docs(
         error_code="api_key_missing" if (result.error and "API key" in result.error) else None,
     )
 
-    response: dict[str, Any] = {
-        "tool": "tapps_lookup_docs",
-        "success": result.success,
-        "elapsed_ms": elapsed_ms,
-        "data": data,
-    }
+    response = success_response("tapps_lookup_docs", elapsed_ms, data)
+    response["success"] = result.success
 
     if result.error:
-        error_code = "lookup_failed"
-        if "API key" in result.error:
-            error_code = "api_key_missing"
-        response["error"] = {"code": error_code, "message": result.error}
+        err_code = "api_key_missing" if "API key" in result.error else "lookup_failed"
+        response["error"] = {"code": err_code, "message": result.error}
     if result.warning:
         response["warning"] = result.warning
 
@@ -529,12 +496,7 @@ def tapps_validate_config(
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
-        return {
-            "tool": "tapps_validate_config",
-            "success": False,
-            "elapsed_ms": 0,
-            "error": {"code": "path_denied", "message": str(exc)},
-        }
+        return error_response("tapps_validate_config", "path_denied", str(exc))
 
     content = resolved.read_text(encoding="utf-8")
 
@@ -546,21 +508,16 @@ def tapps_validate_config(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_config", start, file_path=str(resolved))
 
-    return {
-        "tool": "tapps_validate_config",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
-            "file_path": result.file_path,
-            "config_type": result.config_type,
-            "valid": result.valid,
-            "findings": [f.model_dump() for f in result.findings],
-            "suggestions": result.suggestions,
-            "finding_count": len(result.findings),
-            "critical_count": sum(1 for f in result.findings if f.severity == "critical"),
-            "warning_count": sum(1 for f in result.findings if f.severity == "warning"),
-        },
-    }
+    return success_response("tapps_validate_config", elapsed_ms, {
+        "file_path": result.file_path,
+        "config_type": result.config_type,
+        "valid": result.valid,
+        "findings": [f.model_dump() for f in result.findings],
+        "suggestions": result.suggestions,
+        "finding_count": len(result.findings),
+        "critical_count": sum(1 for f in result.findings if f.severity == "critical"),
+        "warning_count": sum(1 for f in result.findings if f.severity == "warning"),
+    })
 
 
 @mcp.tool()
@@ -592,21 +549,16 @@ def tapps_consult_expert(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_consult_expert", start)
 
-    return {
-        "tool": "tapps_consult_expert",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
-            "domain": result.domain,
-            "expert_id": result.expert_id,
-            "expert_name": result.expert_name,
-            "answer": result.answer,
-            "confidence": round(result.confidence, 4),
-            "factors": result.factors.model_dump(),
-            "sources": result.sources,
-            "chunks_used": result.chunks_used,
-        },
-    }
+    return success_response("tapps_consult_expert", elapsed_ms, {
+        "domain": result.domain,
+        "expert_id": result.expert_id,
+        "expert_name": result.expert_name,
+        "answer": result.answer,
+        "confidence": round(result.confidence, 4),
+        "factors": result.factors.model_dump(),
+        "sources": result.sources,
+        "chunks_used": result.chunks_used,
+    })
 
 
 @mcp.tool()
@@ -625,15 +577,10 @@ def tapps_list_experts() -> dict[str, Any]:
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_list_experts", start)
 
-    return {
-        "tool": "tapps_list_experts",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
-            "expert_count": len(experts),
-            "experts": [e.model_dump() for e in experts],
-        },
-    }
+    return success_response("tapps_list_experts", elapsed_ms, {
+        "expert_count": len(experts),
+        "experts": [e.model_dump() for e in experts],
+    })
 
 
 @mcp.tool()
@@ -658,12 +605,7 @@ def tapps_checklist(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_checklist", start)
 
-    return {
-        "tool": "tapps_checklist",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": result.model_dump(),
-    }
+    return success_response("tapps_checklist", elapsed_ms, result.model_dump())
 
 
 # ---------------------------------------------------------------------------
@@ -702,35 +644,25 @@ def tapps_project_profile(
         _record_execution(
             "tapps_project_profile", start, status="failed", error_code="profile_failed",
         )
-        return {
-            "tool": "tapps_project_profile",
-            "success": False,
-            "elapsed_ms": elapsed_ms,
-            "error": {"code": "profile_failed", "message": str(exc)},
-        }
+        return error_response("tapps_project_profile", "profile_failed", str(exc))
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_project_profile", start)
 
-    return {
-        "tool": "tapps_project_profile",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
-            "project_root": str(root),
-            "tech_stack": profile.tech_stack.model_dump(),
-            "project_type": profile.project_type,
-            "project_type_confidence": round(profile.project_type_confidence, 2),
-            "project_type_reason": profile.project_type_reason,
-            "has_ci": profile.has_ci,
-            "ci_systems": profile.ci_systems,
-            "has_docker": profile.has_docker,
-            "has_tests": profile.has_tests,
-            "test_frameworks": profile.test_frameworks,
-            "package_managers": profile.package_managers,
-            "quality_recommendations": profile.quality_recommendations,
-        },
-    }
+    return success_response("tapps_project_profile", elapsed_ms, {
+        "project_root": str(root),
+        "tech_stack": profile.tech_stack.model_dump(),
+        "project_type": profile.project_type,
+        "project_type_confidence": round(profile.project_type_confidence, 2),
+        "project_type_reason": profile.project_type_reason,
+        "has_ci": profile.has_ci,
+        "ci_systems": profile.ci_systems,
+        "has_docker": profile.has_docker,
+        "has_tests": profile.has_tests,
+        "test_frameworks": profile.test_frameworks,
+        "package_managers": profile.package_managers,
+        "quality_recommendations": profile.quality_recommendations,
+    })
 
 
 # Session note store - singleton, created on first use
@@ -772,23 +704,15 @@ def tapps_session_notes(
 
     if action == "save":
         if not key or not value:
-            return {
-                "tool": "tapps_session_notes",
-                "success": False,
-                "elapsed_ms": 0,
-                "error": {"code": "missing_params", "message": "save requires key and value"},
-            }
+            return error_response(
+                "tapps_session_notes", "missing_params", "save requires key and value",
+            )
         note = store.save(key, value)
         data = {"action": "save", "note": note.model_dump()}
 
     elif action == "get":
         if not key:
-            return {
-                "tool": "tapps_session_notes",
-                "success": False,
-                "elapsed_ms": 0,
-                "error": {"code": "missing_params", "message": "get requires key"},
-            }
+            return error_response("tapps_session_notes", "missing_params", "get requires key")
         found = store.get(key)
         note_data = found.model_dump() if found else None
         data = {"action": "get", "note": note_data, "found": found is not None}
@@ -802,26 +726,16 @@ def tapps_session_notes(
         data = {"action": "clear", "cleared_count": cleared}
 
     else:
-        return {
-            "tool": "tapps_session_notes",
-            "success": False,
-            "elapsed_ms": 0,
-            "error": {
-                "code": "invalid_action",
-                "message": f"Unknown action: {action}. Use save/get/list/clear.",
-            },
-        }
+        return error_response(
+            "tapps_session_notes", "invalid_action",
+            f"Unknown action: {action}. Use save/get/list/clear.",
+        )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_notes", start)
     data.update(store.metadata())
 
-    return {
-        "tool": "tapps_session_notes",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": data,
-    }
+    return success_response("tapps_session_notes", elapsed_ms, data)
 
 
 @mcp.tool()
@@ -844,12 +758,7 @@ def tapps_impact_analysis(
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
-        return {
-            "tool": "tapps_impact_analysis",
-            "success": False,
-            "elapsed_ms": 0,
-            "error": {"code": "path_denied", "message": str(exc)},
-        }
+        return error_response("tapps_impact_analysis", "path_denied", str(exc))
 
     from tapps_mcp.project.impact_analyzer import analyze_impact
 
@@ -859,21 +768,16 @@ def tapps_impact_analysis(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_impact_analysis", start, file_path=str(resolved))
 
-    return {
-        "tool": "tapps_impact_analysis",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
-            "changed_file": report.changed_file,
-            "change_type": report.change_type,
-            "severity": report.severity,
-            "total_affected": report.total_affected,
-            "direct_dependents": [d.model_dump() for d in report.direct_dependents],
-            "transitive_dependents": [d.model_dump() for d in report.transitive_dependents],
-            "test_files": [t.model_dump() for t in report.test_files],
-            "recommendations": report.recommendations,
-        },
-    }
+    return success_response("tapps_impact_analysis", elapsed_ms, {
+        "changed_file": report.changed_file,
+        "change_type": report.change_type,
+        "severity": report.severity,
+        "total_affected": report.total_affected,
+        "direct_dependents": [d.model_dump() for d in report.direct_dependents],
+        "transitive_dependents": [d.model_dump() for d in report.transitive_dependents],
+        "test_files": [t.model_dump() for t in report.test_files],
+        "recommendations": report.recommendations,
+    })
 
 
 @mcp.tool()
@@ -907,12 +811,7 @@ async def tapps_report(
         try:
             resolved = _validate_file_path(file_path)
         except (ValueError, FileNotFoundError) as exc:
-            return {
-                "tool": "tapps_report",
-                "success": False,
-                "elapsed_ms": 0,
-                "error": {"code": "path_denied", "message": str(exc)},
-            }
+            return error_response("tapps_report", "path_denied", str(exc))
         result = await scorer.score_file(resolved)
         score_results.append(result)
         gate_results.append(evaluate_gate(result, preset=settings.quality_preset))
@@ -941,12 +840,7 @@ async def tapps_report(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_report", start, file_path=file_path or None)
 
-    return {
-        "tool": "tapps_report",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": report_data,
-    }
+    return success_response("tapps_report", elapsed_ms, report_data)
 
 
 # ---------------------------------------------------------------------------
@@ -1022,12 +916,9 @@ def tapps_init(
         status="success" if not result["errors"] else "failed",
     )
 
-    return {
-        "tool": "tapps_init",
-        "success": not result["errors"],
-        "elapsed_ms": elapsed_ms,
-        "data": result,
-    }
+    resp = success_response("tapps_init", elapsed_ms, result)
+    resp["success"] = not result["errors"]
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -1040,6 +931,64 @@ def _get_metrics_hub() -> MetricsHub:
     from tapps_mcp.metrics.collector import get_metrics_hub
 
     return get_metrics_hub()
+
+
+_PERIOD_DAYS: dict[str, int] = {"1d": 1, "7d": 7, "30d": 30}
+
+
+def _session_stats(
+    hub: MetricsHub, tool_name: str | None,
+) -> tuple[Any, list[dict[str, Any]]]:
+    """Compute stats from in-memory session data."""
+    from tapps_mcp.metrics.execution_metrics import ToolCallMetricsCollector
+
+    recent = hub.execution.get_recent(limit=100)
+    summary = ToolCallMetricsCollector._compute_summary(recent)
+
+    by_tool: dict[str, list[Any]] = {}
+    for m in recent:
+        by_tool.setdefault(m.tool_name, []).append(m)
+
+    breakdowns = []
+    for tname, tmetrics in sorted(by_tool.items()):
+        if tool_name and tname != tool_name:
+            continue
+        ts = ToolCallMetricsCollector._compute_summary(tmetrics)
+        breakdowns.append({
+            "tool_name": tname,
+            "call_count": ts.total_calls,
+            "success_rate": ts.success_rate,
+            "avg_duration_ms": ts.avg_duration_ms,
+            "p95_duration_ms": ts.p95_duration_ms,
+        })
+    return summary, breakdowns
+
+
+def _period_stats(
+    hub: MetricsHub, tool_name: str | None, period: str,
+) -> tuple[Any, list[dict[str, Any]]]:
+    """Compute stats from persisted data for a given time period."""
+    from datetime import UTC, datetime, timedelta
+
+    since: datetime | None = None
+    days = _PERIOD_DAYS.get(period)
+    if days is not None:
+        since = datetime.now(tz=UTC) - timedelta(days=days)
+
+    summary = hub.execution.get_summary(since=since)
+    raw = hub.execution.get_summary_by_tool(since=since)
+    breakdowns = [
+        {
+            "tool_name": b.tool_name,
+            "call_count": b.call_count,
+            "success_rate": b.success_rate,
+            "avg_duration_ms": b.avg_duration_ms,
+            "p95_duration_ms": b.p95_duration_ms,
+        }
+        for b in raw
+        if not tool_name or b.tool_name == tool_name
+    ]
+    return summary, breakdowns
 
 
 @mcp.tool()
@@ -1074,12 +1023,7 @@ async def tapps_dashboard(
         otel_data = export_otel_trace(recent)
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_dashboard", start)
-        return {
-            "tool": "tapps_dashboard",
-            "success": True,
-            "elapsed_ms": elapsed_ms,
-            "data": otel_data,
-        }
+        return success_response("tapps_dashboard", elapsed_ms, otel_data)
 
     dashboard = hub.get_dashboard_generator()
 
@@ -1097,12 +1041,7 @@ async def tapps_dashboard(
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_dashboard", start)
-    return {
-        "tool": "tapps_dashboard",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": data,
-    }
+    return success_response("tapps_dashboard", elapsed_ms, data)
 
 
 @mcp.tool()
@@ -1124,78 +1063,24 @@ def tapps_stats(
 
     hub = _get_metrics_hub()
 
-    # Compute time-based filter
-    from datetime import UTC, datetime, timedelta
-
-    since: datetime | None = None
     if period == "session":
-        since = None  # use in-memory buffer only
-    elif period == "1d":
-        since = datetime.now(tz=UTC) - timedelta(days=1)
-    elif period == "7d":
-        since = datetime.now(tz=UTC) - timedelta(days=7)
-    elif period == "30d":
-        since = datetime.now(tz=UTC) - timedelta(days=30)
-    # "all" = no filter
-
-    if period == "session":
-        # Use in-memory recent data for session stats
-        recent = hub.execution.get_recent(limit=100)
-        from tapps_mcp.metrics.execution_metrics import ToolCallMetricsCollector
-
-        summary = ToolCallMetricsCollector._compute_summary(recent)
-
-        # Per-tool breakdown from recent
-        by_tool_data: dict[str, list[Any]] = {}
-        for m in recent:
-            by_tool_data.setdefault(m.tool_name, []).append(m)
-        tool_breakdowns = []
-        for tname, tmetrics in sorted(by_tool_data.items()):
-            if tool_name and tname != tool_name:
-                continue
-            ts = ToolCallMetricsCollector._compute_summary(tmetrics)
-            tool_breakdowns.append(
-                {
-                    "tool_name": tname,
-                    "call_count": ts.total_calls,
-                    "success_rate": ts.success_rate,
-                    "avg_duration_ms": ts.avg_duration_ms,
-                    "p95_duration_ms": ts.p95_duration_ms,
-                }
-            )
+        summary, tool_breakdowns = _session_stats(hub, tool_name)
     else:
-        summary = hub.execution.get_summary(since=since)
-        breakdowns = hub.execution.get_summary_by_tool(since=since)
-        tool_breakdowns = [
-            {
-                "tool_name": b.tool_name,
-                "call_count": b.call_count,
-                "success_rate": b.success_rate,
-                "avg_duration_ms": b.avg_duration_ms,
-                "p95_duration_ms": b.p95_duration_ms,
-            }
-            for b in breakdowns
-            if not tool_name or b.tool_name == tool_name
-        ]
+        summary, tool_breakdowns = _period_stats(hub, tool_name, period)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_stats", start)
 
-    return {
-        "tool": "tapps_stats",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
-            "period": period,
-            "total_calls": summary.total_calls,
-            "success_rate": summary.success_rate,
-            "avg_duration_ms": summary.avg_duration_ms,
-            "p95_duration_ms": summary.p95_duration_ms,
-            "gate_pass_rate": summary.gate_pass_rate,
-            "avg_score": summary.avg_score,
-            "tools": tool_breakdowns,
-        },
-    }
+    return success_response("tapps_stats", elapsed_ms, {
+        "period": period,
+        "total_calls": summary.total_calls,
+        "success_rate": summary.success_rate,
+        "avg_duration_ms": summary.avg_duration_ms,
+        "p95_duration_ms": summary.p95_duration_ms,
+        "gate_pass_rate": summary.gate_pass_rate,
+        "avg_score": summary.avg_score,
+        "tools": tool_breakdowns,
+    })
 
 
 @mcp.tool()
@@ -1235,18 +1120,13 @@ def tapps_feedback(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_feedback", start)
 
-    return {
-        "tool": "tapps_feedback",
-        "success": True,
-        "elapsed_ms": elapsed_ms,
-        "data": {
-            "recorded": True,
-            "tool_name": tool_name,
-            "helpful": helpful,
-            "tool_stats": stats,
-            "overall_stats": overall_stats,
-        },
-    }
+    return success_response("tapps_feedback", elapsed_ms, {
+        "recorded": True,
+        "tool_name": tool_name,
+        "helpful": helpful,
+        "tool_stats": stats,
+        "overall_stats": overall_stats,
+    })
 
 
 # ---------------------------------------------------------------------------

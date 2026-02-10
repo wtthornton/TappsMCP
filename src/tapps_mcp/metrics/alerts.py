@@ -6,17 +6,14 @@ Threshold-based alerting for quality metric degradation.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 import structlog
 
+from tapps_mcp.common.utils import utc_now
+
 logger = structlog.get_logger(__name__)
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC)
 
 
 class AlertSeverity(StrEnum):
@@ -129,7 +126,7 @@ class AlertManager:
             List of triggered alerts.
         """
         triggered: list[Alert] = []
-        now = _utc_now().isoformat()
+        now = utc_now().isoformat()
 
         for cond in self._conditions:
             if not cond.enabled:

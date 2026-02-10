@@ -9,12 +9,12 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
 import structlog
 
+from tapps_mcp.common.utils import utc_now
 from tapps_mcp.metrics.confidence_metrics import ConfidenceMetricsTracker
 from tapps_mcp.metrics.execution_metrics import ToolCallMetricsCollector
 from tapps_mcp.metrics.expert_metrics import ExpertPerformanceTracker
@@ -22,10 +22,6 @@ from tapps_mcp.metrics.outcome_tracker import OutcomeTracker
 from tapps_mcp.metrics.rag_metrics import RAGMetricsTracker
 
 logger = structlog.get_logger(__name__)
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC)
 
 
 @dataclass
@@ -118,7 +114,7 @@ class BusinessMetricsCollector:
 
     def collect(self) -> BusinessMetricsData:
         """Collect current business metrics from all trackers."""
-        data = BusinessMetricsData(timestamp=_utc_now().isoformat())
+        data = BusinessMetricsData(timestamp=utc_now().isoformat())
 
         # Adoption metrics
         data.adoption = self._collect_adoption()

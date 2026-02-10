@@ -71,8 +71,7 @@ class AdaptiveScoringEngine:
         if current_weights is None:
             current_weights = _get_default_weights()
 
-        if outcomes is None:
-            outcomes = self._tracker.load_outcomes(limit=1000)
+        outcomes = self._load_outcomes(outcomes)
 
         if len(outcomes) < MIN_OUTCOMES_FOR_ADJUSTMENT:
             logger.debug(
@@ -92,8 +91,7 @@ class AdaptiveScoringEngine:
         outcomes: list[CodeOutcome] | None = None,
     ) -> dict[str, Any]:
         """Produce a diagnostic report without applying changes."""
-        if outcomes is None:
-            outcomes = self._tracker.load_outcomes(limit=1000)
+        outcomes = self._load_outcomes(outcomes)
 
         current = _get_default_weights()
         correlations = self._calculate_correlations(outcomes) if outcomes else {}
@@ -112,7 +110,7 @@ class AdaptiveScoringEngine:
 
     def save_snapshot(self, weights: dict[str, float], snapshot_path: Path) -> None:
         """Persist a :class:`AdaptiveWeightsSnapshot` to *snapshot_path*."""
-        outcomes = self._tracker.load_outcomes(limit=1000)
+        outcomes = self._load_outcomes()
         correlations = self._calculate_correlations(outcomes) if outcomes else {}
         snapshot = AdaptiveWeightsSnapshot(
             weights=weights,
@@ -125,6 +123,12 @@ class AdaptiveScoringEngine:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _load_outcomes(self, outcomes: list[CodeOutcome] | None = None) -> list[CodeOutcome]:
+        """Return *outcomes* if provided, otherwise load from tracker."""
+        if outcomes is not None:
+            return outcomes
+        return self._tracker.load_outcomes(limit=1000)
 
     def _calculate_correlations(
         self,
@@ -209,6 +213,16 @@ def _get_default_weights() -> dict[str, float]:
     }
 
 
+def _mean(values: list[float]) -> float:
+    """Arithmetic mean of *values*."""
+    return sum(values) / len(values)
+
+
+def _variance(values: list[float], mu: float) -> float:
+    """Population variance of *values* around *mu*."""
+    return sum((v - mu) ** 2 for v in values) / len(values)
+
+
 def _pearson_correlation(x: list[float], y: list[bool]) -> float:
     """Compute Pearson correlation between *x* (floats) and *y* (bools).
 
@@ -220,19 +234,16 @@ def _pearson_correlation(x: list[float], y: list[bool]) -> float:
 
     y_float = [1.0 if v else 0.0 for v in y]
 
-    mean_x = sum(x) / n
-    mean_y = sum(y_float) / n
+    mu_x = _mean(x)
+    mu_y = _mean(y_float)
 
-    cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y_float, strict=True)) / n
-    var_x = sum((xi - mean_x) ** 2 for xi in x) / n
-    var_y = sum((yi - mean_y) ** 2 for yi in y_float) / n
+    cov = sum((xi - mu_x) * (yi - mu_y) for xi, yi in zip(x, y_float, strict=True)) / n
+    var_x = _variance(x, mu_x)
+    var_y = _variance(y_float, mu_y)
 
     # Guard against negative variance from floating-point rounding
     if var_x <= 0.0 or var_y <= 0.0:
         return 0.0
 
-    std_x = math.sqrt(var_x)
-    std_y = math.sqrt(var_y)
-
-    corr = cov / (std_x * std_y)
+    corr = cov / (math.sqrt(var_x) * math.sqrt(var_y))
     return max(-1.0, min(1.0, corr))

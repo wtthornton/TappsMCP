@@ -12,6 +12,15 @@ if TYPE_CHECKING:
 from tapps_mcp.pipeline.models import HandoffState, PipelineStage, RunlogEntry, StageResult
 
 
+def _render_list_section(lines: list[str], header: str, items: list[str]) -> None:
+    """Append a bold-header + bulleted list to *lines* if *items* is non-empty."""
+    if items:
+        lines.append(f"**{header}:**")
+        for item in items:
+            lines.append(f"- {item}")
+        lines.append("")
+
+
 def render_handoff(state: HandoffState) -> str:
     """Render a ``HandoffState`` to markdown suitable for ``TAPPS_HANDOFF.md``."""
     lines: list[str] = [
@@ -30,29 +39,10 @@ def render_handoff(state: HandoffState) -> str:
         lines.append(f"**Tools called:** {', '.join(result.tools_called) or 'none'}")
         lines.append("")
 
-        if result.findings:
-            lines.append("**Findings:**")
-            for f in result.findings:
-                lines.append(f"- {f}")
-            lines.append("")
-
-        if result.decisions:
-            lines.append("**Decisions:**")
-            for d in result.decisions:
-                lines.append(f"- {d}")
-            lines.append("")
-
-        if result.files_in_scope:
-            lines.append("**Files in scope:**")
-            for fs in result.files_in_scope:
-                lines.append(f"- {fs}")
-            lines.append("")
-
-        if result.open_questions:
-            lines.append("**Open questions:**")
-            for q in result.open_questions:
-                lines.append(f"- {q}")
-            lines.append("")
+        _render_list_section(lines, "Findings", result.findings)
+        _render_list_section(lines, "Decisions", result.decisions)
+        _render_list_section(lines, "Files in scope", result.files_in_scope)
+        _render_list_section(lines, "Open questions", result.open_questions)
 
         lines.append("---")
         lines.append("")

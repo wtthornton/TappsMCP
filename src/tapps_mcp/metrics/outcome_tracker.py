@@ -9,17 +9,15 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
 import structlog
 
+from tapps_mcp.common.utils import utc_now
+
 logger = structlog.get_logger(__name__)
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=UTC)
 
 
 @dataclass
@@ -83,7 +81,7 @@ class OutcomeTracker:
             iterations=1,
             first_pass_success=overall >= threshold,
             gate_preset=gate_preset,
-            timestamp=_utc_now().isoformat(),
+            timestamp=utc_now().isoformat(),
         )
 
         with self._write_lock:
@@ -133,7 +131,7 @@ class OutcomeTracker:
             if outcome.timestamp:
                 try:
                     start = datetime.fromisoformat(outcome.timestamp)
-                    outcome.time_to_quality = (_utc_now() - start).total_seconds()
+                    outcome.time_to_quality = (utc_now() - start).total_seconds()
                 except (ValueError, TypeError):
                     pass
 

@@ -11,6 +11,7 @@ import json
 import re
 import tomllib
 from collections import Counter
+from collections.abc import Iterator  # noqa: TC003
 from pathlib import Path  # noqa: TC003
 
 import structlog
@@ -88,6 +89,8 @@ _DOMAIN_PATTERNS: dict[str, list[str]] = {
 
 _MIN_LANGUAGE_FILE_COUNT = 3
 
+_DEP_NAME_RE = re.compile(r"^([a-zA-Z0-9\-_]+)")
+
 _SKIP_DIRS: frozenset[str] = frozenset(
     {
         ".git",
@@ -147,17 +150,11 @@ class TechStackDetector:
 
     def detect_languages(self) -> list[str]:
         counts: Counter[str] = Counter()
-        scanned = 0
-        for ext, lang in _LANGUAGE_EXTENSIONS.items():
-            for fp in self.project_root.glob(f"**/*{ext}"):
-                if _should_skip(fp):
-                    continue
+        patterns = [f"**/*{ext}" for ext in _LANGUAGE_EXTENSIONS]
+        for fp in _walk_project_files(self.project_root, patterns, self.max_files):
+            lang = _LANGUAGE_EXTENSIONS.get(fp.suffix)
+            if lang:
                 counts[lang] += 1
-                scanned += 1
-                if scanned >= self.max_files:
-                    break
-            if scanned >= self.max_files:
-                break
         self._languages = {lang for lang, n in counts.items() if n >= _MIN_LANGUAGE_FILE_COUNT}
         return sorted(self._languages)
 
@@ -169,24 +166,13 @@ class TechStackDetector:
         return sorted(self._libraries)
 
     def detect_frameworks(self) -> list[str]:
-        n = 0
-        for py in self.project_root.glob("**/*.py"):
-            if _should_skip(py):
-                continue
-            self._python_imports(py)
-            n += 1
-            if n >= self.max_files:
-                break
-        for ext in (".js", ".ts", ".jsx", ".tsx"):
-            for js in self.project_root.glob(f"**/*{ext}"):
-                if _should_skip(js):
-                    continue
-                self._js_imports(js)
-                n += 1
-                if n >= self.max_files:
-                    break
-            if n >= self.max_files:
-                break
+        py_patterns = ["**/*.py"]
+        js_patterns = [f"**/*{ext}" for ext in (".js", ".ts", ".jsx", ".tsx")]
+        for fp in _walk_project_files(self.project_root, py_patterns + js_patterns, self.max_files):
+            if fp.suffix == ".py":
+                self._python_imports(fp)
+            else:
+                self._js_imports(fp)
         return sorted(self._frameworks)
 
     def detect_domains(self) -> list[str]:
@@ -214,9 +200,9 @@ class TechStackDetector:
                 stripped = line.strip()
                 if not stripped or stripped.startswith("#"):
                     continue
-                m = re.match(r"^([a-zA-Z0-9\-_]+)", stripped)
-                if m:
-                    self._libraries.add(m.group(1).lower())
+                name = _extract_dep_name(stripped)
+                if name:
+                    self._libraries.add(name)
         except OSError:
             pass
 
@@ -226,9 +212,9 @@ class TechStackDetector:
         try:
             data = tomllib.loads(path.read_text(encoding="utf-8"))
             for dep in data.get("project", {}).get("dependencies", []):
-                m = re.match(r"^([a-zA-Z0-9\-_]+)", dep)
-                if m:
-                    self._libraries.add(m.group(1).lower())
+                name = _extract_dep_name(dep)
+                if name:
+                    self._libraries.add(name)
             poetry_deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
             for dep in poetry_deps:
                 if dep != "python":
@@ -274,11 +260,9 @@ class TechStackDetector:
     def _js_imports(self, path: Path) -> None:
         try:
             content = path.read_text(encoding="utf-8")
-            for pkg in re.findall(r"""import\s+.*?\s+from\s+['"]([^'"]+)['"]""", content):
-                name = pkg.split("/")[0]
-                if not name.startswith("."):
-                    self._match_framework(name)
-            for pkg in re.findall(r"""require\(['"]([^'"]+)['"]\)""", content):
+            imports = re.findall(r"""import\s+.*?\s+from\s+['"]([^'"]+)['"]""", content)
+            requires = re.findall(r"""require\(['"]([^'"]+)['"]\)""", content)
+            for pkg in (*imports, *requires):
                 name = pkg.split("/")[0]
                 if not name.startswith("."):
                     self._match_framework(name)
@@ -305,3 +289,24 @@ class TechStackDetector:
 
 def _should_skip(path: Path) -> bool:
     return any(part in _SKIP_DIRS for part in path.parts)
+
+
+def _extract_dep_name(raw: str) -> str | None:
+    """Extract a normalized dependency name from a requirement string."""
+    m = _DEP_NAME_RE.match(raw)
+    return m.group(1).lower() if m else None
+
+
+def _walk_project_files(
+    root: Path, patterns: list[str], max_files: int,
+) -> Iterator[Path]:
+    """Yield project files matching *patterns*, skipping ignored dirs."""
+    n = 0
+    for pattern in patterns:
+        for fp in root.glob(pattern):
+            if _should_skip(fp):
+                continue
+            yield fp
+            n += 1
+            if n >= max_files:
+                return

@@ -33,12 +33,9 @@ _CI_SIGNALS: dict[str, list[str]] = {
 }
 
 
-def _detect_ci(root: Path) -> list[str]:
-    found: list[str] = []
-    for name, paths in _CI_SIGNALS.items():
-        if any((root / p).exists() for p in paths):
-            found.append(name)
-    return found
+def _detect_signals(root: Path, signals: dict[str, list[str]]) -> list[str]:
+    """Detect which signal groups are present under *root*."""
+    return [name for name, paths in signals.items() if any((root / p).exists() for p in paths)]
 
 
 # ---------------------------------------------------------------------------
@@ -52,14 +49,6 @@ _TEST_SIGNALS: dict[str, list[str]] = {
     "go-test": ["go.mod"],
     "cargo-test": ["Cargo.toml"],
 }
-
-
-def _detect_test_frameworks(root: Path) -> list[str]:
-    found: list[str] = []
-    for name, paths in _TEST_SIGNALS.items():
-        if any((root / p).exists() for p in paths):
-            found.append(name)
-    return found
 
 
 # ---------------------------------------------------------------------------
@@ -78,44 +67,35 @@ _PM_SIGNALS: dict[str, list[str]] = {
 }
 
 
-def _detect_package_managers(root: Path) -> list[str]:
-    found: list[str] = []
-    for name, paths in _PM_SIGNALS.items():
-        if any((root / p).exists() for p in paths):
-            found.append(name)
-    # Fallback: if pyproject.toml exists but no lock file detected, assume pip
-    if not found and (root / "pyproject.toml").exists():
-        found.append("pip")
-    return found
-
-
 # ---------------------------------------------------------------------------
 # Quality recommendations
 # ---------------------------------------------------------------------------
 
 
 def _quality_recommendations(profile: ProjectProfile) -> list[str]:
-    recs: list[str] = []
-
-    if not profile.has_ci:
-        recs.append("Add CI/CD pipeline (e.g. GitHub Actions) for automated testing.")
-    if not profile.has_docker and profile.project_type in (
-        "api-service",
-        "microservice",
-        "web-app",
-    ):
-        recs.append("Add Dockerfile for consistent deployment environments.")
-    if not profile.has_tests:
-        recs.append("Add a test suite (pytest for Python, jest for JS/TS).")
-    if "python" in profile.tech_stack.languages:
-        if "ruff" not in profile.tech_stack.libraries:
-            recs.append("Add ruff for fast Python linting.")
-        if "mypy" not in profile.tech_stack.libraries:
-            recs.append("Add mypy for type checking.")
-    if profile.project_type == "library" and not profile.package_managers:
-        recs.append("Publish via PyPI or npm for discoverability.")
-
-    return recs
+    is_python = "python" in profile.tech_stack.languages
+    checks: list[tuple[bool, str]] = [
+        (not profile.has_ci, "Add CI/CD pipeline (e.g. GitHub Actions) for automated testing."),
+        (
+            not profile.has_docker
+            and profile.project_type in ("api-service", "microservice", "web-app"),
+            "Add Dockerfile for consistent deployment environments.",
+        ),
+        (not profile.has_tests, "Add a test suite (pytest for Python, jest for JS/TS)."),
+        (
+            is_python and "ruff" not in profile.tech_stack.libraries,
+            "Add ruff for fast Python linting.",
+        ),
+        (
+            is_python and "mypy" not in profile.tech_stack.libraries,
+            "Add mypy for type checking.",
+        ),
+        (
+            profile.project_type == "library" and not profile.package_managers,
+            "Publish via PyPI or npm for discoverability.",
+        ),
+    ]
+    return [rec for condition, rec in checks if condition]
 
 
 # ---------------------------------------------------------------------------
@@ -139,9 +119,11 @@ def detect_project_profile(project_root: Path) -> ProjectProfile:
     ptype, pconf, preason = detect_project_type(project_root)
 
     # Signals
-    ci_systems = _detect_ci(project_root)
-    test_fws = _detect_test_frameworks(project_root)
-    pkg_mgrs = _detect_package_managers(project_root)
+    ci_systems = _detect_signals(project_root, _CI_SIGNALS)
+    test_fws = _detect_signals(project_root, _TEST_SIGNALS)
+    pkg_mgrs = _detect_signals(project_root, _PM_SIGNALS)
+    if not pkg_mgrs and (project_root / "pyproject.toml").exists():
+        pkg_mgrs.append("pip")
     has_docker = (project_root / "Dockerfile").exists() or (
         project_root / "docker-compose.yml"
     ).exists()
