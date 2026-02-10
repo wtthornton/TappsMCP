@@ -36,12 +36,14 @@ class TestGovernanceLayer:
         assert result.allowed is False
         assert any("PII" in issue for issue in result.detected_issues)
 
-    def test_single_ssn_not_flagged(self):
-        """Single occurrence might be a false positive, so not flagged."""
+    def test_single_ssn_flagged(self):
+        """Even a single SSN should be redacted to avoid data leakage."""
         gl = GovernanceLayer()
         content = "SSN: 123-45-6789"
         result = gl.filter_content(content)
-        assert result.allowed is True
+        assert result.allowed is False
+        assert result.filtered_content is not None
+        assert "123-45-6789" not in result.filtered_content
 
     def test_connection_string_detected(self):
         gl = GovernanceLayer()

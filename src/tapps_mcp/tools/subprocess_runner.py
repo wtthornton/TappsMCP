@@ -137,11 +137,11 @@ async def run_command_async(
             command=cmd,
             timed_out=True,
         )
-    except FileNotFoundError:
-        logger.error("command_not_found_async", cmd=cmd[0] if cmd else "<empty>")
+    except (FileNotFoundError, OSError) as exc:
+        logger.error("command_not_found_async", cmd=cmd[0] if cmd else "<empty>", error=str(exc))
         return CommandResult(
             returncode=-1,
             stdout="",
-            stderr=f"Command not found: {cmd[0] if cmd else '<empty>'}",
+            stderr=f"Command error: {exc}",
             command=cmd,
         )

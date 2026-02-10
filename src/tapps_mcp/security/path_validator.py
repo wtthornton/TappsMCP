@@ -54,21 +54,14 @@ class PathValidator:
         if not path.is_absolute():
             path = (self.project_root / path).resolve()
 
-        # Resolve to an absolute, canonical path
+        # Resolve to an absolute, canonical path (follows symlinks atomically,
+        # eliminating TOCTOU between is_symlink() and resolve())
         try:
             resolved = path.resolve()
         except (OSError, RuntimeError) as exc:
             raise PathValidationError(f"Cannot resolve path {file_path}: {exc}") from exc
 
-        # Reject symlinks that escape project root
-        if path.is_symlink():
-            link_target = path.resolve(strict=False)
-            if not self._is_within_root(link_target):
-                raise PathValidationError(
-                    f"Symlink {file_path} resolves outside project root: {link_target}"
-                )
-
-        # Boundary check
+        # Boundary check (resolve() already followed symlinks)
         if not self._is_within_root(resolved):
             raise PathValidationError(
                 f"Path outside project root: {resolved}. Project root: {self.project_root}"
@@ -114,6 +107,10 @@ class PathValidator:
     @staticmethod
     def _check_traversal_patterns(file_path: Path) -> None:
         path_str = str(file_path)
+
+        # Literal directory traversal
+        if ".." in file_path.parts:
+            raise PathValidationError(f"Directory traversal ('..') in path: {file_path}")
 
         # URL-encoded traversal
         suspicious = ["%2e%2e", "%2f", "%5c"]

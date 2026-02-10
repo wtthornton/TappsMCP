@@ -84,11 +84,16 @@ if (!isTappsMCPInstalled(python)) {
   }
 }
 
-// Forward all args to tapps-mcp CLI
+// Forward all args to tapps-mcp CLI (no shell to prevent injection)
 const args = process.argv.slice(2);
 const child = spawn("tapps-mcp", args, {
   stdio: "inherit",
-  shell: true,
+  shell: process.platform === "win32",
+});
+
+child.on("error", (err) => {
+  console.error("Failed to start tapps-mcp:", err.message);
+  process.exit(1);
 });
 
 child.on("exit", (code) => {

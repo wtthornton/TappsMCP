@@ -8,6 +8,7 @@ absent, transparently falls back to keyword-based
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import structlog
@@ -45,6 +46,7 @@ class VectorKnowledgeBase:
         self._similarity_threshold = similarity_threshold
         self._index_dir = index_dir
         self._initialised = False
+        self._init_lock = threading.Lock()
         self._backend_type = "pending"
 
         # Backends (set during _initialise).
@@ -122,11 +124,14 @@ class VectorKnowledgeBase:
     # ------------------------------------------------------------------
 
     def _ensure_initialised(self) -> None:
-        """Initialise the backend on first use."""
+        """Initialise the backend on first use (thread-safe)."""
         if self._initialised:
             return
-        self._initialised = True
-        self._initialise()
+        with self._init_lock:
+            if self._initialised:
+                return
+            self._initialise()
+            self._initialised = True
 
     def _initialise(self) -> None:
         """Try vector backend, fall back to simple."""

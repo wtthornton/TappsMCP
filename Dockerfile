@@ -24,6 +24,7 @@ LABEL org.opencontainers.image.title="TappsMCP"
 LABEL org.opencontainers.image.description="MCP server providing code quality tools"
 LABEL org.opencontainers.image.source="https://github.com/tapps-mcp/tapps-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.vendor="TappsMCP"
 
 WORKDIR /app
 

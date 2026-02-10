@@ -107,6 +107,11 @@ class KBCache:
                     self._stats.misses += 1
                     return None
                 content = content_path.read_text(encoding="utf-8")
+
+                # Update hit count inside the lock to avoid races
+                new_hits = meta.get("cache_hits", 0) + 1
+                meta["cache_hits"] = new_hits
+                self._write_meta_atomic(meta_path, meta)
         except TimeoutError:
             logger.warning("cache_lock_timeout", library=library, topic=topic)
             self._stats.misses += 1
@@ -121,12 +126,8 @@ class KBCache:
             token_count=meta.get("token_count", 0),
             cached_at=meta.get("cached_at"),
             fetched_at=meta.get("fetched_at"),
-            cache_hits=meta.get("cache_hits", 0) + 1,
+            cache_hits=new_hits,
         )
-
-        # Update hit count in metadata
-        meta["cache_hits"] = entry.cache_hits
-        self._write_meta_atomic(meta_path, meta)
 
         self._stats.hits += 1
         return entry

@@ -79,8 +79,27 @@ def tapps_server_info() -> dict[str, Any]:
     try:
         tool_manager = mcp._tool_manager
         available_tools = list(tool_manager._tools.keys())
-    except Exception:
-        available_tools = ["tapps_server_info"]
+    except AttributeError:
+        # Fallback if internal API changes
+        available_tools = [
+            "tapps_server_info",
+            "tapps_score_file",
+            "tapps_security_scan",
+            "tapps_quality_gate",
+            "tapps_lookup_docs",
+            "tapps_validate_config",
+            "tapps_consult_expert",
+            "tapps_list_experts",
+            "tapps_checklist",
+            "tapps_project_profile",
+            "tapps_session_notes",
+            "tapps_impact_analysis",
+            "tapps_report",
+            "tapps_init",
+            "tapps_dashboard",
+            "tapps_stats",
+            "tapps_feedback",
+        ]
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -799,7 +818,7 @@ async def tapps_report(
                 score_results.append(result)
                 gate_results.append(evaluate_gate(result, preset=settings.quality_preset))
             except Exception:
-                logger.debug("report_file_skip", file=str(pf))
+                logger.warning("report_file_skip", file=str(pf), exc_info=True)
 
     report_data = generate_report(
         score_results,
@@ -907,7 +926,7 @@ def _get_metrics_hub() -> MetricsHub:
 
 @mcp.tool()
 async def tapps_dashboard(
-    format: str = "json",  # noqa: A002
+    output_format: str = "json",
     time_range: str = "7d",
     sections: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -918,7 +937,7 @@ async def tapps_dashboard(
     and alerts.
 
     Args:
-        format: Output format - "json" (default), "markdown", "html", or "otel".
+        output_format: Output format - "json" (default), "markdown", "html", or "otel".
         time_range: Time range - "1d", "7d", "30d", "90d".
         sections: Specific sections to include (default: all).
             Options: summary, tool_metrics, scoring_trends, expert_metrics,
@@ -930,7 +949,7 @@ async def tapps_dashboard(
 
     hub = _get_metrics_hub()
 
-    if format == "otel":
+    if output_format == "otel":
         from tapps_mcp.metrics.otel_export import export_otel_trace
 
         recent = hub.execution.get_recent(limit=100)
@@ -945,12 +964,12 @@ async def tapps_dashboard(
 
     dashboard = hub.get_dashboard_generator()
 
-    if format == "json":
+    if output_format == "json":
         data = dashboard.generate_json_dashboard(sections=sections)
-    elif format == "markdown":
+    elif output_format == "markdown":
         content = dashboard.generate_markdown_dashboard(sections=sections)
         data = {"format": "markdown", "content": content}
-    elif format == "html":
+    elif output_format == "html":
         content = dashboard.generate_html_dashboard(sections=sections)
         path = dashboard.save_dashboard(fmt="html", sections=sections)
         data = {"format": "html", "content": content, "saved_to": str(path)}
@@ -1119,6 +1138,7 @@ def get_knowledge_resource(domain: str, topic: str) -> str:
 
     Browse the 119 knowledge files across 16 expert domains.
     """
+    import re
     from pathlib import Path
 
     from tapps_mcp.experts.registry import ExpertRegistry
@@ -1127,8 +1147,18 @@ def get_knowledge_resource(domain: str, topic: str) -> str:
         valid = ", ".join(sorted(ExpertRegistry.TECHNICAL_DOMAINS))
         return f"Unknown domain: {domain}. Valid domains: {valid}"
 
+    # Sanitise topic to prevent path traversal (alphanumeric, hyphens, underscores only)
+    if not re.match(r"^[a-zA-Z0-9_-]+$", topic):
+        return f"Invalid topic name: '{topic}'. Use only alphanumeric, hyphens, underscores."
+
     knowledge_dir = Path(__file__).parent / "experts" / "knowledge" / domain
     topic_file = knowledge_dir / f"{topic}.md"
+
+    # Verify resolved path stays within the knowledge directory
+    try:
+        topic_file.resolve().relative_to(knowledge_dir.resolve())
+    except ValueError:
+        return f"Invalid topic path: '{topic}'."
 
     if not topic_file.exists():
         # List available topics

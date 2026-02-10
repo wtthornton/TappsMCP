@@ -17,6 +17,7 @@ services:
       TAPPS_MCP_LOG_LEVEL: INFO
     volumes:
       - .:/workspace:ro
+      - tapps-state:/workspace/.tapps-mcp
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/"]
@@ -29,3 +30,6 @@ services:
         limits:
           memory: 512M
           cpus: "1.0"
+
+volumes:
+  tapps-state:

@@ -15,6 +15,7 @@ async background refresh.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from typing import TYPE_CHECKING
 
@@ -64,8 +65,13 @@ class LookupEngine:
 
     async def close(self) -> None:
         """Shut down the client and cancel background tasks."""
-        for task in self._background_tasks:
+        tasks = list(self._background_tasks)
+        for task in tasks:
             task.cancel()
+        # Await cancelled tasks so they finish cleanly
+        for task in tasks:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
         self._background_tasks.clear()
         await self._client.close()
 

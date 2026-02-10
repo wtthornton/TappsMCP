@@ -42,15 +42,15 @@ _INJECTION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "role_manipulation",
         re.compile(
-            r"you\s+are\s+now\s+(?:a\s+)?(?:new|different|evil|unrestricted)",
+            r"you\s+are\s+now\s+(?:an?\s+)?(?:new|different|evil|unrestricted|malicious|jailbroken)",
             re.IGNORECASE,
         ),
     ),
-    # Hidden instruction markers
+    # Hidden instruction markers (escaped pipes to match literal <|...|> tokens)
     (
         "hidden_instruction",
         re.compile(
-            r"(?:<\|(?:im_start|im_end|system|user|assistant)\|>)",
+            r"<\|(?:im_start|im_end|system|user|assistant)\|>",
             re.IGNORECASE,
         ),
     ),

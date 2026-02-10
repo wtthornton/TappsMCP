@@ -77,26 +77,31 @@ class GovernanceLayer:
 
         if self.policy.filter_secrets:
             for pattern in self.SECRET_PATTERNS:
-                if re.search(pattern, content):
+                if re.search(pattern, filtered):
                     detected_issues.append(f"Secret pattern detected: {pattern[:50]}")
-                    filtered = re.sub(pattern, r"\1[REDACTED]", filtered)
+                    # Patterns with 2+ groups: keep group 1 (label), redact group 2 (value)
+                    # Patterns with 0-1 groups: replace entire match
+                    compiled = re.compile(pattern)
+                    if compiled.groups >= 2:  # noqa: PLR2004
+                        filtered = compiled.sub(r"\1 = [REDACTED]", filtered)
+                    else:
+                        filtered = compiled.sub("[REDACTED]", filtered)
 
         if self.policy.filter_tokens:
             token_pat = r"(?i)(token|bearer)\s*[:=]\s*['\"]?([a-zA-Z0-9_\-\.]{32,})"  # noqa: S105
-            if re.search(token_pat, content):
+            if re.search(token_pat, filtered):
                 detected_issues.append("Token detected")
-                filtered = re.sub(token_pat, r"\1[REDACTED]", filtered)
+                filtered = re.sub(token_pat, r"\1 = [REDACTED]", filtered)
 
         if self.policy.filter_credentials:
             for pattern in self.CREDENTIAL_PATTERNS:
-                if re.search(pattern, content):
+                if re.search(pattern, filtered):
                     detected_issues.append("Credentials detected")
-                    filtered = re.sub(pattern, r"\1[REDACTED]", filtered)
+                    filtered = re.sub(pattern, r"\1 = [REDACTED]", filtered)
 
         if self.policy.filter_pii:
             for pattern in self.PII_PATTERNS:
-                matches = re.findall(pattern, content)
-                if len(matches) > 1:
+                if re.search(pattern, filtered):
                     detected_issues.append("Potential PII detected")
                     filtered = re.sub(pattern, "[REDACTED]", filtered)
 

@@ -10,6 +10,7 @@ import contextlib
 import json
 import os
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +35,7 @@ class SessionNoteStore:
         self.session_id = uuid.uuid4().hex[:12]
         self.session_started = datetime.now(tz=timezone.utc).isoformat()  # noqa: UP017
         self._notes: dict[str, SessionNote] = {}
+        self._lock = threading.Lock()
 
         # Persistence directory
         self._store_dir = project_root / ".tapps-mcp" / "sessions"
@@ -50,24 +52,27 @@ class SessionNoteStore:
     def save(self, key: str, value: str) -> SessionNote:
         """Store or update a note."""
         now = datetime.now(tz=timezone.utc).isoformat()  # noqa: UP017
-        existing = self._notes.get(key)
-        note = SessionNote(
-            key=key,
-            value=value,
-            created_at=existing.created_at if existing else now,
-            updated_at=now,
-        )
-        self._notes[key] = note
+        with self._lock:
+            existing = self._notes.get(key)
+            note = SessionNote(
+                key=key,
+                value=value,
+                created_at=existing.created_at if existing else now,
+                updated_at=now,
+            )
+            self._notes[key] = note
         self._persist()
         return note
 
     def get(self, key: str) -> SessionNote | None:
         """Retrieve a single note by key."""
-        return self._notes.get(key)
+        with self._lock:
+            return self._notes.get(key)
 
     def list_all(self) -> list[SessionNote]:
         """Return all notes for the current session."""
-        return list(self._notes.values())
+        with self._lock:
+            return list(self._notes.values())
 
     def clear(self, key: str | None = None) -> int:
         """Clear a single note or all notes.
@@ -75,14 +80,15 @@ class SessionNoteStore:
         Returns:
             Number of notes cleared.
         """
-        if key is not None:
-            if key in self._notes:
-                del self._notes[key]
-                self._persist()
-                return 1
-            return 0
-        count = len(self._notes)
-        self._notes.clear()
+        with self._lock:
+            if key is not None:
+                if key in self._notes:
+                    del self._notes[key]
+                    self._persist()
+                    return 1
+                return 0
+            count = len(self._notes)
+            self._notes.clear()
         self._persist()
         return count
 
@@ -112,7 +118,7 @@ class SessionNoteStore:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2)
                 os.replace(tmp, str(self._store_path))  # noqa: PTH105
-            except BaseException:
+            except OSError:
                 # Clean up temp on failure
                 with contextlib.suppress(OSError):
                     Path(tmp).unlink()

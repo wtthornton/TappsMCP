@@ -7,6 +7,7 @@ opening the circuit (fast-failing) when the failure threshold is reached.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -198,6 +199,8 @@ class CircuitBreaker:
             if fallback is not None:
                 return fallback
             raise
+        except asyncio.CancelledError:
+            raise
         except Exception:
             async with self._lock:
                 self._record_failure()
@@ -207,15 +210,18 @@ class CircuitBreaker:
 
 
 # ---------------------------------------------------------------------------
-# Singleton
+# Singleton (thread-safe)
 # ---------------------------------------------------------------------------
 
 _context7_breaker: CircuitBreaker | None = None
+_singleton_lock = threading.Lock()
 
 
 def get_context7_circuit_breaker() -> CircuitBreaker:
     """Return the global Context7 circuit breaker singleton."""
     global _context7_breaker  # noqa: PLW0603
     if _context7_breaker is None:
-        _context7_breaker = CircuitBreaker(CircuitBreakerConfig(name="context7"))
+        with _singleton_lock:
+            if _context7_breaker is None:
+                _context7_breaker = CircuitBreaker(CircuitBreakerConfig(name="context7"))
     return _context7_breaker

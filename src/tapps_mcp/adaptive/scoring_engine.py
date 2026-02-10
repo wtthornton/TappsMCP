@@ -224,11 +224,15 @@ def _pearson_correlation(x: list[float], y: list[bool]) -> float:
     mean_y = sum(y_float) / n
 
     cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y_float, strict=True)) / n
-    std_x = math.sqrt(sum((xi - mean_x) ** 2 for xi in x) / n)
-    std_y = math.sqrt(sum((yi - mean_y) ** 2 for yi in y_float) / n)
+    var_x = sum((xi - mean_x) ** 2 for xi in x) / n
+    var_y = sum((yi - mean_y) ** 2 for yi in y_float) / n
 
-    if std_x == 0.0 or std_y == 0.0:
+    # Guard against negative variance from floating-point rounding
+    if var_x <= 0.0 or var_y <= 0.0:
         return 0.0
+
+    std_x = math.sqrt(var_x)
+    std_y = math.sqrt(var_y)
 
     corr = cov / (std_x * std_y)
     return max(-1.0, min(1.0, corr))
