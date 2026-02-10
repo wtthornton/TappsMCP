@@ -21,6 +21,7 @@
 - [Development](#development)
 - [Project layout](#project-layout)
 - [Docs and roadmap](#docs-and-roadmap)
+- [Contributing](#contributing)
 - [License](#license)
 
 ---
@@ -53,6 +54,21 @@ LLMs writing code make repeatable mistakes: wrong APIs, missing tests, security 
 
 **Requirements:** Python 3.12+ and [uv](https://docs.astral.sh/uv/) (or pip).
 
+**Install from PyPI:**
+
+```bash
+pip install tapps-mcp
+tapps-mcp serve
+```
+
+**Or with npx (Node.js users):**
+
+```bash
+npx tapps-mcp serve
+```
+
+**From source:**
+
 ```bash
 # Clone and enter the repo
 git clone https://github.com/tapps-mcp/tapps-mcp.git
@@ -68,7 +84,7 @@ uv run tapps-mcp serve
 uv run tapps-mcp serve --transport http --port 8000
 ```
 
-With **pip**: from the repo root run `pip install -e .`, then `tapps-mcp serve` (or `tapps-mcp serve --transport http --port 8000` for HTTP).
+With **pip** from source: from the repo root run `pip install -e .`, then `tapps-mcp serve` (or `tapps-mcp serve --transport http --port 8000` for HTTP).
 
 **One-liner with Docker:**
 
@@ -151,6 +167,10 @@ Quick index:
 | **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. |
 | **tapps_impact_analysis** | Analyze the impact of changes on the codebase (imports, dependents). |
 | **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
+| **tapps_dashboard** | View metrics dashboard with execution stats, expert performance, and trends. |
+| **tapps_stats** | Retrieve aggregated usage statistics and quality trends across sessions. |
+| **tapps_feedback** | Submit feedback on tool results to improve adaptive scoring and expert answers. |
+| **tapps_init** | Initialize a pipeline run: profile the project, set context, and plan the workflow. |
 
 ---
 
@@ -393,7 +413,10 @@ src/tapps_mcp/
 ├── experts/                            # Domain detector, engine, RAG, registry, confidence,
 │                                       #   vector RAG, knowledge management, 119 knowledge files
 ├── project/                            # Project profiling, session notes, impact analysis, reports
-└── adaptive/                           # Adaptive scoring, expert voting, weight distribution
+├── adaptive/                           # Adaptive scoring, expert voting, weight distribution
+├── metrics/                            # Collector, dashboard, alerts, trends, OTel export, feedback
+├── prompts/                            # Workflow prompt templates (discover, develop, validate, etc.)
+└── pipeline/                           # Pipeline orchestration, handoff, initialization
 ```
 
 ---
@@ -408,7 +431,13 @@ src/tapps_mcp/
 | [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) | Architecture and design rationale. |
 | [docs/planning/epics/README.md](docs/planning/epics/README.md) | Epic index, dependency graph, tool delivery timeline. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution · Metrics & Dashboard
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and how to submit changes.
 
 ---
 

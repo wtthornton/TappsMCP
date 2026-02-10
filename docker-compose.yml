@@ -1,10 +1,12 @@
-# TappMCP — local Docker MCP server (Streamable HTTP on port 8000)
+# TappsMCP -- local Docker MCP server (Streamable HTTP on port 8000)
 # Usage: docker compose up --build -d
 # Connect: MCP client to http://localhost:8000/mcp (Streamable HTTP)
 
 services:
   tapps-mcp:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: tappmcp:local
     container_name: tappmcp-mcp
     ports:
@@ -14,12 +16,16 @@ services:
       TAPPS_MCP_QUALITY_PRESET: standard
       TAPPS_MCP_LOG_LEVEL: INFO
     volumes:
-      # Mount host project so the server can score files (optional; omit to use container-only)
       - .:/workspace:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://127.0.0.1:8000/"]
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"

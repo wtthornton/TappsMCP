@@ -36,5 +36,30 @@ def serve(transport: str, host: str, port: int) -> None:
     run_server(transport=transport, host=host, port=port)
 
 
+@main.command()
+@click.option(
+    "--host",
+    "mcp_host",
+    type=click.Choice(["claude-code", "cursor", "vscode", "auto"]),
+    default="auto",
+    help="Target MCP host to configure.",
+)
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root directory.",
+)
+@click.option(
+    "--check",
+    is_flag=True,
+    help="Verify existing config instead of generating.",
+)
+def init(mcp_host: str, project_root: str, check: bool) -> None:
+    """Generate MCP configuration for Claude Code, Cursor, or VS Code."""
+    from tapps_mcp.distribution.setup_generator import run_init
+
+    run_init(mcp_host=mcp_host, project_root=project_root, check=check)
+
+
 if __name__ == "__main__":
     main()

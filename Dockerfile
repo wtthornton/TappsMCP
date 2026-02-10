@@ -1,27 +1,54 @@
-# TappMCP — MCP server for code quality (Docker)
-# Single-stage: install deps + app, run HTTP MCP server.
+# TappsMCP — multi-stage Docker build
+# Stage 1: Builder — install dependencies
+# Stage 2: Production — slim image with pre-installed tools
 
+# ---- Builder ----
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Install build deps
+RUN pip install --no-cache-dir hatchling
+
+# Copy project files
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+
+# Build wheel
+RUN pip wheel --no-deps --wheel-dir /wheels .
+
+# ---- Production ----
 FROM python:3.12-slim
+
+LABEL org.opencontainers.image.title="TappsMCP"
+LABEL org.opencontainers.image.description="MCP server providing code quality tools"
+LABEL org.opencontainers.image.source="https://github.com/tapps-mcp/tapps-mcp"
+LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
 
-# Install system deps and external checkers for full scoring
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+# Install system deps and external checkers
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
     && pip install --no-cache-dir ruff mypy bandit radon \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -rf /var/lib/apt/lists/*
 
-# Project and install (README.md required by pyproject.toml)
-COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
+# Install app from wheel built in builder stage
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
 
-RUN pip install --no-cache-dir .
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash tapps
+USER tapps
 
-# MCP streamable HTTP; mount project at /workspace for scoring
+# Config
 ENV TAPPS_MCP_PROJECT_ROOT=/workspace
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=5s \
+    CMD curl -sf http://127.0.0.1:8000/ || exit 1
 
 CMD ["tapps-mcp", "serve", "--transport", "http", "--host", "0.0.0.0", "--port", "8000"]

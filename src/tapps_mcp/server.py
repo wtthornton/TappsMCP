@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from tapps_mcp.metrics.collector import MetricsHub
     from tapps_mcp.project.session_notes import SessionNoteStore
 
 import structlog
@@ -894,6 +895,378 @@ def tapps_init(
         "elapsed_ms": elapsed_ms,
         "data": result,
     }
+
+
+# ---------------------------------------------------------------------------
+# Epic 7: Metrics, Observability & Dashboard tools
+# ---------------------------------------------------------------------------
+
+
+def _get_metrics_hub() -> MetricsHub:
+    """Lazily import and return the global MetricsHub."""
+    from tapps_mcp.metrics.collector import get_metrics_hub
+
+    return get_metrics_hub()
+
+
+@mcp.tool()
+async def tapps_dashboard(
+    format: str = "json",  # noqa: A002
+    time_range: str = "7d",
+    sections: list[str] | None = None,
+) -> dict[str, Any]:
+    """Generate a comprehensive metrics dashboard.
+
+    Call this to review how well TappsMCP is performing - scoring accuracy,
+    gate pass rates, expert effectiveness, cache performance, quality trends,
+    and alerts.
+
+    Args:
+        format: Output format - "json" (default), "markdown", "html", or "otel".
+        time_range: Time range - "1d", "7d", "30d", "90d".
+        sections: Specific sections to include (default: all).
+            Options: summary, tool_metrics, scoring_trends, expert_metrics,
+            cache_metrics, quality_distribution, alerts, business_metrics,
+            recommendations.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_dashboard")
+
+    hub = _get_metrics_hub()
+
+    if format == "otel":
+        from tapps_mcp.metrics.otel_export import export_otel_trace
+
+        recent = hub.execution.get_recent(limit=100)
+        otel_data = export_otel_trace(recent)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        return {
+            "tool": "tapps_dashboard",
+            "success": True,
+            "elapsed_ms": elapsed_ms,
+            "data": otel_data,
+        }
+
+    dashboard = hub.get_dashboard_generator()
+
+    if format == "json":
+        data = dashboard.generate_json_dashboard(sections=sections)
+    elif format == "markdown":
+        content = dashboard.generate_markdown_dashboard(sections=sections)
+        data = {"format": "markdown", "content": content}
+    elif format == "html":
+        content = dashboard.generate_html_dashboard(sections=sections)
+        path = dashboard.save_dashboard(fmt="html", sections=sections)
+        data = {"format": "html", "content": content, "saved_to": str(path)}
+    else:
+        data = dashboard.generate_json_dashboard(sections=sections)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    return {
+        "tool": "tapps_dashboard",
+        "success": True,
+        "elapsed_ms": elapsed_ms,
+        "data": data,
+    }
+
+
+@mcp.tool()
+def tapps_stats(
+    tool_name: str | None = None,
+    period: str = "session",
+) -> dict[str, Any]:
+    """Return usage statistics for TappsMCP tools.
+
+    Shows call counts, success rates, average durations, cache hit rates,
+    and gate pass rates.
+
+    Args:
+        tool_name: Filter stats to a specific tool (optional).
+        period: Stats period - "session", "1d", "7d", "30d", "all".
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_stats")
+
+    hub = _get_metrics_hub()
+
+    # Compute time-based filter
+    from datetime import UTC, datetime, timedelta
+
+    since: datetime | None = None
+    if period == "session":
+        since = None  # use in-memory buffer only
+    elif period == "1d":
+        since = datetime.now(tz=UTC) - timedelta(days=1)
+    elif period == "7d":
+        since = datetime.now(tz=UTC) - timedelta(days=7)
+    elif period == "30d":
+        since = datetime.now(tz=UTC) - timedelta(days=30)
+    # "all" = no filter
+
+    if period == "session":
+        # Use in-memory recent data for session stats
+        recent = hub.execution.get_recent(limit=100)
+        from tapps_mcp.metrics.execution_metrics import ToolCallMetricsCollector
+
+        summary = ToolCallMetricsCollector._compute_summary(recent)
+
+        # Per-tool breakdown from recent
+        by_tool_data: dict[str, list[Any]] = {}
+        for m in recent:
+            by_tool_data.setdefault(m.tool_name, []).append(m)
+        tool_breakdowns = []
+        for tname, tmetrics in sorted(by_tool_data.items()):
+            if tool_name and tname != tool_name:
+                continue
+            ts = ToolCallMetricsCollector._compute_summary(tmetrics)
+            tool_breakdowns.append({
+                "tool_name": tname,
+                "call_count": ts.total_calls,
+                "success_rate": ts.success_rate,
+                "avg_duration_ms": ts.avg_duration_ms,
+                "p95_duration_ms": ts.p95_duration_ms,
+            })
+    else:
+        summary = hub.execution.get_summary(since=since)
+        breakdowns = hub.execution.get_summary_by_tool(since=since)
+        tool_breakdowns = [
+            {
+                "tool_name": b.tool_name,
+                "call_count": b.call_count,
+                "success_rate": b.success_rate,
+                "avg_duration_ms": b.avg_duration_ms,
+                "p95_duration_ms": b.p95_duration_ms,
+            }
+            for b in breakdowns
+            if not tool_name or b.tool_name == tool_name
+        ]
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    return {
+        "tool": "tapps_stats",
+        "success": True,
+        "elapsed_ms": elapsed_ms,
+        "data": {
+            "period": period,
+            "total_calls": summary.total_calls,
+            "success_rate": summary.success_rate,
+            "avg_duration_ms": summary.avg_duration_ms,
+            "p95_duration_ms": summary.p95_duration_ms,
+            "gate_pass_rate": summary.gate_pass_rate,
+            "avg_score": summary.avg_score,
+            "tools": tool_breakdowns,
+        },
+    }
+
+
+@mcp.tool()
+def tapps_feedback(
+    tool_name: str,
+    helpful: bool,
+    context: str | None = None,
+) -> dict[str, Any]:
+    """Report whether a tool's output was helpful.
+
+    This feedback improves TappsMCP's adaptive scoring and expert weights
+    over time.
+
+    Args:
+        tool_name: Which tool to provide feedback on.
+        helpful: Was the output helpful?
+        context: Additional context about why it was or wasn't helpful.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_feedback")
+
+    from tapps_mcp.metrics.feedback import FeedbackTracker
+
+    hub = _get_metrics_hub()
+    tracker = FeedbackTracker(hub.metrics_dir)
+
+    tracker.record(
+        tool_name=tool_name,
+        helpful=helpful,
+        context=context or "",
+        session_id=hub.session_id,
+    )
+
+    stats = tracker.get_statistics(tool_name=tool_name)
+    overall_stats = tracker.get_statistics()
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    return {
+        "tool": "tapps_feedback",
+        "success": True,
+        "elapsed_ms": elapsed_ms,
+        "data": {
+            "recorded": True,
+            "tool_name": tool_name,
+            "helpful": helpful,
+            "tool_stats": stats,
+            "overall_stats": overall_stats,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# MCP Resources -- browsable knowledge and configuration
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource("tapps://knowledge/{domain}/{topic}")
+def get_knowledge_resource(domain: str, topic: str) -> str:
+    """Retrieve expert knowledge for a domain and topic.
+
+    Browse the 119 knowledge files across 16 expert domains.
+    """
+    from pathlib import Path
+
+    from tapps_mcp.experts.registry import ExpertRegistry
+
+    if domain not in ExpertRegistry.TECHNICAL_DOMAINS:
+        valid = ", ".join(sorted(ExpertRegistry.TECHNICAL_DOMAINS))
+        return f"Unknown domain: {domain}. Valid domains: {valid}"
+
+    knowledge_dir = Path(__file__).parent / "experts" / "knowledge" / domain
+    topic_file = knowledge_dir / f"{topic}.md"
+
+    if not topic_file.exists():
+        # List available topics
+        if knowledge_dir.exists():
+            available = [f.stem for f in knowledge_dir.glob("*.md")]
+            avail_str = ", ".join(sorted(available))
+            return f"Topic '{topic}' not found in domain '{domain}'. Available: {avail_str}"
+        return f"No knowledge directory for domain '{domain}'."
+
+    return topic_file.read_text(encoding="utf-8")
+
+
+@mcp.resource("tapps://knowledge/domains")
+def list_knowledge_domains() -> str:
+    """List all available expert knowledge domains and their topics."""
+    from pathlib import Path
+
+    knowledge_base = Path(__file__).parent / "experts" / "knowledge"
+    lines = ["# TappsMCP Knowledge Domains\n"]
+
+    for domain_dir in sorted(knowledge_base.iterdir()):
+        if not domain_dir.is_dir():
+            continue
+        topics = sorted(f.stem for f in domain_dir.glob("*.md") if f.stem != "README")
+        lines.append(f"\n## {domain_dir.name}")
+        lines.append(f"Topics ({len(topics)}):")
+        for t in topics:
+            lines.append(f"  - {t}")
+
+    return "\n".join(lines)
+
+
+@mcp.resource("tapps://config/quality-presets")
+def get_quality_presets() -> str:
+    """Get available quality gate presets and their thresholds."""
+    from tapps_mcp.config.settings import PRESETS
+
+    lines = ["# Quality Gate Presets\n"]
+    for name, thresholds in PRESETS.items():
+        lines.append(f"## {name}")
+        for key, value in thresholds.items():
+            lines.append(f"  {key}: {value}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+@mcp.resource("tapps://config/scoring-weights")
+def get_scoring_weights() -> str:
+    """Get current scoring category weights."""
+    settings = load_settings()
+    w = settings.scoring_weights
+
+    lines = ["# Scoring Weights\n"]
+    from tapps_mcp.config.settings import ScoringWeights
+
+    for field_name in ScoringWeights.model_fields:
+        lines.append(f"  {field_name}: {getattr(w, field_name)}")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# MCP Prompts -- workflow guidance
+# ---------------------------------------------------------------------------
+
+
+@mcp.prompt()
+def tapps_workflow(task_type: str = "general") -> str:
+    """Generate the TappsMCP workflow prompt for a specific task type.
+
+    Provides tool call order and recommendations based on the task type.
+
+    Args:
+        task_type: One of: general, feature, bugfix, refactor, security, review.
+    """
+    workflows = {
+        "general": (
+            "TappsMCP Workflow - General\n\n"
+            "1. tapps_server_info - discover capabilities\n"
+            "2. tapps_project_profile - understand the project\n"
+            "3. tapps_score_file(quick=True) - quick scoring during edits\n"
+            "4. tapps_score_file - full scoring before completion\n"
+            "5. tapps_quality_gate - verify quality bar\n"
+            "6. tapps_checklist(task_type='review') - verify completeness"
+        ),
+        "feature": (
+            "TappsMCP Workflow - New Feature\n\n"
+            "1. tapps_server_info - discover capabilities\n"
+            "2. tapps_project_profile - understand the project\n"
+            "3. tapps_lookup_docs - check library APIs before coding\n"
+            "4. tapps_consult_expert - get domain guidance\n"
+            "5. tapps_score_file(quick=True) - quick scoring during edits\n"
+            "6. tapps_score_file - full scoring\n"
+            "7. tapps_security_scan - check for vulnerabilities\n"
+            "8. tapps_quality_gate - verify quality bar\n"
+            "9. tapps_checklist(task_type='feature') - verify completeness"
+        ),
+        "bugfix": (
+            "TappsMCP Workflow - Bug Fix\n\n"
+            "1. tapps_server_info - discover capabilities\n"
+            "2. tapps_impact_analysis - understand blast radius\n"
+            "3. tapps_score_file(quick=True) - quick scoring during fix\n"
+            "4. tapps_score_file - full scoring after fix\n"
+            "5. tapps_quality_gate - verify quality bar\n"
+            "6. tapps_checklist(task_type='bugfix') - verify completeness"
+        ),
+        "refactor": (
+            "TappsMCP Workflow - Refactoring\n\n"
+            "1. tapps_server_info - discover capabilities\n"
+            "2. tapps_impact_analysis - understand dependencies\n"
+            "3. tapps_consult_expert(domain='software-architecture') - get guidance\n"
+            "4. tapps_score_file(quick=True) - quick scoring during refactor\n"
+            "5. tapps_score_file - full scoring\n"
+            "6. tapps_quality_gate - verify quality bar\n"
+            "7. tapps_checklist(task_type='refactor') - verify completeness"
+        ),
+        "security": (
+            "TappsMCP Workflow - Security Review\n\n"
+            "1. tapps_server_info - discover capabilities\n"
+            "2. tapps_security_scan - comprehensive security scan\n"
+            "3. tapps_consult_expert(domain='security') - get security guidance\n"
+            "4. tapps_score_file - full scoring with security focus\n"
+            "5. tapps_quality_gate(preset='strict') - strict quality bar\n"
+            "6. tapps_checklist(task_type='security') - verify completeness"
+        ),
+        "review": (
+            "TappsMCP Workflow - Code Review\n\n"
+            "1. tapps_server_info - discover capabilities\n"
+            "2. tapps_score_file - full scoring\n"
+            "3. tapps_security_scan - security check\n"
+            "4. tapps_quality_gate - verify quality bar\n"
+            "5. tapps_checklist(task_type='review') - verify completeness"
+        ),
+    }
+    return workflows.get(task_type, workflows["general"])
 
 
 # ---------------------------------------------------------------------------

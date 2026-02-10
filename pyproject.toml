@@ -51,6 +51,11 @@ rag = [
     "sentence-transformers>=2.0",
     "numpy>=1.24",
 ]
+vector = [
+    "faiss-cpu>=1.7",
+    "sentence-transformers>=2.0",
+    "numpy>=1.24",
+]
 
 [project.scripts]
 tapps-mcp = "tapps_mcp.cli:main"
@@ -58,6 +63,12 @@ tapps-mcp = "tapps_mcp.cli:main"
 [project.urls]
 Homepage = "https://github.com/tapps-mcp/tapps-mcp"
 Repository = "https://github.com/tapps-mcp/tapps-mcp"
+Documentation = "https://github.com/tapps-mcp/tapps-mcp#readme"
+Issues = "https://github.com/tapps-mcp/tapps-mcp/issues"
+Changelog = "https://github.com/tapps-mcp/tapps-mcp/blob/master/CHANGELOG.md"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/tapps_mcp/"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tapps_mcp"]
@@ -97,6 +108,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S105", "S106", "ANN", "PLR2004"]
+"src/tapps_mcp/metrics/**/*.py" = ["PLR2004"]
 
 [tool.mypy]
 python_version = "3.12"
