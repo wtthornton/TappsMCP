@@ -88,9 +88,13 @@ def _build_import_graph(
 ) -> dict[str, set[str]]:
     """Build ``module -> set[files that import it]``."""
     graph: dict[str, set[str]] = {}
-    for i, py in enumerate(project_root.rglob("*.py")):
-        if _should_skip(py) or i >= max_files:
+    count = 0
+    for py in project_root.rglob("*.py"):
+        if _should_skip(py):
+            continue
+        if count >= max_files:
             break
+        count += 1
         imports = _extract_imports(py)
         for mod in imports:
             graph.setdefault(mod, set()).add(str(py))
