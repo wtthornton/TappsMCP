@@ -133,6 +133,15 @@ def tapps_server_info() -> dict[str, Any]:
     settings = load_settings()
     installed = detect_installed_tools()
 
+    # Collect subsystem diagnostics (Context7, cache, RAG, knowledge base)
+    from tapps_mcp.diagnostics import collect_diagnostics
+
+    cache_dir = settings.project_root / ".tapps-mcp-cache"
+    diagnostics = collect_diagnostics(
+        api_key=settings.context7_api_key,
+        cache_dir=cache_dir,
+    )
+
     # Build tool list from the MCP server itself
     available_tools: list[str] = []
     try:
@@ -182,6 +191,7 @@ def tapps_server_info() -> dict[str, Any]:
             },
             "available_tools": available_tools,
             "installed_checkers": [t.model_dump() for t in installed],
+            "diagnostics": diagnostics.model_dump(),
             "recommended_workflow": (
                 "Call tapps_server_info at session start; use tapps_score_file(quick=True) "
                 "during edits; before declaring work complete call tapps_score_file (full) "

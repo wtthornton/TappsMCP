@@ -45,3 +45,71 @@ class InstalledTool(BaseModel):
         default=None,
         description="Install command hint when tool is not available.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Startup diagnostics models
+# ---------------------------------------------------------------------------
+
+
+class Context7Diagnostic(BaseModel):
+    """Context7 API key availability check."""
+
+    api_key_set: bool = Field(description="Whether TAPPS_MCP_CONTEXT7_API_KEY is configured.")
+    status: str = Field(description="'available' if key is set, 'no_key' otherwise.")
+
+
+class CacheDiagnostic(BaseModel):
+    """Cache directory health check."""
+
+    cache_dir: str = Field(description="Absolute path to the cache directory.")
+    exists: bool = Field(description="Whether the cache directory exists.")
+    writable: bool = Field(description="Whether the cache directory is writable.")
+    entry_count: int = Field(default=0, description="Number of cached documentation entries.")
+    total_size_bytes: int = Field(default=0, description="Total size of cached content in bytes.")
+    stale_count: int = Field(default=0, description="Number of stale (past TTL) entries.")
+
+
+class VectorRagDiagnostic(BaseModel):
+    """Vector RAG optional dependency status."""
+
+    faiss_available: bool = Field(description="Whether faiss-cpu is importable.")
+    sentence_transformers_available: bool = Field(
+        description="Whether sentence-transformers is importable."
+    )
+    numpy_available: bool = Field(description="Whether numpy is importable.")
+    status: str = Field(
+        description="'full_vector' if all deps present, 'keyword_only' otherwise."
+    )
+
+
+class KnowledgeDomainInfo(BaseModel):
+    """File count for a single knowledge domain."""
+
+    domain: str = Field(description="Domain name.")
+    file_count: int = Field(description="Number of markdown knowledge files.")
+
+
+class KnowledgeBaseDiagnostic(BaseModel):
+    """Knowledge base integrity check."""
+
+    total_domains: int = Field(description="Number of expert domains with knowledge directories.")
+    total_files: int = Field(description="Total markdown knowledge files across all domains.")
+    expected_domains: int = Field(description="Number of domains defined in ExpertRegistry.")
+    missing_domains: list[str] = Field(
+        default_factory=list,
+        description="Domains defined in the registry but missing knowledge directories.",
+    )
+    domains: list[KnowledgeDomainInfo] = Field(
+        default_factory=list,
+        description="Per-domain file counts.",
+    )
+
+
+class StartupDiagnostics(BaseModel):
+    """Aggregate startup diagnostics for all subsystems."""
+
+    context7: Context7Diagnostic = Field(description="Context7 API key status.")
+    cache: CacheDiagnostic = Field(description="Cache directory health.")
+    vector_rag: VectorRagDiagnostic = Field(description="Vector RAG dependency status.")
+    knowledge_base: KnowledgeBaseDiagnostic = Field(description="Knowledge base integrity.")
