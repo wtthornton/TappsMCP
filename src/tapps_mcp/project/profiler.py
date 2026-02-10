@@ -100,7 +100,9 @@ def _quality_recommendations(profile: ProjectProfile) -> list[str]:
     if not profile.has_ci:
         recs.append("Add CI/CD pipeline (e.g. GitHub Actions) for automated testing.")
     if not profile.has_docker and profile.project_type in (
-        "api-service", "microservice", "web-app",
+        "api-service",
+        "microservice",
+        "web-app",
     ):
         recs.append("Add Dockerfile for consistent deployment environments.")
     if not profile.has_tests:

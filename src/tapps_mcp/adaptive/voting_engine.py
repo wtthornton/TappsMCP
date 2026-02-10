@@ -77,9 +77,7 @@ class AdaptiveVotingEngine:
         """Persist an :class:`ExpertWeightsSnapshot`."""
         summary: dict[str, Any] = {}
         if performance_data:
-            summary = {
-                eid: p.avg_confidence for eid, p in performance_data.items()
-            }
+            summary = {eid: p.avg_confidence for eid, p in performance_data.items()}
         snapshot = ExpertWeightsSnapshot(
             matrix=matrix,
             performance_summary=summary,

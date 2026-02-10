@@ -399,9 +399,7 @@ class TestCheckConfig:
         assert _check_config("cursor", project) is False
 
     def test_check_claude_code_config(self, tmp_path):
-        config = {
-            "mcpServers": {"tapps-mcp": {"command": "tapps-mcp", "args": ["serve"]}}
-        }
+        config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp", "args": ["serve"]}}}
         (tmp_path / ".claude.json").write_text(json.dumps(config), encoding="utf-8")
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
             assert _check_config("claude-code", tmp_path / "project") is True

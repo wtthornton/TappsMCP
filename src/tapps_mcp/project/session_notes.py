@@ -107,9 +107,7 @@ class SessionNoteStore:
         """Atomic write to JSON (tempfile + os.replace)."""
         data = self.snapshot().model_dump()
         try:
-            fd, tmp = tempfile.mkstemp(
-                dir=str(self._store_dir), suffix=".tmp", prefix="session_"
-            )
+            fd, tmp = tempfile.mkstemp(dir=str(self._store_dir), suffix=".tmp", prefix="session_")
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2)

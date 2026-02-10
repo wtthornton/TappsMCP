@@ -1,6 +1,5 @@
 """Tests for expert observability system."""
 
-
 import pytest
 
 from tapps_mcp.metrics.confidence_metrics import ConfidenceMetricsTracker
@@ -32,7 +31,8 @@ class TestObservabilitySystem:
             conf.record("security", 0.3, 0.6)
 
         system = ObservabilitySystem(
-            metrics_dir, confidence_tracker=conf,
+            metrics_dir,
+            confidence_tracker=conf,
         )
         weak = system.identify_weak_areas()
         low_conf = [w for w in weak if w.weakness_type == "low_confidence"]
@@ -45,7 +45,8 @@ class TestObservabilitySystem:
             conf.record("security", 0.2, 0.6)  # Critical low confidence
 
         system = ObservabilitySystem(
-            metrics_dir, confidence_tracker=conf,
+            metrics_dir,
+            confidence_tracker=conf,
         )
         proposals = system.generate_improvement_proposals()
         assert len(proposals) > 0

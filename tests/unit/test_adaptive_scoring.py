@@ -98,16 +98,12 @@ class TestAdaptiveScoringEngine:
     def engine(self, tracker: FileOutcomeTracker) -> AdaptiveScoringEngine:
         return AdaptiveScoringEngine(tracker, learning_rate=0.1)
 
-    async def test_insufficient_outcomes_returns_defaults(
-        self, engine: AdaptiveScoringEngine
-    ):
+    async def test_insufficient_outcomes_returns_defaults(self, engine: AdaptiveScoringEngine):
         outcomes = [_make_outcome("wf-1", {"security": 8.0})]
         result = await engine.adjust_weights(outcomes=outcomes)
         assert result == _get_default_weights()
 
-    async def test_adjust_weights_changes_weights(
-        self, engine: AdaptiveScoringEngine
-    ):
+    async def test_adjust_weights_changes_weights(self, engine: AdaptiveScoringEngine):
         outcomes = _make_outcomes_for_correlation(20)
         defaults = _get_default_weights()
         result = await engine.adjust_weights(outcomes=outcomes, current_weights=defaults)
@@ -122,9 +118,7 @@ class TestAdaptiveScoringEngine:
     async def test_learning_rate_applied(self, engine: AdaptiveScoringEngine):
         outcomes = _make_outcomes_for_correlation(20)
         defaults = _get_default_weights()
-        result = await engine.adjust_weights(
-            outcomes=outcomes, current_weights=defaults
-        )
+        result = await engine.adjust_weights(outcomes=outcomes, current_weights=defaults)
         # With lr=0.1, weights should be close to defaults (90% current + 10% optimal).
         for key in defaults:
             assert abs(result[key] - defaults[key]) < 0.15

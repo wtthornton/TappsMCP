@@ -1,6 +1,5 @@
 """Tests for the tapps_init bootstrap logic."""
 
-
 from tapps_mcp.pipeline.init import bootstrap_pipeline
 
 
@@ -53,9 +52,7 @@ class TestBootstrapPipeline:
 
     def test_claude_platform_appends_to_existing(self, tmp_path):
         (tmp_path / "CLAUDE.md").write_text("# My Project\n\nExisting rules.\n")
-        bootstrap_pipeline(
-            tmp_path, create_handoff=False, create_runlog=False, platform="claude"
-        )
+        bootstrap_pipeline(tmp_path, create_handoff=False, create_runlog=False, platform="claude")
         content = (tmp_path / "CLAUDE.md").read_text()
         assert "My Project" in content  # Original preserved
         assert "TAPPS" in content  # Pipeline appended

@@ -260,9 +260,7 @@ def _check_config(host: str, project_root: Path) -> bool:
     servers_key = _get_servers_key(host)
 
     if not config_path.exists():
-        click.echo(
-            click.style(f"Config file not found: {config_path}", fg="red")
-        )
+        click.echo(click.style(f"Config file not found: {config_path}", fg="red"))
         click.echo(f"  Run: tapps-mcp init --host {host}")
         return False
 
@@ -270,9 +268,7 @@ def _check_config(host: str, project_root: Path) -> bool:
         raw = config_path.read_text(encoding="utf-8")
         data = json.loads(raw)
     except json.JSONDecodeError:
-        click.echo(
-            click.style(f"Invalid JSON in {config_path}", fg="red")
-        )
+        click.echo(click.style(f"Invalid JSON in {config_path}", fg="red"))
         return False
 
     servers = data.get(servers_key, {})
@@ -297,9 +293,7 @@ def _check_config(host: str, project_root: Path) -> bool:
         )
         return False
 
-    click.echo(
-        click.style(f"tapps-mcp is correctly configured in {config_path}", fg="green")
-    )
+    click.echo(click.style(f"tapps-mcp is correctly configured in {config_path}", fg="green"))
     return True
 
 

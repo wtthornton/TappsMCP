@@ -1,6 +1,5 @@
 """Tests for feedback tracker."""
 
-
 import pytest
 
 from tapps_mcp.metrics.feedback import FeedbackTracker

@@ -1,6 +1,5 @@
 """Tests for RAG metrics tracker."""
 
-
 import pytest
 
 from tapps_mcp.metrics.rag_metrics import (

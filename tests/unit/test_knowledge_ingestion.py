@@ -26,24 +26,18 @@ class TestKnowledgeIngestionPipeline:
 
     def test_extract_title_from_header(self, tmp_path: Path):
         pipeline = KnowledgeIngestionPipeline(tmp_path)
-        title = pipeline._extract_title(
-            Path("test.md"), "# My Great Title\n\nContent."
-        )
+        title = pipeline._extract_title(Path("test.md"), "# My Great Title\n\nContent.")
         assert title == "My Great Title"
 
     def test_extract_title_fallback(self, tmp_path: Path):
         pipeline = KnowledgeIngestionPipeline(tmp_path)
-        title = pipeline._extract_title(
-            Path("my-doc-name.md"), "No header here.\n"
-        )
+        title = pipeline._extract_title(Path("my-doc-name.md"), "No header here.\n")
         assert title == "My Doc Name"
 
     def test_store_writes_markdown_file(self, tmp_path: Path):
         docs_dir = tmp_path / "docs"
         docs_dir.mkdir()
-        (docs_dir / "architecture.md").write_text(
-            "# Architecture\n\nContent.\n", encoding="utf-8"
-        )
+        (docs_dir / "architecture.md").write_text("# Architecture\n\nContent.\n", encoding="utf-8")
         pipeline = KnowledgeIngestionPipeline(tmp_path)
         pipeline.ingest_project_sources()
 

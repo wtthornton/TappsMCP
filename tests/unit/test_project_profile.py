@@ -141,8 +141,7 @@ class TestTechStackDetectorLibraries:
 
     def test_from_pyproject_toml(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "demo"\ndependencies = [\n'
-            '  "httpx>=0.27",\n  "structlog",\n]\n',
+            '[project]\nname = "demo"\ndependencies = [\n  "httpx>=0.27",\n  "structlog",\n]\n',
             encoding="utf-8",
         )
         det = TechStackDetector(tmp_path)
@@ -152,8 +151,7 @@ class TestTechStackDetectorLibraries:
 
     def test_from_pyproject_toml_poetry(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            "[tool.poetry.dependencies]\npython = \"^3.12\"\n"
-            'click = "^8.0"\nrich = "^13.0"\n',
+            '[tool.poetry.dependencies]\npython = "^3.12"\nclick = "^8.0"\nrich = "^13.0"\n',
             encoding="utf-8",
         )
         det = TechStackDetector(tmp_path)
@@ -169,7 +167,8 @@ class TestTechStackDetectorLibraries:
             "devDependencies": {"jest": "^29.0", "typescript": "^5.0"},
         }
         (tmp_path / "package.json").write_text(
-            json.dumps(pkg), encoding="utf-8",
+            json.dumps(pkg),
+            encoding="utf-8",
         )
         det = TechStackDetector(tmp_path)
         libs = det.detect_libraries()
@@ -205,8 +204,7 @@ class TestTechStackDetectorFrameworks:
 
     def test_detect_from_js_imports(self, tmp_path: Path) -> None:
         (tmp_path / "index.js").write_text(
-            "import express from 'express';\n"
-            "const react = require('react');\n",
+            "import express from 'express';\nconst react = require('react');\n",
             encoding="utf-8",
         )
         det = TechStackDetector(tmp_path)
@@ -218,7 +216,8 @@ class TestTechStackDetectorFrameworks:
 class TestTechStackDetectorDomains:
     def test_detect_domains_from_libraries(self, tmp_path: Path) -> None:
         (tmp_path / "requirements.txt").write_text(
-            "flask\npandas\nredis\n", encoding="utf-8",
+            "flask\npandas\nredis\n",
+            encoding="utf-8",
         )
         det = TechStackDetector(tmp_path)
         det.detect_libraries()
@@ -248,7 +247,8 @@ class TestTechStackDetectorDetectAll:
         (tmp_path / "requirements.txt").write_text("flask\n", encoding="utf-8")
         # Add a Python import for framework detection
         (tmp_path / "app.py").write_text(
-            "from flask import Flask\n", encoding="utf-8",
+            "from flask import Flask\n",
+            encoding="utf-8",
         )
         # Create tests dir for domain detection
         (tmp_path / "tests").mkdir()
@@ -309,8 +309,7 @@ class TestDetectProjectType:
     def test_cli_tool(self, tmp_path: Path) -> None:
         (tmp_path / "cli.py").write_text("import click\n", encoding="utf-8")
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "mycli"\n'
-            '[project.scripts]\nmycli = "pkg:main"\n',
+            '[project]\nname = "mycli"\n[project.scripts]\nmycli = "pkg:main"\n',
             encoding="utf-8",
         )
         ptype, conf, reason = detect_project_type(tmp_path)
@@ -390,7 +389,8 @@ class TestDetectProjectProfile:
 
     def test_package_manager_pip_fallback(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "demo"\n', encoding="utf-8",
+            '[project]\nname = "demo"\n',
+            encoding="utf-8",
         )
         profile = detect_project_profile(tmp_path)
         assert "pip" in profile.package_managers

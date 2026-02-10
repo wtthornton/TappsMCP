@@ -17,12 +17,26 @@ from tapps_mcp.project.models import FileImpact, ImpactReport
 
 logger = structlog.get_logger(__name__)
 
-_SKIP_DIRS: frozenset[str] = frozenset({
-    ".git", ".venv", "venv", "env", "node_modules",
-    "__pycache__", ".pytest_cache", "dist", "build",
-    ".tox", ".eggs", "htmlcov", ".mypy_cache",
-    ".tapps-agents", ".tapps-mcp-cache", "site-packages",
-})
+_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        "__pycache__",
+        ".pytest_cache",
+        "dist",
+        "build",
+        ".tox",
+        ".eggs",
+        "htmlcov",
+        ".mypy_cache",
+        ".tapps-agents",
+        ".tapps-mcp-cache",
+        "site-packages",
+    }
+)
 
 # Severity thresholds
 _SEVERITY_CRITICAL = 10

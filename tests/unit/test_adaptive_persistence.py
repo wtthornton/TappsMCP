@@ -38,9 +38,7 @@ class TestFileOutcomeTracker:
 
     def test_load_with_limit(self, tracker: FileOutcomeTracker):
         for i in range(5):
-            tracker.save_outcome(
-                CodeOutcome(workflow_id=f"wf-{i}", file_path="f.py")
-            )
+            tracker.save_outcome(CodeOutcome(workflow_id=f"wf-{i}", file_path="f.py"))
         loaded = tracker.load_outcomes(limit=2)
         assert len(loaded) == 2
         assert loaded[0].workflow_id == "wf-3"

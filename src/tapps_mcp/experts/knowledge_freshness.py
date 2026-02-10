@@ -123,17 +123,17 @@ class KnowledgeFreshnessTracker:
             if meta is None:
                 # Untracked file — use filesystem mtime.
                 try:
-                    mtime = datetime.fromtimestamp(
-                        md_file.stat().st_mtime, tz=UTC
-                    )
+                    mtime = datetime.fromtimestamp(md_file.stat().st_mtime, tz=UTC)
                     if mtime < cutoff:
-                        stale.append((
-                            md_file,
-                            KnowledgeFileMetadata(
-                                file_path=key,
-                                last_updated=mtime.isoformat(),
-                            ),
-                        ))
+                        stale.append(
+                            (
+                                md_file,
+                                KnowledgeFileMetadata(
+                                    file_path=key,
+                                    last_updated=mtime.isoformat(),
+                                ),
+                            )
+                        )
                 except OSError:
                     pass
             else:
@@ -223,9 +223,7 @@ class KnowledgeFreshnessTracker:
         self._metadata_file.parent.mkdir(parents=True, exist_ok=True)
         data = {k: v.model_dump() for k, v in self._metadata.items()}
 
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(self._metadata_file.parent), suffix=".tmp"
-        )
+        fd, tmp_path = tempfile.mkstemp(dir=str(self._metadata_file.parent), suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump(data, fh, ensure_ascii=False, indent=2)

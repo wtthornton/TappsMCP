@@ -10,6 +10,7 @@ from __future__ import annotations
 _BAR_CHAR = "#"
 _EMPTY_CHAR = "-"
 
+
 class AnalyticsVisualizer:
     """Creates ASCII-based charts and tables."""
 
@@ -119,8 +120,10 @@ class AnalyticsVisualizer:
 
         # Rows
         for row in rows:
-            cells = [str(cell).ljust(col_widths[i]) if i < len(col_widths) else str(cell)
-                     for i, cell in enumerate(row)]
+            cells = [
+                str(cell).ljust(col_widths[i]) if i < len(col_widths) else str(cell)
+                for i, cell in enumerate(row)
+            ]
             lines.append(" | ".join(cells))
 
         return "\n".join(lines)

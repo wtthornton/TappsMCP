@@ -30,15 +30,24 @@ class TestEndToEndMetrics:
 
         # Simulate several tool calls
         hub.execution.record(
-            "tapps_score_file", now, now + timedelta(milliseconds=100),
-            status="success", score=80.0, gate_passed=True,
+            "tapps_score_file",
+            now,
+            now + timedelta(milliseconds=100),
+            status="success",
+            score=80.0,
+            gate_passed=True,
         )
         hub.execution.record(
-            "tapps_quality_gate", now, now + timedelta(milliseconds=200),
-            status="success", gate_passed=True,
+            "tapps_quality_gate",
+            now,
+            now + timedelta(milliseconds=200),
+            status="success",
+            gate_passed=True,
         )
         hub.execution.record(
-            "tapps_consult_expert", now, now + timedelta(milliseconds=50),
+            "tapps_consult_expert",
+            now,
+            now + timedelta(milliseconds=50),
             status="success",
         )
 
@@ -64,7 +73,10 @@ class TestEndToEndMetrics:
         hub.experts.track_consultation("sec_expert", "security", 0.85, "test query")
         hub.confidence.record("security", 0.85, 0.6, agreement_level=0.9)
         hub.consultations.log_consultation(
-            "sec_expert", "security", 0.85, "Used OWASP patterns",
+            "sec_expert",
+            "security",
+            0.85,
+            "Used OWASP patterns",
         )
 
         # Verify all trackers got the data
@@ -84,8 +96,11 @@ class TestEndToEndMetrics:
         # Populate execution data
         for i in range(5):
             hub.execution.record(
-                "tapps_score_file", now, now + timedelta(milliseconds=100),
-                status="success" if i < 4 else "failed", score=70.0 + i * 5,
+                "tapps_score_file",
+                now,
+                now + timedelta(milliseconds=100),
+                status="success" if i < 4 else "failed",
+                score=70.0 + i * 5,
             )
 
         # Populate confidence data
@@ -102,8 +117,12 @@ class TestEndToEndMetrics:
 
         # Execution data
         hub.execution.record(
-            "tapps_score_file", now, now + timedelta(milliseconds=100),
-            status="success", score=85.0, gate_passed=True,
+            "tapps_score_file",
+            now,
+            now + timedelta(milliseconds=100),
+            status="success",
+            score=85.0,
+            gate_passed=True,
         )
 
         # Expert data
@@ -162,7 +181,9 @@ class TestThreadSafety:
             try:
                 for i in range(10):
                     hub.confidence.record(
-                        f"domain_{thread_id}", 0.5 + i * 0.05, 0.6,
+                        f"domain_{thread_id}",
+                        0.5 + i * 0.05,
+                        0.6,
                     )
             except Exception as e:
                 errors.append(e)
@@ -187,7 +208,9 @@ class TestThreadSafety:
                     if stop.is_set():
                         break
                     hub.execution.record(
-                        "test_tool", now, now + timedelta(milliseconds=i),
+                        "test_tool",
+                        now,
+                        now + timedelta(milliseconds=i),
                     )
             except Exception as e:
                 errors.append(e)

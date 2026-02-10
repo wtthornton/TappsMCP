@@ -115,12 +115,9 @@ def tapps_server_info() -> dict[str, Any]:
                 "name": "TAPPS Quality Pipeline",
                 "stages": [s.value for s in PipelineStage],
                 "current_hint": (
-                    "Start with tapps_pipeline_overview prompt, "
-                    "or follow stages in order."
+                    "Start with tapps_pipeline_overview prompt, or follow stages in order."
                 ),
-                "stage_tools": {
-                    s.value: tools for s, tools in STAGE_TOOLS.items()
-                },
+                "stage_tools": {s.value: tools for s, tools in STAGE_TOOLS.items()},
                 "handoff_file": "docs/TAPPS_HANDOFF.md",
                 "runlog_file": "docs/TAPPS_RUNLOG.md",
                 "prompts_available": True,
@@ -794,10 +791,7 @@ async def tapps_report(
 
         _skip = {".venv", "venv", "node_modules", "__pycache__", ".git", "dist", "build"}
         py_files = sorted(_Path(settings.project_root).rglob("*.py"))
-        py_files = [
-            f for f in py_files
-            if not any(part in _skip for part in f.parts)
-        ][:20]
+        py_files = [f for f in py_files if not any(part in _skip for part in f.parts)][:20]
 
         for pf in py_files:
             try:
@@ -808,7 +802,9 @@ async def tapps_report(
                 logger.debug("report_file_skip", file=str(pf))
 
     report_data = generate_report(
-        score_results, gate_results, report_format=report_format,
+        score_results,
+        gate_results,
+        report_format=report_format,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -1019,13 +1015,15 @@ def tapps_stats(
             if tool_name and tname != tool_name:
                 continue
             ts = ToolCallMetricsCollector._compute_summary(tmetrics)
-            tool_breakdowns.append({
-                "tool_name": tname,
-                "call_count": ts.total_calls,
-                "success_rate": ts.success_rate,
-                "avg_duration_ms": ts.avg_duration_ms,
-                "p95_duration_ms": ts.p95_duration_ms,
-            })
+            tool_breakdowns.append(
+                {
+                    "tool_name": tname,
+                    "call_count": ts.total_calls,
+                    "success_rate": ts.success_rate,
+                    "avg_duration_ms": ts.avg_duration_ms,
+                    "p95_duration_ms": ts.p95_duration_ms,
+                }
+            )
     else:
         summary = hub.execution.get_summary(since=since)
         breakdowns = hub.execution.get_summary_by_tool(since=since)

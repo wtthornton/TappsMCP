@@ -24,16 +24,33 @@ def _exists_any(root: Path, paths: list[str]) -> bool:
 
 
 def _has_api_indicators(root: Path) -> bool:
-    return _exists_any(root, [
-        "api", "routes", "endpoints", "controllers",
-        "app.py", "main.py", "openapi.yaml", "openapi.yml", "swagger.yaml",
-    ])
+    return _exists_any(
+        root,
+        [
+            "api",
+            "routes",
+            "endpoints",
+            "controllers",
+            "app.py",
+            "main.py",
+            "openapi.yaml",
+            "openapi.yml",
+            "swagger.yaml",
+        ],
+    )
 
 
 def _has_openapi_spec(root: Path) -> bool:
-    return _exists_any(root, [
-        "openapi.yaml", "openapi.yml", "swagger.yaml", "swagger.yml", "api.yaml",
-    ])
+    return _exists_any(
+        root,
+        [
+            "openapi.yaml",
+            "openapi.yml",
+            "swagger.yaml",
+            "swagger.yml",
+            "api.yaml",
+        ],
+    )
 
 
 def _has_graphql_schema(root: Path) -> bool:
@@ -41,17 +58,34 @@ def _has_graphql_schema(root: Path) -> bool:
 
 
 def _has_frontend(root: Path) -> bool:
-    return _exists_any(root, [
-        "src", "public", "static", "components", "pages", "app",
-        "index.html", "package.json",
-    ])
+    return _exists_any(
+        root,
+        [
+            "src",
+            "public",
+            "static",
+            "components",
+            "pages",
+            "app",
+            "index.html",
+            "package.json",
+        ],
+    )
 
 
 def _has_backend(root: Path) -> bool:
-    return _exists_any(root, [
-        "server", "backend", "api", "app.py", "main.py",
-        "requirements.txt", "pyproject.toml",
-    ])
+    return _exists_any(
+        root,
+        [
+            "server",
+            "backend",
+            "api",
+            "app.py",
+            "main.py",
+            "requirements.txt",
+            "pyproject.toml",
+        ],
+    )
 
 
 def _has_ui_components(root: Path) -> bool:
@@ -114,11 +148,7 @@ def _has_package_manifest(root: Path) -> bool:
 
 
 def _has_minimal_entrypoints(root: Path) -> bool:
-    count = sum(
-        1
-        for f in ("main.py", "app.py", "cli.py", "__main__.py")
-        if (root / f).exists()
-    )
+    count = sum(1 for f in ("main.py", "app.py", "cli.py", "__main__.py") if (root / f).exists())
     return count <= 1
 
 
@@ -138,10 +168,17 @@ def _has_service_boundaries(root: Path) -> bool:
 
 
 def _has_container_orchestration(root: Path) -> bool:
-    return _exists_any(root, [
-        "Dockerfile", "docker-compose.yml", "docker-compose.yaml",
-        "kubernetes", "k8s", "deployment.yaml",
-    ])
+    return _exists_any(
+        root,
+        [
+            "Dockerfile",
+            "docker-compose.yml",
+            "docker-compose.yaml",
+            "kubernetes",
+            "k8s",
+            "deployment.yaml",
+        ],
+    )
 
 
 def _has_service_mesh(root: Path) -> bool:
@@ -179,10 +216,14 @@ _PROJECT_TYPES: dict[str, dict[str, Any]] = {
             ("has_cli_entrypoint", _has_cli_entrypoint),
             ("has_setup_py_cli", _has_setup_py_cli),
             ("has_click_typer", _has_click_or_typer),
-            ("cli_focused_structure", lambda r: (
-                (_has_cli_entrypoint(r) or _has_setup_py_cli(r))
-                and not _has_frontend(r) and not _has_api_indicators(r)
-            )),
+            (
+                "cli_focused_structure",
+                lambda r: (
+                    (_has_cli_entrypoint(r) or _has_setup_py_cli(r))
+                    and not _has_frontend(r)
+                    and not _has_api_indicators(r)
+                ),
+            ),
         ],
         "weights": [0.4, 0.2, 0.2, 0.2],
     },
@@ -200,9 +241,10 @@ _PROJECT_TYPES: dict[str, dict[str, Any]] = {
             ("has_service_boundaries", _has_service_boundaries),
             ("has_docker_k8s", _has_container_orchestration),
             ("has_service_mesh", _has_service_mesh),
-            ("microservice_structure", lambda r: (
-                _has_service_boundaries(r) and _has_container_orchestration(r)
-            )),
+            (
+                "microservice_structure",
+                lambda r: _has_service_boundaries(r) and _has_container_orchestration(r),
+            ),
         ],
         "weights": [0.3, 0.3, 0.2, 0.2],
     },

@@ -67,18 +67,14 @@ class TestPlatformRules:
 
         content = load_platform_rules("claude")
         token_estimate = len(content) // 4
-        assert token_estimate < 800, (
-            f"Claude rules ~{token_estimate} tokens, exceeds 800 budget"
-        )
+        assert token_estimate < 800, f"Claude rules ~{token_estimate} tokens, exceeds 800 budget"
 
     def test_cursor_rules_under_token_budget(self):
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         content = load_platform_rules("cursor")
         token_estimate = len(content) // 4
-        assert token_estimate < 800, (
-            f"Cursor rules ~{token_estimate} tokens, exceeds 800 budget"
-        )
+        assert token_estimate < 800, f"Cursor rules ~{token_estimate} tokens, exceeds 800 budget"
 
 
 class TestHandoffRoundTrip:

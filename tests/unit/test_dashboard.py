@@ -24,16 +24,26 @@ def generator_with_data(metrics_dir):
     gen = DashboardGenerator(metrics_dir)
     now = datetime.now(tz=UTC)
     gen._execution.record(
-        "tapps_score_file", now, now + timedelta(milliseconds=100),
-        status="success", score=80.0, gate_passed=True,
+        "tapps_score_file",
+        now,
+        now + timedelta(milliseconds=100),
+        status="success",
+        score=80.0,
+        gate_passed=True,
     )
     gen._execution.record(
-        "tapps_quality_gate", now, now + timedelta(milliseconds=200),
-        status="success", gate_passed=True,
+        "tapps_quality_gate",
+        now,
+        now + timedelta(milliseconds=200),
+        status="success",
+        gate_passed=True,
     )
     gen._execution.record(
-        "tapps_consult_expert", now, now + timedelta(milliseconds=50),
-        status="failed", error_code="domain_not_found",
+        "tapps_consult_expert",
+        now,
+        now + timedelta(milliseconds=50),
+        status="failed",
+        error_code="domain_not_found",
     )
     gen._confidence.record("security", 0.85, 0.6)
     gen._rag.record_query("test query", "security", 30.0, 3, [0.8], True)

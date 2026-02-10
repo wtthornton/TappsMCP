@@ -1,6 +1,5 @@
 """Tests for expert performance tracking."""
 
-
 import pytest
 
 from tapps_mcp.metrics.expert_metrics import (

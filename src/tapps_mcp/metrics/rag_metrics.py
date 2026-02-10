@@ -126,9 +126,7 @@ class RAGMetricsTracker:
             by_domain[domain] = {
                 "queries": len(group),
                 "avg_latency_ms": round(sum(g.latency_ms for g in group) / len(group), 2),
-                "cache_hit_rate": round(
-                    sum(1 for g in group if g.cache_hit) / len(group), 4
-                ),
+                "cache_hit_rate": round(sum(1 for g in group if g.cache_hit) / len(group), 4),
             }
 
         # By backend
@@ -140,9 +138,7 @@ class RAGMetricsTracker:
             by_backend[backend] = {
                 "queries": len(group),
                 "avg_latency_ms": round(sum(g.latency_ms for g in group) / len(group), 2),
-                "avg_similarity": round(
-                    sum(g.avg_similarity for g in group) / len(group), 4
-                ),
+                "avg_similarity": round(sum(g.avg_similarity for g in group) / len(group), 4),
             }
 
         return RAGPerformanceMetrics(
@@ -173,9 +169,7 @@ class RAGMetricsTracker:
     def _save(self, records: list[RAGQueryMetric]) -> None:
         data = [r.to_dict() for r in records]
         try:
-            self._file.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            self._file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         except OSError:
             logger.warning("rag_metrics_write_failed", exc_info=True)
 

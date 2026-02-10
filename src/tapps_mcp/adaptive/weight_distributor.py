@@ -70,9 +70,7 @@ class WeightDistributor:
                 continue
 
             per_other = _OTHER_POOL / Decimal(other_count)
-            per_other_rounded = float(
-                per_other.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-            )
+            per_other_rounded = float(per_other.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP))
 
             weights[primary][domain] = float(_PRIMARY_WEIGHT)
             for eid in others:

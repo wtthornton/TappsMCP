@@ -1,6 +1,5 @@
 """Tests for outcome tracker."""
 
-
 import pytest
 
 from tapps_mcp.metrics.outcome_tracker import CodeOutcome, OutcomeTracker

@@ -157,8 +157,6 @@ class ConfidenceMetricsTracker:
         """Save records to JSON file."""
         data = [r.to_dict() for r in records]
         try:
-            self._file.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            self._file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         except OSError:
             logger.warning("confidence_metrics_write_failed", exc_info=True)

@@ -64,9 +64,7 @@ class Chunker:
 
             # Start a new chunk if this header would exceed the target.
             if is_header and current_chars > 0 and current_chars + line_chars > self._target_chars:
-                chunk = self._build_chunk(
-                    file_path, current_lines, chunk_start_line
-                )
+                chunk = self._build_chunk(file_path, current_lines, chunk_start_line)
                 if chunk is not None:
                     chunks.append(chunk)
 
@@ -81,9 +79,7 @@ class Chunker:
 
             # Non-header split at target size.
             if current_chars >= self._target_chars:
-                chunk = self._build_chunk(
-                    file_path, current_lines, chunk_start_line
-                )
+                chunk = self._build_chunk(file_path, current_lines, chunk_start_line)
                 if chunk is not None:
                     chunks.append(chunk)
 

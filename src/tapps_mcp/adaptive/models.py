@@ -87,12 +87,8 @@ class ExpertPerformance(BaseModel):
     domain_coverage: list[str] = Field(
         default_factory=list, description="Domains this expert has been consulted on."
     )
-    weaknesses: list[str] = Field(
-        default_factory=list, description="Identified weakness areas."
-    )
-    last_updated: str = Field(
-        default_factory=_utc_now_iso, description="ISO-8601 UTC timestamp."
-    )
+    weaknesses: list[str] = Field(default_factory=list, description="Identified weakness areas.")
+    last_updated: str = Field(default_factory=_utc_now_iso, description="ISO-8601 UTC timestamp.")
 
 
 # ---------------------------------------------------------------------------

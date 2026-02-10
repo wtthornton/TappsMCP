@@ -1,6 +1,5 @@
 """Tests for consultation logger."""
 
-
 import pytest
 
 from tapps_mcp.metrics.consultation_logger import (

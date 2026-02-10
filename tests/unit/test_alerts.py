@@ -1,6 +1,5 @@
 """Tests for analytics alerting system."""
 
-
 from tapps_mcp.metrics.alerts import (
     AlertCondition,
     AlertManager,
@@ -96,14 +95,16 @@ class TestAlertManager:
         assert len(alerts) == 0
 
     def test_alert_message_format(self):
-        manager = AlertManager(conditions=[
-            AlertCondition(
-                name="test",
-                metric_type="score",
-                threshold=0.5,
-                condition="below",
-            )
-        ])
+        manager = AlertManager(
+            conditions=[
+                AlertCondition(
+                    name="test",
+                    metric_type="score",
+                    threshold=0.5,
+                    condition="below",
+                )
+            ]
+        )
         alerts = manager.check_alerts({"score": 0.3})
         assert "test" in alerts[0].message
         assert "0.3" in alerts[0].message

@@ -107,9 +107,7 @@ class AdaptiveScoringEngine:
             "correlations": correlations,
             "current_weights": current,
             "optimal_weights": optimal,
-            "adjustments": {
-                k: round(optimal.get(k, 0) - current.get(k, 0), 6) for k in current
-            },
+            "adjustments": {k: round(optimal.get(k, 0) - current.get(k, 0), 6) for k in current},
         }
 
     def save_snapshot(self, weights: dict[str, float], snapshot_path: Path) -> None:

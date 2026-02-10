@@ -130,9 +130,7 @@ class DashboardGenerator:
             lines.append(f"- Gate pass rate: {summary.get('gate_pass_rate', 0):.1%}")
             lines.append(f"- Average score: {summary.get('avg_score', 0):.1f}")
             lines.append(f"- Cache hit rate: {summary.get('cache_hit_rate', 0):.1%}")
-            lines.append(
-                f"- Expert confidence avg: {summary.get('expert_confidence_avg', 0):.2f}"
-            )
+            lines.append(f"- Expert confidence avg: {summary.get('expert_confidence_avg', 0):.2f}")
             lines.append(f"- Active alerts: {summary.get('active_alerts', 0)}")
             lines.append("")
 
@@ -141,9 +139,7 @@ class DashboardGenerator:
             tool_data = json_data["tool_metrics"]
             if tool_data:
                 chart_data = {t["tool_name"]: float(t["call_count"]) for t in tool_data}
-                chart = self._visualizer.create_bar_chart(
-                    chart_data, title="## Tool Usage"
-                )
+                chart = self._visualizer.create_bar_chart(chart_data, title="## Tool Usage")
                 lines.append(chart)
                 lines.append("")
 
@@ -294,9 +290,7 @@ class DashboardGenerator:
         exec_summary = self._execution.get_summary()
 
         if exec_summary.total_calls == 0:
-            recommendations.append(
-                "Start using TappsMCP tools to begin collecting metrics."
-            )
+            recommendations.append("Start using TappsMCP tools to begin collecting metrics.")
             return recommendations
 
         if exec_summary.success_rate < 0.9:
@@ -359,7 +353,7 @@ class DashboardGenerator:
             alert_html += (
                 f'<div style="background:{color};color:#fff;padding:8px;'
                 f'margin:4px 0;border-radius:4px">'
-                f'{alert.get("message", "")}</div>'
+                f"{alert.get('message', '')}</div>"
             )
 
         tool_rows = ""
@@ -394,32 +388,32 @@ th {{ background: #f1f1f1; }}
 </head>
 <body>
 <h1>TappsMCP Dashboard</h1>
-<p>Generated: {data.get('timestamp', '')}</p>
+<p>Generated: {data.get("timestamp", "")}</p>
 
 <div>
 <div class="card">
-  <div class="value">{summary.get('total_tool_calls', 0)}</div>
+  <div class="value">{summary.get("total_tool_calls", 0)}</div>
   <div class="label">Total Calls</div>
 </div>
 <div class="card">
-  <div class="value">{summary.get('gate_pass_rate', 0):.0%}</div>
+  <div class="value">{summary.get("gate_pass_rate", 0):.0%}</div>
   <div class="label">Gate Pass Rate</div>
 </div>
 <div class="card">
-  <div class="value">{summary.get('avg_score', 0):.1f}</div>
+  <div class="value">{summary.get("avg_score", 0):.1f}</div>
   <div class="label">Avg Score</div>
 </div>
 <div class="card">
-  <div class="value">{summary.get('cache_hit_rate', 0):.0%}</div>
+  <div class="value">{summary.get("cache_hit_rate", 0):.0%}</div>
   <div class="label">Cache Hit Rate</div>
 </div>
 <div class="card">
-  <div class="value">{summary.get('active_alerts', 0)}</div>
+  <div class="value">{summary.get("active_alerts", 0)}</div>
   <div class="label">Active Alerts</div>
 </div>
 </div>
 
-{f'<h2>Alerts</h2>{alert_html}' if alerts else ''}
+{f"<h2>Alerts</h2>{alert_html}" if alerts else ""}
 
 <h2>Tool Metrics</h2>
 <table>
@@ -427,7 +421,7 @@ th {{ background: #f1f1f1; }}
 {tool_rows}
 </table>
 
-{f'<h2>Recommendations</h2><ul>{rec_html}</ul>' if recommendations else ''}
+{f"<h2>Recommendations</h2><ul>{rec_html}</ul>" if recommendations else ""}
 
 </body>
 </html>"""

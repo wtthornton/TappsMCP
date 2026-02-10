@@ -39,9 +39,7 @@ class IndexMetadata(BaseModel):
     chunk_params: dict[str, Any] = Field(
         default_factory=dict, description="Chunker parameters used."
     )
-    source_files: list[str] = Field(
-        default_factory=list, description="Source files included."
-    )
+    source_files: list[str] = Field(default_factory=list, description="Source files included.")
     source_fingerprint: str = Field(
         default="", description="Hash of source file set for invalidation."
     )
@@ -55,10 +53,7 @@ class VectorIndex:
 
     def __init__(self, embedder: Embedder | None = None) -> None:
         if not FAISS_AVAILABLE:
-            msg = (
-                "faiss-cpu is required for vector RAG. "
-                "Install with: pip install tapps-mcp[rag]"
-            )
+            msg = "faiss-cpu is required for vector RAG. Install with: pip install tapps-mcp[rag]"
             raise ImportError(msg)
 
         self._embedder = embedder

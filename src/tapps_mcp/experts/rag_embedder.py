@@ -60,9 +60,7 @@ class SentenceTransformerEmbedder(Embedder):
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed *texts* using the sentence-transformers model."""
-        embeddings = self._model.encode(
-            texts, normalize_embeddings=True, show_progress_bar=False
-        )
+        embeddings = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
         return [e.tolist() for e in embeddings]
 
     def get_embedding_dim(self) -> int:

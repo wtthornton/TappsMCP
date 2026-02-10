@@ -139,9 +139,8 @@ class AlertManager:
             if value is None:
                 continue
 
-            fired = (
-                (cond.condition == "below" and value < cond.threshold)
-                or (cond.condition == "above" and value > cond.threshold)
+            fired = (cond.condition == "below" and value < cond.threshold) or (
+                cond.condition == "above" and value > cond.threshold
             )
 
             if fired:

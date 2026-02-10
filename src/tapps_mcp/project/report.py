@@ -222,17 +222,17 @@ th {{ background: #f0f0f0; }}
 <body>
 <h1>{h(title)}</h1>
 <div>
-  <div class="card"><div class="value">{summary['files_scored']}</div>Files</div>
-  <div class="card"><div class="value">{summary['avg_score']}</div>Avg Score</div>
-  <div class="card"><div class="value">{summary['total_lint_issues']}</div>Lint</div>
-  <div class="card"><div class="value">{summary['total_security_issues']}</div>Security</div>
+  <div class="card"><div class="value">{summary["files_scored"]}</div>Files</div>
+  <div class="card"><div class="value">{summary["avg_score"]}</div>Avg Score</div>
+  <div class="card"><div class="value">{summary["total_lint_issues"]}</div>Lint</div>
+  <div class="card"><div class="value">{summary["total_security_issues"]}</div>Security</div>
 </div>
 {gate_line}
 <table>
 <tr><th>File</th><th>Score</th><th>Gate</th><th>Lint</th><th>Type</th><th>Security</th></tr>
-{''.join(rows)}
+{"".join(rows)}
 </table>
-<p><small>Generated {h(str(summary.get('generated_at', '')))}</small></p>
+<p><small>Generated {h(str(summary.get("generated_at", "")))}</small></p>
 </body></html>"""
 
 

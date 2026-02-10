@@ -75,9 +75,7 @@ class TestDirectDependents:
         """test_*.py that imports the changed file is in test_files, not direct."""
         _write_file(tmp_path / "src" / "__init__.py", "")
         _write_file(tmp_path / "src" / "models.py", "x = 1\n")
-        _write_file(
-            tmp_path / "tests" / "__init__.py", ""
-        )
+        _write_file(tmp_path / "tests" / "__init__.py", "")
         _write_file(
             tmp_path / "tests" / "test_models.py",
             "from src.models import x\n",
@@ -174,9 +172,7 @@ class TestRecommendations:
         """When tests are affected, a recommendation mentions re-running them."""
         _write_file(tmp_path / "app" / "__init__.py", "")
         _write_file(tmp_path / "app" / "logic.py", "y = 10\n")
-        _write_file(
-            tmp_path / "tests" / "__init__.py", ""
-        )
+        _write_file(tmp_path / "tests" / "__init__.py", "")
         _write_file(
             tmp_path / "tests" / "test_logic.py",
             "from app.logic import y\n",

@@ -88,12 +88,26 @@ _DOMAIN_PATTERNS: dict[str, list[str]] = {
 
 _MIN_LANGUAGE_FILE_COUNT = 3
 
-_SKIP_DIRS: frozenset[str] = frozenset({
-    ".git", ".venv", "venv", "env", "node_modules",
-    "__pycache__", ".pytest_cache", "dist", "build",
-    ".tox", ".eggs", "htmlcov", ".mypy_cache",
-    ".tapps-agents", ".tapps-mcp-cache", "site-packages",
-})
+_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        "__pycache__",
+        ".pytest_cache",
+        "dist",
+        "build",
+        ".tox",
+        ".eggs",
+        "htmlcov",
+        ".mypy_cache",
+        ".tapps-agents",
+        ".tapps-mcp-cache",
+        "site-packages",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -215,9 +229,7 @@ class TechStackDetector:
                 m = re.match(r"^([a-zA-Z0-9\-_]+)", dep)
                 if m:
                     self._libraries.add(m.group(1).lower())
-            poetry_deps = (
-                data.get("tool", {}).get("poetry", {}).get("dependencies", {})
-            )
+            poetry_deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
             for dep in poetry_deps:
                 if dep != "python":
                     self._libraries.add(dep.lower())

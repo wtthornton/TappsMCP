@@ -64,13 +64,9 @@ def export_otel_trace(metrics: list[ToolCallMetric]) -> dict[str, Any]:
         ]
 
         if metric.file_path:
-            attributes.append(
-                {"key": "tool.file_path", "value": {"stringValue": metric.file_path}}
-            )
+            attributes.append({"key": "tool.file_path", "value": {"stringValue": metric.file_path}})
         if metric.score is not None:
-            attributes.append(
-                {"key": "tool.score", "value": {"doubleValue": metric.score}}
-            )
+            attributes.append({"key": "tool.score", "value": {"doubleValue": metric.score}})
         if metric.gate_passed is not None:
             attributes.append(
                 {"key": "tool.gate_passed", "value": {"boolValue": metric.gate_passed}}
@@ -80,9 +76,7 @@ def export_otel_trace(metrics: list[ToolCallMetric]) -> dict[str, Any]:
                 {"key": "tool.error_code", "value": {"stringValue": metric.error_code}}
             )
         if metric.session_id:
-            attributes.append(
-                {"key": "session.id", "value": {"stringValue": metric.session_id}}
-            )
+            attributes.append({"key": "session.id", "value": {"stringValue": metric.session_id}})
 
         span = {
             "traceId": trace_id,

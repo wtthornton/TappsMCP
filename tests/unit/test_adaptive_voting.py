@@ -61,9 +61,7 @@ class TestWeightDistributor:
             domains=["security"],
             expert_primary_map={"security": "expert-sec"},
         )
-        new_matrix = WeightDistributor.recalculate_on_domain_add(
-            matrix, "testing", "expert-test"
-        )
+        new_matrix = WeightDistributor.recalculate_on_domain_add(matrix, "testing", "expert-test")
         assert "testing" in new_matrix.domains
         assert new_matrix.get_expert_weight("expert-test", "testing") >= 0.51
 
@@ -102,18 +100,12 @@ class TestAdaptiveVotingEngine:
             expert_primary_map={"security": "expert-sec", "testing": "expert-test"},
         )
 
-    async def test_no_performance_data_returns_original(
-        self, engine: AdaptiveVotingEngine
-    ):
+    async def test_no_performance_data_returns_original(self, engine: AdaptiveVotingEngine):
         matrix = self._make_matrix()
-        result = await engine.adjust_voting_weights(
-            performance_data={}, current_matrix=matrix
-        )
+        result = await engine.adjust_voting_weights(performance_data={}, current_matrix=matrix)
         assert result.domains == matrix.domains
 
-    async def test_high_performance_increases_weight(
-        self, engine: AdaptiveVotingEngine
-    ):
+    async def test_high_performance_increases_weight(self, engine: AdaptiveVotingEngine):
         matrix = self._make_matrix()
         perf = {
             "expert-sec": ExpertPerformance(
@@ -124,15 +116,11 @@ class TestAdaptiveVotingEngine:
                 code_quality_improvement=5.0,
             ),
         }
-        result = await engine.adjust_voting_weights(
-            performance_data=perf, current_matrix=matrix
-        )
+        result = await engine.adjust_voting_weights(performance_data=perf, current_matrix=matrix)
         # Primary should still be >= 0.51 and possibly higher.
         assert result.get_expert_weight("expert-sec", "security") >= 0.51
 
-    async def test_low_performance_adjustment(
-        self, engine: AdaptiveVotingEngine
-    ):
+    async def test_low_performance_adjustment(self, engine: AdaptiveVotingEngine):
         matrix = self._make_matrix()
         perf = {
             "expert-sec": ExpertPerformance(
@@ -143,9 +131,7 @@ class TestAdaptiveVotingEngine:
                 code_quality_improvement=-3.0,
             ),
         }
-        result = await engine.adjust_voting_weights(
-            performance_data=perf, current_matrix=matrix
-        )
+        result = await engine.adjust_voting_weights(performance_data=perf, current_matrix=matrix)
         # Primary rule still enforced even with poor performance.
         assert result.get_expert_weight("expert-sec", "security") >= 0.51
 
@@ -165,9 +151,7 @@ class TestAdaptiveVotingEngine:
                 first_pass_success_rate=0.95,
             ),
         }
-        result = await engine.adjust_voting_weights(
-            performance_data=perf, current_matrix=matrix
-        )
+        result = await engine.adjust_voting_weights(performance_data=perf, current_matrix=matrix)
         for domain in result.domains:
             primary = result.get_primary_expert(domain)
             assert primary is not None
@@ -183,9 +167,7 @@ class TestAdaptiveVotingEngine:
                 first_pass_success_rate=0.70,
             ),
         }
-        result = await engine.adjust_voting_weights(
-            performance_data=perf, current_matrix=matrix
-        )
+        result = await engine.adjust_voting_weights(performance_data=perf, current_matrix=matrix)
         for domain in result.domains:
             total = sum(result.get_expert_weight(e, domain) for e in result.experts)
             assert abs(total - 1.0) < 0.02

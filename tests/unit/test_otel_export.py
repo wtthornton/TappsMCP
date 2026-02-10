@@ -1,6 +1,5 @@
 """Tests for OpenTelemetry export."""
 
-
 import pytest
 
 from tapps_mcp.metrics.execution_metrics import ToolCallMetric

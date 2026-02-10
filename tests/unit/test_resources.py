@@ -82,9 +82,7 @@ class TestListKnowledgeDomains:
             / "experts"
             / "knowledge"
         )
-        domain_dirs = [
-            d.name for d in sorted(knowledge_base.iterdir()) if d.is_dir()
-        ]
+        domain_dirs = [d.name for d in sorted(knowledge_base.iterdir()) if d.is_dir()]
         # There should be exactly 16 domain directories
         assert len(domain_dirs) == 16
         for dname in domain_dirs:

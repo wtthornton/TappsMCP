@@ -17,13 +17,17 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify TappMCP HTTP server with Playwright")
     parser.add_argument("--url", default="http://localhost:8000", help="Base URL of the server")
-    parser.add_argument("--headless", action="store_true", default=True, help="Run browser headless")
+    parser.add_argument(
+        "--headless", action="store_true", default=True, help="Run browser headless"
+    )
     args = parser.parse_args()
 
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        print("Playwright not installed. Run: uv pip install playwright && uv run playwright install chromium")
+        print(
+            "Playwright not installed. Run: uv pip install playwright && uv run playwright install chromium"
+        )
         return 2
 
     with sync_playwright() as p:
@@ -40,7 +44,9 @@ def main() -> int:
             print(f"Failed to open {args.url}: {e}")
             browser.close()
             return 1
-        content = page.evaluate("() => ({ body: document.body?.innerText || '', title: document.title })")
+        content = page.evaluate(
+            "() => ({ body: document.body?.innerText || '', title: document.title })"
+        )
         browser.close()
 
     body_text = content.get("body", "")

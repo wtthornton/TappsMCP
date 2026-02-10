@@ -1,6 +1,5 @@
 """Tests for trend detection."""
 
-
 from tapps_mcp.metrics.trends import (
     calculate_trend,
     detect_trends,

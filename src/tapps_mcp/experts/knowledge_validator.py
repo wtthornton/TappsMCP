@@ -77,9 +77,7 @@ class KnowledgeBaseValidator:
                     rule="file_readable",
                 )
             )
-            return ValidationResult(
-                file_path=path_str, is_valid=False, issues=issues
-            )
+            return ValidationResult(file_path=path_str, is_valid=False, issues=issues)
 
         file_size = len(content.encode("utf-8"))
         lines = content.split("\n")
@@ -88,17 +86,13 @@ class KnowledgeBaseValidator:
         # Detect structural features.
         has_headers = any(line.strip().startswith("#") for line in lines)
         has_code_blocks = "```" in content
-        has_examples = bool(
-            re.search(r"(?i)(example|e\.g\.|for instance)", content)
-        )
+        has_examples = bool(re.search(r"(?i)(example|e\.g\.|for instance)", content))
 
         # Run validations.
         issues.extend(self._validate_structure(content, file_path))
         issues.extend(self._validate_markdown_syntax(content, file_path))
         issues.extend(self._validate_code_blocks(content, file_path))
-        issues.extend(
-            self._validate_cross_references(content, file_path, self._knowledge_dir)
-        )
+        issues.extend(self._validate_cross_references(content, file_path, self._knowledge_dir))
 
         # File size check.
         if file_size > _MAX_FILE_SIZE:
@@ -136,8 +130,7 @@ class KnowledgeBaseValidator:
 
         # Check for H1 title.
         has_h1 = any(
-            line.strip().startswith("# ") and not line.strip().startswith("##")
-            for line in lines
+            line.strip().startswith("# ") and not line.strip().startswith("##") for line in lines
         )
         if not has_h1:
             issues.append(

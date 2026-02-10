@@ -1,6 +1,5 @@
 """Tests for confidence metrics tracker."""
 
-
 import pytest
 
 from tapps_mcp.metrics.confidence_metrics import (
