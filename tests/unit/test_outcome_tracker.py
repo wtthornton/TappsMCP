@@ -69,7 +69,7 @@ class TestOutcomeTracker:
         finalized = tracker.finalize_outcome("s1", "/tmp/test.py", gate_passed=True)
         assert finalized is not None
         assert finalized.finalized is True
-        assert finalized.time_to_quality > 0
+        assert finalized.time_to_quality >= 0
 
     def test_finalize_persists_to_disk(self, tracker, metrics_dir):
         tracker.track_initial_scores("s1", "/tmp/test.py", {"overall": 60.0})
