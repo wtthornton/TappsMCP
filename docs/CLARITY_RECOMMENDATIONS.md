@@ -93,14 +93,12 @@ Recommendations to make it clearer **when** and **how** an LLM (or human) should
 
 ---
 
-## 7. Optional: MCP resources/prompts
+## 7. MCP resources/prompts
 
-**Current:** No MCP resources or prompts are exposed.
+**Status:** Implemented (Epic 6.7).
 
-**Recommendations (future):**
-
-- **Resource:** Expose a read-only "workflow" resource (e.g. `tapps://workflow`) that returns the same recommended workflow text. Clients that support MCP resources could show it in a sidebar or context.
-- **Prompt:** If the SDK supports `@mcp.prompt()`, register a prompt template like "TappsMCP workflow" so users can insert the workflow into the conversation in one click.
+- **Resources:** Knowledge files exposed as browsable MCP resources via `@mcp.resource("tapps://knowledge/{domain}/{topic}")`. Quality gate presets and scoring configuration also exposed.
+- **Prompts:** Workflow prompt templates registered via `@mcp.prompt()` for each pipeline stage (overview, discover, research, develop, validate, verify) plus platform-specific prompts (Claude, Cursor). Eliminates manual system prompt configuration.
 
 ---
 
@@ -113,5 +111,7 @@ Recommendations to make it clearer **when** and **how** an LLM (or human) should
 | tapps_checklist   | Response includes `missing_required_hints`, `missing_recommended_hints`, `missing_optional_hints` with `{ "tool", "reason" }`. |
 | AGENTS.md         | New file: what TappsMCP is, when to use each tool, recommended workflow. |
 | README            | New "For AI assistants" subsection with workflow and link to AGENTS.md. |
+| MCP resources     | Knowledge files browsable via `@mcp.resource()`. |
+| MCP prompts       | Workflow prompts available via `@mcp.prompt()` for all pipeline stages. |
 
 These are backward-compatible: no tool renames, no removal of existing response fields.

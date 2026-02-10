@@ -149,6 +149,10 @@ Restart Claude Desktop after changing the config.
 | **tapps_impact_analysis** | Analyze what depends on a file and what could break from changes. |
 | **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
 | **tapps_checklist** | See which TappMCP tools were used this session and what's missing. Use before "done". |
+| **tapps_dashboard** | View metrics dashboard: execution stats, expert performance, alerts, trends. Supports json, markdown, html output. |
+| **tapps_stats** | Retrieve usage statistics: call counts, success rates, durations, gate pass rates. |
+| **tapps_feedback** | Submit feedback on tool results to improve adaptive scoring and expert weights. |
+| **tapps_init** | Initialize a pipeline run: profile the project, set context, plan the workflow stages. |
 
 **Suggested workflow for the AI:**
 

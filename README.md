@@ -416,6 +416,7 @@ src/tapps_mcp/
 ├── adaptive/                           # Adaptive scoring, expert voting, weight distribution
 ├── metrics/                            # Collector, dashboard, alerts, trends, OTel export, feedback
 ├── prompts/                            # Workflow prompt templates (discover, develop, validate, etc.)
+├── distribution/                       # Setup generator for `tapps-mcp init`
 └── pipeline/                           # Pipeline orchestration, handoff, initialization
 ```
 
@@ -430,6 +431,8 @@ src/tapps_mcp/
 | [docs/CLAUDE_FULL_ACCESS_SETUP.md](docs/CLAUDE_FULL_ACCESS_SETUP.md) | Grant Claude Code full access (no permission prompts). |
 | [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) | Architecture and design rationale. |
 | [docs/planning/epics/README.md](docs/planning/epics/README.md) | Epic index, dependency graph, tool delivery timeline. |
+| [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
+| [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
 **Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅
 
@@ -443,5 +446,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, 
 
 ## License
 
-MIT (see `pyproject.toml`).
+MIT - see [LICENSE](LICENSE).
 

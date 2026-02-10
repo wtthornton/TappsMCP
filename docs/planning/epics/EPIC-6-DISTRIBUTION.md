@@ -1,6 +1,6 @@
 # Epic 6: Distribution, Production Readiness & Future
 
-**Status:** Complete
+**Status:** Complete - 7 stories, 5 source files + npm wrapper, 84 new tests (1186 total), 7 skipped
 **Priority:** P3 — Important for adoption, not for functionality
 **Estimated LOE:** ~2-3 weeks (1 developer)
 **Dependencies:** Epic 1 (Core Quality MVP), ideally all epics complete
@@ -25,18 +25,18 @@ Make TappsMCP easy to install, easy to configure, and production-ready. This epi
 
 ## Acceptance Criteria
 
-- [ ] `pip install tapps-mcp` works (base install)
-- [ ] `pip install tapps-mcp[vector]` installs FAISS extras
-- [ ] `tapps-mcp init` generates config for Claude Code / Cursor / VS Code
-- [ ] `npx tapps-mcp` works for Node.js users
-- [ ] Docker image published to GitHub Container Registry
-- [ ] Docker image includes ruff, mypy, bandit pre-installed
-- [ ] CI pipeline: test on Windows + Linux + macOS, Python 3.12 + 3.13
-- [ ] CI pipeline: publish to PyPI on git tag (trusted publishing)
-- [ ] Setup guide: Claude Code, Cursor, VS Code + Continue
-- [ ] Setup time < 5 minutes from install to working MCP server
-- [ ] MCP resources expose knowledge files via `@mcp.resource()` (e.g., `tapps://knowledge/security/owasp-top-10`)
-- [ ] MCP prompt template provides system prompt via `@mcp.prompt()` — eliminates manual config
+- [x] `pip install tapps-mcp` works (base install)
+- [x] `pip install tapps-mcp[vector]` installs FAISS extras
+- [x] `tapps-mcp init` generates config for Claude Code / Cursor / VS Code
+- [x] `npx tapps-mcp` works for Node.js users
+- [ ] Docker image published to GitHub Container Registry (workflow ready, needs repo secrets)
+- [x] Docker image includes ruff, mypy, bandit pre-installed
+- [x] CI pipeline: test on Windows + Linux + macOS, Python 3.12 + 3.13
+- [x] CI pipeline: publish to PyPI on git tag (trusted publishing workflow ready)
+- [x] Setup guide: Claude Code, Cursor, VS Code + Continue
+- [x] Setup time < 5 minutes from install to working MCP server
+- [x] MCP resources expose knowledge files via `@mcp.resource()` (e.g., `tapps://knowledge/security/owasp-top-10`)
+- [x] MCP prompt template provides system prompt via `@mcp.prompt()` — eliminates manual config
 
 ---
 

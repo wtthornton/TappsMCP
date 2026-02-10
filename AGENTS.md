@@ -40,6 +40,10 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_impact_analysis** | Before **modifying a file's public API** — shows what depends on it and what could break. |
 | **tapps_report** | After scoring/gating, when the user wants a **formatted quality summary** (Markdown, JSON, or HTML). |
 | **tapps_checklist** | **Before declaring work complete** — reports which tools were called and which are missing (with reasons). Fix missing required steps before saying done. |
+| **tapps_dashboard** | When the user wants to **review how TappsMCP is performing** — scoring accuracy, gate pass rates, expert effectiveness, cache performance, quality trends, and alerts. Supports json, markdown, and html output. |
+| **tapps_stats** | When the user wants **usage statistics** — call counts, success rates, average durations, cache hit rates, and gate pass rates. Filterable by tool and time period. |
+| **tapps_feedback** | After receiving a tool result — report whether the output was **helpful or not**. This feedback improves adaptive scoring and expert weights over time. |
+| **tapps_init** | At the **start of a pipeline run** — profiles the project, sets context, and plans the workflow stages (discover, research, develop, validate, verify). |
 
 ---
 

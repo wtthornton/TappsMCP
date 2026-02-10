@@ -48,22 +48,22 @@ Without this epic, the user has no way to answer: "Is TappsMCP actually improvin
 
 ## Acceptance Criteria
 
-- [ ] `tapps_dashboard` MCP tool returns comprehensive metrics across all subsystems
-- [ ] `tapps_stats` MCP tool returns tool call counts, cache hit rates, gate pass/fail rates, avg scores
-- [ ] `tapps_feedback` MCP tool records user/LLM feedback for adaptive learning
-- [ ] Execution metrics track every MCP tool call with timing, status, and error info
-- [ ] Outcome tracker correlates initial scores with final scores for adaptive weight learning
-- [ ] Expert performance tracker measures consultation accuracy and domain coverage
-- [ ] Confidence metrics track expert agreement levels and threshold compliance
-- [ ] RAG metrics track retrieval precision, latency, cache hit rates, similarity distributions
-- [ ] Cache analytics track hit/miss rates per library with trend detection
-- [ ] Business metrics aggregate adoption, effectiveness, ROI, and operational health
-- [ ] Alert system detects when gate pass rates drop, scores regress, or cache hit rates fall
-- [ ] HTML quality dashboard generated with Jinja2 template (or JSON/Markdown fallback)
-- [ ] Historical trend analysis: improving / stable / degrading detection
-- [ ] OpenTelemetry trace export for external observability tools
-- [ ] All metrics persist to `{PROJECT_ROOT}/.tapps-mcp/metrics/` with configurable retention
-- [ ] Unit tests: ~50+ tests covering all metric collectors, aggregators, and alerting
+- [x] `tapps_dashboard` MCP tool returns comprehensive metrics across all subsystems
+- [x] `tapps_stats` MCP tool returns tool call counts, cache hit rates, gate pass/fail rates, avg scores
+- [x] `tapps_feedback` MCP tool records user/LLM feedback for adaptive learning
+- [x] Execution metrics track every MCP tool call with timing, status, and error info
+- [x] Outcome tracker correlates initial scores with final scores for adaptive weight learning
+- [x] Expert performance tracker measures consultation accuracy and domain coverage
+- [x] Confidence metrics track expert agreement levels and threshold compliance
+- [x] RAG metrics track retrieval precision, latency, cache hit rates, similarity distributions
+- [x] Cache analytics track hit/miss rates per library with trend detection
+- [x] Business metrics aggregate adoption, effectiveness, ROI, and operational health
+- [x] Alert system detects when gate pass rates drop, scores regress, or cache hit rates fall
+- [x] HTML quality dashboard generated with Jinja2 template (or JSON/Markdown fallback)
+- [x] Historical trend analysis: improving / stable / degrading detection
+- [x] OpenTelemetry trace export for external observability tools
+- [x] All metrics persist to `{PROJECT_ROOT}/.tapps-mcp/metrics/` with configurable retention
+- [x] Unit tests: 150 new tests covering all metric collectors, aggregators, and alerting (1102 total)
 
 ---
 

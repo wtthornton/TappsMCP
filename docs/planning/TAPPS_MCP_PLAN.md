@@ -1,8 +1,8 @@
 # TappsMCP: Standalone MCP Server for LLM Code Quality
 
-**Status:** Planning Complete — Broken into Epics
+**Status:** All Epics Complete (v0.1.1 released 2026-02-09)
 **Created:** 2026-02-07
-**Revised:** 2026-02-07
+**Revised:** 2026-02-09
 **Source:** TappsCodingAgents (`C:\cursor\TappsCodingAgents`) — extracting the highest-value components into a standalone MCP server
 
 > **Epic Breakout (2026-02-07):** This monolithic plan has been broken into 8 separate
