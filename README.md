@@ -103,18 +103,20 @@ Point your MCP client at the TappsMCP server so the AI can call the tools.
 ### Cursor
 
 1. Open **Settings → MCP** (or edit `.cursor/mcp.json` in your project).
-2. Add the server (replace the path with your actual TappMCP repo path):
+2. Add the server **without Docker** (replace the path with your actual TappMCP repo path):
 
 ```json
 {
   "mcpServers": {
     "tapps-mcp": {
       "command": "uv",
-      "args": ["--directory", "C:\\cursor\\TappMCP", "run", "tapps-mcp", "serve"]
+      "args": ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"]
     }
   }
 }
 ```
+
+Use `--no-sync` to avoid "file in use" errors when Cursor starts the server. Docker is optional; see [Docker](#docker) for HTTP/remote.
 
 3. Restart or reload Cursor. The AI can then use tools like `tapps_score_file` and `tapps_quality_gate`.
 

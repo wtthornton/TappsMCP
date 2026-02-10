@@ -4,7 +4,8 @@
       "Bash(*)",
       "Read(*)",
       "Edit(*)",
-      "Write(*)"
+      "Write(*)",
+      "mcp__tapps-mcp__tapps_server_info"
     ],
     "additionalDirectories": [
       "c:\\Users\\tappt",
