@@ -56,7 +56,7 @@ class SentenceTransformerEmbedder(Embedder):
 
         self._model_name = model_name
         self._model = SentenceTransformer(model_name)
-        self._dim: int = self._model.get_sentence_embedding_dimension()  # type: ignore[assignment]
+        self._dim: int = self._model.get_sentence_embedding_dimension()
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed *texts* using the sentence-transformers model."""
