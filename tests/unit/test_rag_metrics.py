@@ -1,6 +1,5 @@
 """Tests for RAG metrics tracker."""
 
-from pathlib import Path
 
 import pytest
 

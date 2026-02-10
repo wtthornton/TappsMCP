@@ -1,6 +1,5 @@
 """Tests for the tapps_init bootstrap logic."""
 
-from pathlib import Path
 
 from tapps_mcp.pipeline.init import bootstrap_pipeline
 

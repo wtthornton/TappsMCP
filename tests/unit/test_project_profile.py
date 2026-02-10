@@ -8,16 +8,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from tapps_mcp.project.models import ProjectProfile, TechStack
 from tapps_mcp.project.profiler import detect_project_profile
 from tapps_mcp.project.tech_stack import TechStackDetector, _should_skip
 from tapps_mcp.project.type_detector import detect_project_type
-
-if TYPE_CHECKING:
-    pass
-
 
 # =========================================================================
 # TechStack model

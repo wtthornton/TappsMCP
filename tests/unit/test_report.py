@@ -6,7 +6,6 @@ from tapps_mcp.gates.models import GateResult
 from tapps_mcp.project.report import generate_report
 from tapps_mcp.scoring.models import CategoryScore, ScoreResult
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

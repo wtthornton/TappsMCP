@@ -1,7 +1,6 @@
 """Tests for execution metrics collector."""
 
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 

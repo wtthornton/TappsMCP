@@ -1,5 +1,7 @@
 """Tests for the pipeline prompt loader."""
 
+import pytest
+
 from tapps_mcp.prompts.prompt_loader import (
     list_stages,
     load_handoff_template,
@@ -8,8 +10,6 @@ from tapps_mcp.prompts.prompt_loader import (
     load_runlog_template,
     load_stage_prompt,
 )
-
-import pytest
 
 
 class TestListStages:

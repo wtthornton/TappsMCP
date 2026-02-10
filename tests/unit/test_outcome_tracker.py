@@ -1,6 +1,5 @@
 """Tests for outcome tracker."""
 
-from pathlib import Path
 
 import pytest
 

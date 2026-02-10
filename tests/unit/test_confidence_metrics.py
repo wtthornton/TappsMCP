@@ -1,6 +1,5 @@
 """Tests for confidence metrics tracker."""
 
-from pathlib import Path
 
 import pytest
 

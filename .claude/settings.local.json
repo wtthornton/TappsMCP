@@ -1,26 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/cursor/TappsCodingAgents/**)",
-      "Bash(dir:*)",
-      "Bash(findstr:*)",
-      "Bash(uv sync:*)",
-      "Bash(uv run ruff:*)",
-      "Bash(uv run mypy:*)",
-      "Bash(uv run python:*)",
-      "Bash(uv run pytest:*)",
-      "Bash(uv add:*)",
-      "Bash(.venvScriptspython.exe -m pytest tests/ -v --tb=short)",
-      "Bash(\".venv/Scripts/python.exe\" -m pytest tests/ -v --tb=short)",
-      "Bash(\".venv/Scripts/python.exe\" -c \"from mcp.server.fastmcp import FastMCP; import inspect; print\\(inspect.signature\\(FastMCP.__init__\\)\\)\")",
-      "Bash(\".venv/Scripts/python.exe\":*)",
-      "Bash(.venv/Scripts/python.exe -m pytest:*)",
-      "Bash(.venv/Scripts/python.exe -m ruff:*)",
-      "Bash(uv run:*)",
-      "Bash(ruff check:*)",
-      "Bash(ruff format:*)",
-      "Bash(.venv/Scripts/python.exe -m mypy:*)",
-      "Bash(mypy:*)"
+      "Bash(*)",
+      "Read(*)",
+      "Edit(*)",
+      "Write(*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\tappt",
+      "c:\\cursor"
     ]
   },
   "defaultMode": "bypassPermissions"

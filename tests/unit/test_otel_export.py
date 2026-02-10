@@ -1,6 +1,5 @@
 """Tests for OpenTelemetry export."""
 
-from pathlib import Path
 
 import pytest
 

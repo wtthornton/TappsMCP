@@ -5,12 +5,10 @@ Tests end-to-end flows: tool call -> metric recording -> dashboard display.
 
 import threading
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 
 from tapps_mcp.metrics.collector import MetricsHub
-from tapps_mcp.metrics.dashboard import DashboardGenerator
 
 
 @pytest.fixture

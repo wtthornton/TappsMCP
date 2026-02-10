@@ -1,9 +1,7 @@
 """Tests for analytics alerting system."""
 
-import pytest
 
 from tapps_mcp.metrics.alerts import (
-    Alert,
     AlertCondition,
     AlertManager,
     AlertSeverity,

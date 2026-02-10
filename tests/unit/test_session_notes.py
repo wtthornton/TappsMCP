@@ -222,7 +222,7 @@ class TestSnapshotAndPersistence:
         store.clear()
 
         # Read the persisted file — it should reflect cleared state
-        json_file = store._store_path  # noqa: SLF001
+        json_file = store._store_path
         content = json.loads(json_file.read_text(encoding="utf-8"))
         assert content["notes"] == {}
 

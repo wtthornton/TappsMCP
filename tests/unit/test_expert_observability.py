@@ -1,15 +1,12 @@
 """Tests for expert observability system."""
 
-from pathlib import Path
 
 import pytest
 
 from tapps_mcp.metrics.confidence_metrics import ConfidenceMetricsTracker
-from tapps_mcp.metrics.expert_metrics import ExpertPerformanceTracker
 from tapps_mcp.metrics.expert_observability import (
     ObservabilitySystem,
 )
-from tapps_mcp.metrics.rag_metrics import RAGMetricsTracker
 
 
 @pytest.fixture

@@ -1,6 +1,5 @@
 """Tests for expert performance tracking."""
 
-from pathlib import Path
 
 import pytest
 

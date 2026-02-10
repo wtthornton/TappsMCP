@@ -1,6 +1,5 @@
 """Tests for consultation logger."""
 
-from pathlib import Path
 
 import pytest
 

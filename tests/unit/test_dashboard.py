@@ -1,12 +1,10 @@
 """Tests for dashboard generation."""
 
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 
 from tapps_mcp.metrics.dashboard import DashboardGenerator
-from tapps_mcp.metrics.execution_metrics import ToolCallMetricsCollector
 
 
 @pytest.fixture

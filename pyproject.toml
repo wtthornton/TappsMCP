@@ -107,8 +107,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S105", "S106", "ANN", "PLR2004"]
+"tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007"]
 "src/tapps_mcp/metrics/**/*.py" = ["PLR2004"]
+"scripts/**/*.py" = ["T201", "E501", "PLR2004", "ANN"]
 
 [tool.mypy]
 python_version = "3.12"
