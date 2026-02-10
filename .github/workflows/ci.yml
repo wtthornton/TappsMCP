@@ -48,7 +48,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload coverage artifact
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-report
           path: coverage.xml
@@ -70,7 +70,7 @@ jobs:
           pip install dist/*.whl
           tapps-mcp --version
           tapps-mcp --help
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: dist
           path: dist/
