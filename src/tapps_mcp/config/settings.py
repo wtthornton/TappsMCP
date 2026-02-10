@@ -141,10 +141,20 @@ def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
     Returns:
         Fully resolved ``TappsMCPSettings``.
     """
-    root = Path(project_root) if project_root else Path.cwd()
+    # Determine root: explicit arg > env var > CWD
+    if project_root:
+        root = Path(project_root)
+    else:
+        import os
+
+        env_root = os.environ.get("TAPPS_MCP_PROJECT_ROOT")
+        root = Path(env_root) if env_root else Path.cwd()
+
     yaml_data = _load_yaml_config(root)
 
-    # Merge YAML defaults, then let env vars override via pydantic-settings
+    # Merge YAML defaults, then let env vars override via pydantic-settings.
+    # Only inject project_root if neither YAML nor env var sets it,
+    # so the env var takes priority over CWD.
     if "project_root" not in yaml_data:
         yaml_data["project_root"] = str(root)
 
