@@ -7,6 +7,7 @@ still missing for a given task type.
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import ClassVar
 
@@ -126,32 +127,39 @@ class CallTracker:
     """Server-side call log for the current session."""
 
     _calls: ClassVar[list[ToolCallRecord]] = []
+    _lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
     def record(cls, tool_name: str) -> None:
         """Record a tool invocation."""
-        cls._calls.append(ToolCallRecord(tool_name=tool_name))
+        with cls._lock:
+            cls._calls.append(ToolCallRecord(tool_name=tool_name))
 
     @classmethod
     def get_called_tools(cls) -> set[str]:
         """Return the set of unique tool names called."""
-        return {c.tool_name for c in cls._calls}
+        with cls._lock:
+            return {c.tool_name for c in cls._calls}
 
     @classmethod
     def total_calls(cls) -> int:
         """Return total number of calls."""
-        return len(cls._calls)
+        with cls._lock:
+            return len(cls._calls)
 
     @classmethod
     def reset(cls) -> None:
         """Reset the call log (for testing)."""
-        cls._calls.clear()
+        with cls._lock:
+            cls._calls.clear()
 
     @classmethod
     def evaluate(cls, task_type: str = "review") -> ChecklistResult:
         """Evaluate the checklist for a given task type."""
         tool_map = TASK_TOOL_MAP.get(task_type, TASK_TOOL_MAP["review"])
-        called = cls.get_called_tools()
+        with cls._lock:
+            called = {c.tool_name for c in cls._calls}
+            call_count = len(cls._calls)
         required = tool_map.get("required", [])
         recommended = tool_map.get("recommended", [])
         optional = tool_map.get("optional", [])
@@ -173,5 +181,5 @@ class CallTracker:
             missing_recommended_hints=hints(missing_recommended),
             missing_optional_hints=hints(missing_optional),
             complete=len(missing_required) == 0,
-            total_calls=cls.total_calls(),
+            total_calls=call_count,
         )

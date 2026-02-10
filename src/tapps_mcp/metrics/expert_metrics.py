@@ -155,6 +155,51 @@ class ExpertPerformanceTracker:
 
         return breakdown
 
+    def rotate(self, keep_recent: int = 1000) -> int:
+        """Rotate the performance file, keeping only the most recent entries.
+
+        Returns the number of entries removed.
+        """
+        with self._write_lock:
+            records = self._load_all_records()
+            if len(records) <= keep_recent:
+                return 0
+
+            removed = len(records) - keep_recent
+            kept = records[-keep_recent:]
+
+            try:
+                with self._file.open("w", encoding="utf-8") as fh:
+                    for r in kept:
+                        fh.write(json.dumps(r.to_dict(), ensure_ascii=False) + "\n")
+            except OSError:
+                logger.warning("expert_perf_rotate_failed", exc_info=True)
+                return 0
+
+            return removed
+
+    def _load_all_records(self) -> list[ConsultationRecord]:
+        """Load all consultation records without date filtering."""
+        if not self._file.exists():
+            return []
+
+        records: list[ConsultationRecord] = []
+        try:
+            text = self._file.read_text(encoding="utf-8")
+        except OSError:
+            return []
+
+        for line in text.strip().splitlines():
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+                records.append(ConsultationRecord.from_dict(data))
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        return records
+
     def _load_records(self, days: int = 30) -> list[ConsultationRecord]:
         """Load consultation records within the time window."""
         if not self._file.exists():

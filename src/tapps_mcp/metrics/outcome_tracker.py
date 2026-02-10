@@ -218,6 +218,29 @@ class OutcomeTracker:
             "expert_usage": expert_usage,
         }
 
+    def rotate(self, keep_recent: int = 1000) -> int:
+        """Rotate the outcomes file, keeping only the most recent entries.
+
+        Returns the number of entries removed.
+        """
+        with self._write_lock:
+            outcomes = self.load_outcomes()
+            if len(outcomes) <= keep_recent:
+                return 0
+
+            removed = len(outcomes) - keep_recent
+            kept = outcomes[-keep_recent:]
+
+            try:
+                with self._file.open("w", encoding="utf-8") as fh:
+                    for o in kept:
+                        fh.write(json.dumps(o.to_dict(), ensure_ascii=False) + "\n")
+            except OSError:
+                logger.warning("outcome_rotate_failed", file=str(self._file), exc_info=True)
+                return 0
+
+            return removed
+
     def _append_to_file(self, outcome: CodeOutcome) -> None:
         """Append an outcome record to the JSONL file."""
         line = json.dumps(outcome.to_dict(), ensure_ascii=False)

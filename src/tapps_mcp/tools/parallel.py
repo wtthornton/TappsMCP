@@ -96,9 +96,21 @@ async def run_all_tools(
     elif run_radon:
         results.missing_tools.append("radon")
 
-    # Gather all tasks
+    # Gather all tasks with an overall safety timeout
     if tasks:
-        done = await asyncio.gather(*tasks.values(), return_exceptions=True)
+        overall_timeout = timeout + 15  # individual tools have `timeout`; this is a safety cap
+        try:
+            done = await asyncio.wait_for(
+                asyncio.gather(*tasks.values(), return_exceptions=True),
+                timeout=overall_timeout,
+            )
+        except TimeoutError:
+            logger.warning("parallel_gather_timeout", timeout=overall_timeout)
+            results.degraded = True
+            # Cancel any still-running tasks
+            for t in tasks.values():
+                t.cancel()
+            return results
         task_names = list(tasks.keys())
         for name, result in zip(task_names, done, strict=True):
             if isinstance(result, Exception):
