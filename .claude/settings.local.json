@@ -5,7 +5,15 @@
       "Read(*)",
       "Edit(*)",
       "Write(*)",
-      "mcp__tapps-mcp__tapps_server_info"
+      "mcp__tapps-mcp__tapps_server_info",
+      "mcp__tapps-mcp__tapps_project_profile",
+      "mcp__tapps-mcp__tapps_score_file",
+      "mcp__tapps-mcp__tapps_security_scan",
+      "mcp__tapps-mcp__tapps_quality_gate",
+      "mcp__tapps-mcp__tapps_report",
+      "mcp__tapps-mcp__tapps_consult_expert",
+      "mcp__tapps-mcp__tapps_impact_analysis",
+      "mcp__tapps-mcp__tapps_validate_changed"
     ],
     "additionalDirectories": [
       "c:\\Users\\tappt",

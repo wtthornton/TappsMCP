@@ -355,8 +355,8 @@ async def tapps_score_file(
                 f"Call tapps_lookup_docs for {', '.join(uncached[:5])} "
                 "to avoid hallucinated APIs"
             )
-    except Exception:  # noqa: S110
-        pass  # Never fail scoring for import analysis
+    except Exception as exc:  # Never fail scoring for import analysis
+        logger.debug("score_file_import_analysis_skip", file_path=str(resolved), error=str(exc))
 
     _record_execution(
         "tapps_score_file",
