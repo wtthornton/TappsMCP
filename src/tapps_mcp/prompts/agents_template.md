@@ -32,7 +32,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_server_info** | At **session start** — discover version, available tools, and installed checkers. Response includes a short `recommended_workflow` string. |
 | **tapps_score_file** | When **editing or reviewing** a Python file. Use `quick=True` during edit–lint–fix loops; use full (default) **before declaring work complete**. |
 | **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
-| **tapps_quality_gate** | **Before declaring work complete** — ensures the file passes the configured quality preset. Do not consider work done until this passes (or the user accepts the risk). |
+| **tapps_quality_gate** | **Before declaring work complete** — ensures the file passes the configured quality preset. Do not consider work done until it passes (or the user accepts the risk). |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library — use the returned docs to avoid hallucinated APIs. |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
 | **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file → `domain="testing-strategies"`). |

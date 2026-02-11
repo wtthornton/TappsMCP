@@ -36,6 +36,7 @@ async def warm_cache(
     cache: KBCache,
     api_key: SecretStr | None = None,
     *,
+    libraries: list[str] | None = None,
     max_libraries: int = MAX_WARM_LIBRARIES,
 ) -> int:
     """Detect project dependencies and pre-fetch their documentation.
@@ -44,6 +45,8 @@ async def warm_cache(
         project_root: Project root to scan for dependency files.
         cache: KB cache instance.
         api_key: Context7 API key (skips warming if ``None``).
+        libraries: Optional explicit list of library names. If provided, uses
+            this instead of detecting from project manifest files.
         max_libraries: Maximum number of libraries to warm.
 
     Returns:
@@ -53,14 +56,14 @@ async def warm_cache(
         logger.info("cache_warming_skipped", reason="no_api_key")
         return 0
 
-    libraries = detect_libraries(project_root)
-    if not libraries:
+    libs = libraries if libraries is not None else detect_libraries(project_root)
+    if not libs:
         logger.info("cache_warming_skipped", reason="no_dependencies_detected")
         return 0
 
     # Filter out already-cached (non-stale) libraries
     to_warm = [
-        lib for lib in libraries[:max_libraries] if not cache.has(lib) or cache.is_stale(lib)
+        lib for lib in libs[:max_libraries] if not cache.has(lib) or cache.is_stale(lib)
     ]
 
     if not to_warm:
@@ -69,7 +72,7 @@ async def warm_cache(
 
     logger.info(
         "cache_warming_started",
-        total_detected=len(libraries),
+        total_detected=len(libs),
         to_warm=len(to_warm),
     )
 

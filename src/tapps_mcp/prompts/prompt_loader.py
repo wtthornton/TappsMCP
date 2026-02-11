@@ -55,6 +55,11 @@ def load_runlog_template() -> str:
     return _read_resource("runlog_template.md")
 
 
+def load_agents_template() -> str:
+    """Load the AGENTS.md template for consuming projects."""
+    return _read_resource("agents_template.md")
+
+
 def load_platform_rules(platform: str) -> str:
     """Load platform-specific rule content.
 

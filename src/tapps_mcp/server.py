@@ -652,6 +652,7 @@ def tapps_consult_expert(
         "factors": result.factors.model_dump(),
         "sources": result.sources,
         "chunks_used": result.chunks_used,
+        "low_confidence_nudge": result.low_confidence_nudge,
     })
     return _with_nudges("tapps_consult_expert", resp)
 
@@ -1227,20 +1228,33 @@ def tapps_pipeline_overview() -> str:
 def tapps_init(
     create_handoff: bool = True,
     create_runlog: bool = True,
+    create_agents_md: bool = True,
+    create_tech_stack_md: bool = True,
     platform: str = "",
+    verify_server: bool = True,
+    install_missing_checkers: bool = False,
+    warm_cache_from_tech_stack: bool = True,
+    warm_expert_rag_from_tech_stack: bool = True,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
 
-    Creates handoff and runlog template files. Optionally generates
-    platform-specific rule files for Claude Code or Cursor.
+    Verifies server info and optionally installs missing checkers (ruff, mypy,
+    bandit, radon). Creates handoff, runlog, AGENTS.md, and TECH_STACK.md.
+    Optionally warms the Context7 cache from the detected tech stack.
+    Optionally generates platform-specific rule files for Claude Code or Cursor.
 
     Call once per project to set up the pipeline workflow.
 
     Args:
         create_handoff: Create docs/TAPPS_HANDOFF.md template.
         create_runlog: Create docs/TAPPS_RUNLOG.md template.
+        create_agents_md: Create AGENTS.md with AI assistant workflow (if missing).
+        create_tech_stack_md: Create or update TECH_STACK.md from project profile.
         platform: Generate platform rules. One of: "claude", "cursor", "".
-                  Empty string skips platform-specific files.
+        verify_server: Verify server info and installed checkers.
+        install_missing_checkers: Attempt to pip-install missing checkers (opt-in).
+        warm_cache_from_tech_stack: Pre-fetch docs for tech stack libraries into cache.
+        warm_expert_rag_from_tech_stack: Pre-build expert RAG indices for relevant domains.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_init")
@@ -1252,7 +1266,13 @@ def tapps_init(
         settings.project_root,
         create_handoff=create_handoff,
         create_runlog=create_runlog,
+        create_agents_md=create_agents_md,
+        create_tech_stack_md=create_tech_stack_md,
         platform=platform,
+        verify_server=verify_server,
+        install_missing_checkers=install_missing_checkers,
+        warm_cache_from_tech_stack=warm_cache_from_tech_stack,
+        warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

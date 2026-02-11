@@ -44,6 +44,10 @@ class ConfidenceFactors(BaseModel):
     )
 
 
+# Threshold below which we surface a low-confidence nudge to the AI
+LOW_CONFIDENCE_THRESHOLD = 0.5
+
+
 class ConsultationResult(BaseModel):
     """Result from an expert consultation."""
 
@@ -57,6 +61,10 @@ class ConsultationResult(BaseModel):
     )
     sources: list[str] = Field(default_factory=list, description="Knowledge file sources used.")
     chunks_used: int = Field(default=0, description="Number of RAG chunks used in response.")
+    low_confidence_nudge: str | None = Field(
+        default=None,
+        description="Actionable nudge when confidence is low (e.g. suggest tapps_lookup_docs).",
+    )
 
 
 class DomainMapping(BaseModel):

@@ -167,6 +167,17 @@ To add knowledge to a built-in expert:
 4. Keep content focused and actionable
 5. Update this README if adding new experts
 
+## RAG Index Rebuild
+
+When you edit knowledge files, the vector RAG index (used by `tapps_consult_expert`) is **not** automatically refreshed. To pick up changes:
+
+1. Delete the domain index for the edited expert, e.g.:
+   - `{project_root}/.tapps-mcp/rag_index/{domain_slug}/` (e.g. `security/`, `testing-strategies/`)
+2. Or delete the entire `rag_index` folder to rebuild all domains:
+   - `{project_root}/.tapps-mcp/rag_index/`
+
+The next `tapps_consult_expert` call for that domain will rebuild the index from the current files. See [ARCHITECTURE_CACHE_AND_RAG.md](../../../../docs/ARCHITECTURE_CACHE_AND_RAG.md) for full details.
+
 ## Knowledge Base Best Practices
 
 - **Be specific**: Include concrete examples and patterns

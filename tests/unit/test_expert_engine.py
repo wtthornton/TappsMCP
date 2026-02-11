@@ -55,6 +55,15 @@ class TestConsultExpert:
         assert result.factors is not None
         assert result.factors.domain_relevance > 0
 
+    def test_low_confidence_nudge_when_confidence_low(self) -> None:
+        # Ambiguous/off-topic question often yields low confidence
+        result = consult_expert("Tell me something interesting about cats")
+        assert hasattr(result, "low_confidence_nudge")
+        if result.confidence < 0.5:
+            assert result.low_confidence_nudge is not None
+            assert "tapps_lookup_docs" in result.low_confidence_nudge
+            assert "Note:" in result.answer
+
 
 class TestListExperts:
     """Tests for list_experts."""

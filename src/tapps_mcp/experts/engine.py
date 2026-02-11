@@ -24,8 +24,10 @@ from tapps_mcp.experts.models import (
     ConfidenceFactors,
     ConsultationResult,
     ExpertInfo,
+    LOW_CONFIDENCE_THRESHOLD,
 )
 from tapps_mcp.experts.rag import SimpleKnowledgeBase, _extract_keywords
+from tapps_mcp.experts.vector_rag import VectorKnowledgeBase
 from tapps_mcp.experts.registry import ExpertRegistry
 
 logger = structlog.get_logger(__name__)
@@ -74,9 +76,25 @@ def consult_expert(
     )
 
     # 2. Load knowledge base for the domain.
+    # VectorKnowledgeBase uses semantic search when [rag] extras are installed,
+    # otherwise falls back to SimpleKnowledgeBase automatically.
+    # When project_root is available, use project-level indices (from tapps_init warming).
     knowledge_dir_name = expert.knowledge_dir or sanitize_domain_for_path(expert.primary_domain)
     knowledge_path = ExpertRegistry.get_knowledge_base_path() / knowledge_dir_name
-    kb = SimpleKnowledgeBase(knowledge_path)
+    index_dir = None
+    try:
+        from tapps_mcp.config.settings import load_settings
+
+        settings = load_settings()
+        domain_slug = sanitize_domain_for_path(resolved_domain)
+        index_dir = settings.project_root / ".tapps-mcp" / "rag_index" / domain_slug
+    except Exception:
+        pass
+    kb = VectorKnowledgeBase(
+        knowledge_path,
+        domain=resolved_domain,
+        index_dir=index_dir,
+    )
 
     # 3. Search.
     chunks = kb.search(question, max_results=max_chunks)
@@ -114,6 +132,16 @@ def consult_expert(
             f"provide general guidance based on domain principles."
         )
 
+    # Low-confidence nudge: help the AI supplement with other tools
+    low_confidence_nudge = None
+    if confidence < LOW_CONFIDENCE_THRESHOLD:
+        low_confidence_nudge = (
+            "Confidence is low. Consider also calling tapps_lookup_docs(library='<name>') "
+            "for library-specific details, or try a different domain if the question may fit "
+            "better elsewhere (use tapps_list_experts to see options)."
+        )
+        answer = f"{answer}\n\n---\n\n**Note:** {low_confidence_nudge}"
+
     return ConsultationResult(
         domain=resolved_domain,
         expert_id=expert.expert_id,
@@ -123,6 +151,7 @@ def consult_expert(
         factors=factors,
         sources=sources,
         chunks_used=len(chunks),
+        low_confidence_nudge=low_confidence_nudge,
     )
 
 
