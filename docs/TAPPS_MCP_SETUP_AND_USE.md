@@ -43,6 +43,15 @@ docker compose up --build -d
 
 The MCP server listens on **http://localhost:8000** (Streamable HTTP at `/mcp`). See [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) for full details.
 
+### Recommended install and upgrade
+
+- **Recommended:** Install with **pip** or **uv** so the full package (including session checklist) is available:
+  - **PyPI:** `pip install tapps-mcp` or `uv tool install tapps-mcp`
+  - **From repo:** `uv sync` then `uv run tapps-mcp serve`, or `pip install -e .` then `tapps-mcp serve`
+- **Upgrade:** `pip install -U tapps-mcp` or `uv tool install -U tapps-mcp`. See [CHANGELOG.md](../CHANGELOG.md) for breaking changes.
+- **Standalone binary (.exe):** If you use a pre-built executable, it must include the full `tapps_mcp` package (including `tapps_mcp.tools.checklist`). If tools fail with a checklist import error, switch to a pip/uv install (see [Troubleshooting](#8-troubleshooting) below). **If you build your own binary** (e.g. PyInstaller, shiv, uv tool), ensure the build includes the entire `tapps_mcp` package and subpackages (e.g. `tapps_mcp.tools`, `tapps_mcp.tools.checklist`); otherwise all tools will fail when they try to record session state.
+- **Windows:** Same setup as above. Use `uv` or `pip` from your project or a dedicated venv; ensure the MCP config `command` is on PATH (e.g. `uv`, `python`, or full path to `tapps-mcp` if installed as a script).
+
 ### Optional project config
 
 In the **project root** you want the agent to analyze, add **`.tapps-mcp.yaml`** (optional):
@@ -190,6 +199,17 @@ Restart Claude Desktop after changing the config.
 | Full plan / roadmap | [docs/planning/TAPPS_MCP_PLAN.md](planning/TAPPS_MCP_PLAN.md) |
 | Claude full access (no prompts) | [docs/CLAUDE_FULL_ACCESS_SETUP.md](CLAUDE_FULL_ACCESS_SETUP.md) |
 | **Cache & RAG architecture** | [docs/ARCHITECTURE_CACHE_AND_RAG.md](ARCHITECTURE_CACHE_AND_RAG.md) — SWR, TTL, index rebuild |
+| **Migration from tapps-agents** | [docs/MIGRATION_FROM_TAPPS_AGENTS.md](MIGRATION_FROM_TAPPS_AGENTS.md) — what to remove, keep, configure |
+
+---
+
+## 8. Troubleshooting
+
+| Symptom | What to do |
+|--------|------------|
+| **All tools fail with `No module named 'tapps_mcp.tools.checklist'`** | The runtime is missing the checklist module (common with a standalone binary). **Fix:** Install via pip or uv so the full package is present: `pip install tapps-mcp` or `uv tool install tapps-mcp`, then point MCP config at that environment (e.g. `command`: `uv`, `args`: `["run", "tapps-mcp", "serve"]` with appropriate `--directory` if using a project). If you must use a binary, rebuild it so it includes the full `tapps_mcp` package. |
+| **Cursor shows "Error" for tapps-mcp** | See [If Cursor shows "Error" for tapps-mcp](#if-cursor-shows-error-for-tappsmcp) above (wrong subcommand, `--no-sync`, Show Output). |
+| **Path denied / file not found** | Set `TAPPS_MCP_PROJECT_ROOT` (and optionally `TAPPS_MCP_HOST_PROJECT_ROOT` when using Docker or a different host path). |
 
 ---
 

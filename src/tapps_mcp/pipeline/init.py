@@ -33,6 +33,7 @@ def bootstrap_pipeline(
     install_missing_checkers: bool = False,
     warm_cache_from_tech_stack: bool = True,
     warm_expert_rag_from_tech_stack: bool = True,
+    overwrite_platform_rules: bool = False,
 ) -> dict[str, Any]:
     """Create pipeline template files in the project.
 
@@ -133,19 +134,34 @@ def bootstrap_pipeline(
         result["tech_stack_md"] = {"action": "skipped", "reason": "disabled"}
 
     if platform:
+        platform_action: str | None = None
         if platform == "claude":
-            _bootstrap_claude(project_root, _safe_write)
+            platform_action = _bootstrap_claude(project_root, overwrite_platform_rules)
+            if platform_action == "created":
+                created.append("CLAUDE.md")
         elif platform == "cursor":
-            _bootstrap_cursor(_safe_write)
+            platform_action = _bootstrap_cursor(project_root, overwrite_platform_rules)
+            if platform_action in {"created", "updated"}:
+                created.append(".cursor/rules/tapps-pipeline.md")
+            elif platform_action == "skipped":
+                skipped.append(".cursor/rules/tapps-pipeline.md")
         else:
             errors.append(f"Unknown platform: {platform!r}. Use 'claude' or 'cursor'.")
 
+        result["platform_rules"] = {
+            "platform": platform,
+            "action": platform_action or "skipped",
+        }
+
     # Cache warming from tech stack
     if warm_cache_from_tech_stack and profile is not None:
-        result["cache_warming"] = _run_cache_warming(
+        cache_result = _run_cache_warming(
             project_root,
             profile.tech_stack.context7_priority,
         )
+        result["cache_warming"] = cache_result
+        if cache_result.get("error"):
+            errors.append(f"Cache warming failed: {cache_result['error']}")
     else:
         result["cache_warming"] = {
             "warmed": 0,
@@ -201,6 +217,7 @@ def _run_server_verification(
     if install_missing and missing:
         result["checker_install_attempted"] = True
         import subprocess
+        import sys
 
         import contextlib
 
@@ -211,7 +228,7 @@ def _run_server_verification(
                     subprocess.TimeoutExpired, FileNotFoundError, OSError
                 ):
                     subprocess.run(
-                        ["pip", "install", pkg],
+                        [sys.executable, "-m", "pip", "install", pkg],
                         capture_output=True,
                         timeout=60,
                         check=False,
@@ -313,6 +330,7 @@ def _run_cache_warming(
     cache_dir = project_root / ".tapps-mcp-cache"
     cache = KBCache(cache_dir)
 
+    error: str | None = None
     try:
         warmed = asyncio.run(
             warm_cache(
@@ -323,13 +341,15 @@ def _run_cache_warming(
                 max_libraries=20,
             )
         )
-    except Exception:
+    except Exception as exc:  # pragma: no cover - defensive guardrail
         warmed = 0
+        error = f"{type(exc).__name__}: {exc}"
 
     return {
         "warmed": warmed,
         "attempted": min(len(libraries), 20),
         "skipped": None,
+        "error": error,
         "libraries": libraries[:20],
     }
 
@@ -351,28 +371,47 @@ def _run_expert_rag_warming(
 
 def _bootstrap_claude(
     project_root: Path,
-    safe_write: _SafeWriter,
-) -> None:
-    """Append pipeline reference to CLAUDE.md (or create it)."""
+    overwrite: bool = False,
+) -> str:
+    """Create or update CLAUDE.md with TAPPS pipeline reference.
+
+    Returns ``'created'``, ``'updated'``, or ``'skipped'``.
+    """
     claude_md = project_root / "CLAUDE.md"
     content = load_platform_rules("claude")
 
     if claude_md.exists():
         existing = claude_md.read_text(encoding="utf-8")
-        if "TAPPS" in existing:
+        if "TAPPS" in existing and not overwrite:
             # Already has TAPPS reference
-            return
-        # Append to existing file
-        claude_md.write_text(
-            existing.rstrip() + "\n\n" + content,
-            encoding="utf-8",
-        )
-        return
+            return "skipped"
+        # Append to existing file (or refresh content when overwrite=True)
+        if overwrite:
+            new_content = existing.rstrip() + "\n\n" + content
+        else:
+            new_content = existing.rstrip() + "\n\n" + content
+        claude_md.write_text(new_content, encoding="utf-8")
+        return "updated"
 
-    safe_write("CLAUDE.md", content)
+    claude_md.write_text(content, encoding="utf-8")
+    return "created"
 
 
-def _bootstrap_cursor(safe_write: _SafeWriter) -> None:
-    """Create Cursor pipeline rule file."""
+def _bootstrap_cursor(
+    project_root: Path,
+    overwrite: bool = False,
+) -> str:
+    """Create or update Cursor pipeline rule file.
+
+    Returns ``'created'``, ``'updated'``, or ``'skipped'``.
+    """
     content = load_platform_rules("cursor")
-    safe_write(".cursor/rules/tapps-pipeline.md", content)
+    rules_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+    rules_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if rules_path.exists() and not overwrite:
+        return "skipped"
+
+    action = "updated" if rules_path.exists() else "created"
+    rules_path.write_text(content, encoding="utf-8")
+    return action

@@ -54,11 +54,18 @@ def serve(transport: str, host: str, port: int) -> None:
     is_flag=True,
     help="Verify existing config instead of generating.",
 )
-def init(mcp_host: str, project_root: str, check: bool) -> None:
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite existing tapps-mcp entries without prompting (non-interactive).",
+)
+def init(mcp_host: str, project_root: str, check: bool, force: bool) -> None:
     """Generate MCP configuration for Claude Code, Cursor, or VS Code."""
     from tapps_mcp.distribution.setup_generator import run_init
 
-    run_init(mcp_host=mcp_host, project_root=project_root, check=check)
+    success = run_init(mcp_host=mcp_host, project_root=project_root, check=check, force=force)
+    if not success:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

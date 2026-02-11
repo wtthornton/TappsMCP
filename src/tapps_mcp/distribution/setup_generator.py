@@ -167,12 +167,18 @@ def _merge_config(existing: dict[str, Any], host: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _generate_config(host: str, project_root: Path) -> None:
+def _generate_config(host: str, project_root: Path, *, force: bool = False) -> bool:
     """Generate (or merge) the MCP config for the given host.
 
     Args:
         host: Target host name.
         project_root: Project root directory.
+        force: If ``True``, overwrite any existing ``tapps-mcp`` entry without
+            prompting. Intended for non-interactive use (CI, scripts).
+
+    Returns:
+        ``True`` if configuration was successfully written, ``False`` if the
+        operation was aborted or failed (e.g. invalid JSON).
     """
     config_path = _get_config_path(host, project_root)
     servers_key = _get_servers_key(host)
@@ -185,14 +191,15 @@ def _generate_config(host: str, project_root: Path) -> None:
         except json.JSONDecodeError:
             click.echo(
                 click.style(
-                    f"Warning: {config_path} contains invalid JSON. Backing up and overwriting.",
-                    fg="yellow",
+                    f"Invalid JSON in {config_path}.",
+                    fg="red",
                 )
             )
-            backup_path = config_path.with_suffix(".json.bak")
-            config_path.rename(backup_path)
-            click.echo(f"  Backup saved to {backup_path}")
-            existing = {}
+            click.echo(
+                "  Please fix the file manually (or delete it) and re-run "
+                "'tapps-mcp init' to avoid losing other MCP server entries."
+            )
+            return False
 
         # Check if tapps-mcp already configured
         if servers_key in existing and "tapps-mcp" in existing.get(servers_key, {}):
@@ -202,9 +209,10 @@ def _generate_config(host: str, project_root: Path) -> None:
                     fg="yellow",
                 )
             )
-            if not click.confirm("Overwrite the existing tapps-mcp entry?"):
-                click.echo("Aborted.")
-                return
+            if not force:
+                if not click.confirm("Overwrite the existing tapps-mcp entry?"):
+                    click.echo("Aborted.")
+                    return False
 
         merged = _merge_config(existing, host)
     else:
@@ -220,6 +228,7 @@ def _generate_config(host: str, project_root: Path) -> None:
 
     click.echo(click.style(f"Configuration written to {config_path}", fg="green"))
     _print_next_steps(host)
+    return True
 
 
 def _print_next_steps(host: str) -> None:
@@ -307,7 +316,8 @@ def run_init(
     mcp_host: str = "auto",
     project_root: str = ".",
     check: bool = False,
-) -> None:
+    force: bool = False,
+) -> bool:
     """Run the init command logic.
 
     Called from the CLI ``init`` command.
@@ -318,7 +328,13 @@ def run_init(
         check: If ``True``, verify existing configuration instead of generating.
     """
     root = Path(project_root).resolve()
-    log.info("init_command", host=mcp_host, project_root=str(root), check=check)
+    log.info(
+        "init_command",
+        host=mcp_host,
+        project_root=str(root),
+        check=check,
+        force=force,
+    )
 
     if mcp_host == "auto":
         hosts = _detect_hosts()
@@ -330,7 +346,8 @@ def run_init(
                 )
             )
             click.echo("  Supported hosts: claude-code, cursor, vscode")
-            return
+            # Nothing to do, but this is not an error condition.
+            return True
         click.echo(f"Detected MCP host(s): {', '.join(hosts)}")
         # Use the first detected host
         resolved_host = hosts[0]
@@ -340,6 +357,6 @@ def run_init(
         resolved_host = mcp_host
 
     if check:
-        _check_config(resolved_host, root)
-    else:
-        _generate_config(resolved_host, root)
+        return _check_config(resolved_host, root)
+
+    return _generate_config(resolved_host, root, force=force)

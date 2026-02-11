@@ -77,6 +77,8 @@ python -m venv .venv
 pip install tapps-mcp
 ```
 
+**Upgrade:** `pip install -U tapps-mcp` (see [CHANGELOG.md](CHANGELOG.md) for changes).
+
 ### Install with npx (no Python install)
 
 No need to install Python. From any directory:
@@ -479,6 +481,8 @@ src/tapps_mcp/
 | Doc | Description |
 |-----|-------------|
 | [docs/TAPPS_MCP_SETUP_AND_USE.md](docs/TAPPS_MCP_SETUP_AND_USE.md) | Setup and use summary (Cursor, Claude, tools workflow). |
+| [docs/TAPPS_MCP_SETUP_AND_USE.md#8-troubleshooting](docs/TAPPS_MCP_SETUP_AND_USE.md#8-troubleshooting) | Troubleshooting (e.g. checklist import error, path denied). |
+| [docs/MIGRATION_FROM_TAPPS_AGENTS.md](docs/MIGRATION_FROM_TAPPS_AGENTS.md) | Migrating from tapps-agents: what to remove, keep, configure. |
 | [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) | Docker build, run, env vars, and client connection. |
 | [docs/CLAUDE_FULL_ACCESS_SETUP.md](docs/CLAUDE_FULL_ACCESS_SETUP.md) | Grant Claude Code full access (no permission prompts). |
 | [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) | Architecture and design rationale. |

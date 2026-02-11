@@ -87,7 +87,7 @@ def tech_stack_to_expert_domains(tech_stack: TechStack) -> list[str]:
 
     # Always include software-architecture and code-quality-analysis if Python
     defaults = ["software-architecture"]
-    if "python" in [l.lower() for l in (tech_stack.languages or [])]:
+    if "python" in [lang.lower() for lang in (tech_stack.languages or [])]:
         defaults.append("code-quality-analysis")
     for d in defaults:
         if d not in seen:
@@ -134,6 +134,7 @@ def warm_expert_rag_indices(
 
     kb_path = ExpertRegistry.get_knowledge_base_path()
     warmed = 0
+    failed_domains: list[str] = []
 
     for domain in domains:
         try:
@@ -167,11 +168,13 @@ def warm_expert_rag_indices(
                 warmed += 1
                 logger.debug("rag_warm_domain", domain=domain)
         except Exception:
+            failed_domains.append(domain)
             logger.debug("rag_warm_failed", domain=domain, exc_info=True)
 
     return {
         "warmed": warmed,
         "attempted": len(domains),
         "domains": domains,
+        "failed_domains": failed_domains,
         "skipped": None if warmed > 0 else "faiss_unavailable_or_error",
     }

@@ -3,6 +3,9 @@
 Every tool response includes ``next_steps`` telling the LLM exactly what
 to call next.  The nudge engine reads ``CallTracker`` to know which tools
 have already been called and produces a short, imperative list.
+
+When ``tapps_mcp.tools.checklist`` is unavailable (e.g. incomplete binary),
+CallTracker is not loaded and nudges/pipeline progress are omitted.
 """
 
 from __future__ import annotations
@@ -10,7 +13,24 @@ from __future__ import annotations
 from typing import Any
 
 from tapps_mcp.pipeline.models import STAGE_ORDER, STAGE_TOOLS, PipelineStage
-from tapps_mcp.tools.checklist import CallTracker
+
+# Lazy: avoid breaking when checklist module is missing (e.g. standalone binary).
+_CallTracker: Any = None
+
+
+def _get_call_tracker() -> Any:
+    """Return CallTracker class if available, else None."""
+    global _CallTracker
+    if _CallTracker is not None:
+        return _CallTracker if _CallTracker is not False else None
+    try:
+        from tapps_mcp.tools.checklist import CallTracker as CT
+
+        _CallTracker = CT
+        return CT
+    except ImportError:
+        _CallTracker = False
+        return None
 
 # Max nudges per response to avoid noise
 _MAX_NUDGES = 3
@@ -123,7 +143,10 @@ def compute_next_steps(
     Returns:
         List of 1-3 short imperative strings.
     """
-    called = CallTracker.get_called_tools()
+    tracker = _get_call_tracker()
+    if tracker is None:
+        return []
+    called = tracker.get_called_tools()
     steps: list[str] = []
 
     # Apply tool-specific rules
@@ -153,7 +176,15 @@ def compute_pipeline_progress() -> dict[str, Any]:
         Dict with ``completed_stages``, ``next_stage``, ``tools_called``,
         and ``total_calls``.
     """
-    called = CallTracker.get_called_tools()
+    tracker = _get_call_tracker()
+    if tracker is None:
+        return {
+            "completed_stages": [],
+            "next_stage": "discover",
+            "tools_called": [],
+            "total_calls": 0,
+        }
+    called = tracker.get_called_tools()
 
     completed: list[str] = []
     for stage in STAGE_ORDER:
@@ -171,5 +202,5 @@ def compute_pipeline_progress() -> dict[str, Any]:
         "completed_stages": completed,
         "next_stage": next_stage,
         "tools_called": sorted(called),
-        "total_calls": CallTracker.total_calls(),
+        "total_calls": tracker.total_calls(),
     }

@@ -300,21 +300,17 @@ class TestGenerateConfig:
         assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
 
     def test_handles_invalid_json_in_existing_file(self, tmp_path):
-        """Backs up and overwrites when existing file has invalid JSON."""
+        """Does not overwrite when existing file has invalid JSON."""
         project = tmp_path / "project"
         cursor_dir = project / ".cursor"
         cursor_dir.mkdir(parents=True)
         (cursor_dir / "mcp.json").write_text("not valid json {{{", encoding="utf-8")
 
-        _generate_config("cursor", project)
-
-        # Backup should exist
-        assert (cursor_dir / "mcp.json.bak").exists()
-        assert (cursor_dir / "mcp.json.bak").read_text(encoding="utf-8") == "not valid json {{{"
-
-        # New config should be valid
-        data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
-        assert "tapps-mcp" in data["mcpServers"]
+        ok = _generate_config("cursor", project)
+        # Should report failure and leave file untouched so the user can fix it
+        assert ok is False
+        assert (cursor_dir / "mcp.json.bak").exists() is False
+        assert (cursor_dir / "mcp.json").read_text(encoding="utf-8") == "not valid json {{{"
 
     def test_handles_empty_existing_file(self, tmp_path):
         """Treats empty file as empty config."""
@@ -506,6 +502,15 @@ class TestCliInit:
         )
         assert result.exit_code == 0
         assert "correctly configured" in result.output
+
+    def test_init_check_mode_missing_config_exits_nonzero(self, tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["init", "--host", "cursor", "--project-root", str(tmp_path), "--check"],
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output
 
     def test_init_auto_no_hosts(self, tmp_path):
         runner = CliRunner()

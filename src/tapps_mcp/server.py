@@ -77,10 +77,17 @@ def _validate_file_path(file_path: str) -> Path:
 
 
 def _record_call(tool_name: str) -> None:
-    """Record a tool call in the session checklist tracker."""
-    from tapps_mcp.tools.checklist import CallTracker
+    """Record a tool call in the session checklist tracker.
 
-    CallTracker.record(tool_name)
+    If tapps_mcp.tools.checklist is unavailable (e.g. incomplete binary install),
+    we no-op so other tools still run.
+    """
+    try:
+        from tapps_mcp.tools.checklist import CallTracker
+
+        CallTracker.record(tool_name)
+    except ImportError:
+        logger.debug("checklist module unavailable, skipping call record", tool=tool_name)
 
 
 def _record_execution(
@@ -693,14 +700,37 @@ def tapps_checklist(
     start = time.perf_counter_ns()
     _record_call("tapps_checklist")
 
-    from tapps_mcp.tools.checklist import CallTracker
+    try:
+        from tapps_mcp.tools.checklist import CallTracker
 
-    result = CallTracker.evaluate(task_type)
-    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_checklist", start)
-
-    resp = success_response("tapps_checklist", elapsed_ms, result.model_dump())
-    return _with_nudges("tapps_checklist", resp, {"complete": result.complete})
+        result = CallTracker.evaluate(task_type)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_checklist", start)
+        resp = success_response("tapps_checklist", elapsed_ms, result.model_dump())
+        return _with_nudges("tapps_checklist", resp, {"complete": result.complete})
+    except ImportError:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_checklist", start)
+        fallback_data = {
+            "task_type": task_type,
+            "called": [],
+            "missing_required": [],
+            "missing_recommended": [],
+            "missing_optional": [],
+            "missing_required_hints": [],
+            "missing_recommended_hints": [],
+            "missing_optional_hints": [],
+            "complete": False,
+            "total_calls": 0,
+            "checklist_unavailable": True,
+            "message": (
+                "Module tapps_mcp.tools.checklist is not available (e.g. incomplete "
+                "installation or binary). Other tools work; use tapps_quality_gate and "
+                "tapps_security_scan for verification."
+            ),
+        }
+        resp = success_response("tapps_checklist", elapsed_ms, fallback_data)
+        return _with_nudges("tapps_checklist", resp, {"complete": False})
 
 
 # ---------------------------------------------------------------------------
@@ -1235,6 +1265,7 @@ def tapps_init(
     install_missing_checkers: bool = False,
     warm_cache_from_tech_stack: bool = True,
     warm_expert_rag_from_tech_stack: bool = True,
+    overwrite_platform_rules: bool = False,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
 
@@ -1255,6 +1286,8 @@ def tapps_init(
         install_missing_checkers: Attempt to pip-install missing checkers (opt-in).
         warm_cache_from_tech_stack: Pre-fetch docs for tech stack libraries into cache.
         warm_expert_rag_from_tech_stack: Pre-build expert RAG indices for relevant domains.
+        overwrite_platform_rules: When ``True``, refresh platform rule files even if
+            they already exist (useful when templates are upgraded).
     """
     start = time.perf_counter_ns()
     _record_call("tapps_init")
@@ -1273,6 +1306,7 @@ def tapps_init(
         install_missing_checkers=install_missing_checkers,
         warm_cache_from_tech_stack=warm_cache_from_tech_stack,
         warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
+        overwrite_platform_rules=overwrite_platform_rules,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
