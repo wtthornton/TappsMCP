@@ -12,6 +12,7 @@
 
 - [What is TappsMCP?](#what-is-tappsmcp)
 - [Features](#features)
+- [Install](#install)
 - [Quick start](#quick-start)
 - [Connecting your AI client](#connecting-your-ai-client)
 - [Tools reference](#tools-reference)
@@ -50,49 +51,98 @@ LLMs writing code make repeatable mistakes: wrong APIs, missing tests, security 
 
 ---
 
-## Quick start
+## Install
 
-**Requirements:** Python 3.12+ and [uv](https://docs.astral.sh/uv/) (or pip).
+Choose one of the following. After installing, see [Quick start](#quick-start) to run the server and [Connecting your AI client](#connecting-your-ai-client) to wire it into Cursor or Claude.
 
-**Install from PyPI:**
+| Method | Requirements | Use when |
+|--------|--------------|----------|
+| **PyPI** | Python 3.12+, pip | You want a global or venv install and will run from any project. |
+| **npx** | Node.js 18+ | You prefer not to touch Python; runs on demand. |
+| **From source** | Python 3.12+, [uv](https://docs.astral.sh/uv/) or pip | You are developing TappsMCP or want the latest code. |
+| **Docker** | Docker, Docker Compose | You want HTTP transport or to run in a container. |
+
+### Install from PyPI
 
 ```bash
 pip install tapps-mcp
-tapps-mcp serve
 ```
 
-**Or with npx (Node.js users):**
+Or in a virtual environment:
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate   # Windows
+# source .venv/bin/activate  # macOS/Linux
+pip install tapps-mcp
+```
+
+### Install with npx (no Python install)
+
+No need to install Python. From any directory:
 
 ```bash
 npx tapps-mcp serve
 ```
 
-**From source:**
+The first run downloads the package; use `npx tapps-mcp@latest serve` to pin to latest.
+
+### Install from source
+
+Clone the repo and install in editable mode with [uv](https://docs.astral.sh/uv/) (recommended) or pip:
 
 ```bash
-# Clone and enter the repo
 git clone https://github.com/tapps-mcp/tapps-mcp.git
 cd tapps-mcp
-
-# Install dependencies
-uv sync
-
-# Run via stdio (for Cursor, Claude Desktop, etc.)
-uv run tapps-mcp serve
-
-# Or run via HTTP (e.g. remote or container)
-uv run tapps-mcp serve --transport http --port 8000
 ```
 
-With **pip** from source: from the repo root run `pip install -e .`, then `tapps-mcp serve` (or `tapps-mcp serve --transport http --port 8000` for HTTP).
-
-**One-liner with Docker:**
+**With uv:**
 
 ```bash
+uv sync
+# Run with: uv run tapps-mcp serve
+```
+
+**With pip:**
+
+```bash
+pip install -e .
+# Run with: tapps-mcp serve
+```
+
+### Install with Docker
+
+From the repo root (or use the image from a registry):
+
+```bash
+git clone https://github.com/tapps-mcp/tapps-mcp.git
+cd tapps-mcp
 docker compose up --build -d
 ```
 
-Server is available at **http://localhost:8000** (Streamable HTTP at `/mcp`). See [Docker](#docker) and [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) for details.
+The server listens at **http://localhost:8000** (MCP at `/mcp`). See [Docker](#docker) and [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) for options (e.g. mounting another project).
+
+---
+
+## Quick start
+
+After [installing](#install), run the server so your AI client can connect.
+
+**stdio (Cursor, Claude Desktop):**
+
+```bash
+tapps-mcp serve
+# or: uv run tapps-mcp serve   (if you installed from source with uv)
+# or: npx tapps-mcp serve      (if using npx)
+```
+
+**HTTP (remote / container):**
+
+```bash
+tapps-mcp serve --transport http --port 8000
+```
+
+Then add the server in your client (e.g. [Cursor](#cursor) or [Claude Desktop](#claude-desktop)) and reload. The AI can call tools like `tapps_score_file` and `tapps_quality_gate`.
 
 ---
 
