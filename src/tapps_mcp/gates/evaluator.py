@@ -148,6 +148,13 @@ def evaluate_gate(
             f"Performance {perf.score:.1f} < {thresholds.performance_min:.1f}",
         )
 
+    # Collect suggestions from failing categories
+    failing_cats = {f.category for f in failures}
+    for name, cat in cats.items():
+        if name in failing_cats and cat.suggestions:
+            for tip in cat.suggestions:
+                warnings.append(f"[{name}] {tip}")
+
     # Degraded result warning
     if score_result.degraded:
         tools = ", ".join(score_result.missing_tools) or "unknown"

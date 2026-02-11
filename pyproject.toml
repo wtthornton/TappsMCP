@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tapps-mcp"
-version = "0.1.1"
+version = "0.2.0"
 description = "MCP server providing code quality tools extracted from TappsCodingAgents"
 readme = "README.md"
 license = "MIT"
@@ -136,7 +136,7 @@ module = "tapps_mcp.server"
 disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
-module = ["sentence_transformers", "sentence_transformers.*", "faiss", "numpy", "numpy.*"]
+module = ["sentence_transformers", "sentence_transformers.*", "faiss", "numpy", "numpy.*", "radon", "radon.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

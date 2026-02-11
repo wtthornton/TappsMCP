@@ -186,9 +186,9 @@ Quick index:
 
 ### tapps_score_file
 
-**What it does:** Scores a single Python file from 0–100 using up to seven categories: complexity (cyclomatic complexity), security (Bandit + heuristics), maintainability (maintainability index), test coverage (heuristic from test file presence), performance (nesting, loop size), structure (project layout), and developer experience (docs, tooling). Can run in **quick** mode (ruff-only, under ~500 ms) or full mode (ruff, mypy, bandit, radon in parallel). Optional **fix** mode (with quick) runs ruff with auto-fix before scoring. Returns per-category scores, weights, details, and up to 20 lint/type/security issues. Sets `degraded: true` when some checkers are missing and fallbacks are used.
+**What it does:** Scores a single Python file from 0–100 using up to seven categories: complexity (cyclomatic complexity), security (Bandit + heuristics), maintainability (maintainability index), test coverage (heuristic from test file presence), performance (nesting, loop size), structure (project layout), and developer experience (docs, tooling). Can run in **quick** mode (ruff-only, under ~500 ms) or full mode (ruff, mypy, bandit, radon in parallel). Optional **fix** mode (with quick) runs ruff with auto-fix before scoring. Supports three execution **modes**: `"auto"` (default, subprocess with fallback), `"subprocess"` (async subprocess only), or `"direct"` (radon as library, sync subprocess in thread pool - avoids async subprocess reliability issues in MCP contexts). Returns per-category scores, weights, details, actionable suggestions, and up to 20 lint/type/security issues. Sets `degraded: true` when some checkers are missing and fallbacks are used.
 
-**Why use it:** Gives an objective, repeatable quality signal instead of subjective "looks good." Use quick mode during edit–lint–fix loops for fast feedback; use full mode before considering work complete. The structured output is easy for the AI to interpret and act on (e.g. fix specific line numbers). Ensures quality is measured the same way regardless of model or prompt.
+**Why use it:** Gives an objective, repeatable quality signal instead of subjective "looks good." Use quick mode during edit-lint-fix loops for fast feedback; use full mode before considering work complete. Use `mode="direct"` if you encounter subprocess reliability issues in your MCP host. The structured output is easy for the AI to interpret and act on (e.g. fix specific line numbers, follow actionable suggestions). Ensures quality is measured the same way regardless of model or prompt.
 
 ---
 
@@ -436,7 +436,7 @@ src/tapps_mcp/
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅
 
 ---
 

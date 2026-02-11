@@ -1,15 +1,22 @@
-"""Tests for tools.radon — parsing and scoring."""
+"""Tests for tools.radon — parsing, scoring, and direct-library fallback."""
 
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from tapps_mcp.tools.radon import (
+    _is_radon_importable,
+    _radon_cc_direct,
+    _radon_mi_direct,
     calculate_complexity_score,
     calculate_maintainability_score,
     parse_radon_cc_json,
     parse_radon_mi_json,
     run_radon_cc,
+    run_radon_cc_async,
     run_radon_mi,
+    run_radon_mi_async,
 )
 from tapps_mcp.tools.subprocess_utils import CommandResult
 
@@ -83,11 +90,11 @@ class TestCalculateComplexityScore:
         # 100 / 5.0 = 20.0 → clamped to 10.0
         assert score == 10.0
 
-    def test_uses_max_complexity(self):
+    def test_uses_blended_complexity(self):
         entries = [{"complexity": 2}, {"complexity": 8}]
         score = calculate_complexity_score(entries)
-        # max=8, 8/5.0 = 1.6
-        assert abs(score - 1.6) < 0.01
+        # max=8, avg=5, blended = 0.7*8 + 0.3*5 = 7.1, score = 7.1/5.0 = 1.42
+        assert abs(score - 1.42) < 0.01
 
     def test_missing_complexity_defaults_to_zero(self):
         entries = [{}]
@@ -173,3 +180,114 @@ class TestRunRadonMi:
         mock_cmd.return_value = CommandResult(returncode=0, stdout="{}", stderr="")
         mi = run_radon_mi("test.py")
         assert mi == 50.0
+
+
+class TestBlendedComplexity:
+    """Tests for the blended CC formula (0.7*max + 0.3*avg)."""
+
+    def test_single_entry_max_equals_avg(self):
+        entries = [{"complexity": 10}]
+        score = calculate_complexity_score(entries)
+        # blended = 0.7*10 + 0.3*10 = 10, score = 10/5 = 2.0
+        assert abs(score - 2.0) < 0.01
+
+    def test_many_low_one_high(self):
+        entries = [{"complexity": 1}] * 9 + [{"complexity": 20}]
+        score = calculate_complexity_score(entries)
+        # max=20, avg=(9*1+20)/10=2.9, blended=0.7*20+0.3*2.9=14.87
+        # score = 14.87 / 5.0 = 2.974
+        assert abs(score - 2.974) < 0.01
+
+    def test_all_same_complexity(self):
+        entries = [{"complexity": 5}] * 5
+        score = calculate_complexity_score(entries)
+        # max=5, avg=5, blended=5, score=1.0
+        assert abs(score - 1.0) < 0.01
+
+
+class TestRadonAsyncFallback:
+    """Tests for subprocess-to-library fallback in async functions."""
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
+    @patch("tapps_mcp.tools.radon._radon_cc_direct")
+    async def test_cc_falls_back_on_empty_output(self, mock_direct, mock_cmd):
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
+        mock_direct.return_value = [{"name": "f", "complexity": 3}]
+        result = await run_radon_cc_async("test.py")
+        mock_direct.assert_called_once_with("test.py")
+        assert len(result) == 1
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
+    @patch("tapps_mcp.tools.radon._radon_cc_direct")
+    async def test_cc_falls_back_on_timeout(self, mock_direct, mock_cmd):
+        mock_cmd.return_value = CommandResult(
+            returncode=-1, stdout="", stderr="", timed_out=True
+        )
+        mock_direct.return_value = []
+        result = await run_radon_cc_async("test.py")
+        mock_direct.assert_called_once()
+        assert result == []
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
+    async def test_cc_uses_subprocess_when_available(self, mock_cmd):
+        mock_cmd.return_value = CommandResult(
+            returncode=0, stdout=SAMPLE_CC_JSON, stderr=""
+        )
+        result = await run_radon_cc_async("test.py")
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
+    @patch("tapps_mcp.tools.radon._radon_mi_direct")
+    async def test_mi_falls_back_on_empty_output(self, mock_direct, mock_cmd):
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
+        mock_direct.return_value = 72.5
+        result = await run_radon_mi_async("test.py")
+        mock_direct.assert_called_once_with("test.py")
+        assert result == 72.5
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
+    @patch("tapps_mcp.tools.radon._radon_mi_direct")
+    async def test_mi_falls_back_on_empty_json(self, mock_direct, mock_cmd):
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="{}", stderr="")
+        mock_direct.return_value = 65.0
+        result = await run_radon_mi_async("test.py")
+        mock_direct.assert_called_once()
+        assert result == 65.0
+
+
+class TestRadonDirectFallback:
+    """Tests for direct radon library usage."""
+
+    @patch("tapps_mcp.tools.radon._is_radon_importable", return_value=False)
+    def test_cc_direct_returns_empty_when_unavailable(self, _mock):
+        assert _radon_cc_direct("test.py") == []
+
+    @patch("tapps_mcp.tools.radon._is_radon_importable", return_value=False)
+    def test_mi_direct_returns_default_when_unavailable(self, _mock):
+        assert _radon_mi_direct("test.py") == 50.0
+
+    @patch("tapps_mcp.tools.radon._is_radon_importable", return_value=True)
+    @patch("tapps_mcp.tools.radon._read_source", return_value=None)
+    def test_cc_direct_returns_empty_on_read_failure(self, _mock_read, _mock_avail):
+        assert _radon_cc_direct("missing.py") == []
+
+    @patch("tapps_mcp.tools.radon._is_radon_importable", return_value=True)
+    @patch("tapps_mcp.tools.radon._read_source", return_value=None)
+    def test_mi_direct_returns_default_on_read_failure(self, _mock_read, _mock_avail):
+        assert _radon_mi_direct("missing.py") == 50.0
+
+    def test_is_radon_importable_caches(self):
+        import tapps_mcp.tools.radon as radon_mod
+
+        # Reset cache
+        radon_mod._RADON_AVAILABLE = None
+        result = _is_radon_importable()
+        assert isinstance(result, bool)
+        # Second call should use cached value
+        result2 = _is_radon_importable()
+        assert result == result2

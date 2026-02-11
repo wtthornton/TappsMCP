@@ -14,6 +14,9 @@ class CategoryScore(BaseModel):
     details: dict[str, object] = Field(
         default_factory=dict, description="Category-specific detail."
     )
+    suggestions: list[str] = Field(
+        default_factory=list, description="Actionable improvement tips."
+    )
 
 
 class LintIssue(BaseModel):
@@ -65,4 +68,7 @@ class ScoreResult(BaseModel):
     degraded: bool = Field(default=False, description="True if some tools were unavailable.")
     missing_tools: list[str] = Field(
         default_factory=list, description="Names of unavailable external tools."
+    )
+    tool_errors: dict[str, str] = Field(
+        default_factory=dict, description="Per-tool error reasons when tools fail."
     )

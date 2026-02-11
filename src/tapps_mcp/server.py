@@ -216,6 +216,7 @@ async def tapps_score_file(
     file_path: str,
     quick: bool = False,
     fix: bool = False,
+    mode: str = "auto",
 ) -> dict[str, Any]:
     """Call when editing or reviewing a Python file to get objective quality metrics.
 
@@ -227,6 +228,9 @@ async def tapps_score_file(
         file_path: Path to the Python file to score.
         quick: If True, run ruff-only scoring (< 500 ms).
         fix: If True (requires quick=True), apply ruff auto-fixes first.
+        mode: Execution mode - "subprocess", "direct", or "auto" (default).
+            "direct" uses radon as a library and sync subprocess in thread
+            pool, avoiding async subprocess reliability issues.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_score_file")
@@ -249,9 +253,14 @@ async def tapps_score_file(
 
         result = scorer.score_file_quick(resolved)
     else:
-        result = await scorer.score_file(resolved)
+        result = await scorer.score_file(resolved, mode=mode)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    # Aggregate suggestions across all categories
+    all_suggestions: list[str] = []
+    for cat in result.categories.values():
+        all_suggestions.extend(cat.suggestions)
 
     data: dict[str, Any] = {
         "file_path": result.file_path,
@@ -261,9 +270,11 @@ async def tapps_score_file(
                 "score": round(cat.score, 2),
                 "weight": cat.weight,
                 "details": cat.details,
+                "suggestions": cat.suggestions,
             }
             for name, cat in result.categories.items()
         },
+        "suggestions": all_suggestions,
         "lint_issue_count": len(result.lint_issues),
         "type_issue_count": len(result.type_issues),
         "security_issue_count": len(result.security_issues),
@@ -278,6 +289,8 @@ async def tapps_score_file(
         data["type_issues"] = serialize_issues(result.type_issues)
     if result.security_issues:
         data["security_issues"] = serialize_issues(result.security_issues)
+    if result.tool_errors:
+        data["tool_errors"] = result.tool_errors
 
     _record_execution(
         "tapps_score_file",
@@ -388,19 +401,31 @@ async def tapps_quality_gate(
         degraded=score_result.degraded,
     )
 
+    # Collect suggestions for failing categories
+    failing_cats = {f.category for f in gate_result.failures}
+    gate_suggestions: list[str] = []
+    for name, cat in score_result.categories.items():
+        if name in failing_cats and cat.suggestions:
+            gate_suggestions.extend(cat.suggestions)
+
+    gate_data: dict[str, Any] = {
+        "file_path": str(resolved),
+        "passed": gate_result.passed,
+        "preset": gate_result.preset,
+        "overall_score": round(score_result.overall_score, 2),
+        "scores": {k: round(v, 2) for k, v in gate_result.scores.items()},
+        "thresholds": gate_result.thresholds.model_dump(),
+        "failures": [f.model_dump() for f in gate_result.failures],
+        "warnings": gate_result.warnings,
+        "suggestions": gate_suggestions,
+    }
+    if score_result.tool_errors:
+        gate_data["tool_errors"] = score_result.tool_errors
+
     return success_response(
         "tapps_quality_gate",
         elapsed_ms,
-        {
-            "file_path": str(resolved),
-            "passed": gate_result.passed,
-            "preset": gate_result.preset,
-            "overall_score": round(score_result.overall_score, 2),
-            "scores": {k: round(v, 2) for k, v in gate_result.scores.items()},
-            "thresholds": gate_result.thresholds.model_dump(),
-            "failures": [f.model_dump() for f in gate_result.failures],
-            "warnings": gate_result.warnings,
-        },
+        gate_data,
         degraded=score_result.degraded,
     )
 

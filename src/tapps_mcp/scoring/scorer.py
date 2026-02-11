@@ -87,8 +87,14 @@ class CodeScorer:
             degraded=False,
         )
 
-    async def score_file(self, file_path: Path) -> ScoreResult:
-        """Full mode: parallel ruff + mypy + bandit + radon → 7-category score."""
+    async def score_file(self, file_path: Path, *, mode: str = "subprocess") -> ScoreResult:
+        """Full mode: parallel ruff + mypy + bandit + radon → 7-category score.
+
+        Args:
+            file_path: Path to the Python file to score.
+            mode: Execution mode for external tools - ``"subprocess"``,
+                ``"direct"``, or ``"auto"``.
+        """
         resolved = file_path.resolve()
         str_path = str(resolved)
         cwd = str(resolved.parent)
@@ -106,6 +112,7 @@ class CodeScorer:
             str_path,
             cwd=cwd,
             timeout=timeout,
+            mode=mode,
         )
 
         # Build category scores
@@ -121,6 +128,7 @@ class CodeScorer:
             security_issues=parallel.security_issues,
             degraded=parallel.degraded,
             missing_tools=parallel.missing_tools,
+            tool_errors=parallel.tool_errors,
         )
 
     def score_file_sync(self, file_path: Path) -> ScoreResult:
@@ -140,56 +148,82 @@ class CodeScorer:
         w = self._weights
         cats: dict[str, CategoryScore] = {}
 
-        # 1) Complexity (radon cc → 0-10, lower complexity = higher quality)
-        if parallel.radon_cc:
+        # 1) Complexity (radon cc -> 0-10, lower complexity = higher quality)
+        cplx_details: dict[str, object] = {"functions_analysed": len(parallel.radon_cc)}
+        using_radon_cc = bool(parallel.radon_cc)
+        if using_radon_cc:
             complexity_raw = calculate_complexity_score(parallel.radon_cc)
+            max_entry = max(parallel.radon_cc, key=lambda e: float(str(e.get("complexity", 0))))
+            cplx_details["max_cc"] = float(str(max_entry.get("complexity", 0)))
+            cplx_details["max_cc_function"] = str(max_entry.get("name", ""))
         else:
             complexity_raw = self._ast_complexity(code)
+            cplx_details["fallback"] = True
         cats["complexity"] = CategoryScore(
             name="complexity",
             score=complexity_raw,
             weight=w.complexity,
-            details={"functions_analysed": len(parallel.radon_cc)},
+            details=cplx_details,
+            suggestions=_suggest_complexity(complexity_raw, cplx_details, using_radon_cc),
         )
 
-        # 2) Security (bandit → 0-10)
-        if parallel.security_issues or "bandit" not in parallel.missing_tools:
+        # 2) Security (bandit -> 0-10)
+        sec_details: dict[str, object] = {"issue_count": len(parallel.security_issues)}
+        using_bandit = parallel.security_issues or "bandit" not in parallel.missing_tools
+        if using_bandit:
             sec_score = calculate_security_score(parallel.security_issues)
         else:
             sec_score = self._heuristic_security(code)
+            sec_details["fallback"] = True
+            sec_details["patterns_found"] = [p for p in _INSECURE_PATTERNS if p in code]
         cats["security"] = CategoryScore(
             name="security",
             score=sec_score,
             weight=w.security,
-            details={"issue_count": len(parallel.security_issues)},
+            details=sec_details,
+            suggestions=_suggest_security(sec_score, sec_details),
         )
 
-        # 3) Maintainability (radon mi → 0-10)
+        # 3) Maintainability (radon mi -> 0-10)
+        maint_details: dict[str, object] = {"mi_value": parallel.radon_mi}
         if "radon" not in parallel.missing_tools:
             maint_score = calculate_maintainability_score(parallel.radon_mi)
         else:
             maint_score = self._ast_maintainability(code)
+            maint_details["fallback"] = True
+        has_docstring = '"""' in code or "'''" in code
+        maint_details["has_docstring"] = has_docstring
+        maint_details["line_count"] = len(code.splitlines())
         cats["maintainability"] = CategoryScore(
             name="maintainability",
             score=maint_score,
             weight=w.maintainability,
-            details={"mi_value": parallel.radon_mi},
+            details=maint_details,
+            suggestions=_suggest_maintainability(maint_score, maint_details),
         )
 
         # 4) Test coverage (heuristic)
         coverage = self._coverage_heuristic(file_path)
+        cov_details: dict[str, object] = {"stem": file_path.stem}
+        is_test = file_path.name.startswith("test_") or file_path.name.endswith("_test.py")
+        cov_details["is_test_file"] = is_test
         cats["test_coverage"] = CategoryScore(
             name="test_coverage",
             score=coverage,
             weight=w.test_coverage,
+            details=cov_details,
+            suggestions=_suggest_test_coverage(coverage, cov_details),
         )
 
         # 5) Performance (AST-based)
-        perf = self._ast_performance(code)
+        perf, perf_issues = self._ast_performance_detailed(code)
+        perf_details: dict[str, object] = {"issues_found": sorted(perf_issues)}
         cats["performance"] = CategoryScore(
             name="performance",
             score=perf,
             weight=w.performance,
+            details=perf_details,
+            suggestions=_suggest_performance(perf, perf_details),
         )
 
         # 6) Structure (project layout)
@@ -198,6 +232,7 @@ class CodeScorer:
             name="structure",
             score=structure,
             weight=w.structure,
+            suggestions=_suggest_structure(structure),
         )
 
         # 7) DevEx (tooling / docs)
@@ -206,6 +241,7 @@ class CodeScorer:
             name="devex",
             score=devex,
             weight=w.devex,
+            suggestions=_suggest_devex(devex),
         )
 
         # Bonus: linting & type-checking (informational, not weighted in overall)
@@ -311,23 +347,44 @@ class CodeScorer:
 
     @staticmethod
     def _coverage_heuristic(file_path: Path) -> float:
-        """Heuristic test coverage based on test file existence."""
+        """Heuristic test coverage based on test file existence.
+
+        Uses a graduated scoring approach:
+          - 0: no tests found at all
+          - 3: fuzzy match (test file name contains the module stem)
+          - 5: exact match (``test_{stem}.py`` or ``{stem}_test.py``)
+          - 7: multiple test files reference this module
+        """
         root = _find_project_root(file_path)
         if root is None:
             return 0.0
         # If the file itself is a test file
         if file_path.name.startswith("test_") or file_path.name.endswith("_test.py"):
             return 5.0
-        # Look for matching test files
         stem = file_path.stem
         test_dirs = ["tests", "test", "tests/unit", "tests/integration"]
-        patterns = [f"test_{stem}.py", f"{stem}_test.py"]
+        exact_patterns = [f"test_{stem}.py", f"{stem}_test.py"]
+        exact_count = 0
+        fuzzy_count = 0
         for td in test_dirs:
             td_path = root / td
-            if td_path.is_dir():
-                for pat in patterns:
-                    if (td_path / pat).exists():
-                        return 5.0
+            if not td_path.is_dir():
+                continue
+            for pat in exact_patterns:
+                if (td_path / pat).exists():
+                    exact_count += 1
+            # Fuzzy: test_*{stem}*.py (e.g. test_server_tools.py for server.py)
+            for match in td_path.glob(f"test_*{stem}*.py"):
+                if match.name not in exact_patterns:
+                    fuzzy_count += 1
+        total = exact_count + fuzzy_count
+        multi_test_threshold = 2
+        if total >= multi_test_threshold:
+            return 7.0
+        if exact_count >= 1:
+            return 5.0
+        if fuzzy_count >= 1:
+            return 3.0
         return 0.0
 
     _STRUCTURE_SIGNALS: ClassVar[list[tuple[float, list[str]]]] = [
@@ -372,9 +429,15 @@ class CodeScorer:
     @staticmethod
     def _ast_performance(code: str) -> float:
         """AST-based performance scoring."""
+        score, _seen = CodeScorer._ast_performance_detailed(code)
+        return score
+
+    @staticmethod
+    def _ast_performance_detailed(code: str) -> tuple[float, list[str]]:
+        """AST-based performance scoring with issue details."""
         tree = CodeScorer._parse_ast_safe(code)
         if tree is None:
-            return 0.0
+            return 0.0, []
         seen: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef):
@@ -384,7 +447,7 @@ class CodeScorer:
             if isinstance(node, ast.ListComp):
                 _check_expensive_comp(node, seen)
         penalty = sum(PERFORMANCE_PENALTY_MAP.get(i, 0.5) for i in seen)
-        return clamp_individual(10.0 - penalty)
+        return clamp_individual(10.0 - penalty), sorted(seen)
 
     def _error_result(self, path: str, message: str) -> ScoreResult:
         return ScoreResult(
@@ -401,6 +464,14 @@ class CodeScorer:
 # ------------------------------------------------------------------
 
 _EXPENSIVE_CALL_THRESHOLD = 5
+
+# Suggestion thresholds
+_CC_HIGH = 10
+_CC_MODERATE = 5
+_MI_VERY_LOW = 20
+_MI_LOW = 40
+_FILE_LONG_LINES = 300
+_SCORE_LOW = 5
 
 
 def _check_function_size(node: ast.FunctionDef, seen: set[str]) -> None:
@@ -458,3 +529,148 @@ def _max_nesting_depth(node: ast.AST, depth: int = 0) -> int:
         else:
             max_d = max(max_d, _max_nesting_depth(child, depth))
     return max_d
+
+
+# ------------------------------------------------------------------
+# Suggestion generators (one per scored category)
+# ------------------------------------------------------------------
+
+
+def _suggest_complexity(
+    score: float,
+    details: dict[str, object],
+    using_radon: bool,
+) -> list[str]:
+    """Actionable suggestions for the complexity category."""
+    tips: list[str] = []
+    if not using_radon:
+        tips.append("Install radon for accurate complexity measurement (pip install radon).")
+        return tips
+    max_cc = float(str(details.get("max_cc", 0)))
+    func_name = str(details.get("max_cc_function", ""))
+    if max_cc > _CC_HIGH:
+        tips.append(
+            f"Function '{func_name}' has CC={int(max_cc)}. "
+            f"Extract branches into helper functions to reduce below {_CC_HIGH}."
+        )
+    elif max_cc > _CC_MODERATE:
+        tips.append(
+            f"Function '{func_name}' has CC={int(max_cc)}. "
+            "Consider simplifying conditional logic."
+        )
+    return tips
+
+
+def _suggest_security(
+    score: float,
+    details: dict[str, object],
+) -> list[str]:
+    """Actionable suggestions for the security category."""
+    tips: list[str] = []
+    issue_count = int(str(details.get("issue_count", 0)))
+    if issue_count > 0:
+        tips.append(
+            f"Found {issue_count} security issue(s). "
+            "Run tapps_security_scan for details."
+        )
+    patterns = details.get("patterns_found")
+    if isinstance(patterns, list) and patterns:
+        joined = ", ".join(str(p) for p in patterns)
+        tips.append(f"Avoid insecure patterns: {joined} - use safer alternatives.")
+    return tips
+
+
+def _suggest_maintainability(
+    score: float,
+    details: dict[str, object],
+) -> list[str]:
+    """Actionable suggestions for the maintainability category."""
+    tips: list[str] = []
+    mi = float(str(details.get("mi_value", 100)))
+    if mi < _MI_VERY_LOW:
+        tips.append(f"MI={mi:.0f} (very low). Split this file into smaller modules.")
+    elif mi < _MI_LOW:
+        tips.append(f"MI={mi:.0f} (low). Add docstrings and reduce function sizes.")
+    if not details.get("has_docstring"):
+        tips.append("Add module and function docstrings to improve maintainability.")
+    line_count = int(str(details.get("line_count", 0)))
+    if line_count > _FILE_LONG_LINES:
+        tips.append(f"File has {line_count} lines. Consider splitting into smaller modules.")
+    return tips
+
+
+def _suggest_test_coverage(
+    score: float,
+    details: dict[str, object],
+) -> list[str]:
+    """Actionable suggestions for the test_coverage category."""
+    tips: list[str] = []
+    stem = str(details.get("stem", "module"))
+    is_test = bool(details.get("is_test_file"))
+    if score == 0:
+        tips.append(f"No test file found. Create tests/unit/test_{stem}.py.")
+    elif is_test and score <= _SCORE_LOW:
+        tips.append("This is a test file (coverage score capped at 5/10).")
+    return tips
+
+
+def _suggest_performance(
+    score: float,
+    details: dict[str, object],
+) -> list[str]:
+    """Actionable suggestions for the performance category."""
+    tips: list[str] = []
+    issues = details.get("issues_found")
+    if not isinstance(issues, list) or not issues:
+        return tips
+    for issue in issues:
+        issue_str = str(issue)
+        if issue_str == "very_large_function":
+            tips.append(
+                f"Function exceeds {VERY_LARGE_FUNCTION_LINES} lines. "
+                "Decompose into smaller functions."
+            )
+        elif issue_str == "large_function":
+            tips.append(
+                f"Function exceeds {LARGE_FUNCTION_LINES} lines. "
+                "Consider breaking it up."
+            )
+        elif issue_str == "very_deep_nesting":
+            tips.append(
+                f"Nesting depth > {VERY_DEEP_NESTING_THRESHOLD}. "
+                "Extract inner logic into helpers or use early returns."
+            )
+        elif issue_str == "deep_nesting":
+            tips.append(
+                f"Nesting depth > {DEEP_NESTING_THRESHOLD}. "
+                "Extract inner logic into helpers."
+            )
+        elif issue_str == "nested_loops":
+            tips.append(
+                "Nested for-loops detected. "
+                "Consider alternative data structures or itertools."
+            )
+        elif issue_str == "expensive_comprehension":
+            tips.append(
+                "List comprehension with many function calls. "
+                "Consider a plain loop for clarity."
+            )
+    return tips
+
+
+def _suggest_structure(score: float) -> list[str]:
+    """Actionable suggestions for the structure category."""
+    tips: list[str] = []
+    if score < _SCORE_LOW:
+        tips.append("Add pyproject.toml and a tests/ directory for better project structure.")
+    return tips
+
+
+def _suggest_devex(score: float) -> list[str]:
+    """Actionable suggestions for the devex category."""
+    tips: list[str] = []
+    if score < _SCORE_LOW:
+        tips.append(
+            "Add CLAUDE.md or AGENTS.md for AI-assisted development guidance."
+        )
+    return tips

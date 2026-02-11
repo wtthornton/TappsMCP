@@ -6,7 +6,18 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from tapps_mcp.scoring.models import LintIssue
-from tapps_mcp.scoring.scorer import CodeScorer, _find_project_root, _max_nesting_depth
+from tapps_mcp.scoring.scorer import (
+    CodeScorer,
+    _find_project_root,
+    _max_nesting_depth,
+    _suggest_complexity,
+    _suggest_devex,
+    _suggest_maintainability,
+    _suggest_performance,
+    _suggest_security,
+    _suggest_structure,
+    _suggest_test_coverage,
+)
 from tapps_mcp.tools.parallel import ParallelResults
 
 
@@ -196,6 +207,35 @@ class TestCoverageHeuristic:
         src.write_text("pass", encoding="utf-8")
         assert CodeScorer._coverage_heuristic(src) == 0.0
 
+    def test_fuzzy_match_scores_3(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+        (tmp_path / "tests").mkdir()
+        # test_server_tools.py is a fuzzy match for server.py
+        (tmp_path / "tests" / "test_server_tools.py").write_text("pass", encoding="utf-8")
+        src = tmp_path / "server.py"
+        src.write_text("pass", encoding="utf-8")
+        assert CodeScorer._coverage_heuristic(src) == 3.0
+
+    def test_multiple_test_files_scores_7(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "unit").mkdir()
+        # Exact match + fuzzy match = 2 files
+        (tmp_path / "tests" / "test_server.py").write_text("pass", encoding="utf-8")
+        (tmp_path / "tests" / "unit" / "test_server_tools.py").write_text("pass", encoding="utf-8")
+        src = tmp_path / "server.py"
+        src.write_text("pass", encoding="utf-8")
+        assert CodeScorer._coverage_heuristic(src) == 7.0
+
+    def test_exact_match_preferred_over_fuzzy(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+        (tmp_path / "tests").mkdir()
+        # Only exact match, no fuzzy
+        (tmp_path / "tests" / "test_app.py").write_text("pass", encoding="utf-8")
+        src = tmp_path / "app.py"
+        src.write_text("pass", encoding="utf-8")
+        assert CodeScorer._coverage_heuristic(src) == 5.0
+
 
 class TestStructureScore:
     def test_full_project(self, tmp_path):
@@ -344,3 +384,209 @@ class TestOverallCalculation:
         }
         overall = scorer._calculate_overall(cats)
         assert overall == 0.0
+
+
+# ------------------------------------------------------------------
+# Suggestion generator tests
+# ------------------------------------------------------------------
+
+
+class TestSuggestComplexity:
+    def test_high_cc_with_radon(self):
+        tips = _suggest_complexity(
+            8.0, {"max_cc": 15, "max_cc_function": "parse_data"}, using_radon=True
+        )
+        assert len(tips) == 1
+        assert "parse_data" in tips[0]
+        assert "CC=15" in tips[0]
+        assert "below 10" in tips[0]
+
+    def test_moderate_cc_with_radon(self):
+        tips = _suggest_complexity(
+            4.0, {"max_cc": 7, "max_cc_function": "process"}, using_radon=True
+        )
+        assert len(tips) == 1
+        assert "simplifying" in tips[0]
+
+    def test_low_cc_no_suggestions(self):
+        tips = _suggest_complexity(
+            1.0, {"max_cc": 3, "max_cc_function": "simple"}, using_radon=True
+        )
+        assert tips == []
+
+    def test_fallback_without_radon(self):
+        tips = _suggest_complexity(5.0, {"fallback": True}, using_radon=False)
+        assert len(tips) == 1
+        assert "radon" in tips[0].lower()
+
+
+class TestSuggestSecurity:
+    def test_issues_found(self):
+        tips = _suggest_security(6.0, {"issue_count": 3})
+        assert len(tips) == 1
+        assert "3 security issue" in tips[0]
+
+    def test_patterns_found(self):
+        tips = _suggest_security(
+            6.0, {"issue_count": 0, "patterns_found": ["eval(", "exec("]}
+        )
+        assert len(tips) == 1
+        assert "eval(" in tips[0]
+
+    def test_clean_no_suggestions(self):
+        tips = _suggest_security(10.0, {"issue_count": 0})
+        assert tips == []
+
+
+class TestSuggestMaintainability:
+    def test_very_low_mi(self):
+        tips = _suggest_maintainability(2.0, {"mi_value": 15, "has_docstring": True, "line_count": 100})
+        assert any("MI=15" in t for t in tips)
+        assert any("very low" in t for t in tips)
+
+    def test_low_mi(self):
+        tips = _suggest_maintainability(3.5, {"mi_value": 35, "has_docstring": True, "line_count": 100})
+        assert any("MI=35" in t for t in tips)
+
+    def test_no_docstring(self):
+        tips = _suggest_maintainability(7.0, {"mi_value": 80, "has_docstring": False, "line_count": 50})
+        assert any("docstring" in t.lower() for t in tips)
+
+    def test_long_file(self):
+        tips = _suggest_maintainability(6.0, {"mi_value": 60, "has_docstring": True, "line_count": 400})
+        assert any("400 lines" in t for t in tips)
+
+    def test_good_score_no_suggestions(self):
+        tips = _suggest_maintainability(9.0, {"mi_value": 90, "has_docstring": True, "line_count": 50})
+        assert tips == []
+
+
+class TestSuggestTestCoverage:
+    def test_no_test_file(self):
+        tips = _suggest_test_coverage(0, {"stem": "mymodule", "is_test_file": False})
+        assert len(tips) == 1
+        assert "test_mymodule.py" in tips[0]
+
+    def test_is_test_file(self):
+        tips = _suggest_test_coverage(5, {"stem": "test_foo", "is_test_file": True})
+        assert len(tips) == 1
+        assert "test file" in tips[0].lower()
+
+    def test_has_test_no_suggestions(self):
+        tips = _suggest_test_coverage(5, {"stem": "app", "is_test_file": False})
+        assert tips == []
+
+
+class TestSuggestPerformance:
+    def test_nested_loops(self):
+        tips = _suggest_performance(8.5, {"issues_found": ["nested_loops"]})
+        assert len(tips) == 1
+        assert "Nested for-loops" in tips[0]
+
+    def test_very_large_function(self):
+        tips = _suggest_performance(8.5, {"issues_found": ["very_large_function"]})
+        assert len(tips) == 1
+        assert "100 lines" in tips[0]
+
+    def test_deep_nesting(self):
+        tips = _suggest_performance(9.0, {"issues_found": ["deep_nesting"]})
+        assert len(tips) == 1
+        assert "depth" in tips[0].lower()
+
+    def test_multiple_issues(self):
+        tips = _suggest_performance(
+            6.0, {"issues_found": ["large_function", "nested_loops", "expensive_comprehension"]}
+        )
+        assert len(tips) == 3
+
+    def test_clean_no_suggestions(self):
+        tips = _suggest_performance(10.0, {"issues_found": []})
+        assert tips == []
+
+
+class TestSuggestStructure:
+    def test_low_score(self):
+        tips = _suggest_structure(3.0)
+        assert len(tips) == 1
+        assert "pyproject.toml" in tips[0]
+
+    def test_good_score(self):
+        tips = _suggest_structure(8.0)
+        assert tips == []
+
+
+class TestSuggestDevex:
+    def test_low_score(self):
+        tips = _suggest_devex(3.0)
+        assert len(tips) == 1
+        assert "CLAUDE.md" in tips[0]
+
+    def test_good_score(self):
+        tips = _suggest_devex(8.0)
+        assert tips == []
+
+
+class TestSuggestionsInScoring:
+    """Integration: suggestions are populated when scoring a file."""
+
+    @pytest.mark.asyncio
+    async def test_suggestions_populated_in_full_score(self, tmp_path):
+        f = tmp_path / "sample.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "tests").mkdir()
+
+        parallel = ParallelResults(
+            lint_issues=[],
+            type_issues=[],
+            security_issues=[],
+            radon_cc=[{"name": "big_func", "complexity": 12}],
+            radon_mi=85.0,
+        )
+
+        with patch("tapps_mcp.scoring.scorer.run_all_tools", new_callable=AsyncMock) as mock_tools:
+            mock_tools.return_value = parallel
+            scorer = CodeScorer()
+            result = await scorer.score_file(f)
+
+        # Complexity should have a suggestion about high CC
+        cplx = result.categories["complexity"]
+        assert len(cplx.suggestions) >= 1
+        assert "big_func" in cplx.suggestions[0]
+
+        # Test coverage should suggest creating a test file
+        cov = result.categories["test_coverage"]
+        assert len(cov.suggestions) >= 1
+        assert "test_sample.py" in cov.suggestions[0]
+
+    @pytest.mark.asyncio
+    async def test_no_suggestions_for_perfect_file(self, tmp_path):
+        f = tmp_path / "sample.py"
+        f.write_text(
+            '"""Module doc."""\n\ndef hello():\n    """Say hello."""\n    return "hi"\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "pyproject.toml").write_text("[tool.ruff]\n", encoding="utf-8")
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "test_sample.py").write_text("pass\n", encoding="utf-8")
+        (tmp_path / "CLAUDE.md").write_text("x\n", encoding="utf-8")
+        (tmp_path / "docs").mkdir()
+
+        parallel = ParallelResults(
+            lint_issues=[],
+            type_issues=[],
+            security_issues=[],
+            radon_cc=[{"name": "hello", "complexity": 1}],
+            radon_mi=95.0,
+        )
+
+        with patch("tapps_mcp.scoring.scorer.run_all_tools", new_callable=AsyncMock) as mock_tools:
+            mock_tools.return_value = parallel
+            scorer = CodeScorer()
+            result = await scorer.score_file(f)
+
+        # Well-structured file with good scores should have minimal suggestions
+        total_suggestions = sum(len(c.suggestions) for c in result.categories.values())
+        assert total_suggestions == 0
