@@ -24,12 +24,22 @@ def success_response(
     data: dict[str, Any],
     *,
     degraded: bool | object = _SENTINEL,
+    next_steps: list[str] | None = None,
+    pipeline_progress: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a standard success response envelope.
 
     When *degraded* is explicitly passed (even as False), the key is included
     in the response.  When omitted, the key is absent.
+
+    When *next_steps* is non-empty, it is included in ``data`` so the LLM
+    sees actionable guidance.  Same for *pipeline_progress*.
     """
+    if next_steps:
+        data["next_steps"] = next_steps
+    if pipeline_progress:
+        data["pipeline_progress"] = pipeline_progress
+
     result: dict[str, Any] = {
         "tool": tool_name,
         "success": True,

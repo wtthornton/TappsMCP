@@ -78,7 +78,7 @@ class TestLoadPlatformRules:
     def test_claude_rules(self):
         content = load_platform_rules("claude")
         assert "TAPPS" in content
-        assert "tapps_server_info" in content
+        assert "tapps_session_start" in content
 
     def test_cursor_rules(self):
         content = load_platform_rules("cursor")

@@ -117,16 +117,43 @@ def _record_execution(
 
 
 # ---------------------------------------------------------------------------
+# Nudge helper — injects next_steps + pipeline_progress into any response
+# ---------------------------------------------------------------------------
+
+
+def _with_nudges(
+    tool_name: str,
+    response: dict[str, Any],
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Inject ``next_steps`` and ``pipeline_progress`` into a response dict.
+
+    Safe to call on error responses (they are returned unchanged).
+    """
+    if not response.get("success", False):
+        return response
+    from tapps_mcp.common.nudges import compute_next_steps, compute_pipeline_progress
+
+    steps = compute_next_steps(tool_name, context)
+    progress = compute_pipeline_progress()
+    data = response.get("data", {})
+    if steps:
+        data["next_steps"] = steps
+    if progress:
+        data["pipeline_progress"] = progress
+    return response
+
+
+# ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool()
 def tapps_server_info() -> dict[str, Any]:
-    """Call at session start to discover capabilities.
-
-    Returns TappsMCP server version, available tools, installed checkers
-    (ruff, mypy, bandit, radon), and configuration.
+    """REQUIRED at session start. Discovers server version, available tools,
+    installed checkers (ruff, mypy, bandit, radon), and configuration.
+    Skipping means subsequent tools lack context and recommendations are generic.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_server_info")
@@ -152,11 +179,14 @@ def tapps_server_info() -> dict[str, Any]:
         # Fallback if internal API changes
         available_tools = [
             "tapps_server_info",
+            "tapps_session_start",
             "tapps_score_file",
             "tapps_security_scan",
             "tapps_quality_gate",
             "tapps_lookup_docs",
             "tapps_validate_config",
+            "tapps_validate_changed",
+            "tapps_quick_check",
             "tapps_consult_expert",
             "tapps_list_experts",
             "tapps_checklist",
@@ -175,7 +205,7 @@ def tapps_server_info() -> dict[str, Any]:
 
     from tapps_mcp.pipeline.models import STAGE_TOOLS, PipelineStage
 
-    return success_response("tapps_server_info", elapsed_ms, {
+    resp = success_response("tapps_server_info", elapsed_ms, {
         "server": {
             "name": "TappsMCP",
             "version": __version__,
@@ -190,13 +220,25 @@ def tapps_server_info() -> dict[str, Any]:
         "installed_checkers": [t.model_dump() for t in installed],
         "diagnostics": diagnostics.model_dump(),
         "recommended_workflow": (
-            "Call tapps_server_info at session start; use tapps_score_file(quick=True) "
-            "during edits; before declaring work complete call tapps_score_file (full) "
-            "and tapps_quality_gate on changed files, then tapps_checklist to ensure "
-            "no required steps were skipped. "
-            "Call tapps_lookup_docs before using a library to avoid hallucinated APIs; "
-            "call tapps_consult_expert for domain-specific decisions (security, testing, etc.)."
+            "FIRST: Call tapps_session_start() to initialize. "
+            "BEFORE using any library: Call tapps_lookup_docs(). "
+            "AFTER editing Python files: Call tapps_score_file(quick=True) or tapps_quick_check(). "
+            "BEFORE declaring done: Call tapps_validate_changed() or tapps_quality_gate(). "
+            "FINAL step: Call tapps_checklist()."
         ),
+        "quick_start": [
+            "1. FIRST: Call tapps_session_start() to initialize the session",
+            "2. BEFORE using any library API: Call tapps_lookup_docs(library='<name>')",
+            "3. DURING edits: Call tapps_quick_check(file_path='<path>') after each change",
+            "4. BEFORE declaring done: Call tapps_validate_changed() - all gates MUST pass",
+            "5. FINAL step: Call tapps_checklist(task_type='<type>') to verify completeness",
+        ],
+        "critical_rules": [
+            "BLOCKING: tapps_quality_gate MUST pass before work is complete",
+            "BLOCKING: tapps_lookup_docs MUST be called before using external library APIs",
+            "REQUIRED: tapps_score_file MUST be called on every modified Python file",
+            "NEVER skip tapps_checklist as the final verification step",
+        ],
         "pipeline": {
             "name": "TAPPS Quality Pipeline",
             "stages": [s.value for s in PipelineStage],
@@ -209,6 +251,7 @@ def tapps_server_info() -> dict[str, Any]:
             "prompts_available": True,
         },
     })
+    return _with_nudges("tapps_server_info", resp)
 
 
 @mcp.tool()
@@ -218,11 +261,13 @@ async def tapps_score_file(
     fix: bool = False,
     mode: str = "auto",
 ) -> dict[str, Any]:
-    """Call when editing or reviewing a Python file to get objective quality metrics.
+    """REQUIRED after editing any Python file. Scores quality across 7
+    categories (complexity, security, maintainability, test coverage,
+    performance, structure, devex). Skipping means quality issues go
+    undetected and the quality gate will likely fail.
 
     Use quick=True during edit-lint-fix loops; use full (quick=False) before
-    declaring work complete. Scores across 7 categories (complexity, security,
-    maintainability, test coverage, performance, structure, devex).
+    declaring work complete.
 
     Args:
         file_path: Path to the Python file to score.
@@ -292,6 +337,27 @@ async def tapps_score_file(
     if result.tool_errors:
         data["tool_errors"] = result.tool_errors
 
+    # Detect uncached library imports (non-critical enhancement)
+    try:
+        from tapps_mcp.knowledge.cache import KBCache
+        from tapps_mcp.knowledge.import_analyzer import (
+            extract_external_imports,
+            find_uncached_libraries,
+        )
+
+        settings_cache = load_settings()
+        cache = KBCache(settings_cache.project_root / ".tapps-mcp-cache")
+        external = extract_external_imports(resolved, settings_cache.project_root)
+        uncached = find_uncached_libraries(external, cache)
+        if uncached:
+            data["uncached_libraries"] = uncached[:10]
+            data["docs_hint"] = (
+                f"Call tapps_lookup_docs for {', '.join(uncached[:5])} "
+                "to avoid hallucinated APIs"
+            )
+    except Exception:  # noqa: S110
+        pass  # Never fail scoring for import analysis
+
     _record_execution(
         "tapps_score_file",
         start,
@@ -300,7 +366,10 @@ async def tapps_score_file(
         degraded=result.degraded,
     )
 
-    return success_response("tapps_score_file", elapsed_ms, data, degraded=result.degraded)
+    resp = success_response("tapps_score_file", elapsed_ms, data, degraded=result.degraded)
+    return _with_nudges("tapps_score_file", resp, {
+        "security_issue_count": len(result.security_issues),
+    })
 
 
 @mcp.tool()
@@ -308,10 +377,9 @@ def tapps_security_scan(
     file_path: str,
     scan_secrets: bool = True,
 ) -> dict[str, Any]:
-    """Call when the change touches security-sensitive code or before security-focused review.
-
-    Runs bandit and secret detection on a Python file; returns findings with
-    redacted context.
+    """REQUIRED when changes touch security-sensitive code (auth, input handling,
+    secrets, crypto). Runs bandit and secret detection on a Python file.
+    Skipping risks shipping vulnerabilities to production.
 
     Args:
         file_path: Path to the Python file to scan.
@@ -343,7 +411,7 @@ def tapps_security_scan(
         degraded=not result.bandit_available,
     )
 
-    return success_response(
+    resp = success_response(
         "tapps_security_scan",
         elapsed_ms,
         {
@@ -360,6 +428,7 @@ def tapps_security_scan(
         },
         degraded=not result.bandit_available,
     )
+    return _with_nudges("tapps_security_scan", resp)
 
 
 @mcp.tool()
@@ -367,10 +436,9 @@ async def tapps_quality_gate(
     file_path: str,
     preset: str = "standard",
 ) -> dict[str, Any]:
-    """Call before declaring work complete to ensure the file passes the quality bar.
-
-    Runs full scoring then evaluates pass/fail against the preset. Work is not
-    done until this passes (or the user explicitly accepts the risk).
+    """BLOCKING REQUIREMENT before declaring work complete. Runs full scoring
+    then evaluates pass/fail against the quality preset. Work is NOT done
+    until this passes (or the user explicitly accepts the risk).
 
     Args:
         file_path: Path to the Python file to evaluate.
@@ -422,12 +490,15 @@ async def tapps_quality_gate(
     if score_result.tool_errors:
         gate_data["tool_errors"] = score_result.tool_errors
 
-    return success_response(
+    resp = success_response(
         "tapps_quality_gate",
         elapsed_ms,
         gate_data,
         degraded=score_result.degraded,
     )
+    return _with_nudges("tapps_quality_gate", resp, {
+        "gate_passed": gate_result.passed,
+    })
 
 
 @mcp.tool()
@@ -436,11 +507,10 @@ async def tapps_lookup_docs(
     topic: str = "overview",
     mode: str = "code",
 ) -> dict[str, Any]:
-    """Call before writing code that uses an external library to avoid hallucinated APIs.
-
-    Returns current docs (Context7 + cache). Use the result when implementing
-    or fixing library usage. Resolves library names via fuzzy matching; content
-    is safety-filtered before return.
+    """BLOCKING REQUIREMENT before using any external library API. Returns
+    current docs (Context7 + cache) to prevent hallucinated APIs. Skipping
+    leads to incorrect API usage that must be fixed later. Resolves library
+    names via fuzzy matching; content is safety-filtered before return.
 
     Args:
         library: Library name (fuzzy-matched, e.g. "fastapi", "react").
@@ -497,7 +567,7 @@ async def tapps_lookup_docs(
     if result.warning:
         response["warning"] = result.warning
 
-    return response
+    return _with_nudges("tapps_lookup_docs", response)
 
 
 @mcp.tool()
@@ -505,11 +575,10 @@ def tapps_validate_config(
     file_path: str,
     config_type: str = "auto",
 ) -> dict[str, Any]:
-    """Call when adding or changing Dockerfile, docker-compose, or infra config.
-
+    """REQUIRED when changing Dockerfile, docker-compose, or infra config.
     Validates against best practices (e.g. non-root user, resource limits).
-    Supports Dockerfile, docker-compose.yml, and WebSocket/MQTT/InfluxDB patterns.
-    Use config_type "auto" to detect type from filename and content.
+    Skipping risks deployment failures. Supports Dockerfile, docker-compose.yml,
+    and WebSocket/MQTT/InfluxDB patterns.
 
     Args:
         file_path: Path to the config file to validate.
@@ -533,7 +602,7 @@ def tapps_validate_config(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_config", start, file_path=str(resolved))
 
-    return success_response("tapps_validate_config", elapsed_ms, {
+    resp = success_response("tapps_validate_config", elapsed_ms, {
         "file_path": result.file_path,
         "config_type": result.config_type,
         "valid": result.valid,
@@ -543,6 +612,7 @@ def tapps_validate_config(
         "critical_count": sum(1 for f in result.findings if f.severity == "critical"),
         "warning_count": sum(1 for f in result.findings if f.severity == "warning"),
     })
+    return _with_nudges("tapps_validate_config", resp)
 
 
 @mcp.tool()
@@ -550,11 +620,10 @@ def tapps_consult_expert(
     question: str,
     domain: str = "",
 ) -> dict[str, Any]:
-    """Call when making domain-specific decisions (security, testing, APIs, DB, etc.).
-
-    Routes to one of 16 built-in experts, returns RAG-backed answer with
-    confidence and sources. Use when unsure about patterns or best practices
-    in that domain.
+    """REQUIRED for domain-specific decisions (security, testing, APIs, DB,
+    architecture). Routes to one of 16 built-in experts and returns
+    RAG-backed guidance with confidence scores. Skipping risks incorrect
+    patterns and missed best practices.
 
     Args:
         question: The technical question to ask (natural language).
@@ -574,7 +643,7 @@ def tapps_consult_expert(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_consult_expert", start)
 
-    return success_response("tapps_consult_expert", elapsed_ms, {
+    resp = success_response("tapps_consult_expert", elapsed_ms, {
         "domain": result.domain,
         "expert_id": result.expert_id,
         "expert_name": result.expert_name,
@@ -584,14 +653,13 @@ def tapps_consult_expert(
         "sources": result.sources,
         "chunks_used": result.chunks_used,
     })
+    return _with_nudges("tapps_consult_expert", resp)
 
 
 @mcp.tool()
 def tapps_list_experts() -> dict[str, Any]:
-    """Call when you need to see which expert domains exist before consulting.
-
-    Returns the 16 built-in experts with domain, description, and
-    knowledge-base status. Use before tapps_consult_expert if unsure which domain fits.
+    """Call before tapps_consult_expert if unsure which domain fits. Returns
+    the 16 built-in experts with domain, description, and knowledge-base status.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_list_experts")
@@ -602,20 +670,20 @@ def tapps_list_experts() -> dict[str, Any]:
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_list_experts", start)
 
-    return success_response("tapps_list_experts", elapsed_ms, {
+    resp = success_response("tapps_list_experts", elapsed_ms, {
         "expert_count": len(experts),
         "experts": [e.model_dump() for e in experts],
     })
+    return _with_nudges("tapps_list_experts", resp)
 
 
 @mcp.tool()
 def tapps_checklist(
     task_type: str = "review",
 ) -> dict[str, Any]:
-    """Call before declaring work complete to see if any required steps were skipped.
-
-    Reports which tools were called and which are missing (required/recommended/optional)
-    for this task type, with short reasons so you know what to do next.
+    """REQUIRED as the FINAL step before declaring work complete. Reports which
+    tools were called and which required/recommended steps were skipped.
+    Skipping means no verification that the quality process was followed.
 
     Args:
         task_type: "feature" | "bugfix" | "refactor" | "security" | "review".
@@ -630,7 +698,8 @@ def tapps_checklist(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_checklist", start)
 
-    return success_response("tapps_checklist", elapsed_ms, result.model_dump())
+    resp = success_response("tapps_checklist", elapsed_ms, result.model_dump())
+    return _with_nudges("tapps_checklist", resp, {"complete": result.complete})
 
 
 # ---------------------------------------------------------------------------
@@ -642,10 +711,10 @@ def tapps_checklist(
 def tapps_project_profile(
     project_root: str = "",
 ) -> dict[str, Any]:
-    """Call at session start (after tapps_server_info) to detect the project's
-    tech stack, type, CI, Docker, test frameworks, and package managers.
-
-    Returns quality recommendations tailored to the detected stack.
+    """REQUIRED at session start. Detects the project's tech stack, type, CI,
+    Docker, test frameworks, and package managers. Returns quality
+    recommendations tailored to the detected stack. Skipping means
+    recommendations are generic instead of project-specific.
 
     Args:
         project_root: Project root path (default: server's configured root).
@@ -674,7 +743,7 @@ def tapps_project_profile(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_project_profile", start)
 
-    return success_response("tapps_project_profile", elapsed_ms, {
+    resp = success_response("tapps_project_profile", elapsed_ms, {
         "project_root": str(root),
         "tech_stack": profile.tech_stack.model_dump(),
         "project_type": profile.project_type,
@@ -688,6 +757,7 @@ def tapps_project_profile(
         "package_managers": profile.package_managers,
         "quality_recommendations": profile.quality_recommendations,
     })
+    return _with_nudges("tapps_project_profile", resp)
 
 
 # Session note store - singleton, created on first use
@@ -760,7 +830,8 @@ def tapps_session_notes(
     _record_execution("tapps_session_notes", start)
     data.update(store.metadata())
 
-    return success_response("tapps_session_notes", elapsed_ms, data)
+    resp = success_response("tapps_session_notes", elapsed_ms, data)
+    return _with_nudges("tapps_session_notes", resp)
 
 
 @mcp.tool()
@@ -768,10 +839,10 @@ def tapps_impact_analysis(
     file_path: str,
     change_type: str = "modified",
 ) -> dict[str, Any]:
-    """Call before a refactor or file deletion to understand the blast radius.
-
-    Uses AST-based import graph analysis to identify direct dependents,
-    transitive dependents, and test files that should be re-run.
+    """REQUIRED before refactoring or deleting files. Uses AST-based import
+    graph analysis to map the blast radius - direct dependents, transitive
+    dependents, and test files that should be re-run. Skipping risks breaking
+    dependent code.
 
     Args:
         file_path: Path to the file being changed.
@@ -793,7 +864,7 @@ def tapps_impact_analysis(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_impact_analysis", start, file_path=str(resolved))
 
-    return success_response("tapps_impact_analysis", elapsed_ms, {
+    resp = success_response("tapps_impact_analysis", elapsed_ms, {
         "changed_file": report.changed_file,
         "change_type": report.change_type,
         "severity": report.severity,
@@ -803,6 +874,7 @@ def tapps_impact_analysis(
         "test_files": [t.model_dump() for t in report.test_files],
         "recommendations": report.recommendations,
     })
+    return _with_nudges("tapps_impact_analysis", resp)
 
 
 @mcp.tool()
@@ -865,7 +937,255 @@ async def tapps_report(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_report", start, file_path=file_path or None)
 
-    return success_response("tapps_report", elapsed_ms, report_data)
+    resp = success_response("tapps_report", elapsed_ms, report_data)
+    return _with_nudges("tapps_report", resp)
+
+
+# ---------------------------------------------------------------------------
+# Composite tools — reduce LLM call count
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def tapps_session_start(
+    project_root: str = "",
+) -> dict[str, Any]:
+    """REQUIRED as the FIRST call in every session. Combines server info
+    and project profile detection in a single call. Skipping means all
+    subsequent tools lack project context and recommendations are generic.
+
+    Args:
+        project_root: Project root path (default: server's configured root).
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_session_start")
+
+    # Delegate to existing tools (they record their own calls)
+    info = tapps_server_info()
+    profile = tapps_project_profile(project_root=project_root)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_session_start", start)
+
+    data: dict[str, Any] = {
+        "server": info["data"]["server"],
+        "configuration": info["data"]["configuration"],
+        "installed_checkers": info["data"]["installed_checkers"],
+        "diagnostics": info["data"]["diagnostics"],
+        "quick_start": info["data"].get("quick_start", []),
+        "critical_rules": info["data"].get("critical_rules", []),
+        "pipeline": info["data"]["pipeline"],
+    }
+
+    if profile.get("success"):
+        data["project_profile"] = profile["data"]
+    else:
+        data["project_profile"] = None
+        data["project_profile_error"] = profile.get("error", {}).get("message", "unknown")
+
+    resp = success_response("tapps_session_start", elapsed_ms, data)
+    return _with_nudges("tapps_session_start", resp)
+
+
+@mcp.tool()
+async def tapps_validate_changed(
+    file_paths: str = "",
+    base_ref: str = "HEAD",
+    preset: str = "standard",
+    include_security: bool = True,
+) -> dict[str, Any]:
+    """REQUIRED before declaring work complete on multi-file changes.
+    Detects changed Python files (via git diff) or accepts an explicit
+    comma-separated list. Runs score + quality gate + security scan on each
+    file. Skipping means quality issues in changed files go undetected.
+
+    Args:
+        file_paths: Comma-separated file paths (empty = auto-detect via git diff).
+        base_ref: Git ref to diff against (default: HEAD for unstaged changes).
+        preset: Quality gate preset - "standard", "strict", or "framework".
+        include_security: Whether to run security scan on each file.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_validate_changed")
+
+    from tapps_mcp.gates.evaluator import evaluate_gate
+    from tapps_mcp.scoring.scorer import CodeScorer
+    from tapps_mcp.tools.batch_validator import (
+        MAX_BATCH_FILES,
+        detect_changed_python_files,
+        format_batch_summary,
+    )
+
+    settings = load_settings()
+
+    # Resolve files
+    paths: list[Path] = []
+    if file_paths.strip():
+        for raw_fp in file_paths.split(","):
+            cleaned_fp = raw_fp.strip()
+            if not cleaned_fp:
+                continue
+            try:
+                paths.append(_validate_file_path(cleaned_fp))
+            except (ValueError, FileNotFoundError) as exc:
+                logger.warning("validate_changed_skip", file=cleaned_fp, error=str(exc))
+    else:
+        paths = detect_changed_python_files(settings.project_root, base_ref)
+
+    if not paths:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_validate_changed", start)
+        resp = success_response("tapps_validate_changed", elapsed_ms, {
+            "files_validated": 0,
+            "all_gates_passed": True,
+            "total_security_issues": 0,
+            "results": [],
+            "summary": "No changed Python files found.",
+        })
+        return _with_nudges("tapps_validate_changed", resp)
+
+    # Cap at MAX_BATCH_FILES
+    capped = len(paths) > MAX_BATCH_FILES
+    extra_count = len(paths) - MAX_BATCH_FILES if capped else 0
+    paths = paths[:MAX_BATCH_FILES]
+
+    scorer = CodeScorer()
+    results: list[dict[str, Any]] = []
+
+    for path in paths:
+        file_result: dict[str, Any] = {"file_path": str(path)}
+        try:
+            score = await scorer.score_file(path)
+            file_result["overall_score"] = round(score.overall_score, 2)
+
+            gate = evaluate_gate(score, preset=preset)
+            file_result["gate_passed"] = gate.passed
+            if gate.failures:
+                file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
+
+            if include_security:
+                from tapps_mcp.security.security_scanner import run_security_scan
+
+                sec = run_security_scan(
+                    str(path),
+                    scan_secrets=True,
+                    cwd=str(settings.project_root),
+                    timeout=settings.tool_timeout,
+                )
+                file_result["security_passed"] = sec.passed
+                file_result["security_issues"] = sec.total_issues
+        except Exception as exc:
+            file_result["errors"] = [str(exc)]
+            logger.warning("validate_changed_error", file=str(path), exc_info=True)
+
+        results.append(file_result)
+
+    all_passed = all(r.get("gate_passed", False) for r in results)
+    total_sec = sum(r.get("security_issues", 0) for r in results)
+
+    summary = format_batch_summary(results)
+    if capped:
+        summary += f" ({extra_count} additional files not validated - cap {MAX_BATCH_FILES})"
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution(
+        "tapps_validate_changed", start,
+        gate_passed=all_passed,
+    )
+
+    resp = success_response("tapps_validate_changed", elapsed_ms, {
+        "files_validated": len(results),
+        "all_gates_passed": all_passed,
+        "total_security_issues": total_sec,
+        "results": results,
+        "summary": summary,
+    })
+    return _with_nudges("tapps_validate_changed", resp)
+
+
+@mcp.tool()
+async def tapps_quick_check(
+    file_path: str,
+    preset: str = "standard",
+) -> dict[str, Any]:
+    """REQUIRED at minimum after editing any Python file. Runs quick
+    score + quality gate + basic security check in one fast call. For
+    thorough validation, use tapps_validate_changed or individual tools.
+    Skipping means quality regressions go unnoticed.
+
+    Args:
+        file_path: Path to the Python file to check.
+        preset: Quality gate preset - "standard", "strict", or "framework".
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_quick_check")
+
+    try:
+        resolved = _validate_file_path(file_path)
+    except (ValueError, FileNotFoundError) as exc:
+        return error_response("tapps_quick_check", "path_denied", str(exc))
+
+    from tapps_mcp.gates.evaluator import evaluate_gate
+    from tapps_mcp.scoring.scorer import CodeScorer
+    from tapps_mcp.security.security_scanner import run_security_scan
+
+    settings = load_settings()
+    scorer = CodeScorer()
+
+    # Quick score (ruff-only, fast)
+    score_result = scorer.score_file_quick(resolved)
+
+    # Gate evaluation
+    gate_result = evaluate_gate(score_result, preset=preset)
+
+    # Security scan
+    sec_result = run_security_scan(
+        str(resolved),
+        scan_secrets=True,
+        cwd=str(settings.project_root),
+        timeout=settings.tool_timeout,
+    )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution(
+        "tapps_quick_check",
+        start,
+        file_path=str(resolved),
+        gate_passed=gate_result.passed,
+        score=round(score_result.overall_score, 2),
+    )
+
+    data: dict[str, Any] = {
+        "file_path": str(resolved),
+        "overall_score": round(score_result.overall_score, 2),
+        "gate_passed": gate_result.passed,
+        "gate_preset": preset,
+        "security_passed": sec_result.passed,
+        "lint_issue_count": len(score_result.lint_issues),
+        "security_issue_count": sec_result.total_issues,
+    }
+
+    if gate_result.failures:
+        data["gate_failures"] = [f.model_dump() for f in gate_result.failures]
+    if score_result.lint_issues:
+        data["lint_issues"] = serialize_issues(score_result.lint_issues)
+    if sec_result.total_issues > 0:
+        data["security_issues"] = serialize_issues(
+            sec_result.bandit_issues + sec_result.secret_findings, limit=10,
+        )
+
+    # Aggregate suggestions
+    suggestions: list[str] = []
+    for cat in score_result.categories.values():
+        suggestions.extend(cat.suggestions)
+    if suggestions:
+        data["suggestions"] = suggestions
+
+    resp = success_response(
+        "tapps_quick_check", elapsed_ms, data,
+        degraded=not sec_result.bandit_available,
+    )
+    return _with_nudges("tapps_quick_check", resp)
 
 
 # ---------------------------------------------------------------------------
@@ -943,7 +1263,7 @@ def tapps_init(
 
     resp = success_response("tapps_init", elapsed_ms, result)
     resp["success"] = not result["errors"]
-    return resp
+    return _with_nudges("tapps_init", resp)
 
 
 # ---------------------------------------------------------------------------
@@ -1048,7 +1368,8 @@ async def tapps_dashboard(
         otel_data = export_otel_trace(recent)
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_dashboard", start)
-        return success_response("tapps_dashboard", elapsed_ms, otel_data)
+        resp = success_response("tapps_dashboard", elapsed_ms, otel_data)
+        return _with_nudges("tapps_dashboard", resp)
 
     dashboard = hub.get_dashboard_generator()
 
@@ -1066,7 +1387,8 @@ async def tapps_dashboard(
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_dashboard", start)
-    return success_response("tapps_dashboard", elapsed_ms, data)
+    resp = success_response("tapps_dashboard", elapsed_ms, data)
+    return _with_nudges("tapps_dashboard", resp)
 
 
 @mcp.tool()
@@ -1096,7 +1418,7 @@ def tapps_stats(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_stats", start)
 
-    return success_response("tapps_stats", elapsed_ms, {
+    resp = success_response("tapps_stats", elapsed_ms, {
         "period": period,
         "total_calls": summary.total_calls,
         "success_rate": summary.success_rate,
@@ -1106,6 +1428,7 @@ def tapps_stats(
         "avg_score": summary.avg_score,
         "tools": tool_breakdowns,
     })
+    return _with_nudges("tapps_stats", resp)
 
 
 @mcp.tool()
@@ -1145,13 +1468,14 @@ def tapps_feedback(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_feedback", start)
 
-    return success_response("tapps_feedback", elapsed_ms, {
+    resp = success_response("tapps_feedback", elapsed_ms, {
         "recorded": True,
         "tool_name": tool_name,
         "helpful": helpful,
         "tool_stats": stats,
         "overall_stats": overall_stats,
     })
+    return _with_nudges("tapps_feedback", resp)
 
 
 # ---------------------------------------------------------------------------

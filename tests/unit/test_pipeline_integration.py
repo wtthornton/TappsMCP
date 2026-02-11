@@ -67,14 +67,32 @@ class TestPlatformRules:
 
         content = load_platform_rules("claude")
         token_estimate = len(content) // 4
-        assert token_estimate < 800, f"Claude rules ~{token_estimate} tokens, exceeds 800 budget"
+        assert token_estimate < 1200, f"Claude rules ~{token_estimate} tokens, exceeds 1200 budget"
 
     def test_cursor_rules_under_token_budget(self):
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         content = load_platform_rules("cursor")
         token_estimate = len(content) // 4
-        assert token_estimate < 800, f"Cursor rules ~{token_estimate} tokens, exceeds 800 budget"
+        assert token_estimate < 1200, f"Cursor rules ~{token_estimate} tokens, exceeds 1200 budget"
+
+    def test_claude_rules_contain_enforcement_language(self):
+        from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+        content = load_platform_rules("claude")
+        assert "BLOCKING REQUIREMENT" in content
+        assert "MUST" in content
+        assert "NEVER" in content
+        assert "REQUIRED" in content
+
+    def test_cursor_rules_contain_enforcement_language(self):
+        from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+        content = load_platform_rules("cursor")
+        assert "BLOCKING REQUIREMENT" in content
+        assert "MUST" in content
+        assert "NEVER" in content
+        assert "REQUIRED" in content
 
 
 class TestHandoffRoundTrip:

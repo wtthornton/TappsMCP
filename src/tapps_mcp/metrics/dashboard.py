@@ -71,6 +71,7 @@ class DashboardGenerator:
             "expert_metrics",
             "cache_metrics",
             "quality_distribution",
+            "coverage_metrics",
             "alerts",
             "business_metrics",
             "recommendations",
@@ -85,6 +86,7 @@ class DashboardGenerator:
             "expert_metrics": self._build_expert_metrics,
             "cache_metrics": self._build_cache_metrics,
             "quality_distribution": self._build_quality_distribution,
+            "coverage_metrics": self._build_coverage_metrics,
             "alerts": self._build_alerts,
             "business_metrics": self._build_business_metrics,
             "recommendations": self._build_recommendations,
@@ -138,6 +140,21 @@ class DashboardGenerator:
                     severity = alert.get("severity", "info").upper()
                     lines.append(f"- [{severity}] {alert.get('message', '')}")
                 lines.append("")
+
+        # Coverage metrics
+        if "coverage_metrics" in json_data:
+            cov = json_data["coverage_metrics"]
+            lines.append("## Coverage Metrics")
+            lines.append(f"- Files scored: {cov.get('files_scored', 0)}")
+            lines.append(f"- Files gated: {cov.get('files_gated', 0)}")
+            lines.append(f"- Files scanned: {cov.get('files_scanned', 0)}")
+            lines.append(f"- Gate skip rate: {cov.get('gate_skip_rate', 0):.1%}")
+            lines.append(f"- Docs lookup calls: {cov.get('docs_lookup_calls', 0)}")
+            lines.append(f"- Checklist calls: {cov.get('checklist_calls', 0)}")
+            unused = cov.get("core_tools_unused", [])
+            if unused:
+                lines.append(f"- Unused core tools: {', '.join(unused)}")
+            lines.append("")
 
         # Recommendations
         if "recommendations" in json_data:
@@ -265,6 +282,49 @@ class DashboardGenerator:
             distribution[self._score_bin(s)] += 1
 
         return distribution
+
+    def _build_coverage_metrics(self) -> dict[str, Any]:
+        """Build tool coverage metrics - which files were scored/gated/scanned."""
+        recent = self._execution.get_recent(limit=500)
+
+        scored_files = {
+            m.file_path for m in recent
+            if m.tool_name == "tapps_score_file" and m.file_path
+        }
+        gated_files = {
+            m.file_path for m in recent
+            if m.tool_name == "tapps_quality_gate" and m.file_path
+        }
+        scanned_files = {
+            m.file_path for m in recent
+            if m.tool_name == "tapps_security_scan" and m.file_path
+        }
+
+        # Gate skip rate: files scored but never gated
+        gate_skip_count = len(scored_files - gated_files) if scored_files else 0
+        gate_skip_rate = gate_skip_count / len(scored_files) if scored_files else 0.0
+
+        # Tool usage counts
+        all_tool_names = {m.tool_name for m in recent}
+        core_tools = {
+            "tapps_score_file", "tapps_quality_gate",
+            "tapps_security_scan", "tapps_checklist",
+        }
+
+        lookup_calls = sum(1 for m in recent if m.tool_name == "tapps_lookup_docs")
+        checklist_calls = sum(1 for m in recent if m.tool_name == "tapps_checklist")
+
+        return {
+            "files_scored": len(scored_files),
+            "files_gated": len(gated_files),
+            "files_scanned": len(scanned_files),
+            "gate_skip_rate": round(gate_skip_rate, 3),
+            "gate_skip_count": gate_skip_count,
+            "docs_lookup_calls": lookup_calls,
+            "checklist_calls": checklist_calls,
+            "core_tools_used": sorted(core_tools & all_tool_names),
+            "core_tools_unused": sorted(core_tools - all_tool_names),
+        }
 
     def _build_alerts(self) -> list[dict[str, Any]]:
         current_metrics = self._current_alert_metrics()

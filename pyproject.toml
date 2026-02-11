@@ -104,6 +104,7 @@ ignore = [
     "PLC0415", # import not at top-level — we use lazy imports intentionally
     "PLR0913", # too many arguments — acceptable for config-heavy tool runners
     "PLR0912", # too many branches — acceptable for multi-tool dispatch
+    "PLR0915", # too many statements — acceptable for composite tool handlers
 ]
 
 [tool.ruff.lint.per-file-ignores]

@@ -30,6 +30,9 @@ class ToolCallRecord(BaseModel):
 
 TOOL_REASONS: dict[str, str] = {
     "tapps_server_info": "Call at session start to discover server version and installed checkers.",
+    "tapps_session_start": (
+        "Call as the FIRST action in every session (combines server_info + project_profile)."
+    ),
     "tapps_score_file": (
         "Score the file for quality; use quick=True during edits, full before done."
     ),
@@ -47,6 +50,12 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_list_experts": "List available expert domains before consulting one.",
     "tapps_checklist": (
         "Call before declaring work complete to verify no required steps were skipped."
+    ),
+    "tapps_validate_changed": (
+        "Batch-validate all changed Python files (score + gate + security) before declaring done."
+    ),
+    "tapps_quick_check": (
+        "Quick score + gate + security in one call. Minimum check after editing any Python file."
     ),
 }
 
@@ -164,9 +173,14 @@ class CallTracker:
         recommended = tool_map.get("recommended", [])
         optional = tool_map.get("optional", [])
 
-        missing_required = [t for t in required if t not in called]
-        missing_recommended = [t for t in recommended if t not in called]
-        missing_optional = [t for t in optional if t not in called]
+        # Composite tools satisfy individual requirements
+        effective = set(called)
+        if "tapps_quick_check" in called or "tapps_validate_changed" in called:
+            effective.update({"tapps_score_file", "tapps_quality_gate", "tapps_security_scan"})
+
+        missing_required = [t for t in required if t not in effective]
+        missing_recommended = [t for t in recommended if t not in effective]
+        missing_optional = [t for t in optional if t not in effective]
 
         def hints(tools: list[str]) -> list[ChecklistHint]:
             return [ChecklistHint(tool=t, reason=TOOL_REASONS.get(t, f"Call {t}.")) for t in tools]

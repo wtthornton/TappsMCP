@@ -22,7 +22,7 @@ class TestMCPHandshake:
 
         data = result["data"]
         assert data["server"]["name"] == "TappsMCP"
-        assert data["server"]["version"] == "0.1.1"
+        assert data["server"]["version"] == "0.2.0"
         assert data["server"]["protocol_version"] == "2025-11-25"
 
         assert "available_tools" in data
