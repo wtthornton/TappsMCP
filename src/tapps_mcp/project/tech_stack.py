@@ -91,26 +91,7 @@ _MIN_LANGUAGE_FILE_COUNT = 3
 
 _DEP_NAME_RE = re.compile(r"^([a-zA-Z0-9\-_]+)")
 
-_SKIP_DIRS: frozenset[str] = frozenset(
-    {
-        ".git",
-        ".venv",
-        "venv",
-        "env",
-        "node_modules",
-        "__pycache__",
-        ".pytest_cache",
-        "dist",
-        "build",
-        ".tox",
-        ".eggs",
-        "htmlcov",
-        ".mypy_cache",
-        ".tapps-agents",
-        ".tapps-mcp-cache",
-        "site-packages",
-    }
-)
+from tapps_mcp.common.utils import SKIP_DIRS
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +269,7 @@ class TechStackDetector:
 
 
 def _should_skip(path: Path) -> bool:
-    return any(part in _SKIP_DIRS for part in path.parts)
+    return any(part in SKIP_DIRS for part in path.parts)
 
 
 def _extract_dep_name(raw: str) -> str | None:

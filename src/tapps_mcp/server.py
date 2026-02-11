@@ -916,9 +916,10 @@ async def tapps_report(
         # Project-wide: score all .py files in project root (max 20)
         from pathlib import Path as _Path
 
-        _skip = {".venv", "venv", "node_modules", "__pycache__", ".git", "dist", "build"}
+        from tapps_mcp.common.utils import should_skip_path
+
         py_files = sorted(_Path(settings.project_root).rglob("*.py"))
-        py_files = [f for f in py_files if not any(part in _skip for part in f.parts)][:20]
+        py_files = [f for f in py_files if not should_skip_path(f)][:20]
 
         for pf in py_files:
             try:
