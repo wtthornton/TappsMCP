@@ -311,7 +311,7 @@ GET /api/users?version=2
 
 **Define API contract:**
 ```yaml
-openapi: 3.0.0
+openapi: 3.1.0
 info:
   title: User API
   version: 1.0.0

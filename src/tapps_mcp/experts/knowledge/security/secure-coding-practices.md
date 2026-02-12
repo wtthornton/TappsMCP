@@ -77,8 +77,9 @@ if '<' in username or '>' in username:
 
 ### Multi-Factor Authentication
 - Implement MFA for sensitive operations
-- Use time-based one-time passwords (TOTP)
-- Support hardware security keys (FIDO2/WebAuthn)
+- Prefer passkeys / FIDO2 / WebAuthn (phishing-resistant, strongest option)
+- Support time-based one-time passwords (TOTP) as fallback
+- Hardware security keys provide the highest assurance
 
 ## Access Control
 
@@ -194,7 +195,8 @@ except Exception as e:
 - Document security requirements
 
 ### API Authentication
-- Use OAuth 2.0 or JWT for API authentication
+- Use OAuth 2.1 (with PKCE) or JWT for API authentication
+- Use mTLS for service-to-service communication
 - Implement token expiration and refresh
 - Validate tokens on every request
 - Use secure token storage

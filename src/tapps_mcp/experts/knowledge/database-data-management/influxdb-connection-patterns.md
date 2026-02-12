@@ -92,12 +92,12 @@ class ThreadSafeInfluxDBService:
 
 **Using tenacity:**
 ```python
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_exponential, wait_random, retry_if_exception_type
 from influxdb_client.rest import ApiException
 
 @retry(
     stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
+    wait=wait_exponential(multiplier=1, min=2, max=10) + wait_random(0, 2),
     retry=retry_if_exception_type((ApiException, ConnectionError))
 )
 def write_with_retry(write_api, point):
@@ -225,6 +225,10 @@ def query_safe(query_api, query):
 ## Async Patterns
 
 ### AsyncIO Pattern
+
+> **Note:** `influxdb_client_3` is experimental/alpha. For production,
+> prefer the stable `influxdb-client` package with sync writes or wrap
+> in `asyncio.to_thread()`.
 
 ```python
 import asyncio

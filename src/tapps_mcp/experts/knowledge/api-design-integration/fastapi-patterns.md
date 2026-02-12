@@ -85,18 +85,29 @@ async def send_command(device_id: str, command: dict):
     return result
 ```
 
-### Pattern 4: Request/Response Models
+### Pattern 4: Request/Response Models (Pydantic v2)
 
 ```python
-from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import datetime
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
 class SensorReading(BaseModel):
-    device_id: str = Field(..., description="Device identifier")
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    device_id: str = Field(..., description="Device identifier", min_length=1)
     value: float = Field(..., description="Sensor value")
     unit: str = Field(..., description="Unit of measurement")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    @field_validator("unit")
+    @classmethod
+    def unit_must_be_known(cls, v: str) -> str:
+        allowed = {"celsius", "fahrenheit", "percent", "ppm", "lux"}
+        if v.lower() not in allowed:
+            msg = f"Unknown unit: {v}"
+            raise ValueError(msg)
+        return v.lower()
 
 class SensorResponse(BaseModel):
     device_id: str
@@ -106,11 +117,10 @@ class SensorResponse(BaseModel):
 @app.post("/sensors", response_model=SensorResponse)
 async def create_sensor_reading(reading: SensorReading):
     """Create sensor reading."""
-    # Process reading
     return SensorResponse(
         device_id=reading.device_id,
         readings=[reading],
-        count=1
+        count=1,
     )
 ```
 
@@ -241,7 +251,7 @@ async def ingest_sensor_data(
 ):
     """Ingest sensor data."""
     # Store in InfluxDB
-    await influxdb_client.write(data.dict())
+    await influxdb_client.write(data.model_dump())
     return {"status": "success"}
 
 @app.get("/sensors/{device_id}")

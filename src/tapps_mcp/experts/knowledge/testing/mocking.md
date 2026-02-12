@@ -223,19 +223,64 @@ spy.get_data.assert_called_once_with(1)
 - Verify outcomes
 - Don't test internals
 
+## Async Mocking
+
+### AsyncMock (Python 3.8+)
+
+**Mock async functions:**
+```python
+from unittest.mock import AsyncMock, patch
+
+# Create async mock
+mock_service = AsyncMock()
+mock_service.fetch_data.return_value = {"key": "value"}
+
+# Use in async tests
+async def test_async_function():
+    result = await process_data(mock_service)
+    assert result == {"key": "value"}
+    mock_service.fetch_data.assert_awaited_once()
+```
+
+### Patch Async Dependencies
+
+```python
+@patch('module.async_service', new_callable=AsyncMock)
+async def test_async_endpoint(mock_service):
+    mock_service.get_user.return_value = {"id": 1, "name": "Alice"}
+    result = await get_user_handler(user_id=1)
+    assert result["name"] == "Alice"
+    mock_service.get_user.assert_awaited_once_with(1)
+```
+
+### pytest-asyncio Integration
+
+```python
+import pytest
+from unittest.mock import AsyncMock
+
+@pytest.mark.asyncio
+async def test_with_async_mock():
+    client = AsyncMock()
+    client.post.return_value = {"status": "ok"}
+
+    result = await client.post("/api/data", json={"key": "value"})
+    assert result["status"] == "ok"
+```
+
 ## Mocking Libraries
 
 ### Python
 
 **unittest.mock:**
-- Built-in
+- Built-in (includes AsyncMock for async code)
 - Comprehensive
 - Standard library
 
 **pytest-mock:**
-- pytest integration
-- Fixture-based
-- Easy to use
+- pytest integration via `mocker` fixture
+- Fixture-based (automatic cleanup)
+- Simpler API for common patterns
 
 ### JavaScript
 
@@ -252,5 +297,6 @@ spy.get_data.assert_called_once_with(1)
 ## References
 
 - [unittest.mock Documentation](https://docs.python.org/3/library/unittest.mock.html)
+- [AsyncMock Documentation](https://docs.python.org/3/library/unittest.mock.html#unittest.mock.AsyncMock)
 - [Mocking Best Practices](https://martinfowler.com/articles/mocksArentStubs.html)
 

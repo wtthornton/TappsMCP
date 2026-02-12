@@ -30,14 +30,18 @@ def authenticate_api_key(request):
 - Scope permissions
 - Rate limit per key
 
-### 2. OAuth 2.0
+### 2. OAuth 2.1
 
-**Authorization Code Flow:**
+**Authorization Code Flow with PKCE (required by OAuth 2.1):**
 ```
-Client → Authorization Server → User Consent → Authorization Code
-Client → Exchange Code → Access Token
+Client → Generate code_verifier + code_challenge
+Client → Authorization Server (with code_challenge) → User Consent → Authorization Code
+Client → Exchange Code + code_verifier → Access Token
 Client → API (with Access Token)
 ```
+
+> **Note:** OAuth 2.1 (finalized 2024) deprecates the Implicit flow and
+> requires PKCE for all public clients. Always use Authorization Code + PKCE.
 
 **Implementation:**
 ```python
@@ -49,7 +53,10 @@ oauth.register(
     client_id=CLIENT_ID,
     client_secret=CLIENT_SECRET,
     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-    client_kwargs={'scope': 'openid email profile'}
+    client_kwargs={
+        'scope': 'openid email profile',
+        'code_challenge_method': 'S256',  # PKCE required by OAuth 2.1
+    },
 )
 
 @app.route('/login')
