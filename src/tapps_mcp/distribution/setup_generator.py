@@ -102,17 +102,21 @@ def _get_vscode_settings_dir() -> Path | None:
 # ---------------------------------------------------------------------------
 
 
-def _get_config_path(host: str, project_root: Path) -> Path:
-    """Return the config file path for a given host.
+def _get_config_path(host: str, project_root: Path, scope: str = "user") -> Path:
+    """Return the config file path for a given host and scope.
 
     Args:
         host: One of ``"claude-code"``, ``"cursor"``, ``"vscode"``.
         project_root: The project root directory.
+        scope: ``"user"`` for user-level config, ``"project"`` for
+            project-level ``.mcp.json``. Only affects ``claude-code``.
 
     Returns:
         The ``Path`` to the config file that should be written.
     """
     if host == "claude-code":
+        if scope == "project":
+            return project_root / ".mcp.json"
         return Path.home() / ".claude.json"
     if host == "cursor":
         return project_root / ".cursor" / "mcp.json"
@@ -167,7 +171,13 @@ def _merge_config(existing: dict[str, Any], host: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _generate_config(host: str, project_root: Path, *, force: bool = False) -> bool:
+def _generate_config(
+    host: str,
+    project_root: Path,
+    *,
+    force: bool = False,
+    scope: str = "user",
+) -> bool:
     """Generate (or merge) the MCP config for the given host.
 
     Args:
@@ -175,12 +185,13 @@ def _generate_config(host: str, project_root: Path, *, force: bool = False) -> b
         project_root: Project root directory.
         force: If ``True``, overwrite any existing ``tapps-mcp`` entry without
             prompting. Intended for non-interactive use (CI, scripts).
+        scope: ``"user"`` or ``"project"``. Only affects ``claude-code``.
 
     Returns:
         ``True`` if configuration was successfully written, ``False`` if the
         operation was aborted or failed (e.g. invalid JSON).
     """
-    config_path = _get_config_path(host, project_root)
+    config_path = _get_config_path(host, project_root, scope=scope)
     servers_key = _get_servers_key(host)
 
     if config_path.exists():
@@ -209,10 +220,9 @@ def _generate_config(host: str, project_root: Path, *, force: bool = False) -> b
                     fg="yellow",
                 )
             )
-            if not force:
-                if not click.confirm("Overwrite the existing tapps-mcp entry?"):
-                    click.echo("Aborted.")
-                    return False
+            if not force and not click.confirm("Overwrite the existing tapps-mcp entry?"):
+                click.echo("Aborted.")
+                return False
 
         merged = _merge_config(existing, host)
     else:
@@ -255,17 +265,18 @@ def _print_next_steps(host: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _check_config(host: str, project_root: Path) -> bool:
+def _check_config(host: str, project_root: Path, scope: str = "user") -> bool:
     """Verify that the tapps-mcp entry exists and looks valid.
 
     Args:
         host: Target host name.
         project_root: Project root directory.
+        scope: ``"user"`` or ``"project"``. Only affects ``claude-code``.
 
     Returns:
         ``True`` if configuration looks valid, ``False`` otherwise.
     """
-    config_path = _get_config_path(host, project_root)
+    config_path = _get_config_path(host, project_root, scope=scope)
     servers_key = _get_servers_key(host)
 
     if not config_path.exists():
@@ -311,12 +322,73 @@ def _check_config(host: str, project_root: Path) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _configure_multiple_hosts(
+    hosts: list[str],
+    project_root: Path,
+    *,
+    check: bool = False,
+    force: bool = False,
+    scope: str = "user",
+    rules: bool = True,
+) -> bool:
+    """Configure (or check) multiple hosts, reporting per-host results.
+
+    Returns ``True`` if ALL hosts succeeded, ``False`` if any failed.
+    """
+    all_ok = True
+    for host in hosts:
+        click.echo("")
+        click.echo(click.style(f"--- {host} ---", bold=True))
+        if check:
+            ok = _check_config(host, project_root, scope=scope)
+        else:
+            ok = _generate_config(host, project_root, force=force, scope=scope)
+            if ok and rules:
+                _generate_rules(host, project_root)
+        if not ok:
+            all_ok = False
+    return all_ok
+
+
+def _generate_rules(host: str, project_root: Path) -> None:
+    """Generate platform rule files for the given host.
+
+    Delegates to ``_bootstrap_claude`` and ``_bootstrap_cursor`` from
+    ``tapps_mcp.pipeline.init``.
+    """
+    from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_cursor
+
+    if host == "claude-code":
+        action = _bootstrap_claude(project_root)
+        if action == "created":
+            click.echo(click.style("  Created CLAUDE.md with TAPPS pipeline rules", fg="green"))
+        elif action == "updated":
+            click.echo(click.style("  Updated CLAUDE.md with TAPPS pipeline rules", fg="green"))
+        elif action == "skipped":
+            click.echo("  CLAUDE.md already contains TAPPS rules (skipped)")
+    elif host == "cursor":
+        action = _bootstrap_cursor(project_root)
+        if action == "created":
+            click.echo(
+                click.style("  Created .cursor/rules/tapps-pipeline.md", fg="green")
+            )
+        elif action == "updated":
+            click.echo(
+                click.style("  Updated .cursor/rules/tapps-pipeline.md", fg="green")
+            )
+        elif action == "skipped":
+            click.echo("  .cursor/rules/tapps-pipeline.md already exists (skipped)")
+    # VS Code has no platform rule equivalent — no-op
+
+
 def run_init(
     *,
     mcp_host: str = "auto",
     project_root: str = ".",
     check: bool = False,
     force: bool = False,
+    scope: str = "user",
+    rules: bool = True,
 ) -> bool:
     """Run the init command logic.
 
@@ -326,6 +398,11 @@ def run_init(
         mcp_host: Target host or ``"auto"`` for detection.
         project_root: Project root directory as a string path.
         check: If ``True``, verify existing configuration instead of generating.
+        force: If ``True``, skip overwrite confirmation prompts.
+        scope: ``"user"`` for user-scope config or ``"project"`` for project-scope
+            ``.mcp.json``. Only affects ``claude-code`` host.
+        rules: If ``True``, also generate platform rule files (CLAUDE.md or
+            .cursor/rules/tapps-pipeline.md) alongside MCP config.
     """
     root = Path(project_root).resolve()
     log.info(
@@ -334,6 +411,8 @@ def run_init(
         project_root=str(root),
         check=check,
         force=force,
+        scope=scope,
+        rules=rules,
     )
 
     if mcp_host == "auto":
@@ -346,17 +425,16 @@ def run_init(
                 )
             )
             click.echo("  Supported hosts: claude-code, cursor, vscode")
-            # Nothing to do, but this is not an error condition.
             return True
         click.echo(f"Detected MCP host(s): {', '.join(hosts)}")
-        # Use the first detected host
-        resolved_host = hosts[0]
-        if len(hosts) > 1:
-            click.echo(f"  Using: {resolved_host} (specify --host to choose another)")
-    else:
-        resolved_host = mcp_host
+        return _configure_multiple_hosts(
+            hosts, root, check=check, force=force, scope=scope, rules=rules,
+        )
 
     if check:
-        return _check_config(resolved_host, root)
+        return _check_config(mcp_host, root, scope=scope)
 
-    return _generate_config(resolved_host, root, force=force)
+    ok = _generate_config(mcp_host, root, force=force, scope=scope)
+    if ok and rules:
+        _generate_rules(mcp_host, root)
+    return ok

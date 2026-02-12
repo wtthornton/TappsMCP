@@ -9,8 +9,10 @@ from click.testing import CliRunner
 from tapps_mcp.cli import main
 from tapps_mcp.distribution.setup_generator import (
     _check_config,
+    _configure_multiple_hosts,
     _detect_hosts,
     _generate_config,
+    _generate_rules,
     _get_config_path,
     _get_servers_key,
     _merge_config,
@@ -143,6 +145,25 @@ class TestGetConfigPath:
         project = tmp_path / "project"
         path = _get_config_path("vscode", project)
         assert path == project / ".vscode" / "mcp.json"
+
+    def test_claude_code_project_scope(self, tmp_path):
+        """Project scope returns .mcp.json in project root."""
+        project = tmp_path / "project"
+        path = _get_config_path("claude-code", project, scope="project")
+        assert path == project / ".mcp.json"
+
+    def test_claude_code_user_scope_is_default(self, tmp_path):
+        """Default scope is user, returning ~/.claude.json."""
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            path = _get_config_path("claude-code", tmp_path / "project")
+        assert path == tmp_path / ".claude.json"
+
+    def test_cursor_scope_ignored(self, tmp_path):
+        """Cursor always uses project-local path regardless of scope."""
+        project = tmp_path / "project"
+        path_user = _get_config_path("cursor", project, scope="user")
+        path_project = _get_config_path("cursor", project, scope="project")
+        assert path_user == path_project == project / ".cursor" / "mcp.json"
 
     def test_unknown_host_raises(self, tmp_path):
         with pytest.raises(ValueError, match="Unknown host"):
@@ -332,6 +353,27 @@ class TestGenerateConfig:
         raw = (project / ".cursor" / "mcp.json").read_text(encoding="utf-8")
         assert raw.endswith("\n")
 
+    def test_claude_code_project_scope_writes_mcp_json(self, tmp_path):
+        """Project scope writes .mcp.json in project root."""
+        project = tmp_path / "project"
+        project.mkdir()
+        _generate_config("claude-code", project, scope="project")
+        config_path = project / ".mcp.json"
+        assert config_path.exists()
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+
+    def test_claude_code_project_scope_merges_existing(self, tmp_path):
+        """Project scope merges with existing .mcp.json."""
+        project = tmp_path / "project"
+        project.mkdir()
+        existing = {"mcpServers": {"other": {"command": "other"}}}
+        (project / ".mcp.json").write_text(json.dumps(existing), encoding="utf-8")
+        _generate_config("claude-code", project, scope="project", force=True)
+        data = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
+        assert "other" in data["mcpServers"]
+        assert "tapps-mcp" in data["mcpServers"]
+
 
 # ---------------------------------------------------------------------------
 # Check mode tests
@@ -400,6 +442,20 @@ class TestCheckConfig:
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
             assert _check_config("claude-code", tmp_path / "project") is True
 
+    def test_check_claude_code_project_scope(self, tmp_path):
+        """Project-scope check looks at .mcp.json."""
+        project = tmp_path / "project"
+        project.mkdir()
+        config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp", "args": ["serve"]}}}
+        (project / ".mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        assert _check_config("claude-code", project, scope="project") is True
+
+    def test_check_claude_code_project_scope_missing(self, tmp_path):
+        """Project-scope check fails when .mcp.json is absent."""
+        project = tmp_path / "project"
+        project.mkdir()
+        assert _check_config("claude-code", project, scope="project") is False
+
 
 # ---------------------------------------------------------------------------
 # run_init integration tests
@@ -415,30 +471,43 @@ class TestRunInit:
         captured = capsys.readouterr()
         assert "No MCP hosts detected" in captured.out
 
-    def test_auto_uses_first_detected_host(self, tmp_path):
+    def test_auto_configures_detected_host(self, tmp_path):
         (tmp_path / ".claude").mkdir()
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            run_init(mcp_host="auto", project_root=str(tmp_path))
-        # Should have written claude-code config
+            run_init(mcp_host="auto", project_root=str(tmp_path), rules=False)
         assert (tmp_path / ".claude.json").exists()
 
-    def test_auto_multiple_hosts_uses_first(self, tmp_path):
+    def test_auto_configures_all_detected_hosts(self, tmp_path):
+        """Auto mode configures ALL detected hosts, not just the first."""
         (tmp_path / ".claude").mkdir()
         (tmp_path / "AppData" / "Roaming" / "Cursor").mkdir(parents=True)
         with (
             patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path),
             patch("tapps_mcp.distribution.setup_generator.sys.platform", "win32"),
         ):
-            run_init(mcp_host="auto", project_root=str(tmp_path), check=False)
-        # Claude Code should be first detected, so its config is written
+            run_init(mcp_host="auto", project_root=str(tmp_path), force=True, rules=False)
         assert (tmp_path / ".claude.json").exists()
+        assert (tmp_path / ".cursor" / "mcp.json").exists()
+
+    def test_auto_reports_per_host(self, tmp_path, capsys):
+        """Auto mode prints header per detected host."""
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / "AppData" / "Roaming" / "Cursor").mkdir(parents=True)
+        with (
+            patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path),
+            patch("tapps_mcp.distribution.setup_generator.sys.platform", "win32"),
+        ):
+            run_init(mcp_host="auto", project_root=str(tmp_path), force=True, rules=False)
+        captured = capsys.readouterr()
+        assert "claude-code" in captured.out
+        assert "cursor" in captured.out
 
     def test_explicit_cursor_host(self, tmp_path):
-        run_init(mcp_host="cursor", project_root=str(tmp_path))
+        run_init(mcp_host="cursor", project_root=str(tmp_path), rules=False)
         assert (tmp_path / ".cursor" / "mcp.json").exists()
 
     def test_explicit_vscode_host(self, tmp_path):
-        run_init(mcp_host="vscode", project_root=str(tmp_path))
+        run_init(mcp_host="vscode", project_root=str(tmp_path), rules=False)
         assert (tmp_path / ".vscode" / "mcp.json").exists()
 
     def test_check_mode_with_valid_config(self, tmp_path, capsys):
@@ -527,3 +596,136 @@ class TestCliInit:
         result = runner.invoke(main, ["init", "--host", "invalid"])
         assert result.exit_code != 0
         assert "Invalid value" in result.output
+
+    def test_init_scope_option(self, tmp_path):
+        """CLI accepts --scope project."""
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "init", "--host", "claude-code", "--scope", "project",
+                "--project-root", str(tmp_path), "--no-rules",
+            ],
+        )
+        assert result.exit_code == 0
+        assert (tmp_path / ".mcp.json").exists()
+
+    def test_init_no_rules_flag(self, tmp_path):
+        """CLI --no-rules skips platform rule generation."""
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "init", "--host", "cursor",
+                "--project-root", str(tmp_path), "--no-rules",
+            ],
+        )
+        assert result.exit_code == 0
+        assert (tmp_path / ".cursor" / "mcp.json").exists()
+        assert not (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# Rules generation tests
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateRules:
+    """Tests for platform rule file generation via _generate_rules."""
+
+    def test_generates_claude_md(self, tmp_path):
+        """Generates CLAUDE.md for claude-code host."""
+        _generate_rules("claude-code", tmp_path)
+        claude_md = tmp_path / "CLAUDE.md"
+        assert claude_md.exists()
+        content = claude_md.read_text(encoding="utf-8")
+        assert "TAPPS" in content
+
+    def test_generates_cursor_rules(self, tmp_path):
+        """Generates .cursor/rules/tapps-pipeline.md for cursor host."""
+        _generate_rules("cursor", tmp_path)
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        assert rules.exists()
+        content = rules.read_text(encoding="utf-8")
+        assert "TAPPS" in content
+
+    def test_vscode_is_noop(self, tmp_path):
+        """VS Code has no platform rules; _generate_rules is a no-op."""
+        _generate_rules("vscode", tmp_path)
+        assert not (tmp_path / "CLAUDE.md").exists()
+
+    def test_skips_existing_claude_md_with_tapps(self, tmp_path):
+        """Skips CLAUDE.md if it already has TAPPS reference."""
+        (tmp_path / "CLAUDE.md").write_text("# Rules\nUse TAPPS pipeline.\n")
+        _generate_rules("claude-code", tmp_path)
+        # Content should be unchanged (not doubled)
+        content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+        assert content == "# Rules\nUse TAPPS pipeline.\n"
+
+    def test_skips_existing_cursor_rules(self, tmp_path):
+        """Skips cursor rules if file already exists."""
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules.parent.mkdir(parents=True)
+        rules.write_text("existing rules")
+        _generate_rules("cursor", tmp_path)
+        assert rules.read_text(encoding="utf-8") == "existing rules"
+
+
+# ---------------------------------------------------------------------------
+# Multi-host configuration tests
+# ---------------------------------------------------------------------------
+
+
+class TestConfigureMultipleHosts:
+    """Tests for _configure_multiple_hosts."""
+
+    def test_configures_all_hosts(self, tmp_path):
+        """Configures all provided hosts."""
+        ok = _configure_multiple_hosts(
+            ["cursor", "vscode"], tmp_path, force=True, rules=False,
+        )
+        assert ok is True
+        assert (tmp_path / ".cursor" / "mcp.json").exists()
+        assert (tmp_path / ".vscode" / "mcp.json").exists()
+
+    def test_returns_false_if_any_fails(self, tmp_path):
+        """Returns False if any host configuration fails."""
+        # Pre-create invalid JSON for cursor
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        (cursor_dir / "mcp.json").write_text("{bad}", encoding="utf-8")
+        ok = _configure_multiple_hosts(
+            ["cursor", "vscode"], tmp_path, rules=False,
+        )
+        assert ok is False
+        # VS Code should still succeed
+        assert (tmp_path / ".vscode" / "mcp.json").exists()
+
+    def test_check_mode(self, tmp_path):
+        """Check mode verifies all hosts."""
+        # Set up valid cursor config only
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp", "args": ["serve"]}}}
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        # vscode is missing → should return False
+        ok = _configure_multiple_hosts(
+            ["cursor", "vscode"], tmp_path, check=True, rules=False,
+        )
+        assert ok is False
+
+    def test_generates_rules_when_enabled(self, tmp_path):
+        """Rules are generated alongside config when rules=True."""
+        _configure_multiple_hosts(
+            ["cursor"], tmp_path, force=True, rules=True,
+        )
+        assert (tmp_path / ".cursor" / "mcp.json").exists()
+        assert (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").exists()
+
+    def test_skips_rules_when_disabled(self, tmp_path):
+        """Rules are skipped when rules=False."""
+        _configure_multiple_hosts(
+            ["cursor"], tmp_path, force=True, rules=False,
+        )
+        assert (tmp_path / ".cursor" / "mcp.json").exists()
+        assert not (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").exists()

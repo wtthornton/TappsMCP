@@ -59,11 +59,51 @@ def serve(transport: str, host: str, port: int) -> None:
     is_flag=True,
     help="Overwrite existing tapps-mcp entries without prompting (non-interactive).",
 )
-def init(mcp_host: str, project_root: str, check: bool, force: bool) -> None:
+@click.option(
+    "--scope",
+    type=click.Choice(["user", "project"]),
+    default="user",
+    help="Config scope: 'user' (~/.claude.json) or 'project' (.mcp.json in project root).",
+)
+@click.option(
+    "--rules/--no-rules",
+    default=True,
+    help="Generate platform rule files (CLAUDE.md, .cursor/rules/).",
+)
+def init(
+    mcp_host: str,
+    project_root: str,
+    check: bool,
+    force: bool,
+    scope: str,
+    rules: bool,
+) -> None:
     """Generate MCP configuration for Claude Code, Cursor, or VS Code."""
     from tapps_mcp.distribution.setup_generator import run_init
 
-    success = run_init(mcp_host=mcp_host, project_root=project_root, check=check, force=force)
+    success = run_init(
+        mcp_host=mcp_host,
+        project_root=project_root,
+        check=check,
+        force=force,
+        scope=scope,
+        rules=rules,
+    )
+    if not success:
+        raise SystemExit(1)
+
+
+@main.command()
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root directory.",
+)
+def doctor(project_root: str) -> None:
+    """Diagnose TappsMCP configuration and connectivity."""
+    from tapps_mcp.distribution.doctor import run_doctor
+
+    success = run_doctor(project_root=project_root)
     if not success:
         raise SystemExit(1)
 
