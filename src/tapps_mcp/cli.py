@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import click
 
+from tapps_mcp import __version__
+
 
 @click.group()
-@click.version_option(package_name="tapps-mcp")
+@click.version_option(package_name="tapps-mcp", version=__version__)
 def main() -> None:
     """TappsMCP: MCP server providing code quality tools."""
 
