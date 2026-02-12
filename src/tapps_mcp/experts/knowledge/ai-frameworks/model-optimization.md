@@ -14,11 +14,11 @@ This guide covers general model optimization patterns for AI/ML models, includin
 
 **Example:**
 ```python
-# Quantize model to INT8
-from openvino.tools.pot import create_pipeline
+# Quantize model to INT8 using NNCF
+import nncf
 
-pipeline = create_pipeline([], "DefaultQuantization")
-quantized_model = pipeline.apply(model, dataset)
+calibration_dataset = nncf.Dataset(data_loader)
+quantized_model = nncf.quantize(model, calibration_dataset)
 ```
 
 ### Pattern 2: Pruning

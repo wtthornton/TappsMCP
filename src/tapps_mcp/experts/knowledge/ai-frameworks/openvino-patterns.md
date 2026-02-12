@@ -24,21 +24,17 @@ OpenVINO (Open Visual Inference & Neural network Optimization) is Intel's toolki
 ### Pattern 1: Model Conversion
 
 ```python
-from openvino.tools import mo
+import openvino as ov
 
 # Convert TensorFlow model
-mo.convert_model(
-    saved_model_dir="model/saved_model",
-    output_dir="model/ir",
-    model_name="device_intelligence"
-)
+model = ov.convert_model("model/saved_model")
+ov.save_model(model, "model/ir/device_intelligence.xml")
 
-# Convert PyTorch model
-mo.convert_model(
-    model_path="model/model.pth",
-    output_dir="model/ir",
-    model_name="device_intelligence"
-)
+# Convert PyTorch model (requires torch and model instance)
+import torch
+pytorch_model = torch.load("model/model.pth")
+model = ov.convert_model(pytorch_model, example_input=torch.randn(1, 3, 224, 224))
+ov.save_model(model, "model/ir/device_intelligence.xml")
 ```
 
 ### Pattern 2: Model Loading and Inference
@@ -110,12 +106,11 @@ compiled_model = core.compile_model(model, "CPU")
 ### Pattern 2: Model Quantization
 
 ```python
-from openvino.tools import mo
-from openvino.tools.pot import DataLoader, Metric, Pipeline, create_pipeline
+import nncf
 
-# Quantize model for INT8
-pipeline = create_pipeline([], "DefaultQuantization")
-quantized_model = pipeline.apply(model, dataset)
+# Quantize model for INT8 using NNCF
+calibration_dataset = nncf.Dataset(data_loader)
+quantized_model = nncf.quantize(model, calibration_dataset)
 ```
 
 ### Pattern 3: Batch Processing
@@ -256,5 +251,5 @@ perf_counts = compiled_model.get_property("PERF_COUNT")
 
 - [OpenVINO Documentation](https://docs.openvino.ai/)
 - [OpenVINO Python API](https://docs.openvino.ai/latest/api/ie_python_api/_autosummary/openvino.runtime.html)
-- [Model Optimizer](https://docs.openvino.ai/latest/openvino_docs_MO_DG_Deep_Learning_Model_Optimizer_DevGuide.html)
+- [Model Conversion](https://docs.openvino.ai/latest/openvino_docs_model_processing_introduction.html)
 
