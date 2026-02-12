@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol
 
+from tapps_mcp import __version__
 from tapps_mcp.project.models import ProjectProfile, TechStack
 
 if TYPE_CHECKING:
@@ -34,6 +35,7 @@ def bootstrap_pipeline(
     warm_cache_from_tech_stack: bool = True,
     warm_expert_rag_from_tech_stack: bool = True,
     overwrite_platform_rules: bool = False,
+    overwrite_agents_md: bool = False,
 ) -> dict[str, Any]:
     """Create pipeline template files in the project.
 
@@ -110,15 +112,28 @@ def bootstrap_pipeline(
     if create_runlog:
         _safe_write("docs/TAPPS_RUNLOG.md", load_runlog_template())
 
-    # AGENTS.md: create if missing, skip if exists (preserve user customizations)
+    # AGENTS.md: create if missing, validate+update if exists
     if create_agents_md:
         agents_path = project_root / "AGENTS.md"
+        template_content = load_agents_template()
         if agents_path.exists():
-            result["agents_md"] = {"action": "skipped", "reason": "already_exists"}
-            skipped.append("AGENTS.md")
+            from tapps_mcp.pipeline.agents_md import update_agents_md
+
+            try:
+                action, detail = update_agents_md(
+                    agents_path,
+                    template_content,
+                    overwrite=overwrite_agents_md,
+                )
+                result["agents_md"] = {"action": action, **detail}
+                if action == "validated":
+                    skipped.append("AGENTS.md")
+            except Exception as exc:
+                errors.append(f"AGENTS.md update failed: {exc}")
+                result["agents_md"] = {"action": "error", "reason": str(exc)}
         else:
-            _safe_write("AGENTS.md", load_agents_template())
-            result["agents_md"] = {"action": "created"}
+            _safe_write("AGENTS.md", template_content)
+            result["agents_md"] = {"action": "created", "version": __version__}
     else:
         result["agents_md"] = {"action": "skipped", "reason": "disabled"}
 

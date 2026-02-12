@@ -1,6 +1,8 @@
 """Tests for the tapps_init bootstrap logic."""
 
+from tapps_mcp import __version__
 from tapps_mcp.pipeline.init import bootstrap_pipeline
+from tapps_mcp.prompts.prompt_loader import load_agents_template
 
 
 class TestBootstrapPipeline:
@@ -177,7 +179,7 @@ class TestBootstrapPipeline:
         assert "TappsMCP" in content
         assert "tapps_server_info" in content
 
-    def test_skips_agents_md_when_exists(self, tmp_path):
+    def test_updates_agents_md_when_exists_and_outdated(self, tmp_path):
         (tmp_path / "AGENTS.md").write_text("# Custom agents\n")
         result = bootstrap_pipeline(
             tmp_path,
@@ -187,9 +189,10 @@ class TestBootstrapPipeline:
             verify_server=False,
             warm_cache_from_tech_stack=False,
         )
-        assert "AGENTS.md" in result["skipped"]
-        assert result["agents_md"]["action"] == "skipped"
-        assert (tmp_path / "AGENTS.md").read_text() == "# Custom agents\n"
+        # New behavior: outdated file is updated, not skipped
+        assert result["agents_md"]["action"] == "updated"
+        content = (tmp_path / "AGENTS.md").read_text()
+        assert "tapps_server_info" in content  # template content merged in
 
     def test_creates_tech_stack_md(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text(
@@ -257,3 +260,50 @@ class TestBootstrapPipeline:
         assert "attempted" in erg
         assert "domains" in erg
         assert isinstance(erg["domains"], list)
+
+
+class TestAgentsMdIntegration:
+    """Integration tests for AGENTS.md validate/update in bootstrap_pipeline."""
+
+    _common = dict(
+        create_handoff=False,
+        create_runlog=False,
+        create_tech_stack_md=False,
+        verify_server=False,
+        warm_cache_from_tech_stack=False,
+    )
+
+    def test_validates_when_current(self, tmp_path):
+        (tmp_path / "AGENTS.md").write_text(load_agents_template(), encoding="utf-8")
+        result = bootstrap_pipeline(tmp_path, **self._common)
+        assert result["agents_md"]["action"] == "validated"
+        assert "AGENTS.md" in result["skipped"]
+
+    def test_updates_when_outdated(self, tmp_path):
+        import re
+
+        old = re.sub(
+            r"<!--\s*tapps-agents-version:\s*[\d.]+\s*-->",
+            "<!-- tapps-agents-version: 0.1.0 -->",
+            load_agents_template(),
+        )
+        (tmp_path / "AGENTS.md").write_text(old, encoding="utf-8")
+        result = bootstrap_pipeline(tmp_path, **self._common)
+        assert result["agents_md"]["action"] == "updated"
+        assert "changes" in result["agents_md"]
+        assert len(result["agents_md"]["changes"]) > 0
+
+    def test_overwrite_flag(self, tmp_path):
+        (tmp_path / "AGENTS.md").write_text("# Custom only\n", encoding="utf-8")
+        result = bootstrap_pipeline(
+            tmp_path, **self._common, overwrite_agents_md=True
+        )
+        assert result["agents_md"]["action"] == "overwritten"
+        content = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+        assert "tapps_server_info" in content
+
+    def test_still_creates_when_missing(self, tmp_path):
+        result = bootstrap_pipeline(tmp_path, **self._common)
+        assert result["agents_md"]["action"] == "created"
+        assert "AGENTS.md" in result["created"]
+        assert result["agents_md"]["version"] == __version__

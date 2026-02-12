@@ -1,3 +1,4 @@
+<!-- tapps-agents-version: 0.2.1 -->
 # TappsMCP — instructions for AI assistants
 
 When the **TappsMCP** MCP server is configured in your host (Cursor, Claude Desktop, etc.), you have access to tools that provide **deterministic code quality checks, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
