@@ -189,7 +189,7 @@ class Context7Client:
             return ""
 
         # Direct content field
-        if "content" in data:
+        if data.get("content"):
             return str(data["content"])
 
         # Snippets array
@@ -201,15 +201,27 @@ class Context7Client:
         for snippet in snippets:
             if not isinstance(snippet, dict):
                 continue
-            # Code snippets
+
+            # Title
+            title = snippet.get("codeTitle", "")
+            if isinstance(title, str) and title.strip():
+                parts.append(f"### {title.strip()}")
+
+            # Description (v2 uses codeDescription; older format uses content)
+            desc = snippet.get("codeDescription", "") or snippet.get("content", "")
+            if isinstance(desc, str) and desc.strip():
+                parts.append(desc.strip())
+
+            # Code — items may be strings (old) or dicts with language+code (v2)
             code_list = snippet.get("codeList", [])
             if isinstance(code_list, list):
                 for code in code_list:
                     if isinstance(code, str) and code.strip():
                         parts.append(f"```\n{code.strip()}\n```")
-            # Text content
-            text = snippet.get("content", "")
-            if isinstance(text, str) and text.strip():
-                parts.append(text.strip())
+                    elif isinstance(code, dict):
+                        lang = code.get("language", "")
+                        code_text = code.get("code", "")
+                        if isinstance(code_text, str) and code_text.strip():
+                            parts.append(f"```{lang}\n{code_text.strip()}\n```")
 
         return "\n\n".join(parts)

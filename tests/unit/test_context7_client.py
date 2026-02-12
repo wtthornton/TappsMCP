@@ -15,7 +15,17 @@ class TestExtractContent:
         data = {"content": "# Docs"}
         assert Context7Client._extract_content(data) == "# Docs"
 
-    def test_dict_with_snippets(self):
+    def test_empty_content_falls_through_to_snippets(self):
+        """Empty top-level content should fall through to snippets."""
+        data = {
+            "content": "",
+            "snippets": [{"codeDescription": "Some text"}],
+        }
+        result = Context7Client._extract_content(data)
+        assert "Some text" in result
+
+    def test_dict_with_snippets_old_format(self):
+        """Old format: codeList is list[str], text in 'content'."""
         data = {
             "snippets": [
                 {"content": "Some text", "codeList": ["print('hello')"]},
@@ -26,6 +36,36 @@ class TestExtractContent:
         assert "print('hello')" in result
         assert "Some text" in result
         assert "More text" in result
+
+    def test_dict_with_snippets_v2_format(self):
+        """V2 format: codeList is list[dict], text in 'codeDescription'."""
+        data = {
+            "snippets": [
+                {
+                    "codeTitle": "Create Model",
+                    "codeDescription": "Shows how to create a model.",
+                    "codeList": [
+                        {"language": "python", "code": "class Foo(BaseModel):\n    x: int"},
+                    ],
+                },
+            ]
+        }
+        result = Context7Client._extract_content(data)
+        assert "### Create Model" in result
+        assert "Shows how to create a model." in result
+        assert "class Foo(BaseModel):" in result
+        assert "```python" in result
+
+    def test_v2_snippet_without_code(self):
+        """V2 snippet with only description, no code."""
+        data = {
+            "snippets": [
+                {"codeTitle": "Intro", "codeDescription": "Overview of the library."},
+            ]
+        }
+        result = Context7Client._extract_content(data)
+        assert "### Intro" in result
+        assert "Overview of the library." in result
 
     def test_empty_dict(self):
         assert Context7Client._extract_content({}) == ""
@@ -41,14 +81,32 @@ class TestExtractContent:
         data = {"snippets": []}
         assert Context7Client._extract_content(data) == ""
 
-    def test_snippet_with_only_code(self):
+    def test_snippet_with_only_code_old_format(self):
+        """Old format: codeList as strings."""
         data = {"snippets": [{"codeList": ["x = 1", "y = 2"]}]}
         result = Context7Client._extract_content(data)
         assert "x = 1" in result
         assert "y = 2" in result
 
+    def test_snippet_with_only_code_v2_format(self):
+        """V2 format: codeList as dicts."""
+        data = {"snippets": [{"codeList": [{"language": "py", "code": "x = 1"}]}]}
+        result = Context7Client._extract_content(data)
+        assert "x = 1" in result
+        assert "```py" in result
+
     def test_snippet_with_empty_code(self):
         data = {"snippets": [{"codeList": ["", "   "]}]}
+        result = Context7Client._extract_content(data)
+        assert result == ""
+
+    def test_v2_snippet_with_empty_code_dict(self):
+        """V2 format: empty code dicts are skipped."""
+        data = {
+            "snippets": [
+                {"codeList": [{"language": "py", "code": ""}, {"language": "", "code": "   "}]},
+            ],
+        }
         result = Context7Client._extract_content(data)
         assert result == ""
 
