@@ -59,8 +59,8 @@ class AdaptiveScorerWrapper:
             weights = await self._engine.adjust_weights()
             self._cached_weights = weights
             return dict(weights)
-        except Exception:
-            logger.warning("adaptive_weights_failed", exc_info=True)
+        except (TypeError, ValueError, RuntimeError) as e:
+            logger.warning("adaptive_weights_failed", error=str(e))
             return None
 
     def get_weights_as_settings(
@@ -79,8 +79,8 @@ class AdaptiveScorerWrapper:
 
         try:
             return ScoringWeights(**self._cached_weights)  # type: ignore[arg-type]
-        except Exception:
-            logger.warning("adaptive_weights_conversion_failed", exc_info=True)
+        except (TypeError, ValueError) as e:
+            logger.warning("adaptive_weights_conversion_failed", error=str(e))
             return default if default is not None else ScoringWeights()
 
     async def track_outcome(

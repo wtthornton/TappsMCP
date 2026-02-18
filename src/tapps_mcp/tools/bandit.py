@@ -74,9 +74,15 @@ def parse_bandit_json(raw: str) -> list[SecurityIssue]:
         data = json.loads(raw)
     except json.JSONDecodeError:
         return []
+    if not isinstance(data, dict):
+        return []
     results = data.get("results", [])
+    if not isinstance(results, list):
+        return []
     issues: list[SecurityIssue] = []
     for r in results:
+        if not isinstance(r, dict):
+            continue
         code = r.get("test_id", "unknown")
         issues.append(
             SecurityIssue(

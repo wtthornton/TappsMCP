@@ -20,8 +20,12 @@ def parse_ruff_json(raw: str) -> list[LintIssue]:
         diagnostics = json.loads(raw)
     except json.JSONDecodeError:
         return []
+    if not isinstance(diagnostics, list):
+        return []
     issues: list[LintIssue] = []
     for d in diagnostics:
+        if not isinstance(d, dict):
+            continue
         code_obj = d.get("code")
         if isinstance(code_obj, str):
             code_str = code_obj

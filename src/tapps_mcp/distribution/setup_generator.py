@@ -291,8 +291,11 @@ def _check_config(host: str, project_root: Path, scope: str = "user") -> bool:
         click.echo(click.style(f"Invalid JSON in {config_path}", fg="red"))
         return False
 
+    if not isinstance(data, dict):
+        click.echo(click.style(f"Invalid structure in {config_path}", fg="red"))
+        return False
     servers = data.get(servers_key, {})
-    if "tapps-mcp" not in servers:
+    if not isinstance(servers, dict) or "tapps-mcp" not in servers:
         click.echo(
             click.style(
                 f"tapps-mcp entry not found in {config_path} under '{servers_key}'",
@@ -302,7 +305,10 @@ def _check_config(host: str, project_root: Path, scope: str = "user") -> bool:
         click.echo(f"  Run: tapps-mcp init --host {host}")
         return False
 
-    entry = servers["tapps-mcp"]
+    entry = servers.get("tapps-mcp")
+    if not isinstance(entry, dict):
+        click.echo(click.style(f"Invalid tapps-mcp entry in {config_path}", fg="red"))
+        return False
     command = entry.get("command", "")
     if command != "tapps-mcp":
         click.echo(

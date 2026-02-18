@@ -203,7 +203,11 @@ def _render_html(
         )
 
     gate_rate = summary.get("gate_pass_rate")
-    gate_line = f"<p>Gate pass rate: {gate_rate:.0%}</p>" if gate_rate is not None else ""
+    gate_line = (
+        f"<p>Gate pass rate: {gate_rate:.0%}</p>"
+        if isinstance(gate_rate, (int, float))
+        else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">

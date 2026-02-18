@@ -192,6 +192,8 @@ class ExpertPerformanceTracker:
                 continue
             try:
                 data = json.loads(line)
+                if not isinstance(data, dict):
+                    continue
                 records.append(ConsultationRecord.from_dict(data))
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -216,6 +218,8 @@ class ExpertPerformanceTracker:
                 continue
             try:
                 data = json.loads(line)
+                if not isinstance(data, dict):
+                    continue
                 record = ConsultationRecord.from_dict(data)
                 if record.timestamp:
                     try:

@@ -546,6 +546,8 @@ def _suggest_complexity(
     if not using_radon:
         tips.append("Install radon for accurate complexity measurement (pip install radon).")
         return tips
+    if not isinstance(details, dict):
+        return tips
     max_cc = float(str(details.get("max_cc", 0)))
     func_name = str(details.get("max_cc_function", ""))
     if max_cc > _CC_HIGH:
@@ -567,6 +569,8 @@ def _suggest_security(
 ) -> list[str]:
     """Actionable suggestions for the security category."""
     tips: list[str] = []
+    if not isinstance(details, dict):
+        return tips
     issue_count = int(str(details.get("issue_count", 0)))
     if issue_count > 0:
         tips.append(
@@ -586,6 +590,8 @@ def _suggest_maintainability(
 ) -> list[str]:
     """Actionable suggestions for the maintainability category."""
     tips: list[str] = []
+    if not isinstance(details, dict):
+        return tips
     mi = float(str(details.get("mi_value", 100)))
     if mi < _MI_VERY_LOW:
         tips.append(f"MI={mi:.0f} (very low). Split this file into smaller modules.")
@@ -605,6 +611,8 @@ def _suggest_test_coverage(
 ) -> list[str]:
     """Actionable suggestions for the test_coverage category."""
     tips: list[str] = []
+    if not isinstance(details, dict):
+        return tips
     stem = str(details.get("stem", "module"))
     is_test = bool(details.get("is_test_file"))
     if score == 0:
@@ -620,6 +628,8 @@ def _suggest_performance(
 ) -> list[str]:
     """Actionable suggestions for the performance category."""
     tips: list[str] = []
+    if not isinstance(details, dict):
+        return tips
     issues = details.get("issues_found")
     if not isinstance(issues, list) or not issues:
         return tips

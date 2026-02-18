@@ -180,6 +180,39 @@ class Context7Client:
         return content
 
     @staticmethod
+    def _snippet_title(snippet: dict[str, object]) -> list[str]:
+        """Extract title line from a snippet dict."""
+        title = snippet.get("codeTitle", "")
+        if isinstance(title, str) and title.strip():
+            return [f"### {title.strip()}"]
+        return []
+
+    @staticmethod
+    def _snippet_description(snippet: dict[str, object]) -> list[str]:
+        """Extract description line from a snippet dict."""
+        desc = snippet.get("codeDescription", "") or snippet.get("content", "")
+        if isinstance(desc, str) and desc.strip():
+            return [desc.strip()]
+        return []
+
+    @staticmethod
+    def _snippet_code_parts(snippet: dict[str, object]) -> list[str]:
+        """Extract code blocks from a snippet's codeList."""
+        code_list = snippet.get("codeList", [])
+        if not isinstance(code_list, list):
+            return []
+        parts: list[str] = []
+        for code in code_list:
+            if isinstance(code, str) and code.strip():
+                parts.append(f"```\n{code.strip()}\n```")
+            elif isinstance(code, dict):
+                lang = code.get("language", "")
+                code_text = code.get("code", "")
+                if isinstance(code_text, str) and code_text.strip():
+                    parts.append(f"```{lang}\n{code_text.strip()}\n```")
+        return parts
+
+    @staticmethod
     def _extract_content(data: object) -> str:
         """Extract markdown content from the Context7 JSON response."""
         if isinstance(data, str):
@@ -201,27 +234,8 @@ class Context7Client:
         for snippet in snippets:
             if not isinstance(snippet, dict):
                 continue
-
-            # Title
-            title = snippet.get("codeTitle", "")
-            if isinstance(title, str) and title.strip():
-                parts.append(f"### {title.strip()}")
-
-            # Description (v2 uses codeDescription; older format uses content)
-            desc = snippet.get("codeDescription", "") or snippet.get("content", "")
-            if isinstance(desc, str) and desc.strip():
-                parts.append(desc.strip())
-
-            # Code — items may be strings (old) or dicts with language+code (v2)
-            code_list = snippet.get("codeList", [])
-            if isinstance(code_list, list):
-                for code in code_list:
-                    if isinstance(code, str) and code.strip():
-                        parts.append(f"```\n{code.strip()}\n```")
-                    elif isinstance(code, dict):
-                        lang = code.get("language", "")
-                        code_text = code.get("code", "")
-                        if isinstance(code_text, str) and code_text.strip():
-                            parts.append(f"```{lang}\n{code_text.strip()}\n```")
+            parts.extend(Context7Client._snippet_title(snippet))
+            parts.extend(Context7Client._snippet_description(snippet))
+            parts.extend(Context7Client._snippet_code_parts(snippet))
 
         return "\n\n".join(parts)

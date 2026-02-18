@@ -957,8 +957,8 @@ async def tapps_report(
                 result = await scorer.score_file(pf)
                 score_results.append(result)
                 gate_results.append(evaluate_gate(result, preset=settings.quality_preset))
-            except Exception:
-                logger.warning("report_file_skip", file=str(pf), exc_info=True)
+            except (ValueError, OSError, RuntimeError) as e:
+                logger.warning("report_file_skip", file=str(pf), error=str(e))
 
     report_data = generate_report(
         score_results,
@@ -1013,7 +1013,10 @@ def tapps_session_start(
         data["project_profile"] = profile["data"]
     else:
         data["project_profile"] = None
-        data["project_profile_error"] = profile.get("error", {}).get("message", "unknown")
+        err = profile.get("error")
+        data["project_profile_error"] = (
+            err.get("message", "unknown") if isinstance(err, dict) else (str(err) if err is not None else "unknown")
+        )
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
     return _with_nudges("tapps_session_start", resp)

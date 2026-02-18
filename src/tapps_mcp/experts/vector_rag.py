@@ -140,11 +140,11 @@ class VectorKnowledgeBase:
 
         try:
             self._try_vector_backend()
-        except Exception:
+        except (ImportError, OSError, RuntimeError, ValueError) as e:
             logger.debug(
                 "vector_rag_fallback_to_simple",
                 reason="FAISS or embedder unavailable",
-                exc_info=True,
+                error=str(e),
             )
             self._backend_type = "simple"
 

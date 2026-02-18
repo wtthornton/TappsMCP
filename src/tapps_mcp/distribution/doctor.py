@@ -70,15 +70,19 @@ def check_json_config(
     except json.JSONDecodeError:
         return CheckResult(f"{label} config", False, f"Invalid JSON: {config_path}")
 
+    if not isinstance(data, dict):
+        return CheckResult(f"{label} config", False, f"Invalid structure: {config_path}")
     servers = data.get(servers_key, {})
-    if "tapps-mcp" not in servers:
+    if not isinstance(servers, dict) or "tapps-mcp" not in servers:
         return CheckResult(
             f"{label} config",
             False,
             f"tapps-mcp not in {config_path}",
         )
 
-    entry = servers["tapps-mcp"]
+    entry = servers.get("tapps-mcp")
+    if not isinstance(entry, dict):
+        return CheckResult(f"{label} config", False, f"Invalid tapps-mcp entry: {config_path}")
     command = entry.get("command", "")
     if command != "tapps-mcp":
         return CheckResult(

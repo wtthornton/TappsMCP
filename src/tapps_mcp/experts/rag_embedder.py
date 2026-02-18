@@ -82,6 +82,6 @@ def create_embedder(model_name: str | None = None) -> Embedder | None:
 
     try:
         return SentenceTransformerEmbedder(model_name or _DEFAULT_MODEL)
-    except Exception:
-        logger.warning("embedder_creation_failed", exc_info=True)
+    except (ImportError, OSError, RuntimeError, ValueError) as e:
+        logger.warning("embedder_creation_failed", error=str(e))
         return None

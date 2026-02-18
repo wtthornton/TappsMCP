@@ -137,7 +137,9 @@ class DashboardGenerator:
             if alerts:
                 lines.append("## Active Alerts")
                 for alert in alerts:
-                    severity = alert.get("severity", "info").upper()
+                    if not isinstance(alert, dict):
+                        continue
+                    severity = str(alert.get("severity", "info")).upper()
                     lines.append(f"- [{severity}] {alert.get('message', '')}")
                 lines.append("")
 
@@ -403,11 +405,19 @@ class DashboardGenerator:
         alerts = data.get("alerts", [])
         tool_metrics = data.get("tool_metrics", [])
         recommendations = data.get("recommendations", [])
+        if not isinstance(alerts, list):
+            alerts = []
+        if not isinstance(tool_metrics, list):
+            tool_metrics = []
+        if not isinstance(recommendations, list):
+            recommendations = []
 
         severity_colors = {"critical": "#dc3545", "warning": "#ffc107", "info": "#17a2b8"}
         alert_parts = []
         for alert in alerts:
-            color = severity_colors.get(alert.get("severity", "info"), "#17a2b8")
+            if not isinstance(alert, dict):
+                continue
+            color = severity_colors.get(str(alert.get("severity", "info")), "#17a2b8")
             alert_parts.append(
                 f'<div style="background:{color};color:#fff;padding:8px;'
                 f'margin:4px 0;border-radius:4px">'
@@ -416,11 +426,14 @@ class DashboardGenerator:
         alert_html = "".join(alert_parts)
 
         tool_rows = "".join(
-            f"<tr><td>{t.get('tool_name', '')}</td>"
-            f"<td>{t.get('call_count', 0)}</td>"
-            f"<td>{t.get('success_rate', 0):.0%}</td>"
-            f"<td>{t.get('avg_duration_ms', 0):.0f}ms</td></tr>"
+            (
+                f"<tr><td>{t.get('tool_name', '')}</td>"
+                f"<td>{t.get('call_count', 0)}</td>"
+                f"<td>{t.get('success_rate', 0):.0%}</td>"
+                f"<td>{t.get('avg_duration_ms', 0):.0f}ms</td></tr>"
+            )
             for t in tool_metrics
+            if isinstance(t, dict)
         )
 
         rec_html = "".join(f"<li>{r}</li>" for r in recommendations)

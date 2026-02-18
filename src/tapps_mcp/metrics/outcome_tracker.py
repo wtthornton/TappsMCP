@@ -69,7 +69,11 @@ class OutcomeTracker:
         key = f"{session_id}:{file_path}"
 
         # Determine first-pass success from overall score
+        if not isinstance(scores, dict):
+            scores = {}
         overall = scores.get("overall", 0.0)
+        if not isinstance(overall, (int, float)):
+            overall = 0.0
         thresholds = {"standard": 70.0, "strict": 80.0, "framework": 75.0}
         threshold = thresholds.get(gate_preset, 70.0)
 
@@ -105,7 +109,7 @@ class OutcomeTracker:
                 return None
 
             outcome.iterations += 1
-            outcome.final_scores = dict(scores)
+            outcome.final_scores = dict(scores) if isinstance(scores, dict) else outcome.final_scores
             if expert_domain and expert_domain not in outcome.expert_consultations:
                 outcome.expert_consultations.append(expert_domain)
 

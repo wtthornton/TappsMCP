@@ -44,6 +44,8 @@ class PathValidator:
             FileNotFoundError: If *must_exist* is ``True`` and the file
                 does not exist.
         """
+        if file_path is None:
+            raise PathValidationError("Path cannot be None")
         path = Path(file_path)
 
         # Check for traversal patterns in the raw input

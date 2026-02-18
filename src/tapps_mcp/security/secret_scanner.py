@@ -89,7 +89,7 @@ class SecretScanner:
             for secret_type, patterns in self.SECRET_PATTERNS.items():
                 for pattern in patterns:
                     if re.search(pattern, line, re.IGNORECASE):
-                        severity = self.SEVERITY_MAP.get(secret_type, "medium")
+                        severity = str(self.SEVERITY_MAP.get(secret_type, "medium"))
                         # Redact the actual secret value in context
                         redacted = re.sub(
                             r'["\'][a-zA-Z0-9_\-/+=]{8,}["\']',

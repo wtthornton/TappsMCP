@@ -125,8 +125,8 @@ class SimpleKnowledgeBase:
                     )
                     continue
                 self.files[md_file] = md_file.read_text(encoding="utf-8")
-            except Exception:
-                logger.debug("knowledge_file_read_failed", file=str(md_file), exc_info=True)
+            except (OSError, UnicodeDecodeError) as e:
+                logger.debug("knowledge_file_read_failed", file=str(md_file), error=str(e))
 
     @property
     def file_count(self) -> int:

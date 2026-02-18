@@ -166,12 +166,20 @@ class CallTracker:
     def evaluate(cls, task_type: str = "review") -> ChecklistResult:
         """Evaluate the checklist for a given task type."""
         tool_map = TASK_TOOL_MAP.get(task_type, TASK_TOOL_MAP["review"])
+        if not isinstance(tool_map, dict):
+            tool_map = TASK_TOOL_MAP["review"]
         with cls._lock:
             called = {c.tool_name for c in cls._calls}
             call_count = len(cls._calls)
         required = tool_map.get("required", [])
         recommended = tool_map.get("recommended", [])
         optional = tool_map.get("optional", [])
+        if not isinstance(required, list):
+            required = []
+        if not isinstance(recommended, list):
+            recommended = []
+        if not isinstance(optional, list):
+            optional = []
 
         # Composite tools satisfy individual requirements
         effective = set(called)

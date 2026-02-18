@@ -279,8 +279,8 @@ def detect_project_type(
                 if check(project_root):
                     score += weights[i] if i < len(weights) else 0.25
                     matched.append(name)
-            except Exception:
-                logger.debug("indicator_error", indicator=name, project_type=ptype, exc_info=True)
+            except (OSError, ValueError, TypeError) as e:
+                logger.debug("indicator_error", indicator=name, project_type=ptype, error=str(e))
         scores[ptype] = score
         reasons[ptype] = matched
 

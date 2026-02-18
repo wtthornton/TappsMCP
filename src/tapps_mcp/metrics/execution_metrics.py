@@ -245,6 +245,8 @@ class ToolCallMetricsCollector:
                     continue
                 try:
                     data = json.loads(line)
+                    if not isinstance(data, dict):
+                        continue
                     metric = ToolCallMetric.from_dict(data)
                     # Apply time filters at record level
                     if since or until:

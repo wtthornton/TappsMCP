@@ -120,11 +120,11 @@ class KnowledgeIngestionPipeline:
                 try:
                     parsed = self._parse_source_file(file_path, source_type, domains)
                     entries.extend(parsed)
-                except Exception:
+                except (OSError, UnicodeDecodeError, ValueError) as e:
                     logger.debug(
                         "ingestion_parse_failed",
                         file=str(file_path),
-                        exc_info=True,
+                        error=str(e),
                     )
 
         return entries

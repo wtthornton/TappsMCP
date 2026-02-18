@@ -211,6 +211,8 @@ class FilePerformanceTracker:
                 data = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(data, dict):
+                continue
 
             # Time filter.
             ts_str = data.get("timestamp", "")

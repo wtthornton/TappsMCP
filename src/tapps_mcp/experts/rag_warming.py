@@ -172,9 +172,9 @@ def warm_expert_rag_indices(
             if vkb.backend_type == "vector":
                 warmed += 1
                 logger.debug("rag_warm_domain", domain=domain)
-        except Exception:
+        except (OSError, RuntimeError, ValueError, ImportError) as e:
             failed_domains.append(domain)
-            logger.debug("rag_warm_failed", domain=domain, exc_info=True)
+            logger.debug("rag_warm_failed", domain=domain, error=str(e))
 
     return {
         "warmed": warmed,

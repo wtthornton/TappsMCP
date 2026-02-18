@@ -26,6 +26,8 @@ def thresholds_for_preset(preset: str) -> GateThresholds:
     Falls back to ``"standard"`` if *preset* is unknown.
     """
     data = PRESETS.get(preset, PRESETS["standard"])
+    if not isinstance(data, dict):
+        data = PRESETS["standard"]
     return GateThresholds(**data)
 
 

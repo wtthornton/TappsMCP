@@ -190,11 +190,17 @@ class TechStackDetector:
             return
         try:
             data = tomllib.loads(path.read_text(encoding="utf-8"))
-            for dep in data.get("project", {}).get("dependencies", []):
+            proj = data.get("project") if isinstance(data, dict) else None
+            deps_list = proj.get("dependencies", []) if isinstance(proj, dict) else []
+            if not isinstance(deps_list, list):
+                deps_list = []
+            for dep in deps_list:
                 name = _extract_dep_name(dep)
                 if name:
                     self._libraries.add(name)
-            poetry_deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
+            tool = data.get("tool") if isinstance(data, dict) else None
+            poetry = tool.get("poetry", {}) if isinstance(tool, dict) else {}
+            poetry_deps = poetry.get("dependencies", {}) if isinstance(poetry, dict) else {}
             for dep in poetry_deps:
                 if dep != "python":
                     self._libraries.add(dep.lower())

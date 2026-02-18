@@ -314,12 +314,12 @@ class LookupEngine:
                             library=library,
                             topic=topic,
                         )
-            except Exception:
+            except (Context7Error, asyncio.CancelledError, ValueError) as e:
                 logger.debug(
                     "background_refresh_failed",
                     library=library,
                     topic=topic,
-                    exc_info=True,
+                    error=str(e),
                 )
 
         task = asyncio.create_task(_refresh())
