@@ -440,24 +440,34 @@ class TestSuggestSecurity:
 
 class TestSuggestMaintainability:
     def test_very_low_mi(self):
-        tips = _suggest_maintainability(2.0, {"mi_value": 15, "has_docstring": True, "line_count": 100})
+        tips = _suggest_maintainability(
+            2.0, {"mi_value": 15, "has_docstring": True, "line_count": 100}
+        )
         assert any("MI=15" in t for t in tips)
         assert any("very low" in t for t in tips)
 
     def test_low_mi(self):
-        tips = _suggest_maintainability(3.5, {"mi_value": 35, "has_docstring": True, "line_count": 100})
+        tips = _suggest_maintainability(
+            3.5, {"mi_value": 35, "has_docstring": True, "line_count": 100}
+        )
         assert any("MI=35" in t for t in tips)
 
     def test_no_docstring(self):
-        tips = _suggest_maintainability(7.0, {"mi_value": 80, "has_docstring": False, "line_count": 50})
+        tips = _suggest_maintainability(
+            7.0, {"mi_value": 80, "has_docstring": False, "line_count": 50}
+        )
         assert any("docstring" in t.lower() for t in tips)
 
     def test_long_file(self):
-        tips = _suggest_maintainability(6.0, {"mi_value": 60, "has_docstring": True, "line_count": 400})
+        tips = _suggest_maintainability(
+            6.0, {"mi_value": 60, "has_docstring": True, "line_count": 400}
+        )
         assert any("400 lines" in t for t in tips)
 
     def test_good_score_no_suggestions(self):
-        tips = _suggest_maintainability(9.0, {"mi_value": 90, "has_docstring": True, "line_count": 50})
+        tips = _suggest_maintainability(
+            9.0, {"mi_value": 90, "has_docstring": True, "line_count": 50}
+        )
         assert tips == []
 
 

@@ -49,6 +49,7 @@ The MCP server listens on **http://localhost:8000** (Streamable HTTP at `/mcp`).
   - **PyPI:** `pip install tapps-mcp` or `uv tool install tapps-mcp`
   - **From repo:** `uv sync` then `uv run tapps-mcp serve`, or `pip install -e .` then `tapps-mcp serve`
 - **Upgrade:** `pip install -U tapps-mcp` or `uv tool install -U tapps-mcp`. See [CHANGELOG.md](../CHANGELOG.md) for breaking changes.
+- **Refresh templates after upgrade:** If you use TappsMCP in a consuming project (not this repo), call `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` (and `platform="cursor"` or `"claude"`) to get the latest AGENTS.md and pipeline rules. Run `tapps-mcp init --force` to refresh MCP host config. See [INIT_AND_UPGRADE_FEATURE_LIST.md](INIT_AND_UPGRADE_FEATURE_LIST.md#upgrading-when-tappsmcp-ships-new-features-consuming-projects).
 - **Standalone binary (.exe):** If you use a pre-built executable, it must include the full `tapps_mcp` package (including `tapps_mcp.tools.checklist`). If tools fail with a checklist import error, switch to a pip/uv install (see [Troubleshooting](#8-troubleshooting) below). **If you build your own binary** (e.g. PyInstaller, shiv, uv tool), ensure the build includes the entire `tapps_mcp` package and subpackages (e.g. `tapps_mcp.tools`, `tapps_mcp.tools.checklist`); otherwise all tools will fail when they try to record session state.
 - **Windows:** Same setup as above. Use `uv` or `pip` from your project or a dedicated venv; ensure the MCP config `command` is on PATH (e.g. `uv`, `python`, or full path to `tapps-mcp` if installed as a script).
 
@@ -196,6 +197,9 @@ Restart Claude Desktop after changing the config.
 | Project config | `.tapps-mcp.yaml` in project root |
 | Cursor MCP config | Cursor Settings → MCP or `.cursor/mcp.json` |
 | Docker deployment | [docs/DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) |
+| Init and upgrade (tapps_init, tapps-mcp init) | [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](INIT_AND_UPGRADE_FEATURE_LIST.md) |
+| Upgrade guide for consuming projects | [docs/UPGRADE_FOR_CONSUMERS.md](UPGRADE_FOR_CONSUMERS.md) |
+| Epic 10 (planned): Expert + Context7 | [docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) |
 | Full plan / roadmap | [docs/planning/TAPPS_MCP_PLAN.md](planning/TAPPS_MCP_PLAN.md) |
 | Claude full access (no prompts) | [docs/CLAUDE_FULL_ACCESS_SETUP.md](CLAUDE_FULL_ACCESS_SETUP.md) |
 | **Cache & RAG architecture** | [docs/ARCHITECTURE_CACHE_AND_RAG.md](ARCHITECTURE_CACHE_AND_RAG.md) — SWR, TTL, index rebuild |

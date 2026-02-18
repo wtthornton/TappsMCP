@@ -1,7 +1,7 @@
 """Unit tests for expert RAG warming."""
 
-from tapps_mcp.project.models import TechStack
 from tapps_mcp.experts.rag_warming import tech_stack_to_expert_domains
+from tapps_mcp.project.models import TechStack
 
 
 class TestTechStackToExpertDomains:

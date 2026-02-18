@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from tapps_mcp import __version__
 from tapps_mcp.pipeline.agents_md import (
     EXPECTED_SECTIONS,
@@ -17,7 +15,6 @@ from tapps_mcp.pipeline.agents_md import (
     validate_agents_md,
 )
 from tapps_mcp.prompts.prompt_loader import load_agents_template
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -13,11 +13,10 @@ from pathlib import Path
 
 import structlog
 
+from tapps_mcp.common.utils import SKIP_DIRS
 from tapps_mcp.project.models import FileImpact, ImpactReport
 
 logger = structlog.get_logger(__name__)
-
-from tapps_mcp.common.utils import SKIP_DIRS
 
 # Severity thresholds
 _SEVERITY_CRITICAL = 10

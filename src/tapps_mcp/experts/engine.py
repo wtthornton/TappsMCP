@@ -21,14 +21,14 @@ from tapps_mcp.experts.confidence import (
 from tapps_mcp.experts.domain_detector import DomainDetector
 from tapps_mcp.experts.domain_utils import sanitize_domain_for_path
 from tapps_mcp.experts.models import (
+    LOW_CONFIDENCE_THRESHOLD,
     ConfidenceFactors,
     ConsultationResult,
     ExpertInfo,
-    LOW_CONFIDENCE_THRESHOLD,
 )
-from tapps_mcp.experts.rag import SimpleKnowledgeBase, _extract_keywords
-from tapps_mcp.experts.vector_rag import VectorKnowledgeBase
+from tapps_mcp.experts.rag import _extract_keywords
 from tapps_mcp.experts.registry import ExpertRegistry
+from tapps_mcp.experts.vector_rag import VectorKnowledgeBase
 
 logger = structlog.get_logger(__name__)
 
@@ -88,8 +88,8 @@ def consult_expert(
         settings = load_settings()
         domain_slug = sanitize_domain_for_path(resolved_domain)
         index_dir = settings.project_root / ".tapps-mcp" / "rag_index" / domain_slug
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("rag_index_dir_skip", reason=str(e))
     kb = VectorKnowledgeBase(
         knowledge_path,
         domain=resolved_domain,

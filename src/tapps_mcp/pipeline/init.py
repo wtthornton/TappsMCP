@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 from tapps_mcp import __version__
-from tapps_mcp.project.models import ProjectProfile, TechStack
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from tapps_mcp.project.models import ProjectProfile, TechStack
 
 from tapps_mcp.prompts.prompt_loader import (
     load_agents_template,
@@ -231,10 +232,9 @@ def _run_server_verification(
 
     if install_missing and missing:
         result["checker_install_attempted"] = True
+        import contextlib
         import subprocess
         import sys
-
-        import contextlib
 
         for hint in install_hints:
             if hint and hint.startswith("pip install "):

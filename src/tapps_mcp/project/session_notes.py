@@ -150,8 +150,8 @@ class SessionNoteStore:
                     session_id=self.session_id,
                     note_count=len(self._notes),
                 )
-        except Exception:
-            logger.debug("session_notes_recovery_skipped")
+        except Exception as e:
+            logger.debug("session_notes_recovery_skipped", reason=str(e), exc_info=True)
 
     # ------------------------------------------------------------------
     # Convenience dict for tool response

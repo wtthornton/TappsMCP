@@ -7,11 +7,16 @@ tapps_consult_expert call for those domains is fast.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import structlog
-from pathlib import Path
 
 from tapps_mcp.experts.domain_utils import sanitize_domain_for_path
-from tapps_mcp.project.models import TechStack
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from tapps_mcp.project.models import TechStack
 
 logger = structlog.get_logger(__name__)
 

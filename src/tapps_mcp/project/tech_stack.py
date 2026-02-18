@@ -16,6 +16,7 @@ from pathlib import Path  # noqa: TC003
 
 import structlog
 
+from tapps_mcp.common.utils import SKIP_DIRS
 from tapps_mcp.project.models import TechStack
 
 logger = structlog.get_logger(__name__)
@@ -90,9 +91,6 @@ _DOMAIN_PATTERNS: dict[str, list[str]] = {
 _MIN_LANGUAGE_FILE_COUNT = 3
 
 _DEP_NAME_RE = re.compile(r"^([a-zA-Z0-9\-_]+)")
-
-from tapps_mcp.common.utils import SKIP_DIRS
-
 
 # ---------------------------------------------------------------------------
 # Detector

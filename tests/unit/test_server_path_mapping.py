@@ -1,10 +1,10 @@
 """Tests for host path mapping in server._validate_file_path."""
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from tapps_mcp.common.exceptions import PathValidationError
 from tapps_mcp.config.settings import TappsMCPSettings
 from tapps_mcp.server import _normalize_path_for_mapping, _validate_file_path
 
@@ -94,5 +94,5 @@ class TestValidateFilePathHostMapping:
         )
 
         # Path outside project_root should still fail even with host mapping
-        with pytest.raises(Exception):  # PathValidationError
+        with pytest.raises(PathValidationError):
             _validate_file_path(str(outside / "file.py"))

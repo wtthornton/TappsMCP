@@ -15,21 +15,22 @@ from typing import Any
 from tapps_mcp.pipeline.models import STAGE_ORDER, STAGE_TOOLS, PipelineStage
 
 # Lazy: avoid breaking when checklist module is missing (e.g. standalone binary).
-_CallTracker: Any = None
+# Use a list to avoid global statement (PLW0603); index 0 holds type or False.
+_call_tracker_cache: list[type[Any] | bool] = []
 
 
-def _get_call_tracker() -> Any:
+def _get_call_tracker() -> type[Any] | None:
     """Return CallTracker class if available, else None."""
-    global _CallTracker
-    if _CallTracker is not None:
-        return _CallTracker if _CallTracker is not False else None
+    if _call_tracker_cache:
+        val = _call_tracker_cache[0]
+        return val if val is not False else None
     try:
-        from tapps_mcp.tools.checklist import CallTracker as CT
+        from tapps_mcp.tools.checklist import CallTracker
 
-        _CallTracker = CT
-        return CT
+        _call_tracker_cache.append(CallTracker)
+        return CallTracker
     except ImportError:
-        _CallTracker = False
+        _call_tracker_cache.append(False)
         return None
 
 # Max nudges per response to avoid noise

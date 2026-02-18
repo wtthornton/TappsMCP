@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Planned (Epic 10: Expert + Context7 Integration)
+
+- **Expert + doc lookup coupling** — Workflow guidance for combining `tapps_consult_expert` with `tapps_lookup_docs` for testing/library questions (AGENTS.md, recommended_workflow)
+- **Structured hints when RAG is empty** — `suggested_tool`, `suggested_library`, `suggested_topic` in `tapps_consult_expert` response for machine-parseable follow-up
+- **Auto-fallback to Context7** — When expert RAG returns no chunks, optionally call lookup_docs and merge content (configurable)
+- **Broader testing-strategies KB** — Knowledge on test config, base URLs, env vars, fixtures, monkeypatch
+- **Optional `tapps_research` tool** — Single tool combining expert + Context7 in one call
+
+**Upgrade path for consuming projects:** After upgrading TappsMCP, run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` to refresh AGENTS.md and pipeline rules. See [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md).
+
+---
+
 ## [0.2.0] - 2026-02-10
 
 ### Added

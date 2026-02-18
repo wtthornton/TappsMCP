@@ -77,7 +77,7 @@ python -m venv .venv
 pip install tapps-mcp
 ```
 
-**Upgrade:** `pip install -U tapps-mcp` (see [CHANGELOG.md](CHANGELOG.md) for changes).
+**Upgrade:** `pip install -U tapps-mcp` (see [CHANGELOG.md](CHANGELOG.md) for changes). After upgrading, **consuming projects** should refresh pipeline templates: call `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` (and `platform="cursor"` or `"claude"`) to get the latest workflow and tool hints. See [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md#upgrading-when-tappsmcp-ships-new-features-consuming-projects).
 
 ### Install with npx (no Python install)
 
@@ -485,12 +485,15 @@ src/tapps_mcp/
 | [docs/MIGRATION_FROM_TAPPS_AGENTS.md](docs/MIGRATION_FROM_TAPPS_AGENTS.md) | Migrating from tapps-agents: what to remove, keep, configure. |
 | [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) | Docker build, run, env vars, and client connection. |
 | [docs/CLAUDE_FULL_ACCESS_SETUP.md](docs/CLAUDE_FULL_ACCESS_SETUP.md) | Grant Claude Code full access (no permission prompts). |
+| [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md) | Init and upgrade: tapps_init vs tapps-mcp init, overwrite flags, upgrade path for consuming projects. |
+| [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) | Short upgrade guide for projects that install TappsMCP. |
 | [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) | Architecture and design rationale. |
 | [docs/planning/epics/README.md](docs/planning/epics/README.md) | Epic index, dependency graph, tool delivery timeline. |
+| [docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) | Epic 10: Expert + Context7 integration (planned). |
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · **Epic 10 (planned):** Expert + Context7 integration (auto-fallback, structured hints, tapps_research)
 
 ---
 

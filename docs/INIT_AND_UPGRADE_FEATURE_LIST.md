@@ -21,6 +21,8 @@ This document lists what each init-related process does. The codebase has **two 
 | **Server verification** | `verify_server=True` | Verifies server info and lists installed vs missing checkers (ruff, mypy, bandit, radon). |
 | **Install missing checkers** | `install_missing_checkers=True` | After verification, attempts to `pip install` missing checkers using each checker’s install hint (opt-in). |
 | **Platform rules** | `platform="claude"` or `"cursor"` | **Claude:** Appends TAPPS pipeline reference to `CLAUDE.md` (or creates it). **Cursor:** Creates `.cursor/rules/tapps-pipeline.md`. Empty string skips. |
+| **Overwrite platform rules** | `overwrite_platform_rules=True` | When true, refreshes platform rule files even if they exist. Use when upgrading TappsMCP to get latest templates. |
+| **Overwrite AGENTS.md** | `overwrite_agents_md=True` | When true, replaces AGENTS.md with the latest template. Use when upgrading to get new workflow. Default: false (validate and smart-merge only). |
 | **Cache warming** | `warm_cache_from_tech_stack=True` | Uses project profile’s Context7 priority list; pre-fetches docs for those libraries (up to 20) into `.tapps-mcp-cache`. Requires Context7 API key; skips if missing or no libraries. |
 | **Expert RAG warming** | `warm_expert_rag_from_tech_stack=True` | Maps tech stack (frameworks, libraries, domains) to expert domains; pre-builds vector RAG indices under `project_root/.tapps-mcp/rag_index/` for up to 10 domains so first `tapps_consult_expert` is fast. |
 
@@ -30,9 +32,9 @@ Returns a dict with: `created`, `skipped`, `errors`, `success`, plus `server_ver
 
 ### Idempotency / “upgrade” behavior
 
-- **Handoff, runlog, AGENTS.md:** Created only if missing; never overwritten.
+- **Handoff, runlog, AGENTS.md:** Created only if missing; never overwritten unless `overwrite_agents_md=True`.
 - **TECH_STACK.md:** Recreated from current project profile on every run (refresh/“upgrade” of stack summary).
-- **Platform rules:** Claude = append if no TAPPS reference; Cursor = write rule file (can overwrite).
+- **Platform rules:** Use `overwrite_platform_rules=True` to refresh when templates change. Otherwise: Claude = append if no TAPPS reference; Cursor = write if missing.
 - **Cache warming:** Only warms libraries not already cached or stale.
 - **Expert RAG warming:** Builds/refreshes indices for selected domains.
 
@@ -57,6 +59,7 @@ So “upgrading” pipeline artifacts and caches is done by **calling `tapps_ini
 | **Host detection** | (when `--host auto`) | Detects Claude Code (`~/.claude`), Cursor (platform-specific App Data / `.config`), VS Code (Code app data). |
 | **Config paths** | (per host) | **Claude Code:** `~/.claude.json`. **Cursor:** `project_root/.cursor/mcp.json`. **VS Code:** `project_root/.vscode/mcp.json`. |
 | **Server entry** | (merged into config) | Adds `tapps-mcp` with `command: "tapps-mcp"`, `args: ["serve"]` under `mcpServers` (Claude/Cursor) or `servers` (VS Code). |
+| **Force overwrite** | `--force` | Overwrite existing tapps-mcp entry without prompting. Use when upgrading or in non-interactive scripts. |
 
 ### Idempotency / “upgrade” behavior
 
@@ -72,6 +75,39 @@ So “upgrading” pipeline artifacts and caches is done by **calling `tapps_ini
 | **CLI init** | `tapps-mcp init` | Generate or verify MCP host config so the IDE/host can start TappsMCP. |
 
 There is **no separate upgrade command**. To refresh project pipeline state and caches, run **tapps_init** again. To refresh host MCP configuration, run **tapps-mcp init** again (optionally with `--check` first).
+
+---
+
+## Upgrading when TappsMCP ships new features (consuming projects)
+
+When you upgrade TappsMCP (`pip install -U tapps-mcp` or similar), new workflow templates and AGENTS.md content may be available. To get the latest templates in your project:
+
+| What to refresh | How |
+|-----------------|-----|
+| **AGENTS.md** (workflow, tool hints) | Call `tapps_init` with `overwrite_agents_md=True` to replace AGENTS.md with the latest template. Or rely on validate/smart-merge (default) to add missing sections. |
+| **Platform rules** (CLAUDE.md, .cursor/rules/tapps-pipeline.md) | Call `tapps_init` with `platform="cursor"` or `"claude"` and `overwrite_platform_rules=True` to refresh rule files. |
+| **TECH_STACK.md, caches, RAG indices** | Re-run `tapps_init` with defaults; TECH_STACK is overwritten, cache/RAG warming refreshes as needed. |
+| **MCP host config** | Run `tapps-mcp init --force` to overwrite the tapps-mcp entry in the host config without prompting. |
+
+**Example (via AI):** “Call tapps_init with overwrite_agents_md=True and overwrite_platform_rules=True, platform=cursor, to refresh to the latest TappsMCP templates.”
+
+**Example (CLI):** `tapps-mcp init --force --host cursor` to refresh MCP config. Platform rules are generated but not overwritten if they already exist (use tapps_init with overwrite_platform_rules for that).
+
+---
+
+## Epic 10 (planned): Expert + Context7 integration
+
+Epic 10 will add tighter coupling between expert consultation and doc lookup. When shipped, the following will be reflected in templates and behavior:
+
+| Enhancement | Delivered via |
+|-------------|---------------|
+| Expert + doc lookup workflow guidance | AGENTS.md, agents_template.md, recommended_workflow |
+| Structured suggested_tool / suggested_library / suggested_topic when RAG is empty | tapps_consult_expert response |
+| Auto-fallback to Context7 when expert RAG is empty | tapps_consult_expert (optional, configurable) |
+| Broader testing-strategies KB (test config, URLs, env) | Knowledge files |
+| Optional tapps_research combined tool | New MCP tool |
+
+**To get Epic 10 content in your project:** After upgrading TappsMCP, run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` so AGENTS.md and platform rules include the new workflow. See [TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md).
 
 ---
 

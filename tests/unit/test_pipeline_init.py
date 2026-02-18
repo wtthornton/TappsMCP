@@ -1,5 +1,7 @@
 """Tests for the tapps_init bootstrap logic."""
 
+from typing import ClassVar
+
 from tapps_mcp import __version__
 from tapps_mcp.pipeline.init import bootstrap_pipeline
 from tapps_mcp.prompts.prompt_loader import load_agents_template
@@ -265,13 +267,13 @@ class TestBootstrapPipeline:
 class TestAgentsMdIntegration:
     """Integration tests for AGENTS.md validate/update in bootstrap_pipeline."""
 
-    _common = dict(
-        create_handoff=False,
-        create_runlog=False,
-        create_tech_stack_md=False,
-        verify_server=False,
-        warm_cache_from_tech_stack=False,
-    )
+    _common: ClassVar[dict[str, bool]] = {
+        "create_handoff": False,
+        "create_runlog": False,
+        "create_tech_stack_md": False,
+        "verify_server": False,
+        "warm_cache_from_tech_stack": False,
+    }
 
     def test_validates_when_current(self, tmp_path):
         (tmp_path / "AGENTS.md").write_text(load_agents_template(), encoding="utf-8")

@@ -11,9 +11,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import structlog
 import yaml
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = structlog.get_logger(__name__)
 
 
 class ScoringWeights(BaseSettings):
@@ -136,7 +139,8 @@ def _load_yaml_config(project_root: Path) -> dict[str, Any]:
         with config_path.open(encoding="utf-8-sig") as f:
             data = yaml.safe_load(f)
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except Exception as e:
+        logger.debug("mcp_config_load_failed", path=str(config_path), reason=str(e))
         return {}
 
 
