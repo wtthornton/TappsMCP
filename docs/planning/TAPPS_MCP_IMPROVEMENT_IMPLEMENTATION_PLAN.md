@@ -1,216 +1,280 @@
-# TappsMCP Expert + Context7 Integration — Implementation Plan
+# TappsMCP Expert + Context7 + Retrieval Optimization — Implementation Plan
 
 **Source:** [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md)  
 **Created:** 2026-02-18  
-**Revised:** 2026-02-18 (reviewed via Context7 + TappsMCP)  
-**Status:** Draft  
+**Revised:** 2026-02-20 (re-baselined against current code)  
+**Status:** Draft (re-baselined against repository state; implementation pending)  
 **Audience:** TappsMCP maintainers
 
 ---
 
-## Review Findings (Context7 + TappsMCP)
+## 1) Validation method used for this re-baseline
 
-- **tapps_consult_expert (testing-strategies)** on a plan-related query returned `chunks_used: 0`, `source_count: 0` — validates the exact scenario the plan addresses.
-- **tapps_lookup_docs(pytest, "fixtures configuration monkeypatch env")** returned rich Context7 content (fixtures, monkeypatch, setenv/delenv, configuration) — proves fallback would work and is suitable for Story 10.4 content sourcing.
-- **Existing code:** `experts/rag_warming.py` has `TECH_STACK_TO_EXPERT_DOMAINS` (library → domain); invert for domain→library inference. `domain_utils.py` maps `testing-strategies` → knowledge dir `testing`.
-- **Sync/async:** `consult_expert()` is sync; `LookupEngine.lookup()` and `tapps_lookup_docs` are async — plan must address integration (sync wrapper or `asyncio.run()`).
-- **Security:** Merged content must pass governance (PII/secrets) and RAG safety; response size limits recommended.
+This plan revision was validated against current repository code and docs (not assumptions):
 
----
+- Expert tool surface and response fields: `src/tapps_mcp/server.py`, `src/tapps_mcp/experts/models.py`, `src/tapps_mcp/experts/engine.py`
+- Context7 lookup behavior: `src/tapps_mcp/knowledge/lookup.py`, `src/tapps_mcp/knowledge/context7_client.py`
+- Fuzzy matching implementation: `src/tapps_mcp/knowledge/fuzzy_matcher.py`
+- Retrieval backends: `src/tapps_mcp/experts/rag.py`, `src/tapps_mcp/experts/vector_rag.py`, `src/tapps_mcp/experts/rag_index.py`
+- Feedback/metrics foundations for ranking: `src/tapps_mcp/metrics/feedback.py`, `src/tapps_mcp/metrics/expert_metrics.py`, `src/tapps_mcp/metrics/rag_metrics.py`
+- Knowledge-base coverage check: `src/tapps_mcp/experts/knowledge/testing/`
 
-## Summary
-
-The recommendations document captures real agent behavior: when `tapps_consult_expert` returns zero RAG chunks and low confidence, agents often stop there instead of calling `tapps_lookup_docs`. This plan implements enhancements so agents get better combined guidance from experts and library docs with fewer round-trips.
-
-| # | Recommendation | Agreement | Priority | LOE |
-|---|----------------|-----------|----------|-----|
-| 1 | Auto-fallback to Context7 when expert RAG is empty | ✅ Yes | P1 | Medium |
-| 2 | Workflow: "expert + doc lookup" for testing/library questions | ✅ Yes | P1 | Low |
-| 3 | Stronger, structured "call tapps_lookup_docs" when no RAG | ✅ Yes | P1 | Low |
-| 4 | Broader expert KB coverage (test config, URLs, env) | ✅ Yes | P2 | Low–Medium |
-| 5 | Optional single `tapps_research` tool (expert + Context7) | ✅ Yes | P2 | Medium |
+> Note: MCP resource servers for Context7/TappsMCP were not attached in this session, so validation is code-and-doc based.
 
 ---
 
-## Epic 10: Expert + Context7 Integration
 
-**Epic ID:** EPIC-10  
+## 1.1) Accuracy guardrails for this document
+
+To keep this plan strictly factual, each status claim in Section 2 is tied to observable repository evidence (present/absent symbols, handlers, or files).
+
+- If code implements a capability but no tests exist, status is still reported as implemented with a follow-up validation task.
+- If no symbol/handler/file exists in the repository, status is reported as not implemented.
+- Where behavior depends on runtime integration (MCP host-attached tools), this document calls out the environment limitation explicitly.
+
+## 1.2) Current implementation snapshot (accurate as of 2026-02-20)
+
+| Capability | Current status | Evidence |
+|---|---|---|
+| `tapps_consult_expert` basic flow (domain detect, retrieve, confidence, sources) | ✅ Implemented | `experts/engine.py`, `server.py` |
+| Low-confidence nudge to call `tapps_lookup_docs` | ✅ Implemented | `experts/engine.py` |
+| Automatic Context7 fallback inside expert flow when RAG empty | ❌ Not implemented | no fallback call path in `experts/engine.py` |
+| Structured fields `suggested_tool`, `suggested_library`, `suggested_topic` in response model | ❌ Not implemented | absent in `experts/models.py` and `server.py` response mapping |
+| Structured fields `fallback_used`, `fallback_library`, `fallback_topic` | ❌ Not implemented | absent in `experts/models.py` and `server.py` |
+| Optional `tapps_research` tool | ❌ Not implemented | no tool handler/registration |
+| Testing KB file `test-configuration-and-urls.md` | ❌ Not present | missing under `experts/knowledge/testing/` |
+| Context7 cache + SWR + stale fallback | ✅ Implemented | `knowledge/lookup.py` |
+| Library fuzzy match | ⚠️ Basic only (LCS + alias + prefix) | `knowledge/fuzzy_matcher.py` |
+| Retrieval architecture | ⚠️ Dual backend exists; no hybrid fusion/rerank | `experts/rag.py`, `experts/vector_rag.py`, `experts/rag_index.py` |
+| Signals for hot-rank/adaptive ranking | ⚠️ Foundations exist; ranking policy not implemented | metrics + feedback modules |
+
+---
+
+### Snapshot summary
+
+- Epic 10 stories started/completed in code: **0 / 5**
+- Epic 11 stories started/completed in code: **0 / 5**
+- Overall planned stories started/completed: **0 / 10**
+
+---
+
+## 3) What remains from original Epic 10 (still open)
+
+## Epic 10: Expert + Context7 Integration (carry forward)
+
 **Priority:** P1  
-**Dependencies:** Epic 2 (Knowledge & Docs), Epic 3 (Expert System)  
-**Estimated LOE:** ~2–3 weeks (1 developer)
+**Dependencies:** Epic 2, Epic 3
 
----
+### 10.1 — Auto-fallback to Context7 when expert RAG is empty
 
-## Stories
-
-### 10.1 — Auto-fallback to Context7 when expert RAG is empty (P1)
-
-**Points:** 5  
-**Goal:** When expert consultation returns `chunks_used=0` (or `source_count=0`), automatically call `tapps_lookup_docs` for inferred libraries/topics and merge that content into the response.
+**Status:** Not started
 
 **Tasks:**
-- [ ] Extend `consult_expert()` in `experts/engine.py`:
-  - After RAG search, if `len(chunks) == 0` (or `len(sources) == 0`):
-    - Infer `library` and `topic` from question + domain (see 10.1.1)
-    - Call `LookupEngine.lookup()` via sync wrapper: `consult_expert` is sync, `LookupEngine.lookup()` is async — add `knowledge.lookup.sync_lookup()` that uses `asyncio.run()` or reuse existing async-in-sync pattern if present
-    - Merge doc content into the answer with clear attribution (e.g. "## Library docs (via Context7)")
-- [ ] Derive domain → library mapping from `rag_warming.TECH_STACK_TO_EXPERT_DOMAINS` (invert: each domain maps to its primary library) and extend for topics (see 10.1.1)
-- [ ] Make auto-fallback configurable (e.g. `TAPPS_MCP_EXPERT_AUTO_LOOKUP_DOCS=true`) to allow opt-out
-- [ ] Ensure merged response passes governance (PII/secret filter) and RAG safety before return
-- [ ] Enforce response size limit (e.g. cap merged doc content to ~3000 chars or token budget) to avoid context overflow
-- [ ] Add `fallback_used: true`, `fallback_library`, `fallback_topic` to response when fallback ran
+- [ ] In `experts/engine.py`, when `chunks_used == 0` (or no sources), infer library/topic from domain+question and perform lookup.
+- [ ] Bridge sync expert flow with async lookup in a safe helper (`sync_lookup` wrapper).
+- [ ] Merge fallback content into expert answer with explicit attribution section.
+- [ ] Add response budget limits for merged content.
+- [ ] Add config flag (opt-in/out) for auto-fallback behavior.
+- [ ] Add fields: `fallback_used`, `fallback_library`, `fallback_topic`.
 
-**Definition of Done:**
-- Empty RAG triggers Context7 lookup for inferable libraries
-- Single response contains both expert guidance (or placeholder) and library docs
-- Unit tests for inference logic and fallback behavior
+**DoD:** Empty-RAG consultation can return a combined expert+docs answer in one call.
 
 ---
 
-#### 10.1.1 — Domain → library inference
+### 10.2 — Workflow coupling updates (expert + docs)
 
-Derive mapping from `rag_warming.TECH_STACK_TO_EXPERT_DOMAINS` (invert) and extend for topic hints:
-
-| Domain | Default library | Topic hints |
-|--------|-----------------|-------------|
-| testing-strategies | pytest | fixtures, configuration, monkeypatch, env vars, base URL |
-| api-design-integration | fastapi | endpoints, validation, middleware, testing |
-| database-data-management | sqlalchemy | models, sessions, migrations |
-| cloud-infrastructure | docker | dockerfile, compose |
-| development-workflow | (git/ci varies) | — |
-| security | — | varies; may need topic-only lookup or skip fallback |
-| code-quality-analysis | ruff | linting, formatting |
-| observability-monitoring | prometheus | metrics, alerting |
-
-Use simple keyword matching on `question` to pick topic (e.g. "base URL" → "fixtures and configuration", "fixtures" → "fixtures", "monkeypatch" → "monkeypatch env vars"). Knowledge dir mapping: `domain_utils.DOMAIN_TO_DIRECTORY_MAP` (e.g. `testing-strategies` → `testing`).
-
----
-
-### 10.2 — Workflow: “Expert + doc lookup” for testing/library questions (P1)
-
-**Points:** 2  
-**Goal:** Update AGENTS.md, `agents_template.md`, and `recommended_workflow` to explicitly couple expert and doc lookup for library-specific questions.
+**Status:** Not started
 
 **Tasks:**
-- [ ] Add new subsection to AGENTS.md and `agents_template.md`:
+- [ ] Update AGENTS/template/research prompts to explicitly require combined expert+lookup for library-specific domain questions.
+- [ ] Update `tapps_server_info` recommended workflow wording and stage hints.
 
-  **"For testing / pytest questions"**  
-  Prefer or combine: `tapps_lookup_docs(library="pytest", topic="fixtures and configuration")` and optionally `tapps_consult_expert(domain="testing-strategies")`. If the expert returns low confidence or no chunks, treat that as a signal to call `tapps_lookup_docs` for the relevant library (e.g. pytest, unittest).
-
-- [ ] Add general rule: **"Domain-specific questions that mention a library** (e.g. pytest, FastAPI) **should trigger both expert and doc lookup** in your plan, or the server can auto-fallback (see Epic 10)."
-- [ ] Update `recommended_workflow` in `tapps_server_info` response (see `server.py` and `common/nudges.py`) to include this guidance when applicable; also ensure `pipeline.stage_tools.research` hints at combined expert+lookup for library questions
-- [ ] Update `src/tapps_mcp/prompts/research.md` and `src/tapps_mcp/prompts/platform_*.md` if they reference expert-only flow
-
-**Definition of Done:**
-- AGENTS.md includes explicit expert + doc lookup coupling
-- Server `recommended_workflow` reflects this when returned
+**DoD:** Workflow guidance consistently reflects expert+lookup coupling.
 
 ---
 
-### 10.3 — Stronger, structured “call tapps_lookup_docs” when no RAG (P1)
+### 10.3 — Structured “next tool” hints when no RAG
 
-**Points:** 3  
-**Goal:** When expert has no RAG data, return machine-parseable hints and a concrete recommended tool call so agentic loops can automatically trigger follow-up.
+**Status:** Not started
 
 **Tasks:**
-- [ ] Extend `ConsultationResult` model (`experts/models.py`):
-  - `suggested_tool: str | None` — e.g. `"tapps_lookup_docs"`
-  - `suggested_library: str | None` — e.g. `"pytest"`
-  - `suggested_topic: str | None` — e.g. `"fixtures and configuration"`
-- [ ] In `engine.py`, when `len(chunks) == 0`:
-  - Populate `suggested_tool`, `suggested_library`, `suggested_topic` using same inference as 10.1.1
-  - Ensure prose says: **"Recommended next step: call tapps_lookup_docs(library='pytest', topic='fixtures and configuration')"** with concrete values when inferable
-- [ ] Include these fields in `tapps_consult_expert` MCP tool response so clients can parse and auto-invoke
-- [ ] When auto-fallback (10.1) runs, set `suggested_tool=None` (already handled)
+- [ ] Extend `ConsultationResult` with: `suggested_tool`, `suggested_library`, `suggested_topic`.
+- [ ] Populate those fields when no chunks are found.
+- [ ] Return fields through MCP response mapping in `server.py`.
+- [ ] Add tests for field population and suggestion correctness.
 
-**Definition of Done:**
-- Response includes `suggested_tool`, `suggested_library`, `suggested_topic` when RAG is empty
-- Prose contains concrete library/topic in the recommendation
-- Unit tests verify fields are populated correctly
+**DoD:** Clients can parse and automatically follow up with `tapps_lookup_docs`.
 
 ---
 
-### 10.4 — Broader expert KB coverage (test config, URLs, env) (P2)
+### 10.4 — Testing knowledge-base expansion
 
-**Points:** 3  
-**Goal:** Curate or ingest knowledge on test configuration, base URLs, env vars, pytest fixtures for URLs/config, monkeypatch for env — so the testing-strategies expert can answer more “best practice” questions directly.
+**Status:** Not started
 
 **Tasks:**
-- [ ] Add new knowledge file: `experts/knowledge/testing/test-configuration-and-urls.md` (knowledge dir `testing` maps to domain `testing-strategies` per `domain_utils.DOMAIN_TO_DIRECTORY_MAP`):
-  - Test configuration patterns (base URLs, environment variables)
-  - Avoiding hardcoded localhost
-  - pytest fixtures for config, base URL, test URLs
-  - monkeypatch for env vars in tests (`setenv`, `delenv`)
-  - Source: Context7 `tapps_lookup_docs(library="pytest", topic="fixtures configuration monkeypatch env")` returns suitable content — ingest or summarize
-- [ ] Update `experts/knowledge/README.md` (if present) or index to reference the new file
-- [ ] Validate RAG retrieves this content for queries like “base URLs in tests”, “hardcoded localhost”, “pytest fixtures for config”
-- [ ] Rebuild vector index (if used) or verify simple RAG picks up the file
+- [ ] Add `src/tapps_mcp/experts/knowledge/testing/test-configuration-and-urls.md`.
+- [ ] Include patterns for base URL config, env vars, fixtures, monkeypatch, avoiding hardcoded localhost.
+- [ ] Validate retrieval returns new content for representative queries.
 
-**Definition of Done:**
-- New knowledge file exists and is included in testing-strategies domain
-- Sample queries return relevant chunks from the new content
+**DoD:** Testing expert returns relevant chunks for config/URL/env questions.
 
 ---
 
-### 10.5 — Optional single `tapps_research` tool (P2)
+### 10.5 — Optional `tapps_research` combined tool
 
-**Points:** 5  
-**Goal:** Provide a single tool `tapps_research(question, domain, libraries)` that (1) consults the domain expert, (2) auto-falls back to Context7 when RAG is empty or confidence is low, (3) returns one combined answer with clear attribution.
+**Status:** Not started
 
 **Tasks:**
-- [ ] Design `tapps_research` tool schema:
-  - `question: str` — research question
-  - `domain: str = ""` — optional domain hint (e.g. `testing-strategies`)
-  - `libraries: list[str] = []` — optional explicit libraries (e.g. `["pytest"]`); if empty, infer from domain + question
-- [ ] Implement handler:
-  1. Call expert (reuse `consult_expert` or internal equivalent)
-  2. If `chunks_used == 0` or `confidence < threshold`, call Context7 for each inferred/listed library
-  3. Merge expert answer + doc content with attribution sections
-  4. Return single combined response
-- [ ] Add `tapps_research` to tool registry and AGENTS.md
-- [ ] Document when to use `tapps_research` vs. separate `tapps_consult_expert` + `tapps_lookup_docs`
-- [ ] Add unit tests for combined flow
+- [ ] Define tool schema and response format.
+- [ ] Implement: consult expert → fallback doc lookup (on low confidence or empty RAG) → merged answer.
+- [ ] Register tool and document usage.
+- [ ] Add tests and latency guardrail checks.
 
-**Definition of Done:**
-- `tapps_research` available and documented
-- One call returns expert + doc content when RAG is empty
-- Latency remains acceptable (< 5s when fallback runs)
+**DoD:** Single call can return combined expert+docs guidance.
 
 ---
 
-## Implementation Order
+## 4) New Epic 11 (added): Retrieval quality, hot-rank, fuzzy, references
 
-| Order | Story | Dependency |
-|-------|-------|------------|
-| 1 | 10.3 — Stronger structured hints | None |
-| 2 | 10.2 — Workflow documentation | None |
-| 3 | 10.1 — Auto-fallback | 10.3 (reuses inference logic) |
-| 4 | 10.4 — KB coverage | None |
-| 5 | 10.5 — tapps_research | 10.1 |
+This epic captures improvements discussed after Epic 10 planning and is not covered deeply by the original file.
 
-Stories 10.2 and 10.3 can be done in parallel. Story 10.1 depends on 10.3’s inference logic but can share code.
+## Epic 11: Retrieval & Ranking Optimization
 
----
+**Priority:** P1/P2 mix  
+**Dependencies:** Epic 10.3 recommended; can start partially in parallel.
 
-## Acceptance Criteria (Epic)
+### 11.1 — Hybrid retrieval + rerank
 
-- [ ] When expert RAG is empty, agent receives either (a) auto-fallback Context7 content in one response, or (b) structured `suggested_tool` / `suggested_library` / `suggested_topic` for follow-up
-- [ ] AGENTS.md and workflow docs explicitly couple expert + doc lookup for testing/library questions
-- [ ] Testing-strategies expert has knowledge on test config, base URLs, env vars, fixtures
-- [ ] Optional `tapps_research` tool combines expert + Context7 in one call
-- [ ] All changes maintain security: merged content passes governance (PII/secret filter) and RAG safety; response size limits enforced to avoid context overflow
-- [ ] Performance: auto-fallback latency acceptable when Context7 is used (target under 5s)
+**Goal:** Improve relevance by combining lexical + vector retrieval before final ranking.
+
+**Tasks:**
+- [ ] Retrieve candidate sets from both simple keyword and vector backends.
+- [ ] Add weighted fusion score (vector, lexical, structural).
+- [ ] Add final rerank stage for top-N candidates.
+- [ ] Expose retrieval diagnostics (which backend contributed each final chunk).
+
+**DoD:** Better relevance on benchmark prompts vs current single-path behavior.
 
 ---
 
-## References
+### 11.2 — Hot-rank from usage + feedback
 
-- Source: `C:\cursor\HomeIQ\implementation\TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md`
-- Epic 2: [EPIC-2-KNOWLEDGE-DOCS.md](epics/EPIC-2-KNOWLEDGE-DOCS.md)
-- Epic 3: [EPIC-3-EXPERT-SYSTEM.md](epics/EPIC-3-EXPERT-SYSTEM.md)
-- Current expert engine: `src/tapps_mcp/experts/engine.py`
-- Current consultation result: `src/tapps_mcp/experts/models.py`
-- Domain→library mapping: `src/tapps_mcp/experts/rag_warming.py` (TECH_STACK_TO_EXPERT_DOMAINS — invert for inference)
-- Knowledge dir mapping: `src/tapps_mcp/experts/domain_utils.py` (DOMAIN_TO_DIRECTORY_MAP)
-- Lookup layer: `src/tapps_mcp/knowledge/lookup.py` (LookupEngine — async)
-- AGENTS.md: `AGENTS.md`, `src/tapps_mcp/pipeline/agents_md.py`, `src/tapps_mcp/prompts/agents_template.md`
+**Goal:** Use real performance data to prioritize chunks/sources/domains that historically help.
+
+**Tasks:**
+- [ ] Define hot-rank function with recency decay + helpfulness + confidence trend.
+- [ ] Consume metrics from feedback/expert/rag trackers.
+- [ ] Apply hot-rank as tie-breaker in retrieval ranking.
+- [ ] Add guardrails to avoid popularity-only lock-in.
+
+**DoD:** Repeat queries trend toward higher helpfulness with no quality regressions.
+
+---
+
+### 11.3 — Fuzzy lookup v2 (library/topic resolution)
+
+**Goal:** Reduce mis-resolution and improve recall beyond LCS-only matching.
+
+**Tasks:**
+- [ ] Add multi-signal matching (edit distance/token overlap + existing alias/prefix/LCS).
+- [ ] Add confidence bands + “did you mean” when low confidence.
+- [ ] Incorporate project manifest/library detector priors for disambiguation.
+- [ ] Add eval tests for typo, alias, shorthand, and ambiguous library names.
+
+**DoD:** Higher correct-resolution rate and fewer wrong fuzzy hits.
+
+---
+
+### 11.4 — Context7 code-reference quality normalization
+
+**Goal:** Return cleaner, more actionable code references from Context7 content.
+
+**Tasks:**
+- [ ] Rank snippets by code completeness + query overlap + language/framework fit.
+- [ ] Deduplicate similar snippets.
+- [ ] Add compact “reference card” output shape in merged responses.
+- [ ] Enforce per-section token budgets to avoid context overflow.
+
+**DoD:** Fewer noisy snippets; stronger practical examples.
+
+---
+
+### 11.5 — Evaluation harness + quality gates for retrieval changes
+
+**Goal:** Prevent regressions while tuning ranking/fuzzy behavior.
+
+**Tasks:**
+- [ ] Add benchmark query set (by domain + library).
+- [ ] Define metrics: top-k relevance proxy, resolution accuracy, latency p95, fallback rate.
+- [ ] Add CI check(s) for regression thresholds.
+- [ ] Publish periodic before/after score snapshots.
+
+**DoD:** Retrieval optimization can be tuned safely and measured objectively.
+
+---
+
+## 5) Updated implementation order
+
+1. **10.3** Structured hints (enables deterministic client follow-up)
+2. **10.1** Auto-fallback integration
+3. **10.2** Workflow/docs coupling updates
+4. **10.4** Testing KB expansion
+5. **11.5** Baseline eval harness
+6. **11.1** Hybrid retrieval + rerank
+7. **11.3** Fuzzy v2
+8. **11.2** Hot-rank integration
+9. **11.4** Context7 code-reference normalization
+10. **10.5** Optional `tapps_research` tool
+
+---
+
+## 6) Acceptance criteria (re-baselined)
+
+- [ ] Epic 10 P1 complete: structured hints + auto-fallback + workflow guidance shipped.
+- [ ] Expert response supports deterministic next-step automation when RAG is empty.
+- [ ] Testing expert covers URL/config/env fixture questions with retrievable knowledge.
+- [ ] Retrieval quality improvements from Epic 11 measured against baseline and non-regressive on latency.
+- [ ] Fuzzy lookup accuracy improved with explicit ambiguity handling.
+- [ ] Context7-derived code references are better ranked, deduplicated, and budgeted.
+
+---
+
+## 7) Validation checklist for maintainers
+
+Run this quick audit before marking this plan complete:
+
+- [ ] Verify new response fields exist in models + server mapping.
+- [ ] Verify auto-fallback path exists in `experts/engine.py`.
+- [ ] Verify new testing KB file exists and is indexed.
+- [ ] Verify `tapps_research` tool exists (if implemented).
+- [ ] Verify retrieval/ranking metrics are captured and compared to baseline.
+
+Suggested checks:
+
+```bash
+rg -n "suggested_tool|suggested_library|suggested_topic|fallback_used|fallback_library|fallback_topic" src/tapps_mcp
+rg -n "tapps_research" src/tapps_mcp
+rg --files src/tapps_mcp/experts/knowledge/testing
+rg -n "rerank|hybrid|hot-rank|hot_rank|fuzzy" src/tapps_mcp
+```
+
+---
+
+## 8) References
+
+- Existing implementation surfaces:
+  - `src/tapps_mcp/server.py`
+  - `src/tapps_mcp/experts/engine.py`
+  - `src/tapps_mcp/experts/models.py`
+  - `src/tapps_mcp/knowledge/lookup.py`
+  - `src/tapps_mcp/knowledge/fuzzy_matcher.py`
+  - `src/tapps_mcp/experts/rag.py`
+  - `src/tapps_mcp/experts/vector_rag.py`
+  - `src/tapps_mcp/experts/rag_index.py`
+- Metrics/adaptive signals:
+  - `src/tapps_mcp/metrics/feedback.py`
+  - `src/tapps_mcp/metrics/expert_metrics.py`
+  - `src/tapps_mcp/metrics/rag_metrics.py`
+- Prior plan and epic mapping docs:
+  - `docs/planning/epics/README.md`
+  - `docs/INIT_AND_UPGRADE_FEATURE_LIST.md`
