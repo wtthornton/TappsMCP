@@ -208,9 +208,16 @@ def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
 
 def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
-    """Bootstrap platform-specific rule files."""
+    """Bootstrap platform-specific rule files, hooks, agents, and skills."""
     if not cfg.platform:
         return
+
+    from tapps_mcp.pipeline.platform_generators import (
+        generate_claude_hooks,
+        generate_cursor_hooks,
+        generate_skills,
+        generate_subagent_definitions,
+    )
 
     platform_action: str | None = None
     if cfg.platform == "claude":
@@ -221,12 +228,20 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         state.result["claude_settings"] = {"action": settings_action}
         if settings_action == "created":
             state.created.append(".claude/settings.json")
+        # Hooks, agents, skills
+        state.result["hooks"] = generate_claude_hooks(state.project_root)
+        state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
+        state.result["skills"] = generate_skills(state.project_root, "claude")
     elif cfg.platform == "cursor":
         platform_action = _bootstrap_cursor(state.project_root, cfg.overwrite_platform_rules)
         if platform_action in {"created", "updated"}:
             state.created.append(".cursor/rules/tapps-pipeline.md")
         elif platform_action == "skipped":
             state.skipped.append(".cursor/rules/tapps-pipeline.md")
+        # Hooks, agents, skills
+        state.result["hooks"] = generate_cursor_hooks(state.project_root)
+        state.result["agents"] = generate_subagent_definitions(state.project_root, "cursor")
+        state.result["skills"] = generate_skills(state.project_root, "cursor")
     else:
         state.errors.append(f"Unknown platform: {cfg.platform!r}. Use 'claude' or 'cursor'.")
 

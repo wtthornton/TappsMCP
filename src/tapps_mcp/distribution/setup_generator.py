@@ -357,15 +357,22 @@ def _configure_multiple_hosts(
 
 
 def _generate_rules(host: str, project_root: Path) -> None:
-    """Generate platform rule files for the given host.
+    """Generate platform rule files, hooks, agents, and skills for the given host.
 
     Delegates to ``_bootstrap_claude`` and ``_bootstrap_cursor`` from
-    ``tapps_mcp.pipeline.init``.
+    ``tapps_mcp.pipeline.init``, and uses ``platform_generators`` for hooks,
+    subagents, and skills.
     """
     from tapps_mcp.pipeline.init import (
         _bootstrap_claude,
         _bootstrap_claude_settings,
         _bootstrap_cursor,
+    )
+    from tapps_mcp.pipeline.platform_generators import (
+        generate_claude_hooks,
+        generate_cursor_hooks,
+        generate_skills,
+        generate_subagent_definitions,
     )
 
     if host == "claude-code":
@@ -385,6 +392,12 @@ def _generate_rules(host: str, project_root: Path) -> None:
             )
         elif settings_action == "skipped":
             click.echo("  .claude/settings.json already has TappsMCP permissions (skipped)")
+        hooks_result = generate_claude_hooks(project_root)
+        _echo_gen_result("hooks", hooks_result)
+        agents_result = generate_subagent_definitions(project_root, "claude")
+        _echo_gen_result("agents", agents_result)
+        skills_result = generate_skills(project_root, "claude")
+        _echo_gen_result("skills", skills_result)
     elif host == "cursor":
         action = _bootstrap_cursor(project_root)
         if action == "created":
@@ -393,7 +406,22 @@ def _generate_rules(host: str, project_root: Path) -> None:
             click.echo(click.style("  Updated .cursor/rules/tapps-pipeline.md", fg="green"))
         elif action == "skipped":
             click.echo("  .cursor/rules/tapps-pipeline.md already exists (skipped)")
+        hooks_result = generate_cursor_hooks(project_root)
+        _echo_gen_result("hooks", hooks_result)
+        agents_result = generate_subagent_definitions(project_root, "cursor")
+        _echo_gen_result("agents", agents_result)
+        skills_result = generate_skills(project_root, "cursor")
+        _echo_gen_result("skills", skills_result)
     # VS Code has no platform rule equivalent — no-op
+
+
+def _echo_gen_result(kind: str, result: dict[str, Any]) -> None:
+    """Print a summary line for a generation result."""
+    created = result.get("created") or result.get("scripts_created") or []
+    if created:
+        click.echo(click.style(f"  Generated {kind}: {', '.join(created)}", fg="green"))
+    else:
+        click.echo(f"  {kind.capitalize()} already up to date (skipped)")
 
 
 def run_init(
