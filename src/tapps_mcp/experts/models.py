@@ -65,6 +65,30 @@ class ConsultationResult(BaseModel):
         default=None,
         description="Actionable nudge when confidence is low (e.g. suggest tapps_lookup_docs).",
     )
+    suggested_tool: str | None = Field(
+        default=None,
+        description="Suggested tool to call next when confidence/context is insufficient.",
+    )
+    suggested_library: str | None = Field(
+        default=None,
+        description="Suggested library name for documentation lookup.",
+    )
+    suggested_topic: str | None = Field(
+        default=None,
+        description="Suggested topic to look up for documentation fallback.",
+    )
+    fallback_used: bool = Field(
+        default=False,
+        description="Whether automatic docs fallback content was merged into the answer.",
+    )
+    fallback_library: str | None = Field(
+        default=None,
+        description="Library used for automatic docs fallback lookup.",
+    )
+    fallback_topic: str | None = Field(
+        default=None,
+        description="Topic used for automatic docs fallback lookup.",
+    )
 
 
 class DomainMapping(BaseModel):

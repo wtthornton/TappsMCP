@@ -36,7 +36,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_quality_gate** | **Before declaring work complete** — ensures the file passes the configured quality preset. Do not consider work done until it passes (or the user accepts the risk). |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library — use the returned docs to avoid hallucinated APIs. |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
-| **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file → `domain="testing-strategies"`). |
+| **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. For library-specific questions, pair with `tapps_lookup_docs` (or use expert auto-fallback when available). Pass `domain` when context makes it obvious (e.g. editing a test file → `domain="testing-strategies"`). |
 | **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
 | **tapps_project_profile** | At **session start** or when you need project context — detects project type, tech stack, and structure so you can apply the right patterns. |
 | **tapps_session_notes** | When you make a **key decision or discover a constraint** — save it so you can recall it later in a long session. |
@@ -81,7 +81,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
    - Call `tapps_quality_gate(file_path=...)` — work is not done until it passes.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files.
+7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; if libraries/frameworks are involved, also call `tapps_lookup_docs` (or rely on auto-fallback hints). Use `tapps_validate_config` for Docker/infra files.
 
 ---
 

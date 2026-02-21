@@ -21,7 +21,7 @@ Gather domain knowledge and library documentation before writing code. This prev
 
 1. Identify which libraries the task involves.
 2. Call `tapps_lookup_docs(library="<name>", topic="<specific topic>")` for each library.
-3. If the task involves domain-specific decisions (security patterns, testing strategies, API design, etc.), call `tapps_consult_expert(question="<your question>")`.
+3. If the task involves domain-specific decisions (security patterns, testing strategies, API design, etc.), call `tapps_consult_expert(question="<your question>")`; for library-specific guidance, follow up with `tapps_lookup_docs` if suggested.
 4. If unsure which expert domain fits, call `tapps_list_experts()` first.
 5. Record all findings - API signatures, patterns, expert recommendations.
 

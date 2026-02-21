@@ -64,6 +64,20 @@ class TestConsultExpert:
             assert "tapps_lookup_docs" in result.low_confidence_nudge
             assert "Note:" in result.answer
 
+    def test_structured_suggestion_fields_when_no_context(self) -> None:
+        result = consult_expert("Tell me something interesting about cats")
+        if result.chunks_used == 0:
+            assert result.suggested_tool == "tapps_lookup_docs"
+            assert result.suggested_library is not None
+            assert result.suggested_topic is not None
+
+    def test_fallback_flags_default_shape(self) -> None:
+        result = consult_expert("How to write pytest fixtures?")
+        assert isinstance(result.fallback_used, bool)
+        if result.fallback_used:
+            assert result.fallback_library is not None
+            assert result.fallback_topic is not None
+
 
 class TestListExperts:
     """Tests for list_experts."""

@@ -176,6 +176,12 @@ class TestMCPToolHandlers:
         assert "confidence" in result["data"]
         assert "factors" in result["data"]
         assert "sources" in result["data"]
+        assert "suggested_tool" in result["data"]
+        assert "suggested_library" in result["data"]
+        assert "suggested_topic" in result["data"]
+        assert "fallback_used" in result["data"]
+        assert "fallback_library" in result["data"]
+        assert "fallback_topic" in result["data"]
 
     def test_tapps_consult_expert_auto_routing(self) -> None:
         """tapps_consult_expert auto-routes when domain is empty."""

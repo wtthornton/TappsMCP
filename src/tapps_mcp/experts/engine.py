@@ -11,6 +11,8 @@ This is the main entry point for expert consultations.  It:
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 
 from tapps_mcp.experts.confidence import (
@@ -31,6 +33,83 @@ from tapps_mcp.experts.registry import ExpertRegistry
 from tapps_mcp.experts.vector_rag import VectorKnowledgeBase
 
 logger = structlog.get_logger(__name__)
+
+
+def _infer_lookup_hints(question: str, domain: str) -> tuple[str, str]:
+    """Infer best-effort library/topic hints for docs lookup."""
+    q = question.lower()
+
+    library_candidates: list[tuple[str, list[str]]] = [
+        ("pytest", ["pytest", "fixture", "conftest", "monkeypatch"]),
+        ("fastapi", ["fastapi", "apirouter", "pydantic", "uvicorn"]),
+        ("flask", ["flask", "werkzeug", "jinja"]),
+        ("django", ["django", "orm", "settings.py"]),
+        ("sqlalchemy", ["sqlalchemy", "session", "declarative", "alembic"]),
+        ("pydantic", ["pydantic", "basemodel", "field"]),
+        ("requests", ["requests", "http", "session"]),
+        ("docker", ["docker", "dockerfile", "compose"]),
+        ("kubernetes", ["kubernetes", "k8s", "kubectl"]),
+        ("prometheus", ["prometheus", "metrics", "exporter"]),
+    ]
+
+    library = "python"
+    for candidate, signals in library_candidates:
+        if any(signal in q for signal in signals):
+            library = candidate
+            break
+    else:
+        domain_defaults = {
+            "testing-strategies": "pytest",
+            "api-design-integration": "fastapi",
+            "database-data-management": "sqlalchemy",
+            "cloud-infrastructure": "docker",
+            "observability-monitoring": "prometheus",
+        }
+        library = domain_defaults.get(domain, "python")
+
+    topic = "overview"
+    topic_signals = [
+        ("security", ["security", "auth", "vulnerability", "owasp"]),
+        ("testing", ["test", "fixture", "mock", "assert"]),
+        ("configuration", ["config", "env", "setting", "url"]),
+        ("performance", ["performance", "optimiz", "latency", "throughput"]),
+        ("api", ["api", "endpoint", "route", "request", "response"]),
+    ]
+    for candidate, signals in topic_signals:
+        if any(signal in q for signal in signals):
+            topic = candidate
+            break
+
+    return library, topic
+
+
+def _lookup_docs_sync(library: str, topic: str) -> tuple[bool, str | None]:
+    """Run async docs lookup from this sync module."""
+    try:
+        from tapps_mcp.config.settings import load_settings
+        from tapps_mcp.knowledge.cache import KBCache
+        from tapps_mcp.knowledge.lookup import LookupEngine
+
+        settings = load_settings()
+        cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+
+        async def _run() -> tuple[bool, str | None]:
+            engine = LookupEngine(cache, api_key=settings.context7_api_key)
+            try:
+                result = await engine.lookup(library=library, topic=topic, mode="code")
+            finally:
+                await engine.close()
+            return result.success, result.content
+
+        return asyncio.run(_run())
+    except Exception as exc:
+        logger.debug(
+            "expert_context7_fallback_failed",
+            library=library,
+            topic=topic,
+            reason=str(exc),
+        )
+        return False, None
 
 
 def consult_expert(
@@ -117,6 +196,12 @@ def consult_expert(
     confidence = compute_confidence(factors, resolved_domain)
 
     # 5. Build answer text.
+    suggested_tool: str | None = None
+    suggested_library: str | None = None
+    suggested_topic: str | None = None
+    fallback_used = False
+    fallback_library: str | None = None
+    fallback_topic: str | None = None
     if context:
         answer = (
             f"## {expert.expert_name} — {resolved_domain}\n\n"
@@ -125,12 +210,38 @@ def consult_expert(
             f"{context}"
         )
     else:
+        suggested_tool = "tapps_lookup_docs"
+        suggested_library, suggested_topic = _infer_lookup_hints(question, resolved_domain)
         answer = (
             f"## {expert.expert_name} — {resolved_domain}\n\n"
             f"No specific knowledge found for this query in the "
-            f"{resolved_domain} knowledge base.  The expert can still "
-            f"provide general guidance based on domain principles."
+            f"{resolved_domain} knowledge base. The expert can still "
+            f"provide general guidance based on domain principles.\n\n"
+            f"Suggested next step: call {suggested_tool}(library='{suggested_library}', "
+            f"topic='{suggested_topic}')."
         )
+
+        try:
+            from tapps_mcp.config.settings import load_settings
+
+            settings = load_settings()
+        except Exception as exc:
+            logger.debug("expert_fallback_settings_unavailable", reason=str(exc))
+            settings = None
+
+        if settings is not None and settings.expert_auto_fallback:
+            ok, docs_content = _lookup_docs_sync(suggested_library, suggested_topic)
+            if ok and docs_content:
+                fallback_used = True
+                fallback_library = suggested_library
+                fallback_topic = suggested_topic
+                fallback_excerpt = docs_content[: settings.expert_fallback_max_chars]
+                answer = (
+                    f"{answer}\n\n---\n\n"
+                    "### Context7 fallback (auto-attached)\n\n"
+                    f"Library: `{fallback_library}` | Topic: `{fallback_topic}`\n\n"
+                    f"{fallback_excerpt}"
+                )
 
     # Low-confidence nudge: help the AI supplement with other tools
     low_confidence_nudge = None
@@ -152,6 +263,12 @@ def consult_expert(
         sources=sources,
         chunks_used=len(chunks),
         low_confidence_nudge=low_confidence_nudge,
+        suggested_tool=suggested_tool,
+        suggested_library=suggested_library,
+        suggested_topic=suggested_topic,
+        fallback_used=fallback_used,
+        fallback_library=fallback_library,
+        fallback_topic=fallback_topic,
     )
 
 
