@@ -117,9 +117,13 @@ class AdaptiveDomainDetector:
         if consultation_history:
             suggestions.extend(self._detect_from_consultation_gaps(consultation_history))
 
-        # Filter out already-known domains.
+        # Filter out already-known domains for prompt/code suggestions.
+        # Consultation gap suggestions intentionally reference existing domains.
         known = self._get_existing_domains()
-        suggestions = [s for s in suggestions if s.domain not in known]
+        suggestions = [
+            s for s in suggestions
+            if s.domain not in known or s.source == "consultation_gap"
+        ]
 
         # Deduplicate by domain (keep highest confidence).
         seen: dict[str, DomainSuggestion] = {}

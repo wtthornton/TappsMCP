@@ -22,8 +22,8 @@ class TestExtractKeywords:
 
     def test_short_words_removed(self) -> None:
         kw = _extract_keywords("do it or go")
-        # All <= 2 chars or stop words.
-        assert kw == set()
+        # "do", "it", "or" are stop words; "go" (2 chars) meets min keyword length.
+        assert kw == {"go"}
 
     def test_preserves_compound_terms(self) -> None:
         kw = _extract_keywords("performance-optimization bottleneck")

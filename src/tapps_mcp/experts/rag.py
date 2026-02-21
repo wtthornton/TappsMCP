@@ -309,7 +309,7 @@ def _score_line(line: str, keywords: set[str]) -> float:
 
     stripped = line.strip()
     if stripped.startswith("#"):
-        level = len(line) - len(line.lstrip("#"))
+        level = len(stripped) - len(stripped.lstrip("#"))
         base *= 2.0 - level * 0.2
     if stripped.startswith("```"):
         base *= 1.4
@@ -344,7 +344,7 @@ def _extract_keywords(query: str) -> set[str]:
     """Normalise *query* into a set of keywords."""
     clean = re.sub(r"[^\w\s-]", " ", query.lower())
     _min_keyword_len = 2
-    return {w for w in clean.split() if len(w) > _min_keyword_len and w not in _STOP_WORDS}
+    return {w for w in clean.split() if len(w) >= _min_keyword_len and w not in _STOP_WORDS}
 
 
 def _deduplicate(
