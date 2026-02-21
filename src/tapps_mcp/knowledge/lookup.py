@@ -27,7 +27,7 @@ from tapps_mcp.knowledge.circuit_breaker import (
     get_context7_circuit_breaker,
 )
 from tapps_mcp.knowledge.context7_client import Context7Client, Context7Error
-from tapps_mcp.knowledge.fuzzy_matcher import fuzzy_match_library
+from tapps_mcp.knowledge.fuzzy_matcher import did_you_mean, fuzzy_match_library
 from tapps_mcp.knowledge.models import CacheEntry, LookupResult
 from tapps_mcp.knowledge.rag_safety import check_content_safety
 
@@ -217,11 +217,16 @@ class LookupEngine:
 
         if content is None:
             elapsed = (time.monotonic() - start) * 1000
+            # Offer "did you mean?" suggestions for the failed lookup.
+            suggestions = did_you_mean(lib_clean, known_libs)
+            hint = ""
+            if suggestions:
+                hint = f" Did you mean: {', '.join(suggestions)}?"
             return LookupResult(
                 success=False,
                 library=lib_clean,
                 topic=topic,
-                error="No documentation found.",
+                error=f"No documentation found.{hint}",
                 response_time_ms=round(elapsed, 1),
             )
 

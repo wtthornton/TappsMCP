@@ -205,6 +205,7 @@ def tapps_server_info() -> dict[str, Any]:
             "tapps_dashboard",
             "tapps_stats",
             "tapps_feedback",
+            "tapps_research",
         ]
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -1545,6 +1546,115 @@ def tapps_feedback(
         "overall_stats": overall_stats,
     })
     return _with_nudges("tapps_feedback", resp)
+
+
+@mcp.tool()
+def tapps_research(
+    question: str,
+    domain: str = "",
+    library: str = "",
+    topic: str = "",
+) -> dict[str, Any]:
+    """Combined expert consultation + documentation lookup in one call.
+
+    Consults the domain expert first, then automatically supplements with
+    Context7 documentation when expert RAG has no results or confidence is
+    low.  Saves a round-trip compared to calling tapps_consult_expert and
+    tapps_lookup_docs separately.
+
+    Args:
+        question: The technical question to research (natural language).
+        domain: Optional domain override for expert routing.
+        library: Optional library name for docs lookup (auto-inferred when empty).
+        topic: Optional topic for docs lookup (auto-inferred when empty).
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_research")
+
+    from tapps_mcp.experts.engine import consult_expert
+
+    result = consult_expert(
+        question=question,
+        domain=domain or None,
+    )
+
+    # Determine whether we need a docs supplement.
+    needs_docs = result.chunks_used == 0 or result.confidence < 0.5
+
+    docs_content: str | None = None
+    docs_source: str | None = None
+    docs_library: str | None = None
+    docs_topic: str | None = None
+    docs_error: str | None = None
+
+    if needs_docs:
+        # Resolve library/topic: prefer explicit args, fall back to expert hints.
+        lookup_library = library or result.suggested_library or "python"
+        lookup_topic = topic or result.suggested_topic or "overview"
+
+        try:
+            import asyncio
+
+            from tapps_mcp.knowledge.cache import KBCache
+            from tapps_mcp.knowledge.lookup import LookupEngine
+
+            settings = load_settings()
+            cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+
+            async def _run() -> tuple[bool, str | None, str | None]:
+                engine = LookupEngine(cache, api_key=settings.context7_api_key)
+                try:
+                    lr = await engine.lookup(library=lookup_library, topic=lookup_topic, mode="code")
+                finally:
+                    await engine.close()
+                return lr.success, lr.content, lr.source
+
+            ok, content, source = asyncio.run(_run())
+            if ok and content:
+                max_chars = settings.expert_fallback_max_chars
+                docs_content = content[:max_chars]
+                docs_source = source
+                docs_library = lookup_library
+                docs_topic = lookup_topic
+            else:
+                docs_error = "Docs lookup returned no content."
+        except Exception as exc:
+            docs_error = str(exc)
+
+    # Build merged answer.
+    answer = result.answer
+    if docs_content:
+        answer = (
+            f"{answer}\n\n---\n\n"
+            f"### Documentation reference (auto-attached)\n\n"
+            f"Library: `{docs_library}` | Topic: `{docs_topic}` | Source: {docs_source}\n\n"
+            f"{docs_content}"
+        )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_research", start)
+
+    resp = success_response("tapps_research", elapsed_ms, {
+        "domain": result.domain,
+        "expert_id": result.expert_id,
+        "expert_name": result.expert_name,
+        "answer": answer,
+        "confidence": round(result.confidence, 4),
+        "factors": result.factors.model_dump(),
+        "sources": result.sources,
+        "chunks_used": result.chunks_used,
+        "docs_supplemented": docs_content is not None,
+        "docs_library": docs_library,
+        "docs_topic": docs_topic,
+        "docs_error": docs_error,
+        "suggested_tool": result.suggested_tool,
+        "suggested_library": result.suggested_library,
+        "suggested_topic": result.suggested_topic,
+        "fallback_used": result.fallback_used,
+        "fallback_library": result.fallback_library,
+        "fallback_topic": result.fallback_topic,
+    })
+    return _with_nudges("tapps_research", resp)
 
 
 # ---------------------------------------------------------------------------

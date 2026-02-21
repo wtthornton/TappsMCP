@@ -14,7 +14,7 @@ from tapps_mcp.experts.domain_detector import DomainDetector
 from tapps_mcp.experts.engine import consult_expert, list_experts
 from tapps_mcp.experts.rag import SimpleKnowledgeBase
 from tapps_mcp.experts.registry import ExpertRegistry
-from tapps_mcp.server import tapps_consult_expert, tapps_list_experts
+from tapps_mcp.server import tapps_consult_expert, tapps_list_experts, tapps_research
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -206,3 +206,28 @@ class TestMCPToolHandlers:
         assert "expert_name" in first
         assert "primary_domain" in first
         assert "knowledge_files" in first
+
+    def test_tapps_research_response_shape(self) -> None:
+        """tapps_research returns combined expert + docs response structure."""
+        result: dict[str, Any] = tapps_research(
+            question="How to prevent SQL injection?",
+            domain="security",
+        )
+        assert result["tool"] == "tapps_research"
+        assert result["success"] is True
+        assert result["elapsed_ms"] >= 0
+        assert result["data"]["domain"] == "security"
+        assert result["data"]["expert_id"] == "expert-security"
+        assert "answer" in result["data"]
+        assert "confidence" in result["data"]
+        assert "docs_supplemented" in result["data"]
+        assert isinstance(result["data"]["docs_supplemented"], bool)
+
+    def test_tapps_research_auto_routing(self) -> None:
+        """tapps_research auto-routes when domain is empty."""
+        result: dict[str, Any] = tapps_research(
+            question="How to write unit tests with pytest?",
+            domain="",
+        )
+        assert result["success"] is True
+        assert result["data"]["domain"] == "testing-strategies"

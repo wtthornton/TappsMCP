@@ -68,11 +68,21 @@ class VectorKnowledgeBase:
         max_results: int = 5,
         context_lines: int = 10,
     ) -> list[KnowledgeChunk]:
-        """Search the knowledge base for *query*."""
+        """Search the knowledge base for *query*.
+
+        When both vector and simple backends are available, performs hybrid
+        retrieval: queries both, fuses results with weighted scoring, and
+        returns the top-N after deduplication.
+        """
         self._ensure_initialised()
 
         if self._backend_type == "vector" and self._vector_index is not None:
-            return self._vector_search(query, max_results)
+            vector_results = self._vector_search(query, max_results * 2)
+            # Hybrid: also run keyword search if simple backend is available.
+            if self._simple is not None and self._simple.file_count > 0:
+                keyword_results = self._simple.search(query, max_results * 2, context_lines)
+                return self._hybrid_fuse(vector_results, keyword_results, max_results)
+            return vector_results[:max_results]
 
         if self._simple is not None:
             return self._simple.search(query, max_results, context_lines)
@@ -207,6 +217,74 @@ class VectorKnowledgeBase:
             domain=self._domain,
             chunks=len(all_chunks),
         )
+
+    # ------------------------------------------------------------------
+    # Hybrid fusion + rerank
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _hybrid_fuse(
+        vector_results: list[KnowledgeChunk],
+        keyword_results: list[KnowledgeChunk],
+        max_results: int,
+        *,
+        vector_weight: float = 0.6,
+        keyword_weight: float = 0.3,
+        structural_weight: float = 0.1,
+    ) -> list[KnowledgeChunk]:
+        """Fuse vector and keyword results with weighted scoring and dedup.
+
+        Each chunk gets a fusion score:
+          fusion = vector_weight * vector_score + keyword_weight * keyword_score
+                 + structural_weight * structural_boost
+
+        Structural boost rewards chunks that appear in both result sets.
+        """
+        # Index keyword results by (source_file, line_start) for dedup.
+        kw_index: dict[tuple[str, int], KnowledgeChunk] = {}
+        for c in keyword_results:
+            key = (c.source_file, c.line_start)
+            if key not in kw_index or c.score > kw_index[key].score:
+                kw_index[key] = c
+
+        fused: dict[tuple[str, int], float] = {}
+        chunk_map: dict[tuple[str, int], KnowledgeChunk] = {}
+        source_map: dict[tuple[str, int], str] = {}  # track which backend(s)
+
+        for c in vector_results:
+            key = (c.source_file, c.line_start)
+            fused[key] = vector_weight * c.score
+            chunk_map[key] = c
+            source_map[key] = "vector"
+
+        for key, c in kw_index.items():
+            kw_contribution = keyword_weight * c.score
+            if key in fused:
+                # Appears in both: add keyword score + structural bonus.
+                fused[key] += kw_contribution + structural_weight
+                source_map[key] = "hybrid"
+            else:
+                fused[key] = kw_contribution
+                chunk_map[key] = c
+                source_map[key] = "keyword"
+
+        # Sort by fused score and take top-N.
+        ranked = sorted(fused.items(), key=lambda x: x[1], reverse=True)[:max_results]
+
+        results: list[KnowledgeChunk] = []
+        for key, score in ranked:
+            c = chunk_map[key]
+            results.append(
+                KnowledgeChunk(
+                    content=c.content,
+                    source_file=c.source_file,
+                    line_start=c.line_start,
+                    line_end=c.line_end,
+                    score=round(min(score, 1.0), 4),
+                )
+            )
+
+        return results
 
     # ------------------------------------------------------------------
     # Vector search
