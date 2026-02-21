@@ -17,8 +17,9 @@
 | [Epic 7](EPIC-7-METRICS-DASHBOARD.md) | Metrics, Observability & Dashboard | P1 | ~3-4 weeks | Epic 1, Epic 3, Epic 5 | **Complete** |
 | [Epic 8](EPIC-8-PIPELINE-ORCHESTRATION.md) | Pipeline Orchestration & Workflow Prompts | P1 | ~1.5-2 weeks | Epic 0-4 | **Complete** |
 | [Epic 10+11](../TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) | Expert + Context7 Integration & Retrieval Optimization | P1 | ~2-3 weeks | Epic 2, Epic 3 | **Complete** |
+| [Epic 12](EPIC-12-PLATFORM-INTEGRATION/README.md) | Platform Integration & Feature Gaps | P1 | ~4-6 weeks | Epic 0, Epic 6, Epic 8 | **Planning** |
 
-**Total estimated LOE:** ~19-24 weeks (1 developer), ~10-13 weeks (2 developers with parallelized epics)
+**Total estimated LOE:** ~23-30 weeks (1 developer), ~12-16 weeks (2 developers with parallelized epics)
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -34,6 +35,12 @@ Epic 0 (Foundation)
   │     └── Epic 6 (Distribution)
   ├── Epic 2 (Knowledge & Docs)     ← can parallel with Epic 1
   └── Epic 3 (Expert System)         ← can parallel with Epic 1, Epic 2
+
+Epic 12 (Platform Integration)       ← depends on Epic 0, Epic 6, Epic 8
+  ├── Tier 1 (12.1-12.4) — Tool annotations, config, permissions
+  ├── Tier 2 (12.5-12.8) — Hooks, subagents, skills
+  ├── Tier 3 (12.9-12.12) — Plugin bundles, rule types, teams
+  └── Tier 4 (12.13-12.18) — VS Code, BugBot, elicitation, CI, marketplace
 ```
 
 **Note:** Epic 7 can start partially after Epic 1 (execution metrics, tool call tracking, basic dashboard) and grow incrementally as Epic 3 and Epic 5 deliver expert metrics and adaptive learning data. Stories 7.1, 7.4, 7.5, 7.6, 7.7 can begin after Epic 1. Stories 7.3 requires Epic 3. Story 7.2 benefits from Epic 5.
