@@ -13,8 +13,9 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
-# Maximum files to validate in a single batch call
-MAX_BATCH_FILES = 10
+# Maximum files to validate in a single batch call.
+# Raised from 10 to 50 to handle larger changesets without silent truncation.
+MAX_BATCH_FILES = 50
 
 
 @dataclass
