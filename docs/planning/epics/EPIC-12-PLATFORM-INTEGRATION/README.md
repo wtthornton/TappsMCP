@@ -4,7 +4,7 @@
 **Priority:** P1
 **LOE:** ~4-6 weeks (1 developer), ~2-3 weeks (2 developers)
 **Dependencies:** Epic 0 (Foundation), Epic 6 (Distribution), Epic 8 (Pipeline)
-**Status:** Planning
+**Status:** In Progress (Tiers 1-3 Complete)
 
 ## Overview
 
@@ -31,18 +31,18 @@ All specifications and detailed findings are in the `research/` directory:
 
 | Story | Name | Tier | Priority | LOE | Platform | Status |
 |-------|------|------|----------|-----|----------|--------|
-| [12.1](stories/12.1-tool-annotations.md) | Add Tool Annotations | T1 | P0 | 1 day | All | Pending |
-| [12.2](stories/12.2-server-instructions.md) | Server Instructions Field | T1 | P0 | 0.5 day | Claude Code | Pending |
-| [12.3](stories/12.3-permission-config.md) | Permission Pre-Configuration | T1 | P0 | 0.5 day | Claude Code | Pending |
-| [12.4](stories/12.4-env-in-config.md) | Environment Variables in MCP Config | T1 | P0 | 0.5 day | All | Pending |
-| [12.5](stories/12.5-claude-hooks.md) | Claude Code Hooks Generation | T2 | P1 | 3-4 days | Claude Code | Pending |
-| [12.6](stories/12.6-subagent-definitions.md) | Custom Subagent Definitions | T2 | P1 | 2-3 days | Claude + Cursor | Pending |
-| [12.7](stories/12.7-cursor-hooks.md) | Cursor Hooks Generation | T2 | P1 | 2 days | Cursor | Pending |
-| [12.8](stories/12.8-skills-generation.md) | Skills Generation (SKILL.md) | T2 | P1 | 2 days | Claude + Cursor | Pending |
-| [12.9](stories/12.9-claude-plugin.md) | Claude Code Plugin Bundle | T3 | P2 | 2 days | Claude Code | Pending |
-| [12.10](stories/12.10-cursor-plugin.md) | Cursor Plugin Bundle | T3 | P2 | 2 days | Cursor | Pending |
-| [12.11](stories/12.11-cursor-rule-types.md) | Cursor Rule Types Enhancement | T3 | P2 | 1 day | Cursor | Pending |
-| [12.12](stories/12.12-agent-teams.md) | Agent Teams Integration | T3 | P2 | 1 day | Claude Code | Pending |
+| [12.1](stories/12.1-tool-annotations.md) | Add Tool Annotations | T1 | P0 | 1 day | All | **Complete** |
+| [12.2](stories/12.2-server-instructions.md) | Server Instructions Field | T1 | P0 | 0.5 day | Claude Code | **Complete** |
+| [12.3](stories/12.3-permission-config.md) | Permission Pre-Configuration | T1 | P0 | 0.5 day | Claude Code | **Complete** |
+| [12.4](stories/12.4-env-in-config.md) | Environment Variables in MCP Config | T1 | P0 | 0.5 day | All | **Complete** |
+| [12.5](stories/12.5-claude-hooks.md) | Claude Code Hooks Generation | T2 | P1 | 3-4 days | Claude Code | **Complete** |
+| [12.6](stories/12.6-subagent-definitions.md) | Custom Subagent Definitions | T2 | P1 | 2-3 days | Claude + Cursor | **Complete** |
+| [12.7](stories/12.7-cursor-hooks.md) | Cursor Hooks Generation | T2 | P1 | 2 days | Cursor | **Complete** |
+| [12.8](stories/12.8-skills-generation.md) | Skills Generation (SKILL.md) | T2 | P1 | 2 days | Claude + Cursor | **Complete** |
+| [12.9](stories/12.9-claude-plugin.md) | Claude Code Plugin Bundle | T3 | P2 | 2 days | Claude Code | **Complete** |
+| [12.10](stories/12.10-cursor-plugin.md) | Cursor Plugin Bundle | T3 | P2 | 2 days | Cursor | **Complete** |
+| [12.11](stories/12.11-cursor-rule-types.md) | Cursor Rule Types Enhancement | T3 | P2 | 1 day | Cursor | **Complete** |
+| [12.12](stories/12.12-agent-teams.md) | Agent Teams Integration | T3 | P2 | 1 day | Claude Code | **Complete** |
 | [12.13](stories/12.13-vscode-instructions.md) | VS Code / Copilot Instructions | T4 | P3 | 0.5 day | VS Code | Pending |
 | [12.14](stories/12.14-bugbot-rules.md) | Cursor BugBot Rules | T4 | P3 | 0.5 day | Cursor | Pending |
 | [12.15](stories/12.15-elicitation.md) | MCP Elicitation Support | T4 | P3 | 2-3 days | Cursor | Pending |

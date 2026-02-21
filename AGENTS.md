@@ -102,3 +102,46 @@ Use the `task_type` that best matches the current work:
 - **review** — General code review (default)
 
 The checklist uses this to decide which tools are required vs recommended vs optional for that task.
+
+---
+
+## Platform hooks and automation
+
+When `tapps_init` generates platform-specific files, it also creates **hooks**, **subagents**, and **skills** that automate parts of the workflow:
+
+### Hooks (auto-generated)
+
+**Claude Code** (`.claude/hooks/`): 7 hook scripts that enforce quality automatically:
+- **SessionStart** — Injects TappsMCP awareness on session start and after compaction
+- **PostToolUse (Edit/Write)** — Reminds you to run `tapps_quick_check` after Python edits
+- **Stop** — Blocks session end (exit 2) until `tapps_validate_changed` is called
+- **TaskCompleted** — Blocks task completion (exit 2) until validation passes
+- **PreCompact** — Backs up scoring context before context window compaction
+- **SubagentStart** — Injects TappsMCP awareness into spawned subagents
+
+**Cursor** (`.cursor/hooks/`): 3 hook scripts:
+- **beforeMCPExecution** — Logs MCP tool invocations for observability
+- **afterFileEdit** — Fire-and-forget reminder to run quality checks
+- **stop** — Prompts validation via followup_message before session ends
+
+### Subagents (auto-generated)
+
+Three agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
+- **tapps-reviewer** (sonnet) — Reviews code quality and runs security scans after edits
+- **tapps-researcher** (haiku) — Looks up documentation and consults domain experts
+- **tapps-validator** (sonnet) — Runs pre-completion validation on all changed files
+
+### Skills (auto-generated)
+
+Three SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
+- **tapps-score** — Score a Python file across 7 quality categories
+- **tapps-gate** — Run a quality gate check and report pass/fail
+- **tapps-validate** — Validate all changed files before declaring work complete
+
+### Agent Teams (opt-in, Claude Code only)
+
+When `tapps_init` is called with `agent_teams=True`, additional hooks enable a quality watchdog teammate pattern:
+- **TeammateIdle** — Keeps the quality watchdog active while issues remain
+- **TaskCompleted** — Blocks task completion if quality gates fail
+
+Set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to enable Agent Teams.
