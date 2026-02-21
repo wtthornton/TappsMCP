@@ -1,6 +1,6 @@
 # Contributing to TappsMCP
 
-Thank you for considering contributing to TappsMCP! This document provides guidelines and instructions for contributing.
+Thank you for considering contributing to TappsMCP! This document provides guidelines and instructions for contributing to this quality toolset for AI coding assistants.
 
 ## Development Setup
 
@@ -20,10 +20,10 @@ uv sync
 ### Running Tests
 
 ```bash
-# All tests
+# All tests (1675+ tests)
 uv run pytest tests/ -v
 
-# With coverage
+# With coverage (80% minimum required)
 uv run pytest tests/ --cov=tapps_mcp --cov-report=term-missing
 
 # Specific test file
@@ -41,6 +41,16 @@ uv run ruff format --check src/
 uv run mypy --strict src/tapps_mcp/
 ```
 
+### Verify Setup
+
+```bash
+# Diagnose configuration
+tapps-mcp doctor
+
+# Start server locally to test
+uv run tapps-mcp serve
+```
+
 ## How to Contribute
 
 ### Reporting Issues
@@ -53,7 +63,7 @@ uv run mypy --strict src/tapps_mcp/
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/my-feature`)
 3. Make your changes
-4. Run tests and linting
+4. Run tests and linting (`uv run pytest tests/ -v && uv run ruff check src/ && uv run mypy --strict src/tapps_mcp/`)
 5. Commit with a descriptive message
 6. Push and open a PR
 
@@ -65,7 +75,19 @@ uv run mypy --strict src/tapps_mcp/
 - Use `structlog` for logging (not `print()` or `logging`)
 - Use `pathlib.Path` for file paths
 - Pydantic v2 models for data structures
-- `ruff` for linting and formatting
+- `ruff` for linting and formatting (line length: 100)
+- Async/await for tool handlers and external I/O
+- All file operations through the path validator (`security/path_validator.py`)
+
+### Adding a New Tool
+
+1. Add the tool handler in the appropriate `server_*.py` file (or `server.py` for core tools)
+2. Use `@mcp.tool()` decorator with clear docstring (lead with "When to use")
+3. Add `_record_call("tool_name")` at the start of the handler
+4. Register the tool in the checklist task map (`tools/checklist.py`)
+5. Add tests in `tests/unit/` and optionally `tests/integration/`
+6. Update `AGENTS.md` with the new tool's "When to use" entry
+7. Update `README.md` tools reference table
 
 ### Adding Knowledge Files
 
@@ -74,6 +96,7 @@ Expert knowledge files live in `src/tapps_mcp/experts/knowledge/{domain}/`. To a
 1. Create a markdown file in the appropriate domain directory
 2. Follow the existing format (title, sections, code examples)
 3. The file is automatically picked up by the expert system
+4. Delete any existing RAG index for that domain to trigger a rebuild
 
 ### Adding Validators
 
@@ -84,9 +107,18 @@ Config validators live in `src/tapps_mcp/validators/`. To add a new validator:
 3. Register it in the auto-detection logic in `base.py`
 4. Add tests in `tests/unit/`
 
+## Project Context
+
+TappsMCP is a **toolset for other projects** — changes should consider how consuming projects will be affected. Key integration points:
+
+- `tapps_init` bootstraps TappsMCP in consuming projects (creates AGENTS.md, TECH_STACK.md, platform rules)
+- `tapps-mcp init` generates MCP host configuration for Claude Code, Cursor, or VS Code
+- `tapps-mcp doctor` diagnoses configuration and connectivity issues
+- AGENTS.md is the primary AI-facing documentation consumed by other projects
+
 ## Architecture
 
-See [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) for the full architecture document.
+See [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) for the full architecture document and [CLAUDE.md](CLAUDE.md) for AI assistant instructions when working on this codebase.
 
 ## License
 

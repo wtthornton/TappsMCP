@@ -7,14 +7,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: tappmcp:local
-    container_name: tappmcp-mcp
+    image: tappsmcp:local
+    container_name: tappsmcp-mcp
     ports:
       - "8000:8000"
     environment:
       TAPPS_MCP_PROJECT_ROOT: /workspace
-      # Optional: set to the host path Cursor uses (e.g. C:\cursor\TappMCP) so host paths are accepted
-      # TAPPS_MCP_HOST_PROJECT_ROOT: "C:\\cursor\\TappMCP"
+      # Optional: set to the host path Cursor uses (e.g. C:\cursor\TappsMCP) so host paths are accepted
+      # TAPPS_MCP_HOST_PROJECT_ROOT: "C:\\cursor\\TappsMCP"
       TAPPS_MCP_QUALITY_PRESET: standard
       TAPPS_MCP_LOG_LEVEL: INFO
     volumes:

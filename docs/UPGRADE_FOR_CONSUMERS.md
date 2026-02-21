@@ -23,7 +23,7 @@ Use the **`tapps_init`** MCP tool (via your AI assistant or a script) with:
 | `overwrite_platform_rules=True` | Refresh platform rule files (CLAUDE.md, .cursor/rules) |
 | `platform="cursor"` or `"claude"` | Which platform rules to generate |
 
-**Example (ask your AI):**  
+**Example (ask your AI):**
 *"Call tapps_init with overwrite_agents_md=True, overwrite_platform_rules=True, and platform=cursor to refresh to the latest TappsMCP templates."*
 
 ---
@@ -33,18 +33,29 @@ Use the **`tapps_init`** MCP tool (via your AI assistant or a script) with:
 If the MCP server entry or startup command changed, run:
 
 ```bash
-tapps-mcp init --force --host cursor
+tapps-mcp init --force --host cursor        # for Cursor
+tapps-mcp init --force --host claude-code   # for Claude Code
+tapps-mcp init --force --host vscode        # for VS Code
 ```
 
 `--force` overwrites the existing tapps-mcp entry without prompting.
 
 ---
 
-## 4. Re-run init for caches and TECH_STACK
+## 4. Verify the upgrade
+
+```bash
+tapps-mcp doctor                  # diagnose configuration and connectivity
+tapps-mcp init --check            # verify MCP config is correct
+```
+
+---
+
+## 5. Re-run init for caches and TECH_STACK
 
 A normal `tapps_init` run (without overwrite flags) will:
 
-- Refresh TECH_STACK.md
+- Refresh TECH_STACK.md with current project profile
 - Warm Context7 cache for detected libraries
 - Warm expert RAG indices for relevant domains
 
@@ -54,9 +65,11 @@ A normal `tapps_init` run (without overwrite flags) will:
 
 | What | How |
 |------|-----|
+| Upgrade the package | `pip install -U tapps-mcp` |
 | Get latest AGENTS.md and workflow | `tapps_init(overwrite_agents_md=True)` |
 | Get latest platform rules | `tapps_init(overwrite_platform_rules=True, platform="cursor")` or `platform="claude"` |
 | Refresh MCP config | `tapps-mcp init --force` |
 | Refresh caches and TECH_STACK | `tapps_init()` (default) |
+| Verify upgrade | `tapps-mcp doctor` |
 
 See [INIT_AND_UPGRADE_FEATURE_LIST.md](INIT_AND_UPGRADE_FEATURE_LIST.md) for the full init and upgrade behavior.

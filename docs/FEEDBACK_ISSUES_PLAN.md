@@ -93,7 +93,7 @@ Affected tools include `tapps_list_experts`, `tapps_consult_expert`, `tapps_serv
 
 ## Out of Scope (for this plan)
 
-- Changes to the Site24x7 project itself (only TappMCP repo changes are in scope).
+- Changes to the Site24x7 project itself (only TappsMCP repo changes are in scope).
 - Adding new features beyond “checklist optional” and “clear error when checklist is unavailable.”
 
 ---

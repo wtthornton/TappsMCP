@@ -1,6 +1,6 @@
-# TappMCP: Docker Deployment
+# TappsMCP: Docker Deployment
 
-Run TappMCP as a **local Docker MCP server** using Streamable HTTP. The server listens on port **8000** and exposes the MCP endpoint at **`/mcp`**.
+Run TappsMCP as a **local Docker MCP server** using Streamable HTTP. The server listens on port **8000** and exposes the MCP endpoint at **`/mcp`**.
 
 ---
 
@@ -13,8 +13,8 @@ Run TappMCP as a **local Docker MCP server** using Streamable HTTP. The server l
 ## Quick Start
 
 ```bash
-# From the TappMCP repo root
-cd c:\cursor\TappMCP   # or your path
+# From the TappsMCP repo root
+cd c:\cursor\TappsMCP   # or your path
 
 # Build and start
 docker compose up --build -d
@@ -63,44 +63,44 @@ The MCP server is available at **http://localhost:8000** (Streamable HTTP endpoi
 
 ### Mounting a project (optional)
 
-To let TappMCP score files from a host directory, mount it at `/workspace`:
+To let TappsMCP score files from a host directory, mount it at `/workspace`:
 
 ```yaml
 volumes:
   - /path/to/your/project:/workspace:ro
 ```
 
-The default `docker-compose.yml` mounts the **current directory** (TappMCP repo) as `/workspace:ro`. To score a different project, change the volume to that path.
+The default `docker-compose.yml` mounts the **current directory** (TappsMCP repo) as `/workspace:ro`. To score a different project, change the volume to that path.
 
 ---
 
-## Using TappMCP Docker from another project
+## Using TappsMCP Docker from another project
 
 To use the MCP server for a **different project** (e.g. `C:\projects\myapp`):
 
 ### 1. Start the container with that project mounted
 
-Run Docker from the TappMCP repo but mount the **other project** as `/workspace` so the server can read its files:
+Run Docker from the TappsMCP repo but mount the **other project** as `/workspace` so the server can read its files:
 
 ```bash
-# From the TappMCP repo
-cd c:\cursor\TappMCP
+# From the TappsMCP repo
+cd c:\cursor\TappsMCP
 
 # Override the volume for this run (Windows example)
 docker compose run -d -p 8000:8000 -v "C:\projects\myapp:/workspace:ro" tapps-mcp
 ```
 
-Or create a **docker-compose.override.yml** in the TappMCP repo that overrides the volume:
+Or create a **docker-compose.override.yml** in the TappsMCP repo that overrides the volume:
 
 ```yaml
-# docker-compose.override.yml (in TappMCP repo)
+# docker-compose.override.yml (in TappsMCP repo)
 services:
   tapps-mcp:
     volumes:
       - C:\projects\myapp:/workspace:ro
 ```
 
-Then from the TappMCP repo: `docker compose up -d`. The container will see the other project at `/workspace`.
+Then from the TappsMCP repo: `docker compose up -d`. The container will see the other project at `/workspace`.
 
 **Optional — accept host paths from Cursor:** Set `TAPPS_MCP_HOST_PROJECT_ROOT` to the same path the IDE uses (e.g. `C:\projects\myapp`). Then Cursor can send absolute paths like `C:\projects\myapp\src\main.py` and the server will map them to `/workspace/src/main.py`. Example override:
 
@@ -147,8 +147,8 @@ docker compose down
 ## Build only (no compose)
 
 ```bash
-docker build -t tappmcp:local .
-docker run --rm -p 8000:8000 -e TAPPS_MCP_PROJECT_ROOT=/workspace tappmcp:local
+docker build -t tappsmcp:local .
+docker run --rm -p 8000:8000 -e TAPPS_MCP_PROJECT_ROOT=/workspace tappsmcp:local
 ```
 
 ---
@@ -178,6 +178,6 @@ docker run --rm -p 8000:8000 -e TAPPS_MCP_PROJECT_ROOT=/workspace tappmcp:local
 
 | File | Purpose |
 |------|---------|
-| `Dockerfile` | Builds the TappMCP image (Python 3.12, deps, ruff/mypy/bandit/radon) |
+| `Dockerfile` | Builds the TappsMCP image (Python 3.12, deps, ruff/mypy/bandit/radon) |
 | `docker-compose.yml` | Runs the server, port 8000, optional volume, healthcheck |
 | `.dockerignore` | Keeps build context small (excludes tests, docs, .venv, etc.) |

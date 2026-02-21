@@ -958,8 +958,8 @@ def run_server(
 
         def _root(_request: Request) -> HTMLResponse:
             return HTMLResponse(
-                "<!DOCTYPE html><html><head><title>TappMCP</title></head><body>"
-                "<h1>TappMCP is running</h1><p>MCP endpoint: <a href='/mcp'>/mcp</a></p>"
+                "<!DOCTYPE html><html><head><title>TappsMCP</title></head><body>"
+                "<h1>TappsMCP is running</h1><p>MCP endpoint: <a href='/mcp'>/mcp</a></p>"
                 "<p>Version: " + __version__ + "</p></body></html>",
                 status_code=200,
             )

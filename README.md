@@ -1,6 +1,8 @@
 # TappsMCP
 
-**A Model Context Protocol (MCP) server that gives LLMs—Claude, Cursor, and others—deterministic code quality tools.** Score files, run security scans, enforce quality gates, look up docs, validate configs, and consult domain experts—all through structured tool calls instead of prompt injection.
+**A quality toolset for AI coding assistants.** TappsMCP is an MCP server that gives LLMs and AI-powered IDEs deterministic code quality tools — scoring, security scanning, quality gates, documentation lookup, config validation, and domain expert consultation — all through structured tool calls instead of prompt injection.
+
+**Use TappsMCP in your projects** to help Claude Code, Cursor, VS Code Copilot, and other MCP-capable clients produce higher-quality code with consistent, repeatable standards.
 
 [![CI](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -15,6 +17,7 @@
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Connecting your AI client](#connecting-your-ai-client)
+- [CLI utilities](#cli-utilities)
 - [Tools reference](#tools-reference)
 - [Configuration](#configuration)
 - [Optional tool dependencies](#optional-tool-dependencies)
@@ -29,7 +32,9 @@
 
 ## What is TappsMCP?
 
-LLMs writing code make repeatable mistakes: wrong APIs, missing tests, security issues, and inconsistent quality. TappsMCP moves **proven quality tooling** out of long system prompts and into a single MCP server. Any MCP-capable client (Cursor, Claude Desktop, custom hosts) can call the same tools and get **structured, deterministic results**—scores, gates, security findings, doc lookups, and expert advice—without burning context on framework instructions.
+TappsMCP is a **quality toolset designed to help other projects and LLMs be the best they can**. LLMs writing code make repeatable mistakes: wrong APIs, missing tests, security issues, and inconsistent quality. TappsMCP moves **proven quality tooling** out of long system prompts and into a single MCP server that any project can install and use.
+
+Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, custom hosts) can call the same tools and get **structured, deterministic results** — scores, gates, security findings, doc lookups, and expert advice — without burning context on framework instructions. Install TappsMCP in your project, connect your AI client, and every coding session benefits from consistent quality enforcement.
 
 ---
 
@@ -53,7 +58,7 @@ LLMs writing code make repeatable mistakes: wrong APIs, missing tests, security 
 
 ## Install
 
-Choose one of the following. After installing, see [Quick start](#quick-start) to run the server and [Connecting your AI client](#connecting-your-ai-client) to wire it into Cursor or Claude.
+Choose one of the following. After installing, see [Quick start](#quick-start) to configure your AI client and start the server.
 
 | Method | Requirements | Use when |
 |--------|--------------|----------|
@@ -128,53 +133,101 @@ The server listens at **http://localhost:8000** (MCP at `/mcp`). See [Docker](#d
 
 ## Quick start
 
-After [installing](#install), run the server so your AI client can connect.
+After [installing](#install), set up TappsMCP in your project and connect your AI client.
 
-**stdio (Cursor, Claude Desktop):**
-
-```bash
-tapps-mcp serve
-# or: uv run tapps-mcp serve   (if you installed from source with uv)
-# or: npx tapps-mcp serve      (if using npx)
-```
-
-**HTTP (remote / container):**
+**1. Configure your AI client (auto-detect):**
 
 ```bash
-tapps-mcp serve --transport http --port 8000
+tapps-mcp init                    # detects Claude Code, Cursor, VS Code
+# or: tapps-mcp init --host cursor   # target a specific client
 ```
 
-Then add the server in your client (e.g. [Cursor](#cursor) or [Claude Desktop](#claude-desktop)) and reload. The AI can call tools like `tapps_score_file` and `tapps_quality_gate`.
+**2. Start the server:**
+
+```bash
+tapps-mcp serve                           # stdio (local clients)
+# or: uv run tapps-mcp serve             # if installed from source with uv
+# or: npx tapps-mcp serve                # if using npx
+# or: tapps-mcp serve --transport http    # HTTP (remote / container)
+```
+
+**3. Verify:**
+
+```bash
+tapps-mcp doctor                  # diagnose configuration and connectivity
+```
+
+Then reload your AI client. The AI can call tools like `tapps_score_file` and `tapps_quality_gate`. See [Connecting your AI client](#connecting-your-ai-client) for client-specific details.
 
 ---
 
 ## Connecting your AI client
 
-Point your MCP client at the TappsMCP server so the AI can call the tools.
+Point your MCP client at the TappsMCP server so the AI can call the tools. TappsMCP works with any MCP-capable client.
+
+### Auto-setup with `tapps-mcp init`
+
+The fastest way to configure your client:
+
+```bash
+tapps-mcp init                        # auto-detect installed clients
+tapps-mcp init --host claude-code     # configure Claude Code
+tapps-mcp init --host cursor          # configure Cursor
+tapps-mcp init --host vscode          # configure VS Code
+```
+
+This generates the correct MCP configuration file for your client. Use `tapps-mcp init --check` to verify an existing setup. See [CLI utilities](#cli-utilities) for more options.
+
+### Claude Code
+
+Run `tapps-mcp init --host claude-code` or manually add to `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "tapps-mcp": {
+      "command": "tapps-mcp",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+For project-level config, use `tapps-mcp init --host claude-code --scope project` to create `.mcp.json` in the project root. For full access without permission prompts, see [docs/CLAUDE_FULL_ACCESS_SETUP.md](docs/CLAUDE_FULL_ACCESS_SETUP.md).
 
 ### Cursor
 
-1. Open **Settings → MCP** (or edit `.cursor/mcp.json` in your project).
-2. Add the server **without Docker** (replace the path with your actual TappMCP repo path):
+1. Run `tapps-mcp init --host cursor` or manually edit `.cursor/mcp.json` in your project:
 
 ```json
 {
   "mcpServers": {
     "tapps-mcp": {
       "command": "uv",
-      "args": ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"]
+      "args": ["--directory", "/path/to/tapps-mcp", "run", "--no-sync", "tapps-mcp", "serve"]
     }
   }
 }
 ```
 
-Use `--no-sync` to avoid "file in use" errors when Cursor starts the server. Docker is optional; see [Docker](#docker) for HTTP/remote.
+Use `--no-sync` to avoid "file in use" errors when Cursor starts the server.
 
-3. Restart or reload Cursor. The AI can then use tools like `tapps_score_file` and `tapps_quality_gate`.
+2. Restart or reload Cursor. The AI can then use tools like `tapps_score_file` and `tapps_quality_gate`.
 
-### For AI assistants
+### VS Code (Copilot)
 
-When TappsMCP is connected, call **`tapps_server_info`** at session start (the response includes a short `recommended_workflow`). Use **`tapps_score_file`** (with `quick: true`) during edits; before declaring work complete, run **`tapps_score_file`** (full), **`tapps_quality_gate`**, and **`tapps_checklist`**. Use **`tapps_lookup_docs`** before writing code that uses an external library. See **[AGENTS.md](AGENTS.md)** for when to use each tool and the full workflow.
+Run `tapps-mcp init --host vscode` or manually edit `.vscode/mcp.json` in your project:
+
+```json
+{
+  "servers": {
+    "tapps-mcp": {
+      "command": "tapps-mcp",
+      "args": ["serve"]
+    }
+  }
+}
+```
 
 ### Claude Desktop
 
@@ -184,8 +237,8 @@ Add to your Claude Desktop config (e.g. `claude_desktop_config.json`):
 {
   "mcpServers": {
     "tapps-mcp": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/tapps-mcp", "run", "tapps-mcp", "serve"]
+      "command": "tapps-mcp",
+      "args": ["serve"]
     }
   }
 }
@@ -193,12 +246,52 @@ Add to your Claude Desktop config (e.g. `claude_desktop_config.json`):
 
 Restart Claude Desktop after changing the config.
 
+### For AI assistants
+
+When TappsMCP is connected, call **`tapps_session_start`** at session start (combines server info + project profile). Use **`tapps_quick_check`** after editing files; before declaring work complete, run **`tapps_validate_changed`** and **`tapps_checklist`**. Use **`tapps_lookup_docs`** before writing code that uses an external library. See **[AGENTS.md](AGENTS.md)** for when to use each tool and the full workflow.
+
 ### Suggested workflow for the AI
 
 1. Call **`tapps_session_start`** at session start to initialize context.
-2. Use **`tapps_quick_check`** (or `tapps_score_file` with `quick: true`) during edit–lint–fix loops.
-3. Use **`tapps_validate_changed`** before marking work complete (validates all changed files).
-4. Call **`tapps_checklist`** to ensure no required steps were skipped.
+2. Use **`tapps_quick_check`** (or `tapps_score_file` with `quick: true`) during edit-lint-fix loops.
+3. Use **`tapps_lookup_docs`** before writing code that uses an external library API.
+4. Use **`tapps_validate_changed`** before marking work complete (validates all changed files).
+5. Call **`tapps_checklist`** to ensure no required steps were skipped.
+
+---
+
+## CLI utilities
+
+TappsMCP includes CLI commands to set up, diagnose, and run the server:
+
+| Command | Purpose |
+|---------|---------|
+| `tapps-mcp serve` | Start the MCP server (stdio or HTTP transport) |
+| `tapps-mcp init` | Generate MCP configuration for Claude Code, Cursor, or VS Code |
+| `tapps-mcp init --check` | Verify existing MCP configuration without writing |
+| `tapps-mcp init --force` | Overwrite existing config without prompting (for CI/scripts) |
+| `tapps-mcp doctor` | Diagnose TappsMCP configuration and connectivity issues |
+
+### `tapps-mcp init` options
+
+```bash
+tapps-mcp init [OPTIONS]
+  --host     claude-code | cursor | vscode | auto   # Target client (default: auto-detect)
+  --scope    user | project                          # Config scope for Claude Code (default: user)
+  --force                                            # Overwrite without prompting
+  --check                                            # Verify only, no writes
+  --rules / --no-rules                               # Generate platform rule files (default: yes)
+  --project-root PATH                                # Project root (default: current dir)
+```
+
+### `tapps-mcp doctor`
+
+Diagnoses common issues: missing dependencies, config problems, connectivity:
+
+```bash
+tapps-mcp doctor
+tapps-mcp doctor --project-root /path/to/project
+```
 
 ---
 
@@ -373,13 +466,13 @@ Quick index:
 
 | Category | Weight | Description |
 |----------|--------|-------------|
-| complexity | 0.20 | Cyclomatic complexity (radon cc / AST fallback) |
-| security | 0.20 | Bandit + pattern heuristics |
-| maintainability | 0.15 | Maintainability index (radon mi / AST fallback) |
-| test_coverage | 0.10 | Heuristic from matching test file existence |
-| performance | 0.15 | AST: nested loops, large functions, deep nesting |
-| structure | 0.10 | Project layout (pyproject.toml, tests/, README, .git) |
-| devex | 0.10 | Developer experience (docs, AGENTS.md, tooling config) |
+| complexity | 0.18 | Cyclomatic complexity (radon cc / AST fallback) |
+| security | 0.27 | Bandit + pattern heuristics |
+| maintainability | 0.24 | Maintainability index (radon mi / AST fallback) |
+| test_coverage | 0.13 | Heuristic from matching test file existence |
+| performance | 0.08 | AST: nested loops, large functions, deep nesting |
+| structure | 0.05 | Project layout (pyproject.toml, tests/, README, .git) |
+| devex | 0.05 | Developer experience (docs, AGENTS.md, tooling config) |
 
 When ruff/mypy/bandit/radon are missing, the server uses AST-based fallbacks and reports `degraded: true` in the response.
 
@@ -398,17 +491,17 @@ log_json: false            # JSON-structured logs
 tool_timeout: 30           # Subprocess timeout in seconds
 ```
 
-Custom scoring weights:
+Custom scoring weights (these are the defaults — adjust to your project's priorities):
 
 ```yaml
 scoring_weights:
-  complexity: 0.20
-  security: 0.20
-  maintainability: 0.15
-  test_coverage: 0.10
-  performance: 0.15
-  structure: 0.10
-  devex: 0.10
+  complexity: 0.18
+  security: 0.27
+  maintainability: 0.24
+  test_coverage: 0.13
+  performance: 0.08
+  structure: 0.05
+  devex: 0.05
 ```
 
 ### Environment variables
@@ -416,7 +509,10 @@ scoring_weights:
 | Variable | Description |
 |----------|-------------|
 | **TAPPS_MCP_PROJECT_ROOT** | Restrict file operations to this directory (recommended for security). If unset, current working directory is used. |
+| **TAPPS_MCP_HOST_PROJECT_ROOT** | Optional. Host path mapping for Docker/remote setups. When set, absolute paths from the IDE are mapped to the project root. |
 | **TAPPS_MCP_CONTEXT7_API_KEY** | Optional. Used by `tapps_lookup_docs` for live Context7 API fetches; cache still works without it. |
+| **TAPPS_MCP_QUALITY_PRESET** | Override quality preset (`standard`, `strict`, `framework`). Default: `standard`. |
+| **TAPPS_MCP_LOG_LEVEL** | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Default: `INFO`. |
 
 ---
 
@@ -459,6 +555,35 @@ docker compose ps
 docker compose logs --tail 20
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/
 ```
+
+---
+
+## Bootstrapping TappsMCP in your project
+
+Once TappsMCP is installed and your AI client is connected, use the `tapps_init` MCP tool to bootstrap quality infrastructure in your project:
+
+```
+tapps_init(platform="claude")      # or platform="cursor"
+```
+
+This creates:
+
+| File | Purpose |
+|------|---------|
+| **AGENTS.md** | AI assistant workflow guide (when to call each tool) |
+| **TECH_STACK.md** | Auto-detected project profile (type, frameworks, CI, tests) |
+| **CLAUDE.md** or **.cursor/rules/** | Platform-specific pipeline rules |
+| **docs/TAPPS_HANDOFF.md** | Session handoff template |
+| **docs/TAPPS_RUNLOG.md** | Pipeline run log template |
+
+Optional flags:
+
+- `warm_cache_from_tech_stack=True` — pre-fetch Context7 docs for detected libraries
+- `warm_expert_rag_from_tech_stack=True` — pre-build expert RAG indices for relevant domains
+- `verify_server=True` — check which external checkers are installed
+- `install_missing_checkers=True` — auto-install missing ruff/mypy/bandit/radon
+
+After upgrading TappsMCP, re-run with `overwrite_agents_md=True` and `overwrite_platform_rules=True` to refresh templates. See [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md).
 
 ---
 
@@ -515,18 +640,28 @@ src/tapps_mcp/
 
 ## Docs and roadmap
 
+### For consuming projects
+
 | Doc | Description |
 |-----|-------------|
-| [docs/TAPPS_MCP_SETUP_AND_USE.md](docs/TAPPS_MCP_SETUP_AND_USE.md) | Setup and use summary (Cursor, Claude, tools workflow). |
-| [docs/TAPPS_MCP_SETUP_AND_USE.md#8-troubleshooting](docs/TAPPS_MCP_SETUP_AND_USE.md#8-troubleshooting) | Troubleshooting (e.g. checklist import error, path denied). |
-| [docs/MIGRATION_FROM_TAPPS_AGENTS.md](docs/MIGRATION_FROM_TAPPS_AGENTS.md) | Migrating from tapps-agents: what to remove, keep, configure. |
-| [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) | Docker build, run, env vars, and client connection. |
+| [AGENTS.md](AGENTS.md) | AI assistant workflow guide — when to use each tool, recommended workflow. |
+| [addenda.md](addenda.md) | Best practices for Claude Code, Cursor, consuming projects, troubleshooting. |
+| [docs/TAPPS_MCP_SETUP_AND_USE.md](docs/TAPPS_MCP_SETUP_AND_USE.md) | Detailed setup and use guide (Cursor, Claude, tools workflow). |
+| [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) | Upgrade guide for projects that install TappsMCP. |
+| [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md) | Init and upgrade: `tapps_init` vs `tapps-mcp init`, overwrite flags, upgrade path. |
 | [docs/CLAUDE_FULL_ACCESS_SETUP.md](docs/CLAUDE_FULL_ACCESS_SETUP.md) | Grant Claude Code full access (no permission prompts). |
-| [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md) | Init and upgrade: tapps_init vs tapps-mcp init, overwrite flags, upgrade path for consuming projects. |
-| [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) | Short upgrade guide for projects that install TappsMCP. |
+| [docs/MIGRATION_FROM_TAPPS_AGENTS.md](docs/MIGRATION_FROM_TAPPS_AGENTS.md) | Migrating from tapps-agents: what to remove, keep, configure. |
+
+### For TappsMCP developers
+
+| Doc | Description |
+|-----|-------------|
+| [CLAUDE.md](CLAUDE.md) | Instructions for AI assistants working on the TappsMCP codebase itself. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, coding standards, and how to submit changes. |
+| [docs/ARCHITECTURE_CACHE_AND_RAG.md](docs/ARCHITECTURE_CACHE_AND_RAG.md) | Context7 cache SWR behavior and expert RAG index architecture. |
+| [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) | Docker build, run, env vars, and client connection. |
 | [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) | Architecture and design rationale. |
 | [docs/planning/epics/README.md](docs/planning/epics/README.md) | Epic index, dependency graph, tool delivery timeline. |
-| [docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) | Epic 10+11: Expert + Context7 integration and retrieval optimization (complete). |
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
