@@ -3,13 +3,21 @@
 Tracks which TappsMCP tools have been called during the current server
 session so that ``tapps_checklist`` can report what's been done and what's
 still missing for a given task type.
+
+Call records are persisted to a JSONL file so that state survives
+server restarts within the same session.
 """
 
 from __future__ import annotations
 
+import contextlib
+import json
 import threading
 import time
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import structlog
 from pydantic import BaseModel, Field
@@ -133,16 +141,66 @@ class ChecklistResult(BaseModel):
 
 
 class CallTracker:
-    """Server-side call log for the current session."""
+    """Server-side call log for the current session.
+
+    Call records are persisted to a JSONL file so that state survives
+    server restarts within the same session.
+    """
 
     _calls: ClassVar[list[ToolCallRecord]] = []
     _lock: ClassVar[threading.Lock] = threading.Lock()
+    _persist_path: ClassVar[Path | None] = None
+
+    @classmethod
+    def set_persist_path(cls, path: Path) -> None:
+        """Configure persistence file and load existing records."""
+        with cls._lock:
+            cls._persist_path = path
+            cls._load_persisted()
+
+    @classmethod
+    def _load_persisted(cls) -> None:
+        """Load previously persisted records (called under lock)."""
+        if cls._persist_path is None or not cls._persist_path.exists():
+            return
+        try:
+            text = cls._persist_path.read_text(encoding="utf-8")
+            for line in text.strip().splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    cls._calls.append(
+                        ToolCallRecord(
+                            tool_name=data["tool_name"],
+                            timestamp=data.get("timestamp", time.time()),
+                        )
+                    )
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    pass
+        except OSError:
+            logger.debug("checklist_persist_load_failed", exc_info=True)
+
+    @classmethod
+    def _persist_record(cls, record: ToolCallRecord) -> None:
+        """Append a single record to the persist file (called under lock)."""
+        if cls._persist_path is None:
+            return
+        try:
+            cls._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            with cls._persist_path.open("a", encoding="utf-8") as fh:
+                payload = {"tool_name": record.tool_name, "timestamp": record.timestamp}
+                fh.write(json.dumps(payload) + "\n")
+        except OSError:
+            logger.debug("checklist_persist_write_failed", exc_info=True)
 
     @classmethod
     def record(cls, tool_name: str) -> None:
         """Record a tool invocation."""
         with cls._lock:
-            cls._calls.append(ToolCallRecord(tool_name=tool_name))
+            rec = ToolCallRecord(tool_name=tool_name)
+            cls._calls.append(rec)
+            cls._persist_record(rec)
 
     @classmethod
     def get_called_tools(cls) -> set[str]:
@@ -161,6 +219,9 @@ class CallTracker:
         """Reset the call log (for testing)."""
         with cls._lock:
             cls._calls.clear()
+            if cls._persist_path is not None and cls._persist_path.exists():
+                with contextlib.suppress(OSError):
+                    cls._persist_path.unlink()
 
     @classmethod
     def evaluate(cls, task_type: str = "review") -> ChecklistResult:

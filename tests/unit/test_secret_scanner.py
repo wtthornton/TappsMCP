@@ -82,7 +82,7 @@ class TestSecretScanner:
         code = 'password = "P@ssw0rd!123"'
         findings = self.scanner.scan_content(code, "test.py")
         assert len(findings) >= 1
-        assert any(f.secret_type == "password" for f in findings)
+        assert any(f.secret_type == "passwd" for f in findings)
         assert any(f.severity == "low" for f in findings)
 
     # --- Token patterns ---

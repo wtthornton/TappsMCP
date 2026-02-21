@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 from tapps_mcp import __version__
@@ -23,6 +24,74 @@ class _SafeWriter(Protocol):
     def __call__(self, rel_path: str, content: str) -> None: ...
 
 
+@dataclass
+class BootstrapConfig:
+    """Configuration for ``bootstrap_pipeline`` to reduce parameter count."""
+
+    create_handoff: bool = True
+    create_runlog: bool = True
+    create_agents_md: bool = True
+    create_tech_stack_md: bool = True
+    platform: str = ""
+    verify_server: bool = True
+    install_missing_checkers: bool = False
+    warm_cache_from_tech_stack: bool = True
+    warm_expert_rag_from_tech_stack: bool = True
+    overwrite_platform_rules: bool = False
+    overwrite_agents_md: bool = False
+
+
+@dataclass
+class _BootstrapState:
+    """Mutable accumulator shared between sub-functions."""
+
+    project_root: Path
+    created: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    result: dict[str, Any] = field(default_factory=dict)
+    profile: ProjectProfile | None = None
+
+    def safe_write(self, rel_path: str, content: str) -> None:
+        """Write *content* to *rel_path* under project_root, safely."""
+        target = (self.project_root / rel_path).resolve()
+        try:
+            target.relative_to(self.project_root)
+        except ValueError:
+            self.errors.append(f"{rel_path}: path escapes project root")
+            return
+        if target.exists():
+            self.skipped.append(rel_path)
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        self.created.append(rel_path)
+
+    def safe_write_or_overwrite(self, rel_path: str, content: str) -> str:
+        """Write or overwrite content. Returns 'created', 'updated', or 'skipped'."""
+        target = (self.project_root / rel_path).resolve()
+        try:
+            target.relative_to(self.project_root)
+        except ValueError:
+            self.errors.append(f"{rel_path}: path escapes project root")
+            return "skipped"
+        existed = target.exists()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        if existed:
+            return "updated"
+        self.created.append(rel_path)
+        return "created"
+
+    def finalize(self) -> dict[str, Any]:
+        """Return the final result dict."""
+        self.result["created"] = self.created
+        self.result["skipped"] = self.skipped
+        self.result["errors"] = self.errors
+        self.result["success"] = len(self.errors) == 0
+        return self.result
+
+
 def bootstrap_pipeline(
     project_root: Path,
     *,
@@ -41,172 +110,151 @@ def bootstrap_pipeline(
     """Create pipeline template files in the project.
 
     Returns a summary dict with ``created``, ``skipped``, ``errors``, and
-    subsystem result dicts (``server_verification``, ``agents_md``,
-    ``tech_stack_md``, ``cache_warming``).
-
-    All file writes are validated to stay within *project_root*.
+    subsystem result dicts.
     """
-    created: list[str] = []
-    skipped: list[str] = []
-    errors: list[str] = []
-    result: dict[str, Any] = {}
+    cfg = BootstrapConfig(
+        create_handoff=create_handoff,
+        create_runlog=create_runlog,
+        create_agents_md=create_agents_md,
+        create_tech_stack_md=create_tech_stack_md,
+        platform=platform,
+        verify_server=verify_server,
+        install_missing_checkers=install_missing_checkers,
+        warm_cache_from_tech_stack=warm_cache_from_tech_stack,
+        warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
+        overwrite_platform_rules=overwrite_platform_rules,
+        overwrite_agents_md=overwrite_agents_md,
+    )
+    state = _BootstrapState(project_root=project_root.resolve())
 
-    project_root = project_root.resolve()
+    _verify_server(cfg, state)
+    _detect_profile(cfg, state)
+    _create_templates(cfg, state)
+    _setup_platform(cfg, state)
+    _warm_caches(cfg, state)
 
-    def _safe_write(rel_path: str, content: str) -> None:
-        """Write *content* to *rel_path* under project_root, safely."""
-        target = (project_root / rel_path).resolve()
-        # Security: ensure target is within project root
-        try:
-            target.relative_to(project_root)
-        except ValueError:
-            errors.append(f"{rel_path}: path escapes project root")
-            return
+    return state.finalize()
 
-        if target.exists():
-            skipped.append(rel_path)
-            return
 
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
-        created.append(rel_path)
-
-    def _safe_write_or_overwrite(rel_path: str, content: str) -> str:
-        """Write or overwrite content. Returns 'created', 'updated', or 'skipped'."""
-        target = (project_root / rel_path).resolve()
-        try:
-            target.relative_to(project_root)
-        except ValueError:
-            errors.append(f"{rel_path}: path escapes project root")
-            return "skipped"
-
-        existed = target.exists()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
-        if existed:
-            return "updated"
-        created.append(rel_path)
-        return "created"
-
-    # Server verification and optional checker installation
-    if verify_server or install_missing_checkers:
-        result["server_verification"] = _run_server_verification(
-            project_root,
-            install_missing=install_missing_checkers,
+def _verify_server(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Run server verification and optional checker install."""
+    if cfg.verify_server or cfg.install_missing_checkers:
+        state.result["server_verification"] = _run_server_verification(
+            state.project_root, install_missing=cfg.install_missing_checkers,
         )
     else:
-        result["server_verification"] = {"ok": True, "skipped": True}
+        state.result["server_verification"] = {"ok": True, "skipped": True}
 
-    # Project profile (needed for TECH_STACK and cache warming)
-    profile = None
-    if create_tech_stack_md or warm_cache_from_tech_stack:
+
+def _detect_profile(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Detect project profile if needed for tech stack or cache warming."""
+    if cfg.create_tech_stack_md or cfg.warm_cache_from_tech_stack:
         try:
             from tapps_mcp.project.profiler import detect_project_profile
 
-            profile = detect_project_profile(project_root)
+            state.profile = detect_project_profile(state.project_root)
         except Exception as exc:
-            errors.append(f"Project profile detection failed: {exc}")
+            state.errors.append(f"Project profile detection failed: {exc}")
 
-    if create_handoff:
-        _safe_write("docs/TAPPS_HANDOFF.md", load_handoff_template())
 
-    if create_runlog:
-        _safe_write("docs/TAPPS_RUNLOG.md", load_runlog_template())
+def _create_templates(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Create handoff, runlog, agents, and tech stack templates."""
+    if cfg.create_handoff:
+        state.safe_write("docs/TAPPS_HANDOFF.md", load_handoff_template())
+    if cfg.create_runlog:
+        state.safe_write("docs/TAPPS_RUNLOG.md", load_runlog_template())
 
-    # AGENTS.md: create if missing, validate+update if exists
-    if create_agents_md:
-        agents_path = project_root / "AGENTS.md"
-        template_content = load_agents_template()
-        if agents_path.exists():
-            from tapps_mcp.pipeline.agents_md import update_agents_md
-
-            try:
-                action, detail = update_agents_md(
-                    agents_path,
-                    template_content,
-                    overwrite=overwrite_agents_md,
-                )
-                result["agents_md"] = {"action": action, **detail}
-                if action == "validated":
-                    skipped.append("AGENTS.md")
-            except Exception as exc:
-                errors.append(f"AGENTS.md update failed: {exc}")
-                result["agents_md"] = {"action": "error", "reason": str(exc)}
-        else:
-            _safe_write("AGENTS.md", template_content)
-            result["agents_md"] = {"action": "created", "version": __version__}
+    # AGENTS.md
+    if cfg.create_agents_md:
+        _create_agents_md(cfg, state)
     else:
-        result["agents_md"] = {"action": "skipped", "reason": "disabled"}
+        state.result["agents_md"] = {"action": "skipped", "reason": "disabled"}
 
-    # TECH_STACK.md: create or overwrite from project profile
-    if create_tech_stack_md and profile is not None:
-        tech_stack_content = _render_tech_stack_md(profile)
-        action = _safe_write_or_overwrite("TECH_STACK.md", tech_stack_content)
-        result["tech_stack_md"] = {"action": action}
-    elif create_tech_stack_md and profile is None:
-        result["tech_stack_md"] = {"action": "skipped", "reason": "profile_failed"}
-        errors.append("Could not create TECH_STACK.md: project profile detection failed")
+    # TECH_STACK.md
+    if cfg.create_tech_stack_md and state.profile is not None:
+        content = _render_tech_stack_md(state.profile)
+        action = state.safe_write_or_overwrite("TECH_STACK.md", content)
+        state.result["tech_stack_md"] = {"action": action}
+    elif cfg.create_tech_stack_md:
+        state.result["tech_stack_md"] = {"action": "skipped", "reason": "profile_failed"}
+        state.errors.append("Could not create TECH_STACK.md: project profile detection failed")
     else:
-        result["tech_stack_md"] = {"action": "skipped", "reason": "disabled"}
+        state.result["tech_stack_md"] = {"action": "skipped", "reason": "disabled"}
 
-    if platform:
-        platform_action: str | None = None
-        if platform == "claude":
-            platform_action = _bootstrap_claude(project_root, overwrite_platform_rules)
-            if platform_action == "created":
-                created.append("CLAUDE.md")
-        elif platform == "cursor":
-            platform_action = _bootstrap_cursor(project_root, overwrite_platform_rules)
-            if platform_action in {"created", "updated"}:
-                created.append(".cursor/rules/tapps-pipeline.md")
-            elif platform_action == "skipped":
-                skipped.append(".cursor/rules/tapps-pipeline.md")
-        else:
-            errors.append(f"Unknown platform: {platform!r}. Use 'claude' or 'cursor'.")
 
-        result["platform_rules"] = {
-            "platform": platform,
-            "action": platform_action or "skipped",
-        }
+def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Create or update AGENTS.md."""
+    agents_path = state.project_root / "AGENTS.md"
+    template_content = load_agents_template()
+    if agents_path.exists():
+        from tapps_mcp.pipeline.agents_md import update_agents_md
 
-    # Cache warming from tech stack
-    if warm_cache_from_tech_stack and profile is not None:
+        try:
+            action, detail = update_agents_md(
+                agents_path, template_content, overwrite=cfg.overwrite_agents_md,
+            )
+            state.result["agents_md"] = {"action": action, **detail}
+            if action == "validated":
+                state.skipped.append("AGENTS.md")
+        except Exception as exc:
+            state.errors.append(f"AGENTS.md update failed: {exc}")
+            state.result["agents_md"] = {"action": "error", "reason": str(exc)}
+    else:
+        state.safe_write("AGENTS.md", template_content)
+        state.result["agents_md"] = {"action": "created", "version": __version__}
+
+
+def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Bootstrap platform-specific rule files."""
+    if not cfg.platform:
+        return
+
+    platform_action: str | None = None
+    if cfg.platform == "claude":
+        platform_action = _bootstrap_claude(state.project_root, cfg.overwrite_platform_rules)
+        if platform_action == "created":
+            state.created.append("CLAUDE.md")
+    elif cfg.platform == "cursor":
+        platform_action = _bootstrap_cursor(state.project_root, cfg.overwrite_platform_rules)
+        if platform_action in {"created", "updated"}:
+            state.created.append(".cursor/rules/tapps-pipeline.md")
+        elif platform_action == "skipped":
+            state.skipped.append(".cursor/rules/tapps-pipeline.md")
+    else:
+        state.errors.append(f"Unknown platform: {cfg.platform!r}. Use 'claude' or 'cursor'.")
+
+    state.result["platform_rules"] = {
+        "platform": cfg.platform,
+        "action": platform_action or "skipped",
+    }
+
+
+def _warm_caches(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Warm Context7 cache and expert RAG indices."""
+    if cfg.warm_cache_from_tech_stack and state.profile is not None:
         cache_result = _run_cache_warming(
-            project_root,
-            profile.tech_stack.context7_priority,
+            state.project_root, state.profile.tech_stack.context7_priority,
         )
-        result["cache_warming"] = cache_result
+        state.result["cache_warming"] = cache_result
         if cache_result.get("error"):
-            errors.append(f"Cache warming failed: {cache_result['error']}")
+            state.errors.append(f"Cache warming failed: {cache_result['error']}")
     else:
-        result["cache_warming"] = {
-            "warmed": 0,
-            "attempted": 0,
-            "skipped": "disabled" if not warm_cache_from_tech_stack else "profile_failed",
+        state.result["cache_warming"] = {
+            "warmed": 0, "attempted": 0,
+            "skipped": "disabled" if not cfg.warm_cache_from_tech_stack else "profile_failed",
             "libraries": [],
         }
 
-    # Expert RAG index warming from tech stack
-    if warm_expert_rag_from_tech_stack and profile is not None:
-        result["expert_rag_warming"] = _run_expert_rag_warming(
-            project_root,
-            profile.tech_stack,
+    if cfg.warm_expert_rag_from_tech_stack and state.profile is not None:
+        state.result["expert_rag_warming"] = _run_expert_rag_warming(
+            state.project_root, state.profile.tech_stack,
         )
     else:
-        result["expert_rag_warming"] = {
-            "warmed": 0,
-            "attempted": 0,
-            "skipped": (
-                "disabled" if not warm_expert_rag_from_tech_stack else "profile_failed"
-            ),
+        state.result["expert_rag_warming"] = {
+            "warmed": 0, "attempted": 0,
+            "skipped": "disabled" if not cfg.warm_expert_rag_from_tech_stack else "profile_failed",
             "domains": [],
         }
-
-    result["created"] = created
-    result["skipped"] = skipped
-    result["errors"] = errors
-    result["success"] = len(errors) == 0
-    return result
 
 
 def _run_server_verification(

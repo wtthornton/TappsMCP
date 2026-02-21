@@ -131,3 +131,32 @@ class FeedbackTracker:
             except (json.JSONDecodeError, TypeError):
                 pass
         return records
+
+    def to_adaptive_outcomes(self) -> list[dict[str, Any]]:
+        """Convert feedback records into lightweight outcome dicts for
+        the adaptive scoring engine.
+
+        Each feedback record where ``tool_name`` is a scoring tool
+        (tapps_score_file, tapps_quality_gate, tapps_quick_check)
+        produces a dict with ``first_pass_success`` derived from
+        ``helpful``. This allows the adaptive engine to factor user
+        satisfaction into weight adjustment.
+
+        Returns:
+            A list of outcome-like dicts with ``first_pass_success``
+            and ``initial_scores`` (empty, since we only know the
+            boolean outcome).
+        """
+        scoring_tools = {"tapps_score_file", "tapps_quality_gate", "tapps_quick_check"}
+        records = self._load_all()
+        outcomes: list[dict[str, Any]] = []
+        for r in records:
+            if r.tool_name in scoring_tools:
+                outcomes.append({
+                    "first_pass_success": r.helpful,
+                    "initial_scores": {},
+                    "source": "feedback",
+                    "session_id": r.session_id,
+                    "timestamp": r.timestamp,
+                })
+        return outcomes
