@@ -1,9 +1,9 @@
 # TappsMCP Expert + Context7 + Retrieval Optimization — Implementation Plan
 
-**Source:** [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md)  
-**Created:** 2026-02-18  
-**Revised:** 2026-02-20 (re-baselined against current code)  
-**Status:** Draft (re-baselined against repository state; implementation pending)  
+**Source:** [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md)
+**Created:** 2026-02-18
+**Revised:** 2026-02-20 (re-baselined against current code)
+**Status:** Implementation-ready (re-baselined against repository state; implementation pending)
 **Audience:** TappsMCP maintainers
 
 ---
@@ -62,7 +62,7 @@ To keep this plan strictly factual, each status claim in Section 2 is tied to ob
 
 ## Epic 10: Expert + Context7 Integration (carry forward)
 
-**Priority:** P1  
+**Priority:** P1
 **Dependencies:** Epic 2, Epic 3
 
 ### 10.1 — Auto-fallback to Context7 when expert RAG is empty
@@ -140,7 +140,7 @@ This epic captures improvements discussed after Epic 10 planning and is not cove
 
 ## Epic 11: Retrieval & Ranking Optimization
 
-**Priority:** P1/P2 mix  
+**Priority:** P1/P2 mix
 **Dependencies:** Epic 10.3 recommended; can start partially in parallel.
 
 ### 11.1 — Hybrid retrieval + rerank
@@ -260,7 +260,73 @@ rg -n "rerank|hybrid|hot-rank|hot_rank|fuzzy" src/tapps_mcp
 
 ---
 
-## 8) References
+## 8) Implementation readiness package (kickoff guide)
+
+This section converts the plan into an immediately executable implementation sequence.
+
+### 8.1) First PR scope (recommended)
+
+Target **Epic 10.3 only** in the first implementation PR to keep risk low and enable deterministic client workflows.
+
+**Files expected to change:**
+
+- `src/tapps_mcp/experts/models.py`
+- `src/tapps_mcp/experts/engine.py`
+- `src/tapps_mcp/server.py`
+- `tests/` files covering expert consultation response structure
+
+**Out-of-scope for PR 1:**
+
+- Any Context7 fallback execution path changes (Epic 10.1)
+- New tool registration (`tapps_research`)
+- Retrieval/ranking architecture changes (Epic 11)
+
+### 8.2) PR-by-PR rollout plan
+
+1. **PR 1 — Structured hints (10.3)**
+   - Add `suggested_tool`, `suggested_library`, `suggested_topic` to result model.
+   - Populate when retrieval has no chunks.
+   - Ensure MCP response mapping emits fields.
+   - Add tests for no-RAG and normal-RAG scenarios.
+2. **PR 2 — Auto-fallback execution (10.1)**
+   - Add guarded fallback call path + config flag.
+   - Add merged-answer attribution and budgets.
+   - Add tests for fallback triggered/not-triggered.
+3. **PR 3 — Workflow/docs alignment (10.2 + 10.4)**
+   - Update AGENTS/workflow hints.
+   - Add testing KB file and retrieval tests.
+4. **PR 4+ — Retrieval optimization track (11.5 → 11.1/11.3 → 11.2/11.4)**
+   - Establish benchmark and regression checks first.
+   - Apply retrieval changes incrementally with measurable deltas.
+
+### 8.3) Pre-implementation checks (must pass before PR 1 coding)
+
+- [ ] Confirm response model can add optional fields without breaking existing clients.
+- [ ] Identify all server response serialization paths for `tapps_consult_expert`.
+- [ ] Freeze a baseline behavior snapshot for no-RAG responses (fixtures/snapshots).
+- [ ] Define exact trigger condition for “no RAG” (`chunks_used == 0` and/or `sources == []`).
+
+### 8.4) Risks and mitigations for kickoff
+
+- **Risk:** Introducing structured fields could break strict client parsers.
+  - **Mitigation:** Add fields as optional/null; maintain existing fields unchanged.
+- **Risk:** False positives on no-RAG condition cause noisy suggestions.
+  - **Mitigation:** Gate on both retrieval stats and source list checks.
+- **Risk:** Tests become brittle due to response text variability.
+  - **Mitigation:** Assert structured fields and invariants, not exact prose.
+
+### 8.5) Definition of ready-to-implement
+
+Implementation should start only when all are true:
+
+- [ ] PR 1 scope agreed (10.3 only).
+- [ ] No-RAG trigger condition documented in code comments/tests.
+- [ ] Response schema update plan approved (backward-compatible optional fields).
+- [ ] Baseline tests identified and runnable locally.
+
+---
+
+## 9) References
 
 - Existing implementation surfaces:
   - `src/tapps_mcp/server.py`
