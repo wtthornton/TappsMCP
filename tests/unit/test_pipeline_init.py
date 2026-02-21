@@ -197,9 +197,7 @@ class TestBootstrapPipeline:
         assert "tapps_server_info" in content  # template content merged in
 
     def test_creates_tech_stack_md(self, tmp_path):
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname = 'foo'\ndependencies = []\n"
-        )
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'foo'\ndependencies = []\n")
         result = bootstrap_pipeline(
             tmp_path,
             create_handoff=False,
@@ -224,9 +222,7 @@ class TestBootstrapPipeline:
         assert "missing_checkers" in sv
 
     def test_cache_warming_in_result(self, tmp_path):
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\ndependencies = []\n"
-        )
+        (tmp_path / "pyproject.toml").write_text("[project]\ndependencies = []\n")
         result = bootstrap_pipeline(
             tmp_path,
             create_handoff=False,
@@ -243,9 +239,7 @@ class TestBootstrapPipeline:
 
     def test_expert_rag_warming_in_result(self, tmp_path):
         """Expert RAG warming runs and returns expected structure."""
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\ndependencies = []\n"
-        )
+        (tmp_path / "pyproject.toml").write_text("[project]\ndependencies = []\n")
         result = bootstrap_pipeline(
             tmp_path,
             create_handoff=False,
@@ -297,9 +291,7 @@ class TestAgentsMdIntegration:
 
     def test_overwrite_flag(self, tmp_path):
         (tmp_path / "AGENTS.md").write_text("# Custom only\n", encoding="utf-8")
-        result = bootstrap_pipeline(
-            tmp_path, **self._common, overwrite_agents_md=True
-        )
+        result = bootstrap_pipeline(tmp_path, **self._common, overwrite_agents_md=True)
         assert result["agents_md"]["action"] == "overwritten"
         content = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
         assert "tapps_server_info" in content

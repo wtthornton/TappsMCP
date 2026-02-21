@@ -145,10 +145,7 @@ class TestMiDirect:
     @patch("tapps_mcp.tools.radon_direct._read_source")
     def test_returns_float_for_valid_code(self, mock_read, _mock_avail):
         mock_read.return_value = (
-            '"""Module docstring."""\n\n'
-            "def foo():\n"
-            '    """Function docstring."""\n'
-            "    return 1\n"
+            '"""Module docstring."""\n\ndef foo():\n    """Function docstring."""\n    return 1\n'
         )
         mi = mi_direct("test.py")
         assert isinstance(mi, float)

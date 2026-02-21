@@ -151,9 +151,7 @@ def warm_expert_rag_indices(
             knowledge_dir = kb_path / dir_name
 
             if not knowledge_dir.exists():
-                logger.debug(
-                    "rag_warm_skip_domain", domain=domain, reason="no_knowledge_dir"
-                )
+                logger.debug("rag_warm_skip_domain", domain=domain, reason="no_knowledge_dir")
                 continue
 
             idx_dir: Path | None = None

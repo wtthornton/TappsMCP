@@ -14,9 +14,7 @@ class CategoryScore(BaseModel):
     details: dict[str, object] = Field(
         default_factory=dict, description="Category-specific detail."
     )
-    suggestions: list[str] = Field(
-        default_factory=list, description="Actionable improvement tips."
-    )
+    suggestions: list[str] = Field(default_factory=list, description="Actionable improvement tips.")
 
 
 class LintIssue(BaseModel):

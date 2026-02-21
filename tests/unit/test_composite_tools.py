@@ -79,7 +79,9 @@ class TestTappsValidateChanged:
     @patch("tapps_mcp.server._validate_file_path")
     @patch("tapps_mcp.server.load_settings")
     async def test_no_files_returns_empty(
-        self, mock_settings: MagicMock, mock_validate: MagicMock,
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
     ) -> None:
         from tapps_mcp.server import tapps_validate_changed
 
@@ -100,7 +102,10 @@ class TestTappsValidateChanged:
     @patch("tapps_mcp.server._validate_file_path")
     @patch("tapps_mcp.server.load_settings")
     async def test_explicit_file_paths(
-        self, mock_settings: MagicMock, mock_validate: MagicMock, tmp_path: Path,
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
     ) -> None:
         from tapps_mcp.server import tapps_validate_changed
 
@@ -119,10 +124,13 @@ class TestTappsValidateChanged:
     async def test_records_call(self) -> None:
         from tapps_mcp.server import tapps_validate_changed
 
-        with patch(
-            "tapps_mcp.tools.batch_validator.detect_changed_python_files",
-            return_value=[],
-        ), patch("tapps_mcp.server.load_settings") as mock_settings:
+        with (
+            patch(
+                "tapps_mcp.tools.batch_validator.detect_changed_python_files",
+                return_value=[],
+            ),
+            patch("tapps_mcp.server.load_settings") as mock_settings,
+        ):
             mock_settings.return_value.project_root = Path("/fake")
             await tapps_validate_changed()
 
@@ -141,7 +149,10 @@ class TestTappsQuickCheck:
     @patch("tapps_mcp.server._validate_file_path")
     @patch("tapps_mcp.server.load_settings")
     async def test_success(
-        self, mock_settings: MagicMock, mock_validate: MagicMock, tmp_path: Path,
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
     ) -> None:
         from tapps_mcp.server import tapps_quick_check
 
@@ -171,7 +182,10 @@ class TestTappsQuickCheck:
     @patch("tapps_mcp.server._validate_file_path")
     @patch("tapps_mcp.server.load_settings")
     async def test_records_call(
-        self, mock_settings: MagicMock, mock_validate: MagicMock, tmp_path: Path,
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
     ) -> None:
         from tapps_mcp.server import tapps_quick_check
 
@@ -189,7 +203,10 @@ class TestTappsQuickCheck:
     @patch("tapps_mcp.server._validate_file_path")
     @patch("tapps_mcp.server.load_settings")
     async def test_includes_nudges(
-        self, mock_settings: MagicMock, mock_validate: MagicMock, tmp_path: Path,
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
     ) -> None:
         from tapps_mcp.server import tapps_quick_check
 
@@ -236,7 +253,9 @@ class TestBatchValidator:
 
     @patch("tapps_mcp.tools.batch_validator.subprocess.run")
     def test_detect_changed_filters_py_only(
-        self, mock_run: MagicMock, tmp_path: Path,
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         from tapps_mcp.tools.batch_validator import detect_changed_python_files
 
@@ -246,7 +265,8 @@ class TestBatchValidator:
         (tmp_path / "c.py").write_text("y = 2\n")
 
         mock_run.return_value = MagicMock(
-            returncode=0, stdout="a.py\nb.txt\nc.py\n",
+            returncode=0,
+            stdout="a.py\nb.txt\nc.py\n",
         )
 
         result = detect_changed_python_files(tmp_path)
@@ -255,7 +275,9 @@ class TestBatchValidator:
 
     @patch("tapps_mcp.tools.batch_validator.subprocess.run")
     def test_detect_changed_empty_diff(
-        self, mock_run: MagicMock, tmp_path: Path,
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         from tapps_mcp.tools.batch_validator import detect_changed_python_files
 
@@ -265,7 +287,9 @@ class TestBatchValidator:
 
     @patch("tapps_mcp.tools.batch_validator.subprocess.run")
     def test_detect_changed_deduplicates(
-        self, mock_run: MagicMock, tmp_path: Path,
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         from tapps_mcp.tools.batch_validator import detect_changed_python_files
 

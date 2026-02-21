@@ -109,7 +109,9 @@ class OutcomeTracker:
                 return None
 
             outcome.iterations += 1
-            outcome.final_scores = dict(scores) if isinstance(scores, dict) else outcome.final_scores
+            outcome.final_scores = (
+                dict(scores) if isinstance(scores, dict) else outcome.final_scores
+            )
             if expert_domain and expert_domain not in outcome.expert_consultations:
                 outcome.expert_consultations.append(expert_domain)
 

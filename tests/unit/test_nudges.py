@@ -59,28 +59,32 @@ class TestComputeNextSteps:
     def test_score_file_security_nudge_when_issues(self) -> None:
         CallTracker.record("tapps_score_file")
         steps = compute_next_steps(
-            "tapps_score_file", {"security_issue_count": 3},
+            "tapps_score_file",
+            {"security_issue_count": 3},
         )
         assert any("tapps_security_scan" in s for s in steps)
 
     def test_score_file_no_security_nudge_when_zero_issues(self) -> None:
         CallTracker.record("tapps_score_file")
         steps = compute_next_steps(
-            "tapps_score_file", {"security_issue_count": 0},
+            "tapps_score_file",
+            {"security_issue_count": 0},
         )
         assert not any("WARNING" in s for s in steps)
 
     def test_quality_gate_failed_nudge(self) -> None:
         CallTracker.record("tapps_quality_gate")
         steps = compute_next_steps(
-            "tapps_quality_gate", {"gate_passed": False},
+            "tapps_quality_gate",
+            {"gate_passed": False},
         )
         assert any("FAILED" in s for s in steps)
 
     def test_quality_gate_passed_nudges_checklist(self) -> None:
         CallTracker.record("tapps_quality_gate")
         steps = compute_next_steps(
-            "tapps_quality_gate", {"gate_passed": True},
+            "tapps_quality_gate",
+            {"gate_passed": True},
         )
         assert any("tapps_checklist" in s for s in steps)
 
@@ -88,7 +92,8 @@ class TestComputeNextSteps:
         CallTracker.record("tapps_quality_gate")
         CallTracker.record("tapps_checklist")
         steps = compute_next_steps(
-            "tapps_quality_gate", {"gate_passed": True},
+            "tapps_quality_gate",
+            {"gate_passed": True},
         )
         assert not any("tapps_checklist" in s for s in steps)
 
@@ -245,7 +250,9 @@ class TestWithNudges:
             "data": {"passed": False},
         }
         result = _with_nudges(
-            "tapps_quality_gate", response, {"gate_passed": False},
+            "tapps_quality_gate",
+            response,
+            {"gate_passed": False},
         )
         steps = result["data"].get("next_steps", [])
         assert any("FAILED" in s for s in steps)

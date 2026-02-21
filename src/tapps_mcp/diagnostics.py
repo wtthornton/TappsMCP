@@ -113,9 +113,7 @@ def check_knowledge_base() -> KnowledgeBaseDiagnostic:
                 KnowledgeDomainInfo(domain=expert.primary_domain, file_count=file_count)
             )
         else:
-            domains_info.append(
-                KnowledgeDomainInfo(domain=expert.primary_domain, file_count=0)
-            )
+            domains_info.append(KnowledgeDomainInfo(domain=expert.primary_domain, file_count=0))
 
     missing = sorted(expected_domains - found_domains)
 

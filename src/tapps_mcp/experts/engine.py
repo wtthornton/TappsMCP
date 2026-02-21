@@ -12,8 +12,12 @@ This is the main entry point for expert consultations.  It:
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 import structlog
+
+if TYPE_CHECKING:
+    from tapps_mcp.config.settings import TappsMCPSettings
 
 from tapps_mcp.experts.confidence import (
     compute_chunk_coverage,
@@ -224,18 +228,18 @@ def consult_expert(
         try:
             from tapps_mcp.config.settings import load_settings
 
-            settings = load_settings()
+            fallback_settings: TappsMCPSettings | None = load_settings()
         except Exception as exc:
             logger.debug("expert_fallback_settings_unavailable", reason=str(exc))
-            settings = None
+            fallback_settings = None
 
-        if settings is not None and settings.expert_auto_fallback:
+        if fallback_settings is not None and fallback_settings.expert_auto_fallback:
             ok, docs_content = _lookup_docs_sync(suggested_library, suggested_topic)
             if ok and docs_content:
                 fallback_used = True
                 fallback_library = suggested_library
                 fallback_topic = suggested_topic
-                fallback_excerpt = docs_content[: settings.expert_fallback_max_chars]
+                fallback_excerpt = docs_content[: fallback_settings.expert_fallback_max_chars]
                 answer = (
                     f"{answer}\n\n---\n\n"
                     "### Context7 fallback (auto-attached)\n\n"

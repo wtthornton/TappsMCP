@@ -28,11 +28,15 @@ def _chunk(
 class TestHybridFuseInputVariations:
     """Empty / single-source fusion scenarios."""
 
-    @pytest.mark.parametrize("vec,kw,expected_len,expected_score", [
-        ([], [], 0, None),
-        ([], [{"source_file": "kw.md", "score": 0.9}], 1, 0.27),   # keyword-only: 0.3*0.9
-        ([{"source_file": "vec.md", "score": 0.9}], [], 1, 0.54),  # vector-only: 0.6*0.9
-    ], ids=["both-empty", "keyword-only", "vector-only"])
+    @pytest.mark.parametrize(
+        "vec,kw,expected_len,expected_score",
+        [
+            ([], [], 0, None),
+            ([], [{"source_file": "kw.md", "score": 0.9}], 1, 0.27),  # keyword-only: 0.3*0.9
+            ([{"source_file": "vec.md", "score": 0.9}], [], 1, 0.54),  # vector-only: 0.6*0.9
+        ],
+        ids=["both-empty", "keyword-only", "vector-only"],
+    )
     def test_single_source_scoring(self, vec, kw, expected_len, expected_score) -> None:
         v = [_chunk(**c) for c in vec]
         k = [_chunk(**c) for c in kw]
@@ -65,10 +69,14 @@ class TestHybridFuseOverlap:
 
     def test_full_overlap(self) -> None:
         """All chunks in both sets → all get structural bonus > 0.5."""
-        vec = [_chunk(source_file="a.md", line_start=1, score=0.9),
-               _chunk(source_file="b.md", line_start=5, score=0.7)]
-        kw = [_chunk(source_file="a.md", line_start=1, score=0.8),
-              _chunk(source_file="b.md", line_start=5, score=0.6)]
+        vec = [
+            _chunk(source_file="a.md", line_start=1, score=0.9),
+            _chunk(source_file="b.md", line_start=5, score=0.7),
+        ]
+        kw = [
+            _chunk(source_file="a.md", line_start=1, score=0.8),
+            _chunk(source_file="b.md", line_start=5, score=0.6),
+        ]
         result = VectorKnowledgeBase._hybrid_fuse(vec, kw, max_results=5)
         assert len(result) == 2
         assert all(r.score > 0.5 for r in result)
@@ -85,8 +93,10 @@ class TestHybridFuseDedup:
 
     def test_keyword_dedup_keeps_highest_score(self) -> None:
         vec = [_chunk(source_file="a.md", line_start=1, score=0.8)]
-        kw = [_chunk(source_file="b.md", line_start=1, score=0.5),
-              _chunk(source_file="b.md", line_start=1, score=0.9)]  # same key, higher
+        kw = [
+            _chunk(source_file="b.md", line_start=1, score=0.5),
+            _chunk(source_file="b.md", line_start=1, score=0.9),
+        ]  # same key, higher
         result = VectorKnowledgeBase._hybrid_fuse(vec, kw, max_results=5)
         kw_result = [r for r in result if r.source_file == "b.md"]
         assert len(kw_result) == 1
@@ -116,9 +126,11 @@ class TestHybridFuseScoring:
         assert custom[0].score > default[0].score
 
     def test_sorted_by_score_descending(self) -> None:
-        vec = [_chunk(source_file="low.md", score=0.3),
-               _chunk(source_file="high.md", score=0.9),
-               _chunk(source_file="mid.md", score=0.6)]
+        vec = [
+            _chunk(source_file="low.md", score=0.3),
+            _chunk(source_file="high.md", score=0.9),
+            _chunk(source_file="mid.md", score=0.6),
+        ]
         result = VectorKnowledgeBase._hybrid_fuse(vec, [], max_results=5)
         scores = [r.score for r in result]
         assert scores == sorted(scores, reverse=True)

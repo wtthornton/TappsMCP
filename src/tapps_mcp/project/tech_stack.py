@@ -283,7 +283,9 @@ def _extract_dep_name(raw: str) -> str | None:
 
 
 def _walk_project_files(
-    root: Path, patterns: list[str], max_files: int,
+    root: Path,
+    patterns: list[str],
+    max_files: int,
 ) -> Iterator[Path]:
     """Yield project files matching *patterns*, skipping ignored dirs."""
     n = 0

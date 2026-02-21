@@ -23,28 +23,44 @@ from tapps_mcp.knowledge.fuzzy_matcher import (
 
 
 class TestLCSLength:
-    @pytest.mark.parametrize("a,b,expected", [
-        ("abc", "abc", 3),
-        ("", "abc", 0),
-        ("abc", "", 0),
-        ("", "", 0),
-        ("xyz", "abc", 0),
-        ("ace", "abcde", 3),
-        ("fastapi", "flask", 3),
-        ("abc", "cba", 1),
-    ], ids=["identical", "empty-a", "empty-b", "both-empty",
-            "no-common", "subsequence", "partial", "reversed"])
+    @pytest.mark.parametrize(
+        "a,b,expected",
+        [
+            ("abc", "abc", 3),
+            ("", "abc", 0),
+            ("abc", "", 0),
+            ("", "", 0),
+            ("xyz", "abc", 0),
+            ("ace", "abcde", 3),
+            ("fastapi", "flask", 3),
+            ("abc", "cba", 1),
+        ],
+        ids=[
+            "identical",
+            "empty-a",
+            "empty-b",
+            "both-empty",
+            "no-common",
+            "subsequence",
+            "partial",
+            "reversed",
+        ],
+    )
     def test_lcs_length(self, a, b, expected):
         assert lcs_length(a, b) == expected
 
 
 class TestLCSSimilarity:
-    @pytest.mark.parametrize("a,b,expected", [
-        ("fastapi", "fastapi", 1.0),
-        ("", "", 1.0),
-        ("abc", "", 0.0),
-        ("FastAPI", "fastapi", 1.0),
-    ], ids=["identical", "both-empty", "one-empty", "case-insensitive"])
+    @pytest.mark.parametrize(
+        "a,b,expected",
+        [
+            ("fastapi", "fastapi", 1.0),
+            ("", "", 1.0),
+            ("abc", "", 0.0),
+            ("FastAPI", "fastapi", 1.0),
+        ],
+        ids=["identical", "both-empty", "one-empty", "case-insensitive"],
+    )
     def test_exact_values(self, a, b, expected):
         assert lcs_similarity(a, b) == expected
 
@@ -72,37 +88,55 @@ class TestResolveAlias:
 
     def test_all_known_aliases(self):
         from tapps_mcp.knowledge.fuzzy_matcher import LIBRARY_ALIASES
+
         for alias, canonical in LIBRARY_ALIASES.items():
             assert resolve_alias(alias) == canonical
 
 
 class TestEditDistance:
-    @pytest.mark.parametrize("a,b,expected", [
-        ("abc", "abc", 0),
-        ("abc", "adc", 1),
-        ("abc", "abcd", 1),
-        ("abcd", "abc", 1),
-        ("", "abc", 3),
-        ("abc", "", 3),
-        ("", "", 0),
-        ("fastaip", "fastapi", 2),
-        ("abc", "xyz", 3),
-        ("ab", "ba", 2),
-    ], ids=["identical", "substitution", "insertion", "deletion",
-            "empty-a", "empty-b", "both-empty", "typo",
-            "completely-different", "transposition"])
+    @pytest.mark.parametrize(
+        "a,b,expected",
+        [
+            ("abc", "abc", 0),
+            ("abc", "adc", 1),
+            ("abc", "abcd", 1),
+            ("abcd", "abc", 1),
+            ("", "abc", 3),
+            ("abc", "", 3),
+            ("", "", 0),
+            ("fastaip", "fastapi", 2),
+            ("abc", "xyz", 3),
+            ("ab", "ba", 2),
+        ],
+        ids=[
+            "identical",
+            "substitution",
+            "insertion",
+            "deletion",
+            "empty-a",
+            "empty-b",
+            "both-empty",
+            "typo",
+            "completely-different",
+            "transposition",
+        ],
+    )
     def test_edit_distance(self, a, b, expected):
         assert edit_distance(a, b) == expected
 
 
 class TestEditDistanceSimilarity:
-    @pytest.mark.parametrize("a,b,expected", [
-        ("fastapi", "fastapi", 1.0),
-        ("", "", 1.0),
-        ("abc", "", 0.0),
-        ("FastAPI", "fastapi", 1.0),
-        ("abc", "xyz", 0.0),
-    ], ids=["identical", "both-empty", "one-empty", "case-insensitive", "different"])
+    @pytest.mark.parametrize(
+        "a,b,expected",
+        [
+            ("fastapi", "fastapi", 1.0),
+            ("", "", 1.0),
+            ("abc", "", 0.0),
+            ("FastAPI", "fastapi", 1.0),
+            ("abc", "xyz", 0.0),
+        ],
+        ids=["identical", "both-empty", "one-empty", "case-insensitive", "different"],
+    )
     def test_exact_values(self, a, b, expected):
         assert edit_distance_similarity(a, b) == expected
 
@@ -111,16 +145,27 @@ class TestEditDistanceSimilarity:
 
 
 class TestTokenOverlap:
-    @pytest.mark.parametrize("a,b,expected", [
-        ("scikit-learn", "scikit-learn", 1.0),
-        ("fastapi", "django", 0.0),
-        ("", "something", 0.0),
-        ("", "", 0.0),
-        ("my-lib", "my-other", 0.5),
-        ("my_lib", "my_other", 0.5),
-        ("my lib", "my other", 0.5),
-    ], ids=["identical", "no-overlap", "empty-first", "both-empty",
-            "hyphen-split", "underscore-split", "space-split"])
+    @pytest.mark.parametrize(
+        "a,b,expected",
+        [
+            ("scikit-learn", "scikit-learn", 1.0),
+            ("fastapi", "django", 0.0),
+            ("", "something", 0.0),
+            ("", "", 0.0),
+            ("my-lib", "my-other", 0.5),
+            ("my_lib", "my_other", 0.5),
+            ("my lib", "my other", 0.5),
+        ],
+        ids=[
+            "identical",
+            "no-overlap",
+            "empty-first",
+            "both-empty",
+            "hyphen-split",
+            "underscore-split",
+            "space-split",
+        ],
+    )
     def test_token_overlap(self, a, b, expected):
         assert token_overlap_score(a, b) == expected
 
@@ -151,18 +196,31 @@ class TestMultiSignalScore:
 
 
 class TestConfidenceBand:
-    @pytest.mark.parametrize("score,expected", [
-        (0.9, "high"),
-        (CONFIDENCE_HIGH, "high"),
-        (CONFIDENCE_HIGH - 0.01, "medium"),
-        (0.7, "medium"),
-        (CONFIDENCE_MEDIUM, "medium"),
-        (CONFIDENCE_MEDIUM - 0.01, "low"),
-        (0.3, "low"),
-        (0.0, "low"),
-        (1.0, "high"),
-    ], ids=["high", "boundary-high", "just-below-high", "medium",
-            "boundary-medium", "just-below-medium", "low", "zero", "one"])
+    @pytest.mark.parametrize(
+        "score,expected",
+        [
+            (0.9, "high"),
+            (CONFIDENCE_HIGH, "high"),
+            (CONFIDENCE_HIGH - 0.01, "medium"),
+            (0.7, "medium"),
+            (CONFIDENCE_MEDIUM, "medium"),
+            (CONFIDENCE_MEDIUM - 0.01, "low"),
+            (0.3, "low"),
+            (0.0, "low"),
+            (1.0, "high"),
+        ],
+        ids=[
+            "high",
+            "boundary-high",
+            "just-below-high",
+            "medium",
+            "boundary-medium",
+            "just-below-medium",
+            "low",
+            "zero",
+            "one",
+        ],
+    )
     def test_confidence_band(self, score, expected):
         assert confidence_band(score) == expected
 
@@ -242,12 +300,16 @@ class TestFuzzyMatchTopic:
 
 
 class TestCombinedScore:
-    @pytest.mark.parametrize("lib,topic,weights,expected", [
-        (1.0, 0.5, {}, 0.8),                                        # default weights
-        (0.8, 0.6, {"library_weight": 0.7, "topic_weight": 0.3}, 0.74),
-        (0.0, 0.0, {}, 0.0),
-        (1.0, 1.0, {}, 1.0),
-    ], ids=["default-weights", "custom-weights", "zeros", "maxed"])
+    @pytest.mark.parametrize(
+        "lib,topic,weights,expected",
+        [
+            (1.0, 0.5, {}, 0.8),  # default weights
+            (0.8, 0.6, {"library_weight": 0.7, "topic_weight": 0.3}, 0.74),
+            (0.0, 0.0, {}, 0.0),
+            (1.0, 1.0, {}, 1.0),
+        ],
+        ids=["default-weights", "custom-weights", "zeros", "maxed"],
+    )
     def test_combined_score(self, lib, topic, weights, expected):
         assert abs(combined_score(lib, topic, **weights) - expected) < 0.001
 
@@ -287,6 +349,8 @@ class TestProjectManifestPrior:
         assert len(r1) == len(r2)
 
     def test_project_library_case_insensitive(self):
-        results = fuzzy_match_library("fast", ["FastAPI"], threshold=0.3, project_libraries=["fastapi"])
+        results = fuzzy_match_library(
+            "fast", ["FastAPI"], threshold=0.3, project_libraries=["fastapi"]
+        )
         results_no = fuzzy_match_library("fast", ["FastAPI"], threshold=0.3)
         assert results[0].score >= results_no[0].score

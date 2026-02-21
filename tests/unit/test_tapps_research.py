@@ -23,16 +23,33 @@ class TestTappsResearchResponseShape:
         assert result["success"] is True
         assert result["elapsed_ms"] >= 0
         data = result["data"]
-        expected_keys = {"domain", "expert_id", "expert_name", "answer", "confidence",
-                         "factors", "sources", "chunks_used", "docs_supplemented",
-                         "docs_library", "docs_topic", "docs_error",
-                         "suggested_tool", "suggested_library", "suggested_topic",
-                         "fallback_used", "fallback_library", "fallback_topic"}
+        expected_keys = {
+            "domain",
+            "expert_id",
+            "expert_name",
+            "answer",
+            "confidence",
+            "factors",
+            "sources",
+            "chunks_used",
+            "docs_supplemented",
+            "docs_library",
+            "docs_topic",
+            "docs_error",
+            "suggested_tool",
+            "suggested_library",
+            "suggested_topic",
+            "fallback_used",
+            "fallback_library",
+            "fallback_topic",
+        }
         assert expected_keys <= set(data.keys())
         assert isinstance(data["docs_supplemented"], bool)
         assert 0.0 <= data["confidence"] <= 1.0
-        assert all(k in data["factors"] for k in ("rag_quality", "domain_relevance",
-                                                    "source_count", "chunk_coverage"))
+        assert all(
+            k in data["factors"]
+            for k in ("rag_quality", "domain_relevance", "source_count", "chunk_coverage")
+        )
 
 
 class TestTappsResearchRouting:
@@ -56,12 +73,15 @@ class TestTappsResearchDocsLookup:
         """docs_error is None or a string, never other types."""
         result = tapps_research(
             question="How to use an obscure library xyz123?",
-            domain="security", library="xyz123_nonexistent",
+            domain="security",
+            library="xyz123_nonexistent",
         )
         err = result["data"]["docs_error"]
         assert err is None or isinstance(err, str)
 
     def test_answer_nonempty(self) -> None:
-        result = tapps_research(question="What are best practices for database migrations?",
-                                domain="database-data-management")
+        result = tapps_research(
+            question="What are best practices for database migrations?",
+            domain="database-data-management",
+        )
         assert len(result["data"]["answer"]) > 0

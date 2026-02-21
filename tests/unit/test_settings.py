@@ -5,8 +5,6 @@ from __future__ import annotations
 import os
 from unittest import mock
 
-import pytest
-
 
 class TestScoringWeights:
     """Validate ScoringWeights defaults and constraints."""
@@ -15,7 +13,15 @@ class TestScoringWeights:
         from tapps_mcp.config.settings import ScoringWeights
 
         w = ScoringWeights()
-        total = w.complexity + w.security + w.maintainability + w.test_coverage + w.performance + w.structure + w.devex
+        total = (
+            w.complexity
+            + w.security
+            + w.maintainability
+            + w.test_coverage
+            + w.performance
+            + w.structure
+            + w.devex
+        )
         assert abs(total - 1.0) < 0.01
 
     def test_weight_range(self) -> None:

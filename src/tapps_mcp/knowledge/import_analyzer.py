@@ -23,11 +23,24 @@ logger = structlog.get_logger(__name__)
 _STDLIB_MODULES: frozenset[str] = frozenset(sys.stdlib_module_names)
 
 # Common test/tool packages that aren't worth looking up docs for
-_SKIP_MODULES: frozenset[str] = frozenset({
-    "pytest", "unittest", "mock", "setuptools", "pip", "wheel",
-    "mypy", "ruff", "bandit", "radon", "pylint", "flake8",
-    "_pytest", "conftest",
-})
+_SKIP_MODULES: frozenset[str] = frozenset(
+    {
+        "pytest",
+        "unittest",
+        "mock",
+        "setuptools",
+        "pip",
+        "wheel",
+        "mypy",
+        "ruff",
+        "bandit",
+        "radon",
+        "pylint",
+        "flake8",
+        "_pytest",
+        "conftest",
+    }
+)
 
 
 def extract_external_imports(

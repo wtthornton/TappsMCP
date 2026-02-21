@@ -290,16 +290,13 @@ class DashboardGenerator:
         recent = self._execution.get_recent(limit=500)
 
         scored_files = {
-            m.file_path for m in recent
-            if m.tool_name == "tapps_score_file" and m.file_path
+            m.file_path for m in recent if m.tool_name == "tapps_score_file" and m.file_path
         }
         gated_files = {
-            m.file_path for m in recent
-            if m.tool_name == "tapps_quality_gate" and m.file_path
+            m.file_path for m in recent if m.tool_name == "tapps_quality_gate" and m.file_path
         }
         scanned_files = {
-            m.file_path for m in recent
-            if m.tool_name == "tapps_security_scan" and m.file_path
+            m.file_path for m in recent if m.tool_name == "tapps_security_scan" and m.file_path
         }
 
         # Gate skip rate: files scored but never gated
@@ -309,8 +306,10 @@ class DashboardGenerator:
         # Tool usage counts
         all_tool_names = {m.tool_name for m in recent}
         core_tools = {
-            "tapps_score_file", "tapps_quality_gate",
-            "tapps_security_scan", "tapps_checklist",
+            "tapps_score_file",
+            "tapps_quality_gate",
+            "tapps_security_scan",
+            "tapps_checklist",
         }
 
         lookup_calls = sum(1 for m in recent if m.tool_name == "tapps_lookup_docs")

@@ -61,37 +61,38 @@ def check_json_config(
     label: str,
 ) -> CheckResult:
     """Check a JSON MCP config file for a valid ``tapps-mcp`` entry."""
+    name = f"{label} config"
+    error = _validate_json_config(config_path, servers_key)
+    if error is not None:
+        return CheckResult(name, False, error)
+    return CheckResult(name, True, f"Configured in {config_path}")
+
+
+def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
+    """Return an error message if *config_path* is invalid, else ``None``."""
     if not config_path.exists():
-        return CheckResult(f"{label} config", False, f"Not found: {config_path}")
+        return f"Not found: {config_path}"
 
     try:
         raw = config_path.read_text(encoding="utf-8")
         data: dict[str, Any] = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
-        return CheckResult(f"{label} config", False, f"Invalid JSON: {config_path}")
+        return f"Invalid JSON: {config_path}"
 
     if not isinstance(data, dict):
-        return CheckResult(f"{label} config", False, f"Invalid structure: {config_path}")
+        return f"Invalid structure: {config_path}"
+
     servers = data.get(servers_key, {})
-    if not isinstance(servers, dict) or "tapps-mcp" not in servers:
-        return CheckResult(
-            f"{label} config",
-            False,
-            f"tapps-mcp not in {config_path}",
-        )
-
-    entry = servers.get("tapps-mcp")
+    entry = servers.get("tapps-mcp") if isinstance(servers, dict) else None
     if not isinstance(entry, dict):
-        return CheckResult(f"{label} config", False, f"Invalid tapps-mcp entry: {config_path}")
-    command = entry.get("command", "")
-    if command != "tapps-mcp":
-        return CheckResult(
-            f"{label} config",
-            False,
-            f"Unexpected command: '{command}' (expected 'tapps-mcp')",
-        )
+        return f"tapps-mcp not in {config_path}"
 
-    return CheckResult(f"{label} config", True, f"Configured in {config_path}")
+    command = entry.get("command", "")
+    return (
+        f"Unexpected command: '{command}' (expected 'tapps-mcp')"
+        if command != "tapps-mcp"
+        else None
+    )
 
 
 def check_claude_code_user(home: Path | None = None) -> CheckResult:
@@ -108,14 +109,18 @@ def check_claude_code_project(project_root: Path) -> CheckResult:
 def check_cursor_config(project_root: Path) -> CheckResult:
     """Check ``.cursor/mcp.json`` for tapps-mcp entry."""
     return check_json_config(
-        project_root / ".cursor" / "mcp.json", "mcpServers", "Cursor",
+        project_root / ".cursor" / "mcp.json",
+        "mcpServers",
+        "Cursor",
     )
 
 
 def check_vscode_config(project_root: Path) -> CheckResult:
     """Check ``.vscode/mcp.json`` for tapps-mcp entry."""
     return check_json_config(
-        project_root / ".vscode" / "mcp.json", "servers", "VS Code",
+        project_root / ".vscode" / "mcp.json",
+        "servers",
+        "VS Code",
     )
 
 

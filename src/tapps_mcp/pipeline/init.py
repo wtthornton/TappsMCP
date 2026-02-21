@@ -140,7 +140,8 @@ def _verify_server(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     """Run server verification and optional checker install."""
     if cfg.verify_server or cfg.install_missing_checkers:
         state.result["server_verification"] = _run_server_verification(
-            state.project_root, install_missing=cfg.install_missing_checkers,
+            state.project_root,
+            install_missing=cfg.install_missing_checkers,
         )
     else:
         state.result["server_verification"] = {"ok": True, "skipped": True}
@@ -191,7 +192,9 @@ def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
         try:
             action, detail = update_agents_md(
-                agents_path, template_content, overwrite=cfg.overwrite_agents_md,
+                agents_path,
+                template_content,
+                overwrite=cfg.overwrite_agents_md,
             )
             state.result["agents_md"] = {"action": action, **detail}
             if action == "validated":
@@ -233,25 +236,29 @@ def _warm_caches(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     """Warm Context7 cache and expert RAG indices."""
     if cfg.warm_cache_from_tech_stack and state.profile is not None:
         cache_result = _run_cache_warming(
-            state.project_root, state.profile.tech_stack.context7_priority,
+            state.project_root,
+            state.profile.tech_stack.context7_priority,
         )
         state.result["cache_warming"] = cache_result
         if cache_result.get("error"):
             state.errors.append(f"Cache warming failed: {cache_result['error']}")
     else:
         state.result["cache_warming"] = {
-            "warmed": 0, "attempted": 0,
+            "warmed": 0,
+            "attempted": 0,
             "skipped": "disabled" if not cfg.warm_cache_from_tech_stack else "profile_failed",
             "libraries": [],
         }
 
     if cfg.warm_expert_rag_from_tech_stack and state.profile is not None:
         state.result["expert_rag_warming"] = _run_expert_rag_warming(
-            state.project_root, state.profile.tech_stack,
+            state.project_root,
+            state.profile.tech_stack,
         )
     else:
         state.result["expert_rag_warming"] = {
-            "warmed": 0, "attempted": 0,
+            "warmed": 0,
+            "attempted": 0,
             "skipped": "disabled" if not cfg.warm_expert_rag_from_tech_stack else "profile_failed",
             "domains": [],
         }
@@ -287,9 +294,7 @@ def _run_server_verification(
         for hint in install_hints:
             if hint and hint.startswith("pip install "):
                 pkg = hint.replace("pip install ", "").strip()
-                with contextlib.suppress(
-                    subprocess.TimeoutExpired, FileNotFoundError, OSError
-                ):
+                with contextlib.suppress(subprocess.TimeoutExpired, FileNotFoundError, OSError):
                     subprocess.run(
                         [sys.executable, "-m", "pip", "install", pkg],
                         capture_output=True,
@@ -334,26 +339,20 @@ def _render_tech_stack_md(profile: ProjectProfile) -> str:
     lines.extend(["", "## Context7 Priority (for doc lookups)"])
     for p in ts.context7_priority or []:
         lines.append(f"- {p}")
-    ci_str = (
-        "Yes (" + ", ".join(profile.ci_systems) + ")"
-        if profile.has_ci
-        else "No"
+    ci_str = "Yes (" + ", ".join(profile.ci_systems) + ")" if profile.has_ci else "No"
+    tests_str = "Yes (" + ", ".join(profile.test_frameworks) + ")" if profile.has_tests else "No"
+    lines.extend(
+        [
+            "",
+            "## Infrastructure",
+            f"- **CI:** {ci_str}",
+            f"- **Docker:** {'Yes' if profile.has_docker else 'No'}",
+            f"- **Tests:** {tests_str}",
+            f"- **Package managers:** {', '.join(profile.package_managers) or 'N/A'}",
+            "",
+            "## Recommendations",
+        ]
     )
-    tests_str = (
-        "Yes (" + ", ".join(profile.test_frameworks) + ")"
-        if profile.has_tests
-        else "No"
-    )
-    lines.extend([
-        "",
-        "## Infrastructure",
-        f"- **CI:** {ci_str}",
-        f"- **Docker:** {'Yes' if profile.has_docker else 'No'}",
-        f"- **Tests:** {tests_str}",
-        f"- **Package managers:** {', '.join(profile.package_managers) or 'N/A'}",
-        "",
-        "## Recommendations",
-    ])
     for rec in profile.quality_recommendations or ["(none)"]:
         lines.append(f"- {rec}")
     lines.append("")

@@ -278,7 +278,8 @@ class TestCliDoctor:
             patch("tapps_mcp.distribution.doctor.shutil.which", return_value=None),
         ):
             result = runner.invoke(
-                main, ["doctor", "--project-root", str(tmp_path)],
+                main,
+                ["doctor", "--project-root", str(tmp_path)],
             )
         assert "Doctor Report" in result.output
 
@@ -290,6 +291,7 @@ class TestCliDoctor:
             patch("tapps_mcp.distribution.doctor.shutil.which", return_value=None),
         ):
             result = runner.invoke(
-                main, ["doctor", "--project-root", str(tmp_path)],
+                main,
+                ["doctor", "--project-root", str(tmp_path)],
             )
         assert result.exit_code == 1

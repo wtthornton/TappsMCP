@@ -114,9 +114,9 @@ def edit_distance(a: str, b: str) -> int:
         for j in range(1, n + 1):
             cost = 0 if a[i - 1] == b[j - 1] else 1
             curr[j] = min(
-                prev[j] + 1,       # deletion
-                curr[j - 1] + 1,   # insertion
-                prev[j - 1] + cost, # substitution
+                prev[j] + 1,  # deletion
+                curr[j - 1] + 1,  # insertion
+                prev[j - 1] + cost,  # substitution
             )
         prev, curr = curr, [0] * (n + 1)
     return prev[n]
@@ -230,7 +230,9 @@ def fuzzy_match_library(
 
         if score >= threshold:
             band = confidence_band(score)
-            matches.append(FuzzyMatch(library=lib, score=round(score, 4), match_type=f"fuzzy_{band}"))
+            matches.append(
+                FuzzyMatch(library=lib, score=round(score, 4), match_type=f"fuzzy_{band}")
+            )
 
     # Sort by score descending
     matches.sort(key=lambda m: m.score, reverse=True)

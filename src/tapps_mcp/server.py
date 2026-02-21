@@ -174,13 +174,27 @@ def tapps_server_info() -> dict[str, Any]:
         available_tools = list(tool_manager._tools.keys())
     except AttributeError:
         available_tools = [
-            "tapps_server_info", "tapps_session_start", "tapps_score_file",
-            "tapps_security_scan", "tapps_quality_gate", "tapps_lookup_docs",
-            "tapps_validate_config", "tapps_validate_changed", "tapps_quick_check",
-            "tapps_consult_expert", "tapps_list_experts", "tapps_checklist",
-            "tapps_project_profile", "tapps_session_notes", "tapps_impact_analysis",
-            "tapps_report", "tapps_init", "tapps_dashboard", "tapps_stats",
-            "tapps_feedback", "tapps_research",
+            "tapps_server_info",
+            "tapps_session_start",
+            "tapps_score_file",
+            "tapps_security_scan",
+            "tapps_quality_gate",
+            "tapps_lookup_docs",
+            "tapps_validate_config",
+            "tapps_validate_changed",
+            "tapps_quick_check",
+            "tapps_consult_expert",
+            "tapps_list_experts",
+            "tapps_checklist",
+            "tapps_project_profile",
+            "tapps_session_notes",
+            "tapps_impact_analysis",
+            "tapps_report",
+            "tapps_init",
+            "tapps_dashboard",
+            "tapps_stats",
+            "tapps_feedback",
+            "tapps_research",
         ]
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -188,46 +202,57 @@ def tapps_server_info() -> dict[str, Any]:
 
     from tapps_mcp.pipeline.models import STAGE_TOOLS, PipelineStage
 
-    resp = success_response("tapps_server_info", elapsed_ms, {
-        "server": {"name": "TappsMCP", "version": __version__, "protocol_version": "2025-11-25"},
-        "configuration": {
-            "project_root": str(settings.project_root),
-            "quality_preset": settings.quality_preset,
-            "log_level": settings.log_level,
+    resp = success_response(
+        "tapps_server_info",
+        elapsed_ms,
+        {
+            "server": {
+                "name": "TappsMCP",
+                "version": __version__,
+                "protocol_version": "2025-11-25",
+            },
+            "configuration": {
+                "project_root": str(settings.project_root),
+                "quality_preset": settings.quality_preset,
+                "log_level": settings.log_level,
+            },
+            "available_tools": available_tools,
+            "installed_checkers": [t.model_dump() for t in installed],
+            "diagnostics": diagnostics.model_dump(),
+            "recommended_workflow": (
+                "FIRST: Call tapps_session_start() to initialize. "
+                "BEFORE using any library: Call tapps_lookup_docs(). "
+                "AFTER editing Python files: "
+                "Call tapps_score_file(quick=True) or tapps_quick_check(). "
+                "BEFORE declaring done: Call tapps_validate_changed() or tapps_quality_gate(). "
+                "FINAL step: Call tapps_checklist()."
+            ),
+            "quick_start": [
+                "1. FIRST: Call tapps_session_start() to initialize the session",
+                "2. BEFORE using any library API: Call tapps_lookup_docs(library='<name>')",
+                "3. DURING edits: Call tapps_quick_check(file_path='<path>') after each change",
+                "4. BEFORE declaring done: Call tapps_validate_changed() - all gates MUST pass",
+                "5. FINAL step: Call tapps_checklist(task_type='<type>') to verify completeness",
+            ],
+            "critical_rules": [
+                "BLOCKING: tapps_quality_gate MUST pass before work is complete",
+                "BLOCKING: tapps_lookup_docs MUST be called before using external library APIs",
+                "REQUIRED: tapps_score_file MUST be called on every modified Python file",
+                "NEVER skip tapps_checklist as the final verification step",
+            ],
+            "pipeline": {
+                "name": "TAPPS Quality Pipeline",
+                "stages": [s.value for s in PipelineStage],
+                "current_hint": (
+                    "Start with tapps_pipeline_overview prompt, or follow stages in order."
+                ),
+                "stage_tools": {s.value: tools for s, tools in STAGE_TOOLS.items()},
+                "handoff_file": "docs/TAPPS_HANDOFF.md",
+                "runlog_file": "docs/TAPPS_RUNLOG.md",
+                "prompts_available": True,
+            },
         },
-        "available_tools": available_tools,
-        "installed_checkers": [t.model_dump() for t in installed],
-        "diagnostics": diagnostics.model_dump(),
-        "recommended_workflow": (
-            "FIRST: Call tapps_session_start() to initialize. "
-            "BEFORE using any library: Call tapps_lookup_docs(). "
-            "AFTER editing Python files: Call tapps_score_file(quick=True) or tapps_quick_check(). "
-            "BEFORE declaring done: Call tapps_validate_changed() or tapps_quality_gate(). "
-            "FINAL step: Call tapps_checklist()."
-        ),
-        "quick_start": [
-            "1. FIRST: Call tapps_session_start() to initialize the session",
-            "2. BEFORE using any library API: Call tapps_lookup_docs(library='<name>')",
-            "3. DURING edits: Call tapps_quick_check(file_path='<path>') after each change",
-            "4. BEFORE declaring done: Call tapps_validate_changed() - all gates MUST pass",
-            "5. FINAL step: Call tapps_checklist(task_type='<type>') to verify completeness",
-        ],
-        "critical_rules": [
-            "BLOCKING: tapps_quality_gate MUST pass before work is complete",
-            "BLOCKING: tapps_lookup_docs MUST be called before using external library APIs",
-            "REQUIRED: tapps_score_file MUST be called on every modified Python file",
-            "NEVER skip tapps_checklist as the final verification step",
-        ],
-        "pipeline": {
-            "name": "TAPPS Quality Pipeline",
-            "stages": [s.value for s in PipelineStage],
-            "current_hint": "Start with tapps_pipeline_overview prompt, or follow stages in order.",
-            "stage_tools": {s.value: tools for s, tools in STAGE_TOOLS.items()},
-            "handoff_file": "docs/TAPPS_HANDOFF.md",
-            "runlog_file": "docs/TAPPS_RUNLOG.md",
-            "prompts_available": True,
-        },
-    })
+    )
     return _with_nudges("tapps_server_info", resp)
 
 
@@ -252,30 +277,45 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
 
     settings = load_settings()
     result = run_security_scan(
-        str(resolved), scan_secrets=scan_secrets,
-        cwd=str(settings.project_root), timeout=settings.tool_timeout,
+        str(resolved),
+        scan_secrets=scan_secrets,
+        cwd=str(settings.project_root),
+        timeout=settings.tool_timeout,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
-        "tapps_security_scan", start,
-        file_path=str(resolved), degraded=not result.bandit_available,
+        "tapps_security_scan",
+        start,
+        file_path=str(resolved),
+        degraded=not result.bandit_available,
     )
 
-    resp = success_response("tapps_security_scan", elapsed_ms, {
-        "file_path": str(resolved), "passed": result.passed,
-        "total_issues": result.total_issues, "critical_count": result.critical_count,
-        "high_count": result.high_count, "medium_count": result.medium_count,
-        "low_count": result.low_count, "bandit_available": result.bandit_available,
-        "bandit_issues": serialize_issues(result.bandit_issues, limit=30),
-        "secret_findings": serialize_issues(result.secret_findings, limit=30),
-    }, degraded=not result.bandit_available)
+    resp = success_response(
+        "tapps_security_scan",
+        elapsed_ms,
+        {
+            "file_path": str(resolved),
+            "passed": result.passed,
+            "total_issues": result.total_issues,
+            "critical_count": result.critical_count,
+            "high_count": result.high_count,
+            "medium_count": result.medium_count,
+            "low_count": result.low_count,
+            "bandit_available": result.bandit_available,
+            "bandit_issues": serialize_issues(result.bandit_issues, limit=30),
+            "secret_findings": serialize_issues(result.secret_findings, limit=30),
+        },
+        degraded=not result.bandit_available,
+    )
     return _with_nudges("tapps_security_scan", resp)
 
 
 @mcp.tool()
 async def tapps_lookup_docs(
-    library: str, topic: str = "overview", mode: str = "code",
+    library: str,
+    topic: str = "overview",
+    mode: str = "code",
 ) -> dict[str, Any]:
     """BLOCKING REQUIREMENT before using any external library API. Returns
     current docs (Context7 + cache) to prevent hallucinated APIs.
@@ -303,8 +343,10 @@ async def tapps_lookup_docs(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
     data: dict[str, Any] = {
-        "library": result.library, "topic": result.topic,
-        "source": result.source, "cache_hit": result.cache_hit,
+        "library": result.library,
+        "topic": result.topic,
+        "source": result.source,
+        "cache_hit": result.cache_hit,
         "response_time_ms": result.response_time_ms,
     }
     if result.content is not None:
@@ -316,7 +358,8 @@ async def tapps_lookup_docs(
         data["fuzzy_score"] = result.fuzzy_score
 
     _record_execution(
-        "tapps_lookup_docs", start,
+        "tapps_lookup_docs",
+        start,
         status="success" if result.success else "failed",
         error_code="api_key_missing" if (result.error and "API key" in result.error) else None,
     )
@@ -356,13 +399,20 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_config", start, file_path=str(resolved))
 
-    resp = success_response("tapps_validate_config", elapsed_ms, {
-        "file_path": result.file_path, "config_type": result.config_type,
-        "valid": result.valid, "findings": [f.model_dump() for f in result.findings],
-        "suggestions": result.suggestions, "finding_count": len(result.findings),
-        "critical_count": sum(1 for f in result.findings if f.severity == "critical"),
-        "warning_count": sum(1 for f in result.findings if f.severity == "warning"),
-    })
+    resp = success_response(
+        "tapps_validate_config",
+        elapsed_ms,
+        {
+            "file_path": result.file_path,
+            "config_type": result.config_type,
+            "valid": result.valid,
+            "findings": [f.model_dump() for f in result.findings],
+            "suggestions": result.suggestions,
+            "finding_count": len(result.findings),
+            "critical_count": sum(1 for f in result.findings if f.severity == "critical"),
+            "warning_count": sum(1 for f in result.findings if f.severity == "warning"),
+        },
+    )
     return _with_nudges("tapps_validate_config", resp)
 
 
@@ -385,20 +435,27 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_consult_expert", start)
 
-    resp = success_response("tapps_consult_expert", elapsed_ms, {
-        "domain": result.domain, "expert_id": result.expert_id,
-        "expert_name": result.expert_name, "answer": result.answer,
-        "confidence": round(result.confidence, 4),
-        "factors": result.factors.model_dump(), "sources": result.sources,
-        "chunks_used": result.chunks_used,
-        "low_confidence_nudge": result.low_confidence_nudge,
-        "suggested_tool": result.suggested_tool,
-        "suggested_library": result.suggested_library,
-        "suggested_topic": result.suggested_topic,
-        "fallback_used": result.fallback_used,
-        "fallback_library": result.fallback_library,
-        "fallback_topic": result.fallback_topic,
-    })
+    resp = success_response(
+        "tapps_consult_expert",
+        elapsed_ms,
+        {
+            "domain": result.domain,
+            "expert_id": result.expert_id,
+            "expert_name": result.expert_name,
+            "answer": result.answer,
+            "confidence": round(result.confidence, 4),
+            "factors": result.factors.model_dump(),
+            "sources": result.sources,
+            "chunks_used": result.chunks_used,
+            "low_confidence_nudge": result.low_confidence_nudge,
+            "suggested_tool": result.suggested_tool,
+            "suggested_library": result.suggested_library,
+            "suggested_topic": result.suggested_topic,
+            "fallback_used": result.fallback_used,
+            "fallback_library": result.fallback_library,
+            "fallback_topic": result.fallback_topic,
+        },
+    )
     return _with_nudges("tapps_consult_expert", resp)
 
 
@@ -414,9 +471,14 @@ def tapps_list_experts() -> dict[str, Any]:
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_list_experts", start)
 
-    resp = success_response("tapps_list_experts", elapsed_ms, {
-        "expert_count": len(experts), "experts": [e.model_dump() for e in experts],
-    })
+    resp = success_response(
+        "tapps_list_experts",
+        elapsed_ms,
+        {
+            "expert_count": len(experts),
+            "experts": [e.model_dump() for e in experts],
+        },
+    )
     return _with_nudges("tapps_list_experts", resp)
 
 
@@ -442,10 +504,16 @@ def tapps_checklist(task_type: str = "review") -> dict[str, Any]:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_checklist", start)
         fallback_data = {
-            "task_type": task_type, "called": [], "missing_required": [],
-            "missing_recommended": [], "missing_optional": [],
-            "missing_required_hints": [], "missing_recommended_hints": [],
-            "missing_optional_hints": [], "complete": False, "total_calls": 0,
+            "task_type": task_type,
+            "called": [],
+            "missing_required": [],
+            "missing_recommended": [],
+            "missing_optional": [],
+            "missing_required_hints": [],
+            "missing_recommended_hints": [],
+            "missing_optional_hints": [],
+            "complete": False,
+            "total_calls": 0,
             "checklist_unavailable": True,
             "message": (
                 "Module tapps_mcp.tools.checklist is not available. "
@@ -481,26 +549,34 @@ def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
     except Exception as exc:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution(
-            "tapps_project_profile", start,
-            status="failed", error_code="profile_failed",
+            "tapps_project_profile",
+            start,
+            status="failed",
+            error_code="profile_failed",
         )
         return error_response("tapps_project_profile", "profile_failed", str(exc))
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_project_profile", start)
 
-    resp = success_response("tapps_project_profile", elapsed_ms, {
-        "project_root": str(root),
-        "tech_stack": profile.tech_stack.model_dump(),
-        "project_type": profile.project_type,
-        "project_type_confidence": round(profile.project_type_confidence, 2),
-        "project_type_reason": profile.project_type_reason,
-        "has_ci": profile.has_ci, "ci_systems": profile.ci_systems,
-        "has_docker": profile.has_docker, "has_tests": profile.has_tests,
-        "test_frameworks": profile.test_frameworks,
-        "package_managers": profile.package_managers,
-        "quality_recommendations": profile.quality_recommendations,
-    })
+    resp = success_response(
+        "tapps_project_profile",
+        elapsed_ms,
+        {
+            "project_root": str(root),
+            "tech_stack": profile.tech_stack.model_dump(),
+            "project_type": profile.project_type,
+            "project_type_confidence": round(profile.project_type_confidence, 2),
+            "project_type_reason": profile.project_type_reason,
+            "has_ci": profile.has_ci,
+            "ci_systems": profile.ci_systems,
+            "has_docker": profile.has_docker,
+            "has_tests": profile.has_tests,
+            "test_frameworks": profile.test_frameworks,
+            "package_managers": profile.package_managers,
+            "quality_recommendations": profile.quality_recommendations,
+        },
+    )
     return _with_nudges("tapps_project_profile", resp)
 
 
@@ -537,7 +613,8 @@ def tapps_session_notes(action: str, key: str = "", value: str = "") -> dict[str
     if action == "save":
         if not key or not value:
             return error_response(
-                "tapps_session_notes", "missing_params",
+                "tapps_session_notes",
+                "missing_params",
                 "save requires key and value",
             )
         note = store.save(key, value)
@@ -557,7 +634,8 @@ def tapps_session_notes(action: str, key: str = "", value: str = "") -> dict[str
         data = {"action": "clear", "cleared_count": store.clear(key or None)}
     else:
         return error_response(
-            "tapps_session_notes", "invalid_action",
+            "tapps_session_notes",
+            "invalid_action",
             f"Unknown action: {action}. Use save/get/list/clear.",
         )
 
@@ -592,14 +670,20 @@ def tapps_impact_analysis(file_path: str, change_type: str = "modified") -> dict
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_impact_analysis", start, file_path=str(resolved))
 
-    resp = success_response("tapps_impact_analysis", elapsed_ms, {
-        "changed_file": report.changed_file, "change_type": report.change_type,
-        "severity": report.severity, "total_affected": report.total_affected,
-        "direct_dependents": [d.model_dump() for d in report.direct_dependents],
-        "transitive_dependents": [d.model_dump() for d in report.transitive_dependents],
-        "test_files": [t.model_dump() for t in report.test_files],
-        "recommendations": report.recommendations,
-    })
+    resp = success_response(
+        "tapps_impact_analysis",
+        elapsed_ms,
+        {
+            "changed_file": report.changed_file,
+            "change_type": report.change_type,
+            "severity": report.severity,
+            "total_affected": report.total_affected,
+            "direct_dependents": [d.model_dump() for d in report.direct_dependents],
+            "transitive_dependents": [d.model_dump() for d in report.transitive_dependents],
+            "test_files": [t.model_dump() for t in report.test_files],
+            "recommendations": report.recommendations,
+        },
+    )
     return _with_nudges("tapps_impact_analysis", resp)
 
 

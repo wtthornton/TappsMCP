@@ -15,7 +15,6 @@ from tapps_mcp.knowledge.content_normalizer import (
     rank_snippets,
 )
 
-
 SAMPLE_CONTENT = """# FastAPI Quick Start
 
 ## Installation
@@ -79,16 +78,22 @@ class TestExtractSnippets:
         for s in extract_snippets(SAMPLE_CONTENT):
             assert s.token_count > 0
 
-    @pytest.mark.parametrize("length,expected_count", [
-        (30, 1),   # exactly at MIN_SNIPPET_LENGTH
-        (29, 0),   # just below
-    ], ids=["at-min", "below-min"])
+    @pytest.mark.parametrize(
+        "length,expected_count",
+        [
+            (30, 1),  # exactly at MIN_SNIPPET_LENGTH
+            (29, 0),  # just below
+        ],
+        ids=["at-min", "below-min"],
+    )
     def test_snippet_length_boundary(self, length, expected_count) -> None:
         content = f"```python\n{'a' * length}\n```"
         assert len(extract_snippets(content)) == expected_count
 
     def test_no_language_specified(self) -> None:
-        snippets = extract_snippets("## Section\n\n```\nsome long content that is at least 30 chars\n```")
+        snippets = extract_snippets(
+            "## Section\n\n```\nsome long content that is at least 30 chars\n```"
+        )
         assert len(snippets) == 1 and snippets[0].language == ""
 
     def test_content_with_no_code_blocks(self) -> None:
@@ -99,7 +104,9 @@ class TestExtractSnippets:
         assert len(snippets) == 1
 
     def test_multiple_headers_picks_nearest(self) -> None:
-        content = "# First\n\nText.\n\n## Second\n\n```python\ndef foo():\n    return 'test' * 100\n```"
+        content = (
+            "# First\n\nText.\n\n## Second\n\n```python\ndef foo():\n    return 'test' * 100\n```"
+        )
         snippets = extract_snippets(content)
         assert len(snippets) == 1 and "Second" in snippets[0].context
 
@@ -108,7 +115,9 @@ class TestRankSnippets:
     def test_ranks_by_completeness(self) -> None:
         snippets = [
             CodeSnippet(code="x = 1", token_count=2),
-            CodeSnippet(code="from fastapi import FastAPI\ndef main():\n    return 'ok'", token_count=15),
+            CodeSnippet(
+                code="from fastapi import FastAPI\ndef main():\n    return 'ok'", token_count=15
+            ),
         ]
         ranked = rank_snippets(snippets)
         assert ranked[0].code.startswith("from fastapi")
@@ -116,14 +125,22 @@ class TestRankSnippets:
     def test_query_relevance_boosts(self) -> None:
         snippets = [
             CodeSnippet(code="print('hello world')\nreturn 1", language="python", token_count=5),
-            CodeSnippet(code="def test_sql_injection():\n    query = 'SELECT * FROM users'\n    return query", language="python", token_count=10),
+            CodeSnippet(
+                code=(
+                    "def test_sql_injection():\n    query = 'SELECT * FROM users'\n    return query"
+                ),
+                language="python",
+                token_count=10,
+            ),
         ]
         ranked = rank_snippets(snippets, query="sql injection")
         assert "sql" in ranked[0].code.lower()
 
     def test_empty_and_stopword_queries(self) -> None:
         """Empty and stopword-only queries don't crash."""
-        snip = CodeSnippet(code="from fastapi import FastAPI\ndef main():\n    return 'ok'", token_count=10)
+        snip = CodeSnippet(
+            code="from fastapi import FastAPI\ndef main():\n    return 'ok'", token_count=10
+        )
         assert len(rank_snippets([snip], query="")) == 1
         assert len(rank_snippets([snip], query="how to the a in")) == 1
 
@@ -134,12 +151,18 @@ class TestRankSnippets:
         assert py.score > sh.score
 
     def test_scores_clamped(self) -> None:
-        snip = CodeSnippet(code="from x import y\ndef f():\n    class C:\n        return 1", language="python", token_count=15)
+        snip = CodeSnippet(
+            code="from x import y\ndef f():\n    class C:\n        return 1",
+            language="python",
+            token_count=15,
+        )
         rank_snippets([snip], query="x y f C return")
         assert 0.0 <= snip.score <= 1.0
 
     def test_no_signals_score_zero(self) -> None:
-        snip = CodeSnippet(code="some plain text without keywords here now", language="rust", token_count=5)
+        snip = CodeSnippet(
+            code="some plain text without keywords here now", language="rust", token_count=5
+        )
         rank_snippets([snip])
         assert snip.score == 0.0
 
@@ -159,11 +182,15 @@ class TestDeduplicateSnippets:
         b = CodeSnippet(code="import pytest\ndef test_func():\n    assert True", token_count=8)
         assert len(deduplicate_snippets([a, b])) == 2
 
-    @pytest.mark.parametrize("input_list,expected_len", [
-        ([], 0),
-        ("single", 1),
-        ("triple", 1),
-    ], ids=["empty", "single", "all-identical"])
+    @pytest.mark.parametrize(
+        "input_list,expected_len",
+        [
+            ([], 0),
+            ("single", 1),
+            ("triple", 1),
+        ],
+        ids=["empty", "single", "all-identical"],
+    )
     def test_dedup_edge_cases(self, input_list, expected_len) -> None:
         if input_list == []:
             assert deduplicate_snippets([]) == []
@@ -182,13 +209,17 @@ class TestDeduplicateSnippets:
 
 
 class TestApplyTokenBudget:
-    @pytest.mark.parametrize("token_count,budget,expected_len", [
-        (100, 200, 2),     # fits 2 of 3
-        (50, 0, 0),        # zero budget
-        (100, 100, 1),     # exactly at budget
-        (101, 100, 0),     # one over budget
-        (50, 1000, 2),     # budget larger than total
-    ], ids=["fits-two", "zero-budget", "at-budget", "over-budget", "large-budget"])
+    @pytest.mark.parametrize(
+        "token_count,budget,expected_len",
+        [
+            (100, 200, 2),  # fits 2 of 3
+            (50, 0, 0),  # zero budget
+            (100, 100, 1),  # exactly at budget
+            (101, 100, 0),  # one over budget
+            (50, 1000, 2),  # budget larger than total
+        ],
+        ids=["fits-two", "zero-budget", "at-budget", "over-budget", "large-budget"],
+    )
     def test_budget_enforcement(self, token_count, budget, expected_len) -> None:
         if token_count == 100 and budget == 200:
             snippets = [CodeSnippet(code="x" * 100, token_count=100) for _ in range(3)]
@@ -245,7 +276,9 @@ class TestReferenceCard:
     def test_to_markdown_with_all_fields(self) -> None:
         card = ReferenceCard(
             title="Test Section",
-            snippets=[CodeSnippet(code="print('hi')", language="python", context="Example", token_count=3)],
+            snippets=[
+                CodeSnippet(code="print('hi')", language="python", context="Example", token_count=3)
+            ],
             summary="A test card.",
             token_count=3,
         )
@@ -271,8 +304,16 @@ class TestNormalizationResult:
     def test_to_dict_complete(self) -> None:
         result = NormalizationResult(
             cards=[ReferenceCard(title="Test", token_count=10)],
-            total_snippets=5, deduped_snippets=2, total_tokens=100, budget_applied=True,
+            total_snippets=5,
+            deduped_snippets=2,
+            total_tokens=100,
+            budget_applied=True,
         )
         d = result.to_dict()
-        assert d == {"total_snippets": 5, "deduped_snippets": 2, "total_tokens": 100,
-                     "budget_applied": True, "card_count": 1}
+        assert d == {
+            "total_snippets": 5,
+            "deduped_snippets": 2,
+            "total_tokens": 100,
+            "budget_applied": True,
+            "card_count": 1,
+        }

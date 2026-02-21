@@ -10,14 +10,15 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from tapps_mcp.experts.models import KnowledgeChunk
-from tapps_mcp.experts.rag import SimpleKnowledgeBase
 from tapps_mcp.experts.registry import ExpertRegistry
 from tapps_mcp.experts.vector_rag import VectorKnowledgeBase
+
+if TYPE_CHECKING:
+    from tapps_mcp.experts.models import KnowledgeChunk
 
 logger = structlog.get_logger(__name__)
 
@@ -25,6 +26,7 @@ logger = structlog.get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Benchmark query set
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class BenchmarkQuery:
@@ -106,6 +108,7 @@ BENCHMARK_QUERIES: list[BenchmarkQuery] = [
 # Metrics
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class QueryResult:
     """Result of evaluating a single benchmark query."""
@@ -161,11 +164,14 @@ QUALITY_GATE_PASS_RATE = 0.6
 QUALITY_GATE_P95_LATENCY_MS = 500.0
 # Minimum average keyword coverage.
 QUALITY_GATE_MIN_KEYWORD_COVERAGE = 0.3
+# Minimum keyword coverage for a single query to be considered passing.
+_MIN_QUERY_KEYWORD_COVERAGE = 0.25
 
 
 # ---------------------------------------------------------------------------
 # Evaluation engine
 # ---------------------------------------------------------------------------
+
 
 def _evaluate_query(bq: BenchmarkQuery, kb: VectorKnowledgeBase) -> QueryResult:
     """Evaluate a single benchmark query against a knowledge base."""
@@ -181,7 +187,7 @@ def _evaluate_query(bq: BenchmarkQuery, kb: VectorKnowledgeBase) -> QueryResult:
     keyword_total = len(bq.expected_keywords)
     keyword_coverage = keyword_hits / keyword_total if keyword_total > 0 else 1.0
 
-    passed = len(chunks) >= bq.min_chunks and keyword_coverage >= 0.25
+    passed = len(chunks) >= bq.min_chunks and keyword_coverage >= _MIN_QUERY_KEYWORD_COVERAGE
 
     return QueryResult(
         query=bq,
@@ -230,7 +236,7 @@ def run_retrieval_eval(
         results.append(qr)
         if not qr.passed:
             failures.append(
-                f"FAIL [{bq.domain}] \"{bq.query[:60]}\" — "
+                f'FAIL [{bq.domain}] "{bq.query[:60]}" — '
                 f"chunks={qr.chunks_found}, keywords={qr.keyword_hits}/{qr.keyword_total}"
             )
 
@@ -243,10 +249,7 @@ def run_retrieval_eval(
     p95_latency = latencies[min(p95_idx, total - 1)] if total else 0.0
     top_scores = [r.top_score for r in results]
     avg_top = sum(top_scores) / total if total else 0.0
-    coverages = [
-        r.keyword_hits / r.keyword_total if r.keyword_total > 0 else 1.0
-        for r in results
-    ]
+    coverages = [r.keyword_hits / r.keyword_total if r.keyword_total > 0 else 1.0 for r in results]
     avg_coverage = sum(coverages) / total if total else 0.0
     fallback_count = sum(1 for r in results if r.chunks_found == 0)
     fallback_rate = fallback_count / total if total else 0.0

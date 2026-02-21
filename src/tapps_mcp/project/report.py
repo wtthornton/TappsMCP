@@ -204,9 +204,7 @@ def _render_html(
 
     gate_rate = summary.get("gate_pass_rate")
     gate_line = (
-        f"<p>Gate pass rate: {gate_rate:.0%}</p>"
-        if isinstance(gate_rate, (int, float))
-        else ""
+        f"<p>Gate pass rate: {gate_rate:.0%}</p>" if isinstance(gate_rate, (int, float)) else ""
     )
 
     return f"""<!DOCTYPE html>

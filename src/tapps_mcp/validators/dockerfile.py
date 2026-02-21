@@ -25,7 +25,10 @@ _MAX_RUN_COMMANDS = 5
 
 
 def _check_from(
-    content: str, _lines: list[str], findings: list[ValidationFinding], _sug: list[str],
+    content: str,
+    _lines: list[str],
+    findings: list[ValidationFinding],
+    _sug: list[str],
 ) -> None:
     if not _FROM_RE.search(content):
         findings.append(
@@ -38,7 +41,10 @@ def _check_from(
 
 
 def _check_latest_tag(
-    content: str, lines: list[str], findings: list[ValidationFinding], _sug: list[str],
+    content: str,
+    lines: list[str],
+    findings: list[ValidationFinding],
+    _sug: list[str],
 ) -> None:
     if _FROM_LATEST_RE.search(content):
         for i, line in enumerate(lines, 1):
@@ -47,8 +53,7 @@ def _check_latest_tag(
                     ValidationFinding(
                         severity="warning",
                         message=(
-                            "Avoid 'latest' tag "
-                            "- pin a specific version for reproducibility."
+                            "Avoid 'latest' tag - pin a specific version for reproducibility."
                         ),
                         line=i,
                         category="best_practice",
@@ -57,30 +62,36 @@ def _check_latest_tag(
 
 
 def _check_user(
-    content: str, _lines: list[str], findings: list[ValidationFinding], _sug: list[str],
+    content: str,
+    _lines: list[str],
+    findings: list[ValidationFinding],
+    _sug: list[str],
 ) -> None:
     if not _USER_RE.search(content):
         findings.append(
             ValidationFinding(
                 severity="warning",
-                message=(
-                    "No USER instruction "
-                    "- container runs as root. Add a non-root USER."
-                ),
+                message=("No USER instruction - container runs as root. Add a non-root USER."),
                 category="security",
             )
         )
 
 
 def _check_healthcheck(
-    content: str, _lines: list[str], _findings: list[ValidationFinding], suggestions: list[str],
+    content: str,
+    _lines: list[str],
+    _findings: list[ValidationFinding],
+    suggestions: list[str],
 ) -> None:
     if not _HEALTHCHECK_RE.search(content):
         suggestions.append("Add a HEALTHCHECK instruction for container orchestration.")
 
 
 def _check_env_secrets(
-    _content: str, lines: list[str], findings: list[ValidationFinding], _sug: list[str],
+    _content: str,
+    lines: list[str],
+    findings: list[ValidationFinding],
+    _sug: list[str],
 ) -> None:
     for i, line in enumerate(lines, 1):
         if re.match(r"^ENV\s+\S*(PASSWORD|SECRET|KEY|TOKEN)\s*=", line, re.IGNORECASE):
@@ -95,21 +106,30 @@ def _check_env_secrets(
 
 
 def _check_apt_cache(
-    content: str, _lines: list[str], _findings: list[ValidationFinding], suggestions: list[str],
+    content: str,
+    _lines: list[str],
+    _findings: list[ValidationFinding],
+    suggestions: list[str],
 ) -> None:
     if _APT_GET_RE.search(content) and not _APT_CACHE_RE.search(content):
         suggestions.append("Add 'rm -rf /var/lib/apt/lists/*' after apt-get to reduce image size.")
 
 
 def _check_multi_stage(
-    content: str, _lines: list[str], _findings: list[ValidationFinding], suggestions: list[str],
+    content: str,
+    _lines: list[str],
+    _findings: list[ValidationFinding],
+    suggestions: list[str],
 ) -> None:
     if len(_MULTI_STAGE_RE.findall(content)) == 1:
         suggestions.append("Consider using multi-stage builds to reduce final image size.")
 
 
 def _check_run_count(
-    content: str, _lines: list[str], _findings: list[ValidationFinding], suggestions: list[str],
+    content: str,
+    _lines: list[str],
+    _findings: list[ValidationFinding],
+    suggestions: list[str],
 ) -> None:
     run_count = len(_RUN_RE.findall(content))
     if run_count > _MAX_RUN_COMMANDS:
@@ -119,7 +139,10 @@ def _check_run_count(
 
 
 def _check_layer_ordering(
-    content: str, _lines: list[str], _findings: list[ValidationFinding], suggestions: list[str],
+    content: str,
+    _lines: list[str],
+    _findings: list[ValidationFinding],
+    suggestions: list[str],
 ) -> None:
     copy_req_pos = _COPY_REQ_RE.search(content)
     copy_dot_pos = _COPY_DOT_RE.search(content)
