@@ -11,11 +11,20 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from mcp.types import ToolAnnotations
+
 from tapps_mcp.config.settings import load_settings
 from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
+_ANNOTATIONS_READ_ONLY = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -355,6 +364,6 @@ def ast_quick_complexity(code: str) -> int | None:
 
 def register(mcp_instance: FastMCP) -> None:
     """Register scoring/gate tools on the shared *mcp_instance*."""
-    mcp_instance.tool()(tapps_score_file)
-    mcp_instance.tool()(tapps_quality_gate)
-    mcp_instance.tool()(tapps_quick_check)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_score_file)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quality_gate)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quick_check)

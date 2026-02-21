@@ -9,6 +9,8 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
+from mcp.types import ToolAnnotations
+
 from tapps_mcp.config.settings import load_settings
 from tapps_mcp.server_helpers import success_response
 
@@ -16,6 +18,27 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
     from tapps_mcp.metrics.collector import MetricsHub
+
+_ANNOTATIONS_READ_ONLY = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+_ANNOTATIONS_READ_ONLY_OPEN = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=True,
+)
+
+_ANNOTATIONS_SIDE_EFFECT = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=False,
+)
 
 _MIN_CONFIDENCE_FOR_DOCS = 0.5
 
@@ -353,7 +376,7 @@ def tapps_research(
 
 def register(mcp_instance: FastMCP) -> None:
     """Register metrics/feedback/research tools on *mcp_instance*."""
-    mcp_instance.tool()(tapps_dashboard)
-    mcp_instance.tool()(tapps_stats)
-    mcp_instance.tool()(tapps_feedback)
-    mcp_instance.tool()(tapps_research)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dashboard)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_stats)
+    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT)(tapps_feedback)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_research)

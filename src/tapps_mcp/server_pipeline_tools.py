@@ -10,6 +10,8 @@ import contextlib
 import time
 from typing import TYPE_CHECKING, Any
 
+from mcp.types import ToolAnnotations
+
 from tapps_mcp.config.settings import load_settings
 from tapps_mcp.server_helpers import success_response
 
@@ -17,6 +19,20 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from mcp.server.fastmcp import FastMCP
+
+_ANNOTATIONS_READ_ONLY = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
 
 
 async def tapps_validate_changed(
@@ -263,6 +279,6 @@ def tapps_init(
 
 def register(mcp_instance: FastMCP) -> None:
     """Register pipeline/validation tools on *mcp_instance*."""
-    mcp_instance.tool()(tapps_validate_changed)
-    mcp_instance.tool()(tapps_session_start)
-    mcp_instance.tool()(tapps_init)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_changed)
+    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_session_start)
+    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_init)
