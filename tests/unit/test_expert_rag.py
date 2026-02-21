@@ -210,3 +210,33 @@ class TestDeduplicate:
 
     def test_empty_list(self) -> None:
         assert _deduplicate([]) == []
+
+
+class TestTestingKBRetrieval:
+    """Validate that test-configuration-and-urls.md is retrievable for representative queries."""
+
+    def test_base_url_config_returns_chunks(self) -> None:
+        from pathlib import Path
+
+        kb_dir = Path(__file__).resolve().parent.parent.parent / "src" / "tapps_mcp" / "experts" / "knowledge" / "testing"
+        kb = SimpleKnowledgeBase(kb_dir)
+        results = kb.search("base URL configuration fixture")
+        assert len(results) > 0
+        assert any("url" in c.content.lower() or "base_url" in c.content.lower() for c in results)
+
+    def test_monkeypatch_env_returns_chunks(self) -> None:
+        from pathlib import Path
+
+        kb_dir = Path(__file__).resolve().parent.parent.parent / "src" / "tapps_mcp" / "experts" / "knowledge" / "testing"
+        kb = SimpleKnowledgeBase(kb_dir)
+        results = kb.search("monkeypatch environment variables")
+        assert len(results) > 0
+        assert any("monkeypatch" in c.content.lower() for c in results)
+
+    def test_localhost_avoidance_returns_chunks(self) -> None:
+        from pathlib import Path
+
+        kb_dir = Path(__file__).resolve().parent.parent.parent / "src" / "tapps_mcp" / "experts" / "knowledge" / "testing"
+        kb = SimpleKnowledgeBase(kb_dir)
+        results = kb.search("avoid hardcoded localhost")
+        assert len(results) > 0

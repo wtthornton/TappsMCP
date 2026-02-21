@@ -46,6 +46,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_dashboard** | When the user wants to **review how TappsMCP is performing** — scoring accuracy, gate pass rates, expert effectiveness, cache performance, quality trends, and alerts. Supports json, markdown, and html output. |
 | **tapps_stats** | When the user wants **usage statistics** — call counts, success rates, average durations, cache hit rates, and gate pass rates. Filterable by tool and time period. |
 | **tapps_feedback** | After receiving a tool result — report whether the output was **helpful or not**. This feedback improves adaptive scoring and expert weights over time. |
+| **tapps_research** | When you need **combined expert + docs** in one call — consults the domain expert, then auto-supplements with Context7 documentation when RAG is empty or confidence is low. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
 | **tapps_init** | At the **start of a pipeline run** — profiles the project, sets context, and plans the workflow stages (discover, research, develop, validate, verify). |
 
 ---
@@ -81,7 +82,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
    - Call `tapps_quality_gate(file_path=...)` — work is not done until it passes.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files.
+7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).
 
 ---
 
