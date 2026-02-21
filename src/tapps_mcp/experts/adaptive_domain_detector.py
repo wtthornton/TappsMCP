@@ -121,8 +121,7 @@ class AdaptiveDomainDetector:
         # Consultation gap suggestions intentionally reference existing domains.
         known = self._get_existing_domains()
         suggestions = [
-            s for s in suggestions
-            if s.domain not in known or s.source == "consultation_gap"
+            s for s in suggestions if s.domain not in known or s.source == "consultation_gap"
         ]
 
         # Deduplicate by domain (keep highest confidence).
