@@ -23,7 +23,7 @@ def _get_call_tracker() -> type[Any] | None:
     """Return CallTracker class if available, else None."""
     if _call_tracker_cache:
         val = _call_tracker_cache[0]
-        return val if val is not False else None
+        return val if isinstance(val, type) else None
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
@@ -32,6 +32,7 @@ def _get_call_tracker() -> type[Any] | None:
     except ImportError:
         _call_tracker_cache.append(False)
         return None
+
 
 # Max nudges per response to avoid noise
 _MAX_NUDGES = 3
@@ -52,8 +53,9 @@ NudgeRule = tuple[Any, str]  # (callable, str) - use Any to avoid verbose typing
 _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     "tapps_server_info": [
         (
-            lambda called, _ctx: "tapps_project_profile" not in called
-            and "tapps_session_start" not in called,
+            lambda called, _ctx: (
+                "tapps_project_profile" not in called and "tapps_session_start" not in called
+            ),
             "NEXT: Call tapps_project_profile() to detect the project tech stack.",
         ),
     ],
@@ -85,8 +87,9 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
             "Gate FAILED. Fix the issues, then re-run tapps_score_file() and tapps_quality_gate().",
         ),
         (
-            lambda called, ctx: (ctx or {}).get("gate_passed") is True
-            and "tapps_checklist" not in called,
+            lambda called, ctx: (
+                (ctx or {}).get("gate_passed") is True and "tapps_checklist" not in called
+            ),
             "NEXT: Call tapps_checklist() to verify no required steps were skipped.",
         ),
     ],
@@ -104,8 +107,9 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     ],
     "tapps_lookup_docs": [
         (
-            lambda called, _ctx: "tapps_score_file" not in called
-            and "tapps_quick_check" not in called,
+            lambda called, _ctx: (
+                "tapps_score_file" not in called and "tapps_quick_check" not in called
+            ),
             "NEXT: Write your code, then call tapps_score_file() or tapps_quick_check().",
         ),
     ],
@@ -125,9 +129,7 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
 
 
 # Global nudge: remind about lookup_docs if never called
-_GLOBAL_LOOKUP_NUDGE = (
-    "REMINDER: Call tapps_lookup_docs() before using any external library API."
-)
+_GLOBAL_LOOKUP_NUDGE = "REMINDER: Call tapps_lookup_docs() before using any external library API."
 
 
 def compute_next_steps(

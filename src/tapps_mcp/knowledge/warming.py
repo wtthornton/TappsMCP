@@ -62,9 +62,7 @@ async def warm_cache(
         return 0
 
     # Filter out already-cached (non-stale) libraries
-    to_warm = [
-        lib for lib in libs[:max_libraries] if not cache.has(lib) or cache.is_stale(lib)
-    ]
+    to_warm = [lib for lib in libs[:max_libraries] if not cache.has(lib) or cache.is_stale(lib)]
 
     if not to_warm:
         logger.info("cache_warming_skipped", reason="all_cached")

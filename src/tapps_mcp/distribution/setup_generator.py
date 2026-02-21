@@ -279,48 +279,42 @@ def _check_config(host: str, project_root: Path, scope: str = "user") -> bool:
     config_path = _get_config_path(host, project_root, scope=scope)
     servers_key = _get_servers_key(host)
 
-    if not config_path.exists():
-        click.echo(click.style(f"Config file not found: {config_path}", fg="red"))
-        click.echo(f"  Run: tapps-mcp init --host {host}")
+    error = _validate_config_file(config_path, servers_key)
+    if error is not None:
+        click.echo(click.style(error, fg="red" if "Unexpected" not in error else "yellow"))
+        if "not found" in error.lower():
+            click.echo(f"  Run: tapps-mcp init --host {host}")
         return False
+
+    click.echo(click.style(f"tapps-mcp is correctly configured in {config_path}", fg="green"))
+    return True
+
+
+def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
+    """Return an error string if *config_path* is invalid, else ``None``."""
+    if not config_path.exists():
+        return f"Config file not found: {config_path}"
 
     try:
         raw = config_path.read_text(encoding="utf-8")
         data = json.loads(raw)
     except json.JSONDecodeError:
-        click.echo(click.style(f"Invalid JSON in {config_path}", fg="red"))
-        return False
+        return f"Invalid JSON in {config_path}"
 
     if not isinstance(data, dict):
-        click.echo(click.style(f"Invalid structure in {config_path}", fg="red"))
-        return False
+        return f"Invalid structure in {config_path}"
+
     servers = data.get(servers_key, {})
-    if not isinstance(servers, dict) or "tapps-mcp" not in servers:
-        click.echo(
-            click.style(
-                f"tapps-mcp entry not found in {config_path} under '{servers_key}'",
-                fg="red",
-            )
-        )
-        click.echo(f"  Run: tapps-mcp init --host {host}")
-        return False
-
-    entry = servers.get("tapps-mcp")
+    entry = servers.get("tapps-mcp") if isinstance(servers, dict) else None
     if not isinstance(entry, dict):
-        click.echo(click.style(f"Invalid tapps-mcp entry in {config_path}", fg="red"))
-        return False
-    command = entry.get("command", "")
-    if command != "tapps-mcp":
-        click.echo(
-            click.style(
-                f"Unexpected command in tapps-mcp config: '{command}' (expected 'tapps-mcp')",
-                fg="yellow",
-            )
-        )
-        return False
+        return f"tapps-mcp entry not found in {config_path} under '{servers_key}'"
 
-    click.echo(click.style(f"tapps-mcp is correctly configured in {config_path}", fg="green"))
-    return True
+    command = entry.get("command", "")
+    return (
+        f"Unexpected command in tapps-mcp config: '{command}' (expected 'tapps-mcp')"
+        if command != "tapps-mcp"
+        else None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -375,13 +369,9 @@ def _generate_rules(host: str, project_root: Path) -> None:
     elif host == "cursor":
         action = _bootstrap_cursor(project_root)
         if action == "created":
-            click.echo(
-                click.style("  Created .cursor/rules/tapps-pipeline.md", fg="green")
-            )
+            click.echo(click.style("  Created .cursor/rules/tapps-pipeline.md", fg="green"))
         elif action == "updated":
-            click.echo(
-                click.style("  Updated .cursor/rules/tapps-pipeline.md", fg="green")
-            )
+            click.echo(click.style("  Updated .cursor/rules/tapps-pipeline.md", fg="green"))
         elif action == "skipped":
             click.echo("  .cursor/rules/tapps-pipeline.md already exists (skipped)")
     # VS Code has no platform rule equivalent — no-op
@@ -434,7 +424,12 @@ def run_init(
             return True
         click.echo(f"Detected MCP host(s): {', '.join(hosts)}")
         return _configure_multiple_hosts(
-            hosts, root, check=check, force=force, scope=scope, rules=rules,
+            hosts,
+            root,
+            check=check,
+            force=force,
+            scope=scope,
+            rules=rules,
         )
 
     if check:

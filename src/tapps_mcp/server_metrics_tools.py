@@ -24,7 +24,8 @@ _PERIOD_DAYS: dict[str, int] = {"1d": 1, "7d": 7, "30d": 30}
 
 
 def _session_stats(
-    hub: MetricsHub, tool_name: str | None,
+    hub: MetricsHub,
+    tool_name: str | None,
 ) -> tuple[Any, list[dict[str, Any]]]:
     """Compute stats from in-memory session data."""
     from tapps_mcp.metrics.execution_metrics import ToolCallMetricsCollector
@@ -41,18 +42,22 @@ def _session_stats(
         if tool_name and tname != tool_name:
             continue
         ts = ToolCallMetricsCollector._compute_summary(tmetrics)
-        breakdowns.append({
-            "tool_name": tname,
-            "call_count": ts.total_calls,
-            "success_rate": ts.success_rate,
-            "avg_duration_ms": ts.avg_duration_ms,
-            "p95_duration_ms": ts.p95_duration_ms,
-        })
+        breakdowns.append(
+            {
+                "tool_name": tname,
+                "call_count": ts.total_calls,
+                "success_rate": ts.success_rate,
+                "avg_duration_ms": ts.avg_duration_ms,
+                "p95_duration_ms": ts.p95_duration_ms,
+            }
+        )
     return summary, breakdowns
 
 
 def _period_stats(
-    hub: MetricsHub, tool_name: str | None, period: str,
+    hub: MetricsHub,
+    tool_name: str | None,
+    period: str,
 ) -> tuple[Any, list[dict[str, Any]]]:
     """Compute stats from persisted data for a given time period."""
     from datetime import UTC, datetime, timedelta
@@ -162,16 +167,20 @@ def tapps_stats(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_stats", start)
 
-    resp = success_response("tapps_stats", elapsed_ms, {
-        "period": period,
-        "total_calls": summary.total_calls,
-        "success_rate": summary.success_rate,
-        "avg_duration_ms": summary.avg_duration_ms,
-        "p95_duration_ms": summary.p95_duration_ms,
-        "gate_pass_rate": summary.gate_pass_rate,
-        "avg_score": summary.avg_score,
-        "tools": tool_breakdowns,
-    })
+    resp = success_response(
+        "tapps_stats",
+        elapsed_ms,
+        {
+            "period": period,
+            "total_calls": summary.total_calls,
+            "success_rate": summary.success_rate,
+            "avg_duration_ms": summary.avg_duration_ms,
+            "p95_duration_ms": summary.p95_duration_ms,
+            "gate_pass_rate": summary.gate_pass_rate,
+            "avg_score": summary.avg_score,
+            "tools": tool_breakdowns,
+        },
+    )
     return _with_nudges("tapps_stats", resp)
 
 
@@ -213,13 +222,17 @@ def tapps_feedback(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_feedback", start)
 
-    resp = success_response("tapps_feedback", elapsed_ms, {
-        "recorded": True,
-        "tool_name": tool_name,
-        "helpful": helpful,
-        "tool_stats": stats,
-        "overall_stats": overall_stats,
-    })
+    resp = success_response(
+        "tapps_feedback",
+        elapsed_ms,
+        {
+            "recorded": True,
+            "tool_name": tool_name,
+            "helpful": helpful,
+            "tool_stats": stats,
+            "overall_stats": overall_stats,
+        },
+    )
     return _with_nudges("tapps_feedback", resp)
 
 
@@ -279,7 +292,9 @@ def tapps_research(
                 engine = LookupEngine(cache, api_key=settings.context7_api_key)
                 try:
                     lr = await engine.lookup(
-                        library=lookup_library, topic=lookup_topic, mode="code",
+                        library=lookup_library,
+                        topic=lookup_topic,
+                        mode="code",
                     )
                 finally:
                     await engine.close()
@@ -309,26 +324,30 @@ def tapps_research(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_research", start)
 
-    resp = success_response("tapps_research", elapsed_ms, {
-        "domain": result.domain,
-        "expert_id": result.expert_id,
-        "expert_name": result.expert_name,
-        "answer": answer,
-        "confidence": round(result.confidence, 4),
-        "factors": result.factors.model_dump(),
-        "sources": result.sources,
-        "chunks_used": result.chunks_used,
-        "docs_supplemented": docs_content is not None,
-        "docs_library": docs_library,
-        "docs_topic": docs_topic,
-        "docs_error": docs_error,
-        "suggested_tool": result.suggested_tool,
-        "suggested_library": result.suggested_library,
-        "suggested_topic": result.suggested_topic,
-        "fallback_used": result.fallback_used,
-        "fallback_library": result.fallback_library,
-        "fallback_topic": result.fallback_topic,
-    })
+    resp = success_response(
+        "tapps_research",
+        elapsed_ms,
+        {
+            "domain": result.domain,
+            "expert_id": result.expert_id,
+            "expert_name": result.expert_name,
+            "answer": answer,
+            "confidence": round(result.confidence, 4),
+            "factors": result.factors.model_dump(),
+            "sources": result.sources,
+            "chunks_used": result.chunks_used,
+            "docs_supplemented": docs_content is not None,
+            "docs_library": docs_library,
+            "docs_topic": docs_topic,
+            "docs_error": docs_error,
+            "suggested_tool": result.suggested_tool,
+            "suggested_library": result.suggested_library,
+            "suggested_topic": result.suggested_topic,
+            "fallback_used": result.fallback_used,
+            "fallback_library": result.fallback_library,
+            "fallback_topic": result.fallback_topic,
+        },
+    )
     return _with_nudges("tapps_research", resp)
 
 

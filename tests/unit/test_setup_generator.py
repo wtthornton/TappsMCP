@@ -603,8 +603,14 @@ class TestCliInit:
         result = runner.invoke(
             main,
             [
-                "init", "--host", "claude-code", "--scope", "project",
-                "--project-root", str(tmp_path), "--no-rules",
+                "init",
+                "--host",
+                "claude-code",
+                "--scope",
+                "project",
+                "--project-root",
+                str(tmp_path),
+                "--no-rules",
             ],
         )
         assert result.exit_code == 0
@@ -616,8 +622,12 @@ class TestCliInit:
         result = runner.invoke(
             main,
             [
-                "init", "--host", "cursor",
-                "--project-root", str(tmp_path), "--no-rules",
+                "init",
+                "--host",
+                "cursor",
+                "--project-root",
+                str(tmp_path),
+                "--no-rules",
             ],
         )
         assert result.exit_code == 0
@@ -682,7 +692,10 @@ class TestConfigureMultipleHosts:
     def test_configures_all_hosts(self, tmp_path):
         """Configures all provided hosts."""
         ok = _configure_multiple_hosts(
-            ["cursor", "vscode"], tmp_path, force=True, rules=False,
+            ["cursor", "vscode"],
+            tmp_path,
+            force=True,
+            rules=False,
         )
         assert ok is True
         assert (tmp_path / ".cursor" / "mcp.json").exists()
@@ -695,7 +708,9 @@ class TestConfigureMultipleHosts:
         cursor_dir.mkdir()
         (cursor_dir / "mcp.json").write_text("{bad}", encoding="utf-8")
         ok = _configure_multiple_hosts(
-            ["cursor", "vscode"], tmp_path, rules=False,
+            ["cursor", "vscode"],
+            tmp_path,
+            rules=False,
         )
         assert ok is False
         # VS Code should still succeed
@@ -710,14 +725,20 @@ class TestConfigureMultipleHosts:
         (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
         # vscode is missing → should return False
         ok = _configure_multiple_hosts(
-            ["cursor", "vscode"], tmp_path, check=True, rules=False,
+            ["cursor", "vscode"],
+            tmp_path,
+            check=True,
+            rules=False,
         )
         assert ok is False
 
     def test_generates_rules_when_enabled(self, tmp_path):
         """Rules are generated alongside config when rules=True."""
         _configure_multiple_hosts(
-            ["cursor"], tmp_path, force=True, rules=True,
+            ["cursor"],
+            tmp_path,
+            force=True,
+            rules=True,
         )
         assert (tmp_path / ".cursor" / "mcp.json").exists()
         assert (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").exists()
@@ -725,7 +746,10 @@ class TestConfigureMultipleHosts:
     def test_skips_rules_when_disabled(self, tmp_path):
         """Rules are skipped when rules=False."""
         _configure_multiple_hosts(
-            ["cursor"], tmp_path, force=True, rules=False,
+            ["cursor"],
+            tmp_path,
+            force=True,
+            rules=False,
         )
         assert (tmp_path / ".cursor" / "mcp.json").exists()
         assert not (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").exists()

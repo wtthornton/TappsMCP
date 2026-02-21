@@ -121,8 +121,7 @@ async def tapps_score_file(
         if uncached:
             data["uncached_libraries"] = uncached[:10]
             data["docs_hint"] = (
-                f"Call tapps_lookup_docs for {', '.join(uncached[:5])} "
-                "to avoid hallucinated APIs"
+                f"Call tapps_lookup_docs for {', '.join(uncached[:5])} to avoid hallucinated APIs"
             )
     except Exception:
         _logger.debug("uncached_libraries detection failed", exc_info=True)
@@ -136,9 +135,13 @@ async def tapps_score_file(
     )
 
     resp = success_response("tapps_score_file", elapsed_ms, data, degraded=result.degraded)
-    return _with_nudges("tapps_score_file", resp, {
-        "security_issue_count": len(result.security_issues),
-    })
+    return _with_nudges(
+        "tapps_score_file",
+        resp,
+        {
+            "security_issue_count": len(result.security_issues),
+        },
+    )
 
 
 async def tapps_quality_gate(
@@ -206,9 +209,13 @@ async def tapps_quality_gate(
         gate_data,
         degraded=score_result.degraded,
     )
-    return _with_nudges("tapps_quality_gate", resp, {
-        "gate_passed": gate_result.passed,
-    })
+    return _with_nudges(
+        "tapps_quality_gate",
+        resp,
+        {
+            "gate_passed": gate_result.passed,
+        },
+    )
 
 
 async def tapps_quick_check(
@@ -292,7 +299,8 @@ async def tapps_quick_check(
         data["lint_issues"] = serialize_issues(score_result.lint_issues)
     if sec_result.total_issues > 0:
         data["security_issues"] = serialize_issues(
-            sec_result.bandit_issues + sec_result.secret_findings, limit=10,
+            sec_result.bandit_issues + sec_result.secret_findings,
+            limit=10,
         )
 
     suggestions: list[str] = []
@@ -305,7 +313,9 @@ async def tapps_quick_check(
         data["suggestions"] = suggestions
 
     resp = success_response(
-        "tapps_quick_check", elapsed_ms, data,
+        "tapps_quick_check",
+        elapsed_ms,
+        data,
         degraded=not sec_result.bandit_available,
     )
     return _with_nudges("tapps_quick_check", resp)
@@ -326,8 +336,18 @@ def ast_quick_complexity(code: str) -> int | None:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             cc = 1
             for child in ast.walk(node):
-                if isinstance(child, (ast.If, ast.For, ast.While, ast.ExceptHandler,
-                                      ast.With, ast.Assert, ast.BoolOp)):
+                if isinstance(
+                    child,
+                    (
+                        ast.If,
+                        ast.For,
+                        ast.While,
+                        ast.ExceptHandler,
+                        ast.With,
+                        ast.Assert,
+                        ast.BoolOp,
+                    ),
+                ):
                     cc += 1
             max_cc = max(max_cc, cc)
     return max_cc

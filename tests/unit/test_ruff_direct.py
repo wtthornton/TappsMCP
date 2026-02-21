@@ -30,7 +30,10 @@ class TestRunRuffSync:
         import subprocess
 
         mock_run.return_value = subprocess.CompletedProcess(
-            args=["ruff"], returncode=0, stdout="", stderr="",
+            args=["ruff"],
+            returncode=0,
+            stdout="",
+            stderr="",
         )
         issues = _run_ruff_sync("test.py")
         assert issues == []

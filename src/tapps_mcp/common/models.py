@@ -78,9 +78,7 @@ class VectorRagDiagnostic(BaseModel):
         description="Whether sentence-transformers is importable."
     )
     numpy_available: bool = Field(description="Whether numpy is importable.")
-    status: str = Field(
-        description="'full_vector' if all deps present, 'keyword_only' otherwise."
-    )
+    status: str = Field(description="'full_vector' if all deps present, 'keyword_only' otherwise.")
 
 
 class KnowledgeDomainInfo(BaseModel):

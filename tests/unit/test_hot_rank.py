@@ -50,10 +50,14 @@ class TestComputeHotRank:
 class TestComputeHotRankEdgeCases:
     """Boundary conditions and edge cases."""
 
-    @pytest.mark.parametrize("days,expected_recency", [
-        (0.0, 1.0),     # just now
-        (-5.0, 1.0),    # negative treated as max
-    ], ids=["zero-days", "negative-days"])
+    @pytest.mark.parametrize(
+        "days,expected_recency",
+        [
+            (0.0, 1.0),  # just now
+            (-5.0, 1.0),  # negative treated as max
+        ],
+        ids=["zero-days", "negative-days"],
+    )
     def test_max_recency(self, days, expected_recency) -> None:
         rank = compute_hot_rank("test", 10, 0.5, 0.5, days)
         assert rank.recency_weight == expected_recency
@@ -66,9 +70,15 @@ class TestComputeHotRankEdgeCases:
         rank = compute_hot_rank("test", 10, 0.5, 0.5, 365.0)
         assert rank.recency_weight < 0.01
 
-    @pytest.mark.parametrize("consultations,has_bonus", [
-        (4, True), (5, False), (6, False),
-    ], ids=["below-threshold", "at-threshold", "above-threshold"])
+    @pytest.mark.parametrize(
+        "consultations,has_bonus",
+        [
+            (4, True),
+            (5, False),
+            (6, False),
+        ],
+        ids=["below-threshold", "at-threshold", "above-threshold"],
+    )
     def test_exploration_threshold(self, consultations, has_bonus) -> None:
         rank = compute_hot_rank("test", consultations, 0.5, 0.5, 1.0)
         assert (rank.exploration_bonus > 0.0) == has_bonus
@@ -93,12 +103,16 @@ class TestApplyHotRankBoost:
     """Tests for apply_hot_rank_boost."""
 
     def test_none_metrics_dir_no_change(self) -> None:
-        chunk = KnowledgeChunk(content="test", source_file="a.md", line_start=1, line_end=5, score=0.5)
+        chunk = KnowledgeChunk(
+            content="test", source_file="a.md", line_start=1, line_end=5, score=0.5
+        )
         result = apply_hot_rank_boost([chunk], "security", metrics_dir=None)
         assert result[0].score == 0.5
 
     def test_nonexistent_metrics_dir_no_change(self, tmp_path) -> None:
-        chunk = KnowledgeChunk(content="test", source_file="a.md", line_start=1, line_end=5, score=0.5)
+        chunk = KnowledgeChunk(
+            content="test", source_file="a.md", line_start=1, line_end=5, score=0.5
+        )
         result = apply_hot_rank_boost([chunk], "security", metrics_dir=tmp_path / "nonexistent")
         assert len(result) == 1
 
@@ -108,6 +122,7 @@ class TestApplyHotRankBoost:
     def test_objects_without_score_attribute(self) -> None:
         class NoScoreObj:
             pass
+
         result = apply_hot_rank_boost([NoScoreObj()], "security", metrics_dir=None)
         assert len(result) == 1
 

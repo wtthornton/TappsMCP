@@ -218,7 +218,14 @@ class TestTestingKBRetrieval:
     def test_base_url_config_returns_chunks(self) -> None:
         from pathlib import Path
 
-        kb_dir = Path(__file__).resolve().parent.parent.parent / "src" / "tapps_mcp" / "experts" / "knowledge" / "testing"
+        kb_dir = (
+            Path(__file__).resolve().parent.parent.parent
+            / "src"
+            / "tapps_mcp"
+            / "experts"
+            / "knowledge"
+            / "testing"
+        )
         kb = SimpleKnowledgeBase(kb_dir)
         results = kb.search("base URL configuration fixture")
         assert len(results) > 0
@@ -227,7 +234,14 @@ class TestTestingKBRetrieval:
     def test_monkeypatch_env_returns_chunks(self) -> None:
         from pathlib import Path
 
-        kb_dir = Path(__file__).resolve().parent.parent.parent / "src" / "tapps_mcp" / "experts" / "knowledge" / "testing"
+        kb_dir = (
+            Path(__file__).resolve().parent.parent.parent
+            / "src"
+            / "tapps_mcp"
+            / "experts"
+            / "knowledge"
+            / "testing"
+        )
         kb = SimpleKnowledgeBase(kb_dir)
         results = kb.search("monkeypatch environment variables")
         assert len(results) > 0
@@ -236,7 +250,14 @@ class TestTestingKBRetrieval:
     def test_localhost_avoidance_returns_chunks(self) -> None:
         from pathlib import Path
 
-        kb_dir = Path(__file__).resolve().parent.parent.parent / "src" / "tapps_mcp" / "experts" / "knowledge" / "testing"
+        kb_dir = (
+            Path(__file__).resolve().parent.parent.parent
+            / "src"
+            / "tapps_mcp"
+            / "experts"
+            / "knowledge"
+            / "testing"
+        )
         kb = SimpleKnowledgeBase(kb_dir)
         results = kb.search("avoid hardcoded localhost")
         assert len(results) > 0

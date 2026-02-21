@@ -222,9 +222,7 @@ class TestRadonAsyncFallback:
     @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
     @patch("tapps_mcp.tools.radon._radon_cc_direct")
     async def test_cc_falls_back_on_timeout(self, mock_direct, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=-1, stdout="", stderr="", timed_out=True
-        )
+        mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
         mock_direct.return_value = []
         result = await run_radon_cc_async("test.py")
         mock_direct.assert_called_once()
@@ -233,9 +231,7 @@ class TestRadonAsyncFallback:
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
     async def test_cc_uses_subprocess_when_available(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=0, stdout=SAMPLE_CC_JSON, stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=0, stdout=SAMPLE_CC_JSON, stderr="")
         result = await run_radon_cc_async("test.py")
         assert len(result) == 2
 

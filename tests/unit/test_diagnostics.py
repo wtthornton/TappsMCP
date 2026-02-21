@@ -186,9 +186,7 @@ class TestCollectDiagnostics:
     def test_with_api_key(self, tmp_path: Path) -> None:
         cache_dir = tmp_path / "cache"
         cache_dir.mkdir()
-        result = collect_diagnostics(
-            api_key=SecretStr("test-key"), cache_dir=cache_dir
-        )
+        result = collect_diagnostics(api_key=SecretStr("test-key"), cache_dir=cache_dir)
         assert result.context7.api_key_set is True
         assert result.context7.status == "available"
 

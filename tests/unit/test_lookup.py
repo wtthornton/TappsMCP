@@ -205,9 +205,7 @@ class TestLookupDidYouMean:
         cache.put(CacheEntry(library="flask", topic="overview", content="# Flask docs"))
 
         mock_client = AsyncMock()
-        mock_client.resolve_library.return_value = [
-            LibraryMatch(id="/test/fstapi", title="fstapi")
-        ]
+        mock_client.resolve_library.return_value = [LibraryMatch(id="/test/fstapi", title="fstapi")]
         mock_client.fetch_docs.return_value = None  # No content
         mock_client.close = AsyncMock()
 
@@ -233,9 +231,7 @@ class TestLookupDidYouMean:
         cache.put(CacheEntry(library="fastapi", topic="overview", content="# FastAPI"))
 
         mock_client = AsyncMock()
-        mock_client.resolve_library.return_value = [
-            LibraryMatch(id="/test/zzz", title="zzz")
-        ]
+        mock_client.resolve_library.return_value = [LibraryMatch(id="/test/zzz", title="zzz")]
         mock_client.fetch_docs.return_value = None
         mock_client.close = AsyncMock()
 
@@ -316,6 +312,7 @@ class TestLookupEdgeCases:
     async def test_api_error_with_stale_fallback(self, tmp_path):
         """When API fails and stale cache exists, stale content is returned."""
         from pydantic import SecretStr
+
         from tapps_mcp.knowledge.context7_client import Context7Error
 
         cache = KBCache(cache_dir=tmp_path / "cache")

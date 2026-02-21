@@ -66,5 +66,8 @@ async def run_ruff_check_direct(
     contexts where async subprocess can silently fail.
     """
     return await asyncio.to_thread(
-        _run_ruff_sync, file_path, cwd=cwd, timeout=timeout,
+        _run_ruff_sync,
+        file_path,
+        cwd=cwd,
+        timeout=timeout,
     )

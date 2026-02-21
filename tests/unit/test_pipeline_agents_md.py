@@ -20,6 +20,7 @@ from tapps_mcp.prompts.prompt_loader import load_agents_template
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _template() -> str:
     return load_agents_template()
 

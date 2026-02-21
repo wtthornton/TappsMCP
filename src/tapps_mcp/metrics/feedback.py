@@ -152,11 +152,13 @@ class FeedbackTracker:
         outcomes: list[dict[str, Any]] = []
         for r in records:
             if r.tool_name in scoring_tools:
-                outcomes.append({
-                    "first_pass_success": r.helpful,
-                    "initial_scores": {},
-                    "source": "feedback",
-                    "session_id": r.session_id,
-                    "timestamp": r.timestamp,
-                })
+                outcomes.append(
+                    {
+                        "first_pass_success": r.helpful,
+                        "initial_scores": {},
+                        "source": "feedback",
+                        "session_id": r.session_id,
+                        "timestamp": r.timestamp,
+                    }
+                )
         return outcomes

@@ -26,6 +26,7 @@ class TestBenchmarkQueries:
     def test_all_queries_valid(self) -> None:
         """Each query has domain, keywords, and valid min_chunks."""
         from tapps_mcp.experts.registry import ExpertRegistry
+
         valid_domains = {e.primary_domain for e in ExpertRegistry.get_all_experts()}
         for bq in BENCHMARK_QUERIES:
             assert bq.domain, f"Missing domain: {bq.query}"
@@ -59,14 +60,20 @@ class TestRunRetrievalEval:
         assert all(k in d for k in ("pass_rate", "avg_latency_ms", "failures"))
 
     def test_custom_queries(self) -> None:
-        custom = [BenchmarkQuery(domain="security", query="SQL injection prevention",
-                                 expected_keywords=["sql", "injection"])]
+        custom = [
+            BenchmarkQuery(
+                domain="security",
+                query="SQL injection prevention",
+                expected_keywords=["sql", "injection"],
+            )
+        ]
         report = run_retrieval_eval(queries=custom)
         assert report.total_queries == 1
 
     def test_custom_query_with_no_keywords(self) -> None:
-        custom = [BenchmarkQuery(domain="security", query="security best practices",
-                                 expected_keywords=[])]
+        custom = [
+            BenchmarkQuery(domain="security", query="security best practices", expected_keywords=[])
+        ]
         report = run_retrieval_eval(queries=custom)
         if report.results:
             assert report.results[0].keyword_total == 0
@@ -77,8 +84,14 @@ class TestQualityGates:
 
     def _report(self, **overrides) -> EvalReport:
         """Create a passing EvalReport with optional overrides."""
-        defaults = dict(total_queries=10, passed_queries=8, pass_rate=0.8,
-                        avg_latency_ms=50.0, p95_latency_ms=100.0, avg_keyword_coverage=0.6)
+        defaults = {
+            "total_queries": 10,
+            "passed_queries": 8,
+            "pass_rate": 0.8,
+            "avg_latency_ms": 50.0,
+            "p95_latency_ms": 100.0,
+            "avg_keyword_coverage": 0.6,
+        }
         defaults.update(overrides)
         return EvalReport(**defaults)
 
@@ -86,11 +99,15 @@ class TestQualityGates:
         passed, violations = check_quality_gates(self._report())
         assert passed and violations == []
 
-    @pytest.mark.parametrize("field,value,violation_keyword", [
-        ("pass_rate", 0.3, "Pass rate"),
-        ("p95_latency_ms", 600.0, "latency"),
-        ("avg_keyword_coverage", 0.1, "keyword"),
-    ], ids=["pass-rate", "latency", "keyword-coverage"])
+    @pytest.mark.parametrize(
+        "field,value,violation_keyword",
+        [
+            ("pass_rate", 0.3, "Pass rate"),
+            ("p95_latency_ms", 600.0, "latency"),
+            ("avg_keyword_coverage", 0.1, "keyword"),
+        ],
+        ids=["pass-rate", "latency", "keyword-coverage"],
+    )
     def test_individual_gate_failure(self, field, value, violation_keyword) -> None:
         passed, violations = check_quality_gates(self._report(**{field: value}))
         assert not passed
@@ -101,11 +118,15 @@ class TestQualityGates:
         passed, violations = check_quality_gates(report)
         assert not passed and len(violations) == 3
 
-    @pytest.mark.parametrize("field,value", [
-        ("pass_rate", QUALITY_GATE_PASS_RATE),
-        ("p95_latency_ms", QUALITY_GATE_P95_LATENCY_MS),
-        ("avg_keyword_coverage", QUALITY_GATE_MIN_KEYWORD_COVERAGE),
-    ], ids=["pass-rate-boundary", "latency-boundary", "coverage-boundary"])
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("pass_rate", QUALITY_GATE_PASS_RATE),
+            ("p95_latency_ms", QUALITY_GATE_P95_LATENCY_MS),
+            ("avg_keyword_coverage", QUALITY_GATE_MIN_KEYWORD_COVERAGE),
+        ],
+        ids=["pass-rate-boundary", "latency-boundary", "coverage-boundary"],
+    )
     def test_boundary_values_pass(self, field, value) -> None:
         """Exact threshold values should pass (not fail)."""
         passed, _ = check_quality_gates(self._report(**{field: value}))
@@ -124,9 +145,14 @@ class TestEvalReportDataclass:
         assert report.total_queries == 0 and report.pass_rate == 0.0 and report.failures == []
 
     def test_to_dict_rounds_values(self) -> None:
-        report = EvalReport(pass_rate=0.33333, avg_latency_ms=123.456789,
-                            p95_latency_ms=456.789, avg_top_score=0.88888,
-                            avg_keyword_coverage=0.77777, fallback_rate=0.11111)
+        report = EvalReport(
+            pass_rate=0.33333,
+            avg_latency_ms=123.456789,
+            p95_latency_ms=456.789,
+            avg_top_score=0.88888,
+            avg_keyword_coverage=0.77777,
+            fallback_rate=0.11111,
+        )
         d = report.to_dict()
         assert d["pass_rate"] == 0.3333
         assert d["avg_latency_ms"] == 123.46

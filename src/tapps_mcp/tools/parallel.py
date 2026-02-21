@@ -98,16 +98,24 @@ async def run_all_tools(
 
     if mode == "direct":
         return await _run_direct(
-            file_path, cwd=cwd, timeout=timeout,
-            run_ruff=run_ruff, run_mypy=run_mypy,
-            run_bandit=run_bandit, run_radon=run_radon,
+            file_path,
+            cwd=cwd,
+            timeout=timeout,
+            run_ruff=run_ruff,
+            run_mypy=run_mypy,
+            run_bandit=run_bandit,
+            run_radon=run_radon,
         )
 
     # "subprocess" or "auto" — start with async subprocess
     return await _run_subprocess(
-        file_path, cwd=cwd, timeout=timeout,
-        run_ruff=run_ruff, run_mypy=run_mypy,
-        run_bandit=run_bandit, run_radon=run_radon,
+        file_path,
+        cwd=cwd,
+        timeout=timeout,
+        run_ruff=run_ruff,
+        run_mypy=run_mypy,
+        run_bandit=run_bandit,
+        run_radon=run_radon,
     )
 
 

@@ -25,6 +25,10 @@ _CHARS_PER_TOKEN = 4
 _MIN_SNIPPET_LENGTH = 30
 # Jaccard similarity threshold for deduplication.
 _DEDUP_THRESHOLD = 0.7
+# Minimum lines for a snippet to not be penalised.
+_MIN_SNIPPET_LINES = 3
+# Maximum lines for a snippet to not be penalised.
+_MAX_SNIPPET_LINES = 50
 
 
 @dataclass
@@ -130,6 +134,7 @@ def extract_snippets(content: str) -> list[CodeSnippet]:
 # Snippet ranking
 # ---------------------------------------------------------------------------
 
+
 def rank_snippets(
     snippets: list[CodeSnippet],
     query: str = "",
@@ -169,9 +174,7 @@ def rank_snippets(
 
         # Penalise very short or very long snippets.
         lines = snippet.code.count("\n") + 1
-        if lines < 3:
-            score -= 0.1
-        elif lines > 50:
+        if lines < _MIN_SNIPPET_LINES or lines > _MAX_SNIPPET_LINES:
             score -= 0.1
 
         snippet.score = round(min(1.0, max(0.0, score)), 4)
@@ -183,6 +186,7 @@ def rank_snippets(
 # ---------------------------------------------------------------------------
 # Deduplication
 # ---------------------------------------------------------------------------
+
 
 def deduplicate_snippets(
     snippets: list[CodeSnippet],
@@ -222,6 +226,7 @@ def deduplicate_snippets(
 # Token budget enforcement
 # ---------------------------------------------------------------------------
 
+
 def apply_token_budget(
     snippets: list[CodeSnippet],
     budget: int = _DEFAULT_SECTION_TOKEN_BUDGET,
@@ -240,6 +245,7 @@ def apply_token_budget(
 # ---------------------------------------------------------------------------
 # Main normalisation pipeline
 # ---------------------------------------------------------------------------
+
 
 def normalize_content(
     content: str,

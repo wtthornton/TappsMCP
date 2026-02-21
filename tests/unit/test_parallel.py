@@ -338,10 +338,19 @@ class TestDirectMode:
             ) as mock_direct,
         ):
             await run_all_tools(
-                "test.py", mode="direct",
-                run_ruff=True, run_mypy=False, run_bandit=False, run_radon=True,
+                "test.py",
+                mode="direct",
+                run_ruff=True,
+                run_mypy=False,
+                run_bandit=False,
+                run_radon=True,
             )
             mock_direct.assert_called_once_with(
-                "test.py", cwd=None, timeout=30,
-                run_ruff=True, run_mypy=False, run_bandit=False, run_radon=True,
+                "test.py",
+                cwd=None,
+                timeout=30,
+                run_ruff=True,
+                run_mypy=False,
+                run_bandit=False,
+                run_radon=True,
             )

@@ -320,11 +320,7 @@ class CodeScorer:
         root = _find_project_root(file_path)
         if root is None:
             return 5.0
-        pts = sum(
-            points
-            for points, names in signals
-            if any((root / n).exists() for n in names)
-        )
+        pts = sum(points for points, names in signals if any((root / n).exists() for n in names))
         return clamp_individual(min(10.0, pts * 2.0))
 
     @staticmethod
@@ -413,8 +409,7 @@ class CodeScorer:
         if root is None:
             return 5.0
         pts = sum(
-            p for p, names in CodeScorer._DEVEX_SIGNALS
-            if any((root / n).exists() for n in names)
+            p for p, names in CodeScorer._DEVEX_SIGNALS if any((root / n).exists() for n in names)
         )
         pyproject = root / "pyproject.toml"
         if pyproject.exists():
@@ -557,8 +552,7 @@ def _suggest_complexity(
         )
     elif max_cc > _CC_MODERATE:
         tips.append(
-            f"Function '{func_name}' has CC={int(max_cc)}. "
-            "Consider simplifying conditional logic."
+            f"Function '{func_name}' has CC={int(max_cc)}. Consider simplifying conditional logic."
         )
     return tips
 
@@ -573,10 +567,7 @@ def _suggest_security(
         return tips
     issue_count = int(str(details.get("issue_count", 0)))
     if issue_count > 0:
-        tips.append(
-            f"Found {issue_count} security issue(s). "
-            "Run tapps_security_scan for details."
-        )
+        tips.append(f"Found {issue_count} security issue(s). Run tapps_security_scan for details.")
     patterns = details.get("patterns_found")
     if isinstance(patterns, list) and patterns:
         joined = ", ".join(str(p) for p in patterns)
@@ -641,10 +632,7 @@ def _suggest_performance(
                 "Decompose into smaller functions."
             )
         elif issue_str == "large_function":
-            tips.append(
-                f"Function exceeds {LARGE_FUNCTION_LINES} lines. "
-                "Consider breaking it up."
-            )
+            tips.append(f"Function exceeds {LARGE_FUNCTION_LINES} lines. Consider breaking it up.")
         elif issue_str == "very_deep_nesting":
             tips.append(
                 f"Nesting depth > {VERY_DEEP_NESTING_THRESHOLD}. "
@@ -652,18 +640,15 @@ def _suggest_performance(
             )
         elif issue_str == "deep_nesting":
             tips.append(
-                f"Nesting depth > {DEEP_NESTING_THRESHOLD}. "
-                "Extract inner logic into helpers."
+                f"Nesting depth > {DEEP_NESTING_THRESHOLD}. Extract inner logic into helpers."
             )
         elif issue_str == "nested_loops":
             tips.append(
-                "Nested for-loops detected. "
-                "Consider alternative data structures or itertools."
+                "Nested for-loops detected. Consider alternative data structures or itertools."
             )
         elif issue_str == "expensive_comprehension":
             tips.append(
-                "List comprehension with many function calls. "
-                "Consider a plain loop for clarity."
+                "List comprehension with many function calls. Consider a plain loop for clarity."
             )
     return tips
 
@@ -680,7 +665,5 @@ def _suggest_devex(score: float) -> list[str]:
     """Actionable suggestions for the devex category."""
     tips: list[str] = []
     if score < _SCORE_LOW:
-        tips.append(
-            "Add CLAUDE.md or AGENTS.md for AI-assisted development guidance."
-        )
+        tips.append("Add CLAUDE.md or AGENTS.md for AI-assisted development guidance.")
     return tips

@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import structlog
 
@@ -67,7 +69,11 @@ def compute_hot_rank(
         DomainHotRank with computed score and component breakdown.
     """
     # Recency weight: exponential decay.
-    recency = math.exp(-0.693 * days_since_last / _RECENCY_HALF_LIFE_DAYS) if days_since_last >= 0 else 1.0
+    recency = (
+        math.exp(-0.693 * days_since_last / _RECENCY_HALF_LIFE_DAYS)
+        if days_since_last >= 0
+        else 1.0
+    )
 
     # Exploration bonus for under-served domains.
     exploration = _EXPLORATION_BONUS if consultations < _EXPLORATION_THRESHOLD else 0.0
@@ -101,7 +107,6 @@ def get_domain_hot_ranks(metrics_dir: Path) -> list[DomainHotRank]:
     Returns:
         Sorted list of DomainHotRank (highest score first).
     """
-    from tapps_mcp.common.utils import utc_now
     from tapps_mcp.metrics.expert_metrics import ExpertPerformanceTracker
     from tapps_mcp.metrics.feedback import FeedbackTracker
 
@@ -116,7 +121,6 @@ def get_domain_hot_ranks(metrics_dir: Path) -> list[DomainHotRank]:
     expert_feedback = feedback_stats.get("tapps_consult_expert", {})
     overall_helpful_rate = expert_feedback.get("helpful_rate", 0.5) if expert_feedback else 0.5
 
-    now = utc_now()
     ranks: list[DomainHotRank] = []
 
     for domain, stats in domain_breakdown.items():
@@ -181,6 +185,6 @@ def apply_hot_rank_boost(
     boost = domain_rank.score * boost_factor
     for chunk in chunks:
         if hasattr(chunk, "score"):
-            chunk.score = min(1.0, chunk.score + boost)  # type: ignore[attr-defined]
+            chunk.score = min(1.0, chunk.score + boost)
 
     return chunks

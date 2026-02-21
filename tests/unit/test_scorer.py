@@ -427,9 +427,7 @@ class TestSuggestSecurity:
         assert "3 security issue" in tips[0]
 
     def test_patterns_found(self):
-        tips = _suggest_security(
-            6.0, {"issue_count": 0, "patterns_found": ["eval(", "exec("]}
-        )
+        tips = _suggest_security(6.0, {"issue_count": 0, "patterns_found": ["eval(", "exec("]})
         assert len(tips) == 1
         assert "eval(" in tips[0]
 

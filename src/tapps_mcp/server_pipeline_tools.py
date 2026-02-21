@@ -65,13 +65,17 @@ async def tapps_validate_changed(
     if not paths:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_validate_changed", start)
-        resp = success_response("tapps_validate_changed", elapsed_ms, {
-            "files_validated": 0,
-            "all_gates_passed": True,
-            "total_security_issues": 0,
-            "results": [],
-            "summary": "No changed Python files found.",
-        })
+        resp = success_response(
+            "tapps_validate_changed",
+            elapsed_ms,
+            {
+                "files_validated": 0,
+                "all_gates_passed": True,
+                "total_security_issues": 0,
+                "results": [],
+                "summary": "No changed Python files found.",
+            },
+        )
         return _with_nudges("tapps_validate_changed", resp)
 
     capped = len(paths) > MAX_BATCH_FILES
@@ -118,13 +122,17 @@ async def tapps_validate_changed(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_changed", start, gate_passed=all_passed)
 
-    resp = success_response("tapps_validate_changed", elapsed_ms, {
-        "files_validated": len(results),
-        "all_gates_passed": all_passed,
-        "total_security_issues": total_sec,
-        "results": results,
-        "summary": summary,
-    })
+    resp = success_response(
+        "tapps_validate_changed",
+        elapsed_ms,
+        {
+            "files_validated": len(results),
+            "all_gates_passed": all_passed,
+            "total_security_issues": total_sec,
+            "results": results,
+            "summary": summary,
+        },
+    )
     return _with_nudges("tapps_validate_changed", resp)
 
 
