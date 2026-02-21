@@ -8,7 +8,7 @@ FROM python:3.12-slim AS builder
 WORKDIR /build
 
 # Install build deps
-RUN pip install --no-cache-dir hatchling
+RUN pip install --no-cache-dir hatchling==1.28.0
 
 # Copy project files
 COPY pyproject.toml uv.lock README.md ./
@@ -31,7 +31,7 @@ WORKDIR /app
 # Install system deps and external checkers
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
-    && pip install --no-cache-dir ruff mypy bandit radon \
+    && pip install --no-cache-dir ruff==0.15.0 mypy==1.19.1 bandit==1.9.3 radon==6.0.1 \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -rf /var/lib/apt/lists/*
 

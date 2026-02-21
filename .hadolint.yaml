@@ -1,0 +1,8 @@
+---
+# Hadolint configuration for TappsMCP
+# https://github.com/hadolint/hadolint#configure
+
+ignored:
+  # Pinning apt packages to exact versions is fragile in slim images —
+  # the available version string changes with every base-image rebuild.
+  - DL3008
