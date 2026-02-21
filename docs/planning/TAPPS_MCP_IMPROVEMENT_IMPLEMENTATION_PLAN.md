@@ -2,8 +2,8 @@
 
 **Source:** [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md)
 **Created:** 2026-02-18
-**Revised:** 2026-02-21 (all 10 stories implemented and verified)
-**Status:** COMPLETE — All 10 stories (Epic 10 + Epic 11) implemented, tested (145 tests passing), and verified
+**Revised:** 2026-02-21 (all 10 stories implemented and verified; re-verified 2026-02-21 with updated test counts)
+**Status:** COMPLETE — All 10 stories (Epic 10 + Epic 11) implemented, tested (230 epic-scoped tests passing; 1658 total suite), and verified
 **Audience:** TappsMCP maintainers
 
 ---
@@ -37,10 +37,10 @@ To keep this plan strictly factual, each status claim in Section 2 is tied to ob
 | Capability | Current status | Evidence |
 |---|---|---|
 | `tapps_consult_expert` basic flow (domain detect, retrieve, confidence, sources) | ✅ Implemented | `experts/engine.py`, `server.py` |
-| Low-confidence nudge to call `tapps_lookup_docs` | ✅ Implemented | `experts/engine.py:248-254` |
+| Low-confidence nudge to call `tapps_lookup_docs` | ✅ Implemented | `experts/engine.py:247-254` |
 | Automatic Context7 fallback inside expert flow when RAG empty | ✅ Implemented | `experts/engine.py:86-112` (`_lookup_docs_sync`), `engine.py:224-244` (fallback path), `settings.py:131-142` (config flags) |
-| Structured fields `suggested_tool`, `suggested_library`, `suggested_topic` in response model | ✅ Implemented | `experts/models.py:68-79`, `server.py:663-665`, `engine.py:199-201,213-214,266-268` |
-| Structured fields `fallback_used`, `fallback_library`, `fallback_topic` | ✅ Implemented | `experts/models.py:80-91`, `server.py:666-668`, `engine.py:202-204,235-237,269-271` |
+| Structured fields `suggested_tool`, `suggested_library`, `suggested_topic` in response model | ✅ Implemented | `experts/models.py:68-79`, `server.py:664-666`, `engine.py:199-201,213-214,266-268` |
+| Structured fields `fallback_used`, `fallback_library`, `fallback_topic` | ✅ Implemented | `experts/models.py:80-91`, `server.py:667-669`, `engine.py:202-204,235-237,269-271` |
 | Optional `tapps_research` tool | ✅ Implemented | `server.py` — `tapps_research()` tool registered, combines expert consultation + auto docs lookup |
 | Testing KB file `test-configuration-and-urls.md` | ✅ Implemented | `experts/knowledge/testing/test-configuration-and-urls.md` (57 lines) + retrieval validation tests in `test_expert_rag.py` |
 | Context7 cache + SWR + stale fallback | ✅ Implemented | `knowledge/lookup.py` |
@@ -57,7 +57,8 @@ To keep this plan strictly factual, each status claim in Section 2 is tied to ob
 - Epic 10 stories completed in code: **5 / 5** (10.1 ✅, 10.2 ✅, 10.3 ✅, 10.4 ✅, 10.5 ✅)
 - Epic 11 stories completed in code: **5 / 5** (11.1 ✅, 11.2 ✅, 11.3 ✅, 11.4 ✅, 11.5 ✅)
 - Overall planned stories completed: **10 / 10**
-- Tests: **145 passing** (126 unit + 19 integration)
+- Epic 10/11 scoped tests: **230 passing** (211 unit + 19 integration)
+- Full test suite: **1658 passing**, 7 skipped (1569 unit + 96 integration)
 
 ---
 
@@ -89,7 +90,7 @@ To keep this plan strictly factual, each status claim in Section 2 is tied to ob
 **Status:** ✅ Complete
 
 **Tasks:**
-- [x] Update `tapps_server_info` recommended workflow wording and stage hints. — `server.py:229-234` includes "For domain+library questions, pair with tapps_consult_expert()" in `recommended_workflow`.
+- [x] Update `tapps_server_info` recommended workflow wording and stage hints. — `server.py:230-236` includes "For domain+library questions, pair with tapps_consult_expert()" in `recommended_workflow`.
 - [x] Update AGENTS/template/research prompts to explicitly require combined expert+lookup for library-specific domain questions. — `AGENTS.md` step 7 now explicitly states: "For library-specific domain questions, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation." Also added `tapps_research` tool entry to the tool table.
 
 **DoD:** ✅ Workflow guidance consistently reflects expert+lookup coupling.
@@ -103,7 +104,7 @@ To keep this plan strictly factual, each status claim in Section 2 is tied to ob
 **Tasks:**
 - [x] Extend `ConsultationResult` with: `suggested_tool`, `suggested_library`, `suggested_topic`. — `models.py:68-79`.
 - [x] Populate those fields when no chunks are found. — `engine.py:213-214` sets `suggested_tool=”tapps_lookup_docs”` and calls `_infer_lookup_hints()` when `context` is empty.
-- [x] Return fields through MCP response mapping in `server.py`. — `server.py:663-665`.
+- [x] Return fields through MCP response mapping in `server.py`. — `server.py:664-666`.
 - [x] Add tests for field population and suggestion correctness. — `tests/unit/test_expert_engine.py:67-72` (unit), `tests/integration/test_expert_pipeline.py:179-184` (integration).
 
 **DoD:** ✅ Clients can parse and automatically follow up with `tapps_lookup_docs`.
@@ -174,7 +175,7 @@ This epic captures improvements discussed after Epic 10 planning and is not cove
 - [x] Apply hot-rank as tie-breaker in retrieval ranking. — `apply_hot_rank_boost()` adds narrow score boost (max 5%) to chunks from high-performing domains.
 - [x] Add guardrails to avoid popularity-only lock-in. — Exploration bonus (0.15) for domains with < 5 consultations.
 
-**DoD:** ✅ Repeat queries trend toward higher helpfulness with no quality regressions. 7 unit tests passing.
+**DoD:** ✅ Repeat queries trend toward higher helpfulness with no quality regressions. 21 unit tests passing.
 
 ---
 
@@ -188,7 +189,7 @@ This epic captures improvements discussed after Epic 10 planning and is not cove
 - [x] Add multi-signal matching (edit distance/token overlap + existing alias/prefix/LCS). — `knowledge/fuzzy_matcher.py` now has `edit_distance()`, `edit_distance_similarity()`, `token_overlap_score()`, and `multi_signal_score()` (weights: LCS 0.4, edit distance 0.35, token overlap 0.25).
 - [x] Add confidence bands + “did you mean” when low confidence. — `confidence_band()` classifies scores into high/medium/low. `did_you_mean()` returns suggestions for failed lookups. `lookup.py` integrates “did you mean?” hints into error messages.
 - [x] Incorporate project manifest/library detector priors for disambiguation. — `fuzzy_match_library()` accepts optional `project_libraries` param for +0.10 boost.
-- [x] Add eval tests for typo, alias, shorthand, and ambiguous library names. — 15 new tests in `test_fuzzy_matcher.py` covering edit distance, token overlap, multi-signal, confidence bands, “did you mean”, and manifest priors.
+- [x] Add eval tests for typo, alias, shorthand, and ambiguous library names. — 85 tests in `test_fuzzy_matcher.py` covering LCS, edit distance, token overlap, multi-signal, confidence bands, “did you mean”, manifest priors, alias resolution, and library/topic matching.
 
 **DoD:** ✅ Higher correct-resolution rate and fewer wrong fuzzy hits.
 
@@ -206,7 +207,7 @@ This epic captures improvements discussed after Epic 10 planning and is not cove
 - [x] Add compact “reference card” output shape in merged responses. — `ReferenceCard` dataclass with `to_markdown()` output.
 - [x] Enforce per-section token budgets to avoid context overflow. — `apply_token_budget()` with configurable per-section budget (default 800 tokens).
 
-**DoD:** ✅ Fewer noisy snippets; stronger practical examples. 16 unit tests passing.
+**DoD:** ✅ Fewer noisy snippets; stronger practical examples. 40 unit tests passing.
 
 ---
 
@@ -222,7 +223,7 @@ This epic captures improvements discussed after Epic 10 planning and is not cove
 - [x] Add CI check(s) for regression thresholds. — `check_quality_gates()` enforces: pass rate ≥ 60%, p95 latency ≤ 500ms, keyword coverage ≥ 30%.
 - [x] Publish periodic before/after score snapshots. — `EvalReport.to_dict()` provides serializable snapshot for logging/comparison.
 
-**DoD:** ✅ Retrieval optimization can be tuned safely and measured objectively. 8 unit tests passing (including real eval gate check).
+**DoD:** ✅ Retrieval optimization can be tuned safely and measured objectively. 20 unit tests passing (including real eval gate check).
 
 ---
 
@@ -256,8 +257,8 @@ This epic captures improvements discussed after Epic 10 planning and is not cove
 
 Run this quick audit before marking this plan complete:
 
-- [x] Verify new response fields exist in models + server mapping. — ✅ Verified 2026-02-21. All 6 fields (`suggested_tool`, `suggested_library`, `suggested_topic`, `fallback_used`, `fallback_library`, `fallback_topic`) present in `models.py`, populated in `engine.py`, and mapped in `server.py:663-668`.
-- [x] Verify auto-fallback path exists in `experts/engine.py`. — ✅ Verified 2026-02-21. `_lookup_docs_sync()` at line 86, fallback path at lines 224-244, config flags in `settings.py:131-142`.
+- [x] Verify new response fields exist in models + server mapping. — ✅ Verified 2026-02-21. All 6 fields (`suggested_tool`, `suggested_library`, `suggested_topic`, `fallback_used`, `fallback_library`, `fallback_topic`) present in `models.py:68-91`, populated in `engine.py:199-204,213-214,235-237,266-271`, and mapped in `server.py:664-669`.
+- [x] Verify auto-fallback path exists in `experts/engine.py`. — ✅ Re-verified 2026-02-21. `_lookup_docs_sync()` at line 86, fallback path at lines 224-244, config flags in `settings.py:131-142`.
 - [x] Verify new testing KB file exists and is indexed. — ✅ Verified 2026-02-21. `experts/knowledge/testing/test-configuration-and-urls.md` present (57 lines).
 - [x] Verify `tapps_research` tool exists (if implemented). — ✅ Implemented in `server.py::tapps_research()`, registered in `available_tools`, documented in `AGENTS.md`.
 - [x] Verify retrieval/ranking metrics are captured and compared to baseline. — ✅ `experts/retrieval_eval.py` provides benchmark queries, quality gates, and `check_quality_gates()`. Test `test_retrieval_eval.py::test_real_eval_passes_gates` validates gate compliance.
@@ -318,7 +319,7 @@ Target **Epic 10.3 only** in the first implementation PR to keep risk low and en
 ### 8.3) Pre-implementation checks (must pass before PR 1 coding)
 
 - [x] Confirm response model can add optional fields without breaking existing clients. — ✅ All new fields use `Field(default=None)` or `Field(default=False)`, backward-compatible.
-- [x] Identify all server response serialization paths for `tapps_consult_expert`. — ✅ Single path in `server.py:653-670`.
+- [x] Identify all server response serialization paths for `tapps_consult_expert`. — ✅ Single path in `server.py:654-670`.
 - [x] Freeze a baseline behavior snapshot for no-RAG responses (fixtures/snapshots). — ✅ Tests in `test_expert_engine.py:67-79` validate no-RAG field population.
 - [x] Define exact trigger condition for “no RAG” (`chunks_used == 0` and/or `sources == []`). — ✅ Trigger is `if context:` / `else:` in `engine.py:205-221` — fires when `kb.get_context()` returns empty string (which happens when `chunks == []`).
 
@@ -362,13 +363,61 @@ Implementation should start only when all are true:
   - `src/tapps_mcp/metrics/expert_metrics.py`
   - `src/tapps_mcp/metrics/rag_metrics.py`
 - Test files:
-  - `tests/unit/test_expert_engine.py` — expert engine + structured hints
-  - `tests/unit/test_expert_rag.py` — RAG retrieval + testing KB validation
-  - `tests/unit/test_fuzzy_matcher.py` — fuzzy matching v2
-  - `tests/unit/test_hot_rank.py` — hot-rank scoring
-  - `tests/unit/test_content_normalizer.py` — Context7 content normalization
-  - `tests/unit/test_retrieval_eval.py` — eval harness + quality gates
-  - `tests/integration/test_expert_pipeline.py` — end-to-end including tapps_research
+  - `tests/unit/test_expert_engine.py` — expert engine + structured hints (15 tests)
+  - `tests/unit/test_expert_rag.py` — RAG retrieval + testing KB validation (25 tests)
+  - `tests/unit/test_fuzzy_matcher.py` — fuzzy matching v2 (85 tests)
+  - `tests/unit/test_hot_rank.py` — hot-rank scoring (21 tests)
+  - `tests/unit/test_content_normalizer.py` — Context7 content normalization (40 tests)
+  - `tests/unit/test_retrieval_eval.py` — eval harness + quality gates (20 tests)
+  - `tests/unit/test_tapps_research.py` — tapps_research tool unit tests (5 tests)
+  - `tests/integration/test_expert_pipeline.py` — end-to-end including tapps_research (19 tests)
 - Prior plan and epic mapping docs:
   - `docs/planning/epics/README.md`
   - `docs/INIT_AND_UPGRADE_FEATURE_LIST.md`
+
+---
+
+## 10) Code-verified audit (2026-02-21)
+
+This section records the results of a full code-and-test audit performed against the repository.
+
+### 10.1) Methodology
+
+- Read every source file referenced in this plan and verified symbol existence and line numbers.
+- Ran `uv run pytest tests/ -v --tb=short` with Python 3.12 to confirm all tests pass.
+- Counted tests per file using `--collect-only` to verify plan claims.
+- Cross-checked AGENTS.md, server.py workflow hints, and settings.py config flags.
+
+### 10.2) Test inventory (epic-scoped files)
+
+| Test file | Tests | Notes |
+|---|---|---|
+| `tests/unit/test_expert_engine.py` | 15 | Expert engine + structured hints + fallback shape |
+| `tests/unit/test_expert_rag.py` | 25 | RAG retrieval + testing KB validation (3 tests for 10.4) |
+| `tests/unit/test_fuzzy_matcher.py` | 85 | LCS, edit distance, token overlap, multi-signal, confidence bands, "did you mean", manifest priors |
+| `tests/unit/test_hot_rank.py` | 21 | Hot-rank scoring, edge cases, boost application |
+| `tests/unit/test_content_normalizer.py` | 40 | Snippet extraction, ranking, dedup, token budgets, reference cards |
+| `tests/unit/test_retrieval_eval.py` | 20 | Benchmark queries, eval harness, quality gates |
+| `tests/unit/test_tapps_research.py` | 5 | Research tool response shape, routing, docs lookup |
+| `tests/integration/test_expert_pipeline.py` | 19 | End-to-end: consultation, RAG, domain detection, MCP handlers, tapps_research |
+| **Total (epic-scoped)** | **230** | **211 unit + 19 integration** |
+
+### 10.3) Full suite results
+
+```
+1658 passed, 7 skipped in 67.91s (Python 3.12.3)
+1569 unit tests + 96 integration tests = 1665 collected
+```
+
+### 10.4) Line-number corrections applied
+
+Several line references in the plan were off by 1-2 lines due to code edits since the original revision. Corrected in this audit:
+
+- `server.py:663-665` → `664-666` (suggested fields)
+- `server.py:666-668` → `667-669` (fallback fields)
+- `server.py:229-234` → `230-236` (recommended_workflow)
+- `server.py:653-670` → `654-670` (serialization path)
+
+### 10.5) Findings
+
+All 10 stories are fully implemented and tested. No gaps found between plan claims and repository code. All referenced symbols, handlers, files, and config flags exist at the specified locations (with minor line-number corrections applied above). The full test suite passes with zero failures.
