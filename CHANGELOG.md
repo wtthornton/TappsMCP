@@ -7,13 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned (Epic 10: Expert + Context7 Integration)
+No unreleased changes.
+
+---
+
+## [0.2.1] - 2026-02-21
+
+### Added (Epic 10: Expert + Context7 Integration)
 
 - **Expert + doc lookup coupling** — Workflow guidance for combining `tapps_consult_expert` with `tapps_lookup_docs` for testing/library questions (AGENTS.md, recommended_workflow)
 - **Structured hints when RAG is empty** — `suggested_tool`, `suggested_library`, `suggested_topic` in `tapps_consult_expert` response for machine-parseable follow-up
-- **Auto-fallback to Context7** — When expert RAG returns no chunks, optionally call lookup_docs and merge content (configurable)
-- **Broader testing-strategies KB** — Knowledge on test config, base URLs, env vars, fixtures, monkeypatch
-- **Optional `tapps_research` tool** — Single tool combining expert + Context7 in one call
+- **Auto-fallback to Context7** — When expert RAG returns no chunks, automatically calls lookup_docs and merges content (configurable via `expert_auto_fallback` and `expert_fallback_max_chars` settings)
+- **Broader testing-strategies KB** — Knowledge on test config, base URLs, env vars, fixtures, monkeypatch (`test-configuration-and-urls.md`)
+- **`tapps_research` tool** — Single tool combining expert consultation + Context7 documentation in one call
+
+### Added (Epic 11: Retrieval Optimization)
+
+- **Hybrid fusion + rerank** — `VectorKnowledgeBase._hybrid_fuse()` combines vector and keyword results with weighted scoring and structural bonus
+- **Hot-rank adaptive ranking** — `compute_hot_rank()` uses recency decay, helpfulness, confidence trend, and exploration bonus to prioritize domains
+- **Fuzzy matcher v2** — Multi-signal matching (LCS + edit distance + token overlap + alias + prefix + confidence bands + "did you mean" + manifest priors)
+- **Context7 code-reference normalization** — Snippet extraction, ranking, deduplication, reference cards, and token budgets (`content_normalizer.py`)
+- **Retrieval evaluation harness** — 10 benchmark queries across 8 domains with quality gates (pass rate, latency, keyword coverage)
 
 **Upgrade path for consuming projects:** After upgrading TappsMCP, run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` to refresh AGENTS.md and pipeline rules. See [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md).
 

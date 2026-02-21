@@ -195,9 +195,9 @@ Restart Claude Desktop after changing the config.
 
 ### Suggested workflow for the AI
 
-1. Call **`tapps_server_info`** at session start to see version and installed checkers.
-2. Use **`tapps_score_file`** (with `quick: true`) during edit–lint–fix loops.
-3. Use **`tapps_score_file`** (full) and **`tapps_quality_gate`** before marking work complete.
+1. Call **`tapps_session_start`** at session start to initialize context.
+2. Use **`tapps_quick_check`** (or `tapps_score_file` with `quick: true`) during edit–lint–fix loops.
+3. Use **`tapps_validate_changed`** before marking work complete (validates all changed files).
 4. Call **`tapps_checklist`** to ensure no required steps were skipped.
 
 ---
@@ -208,13 +208,17 @@ Quick index:
 
 | Tool | One-line purpose |
 |------|------------------|
+| **tapps_session_start** | **FIRST call** — combines server info + project profile in one call. |
 | **tapps_server_info** | Discover server version, tools, checkers, and recommended workflow. |
 | **tapps_score_file** | Score a Python file 0–100 across 7 quality categories. |
+| **tapps_quick_check** | Fast score + gate + basic security in one call after editing a file. |
 | **tapps_security_scan** | Run Bandit + secret detection on a Python file. |
 | **tapps_quality_gate** | Pass/fail a file against a quality preset (standard/strict/framework). |
+| **tapps_validate_changed** | Score + gate + security scan all changed files (auto-detects via git diff). |
 | **tapps_lookup_docs** | Fetch current documentation for a library (Context7 + cache). |
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, or infra configs. |
 | **tapps_consult_expert** | Ask a domain expert and get RAG-backed answer with confidence. |
+| **tapps_research** | Combined expert + docs lookup in one call (auto-supplements with Context7). |
 | **tapps_list_experts** | List the 16 built-in expert domains and their status. |
 | **tapps_checklist** | See which tools were called this session and what is still missing. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure for context-aware analysis. |
@@ -225,6 +229,15 @@ Quick index:
 | **tapps_stats** | Retrieve aggregated usage statistics and quality trends across sessions. |
 | **tapps_feedback** | Submit feedback on tool results to improve adaptive scoring and expert answers. |
 | **tapps_init** | Initialize a pipeline run: profile the project, set context, and plan the workflow. |
+| **tapps_workflow** | Generate tool call order and recommendations for a specific task type. |
+
+---
+
+### tapps_session_start
+
+**What it does:** Combines `tapps_server_info` and `tapps_project_profile` in a single call. Returns server metadata, installed checker status, project type, tech stack, and structure. This is the **required first call** in every session.
+
+**Why use it:** Initializes the session with full context so all subsequent tool calls can use project-aware recommendations. Skipping this means tools lack project context and suggestions are generic.
 
 ---
 
@@ -260,6 +273,22 @@ Quick index:
 
 ---
 
+### tapps_quick_check
+
+**What it does:** Runs a quick score + quality gate + basic security check on a single Python file in one fast call. Combines what would otherwise be three separate tool calls into one. For thorough multi-file validation, use `tapps_validate_changed` instead.
+
+**Why use it:** The fastest way to check a file after editing. Use after every edit to catch quality regressions immediately. Skipping means issues accumulate until the final validation step.
+
+---
+
+### tapps_validate_changed
+
+**What it does:** Detects changed Python files (via `git diff` against a base ref) or accepts an explicit comma-separated list. Runs full score + quality gate + security scan on each file. Returns per-file results with pass/fail status and aggregated summary.
+
+**Why use it:** Required before declaring multi-file work complete. Auto-detects what changed so you don't have to specify each file. Ensures no changed file slips through without quality validation.
+
+---
+
 ### tapps_lookup_docs
 
 **What it does:** Fetches current documentation for a given library (e.g. FastAPI, React, SQLAlchemy). Resolves the library name via fuzzy matching, checks a local cache first, and on cache miss can call the Context7 API (when `TAPPS_MCP_CONTEXT7_API_KEY` is set). Accepts an optional **topic** (e.g. "routing", "hooks") and **mode** ("code" for API-style docs, "info" for conceptual). All returned content is checked for prompt-injection patterns before being returned. Response includes source (cache vs API), cache hit flag, and optional token estimate.
@@ -281,6 +310,14 @@ Quick index:
 **What it does:** Sends a natural-language question to a domain expert. The server has 16 built-in domains (e.g. security, testing, API design, database, observability). You can leave **domain** empty for auto-routing from the question, or pass a domain id (e.g. `"security"`, `"testing-strategies"`). The expert uses RAG over curated knowledge files, returns an answer, a confidence score, contributing factors, and source chunks. Answers are filtered for PII/secrets before return.
 
 **Why use it:** When the AI (or user) is unsure about patterns, trade-offs, or best practices in a specific area, a single call returns focused, sourced guidance instead of generic advice. Use for security decisions, test strategy, API design, DB schema, or observability so the response is grounded in the expert knowledge base and the confidence score signals how much to rely on it.
+
+---
+
+### tapps_research
+
+**What it does:** Combined expert consultation + documentation lookup in one call. Consults the domain expert first, then automatically supplements with Context7 documentation when expert RAG has no results or confidence is low. Accepts optional `library` and `topic` parameters (auto-inferred when empty). Returns expert answer, confidence, sources, and any supplementary docs content.
+
+**Why use it:** Saves a round-trip compared to calling `tapps_consult_expert` and `tapps_lookup_docs` separately. Use when you need both expert guidance and current library documentation for a domain-specific question. The auto-supplementation means you always get documentation backing when the expert knowledge base has gaps.
 
 ---
 
@@ -465,7 +502,7 @@ src/tapps_mcp/
 ├── knowledge/                          # Context7 client, cache, lookup, warming, RAG safety
 ├── validators/                         # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
 ├── experts/                            # Domain detector, engine, RAG, registry, confidence,
-│                                       #   vector RAG, knowledge management, 119 knowledge files
+│                                       #   vector RAG, knowledge management, 122 knowledge files
 ├── project/                            # Project profiling, session notes, impact analysis, reports
 ├── adaptive/                           # Adaptive scoring, expert voting, weight distribution
 ├── metrics/                            # Collector, dashboard, alerts, trends, OTel export, feedback
@@ -489,11 +526,11 @@ src/tapps_mcp/
 | [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) | Short upgrade guide for projects that install TappsMCP. |
 | [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) | Architecture and design rationale. |
 | [docs/planning/epics/README.md](docs/planning/epics/README.md) | Epic index, dependency graph, tool delivery timeline. |
-| [docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) | Epic 10: Expert + Context7 integration (planned). |
+| [docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) | Epic 10+11: Expert + Context7 integration and retrieval optimization (complete). |
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · **Epic 10 (planned):** Expert + Context7 integration (auto-fallback, structured hints, tapps_research)
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅
 
 ---
 

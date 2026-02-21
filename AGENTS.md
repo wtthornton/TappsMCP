@@ -30,13 +30,17 @@ You only see these tools when the host has started the TappsMCP server and attac
 
 | Tool | When to use it |
 |------|----------------|
+| **tapps_session_start** | **FIRST call in every session** — combines server info + project profile in one call. Skipping means all tools lack project context. |
 | **tapps_server_info** | At **session start** — discover version, available tools, and installed checkers. Response includes a short `recommended_workflow` string. |
 | **tapps_score_file** | When **editing or reviewing** a Python file. Use `quick=True` during edit–lint–fix loops; use full (default) **before declaring work complete**. |
+| **tapps_quick_check** | **After editing any Python file** — quick score + gate + basic security in one fast call. |
 | **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
 | **tapps_quality_gate** | **Before declaring work complete** — ensures the file passes the configured quality preset. Do not consider work done until this passes (or the user accepts the risk). |
+| **tapps_validate_changed** | **Before declaring multi-file work complete** — auto-detects changed files via git diff and runs score + gate + security on each. |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library — use the returned docs to avoid hallucinated APIs. |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
 | **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file → `domain="testing-strategies"`). |
+| **tapps_research** | When you need **combined expert + docs** in one call — consults the domain expert, then auto-supplements with Context7 documentation when RAG is empty or confidence is low. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
 | **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
 | **tapps_project_profile** | At **session start** or when you need project context — detects project type, tech stack, and structure so you can apply the right patterns. |
 | **tapps_session_notes** | When you make a **key decision or discover a constraint** — save it so you can recall it later in a long session. |
@@ -46,7 +50,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_dashboard** | When the user wants to **review how TappsMCP is performing** — scoring accuracy, gate pass rates, expert effectiveness, cache performance, quality trends, and alerts. Supports json, markdown, and html output. |
 | **tapps_stats** | When the user wants **usage statistics** — call counts, success rates, average durations, cache hit rates, and gate pass rates. Filterable by tool and time period. |
 | **tapps_feedback** | After receiving a tool result — report whether the output was **helpful or not**. This feedback improves adaptive scoring and expert weights over time. |
-| **tapps_research** | When you need **combined expert + docs** in one call — consults the domain expert, then auto-supplements with Context7 documentation when RAG is empty or confidence is low. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
+| **tapps_workflow** | When you want the **recommended tool call order** for a specific task type (general, feature, bugfix, refactor, security, review). |
 | **tapps_init** | At the **start of a pipeline run** — profiles the project, sets context, and plans the workflow stages (discover, research, develop, validate, verify). |
 
 ---
@@ -72,14 +76,13 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 
 ## Recommended workflow
 
-1. **Session start:** Call `tapps_server_info` and `tapps_project_profile` (and optionally `tapps_list_experts` if you may need experts).
+1. **Session start:** Call `tapps_session_start` (combines server info + project profile). Optionally call `tapps_list_experts` if you may need experts.
 2. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` to persist constraints and decisions so they survive long sessions.
 3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
-5. **During edits:** Call `tapps_score_file(file_path=..., quick=True)` (and `fix=True` if you want ruff to apply fixes).
+5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 6. **Before declaring work complete:**
-   - Call `tapps_score_file(file_path=..., quick=False)` on changed files.
-   - Call `tapps_quality_gate(file_path=...)` — work is not done until it passes.
+   - Call `tapps_validate_changed()` to score + gate + security scan all changed files.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
 7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).

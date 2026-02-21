@@ -95,19 +95,24 @@ When you upgrade TappsMCP (`pip install -U tapps-mcp` or similar), new workflow 
 
 ---
 
-## Epic 10 (planned): Expert + Context7 integration
+## Epic 10+11 (complete): Expert + Context7 Integration & Retrieval Optimization
 
-Epic 10 will add tighter coupling between expert consultation and doc lookup. When shipped, the following will be reflected in templates and behavior:
+Epic 10 and Epic 11 added tighter coupling between expert consultation and doc lookup, plus retrieval quality improvements. All 10 stories are shipped and tested (230 epic-scoped tests passing).
 
-| Enhancement | Delivered via |
-|-------------|---------------|
-| Expert + doc lookup workflow guidance | AGENTS.md, agents_template.md, recommended_workflow |
-| Structured suggested_tool / suggested_library / suggested_topic when RAG is empty | tapps_consult_expert response |
-| Auto-fallback to Context7 when expert RAG is empty | tapps_consult_expert (optional, configurable) |
-| Broader testing-strategies KB (test config, URLs, env) | Knowledge files |
-| Optional tapps_research combined tool | New MCP tool |
+| Enhancement | Delivered via | Status |
+|-------------|---------------|--------|
+| Expert + doc lookup workflow guidance | AGENTS.md, agents_template.md, recommended_workflow | ✅ Shipped |
+| Structured `suggested_tool` / `suggested_library` / `suggested_topic` when RAG is empty | `tapps_consult_expert` response | ✅ Shipped |
+| Auto-fallback to Context7 when expert RAG is empty | `tapps_consult_expert` (configurable via `expert_auto_fallback`) | ✅ Shipped |
+| Broader testing-strategies KB (test config, URLs, env) | Knowledge files (`test-configuration-and-urls.md`) | ✅ Shipped |
+| `tapps_research` combined tool | New MCP tool | ✅ Shipped |
+| Hybrid fusion + rerank retrieval | `VectorKnowledgeBase._hybrid_fuse()` | ✅ Shipped |
+| Hot-rank adaptive ranking | `experts/hot_rank.py` | ✅ Shipped |
+| Fuzzy matcher v2 (multi-signal) | `knowledge/fuzzy_matcher.py` | ✅ Shipped |
+| Context7 code-reference normalization | `knowledge/content_normalizer.py` | ✅ Shipped |
+| Retrieval evaluation harness + quality gates | `experts/retrieval_eval.py` | ✅ Shipped |
 
-**To get Epic 10 content in your project:** After upgrading TappsMCP, run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` so AGENTS.md and platform rules include the new workflow. See [TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md).
+**To get Epic 10+11 content in your project:** After upgrading TappsMCP, run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` so AGENTS.md and platform rules include the new workflow. See [TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md).
 
 ---
 

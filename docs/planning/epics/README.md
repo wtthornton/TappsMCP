@@ -16,11 +16,11 @@
 | [Epic 6](EPIC-6-DISTRIBUTION.md) | Distribution & Production Readiness | P3 | ~2-3 weeks | Epic 1+ | **Complete** |
 | [Epic 7](EPIC-7-METRICS-DASHBOARD.md) | Metrics, Observability & Dashboard | P1 | ~3-4 weeks | Epic 1, Epic 3, Epic 5 | **Complete** |
 | [Epic 8](EPIC-8-PIPELINE-ORCHESTRATION.md) | Pipeline Orchestration & Workflow Prompts | P1 | ~1.5-2 weeks | Epic 0-4 | **Complete** |
-| [Epic 10](../TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) | Expert + Context7 Integration | P1 | ~2-3 weeks | Epic 2, Epic 3 | **Planned** |
+| [Epic 10+11](../TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) | Expert + Context7 Integration & Retrieval Optimization | P1 | ~2-3 weeks | Epic 2, Epic 3 | **Complete** |
 
 **Total estimated LOE:** ~19-24 weeks (1 developer), ~10-13 weeks (2 developers with parallelized epics)
 
-> **Epic 10** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, and optional `tapps_research` tool.
+> **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
 ## Dependency Graph
 
@@ -67,6 +67,11 @@ With 2 developers:
 | `tapps_feedback` | Epic 7 | Week 14-17 |
 | `tapps_stats` | Epic 7 | Week 14-17 |
 | `tapps_dashboard` | Epic 7 | Week 16-20 |
+| `tapps_session_start` | Epic 8 | Week 12-14 |
+| `tapps_quick_check` | Epic 8 | Week 12-14 |
+| `tapps_validate_changed` | Epic 8 | Week 12-14 |
+| `tapps_workflow` | Epic 8 | Week 12-14 |
+| `tapps_research` | Epic 10 | Week 20-22 |
 
 ## Metrics Infrastructure (Epic 7 — carried from TappsCodingAgents)
 
