@@ -49,7 +49,7 @@ _MIN_DRIVE_PATH_LEN = 2
 def _normalize_path_for_mapping(path: str) -> str:
     """Normalize a path string for host-root prefix comparison (cross-platform)."""
     s = path.strip().replace("\\", "/")
-    if s and s[1:2] == ":" and len(s) > _MIN_DRIVE_PATH_LEN and s[2:3] == "/":
+    if s and s[1:2] == ":" and len(s) >= _MIN_DRIVE_PATH_LEN:
         s = s[0].lower() + s[1:]
     return s.rstrip("/") or "/"
 
@@ -958,8 +958,8 @@ def run_server(
 
         def _root(_request: Request) -> HTMLResponse:
             return HTMLResponse(
-                "<!DOCTYPE html><html><head><title>TappMCP</title></head><body>"
-                "<h1>TappMCP is running</h1><p>MCP endpoint: <a href='/mcp'>/mcp</a></p>"
+                "<!DOCTYPE html><html><head><title>TappsMCP</title></head><body>"
+                "<h1>TappsMCP is running</h1><p>MCP endpoint: <a href='/mcp'>/mcp</a></p>"
                 "<p>Version: " + __version__ + "</p></body></html>",
                 status_code=200,
             )

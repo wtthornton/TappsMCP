@@ -1,24 +1,26 @@
 <!-- tapps-agents-version: 0.2.1 -->
 # TappsMCP — instructions for AI assistants
 
-When the **TappsMCP** MCP server is configured in your host (Cursor, Claude Desktop, etc.), you have access to tools that provide **deterministic code quality checks, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
+When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor, VS Code Copilot, Claude Desktop, etc.), you have access to tools that provide **deterministic code quality checks, doc lookup, and domain expert advice**. TappsMCP is a quality toolset designed to help your project and LLM produce the best possible code — use it to avoid hallucinated APIs, missed quality steps, and inconsistent output.
 
 ---
 
 ## What TappsMCP is
 
-TappsMCP is an MCP server that exposes tools for:
+TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 21 tools for:
 
-- **Scoring** Python files (0-100 across 7 categories)
-- **Security scanning** (Bandit + secret detection)
-- **Quality gates** (pass/fail vs presets)
-- **Documentation lookup** (up-to-date library docs via Context7)
-- **Config validation** (Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB)
+- **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
+- **Security scanning** (Bandit + secret detection with redacted context)
+- **Quality gates** (pass/fail against configurable presets: standard, strict, framework)
+- **Documentation lookup** (up-to-date library docs via Context7 with fuzzy matching and cache)
+- **Config validation** (Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB best practices)
 - **Domain experts** (16 built-in experts with RAG-backed answers, optional vector search)
 - **Project context** (project type detection, tech stack, impact analysis)
-- **Session notes** (persist decisions and constraints across long sessions)
+- **Session management** (persist decisions, constraints, and notes across long sessions)
 - **Quality reports** (JSON, Markdown, or HTML summaries)
+- **Metrics and feedback** (dashboard, usage stats, adaptive learning via feedback)
 - **Session checklist** (track which tools were used so you don't skip required steps)
+- **Pipeline orchestration** (batch validation, workflow prompts, project initialization)
 
 You only see these tools when the host has started the TappsMCP server and attached it to your session.
 

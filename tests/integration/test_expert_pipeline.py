@@ -138,13 +138,13 @@ class TestDomainDetectionFromProject:
     """Tests domain detection against real project structures."""
 
     def test_detect_from_tapps_mcp_project(self) -> None:
-        """Detect domains from TappMCP's own project root."""
+        """Detect domains from TappsMCP's own project root."""
         from pathlib import Path
 
         project_root = Path(__file__).parent.parent.parent
         results = DomainDetector.detect_from_project(project_root)
         domains = [r.domain for r in results]
-        # TappMCP has pyproject.toml → code-quality-analysis.
+        # TappsMCP has pyproject.toml → code-quality-analysis.
         assert "code-quality-analysis" in domains
 
     def test_detect_from_project_with_tests(self, tmp_path: Path) -> None:

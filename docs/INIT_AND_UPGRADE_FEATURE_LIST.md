@@ -54,12 +54,15 @@ So “upgrading” pipeline artifacts and caches is done by **calling `tapps_ini
 |--------|-------------------|--------------|
 | **Host selection** | `--host claude-code \| cursor \| vscode \| auto` | Target MCP host. `auto` detects installed hosts (`.claude` dir, Cursor/VS Code settings dirs) and uses the first detected. |
 | **Project root** | `--project-root PATH` | Project root; used for Cursor/VS Code config paths (project-level `.cursor/mcp.json` or `.vscode/mcp.json`). Default: current directory. |
+| **Config scope** | `--scope user \| project` | For Claude Code: `user` writes to `~/.claude.json`, `project` writes to `.mcp.json` in the project root. Default: `user`. |
 | **Generate config** | (default, no `--check`) | Writes or merges the `tapps-mcp` server entry into the host’s config file. Preserves other servers; only adds/updates the `tapps-mcp` entry. |
 | **Verify config** | `--check` | Checks that the host’s config file exists and contains a valid `tapps-mcp` server entry; no writes. |
+| **Platform rules** | `--rules / --no-rules` | Generate platform rule files (CLAUDE.md or .cursor/rules/tapps-pipeline.md) alongside MCP config. Default: `--rules`. |
 | **Host detection** | (when `--host auto`) | Detects Claude Code (`~/.claude`), Cursor (platform-specific App Data / `.config`), VS Code (Code app data). |
-| **Config paths** | (per host) | **Claude Code:** `~/.claude.json`. **Cursor:** `project_root/.cursor/mcp.json`. **VS Code:** `project_root/.vscode/mcp.json`. |
+| **Config paths** | (per host) | **Claude Code:** `~/.claude.json` (user) or `.mcp.json` (project). **Cursor:** `project_root/.cursor/mcp.json`. **VS Code:** `project_root/.vscode/mcp.json`. |
 | **Server entry** | (merged into config) | Adds `tapps-mcp` with `command: "tapps-mcp"`, `args: ["serve"]` under `mcpServers` (Claude/Cursor) or `servers` (VS Code). |
 | **Force overwrite** | `--force` | Overwrite existing tapps-mcp entry without prompting. Use when upgrading or in non-interactive scripts. |
+| **Diagnostics** | `tapps-mcp doctor` | Separate command that diagnoses TappsMCP configuration, connectivity, and missing dependencies. |
 
 ### Idempotency / “upgrade” behavior
 

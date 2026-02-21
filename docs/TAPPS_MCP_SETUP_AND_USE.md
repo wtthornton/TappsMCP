@@ -1,6 +1,6 @@
-# TappMCP: Setup and Use Summary
+# TappsMCP: Setup and Use Summary
 
-TappMCP is an **MCP (Model Context Protocol) server** that exposes **code quality tools** to LLMs (Claude, Cursor, etc.): file scoring, security scanning, quality gates, and checklists. This doc is a short guide to set it up and use it.
+TappsMCP is an **MCP (Model Context Protocol) server** that exposes **code quality tools** to LLMs (Claude, Cursor, etc.): file scoring, security scanning, quality gates, and checklists. This doc is a short guide to set it up and use it.
 
 ---
 
@@ -18,7 +18,7 @@ TappMCP is an **MCP (Model Context Protocol) server** that exposes **code qualit
 
 ```bash
 # Clone (or open) the repo
-cd c:\cursor\TappMCP   # or your path
+cd c:\cursor\TappsMCP   # or your path
 
 # Install dependencies with uv
 uv sync
@@ -65,6 +65,42 @@ tool_timeout: 30
 
 ---
 
+## 2b. Auto-setup with `tapps-mcp init`
+
+The fastest way to configure your AI client:
+
+```bash
+tapps-mcp init                        # auto-detect installed clients
+tapps-mcp init --host claude-code     # configure Claude Code
+tapps-mcp init --host cursor          # configure Cursor
+tapps-mcp init --host vscode          # configure VS Code
+tapps-mcp init --check                # verify existing setup
+tapps-mcp doctor                      # diagnose connectivity issues
+```
+
+This generates the correct MCP configuration file and optionally creates platform rule files. Use `--force` to overwrite existing config without prompting.
+
+---
+
+## 2c. Use with Claude Code
+
+Run `tapps-mcp init --host claude-code` or manually add to `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "tapps-mcp": {
+      "command": "tapps-mcp",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+For project-level config, use `tapps-mcp init --host claude-code --scope project` to create `.mcp.json` in the project root. For full access without permission prompts, see [CLAUDE_FULL_ACCESS_SETUP.md](CLAUDE_FULL_ACCESS_SETUP.md).
+
+---
+
 ## 3. Use with Cursor
 
 1. **Cursor MCP config**  
@@ -93,7 +129,7 @@ tool_timeout: 30
      "mcpServers": {
        "tapps-mcp": {
          "command": "uv",
-         "args": ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"],
+         "args": ["--directory", "C:\\cursor\\TappsMCP", "run", "--no-sync", "tapps-mcp", "serve"],
          "env": {
            "TAPPS_MCP_CONTEXT7_API_KEY": "your-context7-api-key"
          }
@@ -102,23 +138,23 @@ tool_timeout: 30
    }
    ```
 
-   - Replace `C:\cursor\TappMCP` with your actual TappMCP repo path.
+   - Replace `C:\cursor\TappsMCP` with your actual TappsMCP repo path.
    - **`--no-sync`** makes `uv run` skip syncing the venv, which avoids “file is being used by another process” when Cursor starts the server.
    - The subcommand must be **`serve`** (not `serv`).
    - Set `TAPPS_MCP_CONTEXT7_API_KEY` so `tapps_lookup_docs` can fetch live docs; omit `env` to use cache-only.
 
 2. **Restart or reload Cursor** so it picks up the new MCP server.
 
-3. In chat/composer, the AI can call TappMCP tools (e.g. `tapps_score_file`, `tapps_quality_gate`) once the server is connected.
+3. In chat/composer, the AI can call TappsMCP tools (e.g. `tapps_score_file`, `tapps_quality_gate`) once the server is connected.
 
 ### If you see two "tapps-mcp" entries (one Error, one Disabled)
 
-Use **only one** transport. If you run TappMCP in Docker, use the **url** config (Option A) and remove or disable any **stdio** (command/args) entry for tapps-mcp from **Settings → Tools & MCP**. Duplicate entries often come from having both a project `.cursor/mcp.json` and a user-level MCP config; keep a single tapps-mcp entry that matches how you run the server (Docker → url, local → command/args).
+Use **only one** transport. If you run TappsMCP in Docker, use the **url** config (Option A) and remove or disable any **stdio** (command/args) entry for tapps-mcp from **Settings → Tools & MCP**. Duplicate entries often come from having both a project `.cursor/mcp.json` and a user-level MCP config; keep a single tapps-mcp entry that matches how you run the server (Docker → url, local → command/args).
 
 ### If Cursor shows "Error" for tapps-mcp
 
 - **Wrong subcommand:** The args must end with **`serve`** (not `serv`). In **Settings → Tools & MCP**, set the args to include `tapps-mcp` and **`serve`**.
-- **"File is being used by another process" (uv):** Add **`--no-sync`** to the args so uv doesn’t sync the venv on start, e.g. `["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"]`. The command must be a PATH command (e.g. `uv`), not a local file path.
+- **"File is being used by another process" (uv):** Add **`--no-sync`** to the args so uv doesn’t sync the venv on start, e.g. `["--directory", "C:\\cursor\\TappsMCP", "run", "--no-sync", "tapps-mcp", "serve"]`. The command must be a PATH command (e.g. `uv`), not a local file path.
 - **Show Output:** In **Settings → Tools & MCP**, click **"Error - Show Output"** next to tapps-mcp to see the exact error.
 
 ---
@@ -132,7 +168,7 @@ In **Claude Desktop** config (e.g. `claude_desktop_config.json`):
   "mcpServers": {
     "tapps-mcp": {
       "command": "uv",
-      "args": ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"]
+      "args": ["--directory", "C:\\cursor\\TappsMCP", "run", "--no-sync", "tapps-mcp", "serve"]
     }
   }
 }
@@ -146,31 +182,36 @@ Restart Claude Desktop after changing the config.
 
 | Tool | Purpose |
 |------|--------|
-| **tapps_server_info** | Server version, available tools, which checkers (ruff, mypy, etc.) are installed. Call once at session start. |
+| **tapps_session_start** | **FIRST call** — combines server info + project profile. Initialize context for all subsequent tools. |
+| **tapps_server_info** | Server version, available tools, which checkers (ruff, mypy, etc.) are installed. |
 | **tapps_score_file** | Score a Python file 0-100 (complexity, security, maintainability, etc.). Use `quick: true` for fast checks, full for final pass. |
+| **tapps_quick_check** | Fast score + gate + basic security in one call. Use after each file edit. |
 | **tapps_security_scan** | Security scan (e.g. bandit + secret detection). |
 | **tapps_quality_gate** | Pass/fail vs thresholds (e.g. overall >= 70 for `standard`). Use before "done". |
+| **tapps_validate_changed** | Score + gate + security scan all changed files (auto-detects via git diff). |
 | **tapps_lookup_docs** | Fetch current library docs via Context7. Use before writing code that calls library APIs. |
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB configs against best practices. |
 | **tapps_consult_expert** | Ask a domain expert (16 domains) and get RAG-backed guidance with confidence scores. |
+| **tapps_research** | Combined expert + docs lookup in one call (auto-supplements with Context7). |
 | **tapps_list_experts** | List available expert domains and their knowledge base status. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure. Call at session start for context-aware analysis. |
 | **tapps_session_notes** | Save/retrieve key decisions and constraints across a session. |
 | **tapps_impact_analysis** | Analyze what depends on a file and what could break from changes. |
 | **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
-| **tapps_checklist** | See which TappMCP tools were used this session and what's missing. Use before "done". |
-| **tapps_dashboard** | View metrics dashboard: execution stats, expert performance, alerts, trends. Supports json, markdown, html output. |
+| **tapps_checklist** | See which TappsMCP tools were used this session and what's missing. Use before "done". |
+| **tapps_dashboard** | View metrics dashboard: execution stats, expert performance, alerts, trends. |
 | **tapps_stats** | Retrieve usage statistics: call counts, success rates, durations, gate pass rates. |
 | **tapps_feedback** | Submit feedback on tool results to improve adaptive scoring and expert weights. |
-| **tapps_init** | Initialize a pipeline run: profile the project, set context, plan the workflow stages. |
+| **tapps_init** | Bootstrap TappsMCP in a project: create AGENTS.md, TECH_STACK.md, platform rules, warm caches. |
+| **tapps_workflow** | Generate recommended tool call order for a specific task type. |
 
 **Suggested workflow for the AI:**
 
-1. Call **tapps_server_info** and **tapps_project_profile** at session start.
+1. Call **tapps_session_start** at session start (combines server info + project profile).
 2. Use **tapps_lookup_docs** before writing code that uses an external library.
 3. Use **tapps_session_notes** to record key decisions during the session.
-4. Use **tapps_score_file** (quick) during edit-lint-fix loops.
-5. Use **tapps_score_file** (full) and **tapps_quality_gate** before marking work complete.
+4. Use **tapps_quick_check** (or `tapps_score_file` with `quick: true`) during edit-lint-fix loops.
+5. Use **tapps_validate_changed** before marking work complete (validates all changed files).
 6. Call **tapps_checklist** to ensure no required steps were skipped.
 
 ---
@@ -193,13 +234,13 @@ Restart Claude Desktop after changing the config.
 | Run tests | `uv run pytest tests/` |
 | Lint | `uv run ruff check src/` |
 | **Docker** | `docker compose up --build -d` → http://localhost:8000 |
-| **Use Docker from another project** | Mount that project at `/workspace`, connect Cursor to http://localhost:8000/mcp (HTTP/SSE). See [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md#using-tappmcp-docker-from-another-project). |
+| **Use Docker from another project** | Mount that project at `/workspace`, connect Cursor to http://localhost:8000/mcp (HTTP/SSE). See [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md#using-tappsmcp-docker-from-another-project). |
 | Project config | `.tapps-mcp.yaml` in project root |
 | Cursor MCP config | Cursor Settings → MCP or `.cursor/mcp.json` |
 | Docker deployment | [docs/DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) |
 | Init and upgrade (tapps_init, tapps-mcp init) | [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](INIT_AND_UPGRADE_FEATURE_LIST.md) |
 | Upgrade guide for consuming projects | [docs/UPGRADE_FOR_CONSUMERS.md](UPGRADE_FOR_CONSUMERS.md) |
-| Epic 10 (planned): Expert + Context7 | [docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) |
+| Epic 10+11 (complete): Expert + Context7 | [docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) |
 | Full plan / roadmap | [docs/planning/TAPPS_MCP_PLAN.md](planning/TAPPS_MCP_PLAN.md) |
 | Claude full access (no prompts) | [docs/CLAUDE_FULL_ACCESS_SETUP.md](CLAUDE_FULL_ACCESS_SETUP.md) |
 | **Cache & RAG architecture** | [docs/ARCHITECTURE_CACHE_AND_RAG.md](ARCHITECTURE_CACHE_AND_RAG.md) — SWR, TTL, index rebuild |
@@ -219,7 +260,9 @@ Restart Claude Desktop after changing the config.
 
 ## Summary
 
-1. **Setup:** `uv sync` in TappMCP repo, then run `uv run tapps-mcp serve`.
-2. **Use in Cursor/Claude:** Add the server to MCP config with `uv` + path to TappMCP + `run tapps-mcp serve`.
-3. **Use the tools:** Have the AI call `tapps_server_info` first, then `tapps_score_file` / `tapps_quality_gate` / `tapps_checklist` as in the workflow above.
-4. **Optional:** Install ruff/mypy/bandit/radon for best scoring; set `TAPPS_MCP_PROJECT_ROOT` and `.tapps-mcp.yaml` as needed.
+1. **Install:** `pip install tapps-mcp` or `uv sync` in the TappsMCP repo.
+2. **Configure your client:** `tapps-mcp init` (auto-detect) or manually add to MCP config.
+3. **Verify:** `tapps-mcp doctor` to diagnose any issues.
+4. **Run:** `tapps-mcp serve` to start the server (stdio for local clients, `--transport http` for remote).
+5. **Use the tools:** Have the AI call `tapps_session_start` first, then `tapps_quick_check` during edits, `tapps_validate_changed` + `tapps_checklist` before declaring work complete.
+6. **Optional:** Install ruff/mypy/bandit/radon for best scoring; set `TAPPS_MCP_PROJECT_ROOT` and `.tapps-mcp.yaml` as needed.

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Verify TappMCP HTTP server at localhost:8000 using Playwright.
+"""Verify TappsMCP HTTP server at localhost:8000 using Playwright.
 
 Usage:
     python scripts/verify_http_server.py [--url URL]
     uv run python scripts/verify_http_server.py
 
-Expects server to return 200 at / with body containing "TappMCP is running".
+Expects server to return 200 at / with body containing "TappsMCP is running".
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import sys
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Verify TappMCP HTTP server with Playwright")
+    parser = argparse.ArgumentParser(description="Verify TappsMCP HTTP server with Playwright")
     parser.add_argument("--url", default="http://localhost:8000", help="Base URL of the server")
     parser.add_argument(
         "--headless", action="store_true", default=True, help="Run browser headless"
@@ -51,10 +51,10 @@ def main() -> int:
 
     body_text = content.get("body", "")
     title = content.get("title", "")
-    if "TappMCP" not in body_text and "TappMCP" not in title:
+    if "TappsMCP" not in body_text and "TappsMCP" not in title:
         print(f"Unexpected response. Body snippet: {body_text[:200]!r}")
         return 1
-    print("OK: TappMCP HTTP server is running and returning the expected page.")
+    print("OK: TappsMCP HTTP server is running and returning the expected page.")
     return 0
 
 

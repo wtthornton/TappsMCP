@@ -232,8 +232,9 @@ class KBCache:
             if not lib_dir.is_dir():
                 continue
             for f in lib_dir.iterdir():
+                if f.suffix == ".md":
+                    count += 1
                 f.unlink(missing_ok=True)
-                count += 1
             lib_dir.rmdir()
         return count
 
