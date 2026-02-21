@@ -19,6 +19,8 @@ class TestTappsMCPSettings:
         assert settings.log_json is False
         assert settings.tool_timeout == 30
         assert settings.context7_api_key is None
+        assert settings.expert_auto_fallback is True
+        assert settings.expert_fallback_max_chars == 1200
 
     def test_scoring_weights_default(self):
         settings = TappsMCPSettings()

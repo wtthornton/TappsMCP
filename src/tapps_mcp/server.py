@@ -228,7 +228,7 @@ def tapps_server_info() -> dict[str, Any]:
         "diagnostics": diagnostics.model_dump(),
         "recommended_workflow": (
             "FIRST: Call tapps_session_start() to initialize. "
-            "BEFORE using any library: Call tapps_lookup_docs(). "
+            "BEFORE using any library: Call tapps_lookup_docs(). For domain+library questions, pair with tapps_consult_expert(). "
             "AFTER editing Python files: Call tapps_score_file(quick=True) or tapps_quick_check(). "
             "BEFORE declaring done: Call tapps_validate_changed() or tapps_quality_gate(). "
             "FINAL step: Call tapps_checklist()."
@@ -660,6 +660,12 @@ def tapps_consult_expert(
         "sources": result.sources,
         "chunks_used": result.chunks_used,
         "low_confidence_nudge": result.low_confidence_nudge,
+        "suggested_tool": result.suggested_tool,
+        "suggested_library": result.suggested_library,
+        "suggested_topic": result.suggested_topic,
+        "fallback_used": result.fallback_used,
+        "fallback_library": result.fallback_library,
+        "fallback_topic": result.fallback_topic,
     })
     return _with_nudges("tapps_consult_expert", resp)
 

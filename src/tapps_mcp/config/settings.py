@@ -128,6 +128,19 @@ class TappsMCPSettings(BaseSettings):
         description="Timeout for individual external tool invocations (seconds).",
     )
 
+    # Expert/doc coupling
+    expert_auto_fallback: bool = Field(
+        default=True,
+        description=(
+            "Enable automatic Context7 lookup hints/content when expert RAG has no matches."
+        ),
+    )
+    expert_fallback_max_chars: int = Field(
+        default=1200,
+        ge=200,
+        description="Maximum number of characters merged from Context7 fallback content.",
+    )
+
 
 def _load_yaml_config(project_root: Path) -> dict[str, Any]:
     """Load project-level ``.tapps-mcp.yaml`` if it exists."""
