@@ -53,5 +53,8 @@ nul
 .cursor/mcp.json
 .mcp.json
 
+# TappsMCP runtime data (metrics, cache, indexes)
+.tapps-mcp/
+
 # UV
 .python-version
