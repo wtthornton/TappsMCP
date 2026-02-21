@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [master, main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -29,6 +32,7 @@ jobs:
   test:
     needs: lint
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.12", "3.13"]
@@ -42,7 +46,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --dev
-      - run: uv run pytest --cov=tapps_mcp --cov-report=xml -v
+      - name: Run unit tests
+        run: uv run pytest tests/unit --cov=tapps_mcp --cov-report=xml -v
+      - name: Run integration tests
+        run: uv run pytest tests/integration -v
+      - name: Verify coverage threshold
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: uv run coverage report --fail-under=80
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         uses: codecov/codecov-action@v5
@@ -68,6 +78,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Verify version consistency
+        run: |
+          PKG_VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "Package version: $PKG_VERSION"
       - run: uv build
       - name: Test install from wheel
         run: |
