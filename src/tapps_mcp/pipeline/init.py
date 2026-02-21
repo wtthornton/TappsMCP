@@ -39,6 +39,7 @@ class BootstrapConfig:
     warm_expert_rag_from_tech_stack: bool = True
     overwrite_platform_rules: bool = False
     overwrite_agents_md: bool = False
+    agent_teams: bool = False
 
 
 @dataclass
@@ -106,6 +107,7 @@ def bootstrap_pipeline(
     warm_expert_rag_from_tech_stack: bool = True,
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
+    agent_teams: bool = False,
 ) -> dict[str, Any]:
     """Create pipeline template files in the project.
 
@@ -124,6 +126,7 @@ def bootstrap_pipeline(
         warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
         overwrite_platform_rules=overwrite_platform_rules,
         overwrite_agents_md=overwrite_agents_md,
+        agent_teams=agent_teams,
     )
     state = _BootstrapState(project_root=project_root.resolve())
 
@@ -213,8 +216,10 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         return
 
     from tapps_mcp.pipeline.platform_generators import (
+        generate_agent_teams_hooks,
         generate_claude_hooks,
         generate_cursor_hooks,
+        generate_cursor_rules,
         generate_skills,
         generate_subagent_definitions,
     )
@@ -232,16 +237,20 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         state.result["hooks"] = generate_claude_hooks(state.project_root)
         state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
         state.result["skills"] = generate_skills(state.project_root, "claude")
+        # Agent Teams (opt-in)
+        if cfg.agent_teams:
+            state.result["agent_teams"] = generate_agent_teams_hooks(state.project_root)
     elif cfg.platform == "cursor":
         platform_action = _bootstrap_cursor(state.project_root, cfg.overwrite_platform_rules)
         if platform_action in {"created", "updated"}:
             state.created.append(".cursor/rules/tapps-pipeline.md")
         elif platform_action == "skipped":
             state.skipped.append(".cursor/rules/tapps-pipeline.md")
-        # Hooks, agents, skills
+        # Hooks, agents, skills, enhanced rules
         state.result["hooks"] = generate_cursor_hooks(state.project_root)
         state.result["agents"] = generate_subagent_definitions(state.project_root, "cursor")
         state.result["skills"] = generate_skills(state.project_root, "cursor")
+        state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
     else:
         state.errors.append(f"Unknown platform: {cfg.platform!r}. Use 'claude' or 'cursor'.")
 

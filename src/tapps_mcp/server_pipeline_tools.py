@@ -216,6 +216,7 @@ def tapps_init(
     warm_expert_rag_from_tech_stack: bool = True,
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
+    agent_teams: bool = False,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
 
@@ -241,6 +242,8 @@ def tapps_init(
         overwrite_agents_md: When ``True``, replace AGENTS.md entirely with the latest
             template. When ``False`` (default), validate and smart-merge missing
             sections/tools.
+        agent_teams: When ``True`` and platform is ``"claude"``, generate Agent Teams
+            hooks (TeammateIdle, TaskCompleted) for quality watchdog teammate.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
@@ -263,6 +266,7 @@ def tapps_init(
         warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
         overwrite_platform_rules=overwrite_platform_rules,
         overwrite_agents_md=overwrite_agents_md,
+        agent_teams=agent_teams,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

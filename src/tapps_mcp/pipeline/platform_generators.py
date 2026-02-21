@@ -630,3 +630,591 @@ def generate_skills(project_root: Path, platform: str) -> dict[str, Any]:
             created.append(skill_name)
 
     return {"created": created, "skipped": skipped}
+
+
+# ---------------------------------------------------------------------------
+# Cursor rule types (Story 12.11)
+# ---------------------------------------------------------------------------
+
+_CURSOR_RULE_PIPELINE = """\
+---
+alwaysApply: true
+---
+
+# TAPPS Quality Pipeline
+
+This project uses the TAPPS MCP server for code quality enforcement.
+
+## Session Start (REQUIRED)
+
+Call `tapps_session_start()` as the FIRST action in every session.
+
+## After Editing Python Files (REQUIRED)
+
+Call `tapps_quick_check(file_path)` after editing any Python file.
+
+## Before Declaring Work Complete (BLOCKING)
+
+Call `tapps_validate_changed()` to batch-validate all changed files.
+The quality gate MUST pass before work is declared complete.
+Call `tapps_checklist(task_type)` as the FINAL verification step.
+"""
+
+_CURSOR_RULE_PYTHON_QUALITY = """\
+---
+globs: "*.py"
+alwaysApply: false
+---
+
+# Python Quality Standards
+
+When Python files are referenced, enforce these quality standards:
+
+## 7 Scoring Categories
+
+TappsMCP scores Python code across 7 categories (0-100 each):
+
+1. **Correctness** - Logic errors, type safety, edge cases
+2. **Security** - Vulnerabilities, injection risks, secrets
+3. **Maintainability** - Complexity, naming, structure
+4. **Performance** - Efficiency, resource usage, scaling
+5. **Documentation** - Docstrings, comments, clarity
+6. **Testing** - Coverage, edge cases, assertions
+7. **Style** - PEP 8, formatting, consistency
+
+## Actions
+
+- Call `tapps_quick_check(file_path)` on edited Python files
+- Any category scoring below 70 needs immediate attention
+- Call `tapps_score_file(file_path)` for full breakdown
+"""
+
+_CURSOR_RULE_EXPERT = """\
+---
+description: >-
+  TappsMCP domain expert consultation — use when needing
+  guidance on security, performance, architecture, testing,
+  or other domain-specific best practices.
+---
+
+# Expert Consultation
+
+Call `tapps_consult_expert(question)` for domain guidance.
+
+## Available Expert Domains
+
+- security, performance, architecture, testing
+- documentation, accessibility, devops, database
+- api, frontend, backend, data-science
+- ml, cloud, mobile, embedded
+
+## Usage
+
+Provide a clear question and optionally specify the domain:
+
+```
+tapps_consult_expert(
+    question="How should I handle auth tokens?",
+    domain="security"
+)
+```
+
+Returns RAG-backed expert guidance with confidence scores.
+"""
+
+
+def generate_cursor_rules(project_root: Path) -> dict[str, Any]:
+    """Generate three Cursor rule files with different rule types.
+
+    Creates ``.cursor/rules/`` with:
+    - ``tapps-pipeline.mdc`` (alwaysApply)
+    - ``tapps-python-quality.mdc`` (autoAttach via globs)
+    - ``tapps-expert-consultation.mdc`` (agentRequested via description)
+
+    Returns a summary dict with ``created`` and ``skipped`` lists.
+    """
+    rules_dir = project_root / ".cursor" / "rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+
+    rules: dict[str, str] = {
+        "tapps-pipeline.mdc": _CURSOR_RULE_PIPELINE,
+        "tapps-python-quality.mdc": _CURSOR_RULE_PYTHON_QUALITY,
+        "tapps-expert-consultation.mdc": _CURSOR_RULE_EXPERT,
+    }
+
+    created: list[str] = []
+    skipped: list[str] = []
+    for name, content in rules.items():
+        target = rules_dir / name
+        if target.exists():
+            skipped.append(name)
+        else:
+            target.write_text(content, encoding="utf-8")
+            created.append(name)
+
+    return {"created": created, "skipped": skipped}
+
+
+# ---------------------------------------------------------------------------
+# Agent Teams hooks (Story 12.12)
+# ---------------------------------------------------------------------------
+
+_AGENT_TEAMS_HOOK_SCRIPTS: dict[str, str] = {
+    "tapps-teammate-idle.sh": """\
+#!/usr/bin/env bash
+# TappsMCP TeammateIdle hook
+# Keeps quality watchdog active while gates are pending.
+set -euo pipefail
+
+INPUT=$(cat)
+PY="import sys,json; d=json.load(sys.stdin)"
+PY="$PY; print(d.get('teammate_name',''))"
+TEAMMATE=$(echo "$INPUT" | python3 -c "$PY" 2>/dev/null)
+
+# Only keep the quality watchdog active
+if [[ "$TEAMMATE" != "tapps-quality-watchdog" ]]; then
+  exit 0
+fi
+
+echo "Quality watchdog — monitoring for issues" >&2
+exit 2
+""",
+    "tapps-teams-task-completed.sh": """\
+#!/usr/bin/env bash
+# TappsMCP TaskCompleted hook (Agent Teams)
+# Blocks task completion if quality gates fail.
+set -euo pipefail
+
+INPUT=$(cat)
+MSG="Task blocked: run tapps_validate_changed"
+MSG="$MSG to verify quality gates pass."
+echo "$MSG" >&2
+exit 2
+""",
+}
+
+_AGENT_TEAMS_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
+    "TeammateIdle": [
+        {
+            "matcher": "tapps-quality-watchdog",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-teammate-idle.sh",
+                },
+            ],
+        },
+    ],
+    "TaskCompleted": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        ".claude/hooks/tapps-teams-task-completed.sh"
+                    ),
+                },
+            ],
+        },
+    ],
+}
+
+_AGENT_TEAMS_CLAUDE_MD_SECTION = """\
+
+## Agent Teams (Optional)
+
+If using Claude Code Agent Teams
+(`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`),
+designate one teammate as a **quality watchdog**:
+
+1. The quality watchdog runs `tapps_quick_check` on files changed
+   by other teammates.
+2. It messages other teammates via the shared mailbox when quality
+   issues are found.
+3. The `TaskCompleted` hook prevents any task from being marked
+   complete until `tapps_validate_changed` passes.
+4. The `TeammateIdle` hook keeps the watchdog active while quality
+   issues remain unresolved.
+
+To enable Agent Teams hooks, re-run `tapps_init` with
+`agent_teams=True`.
+"""
+
+
+def generate_agent_teams_hooks(
+    project_root: Path,
+) -> dict[str, Any]:
+    """Generate Agent Teams hook scripts and merge config.
+
+    Creates ``tapps-teammate-idle.sh`` and
+    ``tapps-teams-task-completed.sh`` in ``.claude/hooks/`` and merges
+    ``TeammateIdle`` and ``TaskCompleted`` entries into
+    ``.claude/settings.json``.
+
+    Returns a summary dict.
+    """
+    hooks_dir = project_root / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+
+    scripts_created: list[str] = []
+    for name, content in _AGENT_TEAMS_HOOK_SCRIPTS.items():
+        script_path = hooks_dir / name
+        if not script_path.exists():
+            script_path.write_text(content, encoding="utf-8")
+            script_path.chmod(
+                script_path.stat().st_mode
+                | stat.S_IXUSR
+                | stat.S_IXGRP
+            )
+            scripts_created.append(name)
+
+    # Merge hooks config into .claude/settings.json
+    settings_file = project_root / ".claude" / "settings.json"
+    if settings_file.exists():
+        raw = settings_file.read_text(encoding="utf-8")
+        config: dict[str, Any] = (
+            json.loads(raw) if raw.strip() else {}
+        )
+    else:
+        config = {}
+
+    existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
+    hooks_added = 0
+    for event, entries in _AGENT_TEAMS_HOOKS_CONFIG.items():
+        if event not in existing_hooks:
+            existing_hooks[event] = entries
+            hooks_added += len(entries)
+
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(
+        json.dumps(config, indent=2) + "\n", encoding="utf-8"
+    )
+
+    return {
+        "scripts_created": scripts_created,
+        "hooks_added": hooks_added,
+    }
+
+
+def get_agent_teams_claude_md_section() -> str:
+    """Return the Agent Teams documentation section."""
+    return _AGENT_TEAMS_CLAUDE_MD_SECTION
+
+
+# ---------------------------------------------------------------------------
+# Plugin bundle generators (Stories 12.9 + 12.10)
+# ---------------------------------------------------------------------------
+
+_CLAUDE_PLUGIN_README = """\
+# TappsMCP — Claude Code Plugin
+
+Code quality scoring, security scanning, and quality gates
+for Python projects.
+
+## Installation
+
+Place this directory as a Claude Code plugin or install via:
+
+```
+claude plugin install tapps-mcp
+```
+
+## What's Included
+
+- **MCP Server**: `tapps-mcp serve` with 12+ quality tools
+- **Agents**: tapps-reviewer, tapps-researcher, tapps-validator
+- **Skills**: `/tapps-score`, `/tapps-gate`, `/tapps-validate`
+- **Hooks**: Session start, post-edit reminders, stop gate
+
+## Usage
+
+Once installed, the TappsMCP tools are available in every
+session. Use `/tapps-score` to score a file, `/tapps-gate` to
+run quality gates, and `/tapps-validate` before declaring
+work complete.
+"""
+
+_CURSOR_PLUGIN_README = """\
+# TappsMCP — Cursor Plugin
+
+Code quality scoring, security scanning, and quality gates
+for Python projects.
+
+## Installation
+
+Install via Cursor marketplace or place this directory as a
+Cursor plugin.
+
+## What's Included
+
+- **MCP Server**: `tapps-mcp serve` with 12+ quality tools
+- **Agents**: tapps-reviewer, tapps-researcher, tapps-validator
+- **Skills**: `@tapps-score`, `@tapps-gate`, `@tapps-validate`
+- **Hooks**: Before MCP, after edit reminders, stop prompt
+- **Rules**: Pipeline (always), Python quality (auto-attach),
+  Expert consultation (agent-requested)
+
+## Usage
+
+Once installed, the TappsMCP tools are available in every
+session. Use `@tapps-score` to score a file, `@tapps-gate` to
+run quality gates, and `@tapps-validate` before declaring
+work complete.
+"""
+
+
+def generate_claude_plugin_bundle(
+    output_dir: Path,
+    version: str = "0.2.1",
+) -> dict[str, Any]:
+    """Generate a Claude Code plugin bundle directory.
+
+    Creates the full plugin directory structure under *output_dir*
+    including plugin.json, agents, skills, hooks, .mcp.json,
+    and README.md.
+
+    Returns a summary dict with ``files_created``.
+    """
+    files_created: list[str] = []
+
+    # .claude-plugin/plugin.json
+    meta_dir = output_dir / ".claude-plugin"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    plugin_data = {
+        "name": "tapps-mcp",
+        "version": version,
+        "description": (
+            "Code quality scoring, security scanning, "
+            "and quality gates for Python projects"
+        ),
+    }
+    (meta_dir / "plugin.json").write_text(
+        json.dumps(plugin_data, indent=2) + "\n", encoding="utf-8"
+    )
+    files_created.append(".claude-plugin/plugin.json")
+
+    # agents/
+    agents_dir = output_dir / "agents"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    for name, content in _CLAUDE_AGENTS.items():
+        (agents_dir / name).write_text(content, encoding="utf-8")
+        files_created.append(f"agents/{name}")
+
+    # skills/
+    for skill_name, content in _CLAUDE_SKILLS.items():
+        skill_dir = output_dir / "skills" / skill_name
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(
+            content, encoding="utf-8"
+        )
+        files_created.append(f"skills/{skill_name}/SKILL.md")
+
+    # hooks/
+    hooks_dir = output_dir / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    hooks_json_data: dict[str, Any] = {}
+    for event, entries in _CLAUDE_HOOKS_CONFIG.items():
+        plugin_entries = []
+        for entry in entries:
+            pe: dict[str, Any] = {}
+            if "matcher" in entry:
+                pe["matcher"] = entry["matcher"]
+            pe["hooks"] = [
+                {
+                    "type": h["type"],
+                    "command": h["command"].replace(
+                        ".claude/hooks/", "hooks/"
+                    ),
+                }
+                for h in entry["hooks"]
+            ]
+            plugin_entries.append(pe)
+        hooks_json_data[event] = plugin_entries
+    (hooks_dir / "hooks.json").write_text(
+        json.dumps({"hooks": hooks_json_data}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    files_created.append("hooks/hooks.json")
+
+    for name, content in _CLAUDE_HOOK_SCRIPTS.items():
+        script_path = hooks_dir / name
+        script_path.write_text(content, encoding="utf-8")
+        script_path.chmod(
+            script_path.stat().st_mode
+            | stat.S_IXUSR
+            | stat.S_IXGRP
+        )
+        files_created.append(f"hooks/{name}")
+
+    # .mcp.json
+    mcp_config = {
+        "mcpServers": {
+            "tapps-mcp": {
+                "command": "uvx",
+                "args": ["tapps-mcp", "serve"],
+                "env": {
+                    "TAPPS_MCP_PROJECT_ROOT": (
+                        "${workspaceFolder}"
+                    ),
+                },
+            },
+        },
+    }
+    (output_dir / ".mcp.json").write_text(
+        json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8"
+    )
+    files_created.append(".mcp.json")
+
+    # README.md
+    (output_dir / "README.md").write_text(
+        _CLAUDE_PLUGIN_README, encoding="utf-8"
+    )
+    files_created.append("README.md")
+
+    return {"files_created": files_created}
+
+
+def generate_cursor_plugin_bundle(
+    output_dir: Path,
+    version: str = "0.2.1",
+) -> dict[str, Any]:
+    """Generate a Cursor plugin bundle directory.
+
+    Creates the full plugin directory structure under *output_dir*
+    including plugin.json, agents, skills, hooks, rules, mcp.json,
+    logo.png placeholder, and README.md.
+
+    Returns a summary dict with ``files_created``.
+    """
+    import base64
+
+    files_created: list[str] = []
+
+    # .cursor-plugin/plugin.json
+    meta_dir = output_dir / ".cursor-plugin"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    plugin_data = {
+        "name": "tapps-mcp-plugin",
+        "displayName": "TappsMCP Quality Tools",
+        "author": "TappsMCP Team",
+        "description": (
+            "Code quality scoring, security scanning, "
+            "and quality gates for Python projects"
+        ),
+        "keywords": [
+            "code-quality",
+            "security",
+            "scoring",
+            "mcp",
+            "python",
+        ],
+        "license": "MIT",
+        "version": version,
+    }
+    (meta_dir / "plugin.json").write_text(
+        json.dumps(plugin_data, indent=2) + "\n", encoding="utf-8"
+    )
+    files_created.append(".cursor-plugin/plugin.json")
+
+    # agents/
+    agents_dir = output_dir / "agents"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    for name, content in _CURSOR_AGENTS.items():
+        (agents_dir / name).write_text(content, encoding="utf-8")
+        files_created.append(f"agents/{name}")
+
+    # skills/
+    for skill_name, content in _CURSOR_SKILLS.items():
+        skill_dir = output_dir / "skills" / skill_name
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(
+            content, encoding="utf-8"
+        )
+        files_created.append(f"skills/{skill_name}/SKILL.md")
+
+    # hooks/
+    hooks_dir = output_dir / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    cursor_hooks_list = [
+        {
+            "event": e["event"],
+            "command": e["command"].replace(
+                ".cursor/hooks/", "hooks/"
+            ),
+        }
+        for e in _CURSOR_HOOKS_CONFIG
+    ]
+    (hooks_dir / "hooks.json").write_text(
+        json.dumps({"hooks": cursor_hooks_list}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    files_created.append("hooks/hooks.json")
+
+    for name, content in _CURSOR_HOOK_SCRIPTS.items():
+        script_path = hooks_dir / name
+        script_path.write_text(content, encoding="utf-8")
+        script_path.chmod(
+            script_path.stat().st_mode
+            | stat.S_IXUSR
+            | stat.S_IXGRP
+        )
+        files_created.append(f"hooks/{name}")
+
+    # rules/
+    rules_dir = output_dir / "rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    rules = {
+        "tapps-pipeline.mdc": _CURSOR_RULE_PIPELINE,
+        "tapps-python-quality.mdc": _CURSOR_RULE_PYTHON_QUALITY,
+        "tapps-expert-consultation.mdc": _CURSOR_RULE_EXPERT,
+    }
+    for name, content in rules.items():
+        (rules_dir / name).write_text(content, encoding="utf-8")
+        files_created.append(f"rules/{name}")
+
+    # mcp.json
+    mcp_config = {
+        "mcpServers": {
+            "tapps-mcp": {
+                "command": "uvx",
+                "args": ["tapps-mcp", "serve"],
+                "env": {
+                    "TAPPS_MCP_PROJECT_ROOT": (
+                        "${workspaceFolder}"
+                    ),
+                },
+            },
+        },
+    }
+    (output_dir / "mcp.json").write_text(
+        json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8"
+    )
+    files_created.append("mcp.json")
+
+    # logo.png placeholder (1x1 transparent PNG)
+    _png = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+        "AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5E"
+        "rkJggg=="
+    )
+    (output_dir / "logo.png").write_bytes(
+        base64.b64decode(_png)
+    )
+    files_created.append("logo.png")
+
+    # README.md
+    (output_dir / "README.md").write_text(
+        _CURSOR_PLUGIN_README, encoding="utf-8"
+    )
+    files_created.append("README.md")
+
+    # LICENSE
+    license_text = (
+        "MIT License\n\nCopyright (c) TappsMCP Team\n"
+    )
+    (output_dir / "LICENSE").write_text(
+        license_text, encoding="utf-8"
+    )
+    files_created.append("LICENSE")
+
+    return {"files_created": files_created}

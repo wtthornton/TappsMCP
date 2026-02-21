@@ -371,6 +371,7 @@ def _generate_rules(host: str, project_root: Path) -> None:
     from tapps_mcp.pipeline.platform_generators import (
         generate_claude_hooks,
         generate_cursor_hooks,
+        generate_cursor_rules,
         generate_skills,
         generate_subagent_definitions,
     )
@@ -412,6 +413,8 @@ def _generate_rules(host: str, project_root: Path) -> None:
         _echo_gen_result("agents", agents_result)
         skills_result = generate_skills(project_root, "cursor")
         _echo_gen_result("skills", skills_result)
+        rules_result = generate_cursor_rules(project_root)
+        _echo_gen_result("cursor rules", rules_result)
     # VS Code has no platform rule equivalent — no-op
 
 
