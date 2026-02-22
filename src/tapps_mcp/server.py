@@ -95,11 +95,21 @@ def _validate_file_path(file_path: str) -> Path:
     return validator.validate_read_path(path_str)
 
 
+_checklist_persist_configured: bool = False
+
+
 def _record_call(tool_name: str) -> None:
     """Record a tool call in the session checklist tracker."""
+    global _checklist_persist_configured
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
+        if not _checklist_persist_configured:
+            settings = load_settings()
+            sessions_dir = settings.project_root / ".tapps-mcp" / "sessions"
+            persist_path = sessions_dir / "checklist_calls.jsonl"
+            CallTracker.set_persist_path(persist_path)
+            _checklist_persist_configured = True
         CallTracker.record(tool_name)
     except ImportError:
         logger.debug("checklist module unavailable, skipping call record", tool=tool_name)

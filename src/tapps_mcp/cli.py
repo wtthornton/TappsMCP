@@ -72,6 +72,11 @@ def serve(transport: str, host: str, port: int) -> None:
     default=True,
     help="Generate platform rule files (CLAUDE.md, .cursor/rules/).",
 )
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be written without making changes.",
+)
 def init(
     mcp_host: str,
     project_root: str,
@@ -79,6 +84,7 @@ def init(
     force: bool,
     scope: str,
     rules: bool,
+    dry_run: bool,
 ) -> None:
     """Generate MCP configuration for Claude Code, Cursor, or VS Code."""
     from tapps_mcp.distribution.setup_generator import run_init
@@ -90,6 +96,7 @@ def init(
         force=force,
         scope=scope,
         rules=rules,
+        dry_run=dry_run,
     )
     if not success:
         raise SystemExit(1)

@@ -1,6 +1,7 @@
 # TappsMCP Self-Review: Code Review Using Its Own Tools
 
 **Date:** 2026-02-21
+**Revised:** 2026-02-22 (re-verification)
 **Version:** 0.2.1
 **Reviewer:** TappsMCP (reviewing itself via its own MCP tools)
 
@@ -60,27 +61,21 @@ The full TappsMCP tool suite was run against its own codebase:
 
 ## High-Value Enhancements (Ranked by Impact)
 
-### 1. server.py Fails Its Own Quality Gate (Critical)
-The main server file scores 68.78 against a 70.0 threshold. MI=16 (very low) and
-1884 lines make this the lowest-maintainability file in the project.
+**Re-verification (2026-02-22):** See [CRITICAL_HIGH_REVIEW_PLAN.md](CRITICAL_HIGH_REVIEW_PLAN.md).
 
-**Recommendation:** Split into `server_core.py`, `server_scoring_tools.py`,
-`server_pipeline_tools.py`, `server_metrics_tools.py`.
+### 1. server.py Fails Its Own Quality Gate (Critical) — ✅ Implemented
+The main server file was split into `server_scoring_tools.py`, `server_pipeline_tools.py`,
+`server_metrics_tools.py`, and `server_helpers.py`; `server.py` delegates to these modules.
 
-### 2. Feedback Loop Is Disconnected (High)
-`tapps_feedback` records data to `feedback.jsonl` but nothing reads it.
-`AdaptiveScoringEngine` uses `CodeOutcome`, not feedback records.
-The "adaptive learning" pipeline has a gap between data collection and weight adjustment.
+### 2. Feedback Loop Is Disconnected (High) — ✅ Implemented
+`AdaptiveScoringEngine` now accepts optional `metrics_dir`; when provided, feedback records
+from `FeedbackTracker.to_adaptive_outcomes()` are merged into outcome loading so negative
+feedback influences weight recalibration. Pass `metrics_dir` when creating the engine.
 
-**Recommendation:** Wire `FeedbackTracker.get_by_tool()` into the adaptive engine
-so negative feedback on specific tools or categories influences weight recalibration.
-
-### 3. Checklist State Is Not Persisted (High)
-`CallTracker` uses module-level state that resets between sessions.
-The checklist reported all tools as "missing" even after calling them,
-because the Python process was restarted between calls.
-
-**Recommendation:** Persist call records to session JSON files (`.tapps-mcp/sessions/`).
+### 3. Checklist State Is Not Persisted (High) — ✅ Implemented
+`CallTracker` had persistence infra (`set_persist_path`, `_load_persisted`, `_persist_record`);
+it is now wired at first tool call. Server calls `CallTracker.set_persist_path(project_root /
+".tapps-mcp" / "sessions" / "checklist_calls.jsonl")` on first `_record_call`.
 
 ### 4. Expert RAG Relevance Is Poor (High)
 Architecture and testing consultations returned irrelevant or empty results.
@@ -89,19 +84,12 @@ Keyword-based chunk matching produces low-relevance results for specific questio
 **Recommendation:** Implement BM25/TF-IDF scoring. Add relevance threshold
 (reject chunks with score < 0.3). Expand knowledge base with MCP-specific content.
 
-### 5. validate_changed Caps at 10 Files (Medium)
-Only ~8% of source files get validated in a batch run. The cap is too low
-for medium-sized projects.
+### 5. validate_changed Caps at 10 Files (Medium) — ✅ Implemented
+`batch_validator.py` now uses `MAX_BATCH_FILES = 50` (raised from 10).
 
-**Recommendation:** Use `score_file_quick` for batch validation with a 50-file cap.
-Reserve full scoring for files flagged by quick check.
-
-### 6. pipeline/init.py Has CC=30 (Medium)
-`bootstrap_pipeline()` is the most complex function in the codebase.
-11 boolean parameters contribute to branch explosion.
-
-**Recommendation:** Extract parameters into `BootstrapConfig` dataclass.
-Split into `_verify_server()`, `_create_templates()`, `_warm_caches()`.
+### 6. pipeline/init.py Has CC=30 (Medium) — ⚠️ Partial
+`BootstrapConfig` dataclass exists; `_verify_server`, `_warm_caches`, `_create_templates`
+extracted. Main `bootstrap_pipeline` still has many params; CC may remain high.
 
 ### 7. Scoring Weights Need Empirical Calibration (Medium)
 15% gap between avg score (85.6) and gate pass rate (82.9%) suggests

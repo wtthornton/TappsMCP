@@ -182,6 +182,7 @@ def _generate_config(
     *,
     force: bool = False,
     scope: str = "user",
+    dry_run: bool = False,
 ) -> bool:
     """Generate (or merge) the MCP config for the given host.
 
@@ -233,6 +234,16 @@ def _generate_config(
     else:
         servers_key_new = _get_servers_key(host)
         merged = {servers_key_new: {"tapps-mcp": _build_server_entry(host)}}
+
+    if dry_run:
+        click.echo(
+            click.style(
+                f"[DRY-RUN] Would write configuration to {config_path}",
+                fg="cyan",
+            )
+        )
+        click.echo("  tapps-mcp entry would be added/updated. Run without --dry-run to apply.")
+        return True
 
     # Ensure parent directory exists
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -336,6 +347,7 @@ def _configure_multiple_hosts(
     force: bool = False,
     scope: str = "user",
     rules: bool = True,
+    dry_run: bool = False,
 ) -> bool:
     """Configure (or check) multiple hosts, reporting per-host results.
 
@@ -348,8 +360,10 @@ def _configure_multiple_hosts(
         if check:
             ok = _check_config(host, project_root, scope=scope)
         else:
-            ok = _generate_config(host, project_root, force=force, scope=scope)
-            if ok and rules:
+            ok = _generate_config(
+                host, project_root, force=force, scope=scope, dry_run=dry_run
+            )
+            if ok and rules and not dry_run:
                 _generate_rules(host, project_root)
         if not ok:
             all_ok = False
@@ -452,6 +466,7 @@ def run_init(
     force: bool = False,
     scope: str = "user",
     rules: bool = True,
+    dry_run: bool = False,
 ) -> bool:
     """Run the init command logic.
 
@@ -466,6 +481,7 @@ def run_init(
             ``.mcp.json``. Only affects ``claude-code`` host.
         rules: If ``True``, also generate platform rule files (CLAUDE.md or
             .cursor/rules/tapps-pipeline.md) alongside MCP config.
+        dry_run: If ``True``, show what would be written without making changes.
     """
     root = Path(project_root).resolve()
     log.info(
@@ -476,6 +492,7 @@ def run_init(
         force=force,
         scope=scope,
         rules=rules,
+        dry_run=dry_run,
     )
 
     if mcp_host == "auto":
@@ -497,12 +514,13 @@ def run_init(
             force=force,
             scope=scope,
             rules=rules,
+            dry_run=dry_run,
         )
 
     if check:
         return _check_config(mcp_host, root, scope=scope)
 
-    ok = _generate_config(mcp_host, root, force=force, scope=scope)
-    if ok and rules:
+    ok = _generate_config(mcp_host, root, force=force, scope=scope, dry_run=dry_run)
+    if ok and rules and not dry_run:
         _generate_rules(mcp_host, root)
     return ok

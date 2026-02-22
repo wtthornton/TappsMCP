@@ -126,7 +126,36 @@ Epic 10 and Epic 11 added tighter coupling between expert consultation and doc l
 
 ## High and critical recommendations for improvement
 
+**Verification (2026-02-22):** Code review and implementation per
+[CRITICAL_HIGH_REVIEW_PLAN.md](CRITICAL_HIGH_REVIEW_PLAN.md).
+
 ### Critical
+
+| # | Area | Status | Evidence |
+|---|------|--------|----------|
+| 1 | **CLI exit codes** | ✅ Implemented | `cli.py` raises `SystemExit(1)` when `run_init()` returns `False`. |
+| 2 | **Invalid JSON in host config** | ✅ Implemented | `setup_generator.py` returns `False` on `JSONDecodeError`; does not overwrite. |
+| 3 | **Cache warming failures hidden** | ✅ Implemented | `_run_cache_warming` sets `error`; `init.py` appends to `state.errors`. |
+
+### High
+
+| # | Area | Status | Evidence |
+|---|------|--------|----------|
+| 4 | **Checker install environment** | ✅ Implemented | `init.py` uses `sys.executable, "-m", "pip", "install", pkg`. |
+| 5 | **Cursor platform rules never refresh** | ✅ Implemented | `overwrite_platform_rules` in `tapps_init`. |
+| 6 | **Expert RAG warming errors not surfaced** | ✅ Implemented | `rag_warming.py` returns `failed_domains`; `init.py` appends to `state.errors`. |
+| 7 | **No dry-run / preview** | ✅ Implemented | `dry_run` in `bootstrap_pipeline`; `--dry-run` in `tapps-mcp init`; `dry_run` in `tapps_init` MCP tool. |
+| 8 | **Success vs subsystem failure** | ✅ Implemented | Cache and expert RAG failures append to `errors`. |
+| 9 | **CLI init overwrite non-interactive** | ✅ Implemented | `--force` skips confirm prompt. |
+
+---
+
+### Original recommendations (reference; all implemented)
+
+<details>
+<summary>Click to expand original issue text</summary>
+
+### Critical (original)
 
 | # | Area | Issue | Recommendation |
 |---|------|--------|----------------|
@@ -144,3 +173,5 @@ Epic 10 and Epic 11 added tighter coupling between expert consultation and doc l
 | 7 | **No dry-run / preview** | Neither `tapps_init` nor `tapps-mcp init` support a dry-run. Users cannot see which files would be created or which config would be written before making changes. | Add a `dry_run: bool` (or CLI `--dry-run`) that computes and returns the same structure (files to create/update, config diff, etc.) without writing. |
 | 8 | **Success vs subsystem failure** | `bootstrap_pipeline` sets `success = len(errors) == 0`. Cache and RAG warming can effectively “fail” (e.g. 0 warmed due to missing API key or exception) without adding to `errors`. So `success` can be `True` even when important subsystems did nothing or failed. | Either: (a) append to `errors` when cache/RAG warming fails (e.g. “Cache warming failed: …”), or (b) add a separate field such as `warnings` or `subsystem_status` so callers can distinguish “no errors but warming skipped” from “all good”. |
 | 9 | **CLI init overwrite in non-interactive** | When `tapps-mcp init` finds an existing `tapps-mcp` entry, it calls `click.confirm("Overwrite...?")`. In non-interactive use (CI, scripts) this can block or default to “no” and abort without a clear “use --force to overwrite” path. | Support a non-interactive overwrite flag (e.g. `--force` or `--overwrite`) so scripts can re-run init without prompting. When not TTY and overwrite would be needed, exit with a clear message and non-zero code unless `--force` is set. |
+
+</details>

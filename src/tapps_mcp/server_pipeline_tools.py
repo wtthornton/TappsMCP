@@ -220,6 +220,7 @@ async def tapps_init(
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
     agent_teams: bool = False,
+    dry_run: bool = False,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
@@ -248,6 +249,8 @@ async def tapps_init(
             sections/tools.
         agent_teams: When ``True`` and platform is ``"claude"``, generate Agent Teams
             hooks (TeammateIdle, TaskCompleted) for quality watchdog teammate.
+        dry_run: When ``True``, compute and return what would be created without
+            writing files or warming caches.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
@@ -287,6 +290,7 @@ async def tapps_init(
         overwrite_platform_rules=overwrite_platform_rules,
         overwrite_agents_md=overwrite_agents_md,
         agent_teams=agent_teams,
+        dry_run=dry_run,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

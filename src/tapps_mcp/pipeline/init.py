@@ -40,6 +40,7 @@ class BootstrapConfig:
     overwrite_platform_rules: bool = False
     overwrite_agents_md: bool = False
     agent_teams: bool = False
+    dry_run: bool = False
 
 
 @dataclass
@@ -47,6 +48,7 @@ class _BootstrapState:
     """Mutable accumulator shared between sub-functions."""
 
     project_root: Path
+    dry_run: bool = False
     created: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -64,8 +66,9 @@ class _BootstrapState:
         if target.exists():
             self.skipped.append(rel_path)
             return
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        if not self.dry_run:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
         self.created.append(rel_path)
 
     def safe_write_or_overwrite(self, rel_path: str, content: str) -> str:
@@ -77,8 +80,9 @@ class _BootstrapState:
             self.errors.append(f"{rel_path}: path escapes project root")
             return "skipped"
         existed = target.exists()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        if not self.dry_run:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
         if existed:
             return "updated"
         self.created.append(rel_path)
@@ -108,8 +112,12 @@ def bootstrap_pipeline(
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
     agent_teams: bool = False,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     """Create pipeline template files in the project.
+
+    When ``dry_run=True``, computes and returns the same result structure
+    without writing files or warming caches.
 
     Returns a summary dict with ``created``, ``skipped``, ``errors``, and
     subsystem result dicts.
@@ -127,14 +135,34 @@ def bootstrap_pipeline(
         overwrite_platform_rules=overwrite_platform_rules,
         overwrite_agents_md=overwrite_agents_md,
         agent_teams=agent_teams,
+        dry_run=dry_run,
     )
-    state = _BootstrapState(project_root=project_root.resolve())
+    state = _BootstrapState(project_root=project_root.resolve(), dry_run=dry_run)
 
     _verify_server(cfg, state)
     _detect_profile(cfg, state)
     _create_templates(cfg, state)
-    _setup_platform(cfg, state)
-    _warm_caches(cfg, state)
+    if not cfg.dry_run:
+        _setup_platform(cfg, state)
+        _warm_caches(cfg, state)
+    else:
+        state.result["platform_rules"] = {
+            "platform": cfg.platform or "(none)",
+            "action": "skipped",
+            "reason": "dry_run",
+        }
+        state.result["cache_warming"] = {
+            "warmed": 0,
+            "attempted": 0,
+            "skipped": "dry_run",
+            "libraries": [],
+        }
+        state.result["expert_rag_warming"] = {
+            "warmed": 0,
+            "attempted": 0,
+            "skipped": "dry_run",
+            "domains": [],
+        }
 
     return state.finalize()
 
@@ -296,10 +324,14 @@ def _warm_caches(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         }
 
     if cfg.warm_expert_rag_from_tech_stack and state.profile is not None:
-        state.result["expert_rag_warming"] = _run_expert_rag_warming(
+        rag_result = _run_expert_rag_warming(
             state.project_root,
             state.profile.tech_stack,
         )
+        state.result["expert_rag_warming"] = rag_result
+        failed = rag_result.get("failed_domains") or []
+        if failed:
+            state.errors.append(f"Expert RAG failed for domains: {', '.join(failed)}")
     else:
         state.result["expert_rag_warming"] = {
             "warmed": 0,

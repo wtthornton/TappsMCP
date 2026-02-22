@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Critical/High Review — 2026-02-22)
+
+- **Checklist persistence** — `CallTracker` now persists call records to `.tapps-mcp/sessions/checklist_calls.jsonl`; `set_persist_path` is invoked on first tool call so state survives server restarts.
+- **Expert RAG error surfacing** — `tapps_init` appends expert RAG `failed_domains` to `errors` so `success` reflects subsystem failure.
+- **Dry-run for init** — `tapps_init` (MCP tool) and `tapps-mcp init` (CLI) support `dry_run` / `--dry-run` to preview what would be created without writing.
+- **Feedback → AdaptiveScoringEngine** — `AdaptiveScoringEngine` accepts optional `metrics_dir`; when provided, feedback records from `tapps_feedback` are merged so negative feedback influences weight recalibration.
+
 ### Added (Epic 12: Platform Integration — Tiers 1-4, Complete)
 
 - **Claude Code hooks generation** — 7 hook scripts in `.claude/hooks/`: session start, session compact, post-edit, stop (exit 2 blocks until validated), task-completed (exit 2 blocks premature completion), pre-compact (context backup), subagent-start. Deep-merges into `.claude/settings.json` preserving existing entries.

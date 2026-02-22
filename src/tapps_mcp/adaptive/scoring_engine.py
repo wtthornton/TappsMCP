@@ -47,16 +47,21 @@ class AdaptiveScoringEngine:
 
     The engine computes Pearson correlations between each scoring metric
     and first-pass success, then nudges weights toward metrics that
-    positively predict success.
+    positively predict success. When *metrics_dir* is provided, feedback
+    records from tapps_feedback are merged in so negative feedback
+    influences weight recalibration.
     """
 
     def __init__(
         self,
         outcome_tracker: OutcomeTrackerProtocol,
         learning_rate: float = DEFAULT_LEARNING_RATE,
+        *,
+        metrics_dir: Path | None = None,
     ) -> None:
         self._tracker = outcome_tracker
         self._learning_rate = learning_rate
+        self._metrics_dir = metrics_dir
 
     async def adjust_weights(
         self,
@@ -125,10 +130,45 @@ class AdaptiveScoringEngine:
     # ------------------------------------------------------------------
 
     def _load_outcomes(self, outcomes: list[CodeOutcome] | None = None) -> list[CodeOutcome]:
-        """Return *outcomes* if provided, otherwise load from tracker."""
+        """Return *outcomes* if provided, otherwise load from tracker and feedback."""
         if outcomes is not None:
             return outcomes
-        return self._tracker.load_outcomes(limit=1000)
+        base = self._tracker.load_outcomes(limit=1000)
+        if self._metrics_dir is not None:
+            merged = self._merge_feedback_outcomes(base)
+            return merged
+        return base
+
+    def _merge_feedback_outcomes(
+        self, base_outcomes: list[CodeOutcome]
+    ) -> list[CodeOutcome]:
+        """Merge feedback-derived outcomes so negative feedback influences weights."""
+        try:
+            from tapps_mcp.metrics.feedback import FeedbackTracker
+
+            tracker = FeedbackTracker(self._metrics_dir)
+            raw = tracker.to_adaptive_outcomes()
+        except (ImportError, OSError) as e:
+            logger.debug("feedback_merge_skipped", error=str(e))
+            return base_outcomes
+
+        if not raw:
+            return base_outcomes
+
+        # Convert feedback dicts to CodeOutcome with neutral initial_scores so they
+        # contribute to correlation (helpful=False pulls correlations down).
+        neutral_scores = {k: 5.0 for k in _METRIC_KEYS}
+        for i, fb in enumerate(raw):
+            base_outcomes.append(
+                CodeOutcome(
+                    workflow_id=f"feedback-{i}",
+                    file_path="(feedback)",
+                    initial_scores=neutral_scores,
+                    first_pass_success=bool(fb.get("first_pass_success", False)),
+                    timestamp=fb.get("timestamp", ""),
+                )
+            )
+        return base_outcomes
 
     def _calculate_correlations(
         self,
