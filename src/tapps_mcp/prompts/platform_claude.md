@@ -94,3 +94,31 @@ designate one teammate as a **quality watchdog**:
 4. The `TeammateIdle` hook keeps the watchdog active while quality issues remain unresolved.
 
 To enable Agent Teams hooks, re-run `tapps_init` with `agent_teams=True`.
+
+## CI Integration
+
+TappsMCP can run in CI without an interactive session:
+
+### Direct Python invocation (recommended for CI)
+
+```bash
+# Install TappsMCP
+pip install tapps-mcp
+
+# Validate changed files
+TAPPS_MCP_PROJECT_ROOT=/workspace \
+  tapps-mcp validate-changed --preset staging
+```
+
+### Claude Code headless mode
+
+```bash
+claude --headless \
+  --allowedTools "mcp__tapps-mcp__tapps_validate_changed" \
+  "Run tapps_validate_changed with preset=staging"
+```
+
+### VS Code / headless — enableAllProjectMcpServers
+
+In headless or non-interactive VS Code contexts, set:
+`claude.enableAllProjectMcpServers: true` in workspace settings.

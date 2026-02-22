@@ -10,6 +10,9 @@ import contextlib
 import time
 from typing import TYPE_CHECKING, Any
 
+from mcp.server.fastmcp import (
+    Context,  # noqa: TC002 — runtime import required for FastMCP annotation resolution
+)
 from mcp.types import ToolAnnotations
 
 from tapps_mcp.config.settings import load_settings
@@ -204,7 +207,7 @@ def tapps_session_start(
     return _with_nudges("tapps_session_start", resp)
 
 
-def tapps_init(
+async def tapps_init(
     create_handoff: bool = True,
     create_runlog: bool = True,
     create_agents_md: bool = True,
@@ -217,6 +220,7 @@ def tapps_init(
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
     agent_teams: bool = False,
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
 
@@ -249,6 +253,22 @@ def tapps_init(
 
     start = time.perf_counter_ns()
     _record_call("tapps_init")
+
+    # If context available, try elicitation confirmation
+    if ctx is not None:
+        from tapps_mcp.common.elicitation import elicit_init_confirmation
+
+        settings_peek = load_settings()
+        confirmed = await elicit_init_confirmation(ctx, str(settings_peek.project_root))
+        if confirmed is False:
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+            _record_execution("tapps_init", start, status="cancelled")
+            return success_response(
+                "tapps_init",
+                elapsed_ms,
+                {"cancelled": True, "message": "tapps_init cancelled — no files were written."},
+            )
+        # confirmed is True or None (unsupported) — proceed normally
 
     from tapps_mcp.pipeline.init import bootstrap_pipeline
 

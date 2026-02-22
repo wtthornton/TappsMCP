@@ -59,6 +59,12 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 - **Plugin bundles** — Ready-to-install plugin directories for Claude Code and Cursor with all hooks, agents, skills, rules, and MCP config bundled together.
 - **Cursor rule types** — Three-tier Cursor rules: always-on pipeline, auto-attach for Python files, agent-requested expert consultation.
 - **Agent Teams** — Quality watchdog teammate pattern for Claude Code Agent Teams with TeammateIdle and TaskCompleted hooks (opt-in).
+- **VS Code / Copilot instructions** — `.github/copilot-instructions.md` for GitHub Copilot with tool guidance, workflow, and scoring reference.
+- **Cursor BugBot rules** — `.cursor/BUGBOT.md` with quality standards, security rules, and scoring thresholds for automated PR review.
+- **MCP elicitation** — Interactive preset selection in `tapps_quality_gate` and init confirmation in `tapps_init` on supporting clients (graceful fallback on others).
+- **CI integration** — GitHub Actions workflow template and headless mode documentation for non-interactive quality gate enforcement.
+- **Cursor marketplace** — Ready-to-publish plugin bundle with marketplace.json, deep link, skills, agents, and hooks.
+- **Agent SDK examples** — Python and TypeScript examples for Claude Agent SDK integration (basic quality check, CI pipeline, subagent registration).
 
 ---
 
@@ -586,6 +592,9 @@ This creates:
 | **.claude/skills/** or **.cursor/skills/** | Skill templates (score, gate, validate) |
 | **.claude/settings.json** | Claude Code permission wildcard + hooks config |
 | **.cursor/rules/*.mdc** | Cursor rules (always, auto-attach, agent-requested) |
+| **.github/copilot-instructions.md** | VS Code Copilot tool guidance |
+| **.github/workflows/tapps-quality.yml** | CI quality gate workflow |
+| **.cursor/BUGBOT.md** | BugBot quality standards (Cursor only) |
 
 Optional flags:
 
@@ -647,6 +656,12 @@ src/tapps_mcp/
 ├── distribution/                       # Setup generator for `tapps-mcp init`
 └── pipeline/                           # Pipeline orchestration, handoff, initialization,
                                         #   platform generators (hooks, agents, skills, plugins)
+plugin/
+└── cursor/                            # Ready-to-publish Cursor marketplace plugin
+examples/
+└── agent-sdk/                         # Claude Agent SDK integration examples (Python + TypeScript)
+scripts/
+└── validate-cursor-plugin.sh          # CI validation for plugin manifest
 ```
 
 ---
@@ -678,7 +693,7 @@ src/tapps_mcp/
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration (Tiers 1-3) ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅
 
 ---
 

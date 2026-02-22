@@ -145,3 +145,27 @@ When `tapps_init` is called with `agent_teams=True`, additional hooks enable a q
 - **TaskCompleted** — Blocks task completion if quality gates fail
 
 Set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to enable Agent Teams.
+
+### VS Code / Copilot Instructions (auto-generated)
+
+`.github/copilot-instructions.md` — Provides GitHub Copilot in VS Code with
+TappsMCP tool guidance, recommended workflow, and scoring category reference.
+
+### Cursor BugBot Rules (auto-generated, Cursor only)
+
+`.cursor/BUGBOT.md` — Quality standards for Cursor BugBot automated PR review:
+security requirements, style rules, testing requirements, and scoring thresholds.
+
+### CI Integration (auto-generated)
+
+`.github/workflows/tapps-quality.yml` — GitHub Actions workflow that validates
+changed Python files on every pull request using TappsMCP quality gates.
+
+### MCP Elicitation
+
+When the MCP client supports elicitation (e.g. Cursor), TappsMCP can prompt
+the user interactively:
+- `tapps_quality_gate` prompts for preset selection when none is provided
+- `tapps_init` asks for confirmation before writing configuration files
+
+On unsupported clients, tools fall back to default behavior silently.

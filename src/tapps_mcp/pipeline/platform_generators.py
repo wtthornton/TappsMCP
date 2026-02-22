@@ -1218,3 +1218,239 @@ def generate_cursor_plugin_bundle(
     files_created.append("LICENSE")
 
     return {"files_created": files_created}
+
+
+# ---------------------------------------------------------------------------
+# VS Code / Copilot Instructions (Story 12.13)
+# ---------------------------------------------------------------------------
+
+_COPILOT_INSTRUCTIONS = """\
+# TappsMCP Quality Tools
+
+This project uses TappsMCP for code quality analysis. When TappsMCP is
+available as an MCP server (configured in `.vscode/mcp.json`), use the
+following tools to maintain code quality throughout development.
+
+## Key Tools
+
+- `tapps_session_start` — Initialize a TappsMCP session at the start of
+  each work session. Call this first.
+- `tapps_quick_check` — Run a quick quality check on a single file after
+  editing. Returns score and top issues.
+- `tapps_quality_gate` — Run a pass/fail quality gate against a configurable
+  preset (development, staging, or production).
+- `tapps_validate_changed` — Validate all changed files against the quality
+  gate. Call this before declaring work complete.
+- `tapps_consult_expert` — Consult a domain expert (security, performance,
+  architecture, testing, and more) for guidance.
+- `tapps_score_file` — Get a detailed 7-category quality score for any file.
+
+## Workflow
+
+1. Start a session: call `tapps_session_start`
+2. After editing Python files: call `tapps_quick_check` on changed files
+3. Before creating a PR or declaring work complete: call
+   `tapps_validate_changed`
+4. For domain-specific guidance: call `tapps_consult_expert` with the
+   relevant domain
+
+## Quality Scoring Categories
+
+TappsMCP scores code across 7 categories (0-100 each):
+correctness, security, maintainability, performance, documentation,
+testing, and style.
+"""
+
+
+def generate_copilot_instructions(project_root: Path) -> dict[str, Any]:
+    """Generate ``.github/copilot-instructions.md`` for VS Code Copilot.
+
+    Creates the ``.github/`` directory if it does not exist and writes
+    the instructions file. Idempotent — re-running overwrites with the
+    same content.
+
+    Returns a summary dict with ``file`` and ``action``.
+    """
+    github_dir = project_root / ".github"
+    github_dir.mkdir(parents=True, exist_ok=True)
+    target = github_dir / "copilot-instructions.md"
+    target.write_text(_COPILOT_INSTRUCTIONS, encoding="utf-8")
+    return {"file": str(target), "action": "created"}
+
+
+# ---------------------------------------------------------------------------
+# Cursor BugBot rules (Story 12.14)
+# ---------------------------------------------------------------------------
+
+_BUGBOT_RULES = """\
+# TappsMCP Quality Standards for BugBot
+
+This project uses TappsMCP (Code Quality MCP Server) for automated quality
+analysis. The following standards are enforced during PR review.
+
+## Code Quality Standards
+
+All Python files must meet TappsMCP scoring thresholds:
+- Overall score: >= 70 (development), >= 80 (staging), >= 90 (production)
+- No individual category score below 50
+
+### Scoring Categories
+
+| Category | What BugBot Should Check |
+|----------|-------------------------|
+| Correctness | Logic errors, unchecked return values, unreachable code |
+| Security | Hardcoded secrets, unsafe deserialization, injection vulns |
+| Maintainability | Functions > 50 lines, cyclomatic complexity > 10 |
+| Performance | Nested loops on large data, sync I/O in async context |
+| Documentation | Missing docstrings on public API, outdated params |
+| Testing | Functions without test coverage, real external service calls |
+| Style | Inconsistent naming, bare `except`, missing type annotations |
+
+## Security Requirements
+
+Flag any of the following as blocking issues:
+- Hardcoded passwords, API keys, tokens, or secrets
+- Use of `eval()` or `exec()` with non-literal arguments
+- `pickle.loads()` on data from external sources
+- Raw SQL string concatenation (use parameterized queries)
+- File path operations without validation against allowed base dir
+- `subprocess` calls with `shell=True` and interpolated user input
+
+## Python Style Rules
+
+Flag the following as non-blocking warnings:
+- Public functions and methods without type annotations
+- Public classes and functions without docstrings
+- Bare `except:` clauses (must specify exception type)
+- Functions with cyclomatic complexity > 10
+- Functions longer than 50 lines (excluding docstrings/blanks)
+- Mutable default arguments in function signatures
+
+## Testing Requirements
+
+Flag the following as non-blocking warnings:
+- New public functions without a corresponding test in `tests/`
+- Tests that make real HTTP requests without mocking
+- Tests that read from or write to production configuration files
+- Tests that depend on environment variables without explicit fixtures
+
+## Directory Hierarchy
+
+This `BUGBOT.md` applies to all files in `.cursor/` and subdirectories.
+Place a subdirectory `BUGBOT.md` to override these rules for specific
+sub-packages with different thresholds.
+"""
+
+
+def generate_bugbot_rules(project_root: Path) -> dict[str, Any]:
+    """Generate ``.cursor/BUGBOT.md`` for Cursor BugBot PR reviews.
+
+    Creates the ``.cursor/`` directory if needed and writes the rules
+    file. Idempotent — re-running overwrites with the same content.
+
+    Returns a summary dict with ``file`` and ``action``.
+    """
+    cursor_dir = project_root / ".cursor"
+    cursor_dir.mkdir(parents=True, exist_ok=True)
+    target = cursor_dir / "BUGBOT.md"
+    target.write_text(_BUGBOT_RULES, encoding="utf-8")
+    return {"file": str(target), "action": "created"}
+
+
+# ---------------------------------------------------------------------------
+# CI / Headless workflow (Story 12.16)
+# ---------------------------------------------------------------------------
+
+_CI_WORKFLOW = """\
+# .github/workflows/tapps-quality.yml
+# Generated by TappsMCP tapps_init — edit as needed
+name: TappsMCP Quality Gate
+
+on:
+  pull_request:
+    paths:
+      - "**.py"
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install TappsMCP
+        run: pip install tapps-mcp
+
+      - name: Run TappsMCP quality gate
+        env:
+          TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
+        run: |
+          tapps-mcp validate-changed \\
+            --preset staging
+"""
+
+_CI_CLAUDE_MD_SECTION = """\
+
+## CI Integration
+
+TappsMCP can run in CI without an interactive session:
+
+### Direct Python invocation (recommended for CI)
+
+```bash
+# Install TappsMCP
+pip install tapps-mcp
+
+# Validate changed files
+TAPPS_MCP_PROJECT_ROOT=/workspace \\
+  tapps-mcp validate-changed --preset staging
+```
+
+### Claude Code headless mode
+
+```bash
+claude --headless \\
+  --allowedTools "mcp__tapps-mcp__tapps_validate_changed" \\
+  "Run tapps_validate_changed with preset=staging"
+```
+
+### VS Code / headless — enableAllProjectMcpServers
+
+In headless or non-interactive VS Code contexts, set:
+`claude.enableAllProjectMcpServers: true` in workspace settings.
+
+### Setup hook for CI onboarding
+
+```bash
+claude --init-only \\
+  --allowedTools "mcp__tapps-mcp__*" \\
+  --project-root /workspace
+```
+"""
+
+
+def generate_ci_workflow(project_root: Path) -> dict[str, Any]:
+    """Generate ``.github/workflows/tapps-quality.yml`` GitHub Actions workflow.
+
+    Creates the ``.github/workflows/`` directory if needed and writes the
+    workflow file. Idempotent — re-running overwrites with same content.
+
+    Returns a summary dict with ``file`` and ``action``.
+    """
+    wf_dir = project_root / ".github" / "workflows"
+    wf_dir.mkdir(parents=True, exist_ok=True)
+    target = wf_dir / "tapps-quality.yml"
+    target.write_text(_CI_WORKFLOW, encoding="utf-8")
+    return {"file": str(target), "action": "created"}
+
+
+def get_ci_claude_md_section() -> str:
+    """Return the CI Integration documentation section for CLAUDE.md."""
+    return _CI_CLAUDE_MD_SECTION

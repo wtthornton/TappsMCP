@@ -1,0 +1,11 @@
+{
+  "name": "tapps-mcp-agent-sdk-examples",
+  "version": "1.0.0",
+  "description": "TappsMCP Agent SDK integration examples",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@anthropic-ai/claude-code": "^1.0.0",
+    "typescript": "^5.0.0"
+  }
+}

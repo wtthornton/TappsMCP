@@ -1,0 +1,12 @@
+{
+  "name": "tapps-mcp-plugin",
+  "displayName": "TappsMCP Quality Tools",
+  "author": "TappsMCP Team",
+  "description": "Code quality scoring (0-100 across 7 categories), security scanning with Bandit + secret detection, and configurable quality gates for Python projects. Works with any MCP-capable Cursor version.",
+  "keywords": ["code-quality", "security", "scoring", "mcp", "python", "linting"],
+  "license": "MIT",
+  "version": "1.0.0",
+  "repository": "https://github.com/tapps-mcp/tapps-mcp",
+  "homepage": "https://github.com/tapps-mcp/tapps-mcp#readme",
+  "category": "code-quality"
+}

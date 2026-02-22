@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "tapps-mcp": {
+      "command": "uvx",
+      "args": [
+        "tapps-mcp",
+        "serve"
+      ],
+      "env": {
+        "TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}"
+      }
+    }
+  }
+}

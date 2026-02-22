@@ -217,7 +217,10 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
     from tapps_mcp.pipeline.platform_generators import (
         generate_agent_teams_hooks,
+        generate_bugbot_rules,
+        generate_ci_workflow,
         generate_claude_hooks,
+        generate_copilot_instructions,
         generate_cursor_hooks,
         generate_cursor_rules,
         generate_skills,
@@ -240,6 +243,12 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         # Agent Teams (opt-in)
         if cfg.agent_teams:
             state.result["agent_teams"] = generate_agent_teams_hooks(state.project_root)
+        # CI workflow (generated for all platforms)
+        state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
+        # VS Code Copilot instructions (generated for all platforms)
+        state.result["copilot_instructions"] = generate_copilot_instructions(
+            state.project_root,
+        )
     elif cfg.platform == "cursor":
         platform_action = _bootstrap_cursor(state.project_root, cfg.overwrite_platform_rules)
         if platform_action in {"created", "updated"}:
@@ -251,6 +260,14 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         state.result["agents"] = generate_subagent_definitions(state.project_root, "cursor")
         state.result["skills"] = generate_skills(state.project_root, "cursor")
         state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
+        # BugBot rules (Cursor-specific)
+        state.result["bugbot_rules"] = generate_bugbot_rules(state.project_root)
+        # CI workflow (generated for all platforms)
+        state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
+        # VS Code Copilot instructions (generated for all platforms)
+        state.result["copilot_instructions"] = generate_copilot_instructions(
+            state.project_root,
+        )
     else:
         state.errors.append(f"Unknown platform: {cfg.platform!r}. Use 'claude' or 'cursor'.")
 

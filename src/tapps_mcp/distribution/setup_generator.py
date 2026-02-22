@@ -369,7 +369,10 @@ def _generate_rules(host: str, project_root: Path) -> None:
         _bootstrap_cursor,
     )
     from tapps_mcp.pipeline.platform_generators import (
+        generate_bugbot_rules,
+        generate_ci_workflow,
         generate_claude_hooks,
+        generate_copilot_instructions,
         generate_cursor_hooks,
         generate_cursor_rules,
         generate_skills,
@@ -399,6 +402,10 @@ def _generate_rules(host: str, project_root: Path) -> None:
         _echo_gen_result("agents", agents_result)
         skills_result = generate_skills(project_root, "claude")
         _echo_gen_result("skills", skills_result)
+        generate_ci_workflow(project_root)
+        click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
+        generate_copilot_instructions(project_root)
+        click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
     elif host == "cursor":
         action = _bootstrap_cursor(project_root)
         if action == "created":
@@ -415,7 +422,17 @@ def _generate_rules(host: str, project_root: Path) -> None:
         _echo_gen_result("skills", skills_result)
         rules_result = generate_cursor_rules(project_root)
         _echo_gen_result("cursor rules", rules_result)
-    # VS Code has no platform rule equivalent — no-op
+        generate_bugbot_rules(project_root)
+        click.echo(click.style("  Generated .cursor/BUGBOT.md", fg="green"))
+        generate_ci_workflow(project_root)
+        click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
+        generate_copilot_instructions(project_root)
+        click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
+    elif host == "vscode":
+        generate_ci_workflow(project_root)
+        click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
+        generate_copilot_instructions(project_root)
+        click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
 
 
 def _echo_gen_result(kind: str, result: dict[str, Any]) -> None:

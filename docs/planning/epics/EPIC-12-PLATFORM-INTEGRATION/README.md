@@ -4,7 +4,7 @@
 **Priority:** P1
 **LOE:** ~4-6 weeks (1 developer), ~2-3 weeks (2 developers)
 **Dependencies:** Epic 0 (Foundation), Epic 6 (Distribution), Epic 8 (Pipeline)
-**Status:** In Progress (Tiers 1-3 Complete)
+**Status:** Complete (All Tiers 1-4 Complete)
 
 ## Overview
 
@@ -43,12 +43,12 @@ All specifications and detailed findings are in the `research/` directory:
 | [12.10](stories/12.10-cursor-plugin.md) | Cursor Plugin Bundle | T3 | P2 | 2 days | Cursor | **Complete** |
 | [12.11](stories/12.11-cursor-rule-types.md) | Cursor Rule Types Enhancement | T3 | P2 | 1 day | Cursor | **Complete** |
 | [12.12](stories/12.12-agent-teams.md) | Agent Teams Integration | T3 | P2 | 1 day | Claude Code | **Complete** |
-| [12.13](stories/12.13-vscode-instructions.md) | VS Code / Copilot Instructions | T4 | P3 | 0.5 day | VS Code | Pending |
-| [12.14](stories/12.14-bugbot-rules.md) | Cursor BugBot Rules | T4 | P3 | 0.5 day | Cursor | Pending |
-| [12.15](stories/12.15-elicitation.md) | MCP Elicitation Support | T4 | P3 | 2-3 days | Cursor | Pending |
-| [12.16](stories/12.16-ci-headless.md) | CI/Headless Documentation | T4 | P3 | 1 day | CI | Pending |
-| [12.17](stories/12.17-cursor-marketplace.md) | Cursor Marketplace Publishing | T4 | P3 | 2 days | Cursor | Pending |
-| [12.18](stories/12.18-agent-sdk.md) | Agent SDK Integration | T4 | P3 | 3+ days | Custom | Pending |
+| [12.13](stories/12.13-vscode-instructions.md) | VS Code / Copilot Instructions | T4 | P3 | 0.5 day | VS Code | **Complete** |
+| [12.14](stories/12.14-bugbot-rules.md) | Cursor BugBot Rules | T4 | P3 | 0.5 day | Cursor | **Complete** |
+| [12.15](stories/12.15-elicitation.md) | MCP Elicitation Support | T4 | P3 | 2-3 days | Cursor | **Complete** |
+| [12.16](stories/12.16-ci-headless.md) | CI/Headless Documentation | T4 | P3 | 1 day | CI | **Complete** |
+| [12.17](stories/12.17-cursor-marketplace.md) | Cursor Marketplace Publishing | T4 | P3 | 2 days | Cursor | **Complete** |
+| [12.18](stories/12.18-agent-sdk.md) | Agent SDK Integration | T4 | P3 | 3+ days | Custom | **Complete** |
 
 ## Implementation Tiers
 
@@ -80,10 +80,10 @@ Stories 12.9-12.12 package the generated files:
 - Enhanced Cursor rules: autoAttach for Python files, agentRequested for experts
 - Agent Teams docs: quality watchdog teammate pattern
 
-### Tier 4 — Polish (9+ days)
-**Nice-to-have features for completeness.**
+### Tier 4 — Polish (Complete)
+**Completed: Extended coverage across all platforms.**
 
-Stories 12.13-12.18 extend coverage:
+Stories 12.13-12.18 extended coverage:
 - VS Code instructions for Copilot users
 - BugBot rules for automated PR review
 - MCP elicitation for interactive gate selection
