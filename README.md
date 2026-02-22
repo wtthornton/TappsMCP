@@ -53,6 +53,18 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 - **Session checklist** — Track which tools were used so the AI doesn't skip required steps.
 - **Adaptive learning** — Scoring weights and expert voting adapt based on usage patterns (internal).
 - **Path safety** — All file operations restricted to a configurable project root.
+- **Platform hooks** — Auto-generated hook scripts for Claude Code (7 hooks) and Cursor (3 hooks) that enforce quality checks on edit, stop, and task completion.
+- **Subagent definitions** — Pre-built agent definitions (reviewer, researcher, validator) for Claude Code and Cursor with platform-specific formats.
+- **Skills generation** — SKILL.md templates for scoring, gating, and validation workflows on both platforms.
+- **Plugin bundles** — Ready-to-install plugin directories for Claude Code and Cursor with all hooks, agents, skills, rules, and MCP config bundled together.
+- **Cursor rule types** — Three-tier Cursor rules: always-on pipeline, auto-attach for Python files, agent-requested expert consultation.
+- **Agent Teams** — Quality watchdog teammate pattern for Claude Code Agent Teams with TeammateIdle and TaskCompleted hooks (opt-in).
+- **VS Code / Copilot instructions** — `.github/copilot-instructions.md` for GitHub Copilot with tool guidance, workflow, and scoring reference.
+- **Cursor BugBot rules** — `.cursor/BUGBOT.md` with quality standards, security rules, and scoring thresholds for automated PR review.
+- **MCP elicitation** — Interactive preset selection in `tapps_quality_gate` and init confirmation in `tapps_init` on supporting clients (graceful fallback on others).
+- **CI integration** — GitHub Actions workflow template and headless mode documentation for non-interactive quality gate enforcement.
+- **Cursor marketplace** — Ready-to-publish plugin bundle with marketplace.json, deep link, skills, agents, and hooks.
+- **Agent SDK examples** — Python and TypeScript examples for Claude Agent SDK integration (basic quality check, CI pipeline, subagent registration).
 
 ---
 
@@ -575,6 +587,14 @@ This creates:
 | **CLAUDE.md** or **.cursor/rules/** | Platform-specific pipeline rules |
 | **docs/TAPPS_HANDOFF.md** | Session handoff template |
 | **docs/TAPPS_RUNLOG.md** | Pipeline run log template |
+| **.claude/hooks/** or **.cursor/hooks/** | Platform hook scripts (quality gate enforcement) |
+| **.claude/agents/** or **.cursor/agents/** | Subagent definitions (reviewer, researcher, validator) |
+| **.claude/skills/** or **.cursor/skills/** | Skill templates (score, gate, validate) |
+| **.claude/settings.json** | Claude Code permission wildcard + hooks config |
+| **.cursor/rules/*.mdc** | Cursor rules (always, auto-attach, agent-requested) |
+| **.github/copilot-instructions.md** | VS Code Copilot tool guidance |
+| **.github/workflows/tapps-quality.yml** | CI quality gate workflow |
+| **.cursor/BUGBOT.md** | BugBot quality standards (Cursor only) |
 
 Optional flags:
 
@@ -582,6 +602,7 @@ Optional flags:
 - `warm_expert_rag_from_tech_stack=True` — pre-build expert RAG indices for relevant domains
 - `verify_server=True` — check which external checkers are installed
 - `install_missing_checkers=True` — auto-install missing ruff/mypy/bandit/radon
+- `agent_teams=True` — generate Agent Teams hooks for quality watchdog teammate (Claude Code only)
 
 After upgrading TappsMCP, re-run with `overwrite_agents_md=True` and `overwrite_platform_rules=True` to refresh templates. See [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md).
 
@@ -633,7 +654,14 @@ src/tapps_mcp/
 ├── metrics/                            # Collector, dashboard, alerts, trends, OTel export, feedback
 ├── prompts/                            # Workflow prompt templates (discover, develop, validate, etc.)
 ├── distribution/                       # Setup generator for `tapps-mcp init`
-└── pipeline/                           # Pipeline orchestration, handoff, initialization
+└── pipeline/                           # Pipeline orchestration, handoff, initialization,
+                                        #   platform generators (hooks, agents, skills, plugins)
+plugin/
+└── cursor/                            # Ready-to-publish Cursor marketplace plugin
+examples/
+└── agent-sdk/                         # Claude Agent SDK integration examples (Python + TypeScript)
+scripts/
+└── validate-cursor-plugin.sh          # CI validation for plugin manifest
 ```
 
 ---
@@ -665,7 +693,7 @@ src/tapps_mcp/
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅
 
 ---
 

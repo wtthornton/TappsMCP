@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-No unreleased changes.
+### Added (Epic 12: Platform Integration — Tiers 1-4, Complete)
+
+- **Claude Code hooks generation** — 7 hook scripts in `.claude/hooks/`: session start, session compact, post-edit, stop (exit 2 blocks until validated), task-completed (exit 2 blocks premature completion), pre-compact (context backup), subagent-start. Deep-merges into `.claude/settings.json` preserving existing entries.
+- **Cursor hooks generation** — 3 hook scripts in `.cursor/hooks/`: before-MCP-execution (logging), after-file-edit (fire-and-forget reminder), stop (followup_message JSON). Merges into `.cursor/hooks.json`.
+- **Subagent definitions** — 3 agents per platform (tapps-reviewer, tapps-researcher, tapps-validator) with platform-specific frontmatter: Claude Code uses comma-separated tools/permissionMode/memory; Cursor uses YAML array tools/readonly.
+- **Skills generation** — 3 SKILL.md files per platform (tapps-score, tapps-gate, tapps-validate) with platform-specific tool references: Claude Code uses `mcp__tapps-mcp__` prefixed names; Cursor uses short names.
+- **Cursor rule types** — 3 distinct `.mdc` rule files: `tapps-pipeline.mdc` (alwaysApply), `tapps-python-quality.mdc` (autoAttach via `globs: "*.py"`), `tapps-expert-consultation.mdc` (agentRequested via description). Reduces context bloat by targeting rules to relevant moments.
+- **Claude Code plugin bundle** — `generate_claude_plugin_bundle()` creates complete plugin directory with `.claude-plugin/plugin.json`, agents, skills, hooks, `.mcp.json`, README.
+- **Cursor plugin bundle** — `generate_cursor_plugin_bundle()` creates complete plugin directory with `.cursor-plugin/plugin.json` (7 required fields), agents, skills, hooks, rules, `mcp.json`, logo.png, README, LICENSE.
+- **Agent Teams integration** — Optional `agent_teams=True` flag on `tapps_init` generates TeammateIdle and TaskCompleted hooks for quality watchdog teammate pattern. CLAUDE.md template now documents `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` workflow.
+- **New module `pipeline/platform_generators.py`** — Centralizes all platform artifact generation (hooks, agents, skills, rules, plugins) separate from `init.py`. Used by both `tapps_init` (MCP tool) and `tapps-mcp init` (CLI).
+- **VS Code / Copilot instructions** — `generate_copilot_instructions()` creates `.github/copilot-instructions.md` with TappsMCP tool guidance, workflow steps, and scoring categories for GitHub Copilot in VS Code.
+- **Cursor BugBot rules** — `generate_bugbot_rules()` creates `.cursor/BUGBOT.md` with quality standards, security requirements, style rules, and testing requirements for automated PR review.
+- **MCP elicitation support** — `tapps_quality_gate` and `tapps_init` now accept an optional MCP `Context` parameter. When `preset` is empty, quality gate prompts the user via elicitation; `tapps_init` asks for confirmation before writing files. Gracefully degrades on unsupported clients.
+- **CI/Headless documentation** — `generate_ci_workflow()` creates `.github/workflows/tapps-quality.yml` GitHub Actions workflow. CLAUDE.md template now includes CI Integration section covering headless mode, `--init-only`, and `enableAllProjectMcpServers`.
+- **Cursor marketplace plugin** — Complete `plugin/cursor/` directory with `marketplace.json`, `.cursor-plugin/plugin.json`, skills, agents, hooks, rules, mcp.json, logo, CHANGELOG, README with install deep link.
+- **Agent SDK examples** — `examples/agent-sdk/` with Python and TypeScript examples for basic quality check, CI pipeline, and subagent registration via Claude Agent SDK.
+- **Validation script** — `scripts/validate-cursor-plugin.sh` for CI validation of Cursor plugin manifest and required files.
+
+**Upgrade path for consuming projects:** After upgrading TappsMCP, run `tapps_init` with `platform="claude"` (or `"cursor"`) and `overwrite_platform_rules=True` to generate hooks, agents, skills, and enhanced rules. Use `agent_teams=True` for Agent Teams support.
 
 ---
 

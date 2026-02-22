@@ -1,0 +1,15 @@
+{
+  "name": "tapps-mcp-plugin",
+  "displayName": "TappsMCP Quality Tools",
+  "author": "TappsMCP Team",
+  "description": "Code quality scoring, security scanning, and quality gates for Python projects",
+  "keywords": [
+    "code-quality",
+    "security",
+    "scoring",
+    "mcp",
+    "python"
+  ],
+  "license": "MIT",
+  "version": "0.2.1"
+}

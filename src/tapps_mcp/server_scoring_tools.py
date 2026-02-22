@@ -11,11 +11,23 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from mcp.server.fastmcp import (
+    Context,  # noqa: TC002 — runtime import required for FastMCP annotation resolution
+)
+from mcp.types import ToolAnnotations
+
 from tapps_mcp.config.settings import load_settings
 from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
+_ANNOTATIONS_READ_ONLY = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -146,7 +158,8 @@ async def tapps_score_file(
 
 async def tapps_quality_gate(
     file_path: str,
-    preset: str = "standard",
+    preset: str = "",
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """BLOCKING REQUIREMENT before declaring work complete. Runs full scoring
     then evaluates pass/fail against the quality preset. Work is NOT done
@@ -155,11 +168,22 @@ async def tapps_quality_gate(
     Args:
         file_path: Path to the Python file to evaluate.
         preset: Quality preset — "standard" (70+), "strict" (80+), or "framework" (75+).
+            When empty, prompts the user to select via elicitation (if supported).
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
 
     start = time.perf_counter_ns()
     _record_call("tapps_quality_gate")
+
+    # If no preset specified and context available, try elicitation
+    if not preset and ctx is not None:
+        from tapps_mcp.common.elicitation import elicit_preset
+
+        selected = await elicit_preset(ctx)
+        if selected is not None:
+            preset = selected
+    if not preset:
+        preset = "standard"
 
     try:
         resolved = _validate_file_path(file_path)
@@ -355,6 +379,6 @@ def ast_quick_complexity(code: str) -> int | None:
 
 def register(mcp_instance: FastMCP) -> None:
     """Register scoring/gate tools on the shared *mcp_instance*."""
-    mcp_instance.tool()(tapps_score_file)
-    mcp_instance.tool()(tapps_quality_gate)
-    mcp_instance.tool()(tapps_quick_check)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_score_file)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quality_gate)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quick_check)

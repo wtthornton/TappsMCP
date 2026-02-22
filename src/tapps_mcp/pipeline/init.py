@@ -39,6 +39,7 @@ class BootstrapConfig:
     warm_expert_rag_from_tech_stack: bool = True
     overwrite_platform_rules: bool = False
     overwrite_agents_md: bool = False
+    agent_teams: bool = False
 
 
 @dataclass
@@ -106,6 +107,7 @@ def bootstrap_pipeline(
     warm_expert_rag_from_tech_stack: bool = True,
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
+    agent_teams: bool = False,
 ) -> dict[str, Any]:
     """Create pipeline template files in the project.
 
@@ -124,6 +126,7 @@ def bootstrap_pipeline(
         warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
         overwrite_platform_rules=overwrite_platform_rules,
         overwrite_agents_md=overwrite_agents_md,
+        agent_teams=agent_teams,
     )
     state = _BootstrapState(project_root=project_root.resolve())
 
@@ -208,21 +211,63 @@ def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
 
 def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
-    """Bootstrap platform-specific rule files."""
+    """Bootstrap platform-specific rule files, hooks, agents, and skills."""
     if not cfg.platform:
         return
+
+    from tapps_mcp.pipeline.platform_generators import (
+        generate_agent_teams_hooks,
+        generate_bugbot_rules,
+        generate_ci_workflow,
+        generate_claude_hooks,
+        generate_copilot_instructions,
+        generate_cursor_hooks,
+        generate_cursor_rules,
+        generate_skills,
+        generate_subagent_definitions,
+    )
 
     platform_action: str | None = None
     if cfg.platform == "claude":
         platform_action = _bootstrap_claude(state.project_root, cfg.overwrite_platform_rules)
         if platform_action == "created":
             state.created.append("CLAUDE.md")
+        settings_action = _bootstrap_claude_settings(state.project_root)
+        state.result["claude_settings"] = {"action": settings_action}
+        if settings_action == "created":
+            state.created.append(".claude/settings.json")
+        # Hooks, agents, skills
+        state.result["hooks"] = generate_claude_hooks(state.project_root)
+        state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
+        state.result["skills"] = generate_skills(state.project_root, "claude")
+        # Agent Teams (opt-in)
+        if cfg.agent_teams:
+            state.result["agent_teams"] = generate_agent_teams_hooks(state.project_root)
+        # CI workflow (generated for all platforms)
+        state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
+        # VS Code Copilot instructions (generated for all platforms)
+        state.result["copilot_instructions"] = generate_copilot_instructions(
+            state.project_root,
+        )
     elif cfg.platform == "cursor":
         platform_action = _bootstrap_cursor(state.project_root, cfg.overwrite_platform_rules)
         if platform_action in {"created", "updated"}:
             state.created.append(".cursor/rules/tapps-pipeline.md")
         elif platform_action == "skipped":
             state.skipped.append(".cursor/rules/tapps-pipeline.md")
+        # Hooks, agents, skills, enhanced rules
+        state.result["hooks"] = generate_cursor_hooks(state.project_root)
+        state.result["agents"] = generate_subagent_definitions(state.project_root, "cursor")
+        state.result["skills"] = generate_skills(state.project_root, "cursor")
+        state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
+        # BugBot rules (Cursor-specific)
+        state.result["bugbot_rules"] = generate_bugbot_rules(state.project_root)
+        # CI workflow (generated for all platforms)
+        state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
+        # VS Code Copilot instructions (generated for all platforms)
+        state.result["copilot_instructions"] = generate_copilot_instructions(
+            state.project_root,
+        )
     else:
         state.errors.append(f"Unknown platform: {cfg.platform!r}. Use 'claude' or 'cursor'.")
 
@@ -457,6 +502,41 @@ def _bootstrap_claude(
 
     claude_md.write_text(content, encoding="utf-8")
     return "created"
+
+
+def _bootstrap_claude_settings(project_root: Path) -> str:
+    """Create or update ``.claude/settings.json`` with permission wildcard.
+
+    Ensures ``"mcp__tapps-mcp__*"`` is in ``permissions.allow`` so that
+    Claude Code auto-approves all TappsMCP tools without user prompts.
+
+    Returns ``'created'``, ``'updated'``, or ``'skipped'``.
+    """
+    import json
+    from pathlib import Path as _Path
+
+    settings_dir = _Path(project_root) / ".claude"
+    settings_file = settings_dir / "settings.json"
+    wildcard = "mcp__tapps-mcp__*"
+
+    if not settings_file.exists():
+        settings_dir.mkdir(parents=True, exist_ok=True)
+        config: dict[str, Any] = {"permissions": {"allow": [wildcard]}}
+        settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        return "created"
+
+    raw = settings_file.read_text(encoding="utf-8")
+    config = json.loads(raw) if raw.strip() else {}
+
+    permissions = config.setdefault("permissions", {})
+    allow_list: list[str] = permissions.setdefault("allow", [])
+
+    if wildcard in allow_list:
+        return "skipped"
+
+    allow_list.append(wildcard)
+    settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    return "updated"
 
 
 def _bootstrap_cursor(

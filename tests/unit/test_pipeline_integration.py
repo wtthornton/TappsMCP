@@ -67,7 +67,7 @@ class TestPlatformRules:
 
         content = load_platform_rules("claude")
         token_estimate = len(content) // 4
-        assert token_estimate < 1200, f"Claude rules ~{token_estimate} tokens, exceeds 1200 budget"
+        assert token_estimate < 1400, f"Claude rules ~{token_estimate} tokens, exceeds 1400 budget"
 
     def test_cursor_rules_under_token_budget(self):
         from tapps_mcp.prompts.prompt_loader import load_platform_rules

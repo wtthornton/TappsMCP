@@ -43,6 +43,16 @@ TappsMCP is designed as a **shared quality infrastructure** that any MCP-capable
 - Call `tapps_init` with `platform="claude"` to create a CLAUDE.md with pipeline rules
 - After upgrading TappsMCP, run `tapps_init(overwrite_agents_md=True, overwrite_platform_rules=True)` to refresh templates
 
+### Hooks, agents, and skills (auto-generated)
+
+When you run `tapps_init(platform="claude")`, TappsMCP also generates:
+- **7 hook scripts** in `.claude/hooks/` — automatic quality enforcement (stop blocks until validated, task completion blocked until gates pass)
+- **3 subagent definitions** in `.claude/agents/` — tapps-reviewer, tapps-researcher, tapps-validator for parallel quality workflows
+- **3 skill templates** in `.claude/skills/` — `/tapps-score`, `/tapps-gate`, `/tapps-validate` for quick access
+- **`.claude/settings.json` hooks config** — deep-merged with existing settings to wire up all hooks
+
+For Agent Teams support, add `agent_teams=True` to generate TeammateIdle and TaskCompleted hooks for a quality watchdog teammate (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`).
+
 ---
 
 ## Best practices for Cursor
@@ -65,6 +75,14 @@ TappsMCP is designed as a **shared quality infrastructure** that any MCP-capable
      ```
 3. Run `tapps-mcp init --host cursor` to auto-generate the config
 4. Call `tapps_init(platform="cursor")` to create `.cursor/rules/tapps-pipeline.md`
+
+### Hooks, agents, skills, and rules (auto-generated)
+
+When you run `tapps_init(platform="cursor")`, TappsMCP also generates:
+- **3 hook scripts** in `.cursor/hooks/` — before-MCP logging, after-edit reminder, stop prompt
+- **3 subagent definitions** in `.cursor/agents/` — tapps-reviewer, tapps-researcher, tapps-validator with Cursor-specific YAML array format
+- **3 skill templates** in `.cursor/skills/` — `@tapps-score`, `@tapps-gate`, `@tapps-validate`
+- **3 Cursor rule files** in `.cursor/rules/` — `tapps-pipeline.mdc` (always-on), `tapps-python-quality.mdc` (auto-attach for `*.py`), `tapps-expert-consultation.mdc` (agent-requested for expert guidance)
 
 ### Tips
 

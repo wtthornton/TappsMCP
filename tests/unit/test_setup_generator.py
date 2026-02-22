@@ -753,3 +753,118 @@ class TestConfigureMultipleHosts:
         )
         assert (tmp_path / ".cursor" / "mcp.json").exists()
         assert not (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# Story 12.2: Server instructions field (Claude Code only)
+# ---------------------------------------------------------------------------
+
+
+class TestServerInstructions:
+    """Tests for the instructions field in generated Claude Code config."""
+
+    def test_claude_code_has_instructions(self, tmp_path):
+        """Claude Code config includes instructions field."""
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            _generate_config("claude-code", tmp_path / "project")
+        data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
+        entry = data["mcpServers"]["tapps-mcp"]
+        assert "instructions" in entry
+        assert isinstance(entry["instructions"], str)
+        assert len(entry["instructions"]) > 0
+
+    def test_instructions_mentions_quality(self, tmp_path):
+        """Instructions string mentions key capabilities for Tool Search matching."""
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            _generate_config("claude-code", tmp_path / "project")
+        data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
+        instructions = data["mcpServers"]["tapps-mcp"]["instructions"]
+        assert "quality" in instructions.lower()
+        assert "security" in instructions.lower()
+
+    def test_cursor_has_no_instructions(self, tmp_path):
+        """Cursor config does NOT include instructions field."""
+        project = tmp_path / "project"
+        project.mkdir()
+        _generate_config("cursor", project)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        assert "instructions" not in data["mcpServers"]["tapps-mcp"]
+
+    def test_vscode_has_no_instructions(self, tmp_path):
+        """VS Code config does NOT include instructions field."""
+        project = tmp_path / "project"
+        project.mkdir()
+        _generate_config("vscode", project)
+        data = json.loads((project / ".vscode" / "mcp.json").read_text(encoding="utf-8"))
+        assert "instructions" not in data["servers"]["tapps-mcp"]
+
+    def test_instructions_in_merged_config(self, tmp_path):
+        """Instructions field is present even when merging into existing config."""
+        config_path = tmp_path / ".claude.json"
+        existing = {"mcpServers": {"other": {"command": "other"}}}
+        config_path.write_text(json.dumps(existing), encoding="utf-8")
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            _generate_config("claude-code", tmp_path / "project", force=True)
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        assert "instructions" in data["mcpServers"]["tapps-mcp"]
+        assert "other" in data["mcpServers"]
+
+
+# ---------------------------------------------------------------------------
+# Story 12.4: Environment variables in MCP config (all platforms)
+# ---------------------------------------------------------------------------
+
+
+class TestEnvInConfig:
+    """Tests for env block in generated MCP configs."""
+
+    def test_claude_code_has_env(self, tmp_path):
+        """Claude Code config includes env with TAPPS_MCP_PROJECT_ROOT."""
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            _generate_config("claude-code", tmp_path / "project")
+        data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
+        entry = data["mcpServers"]["tapps-mcp"]
+        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "${workspaceFolder}"
+
+    def test_cursor_has_env(self, tmp_path):
+        """Cursor config includes env with TAPPS_MCP_PROJECT_ROOT."""
+        project = tmp_path / "project"
+        project.mkdir()
+        _generate_config("cursor", project)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        entry = data["mcpServers"]["tapps-mcp"]
+        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "${workspaceFolder}"
+
+    def test_vscode_has_env(self, tmp_path):
+        """VS Code config includes env with TAPPS_MCP_PROJECT_ROOT."""
+        project = tmp_path / "project"
+        project.mkdir()
+        _generate_config("vscode", project)
+        data = json.loads((project / ".vscode" / "mcp.json").read_text(encoding="utf-8"))
+        entry = data["servers"]["tapps-mcp"]
+        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "${workspaceFolder}"
+
+    def test_env_preserves_command_and_args(self, tmp_path):
+        """env block does not interfere with command and args fields."""
+        project = tmp_path / "project"
+        project.mkdir()
+        _generate_config("cursor", project)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        entry = data["mcpServers"]["tapps-mcp"]
+        assert entry["command"] == "tapps-mcp"
+        assert entry["args"] == ["serve"]
+        assert "env" in entry
+
+    def test_merge_preserves_other_servers_with_env(self, tmp_path):
+        """Merging preserves existing servers while adding env to tapps-mcp."""
+        project = tmp_path / "project"
+        cursor_dir = project / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        existing = {"mcpServers": {"other": {"command": "x"}}}
+        (cursor_dir / "mcp.json").write_text(json.dumps(existing), encoding="utf-8")
+        _generate_config("cursor", project)
+        data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
+        assert "other" in data["mcpServers"]
+        assert data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_MCP_PROJECT_ROOT"] == (
+            "${workspaceFolder}"
+        )

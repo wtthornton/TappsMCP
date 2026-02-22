@@ -10,6 +10,11 @@ import contextlib
 import time
 from typing import TYPE_CHECKING, Any
 
+from mcp.server.fastmcp import (
+    Context,  # noqa: TC002 — runtime import required for FastMCP annotation resolution
+)
+from mcp.types import ToolAnnotations
+
 from tapps_mcp.config.settings import load_settings
 from tapps_mcp.server_helpers import success_response
 
@@ -17,6 +22,20 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from mcp.server.fastmcp import FastMCP
+
+_ANNOTATIONS_READ_ONLY = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
 
 
 async def tapps_validate_changed(
@@ -188,7 +207,7 @@ def tapps_session_start(
     return _with_nudges("tapps_session_start", resp)
 
 
-def tapps_init(
+async def tapps_init(
     create_handoff: bool = True,
     create_runlog: bool = True,
     create_agents_md: bool = True,
@@ -200,6 +219,8 @@ def tapps_init(
     warm_expert_rag_from_tech_stack: bool = True,
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
+    agent_teams: bool = False,
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
 
@@ -225,11 +246,29 @@ def tapps_init(
         overwrite_agents_md: When ``True``, replace AGENTS.md entirely with the latest
             template. When ``False`` (default), validate and smart-merge missing
             sections/tools.
+        agent_teams: When ``True`` and platform is ``"claude"``, generate Agent Teams
+            hooks (TeammateIdle, TaskCompleted) for quality watchdog teammate.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
     start = time.perf_counter_ns()
     _record_call("tapps_init")
+
+    # If context available, try elicitation confirmation
+    if ctx is not None:
+        from tapps_mcp.common.elicitation import elicit_init_confirmation
+
+        settings_peek = load_settings()
+        confirmed = await elicit_init_confirmation(ctx, str(settings_peek.project_root))
+        if confirmed is False:
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+            _record_execution("tapps_init", start, status="cancelled")
+            return success_response(
+                "tapps_init",
+                elapsed_ms,
+                {"cancelled": True, "message": "tapps_init cancelled — no files were written."},
+            )
+        # confirmed is True or None (unsupported) — proceed normally
 
     from tapps_mcp.pipeline.init import bootstrap_pipeline
 
@@ -247,6 +286,7 @@ def tapps_init(
         warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
         overwrite_platform_rules=overwrite_platform_rules,
         overwrite_agents_md=overwrite_agents_md,
+        agent_teams=agent_teams,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -263,6 +303,6 @@ def tapps_init(
 
 def register(mcp_instance: FastMCP) -> None:
     """Register pipeline/validation tools on *mcp_instance*."""
-    mcp_instance.tool()(tapps_validate_changed)
-    mcp_instance.tool()(tapps_session_start)
-    mcp_instance.tool()(tapps_init)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_changed)
+    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_session_start)
+    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_init)

@@ -25,10 +25,15 @@ This document lists what each init-related process does. The codebase has **two 
 | **Overwrite AGENTS.md** | `overwrite_agents_md=True` | When true, replaces AGENTS.md with the latest template. Use when upgrading to get new workflow. Default: false (validate and smart-merge only). |
 | **Cache warming** | `warm_cache_from_tech_stack=True` | Uses project profile’s Context7 priority list; pre-fetches docs for those libraries (up to 20) into `.tapps-mcp-cache`. Requires Context7 API key; skips if missing or no libraries. |
 | **Expert RAG warming** | `warm_expert_rag_from_tech_stack=True` | Maps tech stack (frameworks, libraries, domains) to expert domains; pre-builds vector RAG indices under `project_root/.tapps-mcp/rag_index/` for up to 10 domains so first `tapps_consult_expert` is fast. |
+| **Hooks generation** | `platform="claude"` or `"cursor"` | **Claude:** Creates 7 hook scripts in `.claude/hooks/` and merges hook config into `.claude/settings.json`. **Cursor:** Creates 3 hook scripts in `.cursor/hooks/` and merges into `.cursor/hooks.json`. Existing entries are preserved. |
+| **Subagent definitions** | `platform="claude"` or `"cursor"` | Creates 3 agent `.md` files (tapps-reviewer, tapps-researcher, tapps-validator) in `.claude/agents/` or `.cursor/agents/`. Skips existing files to preserve customizations. Platform-specific frontmatter (Claude: comma-separated tools, Cursor: YAML array tools). |
+| **Skills generation** | `platform="claude"` or `"cursor"` | Creates 3 skill directories with `SKILL.md` (tapps-score, tapps-gate, tapps-validate) in `.claude/skills/` or `.cursor/skills/`. Skips existing files. |
+| **Cursor rule types** | `platform="cursor"` | Creates 3 `.mdc` rule files: `tapps-pipeline.mdc` (alwaysApply), `tapps-python-quality.mdc` (autoAttach `*.py`), `tapps-expert-consultation.mdc` (agentRequested). Reduces context bloat. |
+| **Agent Teams** | `agent_teams=True` | Opt-in. Generates TeammateIdle and TaskCompleted hooks for quality watchdog teammate in `.claude/hooks/` and merges into `.claude/settings.json`. Only applies when `platform="claude"`. |
 
 ### Result shape
 
-Returns a dict with: `created`, `skipped`, `errors`, `success`, plus `server_verification`, `agents_md`, `tech_stack_md`, `cache_warming`, `expert_rag_warming`.
+Returns a dict with: `created`, `skipped`, `errors`, `success`, plus `server_verification`, `agents_md`, `tech_stack_md`, `cache_warming`, `expert_rag_warming`, `hooks`, `agents`, `skills`, `cursor_rules` (Cursor only), `agent_teams` (when opted in).
 
 ### Idempotency / “upgrade” behavior
 

@@ -24,25 +24,30 @@ log = get_logger(__name__)
 _TAPPS_SERVER_ENTRY: dict[str, Any] = {
     "command": "tapps-mcp",
     "args": ["serve"],
+    "env": {
+        "TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}",
+    },
 }
 
-_HOST_CONFIGS: dict[str, dict[str, Any]] = {
-    "claude-code": {
-        "mcpServers": {
-            "tapps-mcp": _TAPPS_SERVER_ENTRY,
-        },
-    },
-    "cursor": {
-        "mcpServers": {
-            "tapps-mcp": _TAPPS_SERVER_ENTRY,
-        },
-    },
-    "vscode": {
-        "servers": {
-            "tapps-mcp": _TAPPS_SERVER_ENTRY,
-        },
-    },
-}
+_SERVER_INSTRUCTIONS = (
+    "Code quality scoring (0-100 across 7 categories), security scanning "
+    "(Bandit + secret detection), quality gates (pass/fail against configurable "
+    "presets), documentation lookup, domain expert consultation, and project "
+    "profiling for Python projects."
+)
+
+
+def _build_server_entry(host: str) -> dict[str, Any]:
+    """Build the tapps-mcp server config entry for the given host.
+
+    Claude Code gets an extra ``instructions`` field for Tool Search discovery.
+    All platforms get the ``env`` block with ``TAPPS_MCP_PROJECT_ROOT``.
+    """
+    entry = dict(_TAPPS_SERVER_ENTRY)
+    entry["env"] = dict(_TAPPS_SERVER_ENTRY["env"])
+    if host == "claude-code":
+        entry["instructions"] = _SERVER_INSTRUCTIONS
+    return entry
 
 # ---------------------------------------------------------------------------
 # Host detection
@@ -162,7 +167,7 @@ def _merge_config(existing: dict[str, Any], host: str) -> dict[str, Any]:
     merged = dict(existing)
     if servers_key not in merged:
         merged[servers_key] = {}
-    merged[servers_key]["tapps-mcp"] = _TAPPS_SERVER_ENTRY.copy()
+    merged[servers_key]["tapps-mcp"] = _build_server_entry(host)
     return merged
 
 
@@ -226,7 +231,8 @@ def _generate_config(
 
         merged = _merge_config(existing, host)
     else:
-        merged = _HOST_CONFIGS[host].copy()
+        servers_key_new = _get_servers_key(host)
+        merged = {servers_key_new: {"tapps-mcp": _build_server_entry(host)}}
 
     # Ensure parent directory exists
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -351,12 +357,27 @@ def _configure_multiple_hosts(
 
 
 def _generate_rules(host: str, project_root: Path) -> None:
-    """Generate platform rule files for the given host.
+    """Generate platform rule files, hooks, agents, and skills for the given host.
 
     Delegates to ``_bootstrap_claude`` and ``_bootstrap_cursor`` from
-    ``tapps_mcp.pipeline.init``.
+    ``tapps_mcp.pipeline.init``, and uses ``platform_generators`` for hooks,
+    subagents, and skills.
     """
-    from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_cursor
+    from tapps_mcp.pipeline.init import (
+        _bootstrap_claude,
+        _bootstrap_claude_settings,
+        _bootstrap_cursor,
+    )
+    from tapps_mcp.pipeline.platform_generators import (
+        generate_bugbot_rules,
+        generate_ci_workflow,
+        generate_claude_hooks,
+        generate_copilot_instructions,
+        generate_cursor_hooks,
+        generate_cursor_rules,
+        generate_skills,
+        generate_subagent_definitions,
+    )
 
     if host == "claude-code":
         action = _bootstrap_claude(project_root)
@@ -366,6 +387,25 @@ def _generate_rules(host: str, project_root: Path) -> None:
             click.echo(click.style("  Updated CLAUDE.md with TAPPS pipeline rules", fg="green"))
         elif action == "skipped":
             click.echo("  CLAUDE.md already contains TAPPS rules (skipped)")
+        settings_action = _bootstrap_claude_settings(project_root)
+        if settings_action == "created":
+            click.echo(click.style("  Created .claude/settings.json with permissions", fg="green"))
+        elif settings_action == "updated":
+            click.echo(
+                click.style("  Updated .claude/settings.json with permissions", fg="green")
+            )
+        elif settings_action == "skipped":
+            click.echo("  .claude/settings.json already has TappsMCP permissions (skipped)")
+        hooks_result = generate_claude_hooks(project_root)
+        _echo_gen_result("hooks", hooks_result)
+        agents_result = generate_subagent_definitions(project_root, "claude")
+        _echo_gen_result("agents", agents_result)
+        skills_result = generate_skills(project_root, "claude")
+        _echo_gen_result("skills", skills_result)
+        generate_ci_workflow(project_root)
+        click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
+        generate_copilot_instructions(project_root)
+        click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
     elif host == "cursor":
         action = _bootstrap_cursor(project_root)
         if action == "created":
@@ -374,7 +414,34 @@ def _generate_rules(host: str, project_root: Path) -> None:
             click.echo(click.style("  Updated .cursor/rules/tapps-pipeline.md", fg="green"))
         elif action == "skipped":
             click.echo("  .cursor/rules/tapps-pipeline.md already exists (skipped)")
-    # VS Code has no platform rule equivalent — no-op
+        hooks_result = generate_cursor_hooks(project_root)
+        _echo_gen_result("hooks", hooks_result)
+        agents_result = generate_subagent_definitions(project_root, "cursor")
+        _echo_gen_result("agents", agents_result)
+        skills_result = generate_skills(project_root, "cursor")
+        _echo_gen_result("skills", skills_result)
+        rules_result = generate_cursor_rules(project_root)
+        _echo_gen_result("cursor rules", rules_result)
+        generate_bugbot_rules(project_root)
+        click.echo(click.style("  Generated .cursor/BUGBOT.md", fg="green"))
+        generate_ci_workflow(project_root)
+        click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
+        generate_copilot_instructions(project_root)
+        click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
+    elif host == "vscode":
+        generate_ci_workflow(project_root)
+        click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
+        generate_copilot_instructions(project_root)
+        click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
+
+
+def _echo_gen_result(kind: str, result: dict[str, Any]) -> None:
+    """Print a summary line for a generation result."""
+    created = result.get("created") or result.get("scripts_created") or []
+    if created:
+        click.echo(click.style(f"  Generated {kind}: {', '.join(created)}", fg="green"))
+    else:
+        click.echo(f"  {kind.capitalize()} already up to date (skipped)")
 
 
 def run_init(

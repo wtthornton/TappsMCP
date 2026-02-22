@@ -81,3 +81,44 @@ Every tool response includes:
 
 Record progress in `docs/TAPPS_HANDOFF.md` and `docs/TAPPS_RUNLOG.md`.
 For detailed stage instructions, request the `tapps_pipeline` MCP prompt with the stage name.
+
+## Agent Teams (Optional)
+
+If using Claude Code Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`),
+designate one teammate as a **quality watchdog**:
+
+1. The quality watchdog runs `tapps_quick_check` on files changed by other teammates.
+2. It messages other teammates via the shared mailbox when quality issues are found.
+3. The `TaskCompleted` hook prevents any task from being marked complete until
+   `tapps_validate_changed` passes.
+4. The `TeammateIdle` hook keeps the watchdog active while quality issues remain unresolved.
+
+To enable Agent Teams hooks, re-run `tapps_init` with `agent_teams=True`.
+
+## CI Integration
+
+TappsMCP can run in CI without an interactive session:
+
+### Direct Python invocation (recommended for CI)
+
+```bash
+# Install TappsMCP
+pip install tapps-mcp
+
+# Validate changed files
+TAPPS_MCP_PROJECT_ROOT=/workspace \
+  tapps-mcp validate-changed --preset staging
+```
+
+### Claude Code headless mode
+
+```bash
+claude --headless \
+  --allowedTools "mcp__tapps-mcp__tapps_validate_changed" \
+  "Run tapps_validate_changed with preset=staging"
+```
+
+### VS Code / headless — enableAllProjectMcpServers
+
+In headless or non-interactive VS Code contexts, set:
+`claude.enableAllProjectMcpServers: true` in workspace settings.

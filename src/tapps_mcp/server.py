@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 import structlog
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from tapps_mcp import __version__
 from tapps_mcp.common.logging import setup_logging
@@ -30,6 +31,24 @@ from tapps_mcp.server_helpers import error_response, serialize_issues, success_r
 from tapps_mcp.tools.tool_detection import detect_installed_tools
 
 logger = structlog.get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Tool annotation presets
+# ---------------------------------------------------------------------------
+
+_ANNOTATIONS_READ_ONLY = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+_ANNOTATIONS_READ_ONLY_OPEN = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=True,
+)
 
 # ---------------------------------------------------------------------------
 # FastMCP server instance
@@ -151,7 +170,7 @@ def _with_nudges(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_server_info() -> dict[str, Any]:
     """REQUIRED at session start. Discovers server version, available tools,
     installed checkers (ruff, mypy, bandit, radon), and configuration.
@@ -256,7 +275,7 @@ def tapps_server_info() -> dict[str, Any]:
     return _with_nudges("tapps_server_info", resp)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, Any]:
     """REQUIRED when changes touch security-sensitive code. Runs bandit and
     secret detection on a Python file.
@@ -311,7 +330,7 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
     return _with_nudges("tapps_security_scan", resp)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)
 async def tapps_lookup_docs(
     library: str,
     topic: str = "overview",
@@ -374,7 +393,7 @@ async def tapps_lookup_docs(
     return _with_nudges("tapps_lookup_docs", response)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str, Any]:
     """REQUIRED when changing Dockerfile, docker-compose, or infra config.
 
@@ -416,7 +435,7 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
     return _with_nudges("tapps_validate_config", resp)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     """REQUIRED for domain-specific decisions. Routes to one of 16 built-in
     experts and returns RAG-backed guidance with confidence scores.
@@ -459,7 +478,7 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     return _with_nudges("tapps_consult_expert", resp)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_list_experts() -> dict[str, Any]:
     """Returns the 16 built-in experts with domain, description, and knowledge-base status."""
     start = time.perf_counter_ns()
@@ -482,7 +501,7 @@ def tapps_list_experts() -> dict[str, Any]:
     return _with_nudges("tapps_list_experts", resp)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_checklist(task_type: str = "review") -> dict[str, Any]:
     """REQUIRED as the FINAL step before declaring work complete.
 
@@ -524,7 +543,7 @@ def tapps_checklist(task_type: str = "review") -> dict[str, Any]:
         return _with_nudges("tapps_checklist", resp, {"complete": False})
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
     """REQUIRED at session start. Detects the project's tech stack, type, CI,
     Docker, test frameworks, and package managers.
@@ -595,7 +614,7 @@ def _get_session_store() -> SessionNoteStore:
     return _session_store
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_session_notes(action: str, key: str = "", value: str = "") -> dict[str, Any]:
     """Persist notes across the session to avoid losing context.
 
@@ -646,7 +665,7 @@ def tapps_session_notes(action: str, key: str = "", value: str = "") -> dict[str
     return _with_nudges("tapps_session_notes", resp)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_impact_analysis(file_path: str, change_type: str = "modified") -> dict[str, Any]:
     """REQUIRED before refactoring or deleting files. Maps the blast radius.
 
@@ -687,7 +706,7 @@ def tapps_impact_analysis(file_path: str, change_type: str = "modified") -> dict
     return _with_nudges("tapps_impact_analysis", resp)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def tapps_report(file_path: str = "", report_format: str = "json") -> dict[str, Any]:
     """Generate a quality report combining scoring and gate results.
 

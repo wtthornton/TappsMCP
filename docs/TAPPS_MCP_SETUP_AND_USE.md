@@ -78,7 +78,14 @@ tapps-mcp init --check                # verify existing setup
 tapps-mcp doctor                      # diagnose connectivity issues
 ```
 
-This generates the correct MCP configuration file and optionally creates platform rule files. Use `--force` to overwrite existing config without prompting.
+This generates the correct MCP configuration file and platform-specific artifacts:
+- **Platform rules** (CLAUDE.md or .cursor/rules/)
+- **Hook scripts** (.claude/hooks/ or .cursor/hooks/) for automatic quality enforcement
+- **Subagent definitions** (.claude/agents/ or .cursor/agents/) for parallel quality workflows
+- **Skill templates** (.claude/skills/ or .cursor/skills/) for quick access to scoring/gating/validation
+- **Cursor rule types** (.cursor/rules/*.mdc) with always-on, auto-attach, and agent-requested rules
+
+Use `--force` to overwrite existing config without prompting.
 
 ---
 
