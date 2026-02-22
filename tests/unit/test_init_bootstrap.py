@@ -92,9 +92,7 @@ class TestBootstrapClaudeSettings:
         _bootstrap_claude_settings(tmp_path)
         _bootstrap_claude_settings(tmp_path)
 
-        data = json.loads(
-            (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
         count = data["permissions"]["allow"].count("mcp__tapps-mcp__*")
         assert count == 1
 

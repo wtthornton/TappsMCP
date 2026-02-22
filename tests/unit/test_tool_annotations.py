@@ -117,8 +117,7 @@ class TestToolAnnotationValues:
             f"expected={expected.idempotentHint}"
         )
         assert actual.openWorldHint == expected.openWorldHint, (
-            f"{tool_name}: openWorldHint={actual.openWorldHint}, "
-            f"expected={expected.openWorldHint}"
+            f"{tool_name}: openWorldHint={actual.openWorldHint}, expected={expected.openWorldHint}"
         )
 
 

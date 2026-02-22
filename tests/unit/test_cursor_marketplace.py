@@ -29,9 +29,16 @@ class TestMarketplaceJson:
     def test_has_required_fields(self):
         data = json.loads((_PLUGIN_DIR / "marketplace.json").read_text())
         required = [
-            "name", "displayName", "author", "description",
-            "keywords", "license", "version", "repository",
-            "homepage", "category",
+            "name",
+            "displayName",
+            "author",
+            "description",
+            "keywords",
+            "license",
+            "version",
+            "repository",
+            "homepage",
+            "category",
         ]
         for field in required:
             assert field in data, f"Missing field: {field}"
@@ -66,19 +73,20 @@ class TestPluginJson:
         assert (_PLUGIN_DIR / ".cursor-plugin" / "plugin.json").exists()
 
     def test_valid_json(self):
-        content = (
-            _PLUGIN_DIR / ".cursor-plugin" / "plugin.json"
-        ).read_text()
+        content = (_PLUGIN_DIR / ".cursor-plugin" / "plugin.json").read_text()
         data = json.loads(content)
         assert isinstance(data, dict)
 
     def test_has_required_fields(self):
-        data = json.loads(
-            (_PLUGIN_DIR / ".cursor-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((_PLUGIN_DIR / ".cursor-plugin" / "plugin.json").read_text())
         required = [
-            "name", "displayName", "author", "description",
-            "keywords", "license", "version",
+            "name",
+            "displayName",
+            "author",
+            "description",
+            "keywords",
+            "license",
+            "version",
         ]
         for field in required:
             assert field in data, f"Missing field: {field}"
@@ -110,9 +118,7 @@ class TestPluginFiles:
 
     def test_skills_exist(self):
         for skill in ["tapps-score", "tapps-gate", "tapps-validate"]:
-            assert (
-                _PLUGIN_DIR / "skills" / skill / "SKILL.md"
-            ).exists(), f"Missing skill: {skill}"
+            assert (_PLUGIN_DIR / "skills" / skill / "SKILL.md").exists(), f"Missing skill: {skill}"
 
     def test_mcp_json_exists(self):
         assert (_PLUGIN_DIR / "mcp.json").exists()

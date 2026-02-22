@@ -810,9 +810,7 @@ _AGENT_TEAMS_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
             "hooks": [
                 {
                     "type": "command",
-                    "command": (
-                        ".claude/hooks/tapps-teams-task-completed.sh"
-                    ),
+                    "command": (".claude/hooks/tapps-teams-task-completed.sh"),
                 },
             ],
         },
@@ -861,20 +859,14 @@ def generate_agent_teams_hooks(
         script_path = hooks_dir / name
         if not script_path.exists():
             script_path.write_text(content, encoding="utf-8")
-            script_path.chmod(
-                script_path.stat().st_mode
-                | stat.S_IXUSR
-                | stat.S_IXGRP
-            )
+            script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
             scripts_created.append(name)
 
     # Merge hooks config into .claude/settings.json
     settings_file = project_root / ".claude" / "settings.json"
     if settings_file.exists():
         raw = settings_file.read_text(encoding="utf-8")
-        config: dict[str, Any] = (
-            json.loads(raw) if raw.strip() else {}
-        )
+        config: dict[str, Any] = json.loads(raw) if raw.strip() else {}
     else:
         config = {}
 
@@ -886,9 +878,7 @@ def generate_agent_teams_hooks(
             hooks_added += len(entries)
 
     settings_file.parent.mkdir(parents=True, exist_ok=True)
-    settings_file.write_text(
-        json.dumps(config, indent=2) + "\n", encoding="utf-8"
-    )
+    settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
     return {
         "scripts_created": scripts_created,
@@ -984,8 +974,7 @@ def generate_claude_plugin_bundle(
         "name": "tapps-mcp",
         "version": version,
         "description": (
-            "Code quality scoring, security scanning, "
-            "and quality gates for Python projects"
+            "Code quality scoring, security scanning, and quality gates for Python projects"
         ),
     }
     (meta_dir / "plugin.json").write_text(
@@ -1004,9 +993,7 @@ def generate_claude_plugin_bundle(
     for skill_name, content in _CLAUDE_SKILLS.items():
         skill_dir = output_dir / "skills" / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
-        (skill_dir / "SKILL.md").write_text(
-            content, encoding="utf-8"
-        )
+        (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
         files_created.append(f"skills/{skill_name}/SKILL.md")
 
     # hooks/
@@ -1022,9 +1009,7 @@ def generate_claude_plugin_bundle(
             pe["hooks"] = [
                 {
                     "type": h["type"],
-                    "command": h["command"].replace(
-                        ".claude/hooks/", "hooks/"
-                    ),
+                    "command": h["command"].replace(".claude/hooks/", "hooks/"),
                 }
                 for h in entry["hooks"]
             ]
@@ -1039,11 +1024,7 @@ def generate_claude_plugin_bundle(
     for name, content in _CLAUDE_HOOK_SCRIPTS.items():
         script_path = hooks_dir / name
         script_path.write_text(content, encoding="utf-8")
-        script_path.chmod(
-            script_path.stat().st_mode
-            | stat.S_IXUSR
-            | stat.S_IXGRP
-        )
+        script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         files_created.append(f"hooks/{name}")
 
     # .mcp.json
@@ -1053,22 +1034,16 @@ def generate_claude_plugin_bundle(
                 "command": "uvx",
                 "args": ["tapps-mcp", "serve"],
                 "env": {
-                    "TAPPS_MCP_PROJECT_ROOT": (
-                        "${workspaceFolder}"
-                    ),
+                    "TAPPS_MCP_PROJECT_ROOT": ("${workspaceFolder}"),
                 },
             },
         },
     }
-    (output_dir / ".mcp.json").write_text(
-        json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8"
-    )
+    (output_dir / ".mcp.json").write_text(json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8")
     files_created.append(".mcp.json")
 
     # README.md
-    (output_dir / "README.md").write_text(
-        _CLAUDE_PLUGIN_README, encoding="utf-8"
-    )
+    (output_dir / "README.md").write_text(_CLAUDE_PLUGIN_README, encoding="utf-8")
     files_created.append("README.md")
 
     return {"files_created": files_created}
@@ -1098,8 +1073,7 @@ def generate_cursor_plugin_bundle(
         "displayName": "TappsMCP Quality Tools",
         "author": "TappsMCP Team",
         "description": (
-            "Code quality scoring, security scanning, "
-            "and quality gates for Python projects"
+            "Code quality scoring, security scanning, and quality gates for Python projects"
         ),
         "keywords": [
             "code-quality",
@@ -1127,9 +1101,7 @@ def generate_cursor_plugin_bundle(
     for skill_name, content in _CURSOR_SKILLS.items():
         skill_dir = output_dir / "skills" / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
-        (skill_dir / "SKILL.md").write_text(
-            content, encoding="utf-8"
-        )
+        (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
         files_created.append(f"skills/{skill_name}/SKILL.md")
 
     # hooks/
@@ -1138,9 +1110,7 @@ def generate_cursor_plugin_bundle(
     cursor_hooks_list = [
         {
             "event": e["event"],
-            "command": e["command"].replace(
-                ".cursor/hooks/", "hooks/"
-            ),
+            "command": e["command"].replace(".cursor/hooks/", "hooks/"),
         }
         for e in _CURSOR_HOOKS_CONFIG
     ]
@@ -1153,11 +1123,7 @@ def generate_cursor_plugin_bundle(
     for name, content in _CURSOR_HOOK_SCRIPTS.items():
         script_path = hooks_dir / name
         script_path.write_text(content, encoding="utf-8")
-        script_path.chmod(
-            script_path.stat().st_mode
-            | stat.S_IXUSR
-            | stat.S_IXGRP
-        )
+        script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         files_created.append(f"hooks/{name}")
 
     # rules/
@@ -1179,16 +1145,12 @@ def generate_cursor_plugin_bundle(
                 "command": "uvx",
                 "args": ["tapps-mcp", "serve"],
                 "env": {
-                    "TAPPS_MCP_PROJECT_ROOT": (
-                        "${workspaceFolder}"
-                    ),
+                    "TAPPS_MCP_PROJECT_ROOT": ("${workspaceFolder}"),
                 },
             },
         },
     }
-    (output_dir / "mcp.json").write_text(
-        json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8"
-    )
+    (output_dir / "mcp.json").write_text(json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8")
     files_created.append("mcp.json")
 
     # logo.png placeholder (1x1 transparent PNG)
@@ -1197,24 +1159,16 @@ def generate_cursor_plugin_bundle(
         "AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5E"
         "rkJggg=="
     )
-    (output_dir / "logo.png").write_bytes(
-        base64.b64decode(_png)
-    )
+    (output_dir / "logo.png").write_bytes(base64.b64decode(_png))
     files_created.append("logo.png")
 
     # README.md
-    (output_dir / "README.md").write_text(
-        _CURSOR_PLUGIN_README, encoding="utf-8"
-    )
+    (output_dir / "README.md").write_text(_CURSOR_PLUGIN_README, encoding="utf-8")
     files_created.append("README.md")
 
     # LICENSE
-    license_text = (
-        "MIT License\n\nCopyright (c) TappsMCP Team\n"
-    )
-    (output_dir / "LICENSE").write_text(
-        license_text, encoding="utf-8"
-    )
+    license_text = "MIT License\n\nCopyright (c) TappsMCP Team\n"
+    (output_dir / "LICENSE").write_text(license_text, encoding="utf-8")
     files_created.append("LICENSE")
 
     return {"files_created": files_created}

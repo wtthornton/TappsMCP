@@ -49,6 +49,7 @@ def _build_server_entry(host: str) -> dict[str, Any]:
         entry["instructions"] = _SERVER_INSTRUCTIONS
     return entry
 
+
 # ---------------------------------------------------------------------------
 # Host detection
 # ---------------------------------------------------------------------------
@@ -360,9 +361,7 @@ def _configure_multiple_hosts(
         if check:
             ok = _check_config(host, project_root, scope=scope)
         else:
-            ok = _generate_config(
-                host, project_root, force=force, scope=scope, dry_run=dry_run
-            )
+            ok = _generate_config(host, project_root, force=force, scope=scope, dry_run=dry_run)
             if ok and rules and not dry_run:
                 _generate_rules(host, project_root)
         if not ok:
@@ -405,9 +404,7 @@ def _generate_rules(host: str, project_root: Path) -> None:
         if settings_action == "created":
             click.echo(click.style("  Created .claude/settings.json with permissions", fg="green"))
         elif settings_action == "updated":
-            click.echo(
-                click.style("  Updated .claude/settings.json with permissions", fg="green")
-            )
+            click.echo(click.style("  Updated .claude/settings.json with permissions", fg="green"))
         elif settings_action == "skipped":
             click.echo("  .claude/settings.json already has TappsMCP permissions (skipped)")
         hooks_result = generate_claude_hooks(project_root)

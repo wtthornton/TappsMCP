@@ -7,6 +7,7 @@ Prerequisites:
   pip install claude-code-sdk
   export ANTHROPIC_API_KEY=sk-...
 """
+
 from __future__ import annotations
 
 import asyncio

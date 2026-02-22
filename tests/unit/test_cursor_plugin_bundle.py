@@ -24,43 +24,38 @@ class TestPluginStructure:
 
     def test_plugin_json_has_all_required_fields(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)
-        data = json.loads(
-            (tmp_path / ".cursor-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".cursor-plugin" / "plugin.json").read_text())
         required = [
-            "name", "displayName", "author",
-            "description", "keywords", "license", "version",
+            "name",
+            "displayName",
+            "author",
+            "description",
+            "keywords",
+            "license",
+            "version",
         ]
         for field in required:
             assert field in data, f"Missing required field: {field}"
 
     def test_plugin_json_name_kebab_case(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)
-        data = json.loads(
-            (tmp_path / ".cursor-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".cursor-plugin" / "plugin.json").read_text())
         assert data["name"] == "tapps-mcp-plugin"
         assert re.match(r"^[a-z][a-z0-9-]+$", data["name"])
 
     def test_plugin_json_display_name(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)
-        data = json.loads(
-            (tmp_path / ".cursor-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".cursor-plugin" / "plugin.json").read_text())
         assert data["displayName"] == "TappsMCP Quality Tools"
 
     def test_plugin_json_author(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)
-        data = json.loads(
-            (tmp_path / ".cursor-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".cursor-plugin" / "plugin.json").read_text())
         assert data["author"] == "TappsMCP Team"
 
     def test_plugin_json_keywords(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)
-        data = json.loads(
-            (tmp_path / ".cursor-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".cursor-plugin" / "plugin.json").read_text())
         assert isinstance(data["keywords"], list)
         assert len(data["keywords"]) >= 3
         assert "code-quality" in data["keywords"]
@@ -69,16 +64,12 @@ class TestPluginStructure:
 
     def test_plugin_json_license(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)
-        data = json.loads(
-            (tmp_path / ".cursor-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".cursor-plugin" / "plugin.json").read_text())
         assert data["license"] == "MIT"
 
     def test_plugin_json_version_semver(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path, version="2.0.0")
-        data = json.loads(
-            (tmp_path / ".cursor-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".cursor-plugin" / "plugin.json").read_text())
         assert re.match(r"^\d+\.\d+\.\d+", data["version"])
 
     def test_mcp_json_exists(self, tmp_path):

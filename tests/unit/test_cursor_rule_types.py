@@ -99,9 +99,7 @@ class TestExpertConsultationRule:
 
     def test_has_description(self, tmp_path):
         generate_cursor_rules(tmp_path)
-        content = (
-            tmp_path / ".cursor" / "rules" / "tapps-expert-consultation.mdc"
-        ).read_text()
+        content = (tmp_path / ".cursor" / "rules" / "tapps-expert-consultation.mdc").read_text()
         fm = _parse_frontmatter(content)
         assert "description" in fm
         assert isinstance(fm["description"], str)
@@ -109,25 +107,19 @@ class TestExpertConsultationRule:
 
     def test_no_globs(self, tmp_path):
         generate_cursor_rules(tmp_path)
-        content = (
-            tmp_path / ".cursor" / "rules" / "tapps-expert-consultation.mdc"
-        ).read_text()
+        content = (tmp_path / ".cursor" / "rules" / "tapps-expert-consultation.mdc").read_text()
         fm = _parse_frontmatter(content)
         assert "globs" not in fm
 
     def test_no_always_apply(self, tmp_path):
         generate_cursor_rules(tmp_path)
-        content = (
-            tmp_path / ".cursor" / "rules" / "tapps-expert-consultation.mdc"
-        ).read_text()
+        content = (tmp_path / ".cursor" / "rules" / "tapps-expert-consultation.mdc").read_text()
         fm = _parse_frontmatter(content)
         assert "alwaysApply" not in fm
 
     def test_body_references_consult_expert(self, tmp_path):
         generate_cursor_rules(tmp_path)
-        content = (
-            tmp_path / ".cursor" / "rules" / "tapps-expert-consultation.mdc"
-        ).read_text()
+        content = (tmp_path / ".cursor" / "rules" / "tapps-expert-consultation.mdc").read_text()
         assert "tapps_consult_expert" in content
 
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import re
-import stat
 
 from tapps_mcp.pipeline.platform_generators import (
     generate_claude_plugin_bundle,
@@ -25,25 +24,19 @@ class TestPluginStructure:
 
     def test_plugin_json_valid(self, tmp_path):
         generate_claude_plugin_bundle(tmp_path)
-        data = json.loads(
-            (tmp_path / ".claude-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".claude-plugin" / "plugin.json").read_text())
         assert "name" in data
         assert "version" in data
         assert "description" in data
 
     def test_plugin_json_name(self, tmp_path):
         generate_claude_plugin_bundle(tmp_path)
-        data = json.loads(
-            (tmp_path / ".claude-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".claude-plugin" / "plugin.json").read_text())
         assert data["name"] == "tapps-mcp"
 
     def test_plugin_json_version_semver(self, tmp_path):
         generate_claude_plugin_bundle(tmp_path, version="1.2.3")
-        data = json.loads(
-            (tmp_path / ".claude-plugin" / "plugin.json").read_text()
-        )
+        data = json.loads((tmp_path / ".claude-plugin" / "plugin.json").read_text())
         assert re.match(r"^\d+\.\d+\.\d+", data["version"])
 
     def test_agents_exist(self, tmp_path):

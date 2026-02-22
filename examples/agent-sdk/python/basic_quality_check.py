@@ -9,6 +9,7 @@ Prerequisites:
   export ANTHROPIC_API_KEY=sk-...
   export TAPPS_MCP_PROJECT_ROOT=/path/to/your/project
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -44,10 +45,7 @@ async def run_quality_check(file_path: str) -> str:
     # Run the query and collect results
     result_parts: list[str] = []
     async for message in query(
-        prompt=(
-            f"Run tapps_quick_check on {file_path} and report "
-            "the score and top issues."
-        ),
+        prompt=(f"Run tapps_quick_check on {file_path} and report the score and top issues."),
         options=options,
     ):
         if hasattr(message, "content"):

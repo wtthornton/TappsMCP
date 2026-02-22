@@ -37,48 +37,36 @@ class TestWorkflowContent:
 
     def test_valid_yaml(self, tmp_path):
         generate_ci_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "tapps-quality.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "tapps-quality.yml").read_text()
         # Strip the leading comment lines that start with #
         parsed = yaml.safe_load(content)
         assert parsed is not None
 
     def test_has_jobs_key(self, tmp_path):
         generate_ci_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "tapps-quality.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "tapps-quality.yml").read_text()
         parsed = yaml.safe_load(content)
         assert "jobs" in parsed
 
     def test_has_name(self, tmp_path):
         generate_ci_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "tapps-quality.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "tapps-quality.yml").read_text()
         parsed = yaml.safe_load(content)
         assert "name" in parsed
 
     def test_references_tapps_mcp(self, tmp_path):
         generate_ci_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "tapps-quality.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "tapps-quality.yml").read_text()
         assert "tapps-mcp" in content
 
     def test_has_project_root_env(self, tmp_path):
         generate_ci_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "tapps-quality.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "tapps-quality.yml").read_text()
         assert "TAPPS_MCP_PROJECT_ROOT" in content
 
     def test_triggers_on_pull_request(self, tmp_path):
         generate_ci_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "tapps-quality.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "tapps-quality.yml").read_text()
         parsed = yaml.safe_load(content)
         assert "pull_request" in parsed.get("on", parsed.get(True, {}))
 
@@ -88,13 +76,9 @@ class TestIdempotency:
 
     def test_idempotent_overwrite(self, tmp_path):
         generate_ci_workflow(tmp_path)
-        content1 = (
-            tmp_path / ".github" / "workflows" / "tapps-quality.yml"
-        ).read_text()
+        content1 = (tmp_path / ".github" / "workflows" / "tapps-quality.yml").read_text()
         generate_ci_workflow(tmp_path)
-        content2 = (
-            tmp_path / ".github" / "workflows" / "tapps-quality.yml"
-        ).read_text()
+        content2 = (tmp_path / ".github" / "workflows" / "tapps-quality.yml").read_text()
         assert content1 == content2
 
 

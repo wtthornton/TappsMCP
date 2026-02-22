@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import stat
+import sys
+
+import pytest
 
 from tapps_mcp.pipeline.platform_generators import generate_cursor_hooks
 
@@ -26,6 +29,7 @@ class TestCursorHooksScripts:
         for name in expected:
             assert (hooks_dir / name).exists(), f"Missing: {name}"
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Exec bit N/A on Windows")
     def test_scripts_are_executable(self, tmp_path):
         generate_cursor_hooks(tmp_path)
         hooks_dir = tmp_path / ".cursor" / "hooks"
@@ -116,7 +120,7 @@ class TestCursorHooksMerge:
         # afterFileEdit should appear once (the pre-existing one, not replaced)
         assert events.count("afterFileEdit") == 1
         # The custom command should be preserved
-        edit_entry = [e for e in data["hooks"] if e["event"] == "afterFileEdit"][0]
+        edit_entry = next(e for e in data["hooks"] if e["event"] == "afterFileEdit")
         assert edit_entry["command"] == "my-custom-script.sh"
         # New events should be added
         assert "beforeMCPExecution" in events

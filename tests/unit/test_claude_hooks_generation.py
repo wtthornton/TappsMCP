@@ -7,8 +7,10 @@ and merges hook entries into .claude/settings.json.
 from __future__ import annotations
 
 import json
-import os
 import stat
+import sys
+
+import pytest
 
 from tapps_mcp.pipeline.platform_generators import generate_claude_hooks
 
@@ -35,6 +37,7 @@ class TestClaudeHooksScripts:
         for name in expected:
             assert (hooks_dir / name).exists(), f"Missing: {name}"
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Exec bit N/A on Windows")
     def test_scripts_are_executable(self, tmp_path):
         generate_claude_hooks(tmp_path)
         hooks_dir = tmp_path / ".claude" / "hooks"
@@ -125,8 +128,12 @@ class TestClaudeHooksConfig:
         generate_claude_hooks(tmp_path)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         expected_events = {
-            "SessionStart", "PostToolUse", "Stop",
-            "TaskCompleted", "PreCompact", "SubagentStart",
+            "SessionStart",
+            "PostToolUse",
+            "Stop",
+            "TaskCompleted",
+            "PreCompact",
+            "SubagentStart",
         }
         assert expected_events == set(data["hooks"].keys())
 

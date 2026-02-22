@@ -135,18 +135,18 @@ class AdaptiveScoringEngine:
             return outcomes
         base = self._tracker.load_outcomes(limit=1000)
         if self._metrics_dir is not None:
-            merged = self._merge_feedback_outcomes(base)
+            merged = self._merge_feedback_outcomes(base, self._metrics_dir)
             return merged
         return base
 
     def _merge_feedback_outcomes(
-        self, base_outcomes: list[CodeOutcome]
+        self, base_outcomes: list[CodeOutcome], metrics_dir: Path
     ) -> list[CodeOutcome]:
         """Merge feedback-derived outcomes so negative feedback influences weights."""
         try:
             from tapps_mcp.metrics.feedback import FeedbackTracker
 
-            tracker = FeedbackTracker(self._metrics_dir)
+            tracker = FeedbackTracker(metrics_dir)
             raw = tracker.to_adaptive_outcomes()
         except (ImportError, OSError) as e:
             logger.debug("feedback_merge_skipped", error=str(e))
@@ -157,7 +157,7 @@ class AdaptiveScoringEngine:
 
         # Convert feedback dicts to CodeOutcome with neutral initial_scores so they
         # contribute to correlation (helpful=False pulls correlations down).
-        neutral_scores = {k: 5.0 for k in _METRIC_KEYS}
+        neutral_scores = dict.fromkeys(_METRIC_KEYS, 5.0)
         for i, fb in enumerate(raw):
             base_outcomes.append(
                 CodeOutcome(

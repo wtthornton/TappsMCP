@@ -100,7 +100,7 @@ _checklist_persist_configured: bool = False
 
 def _record_call(tool_name: str) -> None:
     """Record a tool call in the session checklist tracker."""
-    global _checklist_persist_configured
+    global _checklist_persist_configured  # noqa: PLW0603
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
