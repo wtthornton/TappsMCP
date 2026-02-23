@@ -136,6 +136,238 @@ class TestTappsValidateChanged:
 
         assert "tapps_validate_changed" in CallTracker.get_called_tools()
 
+    @pytest.mark.asyncio
+    async def test_parallel_execution_multiple_files(self, tmp_path: Path) -> None:
+        """Multiple files are all validated (parallel gather)."""
+        from tapps_mcp.scoring.models import ScoreResult
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        files = []
+        for name in ("a.py", "b.py", "c.py"):
+            f = tmp_path / name
+            f.write_text("x = 1\n", encoding="utf-8")
+            files.append(f)
+
+        mock_score = ScoreResult(
+            file_path="test.py",
+            categories={},
+            overall_score=85.0,
+            security_issues=[],
+        )
+        mock_scorer = MagicMock()
+        mock_scorer.score_file = AsyncMock(return_value=mock_score)
+
+        mock_gate = MagicMock(passed=True, failures=[])
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", side_effect=lambda p: Path(p)),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            result = await tapps_validate_changed(
+                file_paths=",".join(str(f) for f in files),
+                include_security=False,
+            )
+
+        assert result["success"] is True
+        assert result["data"]["files_validated"] == 3
+        assert mock_scorer.score_file.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_no_duplicate_security_scan(self, tmp_path: Path) -> None:
+        """run_security_scan is NOT called; bandit results reused from score."""
+        from tapps_mcp.scoring.models import ScoreResult
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        mock_score = ScoreResult(
+            file_path=str(f),
+            categories={},
+            overall_score=85.0,
+            security_issues=[],
+        )
+        mock_scorer = MagicMock()
+        mock_scorer.score_file = AsyncMock(return_value=mock_score)
+
+        mock_gate = MagicMock(passed=True, failures=[])
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", return_value=f),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+            patch(
+                "tapps_mcp.security.security_scanner.run_security_scan",
+            ) as mock_run_sec,
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            result = await tapps_validate_changed(
+                file_paths=str(f),
+                include_security=True,
+            )
+
+        # run_security_scan should NOT be called — bandit reused from score
+        mock_run_sec.assert_not_called()
+        assert result["data"]["files_validated"] == 1
+        data = result["data"]["results"][0]
+        assert data["security_passed"] is True
+        assert data["security_issues"] == 0
+
+    @pytest.mark.asyncio
+    async def test_secret_scanner_still_runs(self, tmp_path: Path) -> None:
+        """SecretScanner.scan_file IS called when include_security=True."""
+        from tapps_mcp.scoring.models import ScoreResult
+        from tapps_mcp.security.secret_scanner import SecretScanResult
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        mock_score = ScoreResult(
+            file_path=str(f),
+            categories={},
+            overall_score=85.0,
+            security_issues=[],
+        )
+        mock_scorer = MagicMock()
+        mock_scorer.score_file = AsyncMock(return_value=mock_score)
+
+        mock_gate = MagicMock(passed=True, failures=[])
+        mock_secret_result = SecretScanResult(
+            total_findings=0, high_severity=0, scanned_files=1
+        )
+        mock_scanner_instance = MagicMock()
+        mock_scanner_instance.scan_file.return_value = mock_secret_result
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", return_value=f),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+            patch(
+                "tapps_mcp.security.secret_scanner.SecretScanner",
+                return_value=mock_scanner_instance,
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            await tapps_validate_changed(file_paths=str(f), include_security=True)
+
+        mock_scanner_instance.scan_file.assert_called_once_with(str(f))
+
+    @pytest.mark.asyncio
+    async def test_individual_file_error_doesnt_abort_batch(
+        self, tmp_path: Path
+    ) -> None:
+        """One file raising an exception doesn't prevent others from validating."""
+        from tapps_mcp.scoring.models import ScoreResult
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        good = tmp_path / "good.py"
+        good.write_text("x = 1\n", encoding="utf-8")
+        bad = tmp_path / "bad.py"
+        bad.write_text("y = 2\n", encoding="utf-8")
+
+        mock_score = ScoreResult(
+            file_path="test.py",
+            categories={},
+            overall_score=85.0,
+            security_issues=[],
+        )
+
+        async def _score_side_effect(path: Path, **kwargs: object) -> ScoreResult:
+            if "bad" in str(path):
+                raise RuntimeError("score failed")
+            return mock_score
+
+        mock_scorer = MagicMock()
+        mock_scorer.score_file = AsyncMock(side_effect=_score_side_effect)
+
+        mock_gate = MagicMock(passed=True, failures=[])
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", side_effect=lambda p: Path(p)),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            result = await tapps_validate_changed(
+                file_paths=f"{good},{bad}",
+                include_security=False,
+            )
+
+        assert result["data"]["files_validated"] == 2
+        results_list = result["data"]["results"]
+        # One succeeded, one has errors
+        errored = [r for r in results_list if "errors" in r]
+        succeeded = [r for r in results_list if "overall_score" in r]
+        assert len(errored) == 1
+        assert len(succeeded) == 1
+        assert "score failed" in errored[0]["errors"][0]
+
+    @pytest.mark.asyncio
+    async def test_security_combines_bandit_and_secrets(self, tmp_path: Path) -> None:
+        """Security result aggregates bandit issues from score + secret findings."""
+        from tapps_mcp.scoring.models import ScoreResult, SecurityIssue
+        from tapps_mcp.security.secret_scanner import SecretScanResult
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        bandit_issue = SecurityIssue(
+            code="B101",
+            message="Use of assert",
+            file=str(f),
+            line=1,
+            severity="low",
+        )
+        mock_score = ScoreResult(
+            file_path=str(f),
+            categories={},
+            overall_score=85.0,
+            security_issues=[bandit_issue],
+        )
+        mock_scorer = MagicMock()
+        mock_scorer.score_file = AsyncMock(return_value=mock_score)
+
+        mock_gate = MagicMock(passed=True, failures=[])
+        mock_secret_result = SecretScanResult(
+            total_findings=1, high_severity=1, scanned_files=1
+        )
+        mock_scanner_instance = MagicMock()
+        mock_scanner_instance.scan_file.return_value = mock_secret_result
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", return_value=f),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+            patch(
+                "tapps_mcp.security.secret_scanner.SecretScanner",
+                return_value=mock_scanner_instance,
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            result = await tapps_validate_changed(
+                file_paths=str(f), include_security=True
+            )
+
+        file_result = result["data"]["results"][0]
+        # 1 bandit + 1 secret = 2 total
+        assert file_result["security_issues"] == 2
+        # high-severity secret makes it fail
+        assert file_result["security_passed"] is False
+
 
 # ---------------------------------------------------------------------------
 # tapps_quick_check
