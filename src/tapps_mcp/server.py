@@ -609,6 +609,19 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "fallback_topic": result.fallback_topic,
         },
     )
+    try:
+        from tapps_mcp.common.output_schemas import ExpertOutput
+
+        structured = ExpertOutput(
+            domain=result.domain,
+            expert_name=result.expert_name,
+            answer=result.answer,
+            confidence=result.confidence,
+            sources=result.sources,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        logger.debug("structured_output_failed: tapps_consult_expert", exc_info=True)
     return _with_nudges("tapps_consult_expert", resp)
 
 
@@ -646,12 +659,25 @@ def tapps_checklist(task_type: str = "review") -> dict[str, Any]:
     _record_call("tapps_checklist")
 
     try:
+        from tapps_mcp.common.output_schemas import ChecklistOutput
         from tapps_mcp.tools.checklist import CallTracker
 
         result = CallTracker.evaluate(task_type)
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_checklist", start)
         resp = success_response("tapps_checklist", elapsed_ms, result.model_dump())
+        try:
+            structured = ChecklistOutput(
+                task_type=task_type,
+                complete=result.complete,
+                called=result.called,
+                missing_required=result.missing_required,
+                missing_recommended=result.missing_recommended,
+                total_calls=result.total_calls,
+            )
+            resp["structuredContent"] = structured.to_structured_content()
+        except Exception:
+            logger.debug("structured_output_failed: tapps_checklist", exc_info=True)
         return _with_nudges("tapps_checklist", resp, {"complete": result.complete})
     except ImportError:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -730,6 +756,24 @@ def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
             "quality_recommendations": profile.quality_recommendations,
         },
     )
+    try:
+        from tapps_mcp.common.output_schemas import ProfileOutput
+
+        structured = ProfileOutput(
+            project_root=str(root),
+            project_type=profile.project_type,
+            project_type_confidence=round(profile.project_type_confidence, 2),
+            tech_stack=profile.tech_stack.model_dump(),
+            has_ci=profile.has_ci,
+            has_docker=profile.has_docker,
+            has_tests=profile.has_tests,
+            test_frameworks=profile.test_frameworks,
+            package_managers=profile.package_managers,
+            quality_recommendations=profile.quality_recommendations,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        logger.debug("structured_output_failed: tapps_project_profile", exc_info=True)
     return _with_nudges("tapps_project_profile", resp)
 
 
@@ -837,6 +881,21 @@ def tapps_impact_analysis(file_path: str, change_type: str = "modified") -> dict
             "recommendations": report.recommendations,
         },
     )
+    try:
+        from tapps_mcp.common.output_schemas import ImpactOutput
+
+        structured = ImpactOutput(
+            changed_file=report.changed_file,
+            change_type=report.change_type,
+            severity=report.severity,
+            total_affected=report.total_affected,
+            direct_dependents=[str(d.file_path) for d in report.direct_dependents],
+            test_files=[str(t.file_path) for t in report.test_files],
+            recommendations=report.recommendations,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        logger.debug("structured_output_failed: tapps_impact_analysis", exc_info=True)
     return _with_nudges("tapps_impact_analysis", resp)
 
 
@@ -1023,6 +1082,39 @@ async def tapps_dependency_scan(project_root: str = "") -> dict[str, Any]:
         data["error"] = result.error
 
     resp = success_response("tapps_dependency_scan", elapsed_ms, data)
+
+    try:
+        from tapps_mcp.common.output_schemas import (
+            DependencyFindingOutput,
+            DependencyScanOutput,
+        )
+
+        findings_out = [
+            DependencyFindingOutput(
+                package=f.package,
+                installed_version=f.installed_version,
+                fixed_version=f.fixed_version,
+                vulnerability_id=f.vulnerability_id,
+                severity=f.severity,
+            )
+            for f in result.findings
+        ]
+        structured = DependencyScanOutput(
+            scanned_packages=result.scanned_packages,
+            vulnerable_packages=result.vulnerable_packages,
+            total_findings=len(result.findings),
+            scan_source=result.scan_source,
+            severity_counts=sev_counts,
+            findings=findings_out,
+            summary=summary,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        import structlog
+        structlog.get_logger(__name__).debug(
+            "structured_output_failed: tapps_dependency_scan", exc_info=True
+        )
+
     return _with_nudges("tapps_dependency_scan", resp)
 
 

@@ -592,6 +592,9 @@ class TestSuggestionsInScoring:
 
         with patch("tapps_mcp.scoring.scorer.run_all_tools", new_callable=AsyncMock) as mock_tools:
             mock_tools.return_value = parallel
+            # Clear dependency cache so a perfect file has no dependency suggestions
+            from tapps_mcp.tools.dependency_scan_cache import clear_dependency_cache
+            clear_dependency_cache()
             scorer = CodeScorer()
             result = await scorer.score_file(f)
 

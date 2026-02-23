@@ -1,9 +1,9 @@
-"""Lookup orchestration — ties cache, fuzzy matcher, client, and circuit breaker.
+"""Lookup orchestration — ties cache, fuzzy matcher, providers, and circuit breaker.
 
 Lookup flow:
   1. Cache check (exact match)
   2. Fuzzy match against cached libraries
-  3. Context7 API resolve + fetch (with circuit breaker)
+  3. Provider chain (Context7, llms.txt) — multi-backend with automatic fallback
   4. RAG safety check on retrieved content
   5. Cache store
   6. Stale fallback if API fails
@@ -35,8 +35,22 @@ if TYPE_CHECKING:
     from pydantic import SecretStr
 
     from tapps_mcp.knowledge.cache import KBCache
+    from tapps_mcp.knowledge.providers.registry import ProviderRegistry
 
 logger = structlog.get_logger(__name__)
+
+
+def _build_provider_registry(api_key: "SecretStr | None") -> "ProviderRegistry":
+    """Build provider registry with Context7 (if key) + llms.txt fallback."""
+    from tapps_mcp.knowledge.providers.context7_provider import Context7Provider
+    from tapps_mcp.knowledge.providers.llms_txt_provider import LlmsTxtProvider
+    from tapps_mcp.knowledge.providers.registry import ProviderRegistry
+
+    registry: ProviderRegistry = ProviderRegistry()
+    if api_key is not None:
+        registry.register(Context7Provider(api_key=api_key))
+    registry.register(LlmsTxtProvider())
+    return registry
 
 
 class LookupEngine:
@@ -56,11 +70,13 @@ class LookupEngine:
         *,
         circuit_breaker: CircuitBreaker | None = None,
         client: Context7Client | None = None,
+        registry: "ProviderRegistry | None" = None,
     ) -> None:
         self._cache = cache
         self._api_key = api_key
         self._breaker = circuit_breaker or get_context7_circuit_breaker()
         self._client = client or Context7Client(api_key=api_key)
+        self._registry = registry or _build_provider_registry(api_key)
         self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def close(self) -> None:
@@ -68,7 +84,6 @@ class LookupEngine:
         tasks = list(self._background_tasks)
         for task in tasks:
             task.cancel()
-        # Await cancelled tasks so they finish cleanly
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
@@ -148,73 +163,71 @@ class LookupEngine:
                     fuzzy_score=best.score,
                 )
 
-        # 3. API resolve + fetch (with circuit breaker)
-        if self._api_key is None:
-            elapsed = (time.monotonic() - start) * 1000
-            return LookupResult(
-                success=False,
-                library=lib_clean,
-                topic=topic,
-                error=(
-                    "No Context7 API key configured and no cached docs available. "
-                    "Options: (1) Set TAPPS_MCP_CONTEXT7_API_KEY or add context7_api_key "
-                    "to .tapps-mcp.yaml; (2) Run tapps_init with warm_cache_from_tech_stack=True "
-                    "to pre-populate cache from project dependencies."
-                ),
-                response_time_ms=round(elapsed, 1),
-            )
+        # 3. API resolve + fetch — try provider chain first, then legacy Context7
+        content: str | None = None
+        provider_source: str | None = None
 
-        try:
-            content = await self._breaker.call(
-                self._resolve_and_fetch,
-                lib_clean,
-                topic,
-                mode,
-            )
-        except CircuitBreakerOpenError:
-            # Circuit is open — try stale fallback
-            stale = self._cache.get(lib_clean, topic)
-            elapsed = (time.monotonic() - start) * 1000
-            if stale is not None and stale.content:
-                return LookupResult(
-                    success=True,
-                    content=stale.content,
-                    source="stale_fallback",
-                    library=stale.library,
-                    topic=stale.topic,
-                    response_time_ms=round(elapsed, 1),
-                    cache_hit=True,
-                    warning="Circuit breaker open; returning stale cached content.",
+        # 3a. Multi-provider chain (Context7 + llms.txt fallback)
+        healthy = self._registry.healthy_providers()
+        if healthy:
+            result = await self._registry.lookup(lib_clean, topic)
+            if result.success and result.content:
+                content = result.content
+                provider_source = result.provider_name or "provider"
+
+        # 3b. Legacy Context7 path (when no provider succeeded and API key set)
+        if content is None and self._api_key is not None:
+            try:
+                content = await self._breaker.call(
+                    self._resolve_and_fetch,
+                    lib_clean,
+                    topic,
+                    mode,
                 )
-            return LookupResult(
-                success=False,
-                library=lib_clean,
-                topic=topic,
-                error="Context7 API unavailable (circuit breaker open).",
-                response_time_ms=round(elapsed, 1),
-            )
-        except (Context7Error, TimeoutError) as exc:
-            # API failed — try stale fallback
-            stale = self._cache.get(lib_clean, topic)
-            elapsed = (time.monotonic() - start) * 1000
-            if stale is not None and stale.content:
+                if content:
+                    provider_source = "context7"
+            except CircuitBreakerOpenError:
+                stale = self._cache.get(lib_clean, topic)
+                elapsed = (time.monotonic() - start) * 1000
+                if stale is not None and stale.content:
+                    return LookupResult(
+                        success=True,
+                        content=stale.content,
+                        source="stale_fallback",
+                        library=stale.library,
+                        topic=stale.topic,
+                        response_time_ms=round(elapsed, 1),
+                        cache_hit=True,
+                        warning="Circuit breaker open; returning stale cached content.",
+                    )
                 return LookupResult(
-                    success=True,
-                    content=stale.content,
-                    source="stale_fallback",
-                    library=stale.library,
-                    topic=stale.topic,
+                    success=False,
+                    library=lib_clean,
+                    topic=topic,
+                    error="Context7 API unavailable (circuit breaker open).",
                     response_time_ms=round(elapsed, 1),
-                    cache_hit=True,
-                    warning=f"API error: {exc}; returning stale cached content.",
                 )
-            return LookupResult(
-                success=False,
-                library=lib_clean,
-                topic=topic,
-                error=f"Context7 API error: {exc}",
-                response_time_ms=round(elapsed, 1),
-            )
+            except (Context7Error, TimeoutError) as exc:
+                stale = self._cache.get(lib_clean, topic)
+                elapsed = (time.monotonic() - start) * 1000
+                if stale is not None and stale.content:
+                    return LookupResult(
+                        success=True,
+                        content=stale.content,
+                        source="stale_fallback",
+                        library=stale.library,
+                        topic=stale.topic,
+                        response_time_ms=round(elapsed, 1),
+                        cache_hit=True,
+                        warning=f"API error: {exc}; returning stale cached content.",
+                    )
+                return LookupResult(
+                    success=False,
+                    library=lib_clean,
+                    topic=topic,
+                    error=f"Context7 API error: {exc}",
+                    response_time_ms=round(elapsed, 1),
+                )
 
         if content is None:
             elapsed = (time.monotonic() - start) * 1000
@@ -260,7 +273,7 @@ class LookupEngine:
         return LookupResult(
             success=True,
             content=safe_content,
-            source="api",
+            source=provider_source or "api",
             library=lib_clean,
             topic=topic,
             response_time_ms=round(elapsed, 1),

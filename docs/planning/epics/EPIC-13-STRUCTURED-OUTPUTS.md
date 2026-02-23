@@ -1,6 +1,6 @@
 # Epic 13: Structured Tool Outputs (MCP 2025-11-25)
 
-**Status:** Partial — 6 tools wired (score_file, quality_gate, quick_check, security_scan, validate_changed, validate_config); outputSchema not in registration; remaining tools open
+**Status:** Substantial — 12 tools wired with structuredContent (score_file, quality_gate, quick_check, security_scan, validate_changed, validate_config, consult_expert, checklist, project_profile, impact_analysis, session_start, research); outputSchema not in registration; tool-handler tests open
 **Priority:** P0 — Critical (enables programmatic score consumption by all MCP clients)
 **Estimated LOE:** ~1-2 weeks (1 developer)
 **Dependencies:** Epic 0 (Foundation), Epic 1 (Core Quality)
@@ -136,7 +136,7 @@ Add structured outputs to `tapps_security_scan`, `tapps_validate_changed`, and `
 
 **Points:** 3
 **Priority:** Important
-**Status:** Open
+**Status:** Complete
 
 Add structured outputs to the remaining tools: `tapps_consult_expert`, `tapps_research`, `tapps_impact_analysis`, `tapps_project_profile`, `tapps_session_start`, `tapps_checklist`.
 
@@ -148,10 +148,10 @@ Add structured outputs to the remaining tools: `tapps_consult_expert`, `tapps_re
 
 **Tasks:**
 - [x] Create output models: `ExpertOutput`, `ImpactOutput`, `ChecklistOutput` (in OUTPUT_SCHEMA_REGISTRY)
-- [ ] Create output models: `ResearchOutput`, `ProfileOutput`, `SessionStartOutput` (still missing)
-- [ ] Wire `outputSchema` + `structuredContent` to each tool handler (none wired yet)
-- [ ] Prioritize tools where structured output is most valuable (expert confidence scores, impact blast radius)
-- [ ] Tools that return simple text (e.g., `tapps_session_notes`) can skip structured outputs
+- [x] Create output models: `ResearchOutput`, `ProfileOutput`, `SessionStartOutput`
+- [x] Wire `structuredContent` to each tool handler (consult_expert, checklist, project_profile, impact_analysis, session_start, research)
+- [x] Prioritize tools where structured output is most valuable (expert confidence scores, impact blast radius)
+- [x] Tools that return simple text (e.g., `tapps_session_notes`) skip structured outputs
 
 **Definition of Done:** All tools that produce structured data return `structuredContent`. Simple text-only tools are explicitly excluded with a comment explaining why.
 

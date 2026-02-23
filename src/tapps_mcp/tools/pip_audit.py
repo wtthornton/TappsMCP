@@ -164,17 +164,22 @@ def _parse_pip_audit_json(raw: str) -> DependencyAuditResult:
 def _build_pip_audit_args(
     source: str,
     project_root: str,
+    ignore_ids: list[str] | None = None,
 ) -> tuple[list[str], str]:
     """Build pip-audit command arguments.
 
     Args:
         source: Scan source mode (auto/environment/requirements/pyproject).
         project_root: Project root directory.
+        ignore_ids: Vulnerability IDs to exclude (passed as --ignore-vuln).
 
     Returns:
         Tuple of (command args, resolved scan source name).
     """
     base_args = ["pip-audit", "--format=json", "--desc"]
+    if ignore_ids:
+        for vid in ignore_ids:
+            base_args.extend(["--ignore-vuln", vid])
     resolved_source = "environment"
 
     if source == "requirements":
@@ -222,7 +227,7 @@ async def run_pip_audit_async(
             error="pip-audit not installed. Install with: pip install pip-audit",
         )
 
-    args, resolved_source = _build_pip_audit_args(source, project_root)
+    args, resolved_source = _build_pip_audit_args(source, project_root, ignore_ids)
     cwd = project_root if project_root else None
 
     logger.info(

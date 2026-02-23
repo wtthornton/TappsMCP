@@ -56,6 +56,9 @@ vector = [
     "sentence-transformers>=5.2.3,<6",
     "numpy>=2.4.2,<3",
 ]
+pip-audit = [
+    "pip-audit>=2.7.0",
+]
 
 [project.scripts]
 tapps-mcp = "tapps_mcp.cli:main"

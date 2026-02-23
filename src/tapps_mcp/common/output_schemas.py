@@ -182,6 +182,66 @@ class ChecklistOutput(StructuredOutput):
     total_calls: int = 0
 
 
+class DependencyFindingOutput(BaseModel):
+    """A single dependency vulnerability finding."""
+
+    package: str
+    installed_version: str
+    fixed_version: str = ""
+    vulnerability_id: str = ""
+    severity: str = "unknown"
+
+
+class DependencyScanOutput(StructuredOutput):
+    """Structured output for tapps_dependency_scan."""
+
+    scanned_packages: int = 0
+    vulnerable_packages: int = 0
+    total_findings: int = 0
+    scan_source: str = "environment"
+    severity_counts: dict[str, int] = Field(default_factory=dict)
+    findings: list[DependencyFindingOutput] = Field(default_factory=list)
+    summary: str = ""
+
+
+class ResearchOutput(StructuredOutput):
+    """Structured output for tapps_research."""
+
+    domain: str = ""
+    expert_id: str = ""
+    expert_name: str = ""
+    answer: str = ""
+    confidence: float = Field(ge=0.0, le=1.0)
+    chunks_used: int = 0
+    docs_supplemented: bool = False
+    docs_library: str | None = None
+    docs_topic: str | None = None
+    sources: list[str] = Field(default_factory=list)
+
+
+class ProfileOutput(StructuredOutput):
+    """Structured output for tapps_project_profile."""
+
+    project_root: str = ""
+    project_type: str = ""
+    project_type_confidence: float = 0.0
+    tech_stack: dict[str, Any] = Field(default_factory=dict)
+    has_ci: bool = False
+    has_docker: bool = False
+    has_tests: bool = False
+    test_frameworks: list[str] = Field(default_factory=list)
+    package_managers: list[str] = Field(default_factory=list)
+    quality_recommendations: list[str] = Field(default_factory=list)
+
+
+class SessionStartOutput(StructuredOutput):
+    """Structured output for tapps_session_start."""
+
+    has_project_profile: bool = False
+    dependency_scan: dict[str, Any] = Field(default_factory=dict)
+    has_pipeline: bool = True
+
+
 # Registry for looking up output schema by tool name
 OUTPUT_SCHEMA_REGISTRY: dict[str, type[StructuredOutput]] = {
     "tapps_score_file": ScoreFileOutput,
@@ -193,6 +253,10 @@ OUTPUT_SCHEMA_REGISTRY: dict[str, type[StructuredOutput]] = {
     "tapps_impact_analysis": ImpactOutput,
     "tapps_consult_expert": ExpertOutput,
     "tapps_checklist": ChecklistOutput,
+    "tapps_dependency_scan": DependencyScanOutput,
+    "tapps_research": ResearchOutput,
+    "tapps_project_profile": ProfileOutput,
+    "tapps_session_start": SessionStartOutput,
 }
 
 

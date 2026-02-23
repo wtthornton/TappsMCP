@@ -129,6 +129,7 @@ class CodeScorer:
             type_issues=parallel.type_issues,
             security_issues=parallel.security_issues,
             dead_code_count=len(parallel.dead_code),
+            dependency_vuln_count=self._dependency_vuln_count,
             degraded=parallel.degraded,
             missing_tools=parallel.missing_tools,
             tool_errors=parallel.tool_errors,
@@ -150,6 +151,7 @@ class CodeScorer:
     ) -> dict[str, CategoryScore]:
         w = self._weights
         cats: dict[str, CategoryScore] = {}
+        self._dependency_vuln_count = 0
 
         # 1) Complexity (radon cc -> 0-10, lower complexity = higher quality)
         cplx_details: dict[str, object] = {"functions_analysed": len(parallel.radon_cc)}
@@ -170,7 +172,7 @@ class CodeScorer:
             suggestions=_suggest_complexity(complexity_raw, cplx_details, using_radon_cc),
         )
 
-        # 2) Security (bandit -> 0-10)
+        # 2) Security (bandit -> 0-10, plus dependency vulnerability penalty)
         sec_details: dict[str, object] = {"issue_count": len(parallel.security_issues)}
         using_bandit = parallel.security_issues or "bandit" not in parallel.missing_tools
         if using_bandit:
@@ -179,13 +181,40 @@ class CodeScorer:
             sec_score = self._heuristic_security(code)
             sec_details["fallback"] = True
             sec_details["patterns_found"] = [p for p in _INSECURE_PATTERNS if p in code]
+
+        # Apply dependency vulnerability penalty (from cached pip-audit results)
+        dep_findings: list = []
+        if self._settings.dependency_scan_enabled:
+            from tapps_mcp.scoring.dependency_security import (
+                calculate_dependency_penalty,
+                suggest_dependency_fixes,
+            )
+            from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
+
+            dep_findings = get_dependency_findings(str(self._settings.project_root))
+            if dep_findings:
+                penalty = calculate_dependency_penalty(dep_findings)
+                sec_score = clamp_individual(sec_score - penalty / 10.0)
+                sec_details["dependency_vulnerabilities"] = len(dep_findings)
+                sev_breakdown: dict[str, int] = {}
+                for f in dep_findings:
+                    sev_breakdown[f.severity] = sev_breakdown.get(f.severity, 0) + 1
+                sec_details["dependency_severity_breakdown"] = sev_breakdown
+
+        sec_suggestions = _suggest_security(sec_score, sec_details)
+        if dep_findings:
+            sec_suggestions = suggest_dependency_fixes(dep_findings)[:5] + sec_suggestions
+
         cats["security"] = CategoryScore(
             name="security",
             score=sec_score,
             weight=w.security,
             details=sec_details,
-            suggestions=_suggest_security(sec_score, sec_details),
+            suggestions=sec_suggestions,
         )
+
+        # Store for ScoreResult.dependency_vuln_count
+        self._dependency_vuln_count = len(dep_findings)
 
         # 3) Maintainability (radon mi -> 0-10, with dead code penalty)
         maint_details: dict[str, object] = {"mi_value": parallel.radon_mi}

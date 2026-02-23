@@ -157,6 +157,10 @@ class TappsMCPSettings(BaseSettings):
         default_factory=list,
         description="Vulnerability IDs to exclude (e.g. CVE-2024-12345).",
     )
+    dependency_scan_source: str = Field(
+        default="auto",
+        description="Scan source: auto, environment, requirements, pyproject.",
+    )
 
     # Expert/doc coupling
     expert_auto_fallback: bool = Field(

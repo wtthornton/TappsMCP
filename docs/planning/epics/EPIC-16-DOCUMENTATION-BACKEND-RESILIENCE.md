@@ -1,6 +1,6 @@
 # Epic 16: Documentation Backend Resilience (Multi-Provider)
 
-**Status:** Complete - 5 source files (providers/ package with base, registry, context7, llms_txt), 39 tests
+**Status:** Partial — LookupEngine wired to provider chain (Context7 + LlmsTxt); Deepcon and Docfork providers not yet implemented
 **Priority:** P0 — Critical (Context7 free tier slashed 92% in Jan 2026; single-provider dependency)
 **Estimated LOE:** ~2-3 weeks (1 developer)
 **Dependencies:** Epic 2 (Knowledge & Docs)
@@ -42,12 +42,12 @@ The MCP ecosystem now has several mature alternatives. A multi-backend architect
 
 ## Acceptance Criteria
 
-- [ ] Backend abstraction: `DocumentationProvider` protocol with `resolve()` and `fetch()` methods
-- [ ] Context7 backend: existing implementation refactored to implement the protocol
+- [x] Backend abstraction: `DocumentationProvider` protocol with `resolve()` and `fetch()` methods (via `providers/` package)
+- [x] Context7 backend: refactored as `Context7Provider` implementing the protocol
 - [ ] Deepcon backend: new provider using Deepcon's API
 - [ ] Docfork backend: new provider using Docfork's API
-- [ ] llms.txt backend: lightweight fallback that fetches `/llms.txt` or `/llms-full.txt` from library websites
-- [ ] Configurable provider order with automatic fallback on failure/rate-limit
+- [x] llms.txt backend: `LlmsTxtProvider` fetches `/llms.txt` or `/llms-full.txt` from library websites
+- [x] Configurable provider order with automatic fallback on failure (Context7 then LlmsTxt)
 - [ ] Circuit breaker per provider (existing pattern from `knowledge/circuit_breaker.py`)
 - [ ] Metrics per provider: success rate, latency, token count
 - [ ] `tapps_lookup_docs` transparently uses the best available provider
@@ -62,7 +62,7 @@ The MCP ecosystem now has several mature alternatives. A multi-backend architect
 
 **Points:** 3
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Define the `DocumentationProvider` protocol that all backends implement. Refactor the existing Context7 code to be one implementation of this protocol.
 
@@ -71,7 +71,7 @@ Define the `DocumentationProvider` protocol that all backends implement. Refacto
 - `src/tapps_mcp/knowledge/models.py`
 
 **Tasks:**
-- [ ] Define `DocumentationProvider` protocol: `async def resolve(library: str) -> ResolvedLibrary | None`, `async def fetch(library_id: str, topic: str) -> str | None`, `def name() -> str`, `def is_available() -> bool`
+- [x] Define `DocumentationProvider` protocol: `async def resolve(library: str) -> ResolvedLibrary | None`, `async def fetch(library_id: str, topic: str) -> str | None`, `def name() -> str`, `def is_available() -> bool`
 - [ ] Define `ResolvedLibrary` model: `library_id`, `display_name`, `version`, `provider_name`
 - [ ] Define `ProviderResult` model: `content`, `provider_name`, `latency_ms`, `token_estimate`, `from_cache`
 - [ ] Define `ProviderConfig` model: `provider_name`, `enabled`, `priority`, `api_key`, `base_url`, `timeout`
@@ -91,7 +91,7 @@ Define the `DocumentationProvider` protocol that all backends implement. Refacto
 
 **Points:** 3
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Wrap the existing `Context7Client` and `LookupEngine` into a `Context7Provider` that implements `DocumentationProvider`.
 
@@ -100,13 +100,13 @@ Wrap the existing `Context7Client` and `LookupEngine` into a `Context7Provider` 
 - `src/tapps_mcp/knowledge/lookup.py`
 
 **Tasks:**
-- [ ] Create `providers/` subpackage under `knowledge/`
-- [ ] Extract Context7-specific logic from `LookupEngine` into `Context7Provider`
-- [ ] `Context7Provider.resolve()` wraps `Context7Client.resolve_library()`
-- [ ] `Context7Provider.fetch()` wraps `Context7Client.get_library_docs()`
-- [ ] `Context7Provider.is_available()` checks API key + circuit breaker state
-- [ ] Preserve existing cache integration (cache is shared across providers)
-- [ ] `LookupEngine` becomes a thin orchestrator over providers + cache
+- [x] Create `providers/` subpackage under `knowledge/`
+- [x] Extract Context7-specific logic from `LookupEngine` into `Context7Provider`
+- [x] `Context7Provider.resolve()` wraps `Context7Client.resolve_library()`
+- [x] `Context7Provider.fetch()` wraps `Context7Client.get_library_docs()`
+- [x] `Context7Provider.is_available()` checks API key + circuit breaker state
+- [x] Preserve existing cache integration (cache is shared across providers)
+- [x] `LookupEngine` becomes a thin orchestrator over providers + cache
 
 **Implementation Notes:**
 - This is a refactor, not a rewrite — all existing Context7 behavior preserved
@@ -152,7 +152,7 @@ Implement the Deepcon documentation provider. Deepcon benchmarks at 90% accuracy
 
 **Points:** 5
 **Priority:** Important
-**Status:** Planned
+**Status:** Partial (llms.txt complete, Docfork planned)
 
 Implement Docfork (open-source, 9,000+ libraries) and llms.txt (zero-dependency fallback) providers.
 
@@ -164,9 +164,9 @@ Implement Docfork (open-source, 9,000+ libraries) and llms.txt (zero-dependency 
 - [ ] Research Docfork's API: endpoint URLs, authentication (if any), request/response format
 - [ ] Implement `DocforkProvider` with `resolve()` and `fetch()` methods
 - [ ] Handle Docfork being open-source: support both hosted API and self-hosted URL
-- [ ] Implement `LlmsTxtProvider`: fetches `https://{library_domain}/llms.txt` or `/llms-full.txt`
-- [ ] `LlmsTxtProvider.resolve()`: map library name to known domain (e.g., "fastapi" -> "fastapi.tiangolo.com")
-- [ ] Maintain a mapping of popular library names to their llms.txt URLs
+- [x] Implement `LlmsTxtProvider`: fetches `https://{library_domain}/llms.txt` or `/llms-full.txt`
+- [x] `LlmsTxtProvider.resolve()`: map library name to known domain (e.g., "fastapi" -> "fastapi.tiangolo.com")
+- [x] Maintain a mapping of popular library names to their llms.txt URLs
 - [ ] Parse llms.txt Markdown format: extract relevant sections based on topic
 - [ ] RAG safety check on all fetched content
 
@@ -185,7 +185,7 @@ Implement Docfork (open-source, 9,000+ libraries) and llms.txt (zero-dependency 
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Partial (Context7 + LlmsTxt wired)
 
 Wire the provider chain into `LookupEngine` with automatic fallback, circuit breaking, and metrics.
 
@@ -194,9 +194,9 @@ Wire the provider chain into `LookupEngine` with automatic fallback, circuit bre
 - `src/tapps_mcp/knowledge/providers/__init__.py` (NEW)
 
 **Tasks:**
-- [ ] Refactor `LookupEngine` to iterate providers in priority order
-- [ ] Cache check first (shared across all providers)
-- [ ] On cache miss: try providers in order until one succeeds
+- [x] Refactor `LookupEngine` to iterate providers in priority order
+- [x] Cache check first (shared across all providers)
+- [x] On cache miss: try providers in order until one succeeds (Context7 then LlmsTxt)
 - [ ] Circuit breaker per provider: open after 3 consecutive failures, half-open after 60s
 - [ ] Rate limit detection: 429 status triggers immediate fallback (don't wait for timeout)
 - [ ] Metrics per provider: track success_count, failure_count, avg_latency, total_tokens

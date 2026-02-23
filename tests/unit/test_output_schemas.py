@@ -770,6 +770,10 @@ class TestRegistry:
             "tapps_impact_analysis",
             "tapps_consult_expert",
             "tapps_checklist",
+            "tapps_dependency_scan",
+            "tapps_research",
+            "tapps_project_profile",
+            "tapps_session_start",
         }
         assert set(OUTPUT_SCHEMA_REGISTRY.keys()) == expected
 
