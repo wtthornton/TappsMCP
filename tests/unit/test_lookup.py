@@ -103,6 +103,41 @@ class TestLookupCacheMiss:
         assert cached is not None
         assert "Cached after fetch" in cached.content
 
+    @pytest.mark.asyncio
+    async def test_cache_stores_provider_source(self, cache):
+        """When content comes from a provider, cache entry has provider_source."""
+        from unittest.mock import MagicMock
+
+        from pydantic import SecretStr
+
+        from tapps_mcp.knowledge.providers.base import DocumentationProvider
+        from tapps_mcp.knowledge.providers.registry import ProviderRegistry
+
+        class MockProvider(DocumentationProvider):
+            def name(self) -> str:
+                return "mock_provider"
+
+            def is_available(self) -> bool:
+                return True
+
+            async def resolve(self, library: str) -> str | None:
+                return f"{library}-id"
+
+            async def fetch(self, library_id: str, topic: str = "overview") -> str | None:
+                return "# Docs from mock_provider"
+
+        registry = ProviderRegistry()
+        registry.register(MockProvider())
+        engine = LookupEngine(cache, api_key=None, registry=registry)
+        result = await engine.lookup("fastapi")
+        await engine.close()
+
+        assert result.success is True
+        assert result.source == "mock_provider"
+        cached = cache.get("fastapi", "overview")
+        assert cached is not None
+        assert cached.provider_source == "mock_provider"
+
 
 class TestLookupFuzzyMatch:
     @pytest.mark.asyncio

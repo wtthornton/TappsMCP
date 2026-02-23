@@ -12,6 +12,10 @@ class CacheEntry(BaseModel):
     topic: str = Field(default="overview", description="Topic within the library.")
     content: str = Field(default="", description="Documentation content (markdown).")
     context7_id: str | None = Field(default=None, description="Context7 library ID.")
+    provider_source: str | None = Field(
+        default=None,
+        description="Provider that populated the cache (e.g. context7, deepcon).",
+    )
     snippet_count: int = Field(default=0, description="Number of code snippets.")
     token_count: int = Field(default=0, description="Estimated token count.")
     cached_at: str | None = Field(default=None, description="ISO timestamp of cache write.")

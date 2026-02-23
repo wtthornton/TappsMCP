@@ -433,7 +433,7 @@ async def tapps_lookup_docs(
 
     settings = load_settings()
     cache = KBCache(settings.project_root / ".tapps-mcp-cache")
-    engine = LookupEngine(cache, api_key=settings.context7_api_key)
+    engine = LookupEngine(cache, settings=settings)
 
     try:
         result = await engine.lookup(library, topic, mode=mode)

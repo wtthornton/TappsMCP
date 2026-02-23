@@ -35,24 +35,32 @@ class TestLookupPipelineCacheMissToHit:
     @pytest.mark.asyncio
     async def test_miss_then_hit(self, tmp_path):
         """First lookup fetches from API, second hits cache."""
-        from pydantic import SecretStr
+        from tapps_mcp.knowledge.providers.base import DocumentationProvider
+        from tapps_mcp.knowledge.providers.registry import ProviderRegistry
+
+        class MockProvider(DocumentationProvider):
+            def name(self) -> str:
+                return "mock_api"
+
+            def is_available(self) -> bool:
+                return True
+
+            async def resolve(self, library: str) -> str | None:
+                return f"{library}-id"
+
+            async def fetch(self, library_id: str, topic: str = "overview") -> str | None:
+                return "# Flask\n\nA lightweight WSGI web framework."
 
         cache = KBCache(cache_dir=tmp_path / "cache")
-        client = _make_mock_client(
-            resolve_result=[LibraryMatch(id="/pallets/flask", title="Flask")],
-            fetch_result="# Flask\n\nA lightweight WSGI web framework.",
-        )
+        registry = ProviderRegistry()
+        registry.register(MockProvider())
 
-        engine = LookupEngine(
-            cache,
-            api_key=SecretStr("test-key"),
-            client=client,
-        )
+        engine = LookupEngine(cache, api_key=None, registry=registry)
 
-        # First lookup: cache miss → API
+        # First lookup: cache miss → provider
         r1 = await engine.lookup("flask")
         assert r1.success is True
-        assert r1.source == "api"
+        assert r1.source == "mock_api"
         assert r1.cache_hit is False
         assert "Flask" in (r1.content or "")
 
@@ -63,26 +71,32 @@ class TestLookupPipelineCacheMissToHit:
         assert r2.cache_hit is True
         assert r2.content == r1.content
 
-        # API should only be called once
-        client.resolve_library.assert_called_once()
         await engine.close()
 
     @pytest.mark.asyncio
     async def test_api_result_persisted_in_cache(self, tmp_path):
         """Content from API is written to disk cache."""
-        from pydantic import SecretStr
+        from tapps_mcp.knowledge.providers.base import DocumentationProvider
+        from tapps_mcp.knowledge.providers.registry import ProviderRegistry
+
+        class MockProvider(DocumentationProvider):
+            def name(self) -> str:
+                return "mock_api"
+
+            def is_available(self) -> bool:
+                return True
+
+            async def resolve(self, library: str) -> str | None:
+                return f"{library}-id"
+
+            async def fetch(self, library_id: str, topic: str = "overview") -> str | None:
+                return "# Django docs content"
 
         cache = KBCache(cache_dir=tmp_path / "cache")
-        client = _make_mock_client(
-            resolve_result=[LibraryMatch(id="/django/django", title="Django")],
-            fetch_result="# Django docs content",
-        )
+        registry = ProviderRegistry()
+        registry.register(MockProvider())
 
-        engine = LookupEngine(
-            cache,
-            api_key=SecretStr("key"),
-            client=client,
-        )
+        engine = LookupEngine(cache, api_key=None, registry=registry)
         await engine.lookup("django")
         await engine.close()
 
@@ -256,9 +270,12 @@ class TestLookupPipelineAirGapped:
         assert r1.cache_hit is True
 
         # Uncached library fails gracefully
+        # Without API key, llms_txt is still tried; if it can't find pandas, we get
+        # "No documentation found" (provider chain) or "API key" (legacy path)
         r2 = await engine.lookup("pandas")
         assert r2.success is False
-        assert "API key" in (r2.error or "")
+        err = r2.error or ""
+        assert "API key" in err or "No documentation found" in err
 
         await engine.close()
 

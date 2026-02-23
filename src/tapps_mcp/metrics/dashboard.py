@@ -70,6 +70,7 @@ class DashboardGenerator:
             "scoring_trends",
             "expert_metrics",
             "cache_metrics",
+            "provider_stats",
             "quality_distribution",
             "coverage_metrics",
             "alerts",
@@ -85,6 +86,7 @@ class DashboardGenerator:
             "scoring_trends": self._build_scoring_trends,
             "expert_metrics": self._build_expert_metrics,
             "cache_metrics": self._build_cache_metrics,
+            "provider_stats": self._build_provider_stats,
             "quality_distribution": self._build_quality_distribution,
             "coverage_metrics": self._build_coverage_metrics,
             "alerts": self._build_alerts,
@@ -141,6 +143,19 @@ class DashboardGenerator:
                         continue
                     severity = str(alert.get("severity", "info")).upper()
                     lines.append(f"- [{severity}] {alert.get('message', '')}")
+                lines.append("")
+
+        # Provider stats
+        if "provider_stats" in json_data:
+            prov = json_data["provider_stats"]
+            if prov and isinstance(prov, dict):
+                lines.append("## Documentation Provider Stats")
+                for name, s in sorted(prov.items()):
+                    if isinstance(s, dict):
+                        calls = s.get("total_calls", 0)
+                        ok = s.get("total_successes", 0)
+                        healthy = s.get("is_healthy", True)
+                        lines.append(f"- **{name}**: calls={calls}, successes={ok}, healthy={healthy}")
                 lines.append("")
 
         # Coverage metrics
@@ -261,6 +276,15 @@ class DashboardGenerator:
             "avg_latency_ms": rag_metrics.avg_latency_ms,
             "by_domain": rag_metrics.by_domain,
         }
+
+    def _build_provider_stats(self) -> dict[str, dict[str, object]]:
+        """Per-provider stats from the documentation provider registry."""
+        from tapps_mcp.config.settings import load_settings
+        from tapps_mcp.knowledge.lookup import _build_provider_registry
+
+        settings = load_settings()
+        registry = _build_provider_registry(settings=settings)
+        return registry.get_stats()
 
     @staticmethod
     def _normalize_file_path(file_path: str, project_root: Path | None) -> str:

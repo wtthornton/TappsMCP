@@ -190,6 +190,13 @@ def tapps_stats(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_stats", start)
 
+    from tapps_mcp.config.settings import load_settings
+    from tapps_mcp.knowledge.lookup import _build_provider_registry
+
+    settings = load_settings()
+    registry = _build_provider_registry(settings=settings)
+    provider_stats = registry.get_stats()
+
     resp = success_response(
         "tapps_stats",
         elapsed_ms,
@@ -202,6 +209,7 @@ def tapps_stats(
             "gate_pass_rate": summary.gate_pass_rate,
             "avg_score": summary.avg_score,
             "tools": tool_breakdowns,
+            "provider_stats": provider_stats,
         },
     )
     return _with_nudges("tapps_stats", resp)
@@ -308,7 +316,7 @@ async def tapps_research(
 
             settings = load_settings()
             cache = KBCache(settings.project_root / ".tapps-mcp-cache")
-            engine = LookupEngine(cache, api_key=settings.context7_api_key)
+            engine = LookupEngine(cache, settings=settings)
             try:
                 lr = await engine.lookup(
                     library=lookup_library,

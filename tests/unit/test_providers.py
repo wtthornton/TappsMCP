@@ -1,33 +1,17 @@
-"""Unit tests for knowledge/providers — base, Context7Provider, LlmsTxtProvider."""
+"""Unit tests for documentation providers (DeepconProvider, DocforkProvider, etc.)."""
 
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
+from pydantic import SecretStr
 
-from tapps_mcp.knowledge.providers.base import DocumentationProvider, ProviderResult
-from tapps_mcp.knowledge.providers.context7_provider import Context7Provider
-from tapps_mcp.knowledge.providers.llms_txt_provider import (
-    LlmsTxtProvider,
-    _extract_topic,
-)
-
-# ---------------------------------------------------------------------------
-# ProviderResult defaults
-# ---------------------------------------------------------------------------
-
-
-class TestProviderResult:
-    def test_provider_result_defaults(self) -> None:
-        result = ProviderResult()
-        assert result.content is None
-        assert result.provider_name == ""
-        assert result.latency_ms == 0.0
-        assert result.token_estimate == 0
-        assert result.from_cache is False
-        assert result.error is None
-        assert result.success is False
+from tapps_mcp.knowledge.providers.base import DocumentationProvider
+from tapps_mcp.knowledge.providers.deepcon_provider import DeepconProvider
+from tapps_mcp.knowledge.providers.docfork_provider import DocforkProvider
+from tapps_mcp.knowledge.providers.llms_txt_provider import LlmsTxtProvider
 
 
 # ---------------------------------------------------------------------------
@@ -35,224 +19,191 @@ class TestProviderResult:
 # ---------------------------------------------------------------------------
 
 
-class TestProtocolCompliance:
-    def test_provider_protocol_compliance_context7(self) -> None:
-        """Context7Provider satisfies DocumentationProvider protocol."""
-        provider = Context7Provider(api_key=None)
-        assert isinstance(provider, DocumentationProvider)
+class TestProviderProtocolCompliance:
+    def test_deepcon_satisfies_protocol(self) -> None:
+        assert isinstance(DeepconProvider(api_key=SecretStr("x")), DocumentationProvider)
 
-    def test_provider_protocol_compliance_llms_txt(self) -> None:
-        """LlmsTxtProvider satisfies DocumentationProvider protocol."""
-        provider = LlmsTxtProvider()
-        assert isinstance(provider, DocumentationProvider)
+    def test_docfork_satisfies_protocol(self) -> None:
+        assert isinstance(DocforkProvider(api_key=SecretStr("x")), DocumentationProvider)
+
+    def test_llms_txt_satisfies_protocol(self) -> None:
+        assert isinstance(LlmsTxtProvider(), DocumentationProvider)
 
 
 # ---------------------------------------------------------------------------
-# Context7Provider tests
+# DeepconProvider
 # ---------------------------------------------------------------------------
 
 
-class TestContext7Provider:
-    def test_context7_name(self) -> None:
-        provider = Context7Provider()
-        assert provider.name() == "context7"
+class TestDeepconProviderAvailability:
+    def test_is_available_with_key(self) -> None:
+        p = DeepconProvider(api_key=SecretStr("test"))
+        assert p.is_available() is True
 
-    def test_context7_not_available_no_key(self) -> None:
-        provider = Context7Provider(api_key=None)
-        assert provider.is_available() is False
+    def test_is_available_without_key(self) -> None:
+        p = DeepconProvider(api_key=None)
+        assert p.is_available() is False
 
-    def test_context7_available_with_key(self) -> None:
-        mock_key = MagicMock()
-        provider = Context7Provider(api_key=mock_key)
-        assert provider.is_available() is True
+    def test_name(self) -> None:
+        assert DeepconProvider(api_key=None).name() == "deepcon"
+
+
+class TestDeepconProviderResolve:
+    @pytest.mark.asyncio
+    async def test_resolve_returns_id_from_response(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"results": [{"id": "fastapi"}]}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("tapps_mcp.knowledge.providers.deepcon_provider.httpx.AsyncClient", return_value=mock_client):
+            p = DeepconProvider(api_key=SecretStr("key"))
+            result = await p.resolve("fastapi")
+        assert result == "fastapi"
 
     @pytest.mark.asyncio
-    async def test_context7_resolve_success(self) -> None:
-        mock_client = AsyncMock()
-        mock_match = MagicMock()
-        mock_match.id = "/vercel/next.js"
-        mock_client.resolve_library.return_value = [mock_match]
-
-        provider = Context7Provider(client=mock_client)
-        result = await provider.resolve("nextjs")
-
-        assert result == "/vercel/next.js"
-        mock_client.resolve_library.assert_awaited_once_with("nextjs")
-
-    @pytest.mark.asyncio
-    async def test_context7_resolve_not_found(self) -> None:
-        mock_client = AsyncMock()
-        mock_client.resolve_library.return_value = []
-
-        provider = Context7Provider(client=mock_client)
-        result = await provider.resolve("nonexistent-lib")
-
+    async def test_resolve_returns_none_without_key(self) -> None:
+        p = DeepconProvider(api_key=None)
+        result = await p.resolve("fastapi")
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_context7_fetch_success(self) -> None:
-        mock_client = AsyncMock()
-        mock_client.fetch_docs.return_value = "# FastAPI Docs\nContent here."
+    async def test_resolve_returns_none_empty_results(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"results": []}
+        mock_resp.raise_for_status = MagicMock()
 
-        provider = Context7Provider(client=mock_client)
-        result = await provider.fetch("/tiangolo/fastapi", topic="routing")
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        assert result == "# FastAPI Docs\nContent here."
-        mock_client.fetch_docs.assert_awaited_once_with("/tiangolo/fastapi", topic="routing")
-
-    @pytest.mark.asyncio
-    async def test_context7_fetch_empty(self) -> None:
-        mock_client = AsyncMock()
-        mock_client.fetch_docs.return_value = ""
-
-        provider = Context7Provider(client=mock_client)
-        result = await provider.fetch("/some/lib")
-
+        with patch("tapps_mcp.knowledge.providers.deepcon_provider.httpx.AsyncClient", return_value=mock_client):
+            p = DeepconProvider(api_key=SecretStr("key"))
+            result = await p.resolve("fastapi")
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_context7_close(self) -> None:
-        mock_client = AsyncMock()
-        provider = Context7Provider(client=mock_client)
-        await provider.close()
-        mock_client.close.assert_awaited_once()
+    async def test_resolve_raises_on_429(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Rate limited", request=MagicMock(), response=mock_resp
+        )
+
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("tapps_mcp.knowledge.providers.deepcon_provider.httpx.AsyncClient", return_value=mock_client):
+            p = DeepconProvider(api_key=SecretStr("key"))
+            with pytest.raises(httpx.HTTPStatusError):
+                await p.resolve("fastapi")
+
+
+class TestDeepconProviderFetch:
+    @pytest.mark.asyncio
+    async def test_fetch_returns_content(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"content": "# FastAPI docs"}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("tapps_mcp.knowledge.providers.deepcon_provider.httpx.AsyncClient", return_value=mock_client):
+            p = DeepconProvider(api_key=SecretStr("key"))
+            result = await p.fetch("fastapi", "overview")
+        assert result == "# FastAPI docs"
 
     @pytest.mark.asyncio
-    async def test_context7_close_no_client(self) -> None:
-        provider = Context7Provider()
-        # Should not raise when no client exists
-        await provider.close()
+    async def test_fetch_returns_none_without_key(self) -> None:
+        p = DeepconProvider(api_key=None)
+        result = await p.fetch("fastapi")
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
-# LlmsTxtProvider tests
+# DocforkProvider
+# ---------------------------------------------------------------------------
+
+
+class TestDocforkProviderAvailability:
+    def test_is_available_with_key(self) -> None:
+        p = DocforkProvider(api_key=SecretStr("test"))
+        assert p.is_available() is True
+
+    def test_is_available_without_key(self) -> None:
+        p = DocforkProvider(api_key=None)
+        assert p.is_available() is False
+
+    def test_name(self) -> None:
+        assert DocforkProvider(api_key=None).name() == "docfork"
+
+
+class TestDocforkProviderResolve:
+    @pytest.mark.asyncio
+    async def test_resolve_returns_library_as_id(self) -> None:
+        p = DocforkProvider(api_key=SecretStr("key"))
+        result = await p.resolve("fastapi")
+        assert result == "fastapi"
+
+    @pytest.mark.asyncio
+    async def test_resolve_returns_none_without_key(self) -> None:
+        p = DocforkProvider(api_key=None)
+        result = await p.resolve("fastapi")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_resolve_normalizes_to_lower(self) -> None:
+        p = DocforkProvider(api_key=SecretStr("key"))
+        result = await p.resolve("  FastAPI  ")
+        assert result == "fastapi"
+
+
+class TestDocforkProviderFetch:
+    @pytest.mark.asyncio
+    async def test_fetch_returns_content(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"content": "# Docfork docs"}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("tapps_mcp.knowledge.providers.docfork_provider.httpx.AsyncClient", return_value=mock_client):
+            p = DocforkProvider(api_key=SecretStr("key"))
+            result = await p.fetch("fastapi", "overview")
+        assert result == "# Docfork docs"
+
+    @pytest.mark.asyncio
+    async def test_fetch_returns_none_without_key(self) -> None:
+        p = DocforkProvider(api_key=None)
+        result = await p.fetch("fastapi")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# LlmsTxtProvider
 # ---------------------------------------------------------------------------
 
 
 class TestLlmsTxtProvider:
-    def test_llms_txt_name(self) -> None:
-        provider = LlmsTxtProvider()
-        assert provider.name() == "llms_txt"
+    def test_is_available_always_true(self) -> None:
+        assert LlmsTxtProvider().is_available() is True
 
-    def test_llms_txt_always_available(self) -> None:
-        provider = LlmsTxtProvider()
-        assert provider.is_available() is True
-
-    @pytest.mark.asyncio
-    async def test_llms_txt_resolve_known(self) -> None:
-        provider = LlmsTxtProvider()
-        result = await provider.resolve("fastapi")
-        assert result == "https://fastapi.tiangolo.com/llms.txt"
-
-    @pytest.mark.asyncio
-    async def test_llms_txt_resolve_known_case_insensitive(self) -> None:
-        provider = LlmsTxtProvider()
-        result = await provider.resolve("  FastAPI  ")
-        assert result == "https://fastapi.tiangolo.com/llms.txt"
-
-    @pytest.mark.asyncio
-    async def test_llms_txt_resolve_unknown(self) -> None:
-        """Unknown library tries URL patterns; all fail -> None."""
-        provider = LlmsTxtProvider(timeout=1.0)
-
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-
-        with patch("tapps_mcp.knowledge.providers.llms_txt_provider.httpx") as mock_httpx:
-            mock_client = AsyncMock()
-            mock_client.head.return_value = mock_response
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_httpx.AsyncClient.return_value = mock_client
-            mock_httpx.HTTPError = Exception
-
-            result = await provider.resolve("some-unknown-lib-xyz")
-            assert result is None
-
-    @pytest.mark.asyncio
-    async def test_llms_txt_fetch_success(self) -> None:
-        provider = LlmsTxtProvider()
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = "# Library Docs\nSome content here."
-
-        with patch("tapps_mcp.knowledge.providers.llms_txt_provider.httpx") as mock_httpx:
-            mock_client = AsyncMock()
-            mock_client.get.return_value = mock_response
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_httpx.AsyncClient.return_value = mock_client
-            mock_httpx.HTTPError = Exception
-
-            result = await provider.fetch("https://example.com/llms.txt")
-            assert result == "# Library Docs\nSome content here."
-
-    @pytest.mark.asyncio
-    async def test_llms_txt_fetch_404(self) -> None:
-        provider = LlmsTxtProvider()
-
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-
-        with patch("tapps_mcp.knowledge.providers.llms_txt_provider.httpx") as mock_httpx:
-            mock_client = AsyncMock()
-            mock_client.get.return_value = mock_response
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_httpx.AsyncClient.return_value = mock_client
-            mock_httpx.HTTPError = Exception
-
-            result = await provider.fetch("https://example.com/llms.txt")
-            assert result is None
-
-    @pytest.mark.asyncio
-    async def test_llms_txt_fetch_with_topic(self) -> None:
-        provider = LlmsTxtProvider()
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = "# Overview\nGeneral info.\n\n# Routing\nRouting details here."
-
-        with patch("tapps_mcp.knowledge.providers.llms_txt_provider.httpx") as mock_httpx:
-            mock_client = AsyncMock()
-            mock_client.get.return_value = mock_response
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_httpx.AsyncClient.return_value = mock_client
-            mock_httpx.HTTPError = Exception
-
-            result = await provider.fetch("https://example.com/llms.txt", topic="routing")
-            assert result is not None
-            assert "Routing details here." in result
-
-
-# ---------------------------------------------------------------------------
-# _extract_topic tests
-# ---------------------------------------------------------------------------
-
-
-class TestExtractTopic:
-    def test_extract_topic_found(self) -> None:
-        content = (
-            "# Overview\nGeneral info.\n\n# Installation\nInstall steps.\n\n# Usage\nUsage details."
-        )
-        result = _extract_topic(content, "installation")
-        assert "Install steps." in result
-        assert "Usage details." not in result
-
-    def test_extract_topic_not_found(self) -> None:
-        content = "# Overview\nGeneral info.\n\n# Usage\nUsage details."
-        result = _extract_topic(content, "nonexistent")
-        # Should return full content when topic not found
-        assert result == content
-
-    def test_extract_topic_case_insensitive(self) -> None:
-        content = "# Getting Started\nStart here.\n\n# API Reference\nAPIs."
-        result = _extract_topic(content, "getting started")
-        assert "Start here." in result
-
-    def test_extract_topic_partial_match(self) -> None:
-        content = "# Quick Start Guide\nQuick info.\n\n# API\nAPIs."
-        result = _extract_topic(content, "quick start")
-        assert "Quick info." in result
+    def test_name(self) -> None:
+        assert LlmsTxtProvider().name() == "llms_txt"

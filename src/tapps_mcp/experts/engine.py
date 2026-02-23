@@ -98,7 +98,7 @@ def _lookup_docs_sync(library: str, topic: str) -> tuple[bool, str | None]:
         cache = KBCache(settings.project_root / ".tapps-mcp-cache")
 
         async def _run() -> tuple[bool, str | None]:
-            engine = LookupEngine(cache, api_key=settings.context7_api_key)
+            engine = LookupEngine(cache, settings=settings)
             try:
                 result = await engine.lookup(library=library, topic=topic, mode="code")
             finally:

@@ -256,3 +256,44 @@ class TestProviderRegistry:
         # Modifying the returned list should not affect the registry
         providers.clear()
         assert len(registry.providers) == 1
+
+
+# ---------------------------------------------------------------------------
+# _build_provider_registry
+# ---------------------------------------------------------------------------
+
+
+class TestBuildProviderRegistry:
+    def test_registry_order_with_settings(self) -> None:
+        """Registry registers Deepcon, Context7, Docfork, LlmsTxt in correct order."""
+        from unittest.mock import MagicMock
+
+        from tapps_mcp.knowledge.lookup import _build_provider_registry
+
+        settings = MagicMock()
+        settings.deepcon_api_key = None
+        settings.context7_api_key = MagicMock()  # Has key
+        settings.docfork_api_key = None
+
+        registry = _build_provider_registry(settings=settings)
+        names = [p.name() for p in registry.providers]
+        assert names == ["context7", "llms_txt"]
+        assert "deepcon" not in names
+        assert "docfork" not in names
+
+    def test_registry_includes_all_when_keys_set(self) -> None:
+        """When all API keys are set, all providers are registered."""
+        from unittest.mock import MagicMock
+
+        from pydantic import SecretStr
+
+        from tapps_mcp.knowledge.lookup import _build_provider_registry
+
+        settings = MagicMock()
+        settings.deepcon_api_key = SecretStr("d")
+        settings.context7_api_key = SecretStr("c")
+        settings.docfork_api_key = SecretStr("f")
+
+        registry = _build_provider_registry(settings=settings)
+        names = [p.name() for p in registry.providers]
+        assert names == ["deepcon", "context7", "docfork", "llms_txt"]

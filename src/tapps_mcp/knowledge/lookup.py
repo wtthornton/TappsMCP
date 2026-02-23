@@ -34,21 +34,36 @@ from tapps_mcp.knowledge.rag_safety import check_content_safety
 if TYPE_CHECKING:
     from pydantic import SecretStr
 
+    from tapps_mcp.config.settings import TappsMCPSettings
     from tapps_mcp.knowledge.cache import KBCache
     from tapps_mcp.knowledge.providers.registry import ProviderRegistry
 
 logger = structlog.get_logger(__name__)
 
 
-def _build_provider_registry(api_key: "SecretStr | None") -> "ProviderRegistry":
-    """Build provider registry with Context7 (if key) + llms.txt fallback."""
+def _build_provider_registry(
+    api_key: "SecretStr | None" = None,
+    *,
+    settings: "TappsMCPSettings | None" = None,
+) -> "ProviderRegistry":
+    """Build provider registry: Deepcon (if key), Context7 (if key), Docfork (if key), LlmsTxt (always)."""
     from tapps_mcp.knowledge.providers.context7_provider import Context7Provider
+    from tapps_mcp.knowledge.providers.deepcon_provider import DeepconProvider
+    from tapps_mcp.knowledge.providers.docfork_provider import DocforkProvider
     from tapps_mcp.knowledge.providers.llms_txt_provider import LlmsTxtProvider
     from tapps_mcp.knowledge.providers.registry import ProviderRegistry
 
     registry: ProviderRegistry = ProviderRegistry()
-    if api_key is not None:
-        registry.register(Context7Provider(api_key=api_key))
+    deepcon_key = settings.deepcon_api_key if settings else None
+    context7_key = settings.context7_api_key if settings else api_key
+    docfork_key = settings.docfork_api_key if settings else None
+
+    if deepcon_key is not None:
+        registry.register(DeepconProvider(api_key=deepcon_key))
+    if context7_key is not None:
+        registry.register(Context7Provider(api_key=context7_key))
+    if docfork_key is not None:
+        registry.register(DocforkProvider(api_key=docfork_key))
     registry.register(LlmsTxtProvider())
     return registry
 
@@ -71,12 +86,15 @@ class LookupEngine:
         circuit_breaker: CircuitBreaker | None = None,
         client: Context7Client | None = None,
         registry: "ProviderRegistry | None" = None,
+        settings: "TappsMCPSettings | None" = None,
     ) -> None:
         self._cache = cache
-        self._api_key = api_key
+        self._api_key = api_key if settings is None else settings.context7_api_key
         self._breaker = circuit_breaker or get_context7_circuit_breaker()
-        self._client = client or Context7Client(api_key=api_key)
-        self._registry = registry or _build_provider_registry(api_key)
+        self._client = client or Context7Client(api_key=self._api_key)
+        self._registry = registry or (
+            _build_provider_registry(settings=settings) if settings else _build_provider_registry(api_key=api_key)
+        )
         self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def close(self) -> None:
@@ -266,6 +284,7 @@ class LookupEngine:
                 topic=topic,
                 content=safe_content,
                 token_count=len(safe_content) // 4,  # rough estimate
+                provider_source=provider_source,
             )
         )
 
