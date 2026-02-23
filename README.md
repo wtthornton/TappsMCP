@@ -43,7 +43,11 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 - **Code scoring** — 0–100 score across 7 categories (complexity, security, maintainability, test coverage, performance, structure, developer experience).
 - **Security scanning** — Bandit + secret detection with redacted context.
 - **Quality gates** — Pass/fail against configurable presets (standard, strict, framework).
-- **Documentation lookup** — Up-to-date library docs via [Context7](https://context7.com) with fuzzy matching and local cache.
+- **Dead code detection** — Vulture-based detection of unused functions, classes, imports, and variables with confidence scoring, integrated into maintainability/structure scores.
+- **Dependency vulnerability scanning** — pip-audit integration for known CVEs in third-party packages with severity filtering.
+- **Circular dependency detection** — AST-based import graph, cycle detection, and coupling metrics (Ca/Ce/instability).
+- **Structured outputs** — Machine-parseable JSON (`structuredContent`) alongside human-readable text for all scoring tools (MCP 2025-11-25).
+- **Documentation lookup** — Up-to-date library docs via [Context7](https://context7.com) with multi-provider fallback (llms.txt), fuzzy matching, and local cache.
 - **Config validation** — Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB patterns against best practices.
 - **Domain experts** — 16 built-in experts (security, testing, APIs, etc.) with RAG-backed answers and confidence scores.
 - **Project context** — Detect project type, tech stack, and structure for context-aware analysis.
@@ -349,6 +353,9 @@ Quick index:
 | **tapps_dashboard** | View metrics dashboard with execution stats, expert performance, and trends. |
 | **tapps_stats** | Retrieve aggregated usage statistics and quality trends across sessions. |
 | **tapps_feedback** | Submit feedback on tool results to improve adaptive scoring and expert answers. |
+| **tapps_dead_code** | Scan a Python file for unused functions, classes, imports, and variables (Vulture). |
+| **tapps_dependency_scan** | Scan project dependencies for known vulnerabilities (pip-audit). |
+| **tapps_dependency_graph** | Build import graph, detect circular imports, and calculate coupling metrics. |
 | **tapps_init** | Initialize a pipeline run: profile the project, set context, and plan the workflow. |
 | **tapps_workflow** | Generate tool call order and recommendations for a specific task type. |
 
@@ -554,6 +561,8 @@ Best results come with these tools installed; the server degrades gracefully wit
 | mypy | Type checking | `pip install mypy` or `uv add mypy` |
 | bandit | Security scanning | `pip install bandit` or `uv add bandit` |
 | radon | Complexity + maintainability | `pip install radon` or `uv add radon` |
+| vulture | Dead code detection | `pip install vulture` or `uv add vulture` |
+| pip-audit | Dependency vulnerability scanning | `pip install pip-audit` or `uv add pip-audit` |
 
 **Vector RAG (optional):** For semantic search over expert knowledge files, install the `rag` extras:
 
@@ -662,14 +671,16 @@ src/tapps_mcp/
 ├── common/                             # Exceptions, logging, shared models, nudges
 ├── config/                             # Settings, default.yaml
 ├── security/                           # Path validation, IO guardrails, secrets, governance
-├── scoring/                            # Score model, constants, scorer
+├── scoring/                            # Score model, constants, scorer, dead code, dependency security
 ├── gates/                              # Gate presets, evaluator
-├── tools/                              # Ruff, mypy, bandit, radon, parallel, checklist, batch validator
-├── knowledge/                          # Context7 client, cache, lookup, warming, RAG safety
+├── tools/                              # Ruff, mypy, bandit, radon, vulture, pip-audit, parallel, checklist
+├── knowledge/                          # Context7 client, cache, lookup, warming, RAG safety,
+│                                       #   multi-provider support (providers/)
 ├── validators/                         # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
 ├── experts/                            # Domain detector, engine, RAG, registry, confidence,
 │                                       #   vector RAG, knowledge management, 119 knowledge files
-├── project/                            # Project profiling, session notes, impact analysis, reports
+├── project/                            # Project profiling, session notes, impact analysis, reports,
+│                                       #   import graph, cycle detection, coupling metrics
 ├── adaptive/                           # Adaptive scoring, expert voting, weight distribution
 ├── metrics/                            # Collector, dashboard, alerts, trends, OTel export, feedback
 ├── prompts/                            # Workflow prompt templates and platform rule templates
@@ -715,7 +726,7 @@ scripts/
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅
 
 ---
 

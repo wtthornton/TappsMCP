@@ -18,8 +18,15 @@
 | [Epic 8](EPIC-8-PIPELINE-ORCHESTRATION.md) | Pipeline Orchestration & Workflow Prompts | P1 | ~1.5-2 weeks | Epic 0-4 | **Complete** |
 | [Epic 10+11](../TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) | Expert + Context7 Integration & Retrieval Optimization | P1 | ~2-3 weeks | Epic 2, Epic 3 | **Complete** |
 | [Epic 12](EPIC-12-PLATFORM-INTEGRATION/README.md) | Platform Integration & Feature Gaps | P1 | ~4-6 weeks | Epic 0, Epic 6, Epic 8 | **Complete** |
+| [Epic 13](EPIC-13-STRUCTURED-OUTPUTS.md) | Structured Tool Outputs (MCP 2025-11-25) | P0 | ~1-2 weeks | Epic 0, Epic 1 | Planned |
+| [Epic 14](EPIC-14-DEAD-CODE-DETECTION.md) | Dead Code Detection (Vulture) | P0 | ~2-3 weeks | Epic 0, Epic 1 | Planned |
+| [Epic 15](EPIC-15-DEPENDENCY-VULNERABILITY-SCANNING.md) | Dependency Vulnerability Scanning (pip-audit) | P0 | ~2 weeks | Epic 0, Epic 1 | Planned |
+| [Epic 16](EPIC-16-DOCUMENTATION-BACKEND-RESILIENCE.md) | Documentation Backend Resilience (Multi-Provider) | P0 | ~2-3 weeks | Epic 2 | Planned |
+| [Epic 17](EPIC-17-CIRCULAR-DEPENDENCY-DETECTION.md) | Circular Dependency Detection | P0 | ~1.5-2 weeks | Epic 0, Epic 4 | Planned |
 
-**Total estimated LOE:** ~23-30 weeks (1 developer), ~12-16 weeks (2 developers with parallelized epics)
+**Completed LOE:** ~23-30 weeks (Epics 0-12)
+**Planned LOE:** ~9-12 weeks (Epics 13-17)
+**Total estimated LOE:** ~32-42 weeks (1 developer)
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -41,7 +48,17 @@ Epic 12 (Platform Integration)       ← depends on Epic 0, Epic 6, Epic 8
   ├── Tier 2 (12.5-12.8) — Hooks, subagents, skills
   ├── Tier 3 (12.9-12.12) — Plugin bundles, rule types, teams
   └── Tier 4 (12.13-12.18) — VS Code, BugBot, elicitation, CI, marketplace
+
+--- Next Wave (Epics 13-17) ---
+
+Epic 13 (Structured Outputs)         ← depends on Epic 0, Epic 1
+Epic 14 (Dead Code Detection)        ← depends on Epic 0, Epic 1 (parallel with 13, 15)
+Epic 15 (Dependency Vulnerability)   ← depends on Epic 0, Epic 1 (parallel with 13, 14)
+Epic 16 (Doc Backend Resilience)     ← depends on Epic 2 (parallel with 13-15, 17)
+Epic 17 (Circular Dep Detection)     ← depends on Epic 0, Epic 4 (parallel with 13-16)
 ```
+
+**Note:** Epics 13-17 are fully independent and can all be developed in parallel.
 
 **Note:** Epic 7 can start partially after Epic 1 (execution metrics, tool call tracking, basic dashboard) and grow incrementally as Epic 3 and Epic 5 deliver expert metrics and adaptive learning data. Stories 7.1, 7.4, 7.5, 7.6, 7.7 can begin after Epic 1. Stories 7.3 requires Epic 3. Story 7.2 benefits from Epic 5.
 
@@ -79,6 +96,11 @@ With 2 developers:
 | `tapps_validate_changed` | Epic 8 | Week 12-14 |
 | `tapps_workflow` | Epic 8 | Week 12-14 |
 | `tapps_research` | Epic 10 | Week 20-22 |
+| Structured `outputSchema` on all tools | Epic 13 | Week 24-25 |
+| `tapps_dead_code` | Epic 14 | Week 24-27 |
+| `tapps_dependency_scan` | Epic 15 | Week 24-26 |
+| Multi-provider `tapps_lookup_docs` | Epic 16 | Week 24-27 |
+| `tapps_dependency_graph` | Epic 17 | Week 24-26 |
 
 ## Metrics Infrastructure (Epic 7 — carried from TappsCodingAgents)
 

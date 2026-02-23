@@ -112,6 +112,7 @@ class CodeScorer:
             str_path,
             cwd=cwd,
             timeout=timeout,
+            run_vulture=self._settings.dead_code_enabled,
             mode=mode,
         )
 
@@ -126,6 +127,7 @@ class CodeScorer:
             lint_issues=parallel.lint_issues,
             type_issues=parallel.type_issues,
             security_issues=parallel.security_issues,
+            dead_code_count=len(parallel.dead_code),
             degraded=parallel.degraded,
             missing_tools=parallel.missing_tools,
             tool_errors=parallel.tool_errors,
@@ -184,7 +186,7 @@ class CodeScorer:
             suggestions=_suggest_security(sec_score, sec_details),
         )
 
-        # 3) Maintainability (radon mi -> 0-10)
+        # 3) Maintainability (radon mi -> 0-10, with dead code penalty)
         maint_details: dict[str, object] = {"mi_value": parallel.radon_mi}
         if "radon" not in parallel.missing_tools:
             maint_score = calculate_maintainability_score(parallel.radon_mi)
@@ -194,12 +196,31 @@ class CodeScorer:
         has_docstring = '"""' in code or "'''" in code
         maint_details["has_docstring"] = has_docstring
         maint_details["line_count"] = len(code.splitlines())
+
+        # Dead code penalty (from vulture findings)
+        maint_suggestions: list[str] = []
+        if parallel.dead_code:
+            from tapps_mcp.scoring.dead_code import (
+                calculate_dead_code_penalty,
+                suggest_dead_code_fixes,
+            )
+
+            dc_maint_penalty, dc_struct_penalty = calculate_dead_code_penalty(parallel.dead_code)
+            maint_score = clamp_individual(maint_score - dc_maint_penalty / 10.0)
+            maint_details["dead_code_count"] = len(parallel.dead_code)
+            maint_details["dead_code_penalty"] = round(dc_maint_penalty, 2)
+            maint_suggestions = suggest_dead_code_fixes(parallel.dead_code[:5])
+            # Store structure penalty for later use
+            self._dead_code_struct_penalty = dc_struct_penalty
+        else:
+            self._dead_code_struct_penalty = 0.0
+
         cats["maintainability"] = CategoryScore(
             name="maintainability",
             score=maint_score,
             weight=w.maintainability,
             details=maint_details,
-            suggestions=_suggest_maintainability(maint_score, maint_details),
+            suggestions=_suggest_maintainability(maint_score, maint_details) + maint_suggestions,
         )
 
         # 4) Test coverage (heuristic)
@@ -226,8 +247,10 @@ class CodeScorer:
             suggestions=_suggest_performance(perf, perf_details),
         )
 
-        # 6) Structure (project layout)
+        # 6) Structure (project layout, with dead code penalty)
         structure = self._structure_score(file_path)
+        if self._dead_code_struct_penalty > 0:
+            structure = clamp_individual(structure - self._dead_code_struct_penalty / 10.0)
         cats["structure"] = CategoryScore(
             name="structure",
             score=structure,

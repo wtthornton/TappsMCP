@@ -147,6 +147,34 @@ async def tapps_score_file(
     )
 
     resp = success_response("tapps_score_file", elapsed_ms, data, degraded=result.degraded)
+
+    # Attach structured output for programmatic consumption
+    try:
+        from tapps_mcp.common.output_schemas import CategoryScoreOutput, ScoreFileOutput
+
+        structured = ScoreFileOutput(
+            file_path=result.file_path,
+            overall_score=round(result.overall_score, 2),
+            categories={
+                name: CategoryScoreOutput(
+                    name=name,
+                    score=round(cat.score, 2),
+                    weight=cat.weight,
+                    suggestions=cat.suggestions,
+                )
+                for name, cat in result.categories.items()
+            },
+            lint_issue_count=len(result.lint_issues),
+            type_issue_count=len(result.type_issues),
+            security_issue_count=len(result.security_issues),
+            degraded=result.degraded,
+            tool_errors=result.tool_errors,
+            suggestions=all_suggestions,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        _logger.debug("structured_output_failed: tapps_score_file", exc_info=True)
+
     return _with_nudges(
         "tapps_score_file",
         resp,
@@ -236,6 +264,34 @@ async def tapps_quality_gate(
         gate_data,
         degraded=score_result.degraded,
     )
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import GateFailure, QualityGateOutput
+
+        structured = QualityGateOutput(
+            file_path=str(resolved),
+            passed=gate_result.passed,
+            preset=gate_result.preset,
+            overall_score=round(score_result.overall_score, 2),
+            threshold=gate_result.thresholds.overall_min,
+            scores={k: round(v, 2) for k, v in gate_result.scores.items()},
+            failures=[
+                GateFailure(
+                    category=f.category,
+                    actual=f.actual,
+                    threshold=f.threshold,
+                    message=f.message,
+                )
+                for f in gate_result.failures
+            ],
+            warnings=gate_result.warnings,
+            suggestions=gate_suggestions,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        _logger.debug("structured_output_failed: tapps_quality_gate", exc_info=True)
+
     return _with_nudges(
         "tapps_quality_gate",
         resp,
@@ -345,6 +401,25 @@ async def tapps_quick_check(
         data,
         degraded=not sec_result.bandit_available,
     )
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import QuickCheckOutput
+
+        structured = QuickCheckOutput(
+            file_path=str(resolved),
+            overall_score=round(score_result.overall_score, 2),
+            gate_passed=gate_result.passed,
+            gate_preset=preset,
+            security_passed=sec_result.passed,
+            lint_issue_count=len(score_result.lint_issues),
+            security_issue_count=sec_result.total_issues,
+            suggestions=suggestions,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        _logger.debug("structured_output_failed: tapps_quick_check", exc_info=True)
+
     return _with_nudges("tapps_quick_check", resp)
 
 

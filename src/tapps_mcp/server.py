@@ -244,6 +244,9 @@ def tapps_server_info() -> dict[str, Any]:
             "tapps_stats",
             "tapps_feedback",
             "tapps_research",
+            "tapps_dead_code",
+            "tapps_dependency_scan",
+            "tapps_dependency_graph",
         ]
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -821,6 +824,208 @@ async def tapps_report(
     _record_execution("tapps_report", start, file_path=file_path or None)
     resp = success_response("tapps_report", elapsed_ms, report_data)
     return _with_nudges("tapps_report", resp)
+
+
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
+async def tapps_dead_code(file_path: str, min_confidence: int = 80) -> dict[str, Any]:
+    """Scan a Python file for dead code (unused functions, classes, imports, variables).
+
+    Args:
+        file_path: Path to the Python file to scan.
+        min_confidence: Minimum confidence threshold (0-100, default 80).
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_dead_code")
+
+    try:
+        resolved = _validate_file_path(file_path)
+    except (ValueError, FileNotFoundError) as exc:
+        return error_response("tapps_dead_code", "path_denied", str(exc))
+
+    from tapps_mcp.tools.vulture import run_vulture_async
+
+    findings = await run_vulture_async(
+        str(resolved), min_confidence=min_confidence, cwd=str(resolved.parent)
+    )
+
+    # Group by type
+    by_type: dict[str, list[dict[str, Any]]] = {}
+    for f in findings:
+        by_type.setdefault(f.finding_type, []).append(
+            {
+                "name": f.name,
+                "line": f.line,
+                "confidence": f.confidence,
+                "message": f.message,
+            }
+        )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_dead_code", start, file_path=str(resolved))
+
+    type_counts = {k: len(v) for k, v in by_type.items()}
+    summary = f"Found {len(findings)} dead code items"
+    if type_counts:
+        parts = [f"{count} {typ}" for typ, count in sorted(type_counts.items())]
+        summary += f" ({', '.join(parts)})"
+
+    resp = success_response(
+        "tapps_dead_code",
+        elapsed_ms,
+        {
+            "file_path": str(resolved),
+            "total_findings": len(findings),
+            "min_confidence": min_confidence,
+            "by_type": by_type,
+            "type_counts": type_counts,
+            "summary": summary,
+        },
+    )
+    return _with_nudges("tapps_dead_code", resp)
+
+
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)
+async def tapps_dependency_scan(project_root: str = "") -> dict[str, Any]:
+    """Scan project dependencies for known vulnerabilities using pip-audit.
+
+    Args:
+        project_root: Project root path (default: server's configured root).
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_dependency_scan")
+
+    from tapps_mcp.tools.pip_audit import run_pip_audit_async
+
+    settings = load_settings()
+    root = project_root if project_root else str(settings.project_root)
+
+    result = await run_pip_audit_async(
+        project_root=root,
+        severity_threshold=settings.dependency_scan_severity_threshold,
+        ignore_ids=settings.dependency_scan_ignore_ids or None,
+    )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_dependency_scan", start)
+
+    # Group by severity
+    by_severity: dict[str, list[dict[str, str]]] = {}
+    for f in result.findings:
+        by_severity.setdefault(f.severity, []).append(
+            {
+                "package": f.package,
+                "installed_version": f.installed_version,
+                "fixed_version": f.fixed_version,
+                "vulnerability_id": f.vulnerability_id,
+                "description": f.description[:200] if f.description else "",
+            }
+        )
+
+    sev_counts = {k: len(v) for k, v in by_severity.items()}
+    summary = f"Scanned {result.scanned_packages} packages: {len(result.findings)} vulnerabilities"
+    if sev_counts:
+        parts = [f"{count} {sev}" for sev, count in sorted(sev_counts.items())]
+        summary += f" ({', '.join(parts)})"
+
+    data: dict[str, Any] = {
+        "scanned_packages": result.scanned_packages,
+        "vulnerable_packages": result.vulnerable_packages,
+        "total_findings": len(result.findings),
+        "scan_source": result.scan_source,
+        "by_severity": by_severity,
+        "severity_counts": sev_counts,
+        "summary": summary,
+    }
+    if result.error:
+        data["error"] = result.error
+
+    resp = success_response("tapps_dependency_scan", elapsed_ms, data)
+    return _with_nudges("tapps_dependency_scan", resp)
+
+
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
+def tapps_dependency_graph(
+    project_root: str = "",
+    detect_cycles: bool = True,
+    include_coupling: bool = True,
+) -> dict[str, Any]:
+    """Analyze import dependencies: detect circular imports and measure coupling.
+
+    Args:
+        project_root: Project root path (default: server's configured root).
+        detect_cycles: Whether to detect circular dependency cycles.
+        include_coupling: Whether to calculate coupling metrics.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_dependency_graph")
+
+    from tapps_mcp.project.import_graph import build_import_graph
+
+    settings = load_settings()
+    root = settings.project_root
+    if project_root:
+        from pathlib import Path
+
+        root = Path(project_root).resolve()
+
+    graph = build_import_graph(root)
+    data: dict[str, Any] = {
+        "project_root": str(root),
+        "total_modules": len(graph.modules),
+        "total_edges": len(graph.edges),
+    }
+
+    if detect_cycles:
+        from tapps_mcp.project.cycle_detector import (
+            detect_cycles as _detect,
+        )
+        from tapps_mcp.project.cycle_detector import (
+            suggest_cycle_fixes,
+        )
+
+        analysis = _detect(graph)
+        data["cycles"] = {
+            "total": len(analysis.cycles),
+            "runtime_cycles": analysis.runtime_cycles,
+            "type_checking_cycles": analysis.type_checking_cycles,
+            "details": [
+                {
+                    "modules": c.modules,
+                    "length": c.length,
+                    "severity": c.severity,
+                    "description": c.description,
+                }
+                for c in analysis.cycles[:10]
+            ],
+        }
+        data["cycle_suggestions"] = suggest_cycle_fixes(analysis.cycles[:5])
+
+    if include_coupling:
+        from tapps_mcp.project.coupling_metrics import calculate_coupling, suggest_coupling_fixes
+
+        couplings = calculate_coupling(graph)
+        hubs = [c for c in couplings if c.is_hub]
+        data["coupling"] = {
+            "total_modules_analysed": len(couplings),
+            "hub_count": len(hubs),
+            "top_coupled": [
+                {
+                    "module": c.module,
+                    "afferent": c.afferent,
+                    "efferent": c.efferent,
+                    "instability": round(c.instability, 3),
+                    "is_hub": c.is_hub,
+                }
+                for c in couplings[:10]
+            ],
+        }
+        data["coupling_suggestions"] = suggest_coupling_fixes(couplings[:5])
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_dependency_graph", start)
+
+    resp = success_response("tapps_dependency_graph", elapsed_ms, data)
+    return _with_nudges("tapps_dependency_graph", resp)
 
 
 # ---------------------------------------------------------------------------

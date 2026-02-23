@@ -161,7 +161,7 @@ class TestTappsValidateChanged:
 
         with (
             patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
-            patch("tapps_mcp.server._validate_file_path", side_effect=lambda p: Path(p)),
+            patch("tapps_mcp.server._validate_file_path", side_effect=Path),
             patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
         ):
@@ -293,7 +293,7 @@ class TestTappsValidateChanged:
 
         with (
             patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
-            patch("tapps_mcp.server._validate_file_path", side_effect=lambda p: Path(p)),
+            patch("tapps_mcp.server._validate_file_path", side_effect=Path),
             patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
         ):

@@ -1,6 +1,6 @@
 """Parallel external-tool execution.
 
-Runs ruff, mypy, bandit, and radon concurrently via asyncio for the
+Runs ruff, mypy, bandit, radon, and vulture concurrently via asyncio for the
 full scoring mode.  Supports three execution modes:
 
 - ``"subprocess"`` (default) - async subprocess for all tools
@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from tapps_mcp.scoring.models import LintIssue, SecurityIssue, TypeIssue
+    from tapps_mcp.tools.vulture import DeadCodeFinding
 
 import structlog
 
@@ -24,6 +25,7 @@ from tapps_mcp.tools.bandit import run_bandit_check_async
 from tapps_mcp.tools.mypy import run_mypy_check_async
 from tapps_mcp.tools.radon import run_radon_cc_async, run_radon_mi_async
 from tapps_mcp.tools.ruff import run_ruff_check_async
+from tapps_mcp.tools.vulture import run_vulture_async
 
 logger = structlog.get_logger(__name__)
 
@@ -39,6 +41,7 @@ class ParallelResults:
     security_issues: list[SecurityIssue] = field(default_factory=list)
     radon_cc: list[dict[str, Any]] = field(default_factory=list)
     radon_mi: float = 50.0
+    dead_code: list[DeadCodeFinding] = field(default_factory=list)
     missing_tools: list[str] = field(default_factory=list)
     degraded: bool = False
     tool_errors: dict[str, str] = field(default_factory=dict)
@@ -62,6 +65,8 @@ def _assign_result(name: str, results: ParallelResults, value: object) -> None:
         results.radon_cc = value  # type: ignore[assignment]
     elif name == "radon_mi":
         results.radon_mi = value  # type: ignore[assignment]
+    elif name == "vulture":
+        results.dead_code = value  # type: ignore[assignment]
 
 
 async def run_all_tools(
@@ -73,9 +78,10 @@ async def run_all_tools(
     run_mypy: bool = True,
     run_bandit: bool = True,
     run_radon: bool = True,
+    run_vulture: bool = True,
     mode: str = "subprocess",
 ) -> ParallelResults:
-    """Run ruff, mypy, bandit, and radon concurrently.
+    """Run ruff, mypy, bandit, radon, and vulture concurrently.
 
     Args:
         file_path: Path to the Python file to analyse.
@@ -85,6 +91,7 @@ async def run_all_tools(
         run_mypy: Whether to run mypy.
         run_bandit: Whether to run bandit.
         run_radon: Whether to run radon.
+        run_vulture: Whether to run vulture (dead code detection).
         mode: Execution mode - ``"subprocess"`` (async subprocess),
             ``"direct"`` (library / sync subprocess in thread pool),
             or ``"auto"`` (subprocess with direct fallback).
@@ -105,6 +112,7 @@ async def run_all_tools(
             run_mypy=run_mypy,
             run_bandit=run_bandit,
             run_radon=run_radon,
+            run_vulture=run_vulture,
         )
 
     # "subprocess" or "auto" — start with async subprocess
@@ -116,6 +124,7 @@ async def run_all_tools(
         run_mypy=run_mypy,
         run_bandit=run_bandit,
         run_radon=run_radon,
+        run_vulture=run_vulture,
     )
 
 
@@ -133,6 +142,7 @@ async def _run_subprocess(
     run_mypy: bool = True,
     run_bandit: bool = True,
     run_radon: bool = True,
+    run_vulture: bool = True,
 ) -> ParallelResults:
     """Run tools via async subprocess (original behaviour)."""
     results = ParallelResults()
@@ -159,6 +169,13 @@ async def _run_subprocess(
         tasks["radon_mi"] = asyncio.create_task(run_radon_mi_async(file_path, **kw))
     elif run_radon:
         _mark_missing("radon", results)
+
+    # Vulture: dead code detection (optional, graceful degradation)
+    if run_vulture:
+        tasks["vulture"] = asyncio.create_task(
+            run_vulture_async(file_path, cwd=cwd, timeout=timeout)
+        )
+        # No _mark_missing for vulture — it degrades silently (returns empty list)
 
     # Gather all tasks with an overall safety timeout
     if tasks:
@@ -205,6 +222,7 @@ async def _run_direct(
     run_mypy: bool = True,
     run_bandit: bool = True,
     run_radon: bool = True,
+    run_vulture: bool = True,
 ) -> ParallelResults:
     """Run tools via direct library calls and sync subprocess in thread pool.
 
@@ -262,6 +280,12 @@ async def _run_direct(
             results.tool_errors["radon"] = "library_unavailable, using subprocess fallback"
         else:
             _mark_missing("radon", results)
+
+    # Vulture: dead code detection (optional, graceful degradation)
+    if run_vulture:
+        tasks["vulture"] = asyncio.create_task(
+            run_vulture_async(file_path, cwd=cwd, timeout=timeout)
+        )
 
     # Gather with safety timeout
     if tasks:

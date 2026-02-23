@@ -63,6 +63,10 @@ class ScoreResult(BaseModel):
     security_issues: list[SecurityIssue] = Field(
         default_factory=list, description="Bandit / heuristic findings."
     )
+    dead_code_count: int = Field(default=0, description="Number of dead code findings.")
+    dependency_vuln_count: int = Field(
+        default=0, description="Number of dependency vulnerability findings."
+    )
     degraded: bool = Field(default=False, description="True if some tools were unavailable.")
     missing_tools: list[str] = Field(
         default_factory=list, description="Names of unavailable external tools."

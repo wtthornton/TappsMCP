@@ -29,6 +29,16 @@ _TOOL_SPECS: list[dict[str, str]] = [
         "version_flag": "--version",
         "install_hint": "pip install radon",
     },
+    {
+        "name": "vulture",
+        "version_flag": "--version",
+        "install_hint": "pip install vulture",
+    },
+    {
+        "name": "pip-audit",
+        "version_flag": "--version",
+        "install_hint": "pip install pip-audit",
+    },
 ]
 
 

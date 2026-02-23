@@ -128,6 +128,32 @@ class TappsMCPSettings(BaseSettings):
         description="Timeout for individual external tool invocations (seconds).",
     )
 
+    # Dead code detection
+    dead_code_enabled: bool = Field(
+        default=True,
+        description="Enable dead code detection via vulture in scoring.",
+    )
+    dead_code_min_confidence: int = Field(
+        default=80,
+        ge=0,
+        le=100,
+        description="Minimum confidence threshold for dead code findings (0-100).",
+    )
+
+    # Dependency vulnerability scanning
+    dependency_scan_enabled: bool = Field(
+        default=True,
+        description="Enable dependency vulnerability scanning via pip-audit.",
+    )
+    dependency_scan_severity_threshold: str = Field(
+        default="medium",
+        description="Minimum severity to include: critical, high, medium, low, unknown.",
+    )
+    dependency_scan_ignore_ids: list[str] = Field(
+        default_factory=list,
+        description="Vulnerability IDs to exclude (e.g. CVE-2024-12345).",
+    )
+
     # Expert/doc coupling
     expert_auto_fallback: bool = Field(
         default=True,

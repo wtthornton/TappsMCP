@@ -353,4 +353,5 @@ class TestDirectMode:
                 run_mypy=False,
                 run_bandit=False,
                 run_radon=True,
+                run_vulture=True,
             )

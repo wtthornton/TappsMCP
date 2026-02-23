@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (Performance - 2026-02-23)
+
+- **tapps_validate_changed parallel file processing** - files are now scored concurrently via `asyncio.gather` with a semaphore (max 5 concurrent), replacing the sequential loop. Expected ~4-5x speedup on multi-file changesets.
+- **tapps_validate_changed bandit deduplication** - eliminated redundant `run_security_scan()` call that re-ran bandit per file. Bandit results from `scorer.score_file()` are now reused; only `SecretScanner` runs separately for secret detection.
+
 ### Added (Init/Upgrade/Permissions - 2026-02-23)
 
 - **`tapps-mcp upgrade` CLI command** - validates and updates all generated files (AGENTS.md, platform rules, hooks, agents, skills, `.claude/settings.json`) after upgrading TappsMCP.

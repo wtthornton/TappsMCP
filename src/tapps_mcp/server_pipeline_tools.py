@@ -133,9 +133,7 @@ async def tapps_validate_changed(
                     secret_count = secret_result.total_findings
 
                     bandit_crit_high = sum(
-                        1
-                        for i in score.security_issues
-                        if i.severity in ("critical", "high")
+                        1 for i in score.security_issues if i.severity in ("critical", "high")
                     )
                     file_result["security_passed"] = (
                         bandit_crit_high + secret_result.high_severity

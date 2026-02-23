@@ -6,12 +6,15 @@ When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor
 
 ## What TappsMCP is
 
-TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 21 tools for:
+TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 24 tools for:
 
 - **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Security scanning** (Bandit + secret detection with redacted context)
 - **Quality gates** (pass/fail against configurable presets: standard, strict, framework)
-- **Documentation lookup** (up-to-date library docs via Context7 with fuzzy matching and cache)
+- **Dead code detection** (Vulture-based unused function/class/import/variable detection with confidence scoring)
+- **Dependency vulnerability scanning** (pip-audit for known CVEs in third-party packages)
+- **Circular dependency detection** (import graph analysis, cycle detection, coupling metrics)
+- **Documentation lookup** (up-to-date library docs via Context7 with multi-provider fallback and cache)
 - **Config validation** (Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB best practices)
 - **Domain experts** (16 built-in experts with RAG-backed answers, optional vector search)
 - **Project context** (project type detection, tech stack, impact analysis)
@@ -20,6 +23,7 @@ TappsMCP is an MCP server that provides a comprehensive quality toolset for your
 - **Metrics and feedback** (dashboard, usage stats, adaptive learning via feedback)
 - **Session checklist** (track which tools were used so you don't skip required steps)
 - **Pipeline orchestration** (batch validation, workflow prompts, project initialization)
+- **Structured outputs** (machine-parseable JSON alongside human-readable text for all scoring tools)
 
 You only see these tools when the host has started the TappsMCP server and attached it to your session.
 
@@ -51,6 +55,9 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_dashboard** | When the user wants to **review how TappsMCP is performing** - scoring accuracy, gate pass rates, expert effectiveness, cache performance, quality trends, and alerts. Supports json, markdown, and html output. |
 | **tapps_stats** | When the user wants **usage statistics** - call counts, success rates, average durations, cache hit rates, and gate pass rates. Filterable by tool and time period. |
 | **tapps_feedback** | After receiving a tool result - report whether the output was **helpful or not**. This feedback improves adaptive scoring and expert weights over time. |
+| **tapps_dead_code** | When you want to **find unused code** in a Python file - detects unused functions, classes, imports, and variables with confidence scoring. Use during refactoring or code review. |
+| **tapps_dependency_scan** | When you want to **check for vulnerable dependencies** - scans pip packages for known CVEs using pip-audit. Use before releases or security reviews. |
+| **tapps_dependency_graph** | When you want to **understand module dependencies** - builds import graph, detects circular imports, and calculates coupling metrics. Use before refactoring or when investigating import errors. |
 | **tapps_workflow** | When you want the **recommended tool call order** for a specific task type (general, feature, bugfix, refactor, security, review). |
 | **tapps_init** | At **pipeline bootstrap** - creates AGENTS.md, TECH_STACK.md, platform rules, optionally warms caches. Call once per project (or when upgrading). |
 

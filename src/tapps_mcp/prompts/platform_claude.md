@@ -72,6 +72,9 @@ Execute these stages IN ORDER for every code task:
 | `tapps_checklist` | No verification that process was followed |
 | `tapps_consult_expert` | Decisions made without domain expertise |
 | `tapps_impact_analysis` | Refactoring breaks unknown dependents |
+| `tapps_dead_code` | Unused code accumulates, bloating the codebase |
+| `tapps_dependency_scan` | Vulnerable dependencies shipped to production |
+| `tapps_dependency_graph` | Circular imports cause runtime crashes |
 
 ## Response Guidance
 

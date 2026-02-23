@@ -65,6 +65,15 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_quick_check": (
         "Quick score + gate + security in one call. Minimum check after editing any Python file."
     ),
+    "tapps_dead_code": (
+        "Scan for unused functions, classes, imports, and variables. Use during refactoring."
+    ),
+    "tapps_dependency_scan": (
+        "Scan dependencies for known vulnerabilities (CVEs). Use before releases."
+    ),
+    "tapps_dependency_graph": (
+        "Analyze import graph for circular dependencies and coupling. Use before major refactoring."
+    ),
 }
 
 
@@ -85,18 +94,18 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
     },
     "refactor": {
         "required": ["tapps_score_file", "tapps_quality_gate"],
-        "recommended": [],
+        "recommended": ["tapps_dead_code", "tapps_dependency_graph"],
         "optional": ["tapps_security_scan", "tapps_checklist"],
     },
     "security": {
         "required": ["tapps_security_scan", "tapps_quality_gate"],
-        "recommended": ["tapps_score_file"],
+        "recommended": ["tapps_score_file", "tapps_dependency_scan"],
         "optional": ["tapps_checklist"],
     },
     "review": {
         "required": ["tapps_score_file", "tapps_security_scan", "tapps_quality_gate"],
-        "recommended": ["tapps_checklist"],
-        "optional": [],
+        "recommended": ["tapps_checklist", "tapps_dead_code"],
+        "optional": ["tapps_dependency_scan", "tapps_dependency_graph"],
     },
 }
 

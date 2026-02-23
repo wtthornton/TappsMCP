@@ -13,11 +13,15 @@ TappsMCP gives any MCP-capable client (Claude Code, Cursor, VS Code Copilot, cus
 - Code scoring (0-100 across 7 categories)
 - Security scanning (Bandit + secret detection)
 - Quality gates (pass/fail against configurable presets)
-- Documentation lookup (Context7 + cache)
+- Dead code detection (Vulture with confidence scoring)
+- Dependency vulnerability scanning (pip-audit)
+- Circular dependency detection (import graph + coupling metrics)
+- Documentation lookup (Context7 + multi-provider fallback + cache)
 - Config validation (Dockerfile, docker-compose, infra)
 - Domain expert consultation (16 built-in experts with RAG)
 - Project profiling, impact analysis, session management
 - Metrics, dashboards, and adaptive learning
+- Structured outputs (machine-parseable JSON for all scoring tools)
 
 ---
 
@@ -33,13 +37,15 @@ src/tapps_mcp/
   common/                                      # Exceptions, logging, shared models, nudges
   config/                                      # Settings (Pydantic), default.yaml
   security/                                    # Path validation, IO guardrails, secrets, governance
-  scoring/                                     # Score model, constants, scorer
+  scoring/                                     # Score model, constants, scorer, dead code, dependency security
   gates/                                       # Gate presets, evaluator
-  tools/                                       # Ruff, mypy, bandit, radon wrappers, parallel, checklist
-  knowledge/                                   # Context7 client, cache, lookup, fuzzy matcher, warming
+  tools/                                       # Ruff, mypy, bandit, radon, vulture, pip-audit, parallel, checklist
+  knowledge/                                   # Context7 client, cache, lookup, fuzzy matcher, warming,
+                                               #   multi-provider support (providers/)
   validators/                                  # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
   experts/                                     # Domain experts, RAG engine, knowledge files (119 .md)
-  project/                                     # Profiler, session notes, impact analysis, reports
+  project/                                     # Profiler, session notes, impact analysis, reports,
+                                               #   import graph, cycle detection, coupling metrics
   adaptive/                                    # Adaptive scoring, expert voting, weight distribution
   metrics/                                     # Collector, dashboard, alerts, trends, OTel, feedback
   prompts/                                     # Workflow prompt templates and platform rule templates
@@ -58,7 +64,7 @@ uv sync
 # Run the MCP server (stdio)
 uv run tapps-mcp serve
 
-# Run all tests (1995+ tests)
+# Run all tests (2230+ tests)
 uv run pytest tests/ -v
 
 # Run with coverage
@@ -115,7 +121,7 @@ uv run tapps-mcp doctor
 | `server_pipeline_tools.py` | `tapps_validate_changed`, `tapps_session_start`, `tapps_init` |
 | `server_metrics_tools.py` | `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research` |
 | `scoring/scorer.py` | Core 7-category scoring engine |
-| `tools/parallel.py` | Parallel execution of ruff, mypy, bandit, radon |
+| `tools/parallel.py` | Parallel execution of ruff, mypy, bandit, radon, vulture |
 | `config/settings.py` | All settings with env var overrides (`TAPPS_MCP_*`) |
 | `knowledge/lookup.py` | Context7 documentation lookup with SWR cache |
 | `experts/engine.py` | Expert consultation RAG engine |
@@ -155,4 +161,4 @@ When TappsMCP's own MCP server is available in your session, use it on this code
 - The `tapps-mcp init` CLI generates MCP host configuration for Claude Code, Cursor, or VS Code
 - The `tapps-mcp upgrade` CLI validates and updates all generated files after a TappsMCP version upgrade
 - The `tapps-mcp doctor` CLI diagnoses configuration and connectivity issues
-- All 12 epics are complete (0-11) — see `docs/planning/epics/README.md` for the full history
+- All 18 epics are complete (0-17) — see `docs/planning/epics/README.md` for the full history
