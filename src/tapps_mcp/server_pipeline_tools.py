@@ -338,8 +338,85 @@ async def tapps_init(
     return _with_nudges("tapps_init", resp)
 
 
+def tapps_upgrade(
+    platform: str = "",
+    force: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Upgrade all TappsMCP-generated files after a version update.
+
+    Validates and refreshes AGENTS.md, platform rules, hooks, agents,
+    skills, and settings. Preserves custom command paths in MCP configs
+    (e.g. PyInstaller exe paths are never overwritten).
+
+    Use ``dry_run=True`` to preview what would change.
+
+    Args:
+        platform: Target platform - "claude", "cursor", "both", or "" for auto-detection.
+        force: If True, overwrite all generated files without prompting.
+        dry_run: If True, show what would be updated without making changes.
+    """
+    from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
+
+    start = time.perf_counter_ns()
+    _record_call("tapps_upgrade")
+
+    settings = load_settings()
+    result = upgrade_pipeline(
+        settings.project_root,
+        platform=platform,
+        force=force,
+        dry_run=dry_run,
+    )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution(
+        "tapps_upgrade",
+        start,
+        status="success" if result.get("success") else "failed",
+    )
+
+    resp = success_response("tapps_upgrade", elapsed_ms, result)
+    return _with_nudges("tapps_upgrade", resp)
+
+
+def tapps_doctor(
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Diagnose TappsMCP configuration and connectivity.
+
+    Checks binary availability, MCP configs, platform rules, generated
+    files (AGENTS.md, settings), hooks, and installed quality tools.
+
+    Returns structured results with per-check pass/fail status and
+    remediation hints for any failures.
+
+    Args:
+        project_root: Project root path (default: server's configured root).
+    """
+    from tapps_mcp.distribution.doctor import run_doctor_structured
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
+
+    start = time.perf_counter_ns()
+    _record_call("tapps_doctor")
+
+    settings = load_settings()
+    root = project_root or str(settings.project_root)
+
+    result = run_doctor_structured(project_root=root)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_doctor", start)
+
+    resp = success_response("tapps_doctor", elapsed_ms, result)
+    return _with_nudges("tapps_doctor", resp)
+
+
 def register(mcp_instance: FastMCP) -> None:
     """Register pipeline/validation tools on *mcp_instance*."""
     mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_changed)
     mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_session_start)
     mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_init)
+    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_upgrade)
+    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_doctor)

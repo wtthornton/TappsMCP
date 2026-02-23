@@ -240,6 +240,8 @@ def tapps_server_info() -> dict[str, Any]:
             "tapps_impact_analysis",
             "tapps_report",
             "tapps_init",
+            "tapps_upgrade",
+            "tapps_doctor",
             "tapps_dashboard",
             "tapps_stats",
             "tapps_feedback",

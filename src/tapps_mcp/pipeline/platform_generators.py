@@ -57,7 +57,7 @@ exit 0
     "tapps-stop.sh": """\
 #!/usr/bin/env bash
 # TappsMCP Stop hook
-# Blocks session stop until tapps_validate_changed has been called.
+# Reminds to run tapps_validate_changed but does NOT block.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 INPUT=$(cat)
 PY="import sys,json; d=json.load(sys.stdin)"
@@ -66,18 +66,17 @@ ACTIVE=$(echo "$INPUT" | python3 -c "$PY" 2>/dev/null)
 if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
   exit 0
 fi
-echo "Run tapps_validate_changed before ending the session." >&2
-exit 2
+echo "Reminder: Run tapps_validate_changed before ending the session." >&2
+exit 0
 """,
     "tapps-task-completed.sh": """\
 #!/usr/bin/env bash
 # TappsMCP TaskCompleted hook
-# Blocks task completion until quality gates pass.
+# Reminds to run quality checks but does NOT block.
 INPUT=$(cat)
-MSG="Before marking this task complete, run"
-MSG="$MSG tapps_validate_changed to confirm quality."
+MSG="Reminder: run tapps_validate_changed to confirm quality."
 echo "$MSG" >&2
-exit 2
+exit 0
 """,
     "tapps-pre-compact.sh": """\
 #!/usr/bin/env bash
@@ -955,7 +954,7 @@ work complete.
 
 def generate_claude_plugin_bundle(
     output_dir: Path,
-    version: str = "0.2.1",
+    version: str = "0.3.0",
 ) -> dict[str, Any]:
     """Generate a Claude Code plugin bundle directory.
 
@@ -1051,7 +1050,7 @@ def generate_claude_plugin_bundle(
 
 def generate_cursor_plugin_bundle(
     output_dir: Path,
-    version: str = "0.2.1",
+    version: str = "0.3.0",
 ) -> dict[str, Any]:
     """Generate a Cursor plugin bundle directory.
 

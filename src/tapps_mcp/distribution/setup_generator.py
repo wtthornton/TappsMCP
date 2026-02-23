@@ -7,6 +7,7 @@ with auto-detection of installed hosts and config merging.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -37,14 +38,39 @@ _SERVER_INSTRUCTIONS = (
 )
 
 
+def _detect_command_path() -> str:
+    """Detect the best ``tapps-mcp`` command path for MCP configs.
+
+    Resolution order:
+    1. If running as a PyInstaller frozen exe, return ``sys.executable``.
+    2. If ``tapps-mcp`` is on PATH, return ``"tapps-mcp"``.
+    3. Fallback to ``"tapps-mcp"`` (user must ensure it's on PATH).
+    """
+    # PyInstaller frozen executable
+    if getattr(sys, "frozen", False):
+        return sys.executable
+
+    # Available on PATH
+    which_result = shutil.which("tapps-mcp")
+    if which_result is not None:
+        return "tapps-mcp"
+
+    return "tapps-mcp"
+
+
 def _build_server_entry(host: str) -> dict[str, Any]:
     """Build the tapps-mcp server config entry for the given host.
 
     Claude Code gets an extra ``instructions`` field for Tool Search discovery.
     All platforms get the ``env`` block with ``TAPPS_MCP_PROJECT_ROOT``.
+    Uses :func:`_detect_command_path` to determine the command.
     """
-    entry = dict(_TAPPS_SERVER_ENTRY)
-    entry["env"] = dict(_TAPPS_SERVER_ENTRY["env"])
+    command = _detect_command_path()
+    entry: dict[str, Any] = {
+        "command": command,
+        "args": ["serve"],
+        "env": {"TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}"},
+    }
     if host == "claude-code":
         entry["instructions"] = _SERVER_INSTRUCTIONS
     return entry
@@ -151,15 +177,27 @@ def _get_servers_key(host: str) -> str:
     return "mcpServers"
 
 
-def _merge_config(existing: dict[str, Any], host: str) -> dict[str, Any]:
+def _merge_config(
+    existing: dict[str, Any],
+    host: str,
+    *,
+    upgrade_mode: bool = False,
+) -> dict[str, Any]:
     """Merge the tapps-mcp entry into an existing config dict.
 
     Only adds/replaces the ``tapps-mcp`` key inside the servers object;
     all other keys are preserved.
 
+    When *upgrade_mode* is ``True`` and an existing ``tapps-mcp`` entry
+    already has ``command`` and ``args``, those values are preserved.
+    Only ``env`` and ``instructions`` are updated. This prevents
+    overwriting custom exe paths (e.g. PyInstaller binaries) during
+    ``tapps-mcp upgrade``.
+
     Args:
         existing: The parsed JSON from the existing config file.
         host: The target host name.
+        upgrade_mode: If ``True``, preserve existing command/args.
 
     Returns:
         The merged config dict.
@@ -168,7 +206,18 @@ def _merge_config(existing: dict[str, Any], host: str) -> dict[str, Any]:
     merged = dict(existing)
     if servers_key not in merged:
         merged[servers_key] = {}
-    merged[servers_key]["tapps-mcp"] = _build_server_entry(host)
+
+    new_entry = _build_server_entry(host)
+
+    if upgrade_mode:
+        old_entry = merged[servers_key].get("tapps-mcp")
+        if isinstance(old_entry, dict) and "command" in old_entry:
+            # Preserve command and args from existing config
+            new_entry["command"] = old_entry["command"]
+            if "args" in old_entry:
+                new_entry["args"] = old_entry["args"]
+
+    merged[servers_key]["tapps-mcp"] = new_entry
     return merged
 
 
@@ -184,6 +233,7 @@ def _generate_config(
     force: bool = False,
     scope: str = "user",
     dry_run: bool = False,
+    upgrade_mode: bool = False,
 ) -> bool:
     """Generate (or merge) the MCP config for the given host.
 
@@ -231,7 +281,7 @@ def _generate_config(
                 click.echo("Aborted.")
                 return False
 
-        merged = _merge_config(existing, host)
+        merged = _merge_config(existing, host, upgrade_mode=upgrade_mode)
     else:
         servers_key_new = _get_servers_key(host)
         merged = {servers_key_new: {"tapps-mcp": _build_server_entry(host)}}
@@ -308,6 +358,21 @@ def _check_config(host: str, project_root: Path, scope: str = "user") -> bool:
     return True
 
 
+def _is_valid_tapps_command(command: str) -> bool:
+    """Return ``True`` if *command* looks like a valid tapps-mcp command.
+
+    Accepts:
+    - ``"tapps-mcp"`` (bare name, on PATH)
+    - Any absolute or relative path whose filename is ``tapps-mcp`` or
+      ``tapps-mcp.exe`` (PyInstaller / standalone binary).
+    """
+    if command == "tapps-mcp":
+        return True
+    # Check if the filename portion matches
+    name = Path(command).name.lower()
+    return name in ("tapps-mcp", "tapps-mcp.exe")
+
+
 def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
     """Return an error string if *config_path* is invalid, else ``None``."""
     if not config_path.exists():
@@ -329,8 +394,9 @@ def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
 
     command = entry.get("command", "")
     return (
-        f"Unexpected command in tapps-mcp config: '{command}' (expected 'tapps-mcp')"
-        if command != "tapps-mcp"
+        f"Unexpected command in tapps-mcp config: '{command}'"
+        f" (expected 'tapps-mcp' or path to tapps-mcp.exe)"
+        if not _is_valid_tapps_command(command)
         else None
     )
 
@@ -593,8 +659,8 @@ def _upgrade_host(
     if error is not None:
         click.echo(click.style(f"  MCP config: {error}", fg="red"))
         if not dry_run:
-            click.echo("    Regenerating MCP config...")
-            _generate_config(host, project_root, force=True)
+            click.echo("    Regenerating MCP config (preserving command path)...")
+            _generate_config(host, project_root, force=True, upgrade_mode=True)
     else:
         click.echo(click.style("  MCP config: OK", fg="green"))
 

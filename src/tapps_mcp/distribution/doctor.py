@@ -43,7 +43,21 @@ class CheckResult:
 
 
 def check_binary_on_path() -> CheckResult:
-    """Check that ``tapps-mcp`` is on PATH."""
+    """Check that ``tapps-mcp`` is available.
+
+    If running as a PyInstaller frozen exe, the binary is the current
+    process itself, so the check always passes.
+    """
+    import sys as _sys
+
+    # Running as a frozen exe (PyInstaller) — binary is the current process
+    if getattr(_sys, "frozen", False):
+        return CheckResult(
+            "tapps-mcp binary",
+            True,
+            f"Running as frozen exe: {_sys.executable}",
+        )
+
     found = shutil.which("tapps-mcp") is not None
     if found:
         return CheckResult("tapps-mcp binary", True, "tapps-mcp is on PATH")
@@ -70,6 +84,8 @@ def check_json_config(
 
 def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
     """Return an error message if *config_path* is invalid, else ``None``."""
+    from tapps_mcp.distribution.setup_generator import _is_valid_tapps_command
+
     if not config_path.exists():
         return f"Not found: {config_path}"
 
@@ -89,8 +105,8 @@ def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
 
     command = entry.get("command", "")
     return (
-        f"Unexpected command: '{command}' (expected 'tapps-mcp')"
-        if command != "tapps-mcp"
+        f"Unexpected command: '{command}' (expected 'tapps-mcp' or path to tapps-mcp.exe)"
+        if not _is_valid_tapps_command(command)
         else None
     )
 
@@ -290,6 +306,59 @@ def check_quality_tools() -> list[CheckResult]:
 # ---------------------------------------------------------------------------
 
 
+def _collect_checks(root: Path) -> list[CheckResult]:
+    """Collect all diagnostic checks for the given project root."""
+    checks: list[CheckResult] = []
+    checks.append(check_binary_on_path())
+    checks.append(check_claude_code_user())
+    checks.append(check_claude_code_project(root))
+    checks.append(check_cursor_config(root))
+    checks.append(check_vscode_config(root))
+    checks.append(check_claude_md(root))
+    checks.append(check_cursor_rules(root))
+    checks.append(check_agents_md(root))
+    checks.append(check_claude_settings(root))
+    checks.append(check_hooks(root))
+    checks.extend(check_quality_tools())
+    return checks
+
+
+def run_doctor_structured(*, project_root: str = ".") -> dict[str, Any]:
+    """Run all diagnostic checks and return structured results.
+
+    Returns a dict with ``checks``, ``pass_count``, ``fail_count``,
+    and ``all_passed`` for programmatic consumption (MCP tool).
+    """
+    root = Path(project_root).resolve()
+    log.info("doctor_structured", project_root=str(root))
+
+    checks = _collect_checks(root)
+
+    results: list[dict[str, str | bool]] = []
+    pass_count = 0
+    fail_count = 0
+    for check in checks:
+        entry: dict[str, str | bool] = {
+            "name": check.name,
+            "ok": check.ok,
+            "message": check.message,
+        }
+        if check.detail:
+            entry["detail"] = check.detail
+        results.append(entry)
+        if check.ok:
+            pass_count += 1
+        else:
+            fail_count += 1
+
+    return {
+        "checks": results,
+        "pass_count": pass_count,
+        "fail_count": fail_count,
+        "all_passed": fail_count == 0,
+    }
+
+
 def run_doctor(*, project_root: str = ".") -> bool:
     """Run all diagnostic checks and print a summary.
 
@@ -298,28 +367,7 @@ def run_doctor(*, project_root: str = ".") -> bool:
     root = Path(project_root).resolve()
     log.info("doctor_command", project_root=str(root))
 
-    checks: list[CheckResult] = []
-
-    # Binary
-    checks.append(check_binary_on_path())
-
-    # MCP configs
-    checks.append(check_claude_code_user())
-    checks.append(check_claude_code_project(root))
-    checks.append(check_cursor_config(root))
-    checks.append(check_vscode_config(root))
-
-    # Platform rules
-    checks.append(check_claude_md(root))
-    checks.append(check_cursor_rules(root))
-
-    # Generated files
-    checks.append(check_agents_md(root))
-    checks.append(check_claude_settings(root))
-    checks.append(check_hooks(root))
-
-    # Quality tools
-    checks.extend(check_quality_tools())
+    checks = _collect_checks(root)
 
     # Print report
     click.echo("")

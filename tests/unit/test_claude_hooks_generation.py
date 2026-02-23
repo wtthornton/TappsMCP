@@ -55,15 +55,19 @@ class TestClaudeHooksScripts:
         content = (tmp_path / ".claude" / "hooks" / "tapps-stop.sh").read_text()
         assert "exit 0" in content
 
-    def test_stop_script_has_exit_2(self, tmp_path):
+    def test_stop_script_is_non_blocking(self, tmp_path):
         generate_claude_hooks(tmp_path)
         content = (tmp_path / ".claude" / "hooks" / "tapps-stop.sh").read_text()
-        assert "exit 2" in content
+        # Stop hook should NOT block (exit 0, not exit 2)
+        assert "exit 2" not in content
+        assert content.strip().endswith("exit 0")
 
-    def test_task_completed_has_exit_2(self, tmp_path):
+    def test_task_completed_is_non_blocking(self, tmp_path):
         generate_claude_hooks(tmp_path)
         content = (tmp_path / ".claude" / "hooks" / "tapps-task-completed.sh").read_text()
-        assert "exit 2" in content
+        # Task completed hook should NOT block (exit 0, not exit 2)
+        assert "exit 2" not in content
+        assert content.strip().endswith("exit 0")
 
     def test_scripts_start_with_shebang(self, tmp_path):
         generate_claude_hooks(tmp_path)
