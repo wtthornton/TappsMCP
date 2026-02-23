@@ -148,6 +148,21 @@ class ToolCallMetricsCollector:
             items = list(self._buffer)
         return items[-limit:]
 
+    def get_recent_from_disk(self, limit: int = 500) -> list[ToolCallMetric]:
+        """Get most recent metrics from disk (JSONL files).
+
+        Use this for coverage aggregation so metrics are correct even when
+        the in-memory buffer is empty (e.g. after server restart).
+        """
+        metrics = self._load_from_disk(since=None, until=None)
+        # Sort by started_at descending (most recent first)
+        sorted_metrics = sorted(
+            metrics,
+            key=lambda m: m.started_at,
+            reverse=True,
+        )
+        return sorted_metrics[:limit]
+
     def get_summary(
         self,
         since: datetime | None = None,

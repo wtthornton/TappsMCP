@@ -7,8 +7,9 @@ permission wildcard entry for auto-approving TappsMCP tools.
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
-from tapps_mcp.pipeline.init import _bootstrap_claude_settings
+from tapps_mcp.pipeline.init import BootstrapConfig, _bootstrap_claude_settings, bootstrap_pipeline
 
 
 class TestBootstrapClaudeSettings:
@@ -133,3 +134,78 @@ class TestBootstrapClaudeSettings:
 
         data = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
+
+
+class TestAutoDetectClaudeSettings:
+    """Tests for auto-detection of Claude Code in bootstrap_pipeline.
+
+    When platform is not "claude" but .claude/ directory exists,
+    bootstrap_pipeline should still ensure the permission wildcard.
+    """
+
+    def _run_bootstrap(self, tmp_path, platform="", dry_run=False):
+        """Run bootstrap with mocked server verification and profile detection."""
+        cfg = BootstrapConfig(
+            platform=platform,
+            create_handoff=False,
+            create_runlog=False,
+            create_agents_md=False,
+            create_tech_stack_md=False,
+            verify_server=False,
+            warm_cache_from_tech_stack=False,
+            warm_expert_rag_from_tech_stack=False,
+            dry_run=dry_run,
+        )
+        with patch(
+            "tapps_mcp.pipeline.init._run_server_verification",
+            return_value={"ok": True},
+        ), patch(
+            "tapps_mcp.pipeline.init._detect_profile",
+        ):
+            return bootstrap_pipeline(tmp_path, config=cfg)
+
+    def test_auto_adds_wildcard_when_claude_dir_exists_no_platform(self, tmp_path):
+        """When .claude/ exists but platform is empty, permissions are still set."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        result = self._run_bootstrap(tmp_path, platform="")
+
+        settings_file = claude_dir / "settings.json"
+        assert settings_file.exists()
+        data = json.loads(settings_file.read_text(encoding="utf-8"))
+        assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
+        assert result["claude_settings"]["action"] in ("created", "updated")
+
+    def test_auto_adds_wildcard_when_claude_dir_exists_cursor_platform(self, tmp_path):
+        """When .claude/ exists and platform is 'cursor', permissions are still set."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        with patch("tapps_mcp.pipeline.init._setup_platform"):
+            result = self._run_bootstrap(tmp_path, platform="cursor")
+
+        settings_file = claude_dir / "settings.json"
+        assert settings_file.exists()
+        data = json.loads(settings_file.read_text(encoding="utf-8"))
+        assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
+        assert result["claude_settings"]["action"] in ("created", "updated")
+
+    def test_no_claude_dir_no_auto_settings(self, tmp_path):
+        """When .claude/ doesn't exist and platform is empty, no settings created."""
+        assert not (tmp_path / ".claude").exists()
+
+        result = self._run_bootstrap(tmp_path, platform="")
+
+        assert not (tmp_path / ".claude" / "settings.json").exists()
+        assert "claude_settings" not in result
+
+    def test_dry_run_skips_auto_settings(self, tmp_path):
+        """In dry_run mode, auto-detection is skipped."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+
+        result = self._run_bootstrap(tmp_path, platform="", dry_run=True)
+
+        assert not (claude_dir / "settings.json").exists()
+        assert "claude_settings" not in result

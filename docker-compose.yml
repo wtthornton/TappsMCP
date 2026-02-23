@@ -4,6 +4,8 @@
 
 services:
   tapps-mcp:
+    networks:
+      - tapps-network
     build:
       context: .
       dockerfile: Dockerfile
@@ -32,6 +34,10 @@ services:
         limits:
           memory: 512M
           cpus: "1.0"
+
+networks:
+  tapps-network:
+    driver: bridge
 
 volumes:
   tapps-state:

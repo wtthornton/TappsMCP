@@ -67,7 +67,7 @@ class AdaptiveSettings(BaseSettings):
         description="Learning rate for weight adjustment (0.0-1.0).",
     )
     min_outcomes: int = Field(
-        default=10,
+        default=5,
         ge=1,
         description="Minimum outcome records before adaptive adjustment activates.",
     )

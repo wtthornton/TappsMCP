@@ -81,6 +81,22 @@ class TestToolCallMetricsCollector:
         files = list(metrics_dir.glob("tool_calls_*.jsonl"))
         assert len(files) == 1
 
+    def test_get_recent_from_disk(self, collector):
+        """get_recent_from_disk loads from JSONL files (not in-memory buffer)."""
+        now = datetime.now(tz=UTC)
+        collector.record(
+            tool_name="tapps_score_file",
+            started_at=now,
+            completed_at=now + timedelta(milliseconds=100),
+            file_path=str(collector._metrics_dir.parent / "src" / "main.py"),
+        )
+        # get_recent_from_disk reads from disk; should find the record
+        recent = collector.get_recent_from_disk(limit=10)
+        assert len(recent) >= 1
+        scored = [m for m in recent if m.tool_name == "tapps_score_file"]
+        assert len(scored) >= 1
+        assert scored[0].file_path is not None
+
     def test_get_metrics_filters_by_tool(self, collector):
         now = datetime.now(tz=UTC)
         collector.record("tool_a", now, now + timedelta(milliseconds=10))

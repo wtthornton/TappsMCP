@@ -157,8 +157,9 @@ class LookupEngine:
                 topic=topic,
                 error=(
                     "No Context7 API key configured and no cached docs available. "
-                    "Set TAPPS_MCP_CONTEXT7_API_KEY env var or add context7_api_key "
-                    "to .tapps-mcp.yaml to enable live documentation lookup."
+                    "Options: (1) Set TAPPS_MCP_CONTEXT7_API_KEY or add context7_api_key "
+                    "to .tapps-mcp.yaml; (2) Run tapps_init with warm_cache_from_tech_stack=True "
+                    "to pre-populate cache from project dependencies."
                 ),
                 response_time_ms=round(elapsed, 1),
             )

@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(sort:*)"
+      "Bash(sort:*)",
+      "mcp__tapps-mcp__*"
     ]
   }
 }

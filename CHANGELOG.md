@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Implementation Plan Execution — 2026-02-22)
+
+- **Docker Compose explicit networks** — `docker-compose.yml` now defines `tapps-network` and assigns the `tapps-mcp` service to it.
+- **Expert RAG relevance threshold** — `SimpleKnowledgeBase` and `VectorKnowledgeBase` filter chunks below `relevance_threshold` (default 0.2/0.3); reduces irrelevant expert consultation results.
+- **MCP-specific knowledge** — New `testing/mcp-testing-patterns.md` and `software-architecture/mcp-server-architecture.md` for improved RAG relevance on MCP architecture/testing questions.
+- **tapps_lookup_docs expert fallback** — When Context7 and cache fail, returns expert knowledge base content as `expert_fallback` so users get useful guidance without API key.
+- **tapps_lookup_docs error improvement** — No-API-key error now suggests `tapps_init` with `warm_cache_from_tech_stack=True` as alternative.
+- **tapps_report max_files and parallel scoring** — New `max_files` parameter (default 20); project-wide report uses `asyncio.gather` for parallel file scoring.
+
+### Changed (Implementation Plan Execution — 2026-02-22)
+
+- **adaptive/persistence.py** — Extracted `_parse_consultation_line` and `_passes_consultation_filter`; reduced cyclomatic complexity.
+- **adaptive/voting_engine.py** — Extracted `_normalize_domain_column` and `_enforce_primary_floor`; simplified `_normalize_matrix`.
+- **Adaptive min_outcomes** — Lowered from 10 to 5 so adaptive weights activate sooner (scoring_engine, settings, default.yaml).
+- **bootstrap_pipeline** — Accepts optional `config: BootstrapConfig` to reduce parameter branching; kwargs still supported.
+
 ### Added (Critical/High Review — 2026-02-22)
 
 - **Checklist persistence** — `CallTracker` now persists call records to `.tapps-mcp/sessions/checklist_calls.jsonl`; `set_persist_path` is invoked on first tool call so state survives server restarts.

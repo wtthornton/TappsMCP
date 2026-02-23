@@ -157,56 +157,74 @@ class AdaptiveVotingEngine:
     ) -> ExpertWeightMatrix:
         """Normalize weights per domain: sum to 1.0, primary >= 0.51."""
         for domain in original_matrix.domains:
-            primary = original_matrix.get_primary_expert(domain)
-            col_sum = sum(weights[eid].get(domain, 0.0) for eid in original_matrix.experts)
-
-            if col_sum <= 0:
-                # Reset to uniform.
-                n = len(original_matrix.experts)
-                for eid in original_matrix.experts:
-                    weights[eid][domain] = 1.0 / n
-                col_sum = 1.0
-
-            # Normalize to sum=1.
-            for eid in original_matrix.experts:
-                weights[eid][domain] = weights[eid].get(domain, 0.0) / col_sum
-
-            # Enforce primary >= 0.51 (for multi-expert domains).
-            if primary and len(original_matrix.experts) > 1:
-                primary_w = weights[primary][domain]
-                if primary_w < _PRIMARY_WEIGHT_FLOOR:
-                    deficit = _PRIMARY_WEIGHT_FLOOR - primary_w
-                    weights[primary][domain] = _PRIMARY_WEIGHT_FLOOR
-                    # Redistribute deficit from non-primary experts.
-                    others = [e for e in original_matrix.experts if e != primary]
-                    other_total = sum(weights[e][domain] for e in others)
-                    if other_total > 0:
-                        for eid in others:
-                            share = weights[eid][domain] / other_total
-                            weights[eid][domain] = max(0.0, weights[eid][domain] - deficit * share)
-
-                    # Re-normalize.
-                    col_sum = sum(weights[eid][domain] for eid in original_matrix.experts)
-                    if col_sum > 0:
-                        for eid in original_matrix.experts:
-                            weights[eid][domain] = round(weights[eid][domain] / col_sum, 6)
-                            # Final primary floor after re-normalization.
-                        if weights[primary][domain] < _PRIMARY_WEIGHT_FLOOR:
-                            weights[primary][domain] = _PRIMARY_WEIGHT_FLOOR
-                            # Final fix-up.
-                            remainder = 1.0 - _PRIMARY_WEIGHT_FLOOR
-                            others_sum = sum(weights[e][domain] for e in others)
-                            if others_sum > 0:
-                                for eid in others:
-                                    weights[eid][domain] = round(
-                                        (weights[eid][domain] / others_sum) * remainder, 6
-                                    )
-
+            AdaptiveVotingEngine._normalize_domain_column(
+                weights, original_matrix, domain
+            )
         return ExpertWeightMatrix(
             weights=weights,
             domains=original_matrix.domains,
             experts=original_matrix.experts,
         )
+
+    @staticmethod
+    def _normalize_domain_column(
+        weights: dict[str, dict[str, float]],
+        matrix: ExpertWeightMatrix,
+        domain: str,
+    ) -> None:
+        """Normalize a single domain column and enforce primary floor."""
+        experts = matrix.experts
+        col_sum = sum(weights[eid].get(domain, 0.0) for eid in experts)
+
+        if col_sum <= 0:
+            n = len(experts)
+            for eid in experts:
+                weights[eid][domain] = 1.0 / n
+            col_sum = 1.0
+
+        for eid in experts:
+            weights[eid][domain] = weights[eid].get(domain, 0.0) / col_sum
+
+        primary = matrix.get_primary_expert(domain)
+        if primary and len(experts) > 1 and weights[primary][domain] < _PRIMARY_WEIGHT_FLOOR:
+            AdaptiveVotingEngine._enforce_primary_floor(
+                weights, matrix, domain, primary, experts
+            )
+
+    @staticmethod
+    def _enforce_primary_floor(
+        weights: dict[str, dict[str, float]],
+        matrix: ExpertWeightMatrix,
+        domain: str,
+        primary: str,
+        experts: list[str],
+    ) -> None:
+        """Ensure primary expert has at least 51% weight, redistribute from others."""
+        others = [e for e in experts if e != primary]
+        deficit = _PRIMARY_WEIGHT_FLOOR - weights[primary][domain]
+        weights[primary][domain] = _PRIMARY_WEIGHT_FLOOR
+
+        other_total = sum(weights[e][domain] for e in others)
+        if other_total <= 0:
+            return
+
+        for eid in others:
+            share = weights[eid][domain] / other_total
+            weights[eid][domain] = max(0.0, weights[eid][domain] - deficit * share)
+
+        col_sum = sum(weights[eid][domain] for eid in experts)
+        if col_sum > 0:
+            for eid in experts:
+                weights[eid][domain] = round(weights[eid][domain] / col_sum, 6)
+
+        if weights[primary][domain] < _PRIMARY_WEIGHT_FLOOR:
+            remainder = 1.0 - _PRIMARY_WEIGHT_FLOOR
+            others_sum = sum(weights[e][domain] for e in others)
+            if others_sum > 0:
+                for eid in others:
+                    weights[eid][domain] = round(
+                        (weights[eid][domain] / others_sum) * remainder, 6
+                    )
 
 
 def _build_default_matrix() -> ExpertWeightMatrix:

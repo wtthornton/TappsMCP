@@ -119,3 +119,31 @@ class TestDashboardGenerator:
         dist = data["quality_distribution"]
         assert "90-100" in dist
         assert "0-59" in dist
+
+    def test_coverage_metrics_from_disk(self, metrics_dir):
+        """Coverage metrics use disk data, so files_scored reflects file_path in records."""
+        gen = DashboardGenerator(metrics_dir)
+        project_root = metrics_dir.parent.parent
+        file_path = str(project_root / "src" / "main.py")
+        now = datetime.now(tz=UTC)
+        gen._execution.record(
+            "tapps_score_file",
+            now,
+            now + timedelta(milliseconds=100),
+            status="success",
+            file_path=file_path,
+            score=85.0,
+        )
+        gen._execution.record(
+            "tapps_quality_gate",
+            now,
+            now + timedelta(milliseconds=150),
+            status="success",
+            file_path=file_path,
+            gate_passed=True,
+        )
+        data = gen.generate_json_dashboard(sections=["coverage_metrics"])
+        cov = data["coverage_metrics"]
+        assert cov["files_scored"] >= 1
+        assert cov["files_gated"] >= 1
+        assert "tapps_score_file" in cov["core_tools_used"]

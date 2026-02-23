@@ -30,6 +30,8 @@ This document lists what each init-related process does. The codebase has **two 
 | **Skills generation** | `platform="claude"` or `"cursor"` | Creates 3 skill directories with `SKILL.md` (tapps-score, tapps-gate, tapps-validate) in `.claude/skills/` or `.cursor/skills/`. Skips existing files. |
 | **Cursor rule types** | `platform="cursor"` | Creates 3 `.mdc` rule files: `tapps-pipeline.mdc` (alwaysApply), `tapps-python-quality.mdc` (autoAttach `*.py`), `tapps-expert-consultation.mdc` (agentRequested). Reduces context bloat. |
 | **Agent Teams** | `agent_teams=True` | Opt-in. Generates TeammateIdle and TaskCompleted hooks for quality watchdog teammate in `.claude/hooks/` and merges into `.claude/settings.json`. Only applies when `platform="claude"`. |
+| **Dry run** | `dry_run=True` | Computes and returns what would be created without writing files or warming caches. Skips server verification. Keeps run lightweight (~2–5s). See [MCP_CLIENT_TIMEOUTS.md](MCP_CLIENT_TIMEOUTS.md). |
+| **Verify only** | `verify_only=True` | Runs only server verification and returns immediately (~1–3s). Use for quick connectivity/checker checks. |
 
 ### Result shape
 

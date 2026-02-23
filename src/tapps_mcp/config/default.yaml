@@ -18,4 +18,4 @@ scoring_weights:
 adaptive:
   enabled: false
   learning_rate: 0.1
-  min_outcomes: 10
+  min_outcomes: 5

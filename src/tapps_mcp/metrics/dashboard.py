@@ -263,6 +263,21 @@ class DashboardGenerator:
         }
 
     @staticmethod
+    def _normalize_file_path(file_path: str, project_root: Path | None) -> str:
+        """Normalize file path for deduplication (Windows case/slash handling)."""
+        if not file_path or not file_path.strip():
+            return ""
+        try:
+            p = Path(file_path)
+            if not p.is_absolute() and project_root is not None:
+                p = (project_root / p).resolve()
+            else:
+                p = p.resolve()
+            return str(p)
+        except (OSError, RuntimeError):
+            return file_path
+
+    @staticmethod
     def _score_bin(score: float) -> str:
         """Map a score to its distribution bin label."""
         if score >= 90:
@@ -287,16 +302,29 @@ class DashboardGenerator:
 
     def _build_coverage_metrics(self) -> dict[str, Any]:
         """Build tool coverage metrics - which files were scored/gated/scanned."""
-        recent = self._execution.get_recent(limit=500)
+        # Use disk data (not in-memory buffer) so metrics are correct after restart
+        recent = self._execution.get_recent_from_disk(limit=500)
+
+        # Derive project root for path normalization (project_root/.tapps-mcp/metrics)
+        project_root = self._metrics_dir.parent.parent if self._metrics_dir else None
+
+        def _norm(fp: str | None) -> str:
+            return self._normalize_file_path(fp or "", project_root)
 
         scored_files = {
-            m.file_path for m in recent if m.tool_name == "tapps_score_file" and m.file_path
+            _norm(m.file_path)
+            for m in recent
+            if m.tool_name == "tapps_score_file" and m.file_path and _norm(m.file_path)
         }
         gated_files = {
-            m.file_path for m in recent if m.tool_name == "tapps_quality_gate" and m.file_path
+            _norm(m.file_path)
+            for m in recent
+            if m.tool_name == "tapps_quality_gate" and m.file_path and _norm(m.file_path)
         }
         scanned_files = {
-            m.file_path for m in recent if m.tool_name == "tapps_security_scan" and m.file_path
+            _norm(m.file_path)
+            for m in recent
+            if m.tool_name == "tapps_security_scan" and m.file_path and _norm(m.file_path)
         }
 
         # Gate skip rate: files scored but never gated

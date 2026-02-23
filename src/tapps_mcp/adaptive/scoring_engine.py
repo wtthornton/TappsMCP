@@ -25,7 +25,8 @@ logger = structlog.get_logger(__name__)
 DEFAULT_LEARNING_RATE = 0.1
 
 # Minimum number of outcomes required before adjustment activates.
-MIN_OUTCOMES_FOR_ADJUSTMENT = 10
+# Lowered from 10 to 5 to allow adaptive weights to activate sooner.
+MIN_OUTCOMES_FOR_ADJUSTMENT = 5
 
 # Metrics analyzed (keys in CodeOutcome.initial_scores).
 _METRIC_KEYS = [

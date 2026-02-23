@@ -221,6 +221,26 @@ class TestBootstrapPipeline:
         assert "installed" in sv
         assert "missing_checkers" in sv
 
+    def test_dry_run_skips_server_verification(self, tmp_path):
+        """dry_run skips actual checker detection to stay lightweight."""
+        result = bootstrap_pipeline(tmp_path, dry_run=True)
+        sv = result["server_verification"]
+        assert sv["skipped"] == "dry_run"
+        assert sv["ok"] is True
+        assert "message" in sv
+
+    def test_verify_only_runs_only_server_verification(self, tmp_path):
+        """verify_only returns immediately after server verification."""
+        result = bootstrap_pipeline(tmp_path, verify_only=True)
+        assert "server_verification" in result
+        sv = result["server_verification"]
+        assert "ok" in sv
+        assert "installed" in sv
+        assert "missing_checkers" in sv
+        assert result["created"] == []
+        assert "agents_md" not in result
+        assert "tech_stack_md" not in result
+
     def test_cache_warming_in_result(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text("[project]\ndependencies = []\n")
         result = bootstrap_pipeline(

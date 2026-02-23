@@ -126,6 +126,26 @@ class TestFilePerformanceTracker:
         assert perf is not None
         assert "low_confidence" in perf.weaknesses
 
+    def test_load_skips_malformed_lines(self, tracker: FilePerformanceTracker):
+        """Malformed JSONL lines are skipped without failing."""
+        tracker.track_consultation("expert-a", "sec", 0.8)
+        perf_file = tracker._file
+        # Append invalid line
+        with perf_file.open("a", encoding="utf-8") as fh:
+            fh.write("{ invalid json }\n")
+        perf = tracker.calculate_performance("expert-a")
+        assert perf is not None
+        assert perf.consultations == 1
+
+    def test_load_skips_non_dict_lines(self, tracker: FilePerformanceTracker):
+        """Non-dict JSON lines are skipped."""
+        perf_file = tracker._file
+        perf_file.parent.mkdir(parents=True, exist_ok=True)
+        with perf_file.open("w", encoding="utf-8") as fh:
+            fh.write('["array", "not", "dict"]\n')
+        perf = tracker.calculate_performance("any")
+        assert perf is None
+
 
 class TestSaveJsonAtomic:
     def test_writes_json(self, tmp_path: Path):
@@ -141,3 +161,16 @@ class TestSaveJsonAtomic:
         save_json_atomic({"v": 2}, target)
         data = json.loads(target.read_text(encoding="utf-8"))
         assert data["v"] == 2
+
+    def test_creates_parent_directory(self, tmp_path: Path):
+        target = tmp_path / "nested" / "dir" / "data.json"
+        save_json_atomic({"created": True}, target)
+        assert target.exists()
+        data = json.loads(target.read_text(encoding="utf-8"))
+        assert data["created"] is True
+
+    def test_writes_list(self, tmp_path: Path):
+        target = tmp_path / "list.json"
+        save_json_atomic([1, 2, 3], target)
+        data = json.loads(target.read_text(encoding="utf-8"))
+        assert data == [1, 2, 3]

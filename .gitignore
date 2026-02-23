@@ -55,6 +55,7 @@ nul
 
 # TappsMCP runtime data (metrics, cache, indexes)
 .tapps-mcp/
+.tapps-mcp-cache/
 
 # UV
 .python-version

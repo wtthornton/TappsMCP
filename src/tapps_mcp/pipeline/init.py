@@ -41,6 +41,7 @@ class BootstrapConfig:
     overwrite_agents_md: bool = False
     agent_teams: bool = False
     dry_run: bool = False
+    verify_only: bool = False
 
 
 @dataclass
@@ -99,6 +100,7 @@ class _BootstrapState:
 
 def bootstrap_pipeline(
     project_root: Path,
+    config: BootstrapConfig | None = None,
     *,
     create_handoff: bool = True,
     create_runlog: bool = True,
@@ -113,37 +115,58 @@ def bootstrap_pipeline(
     overwrite_agents_md: bool = False,
     agent_teams: bool = False,
     dry_run: bool = False,
+    verify_only: bool = False,
 ) -> dict[str, Any]:
     """Create pipeline template files in the project.
 
+    Pass *config* to use a pre-built :class:`BootstrapConfig`, or use keyword
+    arguments. Keyword args are ignored when *config* is provided.
+
     When ``dry_run=True``, computes and returns the same result structure
-    without writing files or warming caches.
+    without writing files or warming caches. Skips server verification in
+    dry_run to keep it lightweight.
+
+    When ``verify_only=True``, runs only server verification and returns
+    immediately (fast, ~1-3s). Use for quick connectivity/checker checks.
 
     Returns a summary dict with ``created``, ``skipped``, ``errors``, and
     subsystem result dicts.
     """
-    cfg = BootstrapConfig(
-        create_handoff=create_handoff,
-        create_runlog=create_runlog,
-        create_agents_md=create_agents_md,
-        create_tech_stack_md=create_tech_stack_md,
-        platform=platform,
-        verify_server=verify_server,
-        install_missing_checkers=install_missing_checkers,
-        warm_cache_from_tech_stack=warm_cache_from_tech_stack,
-        warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
-        overwrite_platform_rules=overwrite_platform_rules,
-        overwrite_agents_md=overwrite_agents_md,
-        agent_teams=agent_teams,
-        dry_run=dry_run,
-    )
+    if config is not None:
+        cfg = config
+    else:
+        cfg = BootstrapConfig(
+            create_handoff=create_handoff,
+            create_runlog=create_runlog,
+            create_agents_md=create_agents_md,
+            create_tech_stack_md=create_tech_stack_md,
+            platform=platform,
+            verify_server=verify_server,
+            install_missing_checkers=install_missing_checkers,
+            warm_cache_from_tech_stack=warm_cache_from_tech_stack,
+            warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
+            overwrite_platform_rules=overwrite_platform_rules,
+            overwrite_agents_md=overwrite_agents_md,
+            agent_teams=agent_teams,
+            dry_run=dry_run,
+            verify_only=verify_only,
+        )
     state = _BootstrapState(project_root=project_root.resolve(), dry_run=dry_run)
 
     _verify_server(cfg, state)
+    if cfg.verify_only:
+        return state.finalize()
     _detect_profile(cfg, state)
     _create_templates(cfg, state)
     if not cfg.dry_run:
         _setup_platform(cfg, state)
+        # Ensure Claude Code permissions even when platform != "claude",
+        # if the .claude/ directory already exists (user is in Claude Code).
+        if cfg.platform != "claude" and (state.project_root / ".claude").is_dir():
+            settings_action = _bootstrap_claude_settings(state.project_root)
+            state.result["claude_settings"] = {"action": settings_action}
+            if settings_action == "created":
+                state.created.append(".claude/settings.json")
         _warm_caches(cfg, state)
     else:
         state.result["platform_rules"] = {
@@ -168,8 +191,19 @@ def bootstrap_pipeline(
 
 
 def _verify_server(cfg: BootstrapConfig, state: _BootstrapState) -> None:
-    """Run server verification and optional checker install."""
-    if cfg.verify_server or cfg.install_missing_checkers:
+    """Run server verification and optional checker install.
+
+    When dry_run=True, skips actual subprocess calls (checker detection) to keep
+    dry_run lightweight; returns a placeholder instead.
+    """
+    if cfg.dry_run and (cfg.verify_server or cfg.install_missing_checkers):
+        state.result["server_verification"] = {
+            "ok": True,
+            "skipped": "dry_run",
+            "message": "Server verification skipped in dry_run"
+            " (use verify_only for actual verification)",
+        }
+    elif cfg.verify_server or cfg.install_missing_checkers:
         state.result["server_verification"] = _run_server_verification(
             state.project_root,
             install_missing=cfg.install_missing_checkers,

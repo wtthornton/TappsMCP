@@ -67,25 +67,38 @@ class VectorKnowledgeBase:
         query: str,
         max_results: int = 5,
         context_lines: int = 10,
+        *,
+        relevance_threshold: float = 0.3,
     ) -> list[KnowledgeChunk]:
         """Search the knowledge base for *query*.
 
         When both vector and simple backends are available, performs hybrid
         retrieval: queries both, fuses results with weighted scoring, and
-        returns the top-N after deduplication.
+        returns the top-N after deduplication. Chunks below *relevance_threshold*
+        are filtered out.
         """
         self._ensure_initialised()
 
         if self._backend_type == "vector" and self._vector_index is not None:
             vector_results = self._vector_search(query, max_results * 2)
-            # Hybrid: also run keyword search if simple backend is available.
+            vector_filtered = [c for c in vector_results if c.score >= relevance_threshold]
             if self._simple is not None and self._simple.file_count > 0:
-                keyword_results = self._simple.search(query, max_results * 2, context_lines)
-                return self._hybrid_fuse(vector_results, keyword_results, max_results)
-            return vector_results[:max_results]
+                keyword_results = self._simple.search(
+                    query, max_results * 2, context_lines,
+                    relevance_threshold=relevance_threshold,
+                )
+                fused = self._hybrid_fuse(
+                    vector_filtered, keyword_results, max_results * 2
+                )
+                filtered = [c for c in fused if c.score >= relevance_threshold]
+                return filtered[:max_results]
+            return vector_filtered[:max_results]
 
         if self._simple is not None:
-            return self._simple.search(query, max_results, context_lines)
+            return self._simple.search(
+                query, max_results, context_lines,
+                relevance_threshold=relevance_threshold,
+            )
 
         return []
 

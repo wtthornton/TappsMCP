@@ -246,6 +246,7 @@ Restart Claude Desktop after changing the config.
 | Cursor MCP config | Cursor Settings → MCP or `.cursor/mcp.json` |
 | Docker deployment | [docs/DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) |
 | Init and upgrade (tapps_init, tapps-mcp init) | [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](INIT_AND_UPGRADE_FEATURE_LIST.md) |
+| MCP client timeouts / long-running tools | [docs/MCP_CLIENT_TIMEOUTS.md](MCP_CLIENT_TIMEOUTS.md) |
 | Upgrade guide for consuming projects | [docs/UPGRADE_FOR_CONSUMERS.md](UPGRADE_FOR_CONSUMERS.md) |
 | Epic 10+11 (complete): Expert + Context7 | [docs/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) |
 | Full plan / roadmap | [docs/planning/TAPPS_MCP_PLAN.md](planning/TAPPS_MCP_PLAN.md) |
@@ -262,6 +263,7 @@ Restart Claude Desktop after changing the config.
 | **All tools fail with `No module named 'tapps_mcp.tools.checklist'`** | The runtime is missing the checklist module (common with a standalone binary). **Fix:** Install via pip or uv so the full package is present: `pip install tapps-mcp` or `uv tool install tapps-mcp`, then point MCP config at that environment (e.g. `command`: `uv`, `args`: `["run", "tapps-mcp", "serve"]` with appropriate `--directory` if using a project). If you must use a binary, rebuild it so it includes the full `tapps_mcp` package. |
 | **Cursor shows "Error" for tapps-mcp** | See [If Cursor shows "Error" for tapps-mcp](#if-cursor-shows-error-for-tappsmcp) above (wrong subcommand, `--no-sync`, Show Output). |
 | **Path denied / file not found** | Set `TAPPS_MCP_PROJECT_ROOT` (and optionally `TAPPS_MCP_HOST_PROJECT_ROOT` when using Docker or a different host path). |
+| **"This operation was aborted" when calling tapps_init** | MCP client timeout. Full init can take 10–35+ seconds. **Fix:** Use `dry_run: true` to preview (~2–5s), or `verify_only: true` (~1–3s), or set `warm_cache_from_tech_stack: false` and `warm_expert_rag_from_tech_stack: false` for faster init. See [MCP_CLIENT_TIMEOUTS.md](MCP_CLIENT_TIMEOUTS.md). |
 
 ---
 

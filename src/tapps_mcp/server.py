@@ -95,6 +95,26 @@ def _validate_file_path(file_path: str) -> Path:
     return validator.validate_read_path(path_str)
 
 
+_LIBRARY_DOMAIN_MAP: dict[str, str] = {}
+for _domain, _libs in {
+    "testing-strategies": ("pytest", "unittest", "mock", "coverage", "hypothesis"),
+    "api-design-integration": ("fastapi", "flask", "django", "starlette", "httpx", "requests"),
+    "database-data-management": ("sqlalchemy", "alembic", "psycopg", "redis"),
+    "cloud-infrastructure": ("docker", "kubernetes", "docker-compose"),
+    "code-quality-analysis": ("pydantic", "mypy", "ruff"),
+    "security": ("security", "cryptography", "pyjwt", "bandit"),
+}.items():
+    for _lib in _libs:
+        _LIBRARY_DOMAIN_MAP[_lib] = _domain
+
+_EXPERT_FALLBACK_MIN_CONFIDENCE = 0.3
+
+
+def _library_to_domain(library: str) -> str:
+    """Map library name to best-matching expert domain for fallback lookup."""
+    return _LIBRARY_DOMAIN_MAP.get(library.lower(), "software-architecture")
+
+
 _checklist_persist_configured: bool = False
 
 
@@ -398,6 +418,28 @@ async def tapps_lookup_docs(
     if result.error:
         err_code = "api_key_missing" if "API key" in result.error else "lookup_failed"
         response["error"] = {"code": err_code, "message": result.error}
+        # Expert fallback when Context7 and cache fail — provide RAG-backed guidance
+        try:
+            from tapps_mcp.experts.engine import consult_expert
+
+            cr = consult_expert(
+                question=f"How do I use {library} for {topic}? Best practices and API usage.",
+                domain=_library_to_domain(library),
+                max_chunks=3,
+                max_context_length=1500,
+            )
+            if cr.confidence >= _EXPERT_FALLBACK_MIN_CONFIDENCE and cr.answer:
+                response["expert_fallback"] = {
+                    "content": cr.answer,
+                    "confidence": round(cr.confidence, 2),
+                    "sources": cr.sources[:3],
+                }
+                response["error"]["message"] += (
+                    " Expert knowledge base fallback provided — use tapps_consult_expert "
+                    "for more targeted questions."
+                )
+        except Exception:
+            logger.debug("expert_fallback_failed", library=library, topic=topic)
     if result.warning:
         response["warning"] = result.warning
     return _with_nudges("tapps_lookup_docs", response)
@@ -717,13 +759,20 @@ def tapps_impact_analysis(file_path: str, change_type: str = "modified") -> dict
 
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
-async def tapps_report(file_path: str = "", report_format: str = "json") -> dict[str, Any]:
+async def tapps_report(
+    file_path: str = "",
+    report_format: str = "json",
+    max_files: int = 20,
+) -> dict[str, Any]:
     """Generate a quality report combining scoring and gate results.
 
     Args:
         file_path: Path to a Python file (optional - project-wide if omitted).
         report_format: "json" | "markdown" | "html".
+        max_files: Maximum files to score for project-wide report (default 20).
     """
+    import asyncio
+
     start = time.perf_counter_ns()
     _record_call("tapps_report")
 
@@ -733,8 +782,8 @@ async def tapps_report(file_path: str = "", report_format: str = "json") -> dict
 
     settings = load_settings()
     scorer = CodeScorer()
-    score_results = []
-    gate_results = []
+    score_results: list[Any] = []
+    gate_results: list[Any] = []
 
     if file_path:
         try:
@@ -750,14 +799,22 @@ async def tapps_report(file_path: str = "", report_format: str = "json") -> dict
         from tapps_mcp.common.utils import should_skip_path
 
         py_files = sorted(_Path(settings.project_root).rglob("*.py"))
-        py_files = [f for f in py_files if not should_skip_path(f)][:20]
-        for pf in py_files:
+        py_files = [f for f in py_files if not should_skip_path(f)][:max(1, max_files)]
+
+        async def _score_one(pf: _Path) -> tuple[Any, Any] | None:
             try:
-                result = await scorer.score_file(pf)
-                score_results.append(result)
-                gate_results.append(evaluate_gate(result, preset=settings.quality_preset))
+                res = await scorer.score_file(pf)
+                return res, evaluate_gate(res, preset=settings.quality_preset)
             except (ValueError, OSError, RuntimeError) as e:
                 logger.warning("report_file_skip", file=str(pf), error=str(e))
+                return None
+
+        tasks = [_score_one(pf) for pf in py_files]
+        outcomes = await asyncio.gather(*tasks, return_exceptions=False)
+        for out in outcomes:
+            if out is not None:
+                score_results.append(out[0])
+                gate_results.append(out[1])
 
     report_data = generate_report(score_results, gate_results, report_format=report_format)
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

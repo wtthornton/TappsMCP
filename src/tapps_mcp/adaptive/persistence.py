@@ -196,39 +196,47 @@ class FilePerformanceTracker:
         if not self._file.exists():
             return []
 
-        cutoff = datetime.now(tz=UTC) - timedelta(days=days)
-        records: list[dict[str, Any]] = []
-
         try:
             text = self._file.read_text(encoding="utf-8")
         except OSError:
             return []
 
-        for line in text.strip().splitlines():
-            if not line.strip():
-                continue
-            try:
-                data = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(data, dict):
-                continue
+        cutoff = datetime.now(tz=UTC) - timedelta(days=days)
+        return [
+            data
+            for line in text.strip().splitlines()
+            if line.strip()
+            and (data := self._parse_consultation_line(line)) is not None
+            and self._passes_consultation_filter(data, expert_id, cutoff)
+        ]
 
-            # Time filter.
-            ts_str = data.get("timestamp", "")
-            try:
-                ts = datetime.fromisoformat(ts_str)
-                if ts < cutoff:
-                    continue
-            except (ValueError, TypeError):
-                pass  # keep records without valid timestamps
+    @staticmethod
+    def _parse_consultation_line(line: str) -> dict[str, Any] | None:
+        """Parse a JSONL line into a consultation record, or None if invalid."""
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) else None
 
-            if expert_id is not None and data.get("expert_id") != expert_id:
-                continue
+    @staticmethod
+    def _passes_consultation_filter(
+        data: dict[str, Any],
+        expert_id: str | None,
+        cutoff: datetime,
+    ) -> bool:
+        """Return True if record passes time and expert filters."""
+        ts_str = data.get("timestamp", "")
+        try:
+            ts = datetime.fromisoformat(ts_str)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=UTC)
+            if ts < cutoff:
+                return False
+        except (ValueError, TypeError):
+            pass  # keep records without valid timestamps
 
-            records.append(data)
-
-        return records
+        return expert_id is None or data.get("expert_id") == expert_id
 
     def _get_all_expert_ids(self, days: int = 30) -> set[str]:
         """Return all unique expert IDs within the time window."""

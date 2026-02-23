@@ -53,7 +53,27 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_stats** | When the user wants **usage statistics** — call counts, success rates, average durations, cache hit rates, and gate pass rates. Filterable by tool and time period. |
 | **tapps_feedback** | After receiving a tool result — report whether the output was **helpful or not**. This feedback improves adaptive scoring and expert weights over time. |
 | **tapps_workflow** | When you want the **recommended tool call order** for a specific task type (general, feature, bugfix, refactor, security, review). |
-| **tapps_init** | At the **start of a pipeline run** — profiles the project, sets context, and plans the workflow stages (discover, research, develop, validate, verify). |
+| **tapps_init** | At **pipeline bootstrap** — creates AGENTS.md, TECH_STACK.md, platform rules, optionally warms caches. Call once per project (or when upgrading). |
+
+---
+
+## tapps_session_start vs tapps_init
+
+| Aspect | tapps_session_start | tapps_init |
+|--------|---------------------|------------|
+| **When** | **First call in every session** | **Pipeline bootstrap** (once per project, or when upgrading) |
+| **Duration** | Fast (~1–3s) | Full run: 10–35+ seconds |
+| **Purpose** | Load server info + project profile into context | Create files (AGENTS.md, TECH_STACK.md, platform rules), optionally warm cache/RAG |
+| **Side effects** | None (read-only) | Writes files, warms caches |
+| **Typical flow** | Call at session start, then work | Call once to bootstrap, or `dry_run: true` to preview |
+
+**Session start** → `tapps_session_start`. Use this as the first call in every session so subsequent tools have project context.
+
+**Pipeline/bootstrap** → `tapps_init`. Use when you need to set up TappsMCP in a project (AGENTS.md, TECH_STACK.md, platform rules) or upgrade existing files.
+
+**Both in one session?** Yes. If the project is not yet bootstrapped: call `tapps_session_start` first (fast), then `tapps_init` (creates files). If the project is already bootstrapped: call only `tapps_session_start` at session start.
+
+**Lighter tapps_init options** (for timeout-prone MCP clients): Use `dry_run: true` to preview (~2–5s); use `verify_only: true` for a quick server/checker check (~1–3s); or set `warm_cache_from_tech_stack: false` and `warm_expert_rag_from_tech_stack: false` for a faster init without cache warming.
 
 ---
 

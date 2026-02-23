@@ -221,6 +221,7 @@ async def tapps_init(
     overwrite_agents_md: bool = False,
     agent_teams: bool = False,
     dry_run: bool = False,
+    verify_only: bool = False,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
@@ -231,6 +232,11 @@ async def tapps_init(
     Optionally generates platform-specific rule files for Claude Code or Cursor.
 
     Call once per project to set up the pipeline workflow.
+
+    Duration: Full init can take 10-35+ seconds (profile, templates, cache/RAG
+    warming). For timeout-prone MCP clients, use dry_run or verify_only first,
+    or set warm_cache_from_tech_stack=False and warm_expert_rag_from_tech_stack=False
+    for a faster init (~5-15s). See docs/MCP_CLIENT_TIMEOUTS.md for timeout guidance.
 
     Args:
         create_handoff: Create docs/TAPPS_HANDOFF.md template.
@@ -250,15 +256,17 @@ async def tapps_init(
         agent_teams: When ``True`` and platform is ``"claude"``, generate Agent Teams
             hooks (TeammateIdle, TaskCompleted) for quality watchdog teammate.
         dry_run: When ``True``, compute and return what would be created without
-            writing files or warming caches.
+            writing files or warming caches. Keeps dry_run lightweight (~2-5s).
+        verify_only: When ``True``, run only server verification and return (~1-3s).
+            Use for quick connectivity/checker checks without creating files.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
     start = time.perf_counter_ns()
     _record_call("tapps_init")
 
-    # If context available, try elicitation confirmation
-    if ctx is not None:
+    # If context available, try elicitation confirmation (skip for verify_only/dry_run)
+    if ctx is not None and not verify_only and not dry_run:
         from tapps_mcp.common.elicitation import elicit_init_confirmation
 
         settings_peek = load_settings()
@@ -291,6 +299,7 @@ async def tapps_init(
         overwrite_agents_md=overwrite_agents_md,
         agent_teams=agent_teams,
         dry_run=dry_run,
+        verify_only=verify_only,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

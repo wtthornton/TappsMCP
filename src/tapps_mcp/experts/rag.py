@@ -146,6 +146,8 @@ class SimpleKnowledgeBase:
         query: str,
         max_results: int = 5,
         context_lines: int = 10,
+        *,
+        relevance_threshold: float = 0.2,
     ) -> list[KnowledgeChunk]:
         """Search knowledge base for relevant chunks.
 
@@ -153,6 +155,8 @@ class SimpleKnowledgeBase:
             query: Search query (natural language or keywords).
             max_results: Maximum number of chunks to return.
             context_lines: Lines of context around keyword matches.
+            relevance_threshold: Minimum score (0-1) for chunks to include.
+                Chunks below this are filtered out to improve relevance.
 
         Returns:
             List of :class:`KnowledgeChunk` sorted by relevance (desc).
@@ -166,7 +170,8 @@ class SimpleKnowledgeBase:
             chunks.extend(self._extract_chunks(file_path, content, keywords, context_lines))
 
         chunks.sort(key=lambda c: c.score, reverse=True)
-        return chunks[:max_results]
+        filtered = [c for c in chunks if c.score >= relevance_threshold]
+        return filtered[:max_results]
 
     def get_context(self, query: str, max_length: int = 2000) -> str:
         """Return a formatted context string for *query*.
