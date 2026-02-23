@@ -64,7 +64,7 @@ uv sync
 # Run the MCP server (stdio)
 uv run tapps-mcp serve
 
-# Run all tests (2276+ tests)
+# Run all tests (2282+ tests)
 uv run pytest tests/ -v
 
 # Run with coverage
@@ -117,6 +117,7 @@ uv run tapps-mcp doctor
 | File | Purpose |
 |------|---------|
 | `server.py` | Main MCP server — registers all tools, resources, prompts |
+| `common/output_schemas.py` | Pydantic models for structuredContent (6 tools wired) |
 | `server_scoring_tools.py` | `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check` |
 | `server_pipeline_tools.py` | `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_upgrade`, `tapps_doctor` |
 | `server_metrics_tools.py` | `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research` |

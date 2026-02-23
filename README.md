@@ -46,7 +46,7 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 - **Dead code detection** — Vulture-based detection of unused functions, classes, imports, and variables with confidence scoring, integrated into maintainability/structure scores.
 - **Dependency vulnerability scanning** — pip-audit integration for known CVEs in third-party packages with severity filtering.
 - **Circular dependency detection** — AST-based import graph, cycle detection, and coupling metrics (Ca/Ce/instability).
-- **Structured outputs** — Machine-parseable JSON (`structuredContent`) alongside human-readable text for all scoring tools (MCP 2025-11-25).
+- **Structured outputs** — Machine-parseable JSON (`structuredContent`) alongside human-readable text for 6 tools: `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`, `tapps_security_scan`, `tapps_validate_changed`, `tapps_validate_config` (MCP 2025-11-25).
 - **Documentation lookup** — Up-to-date library docs via [Context7](https://context7.com) with multi-provider fallback (llms.txt), fuzzy matching, and local cache.
 - **Config validation** — Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB patterns against best practices.
 - **Domain experts** — 16 built-in experts (security, testing, APIs, etc.) with RAG-backed answers and confidence scores.
@@ -542,6 +542,8 @@ quality_preset: standard   # standard | strict | framework
 log_level: INFO            # DEBUG | INFO | WARNING | ERROR
 log_json: false            # JSON-structured logs
 tool_timeout: 30           # Subprocess timeout in seconds
+dead_code_min_confidence: 80           # Minimum vulture confidence (0-100)
+dead_code_whitelist_patterns: ["test_*", "conftest.py"]  # File patterns to exclude
 ```
 
 Custom scoring weights (these are the defaults — adjust to your project's priorities):
@@ -566,6 +568,8 @@ scoring_weights:
 | **TAPPS_MCP_CONTEXT7_API_KEY** | Optional. Used by `tapps_lookup_docs` for live Context7 API fetches; cache still works without it. |
 | **TAPPS_MCP_QUALITY_PRESET** | Override quality preset (`standard`, `strict`, `framework`). Default: `standard`. |
 | **TAPPS_MCP_LOG_LEVEL** | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Default: `INFO`. |
+| **TAPPS_MCP_DEAD_CODE_MIN_CONFIDENCE** | Minimum confidence for dead code findings (0–100). Default: `80`. |
+| **TAPPS_MCP_DEAD_CODE_WHITELIST_PATTERNS** | Comma-separated file patterns to exclude (fnmatch). Default: `test_*,conftest.py`. |
 
 ---
 

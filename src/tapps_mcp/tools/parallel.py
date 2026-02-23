@@ -79,6 +79,7 @@ async def run_all_tools(
     run_bandit: bool = True,
     run_radon: bool = True,
     run_vulture: bool = True,
+    vulture_whitelist_patterns: list[str] | None = None,
     mode: str = "subprocess",
 ) -> ParallelResults:
     """Run ruff, mypy, bandit, radon, and vulture concurrently.
@@ -113,6 +114,7 @@ async def run_all_tools(
             run_bandit=run_bandit,
             run_radon=run_radon,
             run_vulture=run_vulture,
+            vulture_whitelist_patterns=vulture_whitelist_patterns,
         )
 
     # "subprocess" or "auto" — start with async subprocess
@@ -125,6 +127,7 @@ async def run_all_tools(
         run_bandit=run_bandit,
         run_radon=run_radon,
         run_vulture=run_vulture,
+        vulture_whitelist_patterns=vulture_whitelist_patterns,
     )
 
 
@@ -143,6 +146,7 @@ async def _run_subprocess(
     run_bandit: bool = True,
     run_radon: bool = True,
     run_vulture: bool = True,
+    vulture_whitelist_patterns: list[str] | None = None,
 ) -> ParallelResults:
     """Run tools via async subprocess (original behaviour)."""
     results = ParallelResults()
@@ -173,7 +177,12 @@ async def _run_subprocess(
     # Vulture: dead code detection (optional, graceful degradation)
     if run_vulture:
         tasks["vulture"] = asyncio.create_task(
-            run_vulture_async(file_path, cwd=cwd, timeout=timeout)
+            run_vulture_async(
+                file_path,
+                cwd=cwd,
+                timeout=timeout,
+                whitelist_patterns=vulture_whitelist_patterns,
+            )
         )
         # No _mark_missing for vulture — it degrades silently (returns empty list)
 
@@ -223,6 +232,7 @@ async def _run_direct(
     run_bandit: bool = True,
     run_radon: bool = True,
     run_vulture: bool = True,
+    vulture_whitelist_patterns: list[str] | None = None,
 ) -> ParallelResults:
     """Run tools via direct library calls and sync subprocess in thread pool.
 
@@ -284,7 +294,12 @@ async def _run_direct(
     # Vulture: dead code detection (optional, graceful degradation)
     if run_vulture:
         tasks["vulture"] = asyncio.create_task(
-            run_vulture_async(file_path, cwd=cwd, timeout=timeout)
+            run_vulture_async(
+                file_path,
+                cwd=cwd,
+                timeout=timeout,
+                whitelist_patterns=vulture_whitelist_patterns,
+            )
         )
 
     # Gather with safety timeout

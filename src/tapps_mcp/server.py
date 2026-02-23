@@ -362,6 +362,52 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
         },
         degraded=not result.bandit_available,
     )
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import (
+            SecurityFindingOutput,
+            SecurityScanOutput,
+        )
+
+        findings: list[SecurityFindingOutput] = []
+        for i in result.bandit_issues[:50]:
+            findings.append(
+                SecurityFindingOutput(
+                    code=i.code,
+                    message=i.message,
+                    file=i.file,
+                    line=i.line,
+                    severity=i.severity,
+                    confidence=i.confidence,
+                )
+            )
+        for f in result.secret_findings[:50]:
+            findings.append(
+                SecurityFindingOutput(
+                    code=f.secret_type,
+                    message=f.secret_type,
+                    file=f.file_path,
+                    line=f.line_number,
+                    severity=f.severity,
+                    confidence="medium",
+                )
+            )
+        structured = SecurityScanOutput(
+            file_path=str(resolved),
+            passed=result.passed,
+            total_issues=result.total_issues,
+            critical_count=result.critical_count,
+            high_count=result.high_count,
+            medium_count=result.medium_count,
+            low_count=result.low_count,
+            bandit_available=result.bandit_available,
+            findings=findings,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        logger.debug("structured_output_failed: tapps_security_scan", exc_info=True)
+
     return _with_nudges("tapps_security_scan", resp)
 
 
@@ -489,6 +535,37 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
             "warning_count": sum(1 for f in result.findings if f.severity == "warning"),
         },
     )
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import (
+            ConfigFindingOutput,
+            ValidateConfigOutput,
+        )
+
+        config_findings = [
+            ConfigFindingOutput(
+                severity=f.severity,
+                message=f.message,
+                line=f.line,
+                category=f.category,
+            )
+            for f in result.findings
+        ]
+        structured = ValidateConfigOutput(
+            file_path=result.file_path,
+            config_type=result.config_type,
+            valid=result.valid,
+            finding_count=len(result.findings),
+            critical_count=sum(1 for f in result.findings if f.severity == "critical"),
+            warning_count=sum(1 for f in result.findings if f.severity == "warning"),
+            findings=config_findings,
+            suggestions=result.suggestions,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        logger.debug("structured_output_failed: tapps_validate_config", exc_info=True)
+
     return _with_nudges("tapps_validate_config", resp)
 
 
@@ -783,10 +860,10 @@ async def tapps_report(
 
     from tapps_mcp.gates.evaluator import evaluate_gate
     from tapps_mcp.project.report import generate_report
-    from tapps_mcp.scoring.scorer import CodeScorer
+    from tapps_mcp.server_helpers import _get_scorer
 
     settings = load_settings()
-    scorer = CodeScorer()
+    scorer = _get_scorer()
     score_results: list[Any] = []
     gate_results: list[Any] = []
 
@@ -846,8 +923,12 @@ async def tapps_dead_code(file_path: str, min_confidence: int = 80) -> dict[str,
 
     from tapps_mcp.tools.vulture import run_vulture_async
 
+    settings = load_settings()
     findings = await run_vulture_async(
-        str(resolved), min_confidence=min_confidence, cwd=str(resolved.parent)
+        str(resolved),
+        min_confidence=min_confidence,
+        whitelist_patterns=settings.dead_code_whitelist_patterns,
+        cwd=str(resolved.parent),
     )
 
     # Group by type

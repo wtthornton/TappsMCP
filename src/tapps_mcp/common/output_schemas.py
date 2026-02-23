@@ -127,6 +127,28 @@ class ValidateChangedOutput(StructuredOutput):
     failed_count: int = 0
 
 
+class ConfigFindingOutput(BaseModel):
+    """A single config validation finding in structured output."""
+
+    severity: str
+    message: str
+    line: int | None = None
+    category: str = "general"
+
+
+class ValidateConfigOutput(StructuredOutput):
+    """Structured output for tapps_validate_config."""
+
+    file_path: str
+    config_type: str
+    valid: bool
+    finding_count: int = 0
+    critical_count: int = 0
+    warning_count: int = 0
+    findings: list[ConfigFindingOutput] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
+
+
 class ImpactOutput(StructuredOutput):
     """Structured output for tapps_impact_analysis."""
 
@@ -167,6 +189,7 @@ OUTPUT_SCHEMA_REGISTRY: dict[str, type[StructuredOutput]] = {
     "tapps_quick_check": QuickCheckOutput,
     "tapps_security_scan": SecurityScanOutput,
     "tapps_validate_changed": ValidateChangedOutput,
+    "tapps_validate_config": ValidateConfigOutput,
     "tapps_impact_analysis": ImpactOutput,
     "tapps_consult_expert": ExpertOutput,
     "tapps_checklist": ChecklistOutput,

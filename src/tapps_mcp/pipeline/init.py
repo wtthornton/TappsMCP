@@ -414,7 +414,10 @@ def _run_server_verification(
                         cwd=project_root,
                     )
 
-        # Re-detect after install
+        # Reset cache so re-detection actually probes for newly installed tools
+        from tapps_mcp.tools.tool_detection import _reset_tools_cache
+
+        _reset_tools_cache()
         installed_after = detect_installed_tools()
         result["ok"] = all(t.available for t in installed_after)
         result["installed"] = [t.name for t in installed_after if t.available]

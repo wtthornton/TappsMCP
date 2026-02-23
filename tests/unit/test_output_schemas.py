@@ -9,6 +9,7 @@ from tapps_mcp.common.output_schemas import (
     OUTPUT_SCHEMA_REGISTRY,
     CategoryScoreOutput,
     ChecklistOutput,
+    ConfigFindingOutput,
     ExpertOutput,
     FileValidationResult,
     GateFailure,
@@ -20,6 +21,7 @@ from tapps_mcp.common.output_schemas import (
     SecurityScanOutput,
     StructuredOutput,
     ValidateChangedOutput,
+    ValidateConfigOutput,
     get_output_schema,
 )
 
@@ -385,6 +387,54 @@ class TestValidateChangedOutput:
 
 
 # ---------------------------------------------------------------------------
+# ValidateConfigOutput
+# ---------------------------------------------------------------------------
+
+
+class TestValidateConfigOutput:
+    """Tests for ValidateConfigOutput model."""
+
+    def test_validate_config_output_schema(self) -> None:
+        """Verify schema has expected properties."""
+        schema = ValidateConfigOutput.to_output_schema()
+        props = schema["properties"]
+        assert "file_path" in props
+        assert "config_type" in props
+        assert "valid" in props
+        assert "finding_count" in props
+        assert "findings" in props
+        assert "suggestions" in props
+
+    def test_validate_config_output_serialize(self) -> None:
+        """Full serialization with findings."""
+        output = ValidateConfigOutput(
+            file_path="Dockerfile",
+            config_type="dockerfile",
+            valid=True,
+            finding_count=1,
+            critical_count=0,
+            warning_count=1,
+            findings=[
+                ConfigFindingOutput(
+                    severity="warning",
+                    message="Avoid latest tag",
+                    line=1,
+                    category="best_practice",
+                ),
+            ],
+            suggestions=["Pin a specific version"],
+        )
+        content = output.to_structured_content()
+        assert content["file_path"] == "Dockerfile"
+        assert content["config_type"] == "dockerfile"
+        assert content["valid"] is True
+        assert content["finding_count"] == 1
+        assert len(content["findings"]) == 1
+        assert content["findings"][0]["severity"] == "warning"
+        assert content["suggestions"] == ["Pin a specific version"]
+
+
+# ---------------------------------------------------------------------------
 # ImpactOutput
 # ---------------------------------------------------------------------------
 
@@ -716,6 +766,7 @@ class TestRegistry:
             "tapps_quick_check",
             "tapps_security_scan",
             "tapps_validate_changed",
+            "tapps_validate_config",
             "tapps_impact_analysis",
             "tapps_consult_expert",
             "tapps_checklist",

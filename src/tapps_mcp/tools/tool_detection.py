@@ -42,12 +42,32 @@ _TOOL_SPECS: list[dict[str, str]] = [
 ]
 
 
+# Process-lifetime cache for tool detection results.
+_cached_tools: list[InstalledTool] | None = None
+
+
+def _reset_tools_cache() -> None:
+    """Reset the cached tool detection results.
+
+    Call after installing or removing tools mid-session, or in test teardown.
+    """
+    global _cached_tools  # noqa: PLW0603
+    _cached_tools = None
+
+
 def detect_installed_tools() -> list[InstalledTool]:
     """Probe for known external tools and return their availability.
+
+    Results are cached for the process lifetime.  Call
+    :func:`_reset_tools_cache` to force re-detection.
 
     Returns:
         List of ``InstalledTool`` objects.
     """
+    global _cached_tools  # noqa: PLW0603
+    if _cached_tools is not None:
+        return list(_cached_tools)
+
     results: list[InstalledTool] = []
 
     for spec in _TOOL_SPECS:
@@ -75,4 +95,5 @@ def detect_installed_tools() -> list[InstalledTool]:
             )
         )
 
-    return results
+    _cached_tools = results
+    return list(_cached_tools)

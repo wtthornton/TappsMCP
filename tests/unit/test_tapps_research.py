@@ -14,8 +14,8 @@ from tapps_mcp.server import tapps_research
 class TestTappsResearchResponseShape:
     """Validate complete response structure in a single call."""
 
-    def test_full_response_structure(self) -> None:
-        result: dict[str, Any] = tapps_research(
+    async def test_full_response_structure(self) -> None:
+        result: dict[str, Any] = await tapps_research(
             question="How to prevent SQL injection?",
             domain="security",
         )
@@ -55,13 +55,13 @@ class TestTappsResearchResponseShape:
 class TestTappsResearchRouting:
     """Domain routing and auto-detection."""
 
-    def test_explicit_domain(self) -> None:
-        result = tapps_research(question="How to prevent SQL injection?", domain="security")
+    async def test_explicit_domain(self) -> None:
+        result = await tapps_research(question="How to prevent SQL injection?", domain="security")
         assert result["data"]["domain"] == "security"
         assert result["data"]["expert_id"] == "expert-security"
 
-    def test_auto_routing(self) -> None:
-        result = tapps_research(question="How to write unit tests with pytest?", domain="")
+    async def test_auto_routing(self) -> None:
+        result = await tapps_research(question="How to write unit tests with pytest?", domain="")
         assert result["success"] is True
         assert result["data"]["domain"] == "testing-strategies"
 
@@ -69,9 +69,9 @@ class TestTappsResearchRouting:
 class TestTappsResearchDocsLookup:
     """Docs supplementation edge cases."""
 
-    def test_docs_error_field_type(self) -> None:
+    async def test_docs_error_field_type(self) -> None:
         """docs_error is None or a string, never other types."""
-        result = tapps_research(
+        result = await tapps_research(
             question="How to use an obscure library xyz123?",
             domain="security",
             library="xyz123_nonexistent",
@@ -79,8 +79,8 @@ class TestTappsResearchDocsLookup:
         err = result["data"]["docs_error"]
         assert err is None or isinstance(err, str)
 
-    def test_answer_nonempty(self) -> None:
-        result = tapps_research(
+    async def test_answer_nonempty(self) -> None:
+        result = await tapps_research(
             question="What are best practices for database migrations?",
             domain="database-data-management",
         )

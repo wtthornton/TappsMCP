@@ -12,6 +12,7 @@ from tapps_mcp.tools.vulture import (
     is_vulture_available,
     parse_vulture_output,
     run_vulture_async,
+    _matches_whitelist,
 )
 
 # ---------------------------------------------------------------------------
@@ -225,3 +226,48 @@ class TestRunVultureAsync:
             cwd="/tmp",
             timeout=15,
         )
+
+
+# ---------------------------------------------------------------------------
+# _matches_whitelist
+# ---------------------------------------------------------------------------
+class TestMatchesWhitelist:
+    def test_matches_test_star(self) -> None:
+        assert _matches_whitelist("tests/test_foo.py", ["test_*"]) is True
+        assert _matches_whitelist("test_bar.py", ["test_*"]) is True
+        assert _matches_whitelist("src/foo.py", ["test_*"]) is False
+
+    def test_matches_conftest(self) -> None:
+        assert _matches_whitelist("conftest.py", ["conftest.py"]) is True
+        assert _matches_whitelist("tests/conftest.py", ["conftest.py"]) is True
+
+    def test_empty_patterns(self) -> None:
+        assert _matches_whitelist("test.py", []) is False
+
+
+# ---------------------------------------------------------------------------
+# whitelist_patterns filtering
+# ---------------------------------------------------------------------------
+class TestWhitelistFiltering:
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.vulture.run_command_async")
+    @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True)
+    async def test_whitelist_filters_test_files(
+        self, _mock_avail: object, mock_cmd: object
+    ) -> None:
+        """Findings from test_*.py files are filtered when whitelist_patterns is set."""
+        mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
+            returncode=1,
+            stdout="tests/test_foo.py:10: unused function 'helper' (90% confidence)\n"
+            "src/main.py:5: unused import 'os' (80% confidence)\n",
+            stderr="",
+        )
+        result = await run_vulture_async(
+            "tests/test_foo.py",
+            min_confidence=80,
+            whitelist_patterns=["test_*", "conftest.py"],
+        )
+        # test_foo.py finding filtered; main.py kept
+        assert len(result) == 1
+        assert result[0].file_path == "src/main.py"
+        assert result[0].name == "os"

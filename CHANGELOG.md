@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Epic 13: Structured Outputs — partial, Epic 14: Dead Code — complete)
+
+- **Structured outputs for 6 tools** — `tapps_security_scan`, `tapps_validate_changed`, and `tapps_validate_config` now return `structuredContent` alongside human-readable text. Combined with existing scoring tools (`tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`), 6 tools provide machine-parseable JSON for programmatic consumption.
+- **ValidateConfigOutput model** — New `ConfigFindingOutput` and `ValidateConfigOutput` in `output_schemas.py` for `tapps_validate_config` structured responses.
+- **Dead code whitelist** — `dead_code_whitelist_patterns` setting (default: `["test_*", "conftest.py"]`) filters vulture findings by file basename via fnmatch. Configurable via `TAPPS_MCP_DEAD_CODE_WHITELIST_PATTERNS` or `.tapps-mcp.yaml`.
+- **Dead code whitelist tests** — `TestMatchesWhitelist` and `TestWhitelistFiltering` in `test_vulture.py`.
+
+### Added (Performance)
+
+- **`load_settings()` caching** — singleton cached on first no-arg call, eliminating ~20+ YAML parses and Pydantic constructions per session. `_reset_settings_cache()` for test isolation.
+- **`CodeScorer` singleton** — `_get_scorer()` in `server_helpers.py` lazily initializes one `CodeScorer`, replacing 5 per-call constructions. `_reset_scorer_cache()` for test isolation.
+- **`detect_installed_tools()` caching** — tool detection results (6 subprocess calls) cached for process lifetime. `_reset_tools_cache()` for test isolation and post-install re-detection.
+- **`tests/conftest.py`** — autouse fixture resets all 3 caches after each test for isolation.
+
+### Changed
+
+- **`tapps_research` is now async** — replaced `asyncio.run()` (new event loop per call) with direct `await engine.lookup()`. Eliminates event loop creation overhead.
+- **run_vulture_async** — Now accepts `whitelist_patterns: list[str] | None`; findings matching patterns are excluded.
+- **run_all_tools** — Accepts `vulture_whitelist_patterns` and passes it to `run_vulture_async`.
+- **CodeScorer** — Passes `settings.dead_code_whitelist_patterns` to `run_all_tools`. Uses singleton via `_get_scorer()` instead of per-call construction.
+- **tapps_dead_code** — Uses `dead_code_whitelist_patterns` from settings when scanning.
+- **Epic 14** — Marked complete. Epic 13 status updated: 6/8 tools wired, outputSchema not yet in tool registration.
+
 ## [0.3.0] - 2026-02-23
 
 ### Added (Epic 18: MCP Upgrade Tool & Exe Path Handling)

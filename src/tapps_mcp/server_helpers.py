@@ -2,7 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from tapps_mcp.scoring.scorer import CodeScorer as _CodeScorerType
+
+# ---------------------------------------------------------------------------
+# CodeScorer singleton — avoids re-instantiating on every tool call.
+# ---------------------------------------------------------------------------
+
+_scorer: _CodeScorerType | None = None
+
+
+def _get_scorer() -> _CodeScorerType:
+    """Return a lazily-initialized :class:`CodeScorer` singleton."""
+    global _scorer  # noqa: PLW0603
+    if _scorer is None:
+        from tapps_mcp.scoring.scorer import CodeScorer
+
+        _scorer = CodeScorer()
+    return _scorer
+
+
+def _reset_scorer_cache() -> None:
+    """Reset the cached :class:`CodeScorer` singleton (for testing)."""
+    global _scorer  # noqa: PLW0603
+    _scorer = None
 
 
 def error_response(tool_name: str, code: str, message: str) -> dict[str, Any]:

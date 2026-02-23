@@ -207,9 +207,9 @@ class TestMCPToolHandlers:
         assert "primary_domain" in first
         assert "knowledge_files" in first
 
-    def test_tapps_research_response_shape(self) -> None:
+    async def test_tapps_research_response_shape(self) -> None:
         """tapps_research returns combined expert + docs response structure."""
-        result: dict[str, Any] = tapps_research(
+        result: dict[str, Any] = await tapps_research(
             question="How to prevent SQL injection?",
             domain="security",
         )
@@ -223,9 +223,9 @@ class TestMCPToolHandlers:
         assert "docs_supplemented" in result["data"]
         assert isinstance(result["data"]["docs_supplemented"], bool)
 
-    def test_tapps_research_auto_routing(self) -> None:
+    async def test_tapps_research_auto_routing(self) -> None:
         """tapps_research auto-routes when domain is empty."""
-        result: dict[str, Any] = tapps_research(
+        result: dict[str, Any] = await tapps_research(
             question="How to write unit tests with pytest?",
             domain="",
         )

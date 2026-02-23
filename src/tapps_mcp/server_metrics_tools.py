@@ -259,7 +259,7 @@ def tapps_feedback(
     return _with_nudges("tapps_feedback", resp)
 
 
-def tapps_research(
+async def tapps_research(
     question: str,
     domain: str = "",
     library: str = "",
@@ -303,31 +303,25 @@ def tapps_research(
         lookup_topic = topic or result.suggested_topic or "overview"
 
         try:
-            import asyncio
-
             from tapps_mcp.knowledge.cache import KBCache
             from tapps_mcp.knowledge.lookup import LookupEngine
 
             settings = load_settings()
             cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+            engine = LookupEngine(cache, api_key=settings.context7_api_key)
+            try:
+                lr = await engine.lookup(
+                    library=lookup_library,
+                    topic=lookup_topic,
+                    mode="code",
+                )
+            finally:
+                await engine.close()
 
-            async def _run() -> tuple[bool, str | None, str | None]:
-                engine = LookupEngine(cache, api_key=settings.context7_api_key)
-                try:
-                    lr = await engine.lookup(
-                        library=lookup_library,
-                        topic=lookup_topic,
-                        mode="code",
-                    )
-                finally:
-                    await engine.close()
-                return lr.success, lr.content, lr.source
-
-            ok, content, source = asyncio.run(_run())
-            if ok and content:
+            if lr.success and lr.content:
                 max_chars = settings.expert_fallback_max_chars
-                docs_content = content[:max_chars]
-                docs_source = source
+                docs_content = lr.content[:max_chars]
+                docs_source = lr.source
                 docs_library = lookup_library
                 docs_topic = lookup_topic
             else:

@@ -1,6 +1,6 @@
 # Epic 13: Structured Tool Outputs (MCP 2025-11-25)
 
-**Status:** Complete - 1 source file (output_schemas.py), 48 tests, structured outputs wired to 8 tools
+**Status:** Partial — 6 tools wired (score_file, quality_gate, quick_check, security_scan, validate_changed, validate_config); outputSchema not in registration; remaining tools open
 **Priority:** P0 — Critical (enables programmatic score consumption by all MCP clients)
 **Estimated LOE:** ~1-2 weeks (1 developer)
 **Dependencies:** Epic 0 (Foundation), Epic 1 (Core Quality)
@@ -34,14 +34,15 @@ The MCP 2025-11-25 spec introduces `outputSchema` (tool-level JSON schema declar
 
 ## Acceptance Criteria
 
-- [ ] All scoring tools (`tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`) return `structuredContent` alongside text
-- [ ] `tapps_validate_changed` returns structured per-file results
-- [ ] `tapps_security_scan` returns structured findings with severity, line, and CWE
+- [x] All scoring tools (`tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`) return `structuredContent` alongside text
+- [x] `tapps_validate_changed` returns structured per-file results
+- [x] `tapps_security_scan` returns structured findings with severity, line, and CWE
 - [ ] All tools declare `outputSchema` in their tool registration
-- [ ] Backward-compatible — text content unchanged for clients that don't support structured outputs
-- [ ] Pydantic models define output schemas (single source of truth)
-- [ ] Unit tests validate both text and structured responses
-- [ ] Zero mypy/ruff errors
+- [x] Backward-compatible — text content unchanged for clients that don't support structured outputs
+- [x] Pydantic models define output schemas (single source of truth)
+- [x] Unit tests validate schema models and serialization (test_output_schemas.py)
+- [ ] Unit tests validate tool handlers return both text and structuredContent
+- [x] Zero mypy/ruff errors
 
 ---
 
@@ -51,28 +52,30 @@ The MCP 2025-11-25 spec introduces `outputSchema` (tool-level JSON schema declar
 
 **Points:** 3
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Create Pydantic v2 models for each tool's structured output. These models serve as the single source of truth for both `outputSchema` declarations and runtime `structuredContent` serialization.
 
 **Source Files:**
-- `src/tapps_mcp/common/output_schemas.py` (NEW)
+- `src/tapps_mcp/common/output_schemas.py`
 
 **Tasks:**
-- [ ] Create `ScoreFileOutput` model: overall_score, categories (dict of name -> score/suggestions), degraded, tool_errors, suggestions
-- [ ] Create `QualityGateOutput` model: passed, preset, threshold, actual_score, failing_categories, warnings
-- [ ] Create `QuickCheckOutput` model: score, gate_result (pass/fail), security_summary, suggestions
-- [ ] Create `SecurityScanOutput` model: findings (list of severity/line/code/message/cwe), secret_findings, summary
-- [ ] Create `ValidateChangedOutput` model: files (list of per-file results), overall_passed, summary
-- [ ] Add `.to_output_schema()` class method that returns the JSON schema dict for MCP tool registration
-- [ ] Add `.to_structured_content()` instance method that returns the serialized JSON for MCP responses
+- [x] Create `ScoreFileOutput` model: overall_score, categories (dict of name -> score/suggestions), degraded, tool_errors, suggestions
+- [x] Create `QualityGateOutput` model: passed, preset, threshold, actual_score, failing_categories, warnings
+- [x] Create `QuickCheckOutput` model: score, gate_result (pass/fail), security_summary, suggestions
+- [x] Create `SecurityScanOutput` model: findings (list of severity/line/code/message/cwe), secret_findings, summary
+- [x] Create `ValidateChangedOutput` model: files (list of per-file results), overall_passed, summary
+- [x] Add `ExpertOutput`, `ImpactOutput`, `ChecklistOutput` models
+- [x] Add `.to_output_schema()` class method that returns the JSON schema dict for MCP tool registration
+- [x] Add `.to_structured_content()` instance method that returns the serialized JSON for MCP responses
+- [x] Create `ValidateConfigOutput` model
 
 **Implementation Notes:**
 - Use Pydantic v2 `model_json_schema()` for automatic JSON schema generation
 - All models inherit from a `StructuredOutput` base with common serialization logic
 - Keep models lean — only data that clients need to act on programmatically
 
-**Definition of Done:** Output schema models exist with full type annotations, JSON schema export, and serialization. All models pass mypy --strict.
+**Definition of Done:** Output schema models exist with full type annotations, JSON schema export, and serialization. All models pass mypy --strict. ValidateConfigOutput still missing.
 
 ---
 
@@ -80,7 +83,7 @@ Create Pydantic v2 models for each tool's structured output. These models serve 
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Add `outputSchema` to tool registration and return `structuredContent` alongside existing text content for `tapps_score_file`, `tapps_quality_gate`, and `tapps_quick_check`.
 
@@ -90,19 +93,19 @@ Add `outputSchema` to tool registration and return `structuredContent` alongside
 
 **Tasks:**
 - [ ] Research FastMCP's `outputSchema` support — determine if `@mcp.tool()` accepts it as a kwarg or if it requires low-level registration
-- [ ] Add `outputSchema` to `tapps_score_file` tool registration using `ScoreFileOutput.to_output_schema()`
-- [ ] Build `ScoreFileOutput` instance from existing `ScoreResult` data in the handler
-- [ ] Return both text content and `structuredContent` in the tool response
-- [ ] Repeat for `tapps_quality_gate` with `QualityGateOutput`
-- [ ] Repeat for `tapps_quick_check` with `QuickCheckOutput`
-- [ ] Ensure backward compatibility — text content is identical to current output
+- [ ] Add `outputSchema` to tool registration (get_output_schema exists but not wired to @mcp.tool)
+- [x] Build `ScoreFileOutput` instance from existing `ScoreResult` data in the handler
+- [x] Return both text content and `structuredContent` in the tool response
+- [x] Repeat for `tapps_quality_gate` with `QualityGateOutput`
+- [x] Repeat for `tapps_quick_check` with `QuickCheckOutput`
+- [x] Ensure backward compatibility — text content is identical to current output
 
 **Implementation Notes:**
 - FastMCP may require using `mcp.types.CallToolResult` directly instead of returning a plain string
 - The `structuredContent` field is optional per spec — clients that don't support it simply ignore it
 - Test with both structured-aware and plain-text clients
 
-**Definition of Done:** All three scoring tools return structured JSON alongside text. Clients that support `structuredContent` can extract scores programmatically.
+**Definition of Done:** All three scoring tools return structured JSON alongside text. Clients that support `structuredContent` can extract scores programmatically. outputSchema still not declared at registration.
 
 ---
 
@@ -110,7 +113,7 @@ Add `outputSchema` to tool registration and return `structuredContent` alongside
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Add structured outputs to `tapps_security_scan`, `tapps_validate_changed`, and `tapps_validate_config`.
 
@@ -120,10 +123,10 @@ Add structured outputs to `tapps_security_scan`, `tapps_validate_changed`, and `
 - `src/tapps_mcp/common/output_schemas.py`
 
 **Tasks:**
-- [ ] Add `outputSchema` + `structuredContent` to `tapps_security_scan` using `SecurityScanOutput`
-- [ ] Add `outputSchema` + `structuredContent` to `tapps_validate_changed` using `ValidateChangedOutput`
-- [ ] Create `ValidateConfigOutput` model and wire to `tapps_validate_config`
-- [ ] Ensure per-file results in `tapps_validate_changed` include individual scores and gate results
+- [x] Add `outputSchema` + `structuredContent` to `tapps_security_scan` using `SecurityScanOutput`
+- [x] Add `outputSchema` + `structuredContent` to `tapps_validate_changed` using `ValidateChangedOutput`
+- [x] Create `ValidateConfigOutput` model and wire to `tapps_validate_config`
+- [x] Ensure per-file results in `tapps_validate_changed` include individual scores and gate results
 
 **Definition of Done:** Security and validation tools return structured JSON. `tapps_validate_changed` returns a parseable array of per-file results.
 
@@ -133,7 +136,7 @@ Add structured outputs to `tapps_security_scan`, `tapps_validate_changed`, and `
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Open
 
 Add structured outputs to the remaining tools: `tapps_consult_expert`, `tapps_research`, `tapps_impact_analysis`, `tapps_project_profile`, `tapps_session_start`, `tapps_checklist`.
 
@@ -144,8 +147,9 @@ Add structured outputs to the remaining tools: `tapps_consult_expert`, `tapps_re
 - `src/tapps_mcp/common/output_schemas.py`
 
 **Tasks:**
-- [ ] Create output models: `ExpertOutput`, `ResearchOutput`, `ImpactOutput`, `ProfileOutput`, `SessionStartOutput`, `ChecklistOutput`
-- [ ] Wire `outputSchema` + `structuredContent` to each tool
+- [x] Create output models: `ExpertOutput`, `ImpactOutput`, `ChecklistOutput` (in OUTPUT_SCHEMA_REGISTRY)
+- [ ] Create output models: `ResearchOutput`, `ProfileOutput`, `SessionStartOutput` (still missing)
+- [ ] Wire `outputSchema` + `structuredContent` to each tool handler (none wired yet)
 - [ ] Prioritize tools where structured output is most valuable (expert confidence scores, impact blast radius)
 - [ ] Tools that return simple text (e.g., `tapps_session_notes`) can skip structured outputs
 
@@ -157,24 +161,24 @@ Add structured outputs to the remaining tools: `tapps_consult_expert`, `tapps_re
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Partial
 
 Comprehensive tests for structured output correctness and schema validation.
 
 **Source Files:**
-- `tests/unit/test_output_schemas.py` (NEW)
-- `tests/unit/test_structured_scoring.py` (NEW)
+- `tests/unit/test_output_schemas.py`
+- `tests/unit/test_structured_scoring.py` (not created)
 
 **Tasks:**
-- [ ] Test each output model's JSON schema generation matches expected structure
-- [ ] Test each output model's serialization round-trips correctly
+- [x] Test each output model's JSON schema generation matches expected structure
+- [x] Test each output model's serialization round-trips correctly
 - [ ] Test that tool handlers return both text and structuredContent
 - [ ] Test backward compatibility — text content unchanged
 - [ ] Test that structuredContent validates against the declared outputSchema
 - [ ] Add integration test: call tool via MCP client, verify structured response
 - [ ] Document structured output usage in AGENTS.md for consuming projects
 
-**Definition of Done:** All output schemas have round-trip tests. Tool responses validate against declared schemas. ~30 new tests.
+**Definition of Done:** All output schemas have round-trip tests. Tool responses validate against declared schemas. ~30 new tests. Schema tests complete (~48); tool-handler tests not added.
 
 ---
 

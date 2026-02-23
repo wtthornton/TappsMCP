@@ -165,6 +165,8 @@ For semantic expert search (optional): `pip install tapps-mcp[rag]`
 | `TAPPS_MCP_CONTEXT7_API_KEY` | Enable live Context7 documentation lookups | Not set (cache-only) |
 | `TAPPS_MCP_QUALITY_PRESET` | Override quality preset | `standard` |
 | `TAPPS_MCP_LOG_LEVEL` | Logging verbosity | `INFO` |
+| `TAPPS_MCP_DEAD_CODE_MIN_CONFIDENCE` | Minimum confidence for dead code (0–100) | `80` |
+| `TAPPS_MCP_DEAD_CODE_WHITELIST_PATTERNS` | Comma-separated file patterns to exclude (fnmatch) | `test_*,conftest.py` |
 
 ---
 

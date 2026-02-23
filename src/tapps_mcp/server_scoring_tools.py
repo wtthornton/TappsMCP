@@ -17,7 +17,7 @@ from mcp.server.fastmcp import (
 from mcp.types import ToolAnnotations
 
 from tapps_mcp.config.settings import load_settings
-from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
+from tapps_mcp.server_helpers import _get_scorer, error_response, serialize_issues, success_response
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -68,9 +68,7 @@ async def tapps_score_file(
     except (ValueError, FileNotFoundError) as exc:
         return error_response("tapps_score_file", "path_denied", str(exc))
 
-    from tapps_mcp.scoring.scorer import CodeScorer
-
-    scorer = CodeScorer()
+    scorer = _get_scorer()
     fixes_applied = 0
 
     if quick:
@@ -222,9 +220,8 @@ async def tapps_quality_gate(
         return error_response("tapps_quality_gate", "path_denied", str(exc))
 
     from tapps_mcp.gates.evaluator import evaluate_gate
-    from tapps_mcp.scoring.scorer import CodeScorer
 
-    scorer = CodeScorer()
+    scorer = _get_scorer()
     score_result = await scorer.score_file(resolved)
     gate_result = evaluate_gate(score_result, preset=preset)
 
@@ -326,11 +323,10 @@ async def tapps_quick_check(
         return error_response("tapps_quick_check", "path_denied", str(exc))
 
     from tapps_mcp.gates.evaluator import evaluate_gate
-    from tapps_mcp.scoring.scorer import CodeScorer
     from tapps_mcp.security.security_scanner import run_security_scan
 
     settings = load_settings()
-    scorer = CodeScorer()
+    scorer = _get_scorer()
 
     score_result = scorer.score_file_quick(resolved)
 

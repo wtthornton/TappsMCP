@@ -139,6 +139,10 @@ class TappsMCPSettings(BaseSettings):
         le=100,
         description="Minimum confidence threshold for dead code findings (0-100).",
     )
+    dead_code_whitelist_patterns: list[str] = Field(
+        default_factory=lambda: ["test_*", "conftest.py"],
+        description="File name patterns to exclude from dead code findings (fnmatch).",
+    )
 
     # Dependency vulnerability scanning
     dependency_scan_enabled: bool = Field(
@@ -168,6 +172,19 @@ class TappsMCPSettings(BaseSettings):
     )
 
 
+# Settings cache — only the no-arg (default) case is cached.
+_cached_settings: TappsMCPSettings | None = None
+
+
+def _reset_settings_cache() -> None:
+    """Reset the cached settings singleton.
+
+    Call in test teardown or when environment/YAML config changes mid-process.
+    """
+    global _cached_settings  # noqa: PLW0603
+    _cached_settings = None
+
+
 def _load_yaml_config(project_root: Path) -> dict[str, Any]:
     """Load project-level ``.tapps-mcp.yaml`` if it exists."""
     config_path = project_root / ".tapps-mcp.yaml"
@@ -186,12 +203,21 @@ def _load_yaml_config(project_root: Path) -> dict[str, Any]:
 def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
     """Load settings with correct precedence.
 
+    When *project_root* is ``None`` (the default), returns a cached singleton
+    created on the first call.  Pass an explicit *project_root* to bypass the
+    cache entirely.
+
     Args:
         project_root: Override for project root.  When ``None``, uses CWD.
 
     Returns:
         Fully resolved ``TappsMCPSettings``.
     """
+    global _cached_settings  # noqa: PLW0603
+
+    if project_root is None and _cached_settings is not None:
+        return _cached_settings
+
     # Determine root: explicit arg > env var > CWD
     if project_root:
         root = Path(project_root)
@@ -209,4 +235,9 @@ def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
     if "project_root" not in yaml_data:
         yaml_data["project_root"] = str(root)
 
-    return TappsMCPSettings(**yaml_data)
+    result = TappsMCPSettings(**yaml_data)
+
+    if project_root is None:
+        _cached_settings = result
+
+    return result

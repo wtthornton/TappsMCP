@@ -7,9 +7,11 @@ back gracefully (empty results) when vulture is not installed.
 
 from __future__ import annotations
 
+import fnmatch
 import re
 import shutil
 from dataclasses import dataclass
+from pathlib import Path
 
 import structlog
 
@@ -110,10 +112,19 @@ def is_vulture_available() -> bool:
     return shutil.which("vulture") is not None
 
 
+def _matches_whitelist(file_path: str, patterns: list[str]) -> bool:
+    """Return True if file_path matches any whitelist pattern (fnmatch on basename)."""
+    if not patterns:
+        return False
+    base = Path(file_path).name
+    return any(fnmatch.fnmatch(base, p) for p in patterns)
+
+
 async def run_vulture_async(
     file_path: str,
     *,
     min_confidence: int = 80,
+    whitelist_patterns: list[str] | None = None,
     cwd: str | None = None,
     timeout: int = 30,
 ) -> list[DeadCodeFinding]:
@@ -122,6 +133,7 @@ async def run_vulture_async(
     Args:
         file_path: Path to the Python file to analyse.
         min_confidence: Minimum confidence percentage (0-100).
+        whitelist_patterns: File name patterns to exclude (fnmatch on basename).
         cwd: Working directory for the subprocess.
         timeout: Timeout in seconds.
 
@@ -147,4 +159,10 @@ async def run_vulture_async(
 
     # vulture exits 0 when no dead code found, non-zero when findings exist.
     # Both are valid; we just parse stdout.
-    return parse_vulture_output(result.stdout, min_confidence=min_confidence)
+    findings = parse_vulture_output(result.stdout, min_confidence=min_confidence)
+
+    # Filter by whitelist patterns (e.g. test_*, conftest.py)
+    if whitelist_patterns:
+        findings = [f for f in findings if not _matches_whitelist(f.file_path, whitelist_patterns)]
+
+    return findings

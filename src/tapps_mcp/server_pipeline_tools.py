@@ -68,7 +68,7 @@ async def tapps_validate_changed(
     _record_call("tapps_validate_changed")
 
     from tapps_mcp.gates.evaluator import evaluate_gate
-    from tapps_mcp.scoring.scorer import CodeScorer
+    from tapps_mcp.server_helpers import _get_scorer
     from tapps_mcp.tools.batch_validator import (
         MAX_BATCH_FILES,
         detect_changed_python_files,
@@ -108,7 +108,7 @@ async def tapps_validate_changed(
     extra_count = len(paths) - MAX_BATCH_FILES if capped else 0
     paths = paths[:MAX_BATCH_FILES]
 
-    scorer = CodeScorer()
+    scorer = _get_scorer()
     sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
 
     async def _validate_one(path: Path) -> dict[str, Any]:
@@ -176,6 +176,39 @@ async def tapps_validate_changed(
             "summary": summary,
         },
     )
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import (
+            FileValidationResult,
+            ValidateChangedOutput,
+        )
+
+        file_results = [
+            FileValidationResult(
+                file_path=r.get("file_path", ""),
+                score=r.get("overall_score", 0.0),
+                gate_passed=r.get("gate_passed", False),
+                security_passed=r.get("security_passed", True),
+            )
+            for r in results
+        ]
+        failed_count = sum(1 for r in results if not r.get("gate_passed", False))
+        structured = ValidateChangedOutput(
+            files=file_results,
+            overall_passed=all_passed,
+            total_files=len(results),
+            passed_count=len(results) - failed_count,
+            failed_count=failed_count,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        import structlog
+
+        structlog.get_logger(__name__).debug(
+            "structured_output_failed: tapps_validate_changed", exc_info=True
+        )
+
     return _with_nudges("tapps_validate_changed", resp)
 
 

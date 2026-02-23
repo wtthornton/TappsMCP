@@ -113,6 +113,7 @@ class CodeScorer:
             cwd=cwd,
             timeout=timeout,
             run_vulture=self._settings.dead_code_enabled,
+            vulture_whitelist_patterns=self._settings.dead_code_whitelist_patterns,
             mode=mode,
         )
 
