@@ -158,6 +158,106 @@ def check_cursor_rules(project_root: Path) -> CheckResult:
     )
 
 
+def check_agents_md(project_root: Path) -> CheckResult:
+    """Check if AGENTS.md exists and its version matches the installed TappsMCP."""
+    agents_md = project_root / "AGENTS.md"
+    if not agents_md.exists():
+        return CheckResult(
+            "AGENTS.md",
+            False,
+            "AGENTS.md not found in project root",
+            "Run: tapps-mcp upgrade (or tapps_init via MCP)",
+        )
+    from tapps_mcp import __version__
+    from tapps_mcp.pipeline.agents_md import AgentsValidation
+
+    content = agents_md.read_text(encoding="utf-8")
+    validation = AgentsValidation(content)
+    if validation.is_up_to_date:
+        return CheckResult(
+            "AGENTS.md",
+            True,
+            f"AGENTS.md version {validation.existing_version} matches TappsMCP {__version__}",
+        )
+    issues: list[str] = []
+    if validation.existing_version != __version__:
+        issues.append(f"version {validation.existing_version or 'none'} != TappsMCP {__version__}")
+    if validation.sections_missing:
+        issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
+    if validation.tools_missing:
+        issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
+    return CheckResult(
+        "AGENTS.md",
+        False,
+        f"AGENTS.md outdated ({'; '.join(issues)})",
+        "Run: tapps-mcp upgrade (or tapps_init with overwrite_agents_md=True)",
+    )
+
+
+def check_claude_settings(project_root: Path) -> CheckResult:
+    """Check ``.claude/settings.json`` for TappsMCP permission entries.
+
+    Both ``mcp__tapps-mcp`` (bare server match) and ``mcp__tapps-mcp__*``
+    (wildcard) are needed to work around known Claude Code permission bugs
+    (issues #3107, #13077, #27139).
+    """
+    settings_file = project_root / ".claude" / "settings.json"
+    if not settings_file.exists():
+        return CheckResult(
+            ".claude/settings.json",
+            False,
+            ".claude/settings.json not found",
+            "Run: tapps-mcp upgrade --host claude-code",
+        )
+    try:
+        raw = settings_file.read_text(encoding="utf-8")
+        data: dict[str, Any] = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        return CheckResult(
+            ".claude/settings.json",
+            False,
+            "Invalid JSON in .claude/settings.json",
+        )
+    allow_list = data.get("permissions", {}).get("allow", [])
+    required = ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
+    missing = [e for e in required if e not in allow_list]
+    if not missing:
+        return CheckResult(
+            ".claude/settings.json",
+            True,
+            "TappsMCP permission entries present (bare + wildcard)",
+        )
+    return CheckResult(
+        ".claude/settings.json",
+        False,
+        f"Missing permission entries: {', '.join(missing)}",
+        "Run: tapps-mcp upgrade --host claude-code",
+    )
+
+
+def check_hooks(project_root: Path) -> CheckResult:
+    """Check if TappsMCP hooks directory exists for at least one platform."""
+    claude_hooks = project_root / ".claude" / "hooks"
+    cursor_hooks = project_root / ".cursor" / "hooks"
+    found: list[str] = []
+    if claude_hooks.is_dir() and any(claude_hooks.glob("tapps-*")):
+        found.append("Claude Code")
+    if cursor_hooks.is_dir() and any(cursor_hooks.glob("tapps-*")):
+        found.append("Cursor")
+    if found:
+        return CheckResult(
+            "Hooks",
+            True,
+            f"TappsMCP hooks found for: {', '.join(found)}",
+        )
+    return CheckResult(
+        "Hooks",
+        False,
+        "No TappsMCP hooks found",
+        "Run: tapps-mcp upgrade",
+    )
+
+
 def check_quality_tools() -> list[CheckResult]:
     """Check for installed quality tools (ruff, mypy, bandit, radon)."""
     from tapps_mcp.tools.tool_detection import detect_installed_tools
@@ -212,6 +312,11 @@ def run_doctor(*, project_root: str = ".") -> bool:
     # Platform rules
     checks.append(check_claude_md(root))
     checks.append(check_cursor_rules(root))
+
+    # Generated files
+    checks.append(check_agents_md(root))
+    checks.append(check_claude_settings(root))
+    checks.append(check_hooks(root))
 
     # Quality tools
     checks.extend(check_quality_tools())

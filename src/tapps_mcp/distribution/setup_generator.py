@@ -521,3 +521,231 @@ def run_init(
     if ok and rules and not dry_run:
         _generate_rules(mcp_host, root)
     return ok
+
+
+# ---------------------------------------------------------------------------
+# Upgrade command
+# ---------------------------------------------------------------------------
+
+
+def _upgrade_agents_md(project_root: Path, *, dry_run: bool = False) -> str:
+    """Validate and update AGENTS.md to the latest template.
+
+    Returns a human-readable status string.
+    """
+    from tapps_mcp.pipeline.agents_md import AgentsValidation, update_agents_md
+    from tapps_mcp.prompts.prompt_loader import load_agents_template
+
+    agents_path = project_root / "AGENTS.md"
+    template_content = load_agents_template()
+
+    if not agents_path.exists():
+        if not dry_run:
+            agents_path.write_text(template_content, encoding="utf-8")
+        return "created"
+
+    validation = AgentsValidation(agents_path.read_text(encoding="utf-8"))
+    if validation.is_up_to_date:
+        return "up-to-date"
+
+    if dry_run:
+        issues: list[str] = []
+        if validation.sections_missing:
+            issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
+        if validation.tools_missing:
+            issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
+        return f"needs update ({'; '.join(issues) or 'version mismatch'})"
+
+    action, _detail = update_agents_md(agents_path, template_content)
+    return action
+
+
+def _upgrade_host(
+    host: str,
+    project_root: Path,
+    *,
+    force: bool = False,
+    dry_run: bool = False,
+) -> bool:
+    """Upgrade all generated files for a single host.
+
+    Returns ``True`` if all upgrades succeeded.
+    """
+    from tapps_mcp.pipeline.init import (
+        _bootstrap_claude,
+        _bootstrap_claude_settings,
+        _bootstrap_cursor,
+    )
+    from tapps_mcp.pipeline.platform_generators import (
+        generate_claude_hooks,
+        generate_cursor_hooks,
+        generate_cursor_rules,
+        generate_skills,
+        generate_subagent_definitions,
+    )
+
+    ok = True
+
+    # MCP config check
+    config_path = _get_config_path(host, project_root)
+    servers_key = _get_servers_key(host)
+    error = _validate_config_file(config_path, servers_key)
+    if error is not None:
+        click.echo(click.style(f"  MCP config: {error}", fg="red"))
+        if not dry_run:
+            click.echo("    Regenerating MCP config...")
+            _generate_config(host, project_root, force=True)
+    else:
+        click.echo(click.style("  MCP config: OK", fg="green"))
+
+    # Platform rules
+    if host == "claude-code":
+        if dry_run:
+            claude_md = project_root / "CLAUDE.md"
+            if claude_md.exists():
+                existing = claude_md.read_text(encoding="utf-8")
+                if "TAPPS" in existing:
+                    click.echo("  CLAUDE.md: would refresh TAPPS section")
+                else:
+                    click.echo("  CLAUDE.md: would append TAPPS section")
+            else:
+                click.echo("  CLAUDE.md: would create")
+        else:
+            action = _bootstrap_claude(project_root, overwrite=force)
+            click.echo(click.style(f"  CLAUDE.md: {action}", fg="green"))
+
+        # Settings
+        if dry_run:
+            settings_file = project_root / ".claude" / "settings.json"
+            if settings_file.exists():
+                raw = settings_file.read_text(encoding="utf-8")
+                data = json.loads(raw) if raw.strip() else {}
+                allow_list = data.get("permissions", {}).get("allow", [])
+                required = ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
+                missing = [e for e in required if e not in allow_list]
+                if not missing:
+                    click.echo("  .claude/settings.json: up-to-date")
+                else:
+                    click.echo(
+                        f"  .claude/settings.json: would add {len(missing)} permission entries"
+                    )
+            else:
+                click.echo("  .claude/settings.json: would create")
+        else:
+            settings_action = _bootstrap_claude_settings(project_root)
+            click.echo(click.style(f"  .claude/settings.json: {settings_action}", fg="green"))
+
+        # Hooks, agents, skills
+        if not dry_run:
+            hooks_result = generate_claude_hooks(project_root)
+            _echo_gen_result("hooks", hooks_result)
+            agents_result = generate_subagent_definitions(project_root, "claude")
+            _echo_gen_result("agents", agents_result)
+            skills_result = generate_skills(project_root, "claude")
+            _echo_gen_result("skills", skills_result)
+        else:
+            click.echo("  Hooks/agents/skills: would regenerate (skip existing)")
+
+    elif host == "cursor":
+        if dry_run:
+            rules_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+            if rules_path.exists():
+                click.echo(
+                    "  .cursor/rules/tapps-pipeline.md: would refresh"
+                    if force
+                    else "  .cursor/rules/tapps-pipeline.md: exists (skipped)"
+                )
+            else:
+                click.echo("  .cursor/rules/tapps-pipeline.md: would create")
+        else:
+            action = _bootstrap_cursor(project_root, overwrite=force)
+            click.echo(click.style(f"  .cursor/rules/tapps-pipeline.md: {action}", fg="green"))
+            hooks_result = generate_cursor_hooks(project_root)
+            _echo_gen_result("hooks", hooks_result)
+            agents_result = generate_subagent_definitions(project_root, "cursor")
+            _echo_gen_result("agents", agents_result)
+            skills_result = generate_skills(project_root, "cursor")
+            _echo_gen_result("skills", skills_result)
+            rules_result = generate_cursor_rules(project_root)
+            _echo_gen_result("cursor rules", rules_result)
+
+    elif host == "vscode":
+        click.echo("  VS Code: no platform rules to upgrade")
+
+    return ok
+
+
+def run_upgrade(
+    *,
+    mcp_host: str = "auto",
+    project_root: str = ".",
+    force: bool = False,
+    dry_run: bool = False,
+) -> bool:
+    """Validate and update all TappsMCP-generated files.
+
+    Called from the CLI ``upgrade`` command.
+
+    Args:
+        mcp_host: Target host or ``"auto"`` for detection.
+        project_root: Project root directory as a string path.
+        force: If ``True``, overwrite all generated files without prompting.
+        dry_run: If ``True``, show what would be updated without making changes.
+    """
+    from tapps_mcp import __version__
+
+    root = Path(project_root).resolve()
+    log.info(
+        "upgrade_command",
+        host=mcp_host,
+        project_root=str(root),
+        force=force,
+        dry_run=dry_run,
+    )
+
+    prefix = "[DRY-RUN] " if dry_run else ""
+    click.echo("")
+    click.echo(click.style(f"{prefix}=== TappsMCP Upgrade (v{__version__}) ===", bold=True))
+    click.echo("")
+
+    # Detect hosts
+    if mcp_host == "auto":
+        hosts = _detect_hosts()
+        if not hosts:
+            click.echo("No MCP hosts detected. Upgrading project-level files only.")
+            hosts = []
+        else:
+            click.echo(f"Detected host(s): {', '.join(hosts)}")
+    else:
+        hosts = [mcp_host]
+
+    all_ok = True
+
+    # AGENTS.md (platform-independent)
+    click.echo("")
+    click.echo(click.style("--- AGENTS.md ---", bold=True))
+    agents_status = _upgrade_agents_md(root, dry_run=dry_run)
+    if agents_status == "up-to-date":
+        click.echo(click.style(f"  AGENTS.md: {agents_status}", fg="green"))
+    else:
+        click.echo(click.style(f"  AGENTS.md: {agents_status}", fg="yellow"))
+
+    # Per-host upgrades
+    for host in hosts:
+        click.echo("")
+        click.echo(click.style(f"--- {host} ---", bold=True))
+        ok = _upgrade_host(host, root, force=force, dry_run=dry_run)
+        if not ok:
+            all_ok = False
+
+    # Summary
+    click.echo("")
+    if dry_run:
+        msg = "Dry run complete. Run without --dry-run to apply changes."
+        click.echo(click.style(msg, fg="cyan"))
+    elif all_ok:
+        click.echo(click.style("Upgrade complete!", fg="green"))
+    else:
+        click.echo(click.style("Upgrade completed with issues. Check output above.", fg="yellow"))
+
+    return all_ok

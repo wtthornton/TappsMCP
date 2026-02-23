@@ -189,3 +189,30 @@ the user interactively:
 - `tapps_init` asks for confirmation before writing configuration files
 
 On unsupported clients, tools fall back to default behavior silently.
+
+---
+
+## Troubleshooting: MCP tool permissions
+
+If TappsMCP tools are being rejected or prompting for approval on every call:
+
+**Claude Code:** Ensure `.claude/settings.json` contains **both** permission entries:
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__tapps-mcp",
+      "mcp__tapps-mcp__*"
+    ]
+  }
+}
+```
+The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard `mcp__tapps-mcp__*` syntax has known issues in some Claude Code versions (see issues #3107, #13077, #27139). Run `tapps-mcp upgrade --host claude-code` to fix automatically.
+
+**Cursor / VS Code:** These hosts manage MCP tool permissions differently. No `.claude/settings.json` needed.
+
+**If tools are still rejected after fixing permissions:**
+1. Restart your MCP host (Claude Code / Cursor / VS Code)
+2. Verify the TappsMCP server is running: `tapps-mcp doctor`
+3. Check that your permission mode is not `dontAsk` (which auto-denies unlisted tools)
+4. As a last resort, use `tapps_quick_check` on individual files instead of `tapps_validate_changed`

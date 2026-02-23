@@ -799,7 +799,7 @@ async def tapps_report(
         from tapps_mcp.common.utils import should_skip_path
 
         py_files = sorted(_Path(settings.project_root).rglob("*.py"))
-        py_files = [f for f in py_files if not should_skip_path(f)][:max(1, max_files)]
+        py_files = [f for f in py_files if not should_skip_path(f)][: max(1, max_files)]
 
         async def _score_one(pf: _Path) -> tuple[Any, Any] | None:
             try:

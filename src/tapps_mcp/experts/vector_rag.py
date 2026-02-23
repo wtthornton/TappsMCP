@@ -84,19 +84,21 @@ class VectorKnowledgeBase:
             vector_filtered = [c for c in vector_results if c.score >= relevance_threshold]
             if self._simple is not None and self._simple.file_count > 0:
                 keyword_results = self._simple.search(
-                    query, max_results * 2, context_lines,
+                    query,
+                    max_results * 2,
+                    context_lines,
                     relevance_threshold=relevance_threshold,
                 )
-                fused = self._hybrid_fuse(
-                    vector_filtered, keyword_results, max_results * 2
-                )
+                fused = self._hybrid_fuse(vector_filtered, keyword_results, max_results * 2)
                 filtered = [c for c in fused if c.score >= relevance_threshold]
                 return filtered[:max_results]
             return vector_filtered[:max_results]
 
         if self._simple is not None:
             return self._simple.search(
-                query, max_results, context_lines,
+                query,
+                max_results,
+                context_lines,
                 relevance_threshold=relevance_threshold,
             )
 

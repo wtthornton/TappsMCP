@@ -26,24 +26,25 @@ TappsMCP gives any MCP-capable client (Claude Code, Cursor, VS Code Copilot, cus
 ```
 src/tapps_mcp/
   __init__.py, cli.py, server.py              # Entry points and MCP server
+  server_helpers.py                            # Shared response builders
   server_scoring_tools.py                      # Score file, quality gate, quick check
   server_pipeline_tools.py                     # Pipeline tools (validate_changed, session_start, init)
   server_metrics_tools.py                      # Dashboard, stats, feedback, research
-  common/                                      # Exceptions, logging, shared models
+  common/                                      # Exceptions, logging, shared models, nudges
   config/                                      # Settings (Pydantic), default.yaml
-  security/                                    # Path validation, IO guardrails, secrets
+  security/                                    # Path validation, IO guardrails, secrets, governance
   scoring/                                     # Score model, constants, scorer
   gates/                                       # Gate presets, evaluator
-  tools/                                       # Ruff, mypy, bandit, radon wrappers, parallel executor
-  knowledge/                                   # Context7 client, cache, lookup, fuzzy matcher
+  tools/                                       # Ruff, mypy, bandit, radon wrappers, parallel, checklist
+  knowledge/                                   # Context7 client, cache, lookup, fuzzy matcher, warming
   validators/                                  # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
-  experts/                                     # Domain experts, RAG engine, knowledge files (122 .md)
+  experts/                                     # Domain experts, RAG engine, knowledge files (119 .md)
   project/                                     # Profiler, session notes, impact analysis, reports
   adaptive/                                    # Adaptive scoring, expert voting, weight distribution
   metrics/                                     # Collector, dashboard, alerts, trends, OTel, feedback
-  prompts/                                     # Workflow prompt templates
-  distribution/                                # Setup generator (tapps-mcp init), doctor
-  pipeline/                                    # Pipeline orchestration, handoff, initialization
+  prompts/                                     # Workflow prompt templates and platform rule templates
+  distribution/                                # Setup generator (init, upgrade, doctor)
+  pipeline/                                    # Pipeline orchestration, AGENTS.md validation, platform generators
 ```
 
 ---
@@ -57,7 +58,7 @@ uv sync
 # Run the MCP server (stdio)
 uv run tapps-mcp serve
 
-# Run all tests (1675+ tests)
+# Run all tests (1995+ tests)
 uv run pytest tests/ -v
 
 # Run with coverage
@@ -69,6 +70,13 @@ uv run mypy --strict src/tapps_mcp/
 # Linting and formatting
 uv run ruff check src/
 uv run ruff format --check src/
+
+# Upgrade generated files after version bump
+uv run tapps-mcp upgrade --dry-run   # preview changes
+uv run tapps-mcp upgrade             # apply updates
+
+# Diagnose configuration issues
+uv run tapps-mcp doctor
 ```
 
 ---
@@ -112,7 +120,10 @@ uv run ruff format --check src/
 | `knowledge/lookup.py` | Context7 documentation lookup with SWR cache |
 | `experts/engine.py` | Expert consultation RAG engine |
 | `pipeline/init.py` | `tapps_init` bootstrap logic |
-| `distribution/setup_generator.py` | `tapps-mcp init` CLI config generation |
+| `pipeline/agents_md.py` | AGENTS.md validation and smart-merge logic |
+| `pipeline/platform_generators.py` | Hooks, agents, skills, CI workflow generation |
+| `distribution/setup_generator.py` | `tapps-mcp init` and `tapps-mcp upgrade` CLI |
+| `distribution/doctor.py` | `tapps-mcp doctor` diagnostic checks |
 
 ---
 
@@ -142,5 +153,6 @@ When TappsMCP's own MCP server is available in your session, use it on this code
 - TappsMCP is a **tool for other projects** — changes should consider how consuming projects will be affected
 - The `tapps_init` MCP tool bootstraps TappsMCP in consuming projects (creates AGENTS.md, TECH_STACK.md, platform rules)
 - The `tapps-mcp init` CLI generates MCP host configuration for Claude Code, Cursor, or VS Code
+- The `tapps-mcp upgrade` CLI validates and updates all generated files after a TappsMCP version upgrade
 - The `tapps-mcp doctor` CLI diagnoses configuration and connectivity issues
 - All 12 epics are complete (0-11) — see `docs/planning/epics/README.md` for the full history

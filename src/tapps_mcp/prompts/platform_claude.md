@@ -80,7 +80,7 @@ Every tool response includes:
 - `pipeline_progress`: Which stages are complete and what comes next
 
 Record progress in `docs/TAPPS_HANDOFF.md` and `docs/TAPPS_RUNLOG.md`.
-For detailed stage instructions, request the `tapps_pipeline` MCP prompt with the stage name.
+For task-specific recommended tool call order, use the `tapps_workflow` MCP prompt (e.g. `tapps_workflow(task_type="feature")`).
 
 ## Agent Teams (Optional)
 

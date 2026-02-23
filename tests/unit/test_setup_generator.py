@@ -17,6 +17,7 @@ from tapps_mcp.distribution.setup_generator import (
     _get_servers_key,
     _merge_config,
     run_init,
+    run_upgrade,
 )
 
 # ---------------------------------------------------------------------------
@@ -868,3 +869,99 @@ class TestEnvInConfig:
         assert data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_MCP_PROJECT_ROOT"] == (
             "${workspaceFolder}"
         )
+
+
+# ---------------------------------------------------------------------------
+# run_upgrade tests
+# ---------------------------------------------------------------------------
+
+
+class TestRunUpgrade:
+    """Tests for the run_upgrade entry point."""
+
+    def test_dry_run_no_file_changes(self, tmp_path, capsys):
+        """dry_run=True should not create or modify files."""
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            result = run_upgrade(
+                mcp_host="auto",
+                project_root=str(tmp_path),
+                dry_run=True,
+            )
+        assert result is True
+        captured = capsys.readouterr()
+        assert "DRY-RUN" in captured.out
+        # AGENTS.md should not have been created
+        assert not (tmp_path / "AGENTS.md").exists()
+
+    def test_updates_agents_md_when_outdated(self, tmp_path, capsys):
+        """run_upgrade updates AGENTS.md when it has an outdated version."""
+        content = "<!-- tapps-agents-version: 0.0.1 -->\n# Old AGENTS\n\nOld content.\n"
+        (tmp_path / "AGENTS.md").write_text(content, encoding="utf-8")
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            run_upgrade(
+                mcp_host="auto",
+                project_root=str(tmp_path),
+            )
+        captured = capsys.readouterr()
+        # The AGENTS.md section should report an update
+        assert "AGENTS.md" in captured.out
+
+    def test_agents_md_up_to_date(self, tmp_path, capsys):
+        """run_upgrade reports up-to-date when AGENTS.md is current."""
+        from tapps_mcp.prompts.prompt_loader import load_agents_template
+
+        (tmp_path / "AGENTS.md").write_text(load_agents_template(), encoding="utf-8")
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            run_upgrade(
+                mcp_host="auto",
+                project_root=str(tmp_path),
+            )
+        captured = capsys.readouterr()
+        assert "up-to-date" in captured.out
+
+    def test_creates_agents_md_when_missing(self, tmp_path, capsys):
+        """run_upgrade creates AGENTS.md when it does not exist."""
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            run_upgrade(
+                mcp_host="auto",
+                project_root=str(tmp_path),
+            )
+        assert (tmp_path / "AGENTS.md").exists()
+        captured = capsys.readouterr()
+        assert "AGENTS.md" in captured.out
+        assert "created" in captured.out
+
+
+class TestCliUpgrade:
+    """Tests for the CLI upgrade command via Click's CliRunner."""
+
+    def test_upgrade_help(self):
+        """CLI upgrade --help works."""
+        runner = CliRunner()
+        result = runner.invoke(main, ["upgrade", "--help"])
+        assert result.exit_code == 0
+        assert "Validate and update" in result.output
+
+    def test_upgrade_dry_run_via_cli(self, tmp_path):
+        """CLI upgrade --dry-run does not create files."""
+        runner = CliRunner()
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            result = runner.invoke(
+                main,
+                ["upgrade", "--project-root", str(tmp_path), "--dry-run"],
+            )
+        assert result.exit_code == 0
+        assert "DRY-RUN" in result.output
+        # AGENTS.md should not have been created
+        assert not (tmp_path / "AGENTS.md").exists()
+
+    def test_upgrade_runs_successfully(self, tmp_path):
+        """CLI upgrade creates expected files."""
+        runner = CliRunner()
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            result = runner.invoke(
+                main,
+                ["upgrade", "--project-root", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+        assert "AGENTS.md" in result.output

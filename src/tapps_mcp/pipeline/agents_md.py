@@ -14,24 +14,31 @@ from tapps_mcp import __version__
 # Constants
 # ---------------------------------------------------------------------------
 
-# The 5 canonical sections in the AGENTS.md template (## headings)
+# The 8 canonical sections in the AGENTS.md template (## headings)
 EXPECTED_SECTIONS: list[str] = [
     "What TappsMCP is",
     "When to use each tool",
+    "tapps_session_start vs tapps_init",
     "Domain hints for tapps_consult_expert",
     "Recommended workflow",
     "Checklist task types",
+    "Platform hooks and automation",
+    "Troubleshooting: MCP tool permissions",
 ]
 
-# The 17 canonical tool names the template should mention
+# The 21 canonical tool names the template should mention
 EXPECTED_TOOLS: list[str] = [
     "tapps_server_info",
+    "tapps_session_start",
     "tapps_score_file",
+    "tapps_quick_check",
     "tapps_security_scan",
     "tapps_quality_gate",
+    "tapps_validate_changed",
     "tapps_lookup_docs",
     "tapps_validate_config",
     "tapps_consult_expert",
+    "tapps_research",
     "tapps_list_experts",
     "tapps_project_profile",
     "tapps_session_notes",

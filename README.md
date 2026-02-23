@@ -94,7 +94,7 @@ python -m venv .venv
 pip install tapps-mcp
 ```
 
-**Upgrade:** `pip install -U tapps-mcp` (see [CHANGELOG.md](CHANGELOG.md) for changes). After upgrading, **consuming projects** should refresh pipeline templates: call `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` (and `platform="cursor"` or `"claude"`) to get the latest workflow and tool hints. See [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md#upgrading-when-tappsmcp-ships-new-features-consuming-projects).
+**Upgrade:** `pip install -U tapps-mcp` then run `tapps-mcp upgrade` to refresh all generated files (AGENTS.md, platform rules, hooks, permissions). See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide.
 
 ### Install with npx (no Python install)
 
@@ -282,6 +282,7 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server:
 | `tapps-mcp init` | Generate MCP configuration for Claude Code, Cursor, or VS Code |
 | `tapps-mcp init --check` | Verify existing MCP configuration without writing |
 | `tapps-mcp init --force` | Overwrite existing config without prompting (for CI/scripts) |
+| `tapps-mcp upgrade` | Validate and update all generated files (AGENTS.md, platform rules, hooks, settings) after upgrading TappsMCP |
 | `tapps-mcp doctor` | Diagnose TappsMCP configuration and connectivity issues |
 
 ### `tapps-mcp init` options
@@ -296,6 +297,19 @@ tapps-mcp init [OPTIONS]
   --project-root PATH                                # Project root (default: current dir)
 ```
 
+### `tapps-mcp upgrade`
+
+After upgrading TappsMCP (`pip install -U tapps-mcp`), refresh generated files:
+
+```bash
+tapps-mcp upgrade                           # auto-detect host, update all files
+tapps-mcp upgrade --host claude-code        # target a specific host
+tapps-mcp upgrade --dry-run                 # preview changes without writing
+tapps-mcp upgrade --force                   # overwrite even if up-to-date
+```
+
+Updates AGENTS.md, platform rules, hooks, agents, skills, and `.claude/settings.json` permissions.
+
 ### `tapps-mcp doctor`
 
 Diagnoses common issues: missing dependencies, config problems, connectivity:
@@ -304,6 +318,8 @@ Diagnoses common issues: missing dependencies, config problems, connectivity:
 tapps-mcp doctor
 tapps-mcp doctor --project-root /path/to/project
 ```
+
+Checks: MCP config, AGENTS.md version and completeness, `.claude/settings.json` permissions, hook files, installed checkers.
 
 ---
 
@@ -604,7 +620,7 @@ Optional flags:
 - `install_missing_checkers=True` — auto-install missing ruff/mypy/bandit/radon
 - `agent_teams=True` — generate Agent Teams hooks for quality watchdog teammate (Claude Code only)
 
-After upgrading TappsMCP, re-run with `overwrite_agents_md=True` and `overwrite_platform_rules=True` to refresh templates. See [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md).
+After upgrading TappsMCP, run `tapps-mcp upgrade` to refresh all generated files, or re-run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True`. See [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md).
 
 ---
 
@@ -639,23 +655,27 @@ Pre-commit hooks are configured (`.pre-commit-config.yaml`). CI runs on push/PR 
 ```
 src/tapps_mcp/
 ├── __init__.py, cli.py, server.py      # Entry points and MCP server
-├── common/                             # Exceptions, logging, shared models
+├── server_helpers.py                   # Shared response builders
+├── server_scoring_tools.py             # tapps_score_file, tapps_quality_gate, tapps_quick_check
+├── server_pipeline_tools.py            # tapps_validate_changed, tapps_session_start, tapps_init
+├── server_metrics_tools.py             # tapps_dashboard, tapps_stats, tapps_feedback, tapps_research
+├── common/                             # Exceptions, logging, shared models, nudges
 ├── config/                             # Settings, default.yaml
 ├── security/                           # Path validation, IO guardrails, secrets, governance
 ├── scoring/                            # Score model, constants, scorer
 ├── gates/                              # Gate presets, evaluator
-├── tools/                              # Ruff, mypy, bandit, radon, parallel, checklist
+├── tools/                              # Ruff, mypy, bandit, radon, parallel, checklist, batch validator
 ├── knowledge/                          # Context7 client, cache, lookup, warming, RAG safety
 ├── validators/                         # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
 ├── experts/                            # Domain detector, engine, RAG, registry, confidence,
-│                                       #   vector RAG, knowledge management, 122 knowledge files
+│                                       #   vector RAG, knowledge management, 119 knowledge files
 ├── project/                            # Project profiling, session notes, impact analysis, reports
 ├── adaptive/                           # Adaptive scoring, expert voting, weight distribution
 ├── metrics/                            # Collector, dashboard, alerts, trends, OTel export, feedback
-├── prompts/                            # Workflow prompt templates (discover, develop, validate, etc.)
-├── distribution/                       # Setup generator for `tapps-mcp init`
+├── prompts/                            # Workflow prompt templates and platform rule templates
+├── distribution/                       # Setup generator (init, upgrade, doctor)
 └── pipeline/                           # Pipeline orchestration, handoff, initialization,
-                                        #   platform generators (hooks, agents, skills, plugins)
+                                        #   AGENTS.md validation, platform generators
 plugin/
 └── cursor/                            # Ready-to-publish Cursor marketplace plugin
 examples/
@@ -672,13 +692,15 @@ scripts/
 
 | Doc | Description |
 |-----|-------------|
-| [AGENTS.md](AGENTS.md) | AI assistant workflow guide — when to use each tool, recommended workflow. |
+| [AGENTS.md](AGENTS.md) | AI assistant workflow guide - when to use each tool, recommended workflow, troubleshooting. |
 | [addenda.md](addenda.md) | Best practices for Claude Code, Cursor, consuming projects, troubleshooting. |
 | [docs/TAPPS_MCP_SETUP_AND_USE.md](docs/TAPPS_MCP_SETUP_AND_USE.md) | Detailed setup and use guide (Cursor, Claude, tools workflow). |
 | [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) | Upgrade guide for projects that install TappsMCP. |
 | [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md) | Init and upgrade: `tapps_init` vs `tapps-mcp init`, overwrite flags, upgrade path. |
 | [docs/CLAUDE_FULL_ACCESS_SETUP.md](docs/CLAUDE_FULL_ACCESS_SETUP.md) | Grant Claude Code full access (no permission prompts). |
 | [docs/MIGRATION_FROM_TAPPS_AGENTS.md](docs/MIGRATION_FROM_TAPPS_AGENTS.md) | Migrating from tapps-agents: what to remove, keep, configure. |
+| [docs/ci-integration.md](docs/ci-integration.md) | CI/CD integration: GitHub Actions, headless mode, direct CLI invocation. |
+| [docs/MCP_CLIENT_TIMEOUTS.md](docs/MCP_CLIENT_TIMEOUTS.md) | Handling long-running tool timeouts in MCP clients. |
 
 ### For TappsMCP developers
 

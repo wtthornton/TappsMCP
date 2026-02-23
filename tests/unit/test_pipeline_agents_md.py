@@ -162,13 +162,13 @@ class TestMergeAgentsMd:
         template = _template()
         # Modify a section body in the existing file
         existing = template.replace(
-            "**Scoring** Python files (0-100 across 7 categories)",
-            "**Scoring** Python files (old description)",
+            "**Security scanning** (Bandit + secret detection with redacted context)",
+            "**Security scanning** (old description)",
         )
         merged, changes = merge_agents_md(existing, template)
         assert any("updated_section:What TappsMCP is" in c for c in changes)
         # Merged should have the template version
-        assert "0-100 across 7 categories" in merged
+        assert "Bandit + secret detection with redacted context" in merged
 
     def test_merge_preserves_user_sections(self) -> None:
         template = _template()

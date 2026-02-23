@@ -104,6 +104,47 @@ def init(
 
 @main.command()
 @click.option(
+    "--host",
+    "mcp_host",
+    type=click.Choice(["claude-code", "cursor", "vscode", "auto"]),
+    default="auto",
+    help="Target MCP host to upgrade.",
+)
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root directory.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite all generated files without prompting.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be updated without making changes.",
+)
+def upgrade(mcp_host: str, project_root: str, force: bool, dry_run: bool) -> None:
+    """Validate and update all TappsMCP-generated files after a version upgrade.
+
+    Checks AGENTS.md, platform rules, hooks, agents, skills, and settings
+    against the current TappsMCP version and refreshes outdated files.
+    """
+    from tapps_mcp.distribution.setup_generator import run_upgrade
+
+    success = run_upgrade(
+        mcp_host=mcp_host,
+        project_root=project_root,
+        force=force,
+        dry_run=dry_run,
+    )
+    if not success:
+        raise SystemExit(1)
+
+
+@main.command()
+@click.option(
     "--project-root",
     default=".",
     help="Project root directory.",

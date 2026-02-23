@@ -558,11 +558,15 @@ def _bootstrap_claude(
         if "TAPPS" in existing and not overwrite:
             # Already has TAPPS reference
             return "skipped"
-        # Append to existing file (or refresh content when overwrite=True)
-        if overwrite:
+        if overwrite and "# TAPPS Quality Pipeline" in existing:
+            # Replace existing TAPPS section with updated content
+            new_content = _replace_tapps_section(existing, content)
+        elif "TAPPS" not in existing:
+            # No TAPPS content yet - append
             new_content = existing.rstrip() + "\n\n" + content
         else:
-            new_content = existing.rstrip() + "\n\n" + content
+            # overwrite=True but no heading marker found - replace whole TAPPS block
+            new_content = _replace_tapps_section(existing, content)
         claude_md.write_text(new_content, encoding="utf-8")
         return "updated"
 
@@ -570,11 +574,44 @@ def _bootstrap_claude(
     return "created"
 
 
-def _bootstrap_claude_settings(project_root: Path) -> str:
-    """Create or update ``.claude/settings.json`` with permission wildcard.
+def _replace_tapps_section(existing: str, new_tapps_content: str) -> str:
+    """Replace the TAPPS section in an existing CLAUDE.md.
 
-    Ensures ``"mcp__tapps-mcp__*"`` is in ``permissions.allow`` so that
-    Claude Code auto-approves all TappsMCP tools without user prompts.
+    Finds the ``# TAPPS Quality Pipeline`` heading and replaces everything
+    from that heading to the next top-level heading (or end of file) with
+    *new_tapps_content*.
+    """
+    import re
+
+    # Match from "# TAPPS Quality Pipeline" to the next top-level heading or EOF
+    pattern = r"(?m)^# TAPPS Quality Pipeline.*?(?=\n# (?!TAPPS)|\Z)"
+    match = re.search(pattern, existing, re.DOTALL)
+    if match:
+        before = existing[: match.start()].rstrip()
+        after = existing[match.end() :].lstrip("\n")
+        parts = [before, new_tapps_content]
+        if after:
+            parts.append(after)
+        return "\n\n".join(parts)
+    # Fallback: no TAPPS heading found, just replace all TAPPS-referencing content
+    # by appending fresh content
+    return existing.rstrip() + "\n\n" + new_tapps_content
+
+
+# Both entries needed for Claude Code permissions: bare match is the reliable
+# fallback (issue #3107), wildcard is the official syntax from v2.0.70+.
+_CLAUDE_PERMISSION_ENTRIES = ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
+
+
+def _bootstrap_claude_settings(project_root: Path) -> str:
+    """Create or update ``.claude/settings.json`` with permission entries.
+
+    Adds **both** ``"mcp__tapps-mcp"`` (bare server match - confirmed
+    working in Claude Code issue #3107) and ``"mcp__tapps-mcp__*"``
+    (wildcard match - added in Claude Code 2.0.70) to ``permissions.allow``.
+    Using both syntaxes works around a known Claude Code bug where the
+    wildcard variant is sometimes not honoured (issues #13077, #14730,
+    #27139).
 
     Returns ``'created'``, ``'updated'``, or ``'skipped'``.
     """
@@ -583,11 +620,10 @@ def _bootstrap_claude_settings(project_root: Path) -> str:
 
     settings_dir = _Path(project_root) / ".claude"
     settings_file = settings_dir / "settings.json"
-    wildcard = "mcp__tapps-mcp__*"
 
     if not settings_file.exists():
         settings_dir.mkdir(parents=True, exist_ok=True)
-        config: dict[str, Any] = {"permissions": {"allow": [wildcard]}}
+        config: dict[str, Any] = {"permissions": {"allow": list(_CLAUDE_PERMISSION_ENTRIES)}}
         settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
         return "created"
 
@@ -597,10 +633,11 @@ def _bootstrap_claude_settings(project_root: Path) -> str:
     permissions = config.setdefault("permissions", {})
     allow_list: list[str] = permissions.setdefault("allow", [])
 
-    if wildcard in allow_list:
+    missing = [e for e in _CLAUDE_PERMISSION_ENTRIES if e not in allow_list]
+    if not missing:
         return "skipped"
 
-    allow_list.append(wildcard)
+    allow_list.extend(missing)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     return "updated"
 

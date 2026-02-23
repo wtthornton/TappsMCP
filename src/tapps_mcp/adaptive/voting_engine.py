@@ -157,9 +157,7 @@ class AdaptiveVotingEngine:
     ) -> ExpertWeightMatrix:
         """Normalize weights per domain: sum to 1.0, primary >= 0.51."""
         for domain in original_matrix.domains:
-            AdaptiveVotingEngine._normalize_domain_column(
-                weights, original_matrix, domain
-            )
+            AdaptiveVotingEngine._normalize_domain_column(weights, original_matrix, domain)
         return ExpertWeightMatrix(
             weights=weights,
             domains=original_matrix.domains,
@@ -187,9 +185,7 @@ class AdaptiveVotingEngine:
 
         primary = matrix.get_primary_expert(domain)
         if primary and len(experts) > 1 and weights[primary][domain] < _PRIMARY_WEIGHT_FLOOR:
-            AdaptiveVotingEngine._enforce_primary_floor(
-                weights, matrix, domain, primary, experts
-            )
+            AdaptiveVotingEngine._enforce_primary_floor(weights, matrix, domain, primary, experts)
 
     @staticmethod
     def _enforce_primary_floor(
@@ -222,9 +218,7 @@ class AdaptiveVotingEngine:
             others_sum = sum(weights[e][domain] for e in others)
             if others_sum > 0:
                 for eid in others:
-                    weights[eid][domain] = round(
-                        (weights[eid][domain] / others_sum) * remainder, 6
-                    )
+                    weights[eid][domain] = round((weights[eid][domain] / others_sum) * remainder, 6)
 
 
 def _build_default_matrix() -> ExpertWeightMatrix:

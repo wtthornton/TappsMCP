@@ -165,9 +165,12 @@ async def tapps_quality_gate(
     then evaluates pass/fail against the quality preset. Work is NOT done
     until this passes (or the user explicitly accepts the risk).
 
+    If this tool is unavailable or rejected, use tapps_quick_check as a
+    lighter alternative that includes a basic quality gate.
+
     Args:
         file_path: Path to the Python file to evaluate.
-        preset: Quality preset — "standard" (70+), "strict" (80+), or "framework" (75+).
+        preset: Quality preset - "standard" (70+), "strict" (80+), or "framework" (75+).
             When empty, prompts the user to select via elicitation (if supported).
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges

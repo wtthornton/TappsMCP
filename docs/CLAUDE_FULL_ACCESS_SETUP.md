@@ -27,9 +27,26 @@ In the **project root** (same level as `README.md` and `docs/`), create a folder
 
 With this, Claude Code skips permission prompts for tools in this workspace. You can keep or add a `permissions.allow` list; with `bypassPermissions`, the allowlist is ignored and Claude still has full access.
 
+### Alternative: Allow only TappsMCP tools (without bypassing all permissions)
+
+If you prefer to keep permission prompts for other tools but auto-approve TappsMCP, add **both** entries to `.claude/settings.json` (not `settings.local.json`):
+
+```json
+{
+  “permissions”: {
+    “allow”: [
+      “mcp__tapps-mcp”,
+      “mcp__tapps-mcp__*”
+    ]
+  }
+}
+```
+
+Both entries are needed due to a known Claude Code bug where the wildcard `mcp__tapps-mcp__*` syntax is unreliable in some versions (issues #3107, #13077, #27139). The bare `mcp__tapps-mcp` entry is the reliable fallback. Running `tapps-mcp upgrade --host claude-code` or `tapps_init(platform=”claude”)` sets this up automatically.
+
 ---
 
-## Step 2: Cursor IDE – stop “Allow this bash command?”
+## Step 2: Cursor IDE - stop “Allow this bash command?”
 
 Use **one** of these so Cursor does not prompt for bash/terminal commands:
 
@@ -68,12 +85,13 @@ If the command runs and returns output (or “no match”) **without** a permiss
 
 ## Permission modes (reference)
 
-| Mode               | Behavior |
-|--------------------|----------|
-| `default`          | Asks for permission on first use of each tool. |
-| `acceptEdits`      | Auto-accepts file edits; may still prompt for other tools. |
-| `plan`             | Read/analyze only; no file edits or command execution. |
-| `bypassPermissions`| No prompts; full access to all tools. |
+| Mode               | Behavior | MCP tools |
+|--------------------|----------|-----------|
+| `default`          | Asks for permission on first use of each tool. | Prompted unless in `permissions.allow` |
+| `acceptEdits`      | Auto-accepts file edits; may still prompt for other tools. | Prompted unless in `permissions.allow` |
+| `dontAsk`          | Auto-denies tools not in `permissions.allow`. | **Auto-denied** unless explicitly allowed |
+| `plan`             | Read/analyze only; no file edits or command execution. | **Blocked** (even read-only tools) |
+| `bypassPermissions`| No prompts; full access to all tools. | Auto-approved |
 
 ---
 

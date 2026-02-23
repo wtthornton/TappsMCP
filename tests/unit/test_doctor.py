@@ -8,12 +8,15 @@ from click.testing import CliRunner
 from tapps_mcp.cli import main
 from tapps_mcp.distribution.doctor import (
     CheckResult,
+    check_agents_md,
     check_binary_on_path,
     check_claude_code_project,
     check_claude_code_user,
     check_claude_md,
+    check_claude_settings,
     check_cursor_config,
     check_cursor_rules,
+    check_hooks,
     check_json_config,
     check_vscode_config,
     run_doctor,
@@ -295,3 +298,187 @@ class TestCliDoctor:
                 ["doctor", "--project-root", str(tmp_path)],
             )
         assert result.exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# check_agents_md
+# ---------------------------------------------------------------------------
+
+
+class TestCheckAgentsMd:
+    """Tests for check_agents_md diagnostic check."""
+
+    def test_valid_up_to_date(self, tmp_path):
+        """AGENTS.md with current version marker passes."""
+        from tapps_mcp.prompts.prompt_loader import load_agents_template
+
+        (tmp_path / "AGENTS.md").write_text(load_agents_template(), encoding="utf-8")
+        result = check_agents_md(tmp_path)
+        assert result.ok is True
+        assert "matches" in result.message
+
+    def test_missing_agents_md(self, tmp_path):
+        """Missing AGENTS.md fails."""
+        result = check_agents_md(tmp_path)
+        assert result.ok is False
+        assert "not found" in result.message
+
+    def test_outdated_version_marker(self, tmp_path):
+        """AGENTS.md with old version marker fails."""
+        content = "<!-- tapps-agents-version: 0.0.1 -->\n# AGENTS\n\nOld content.\n"
+        (tmp_path / "AGENTS.md").write_text(content, encoding="utf-8")
+        result = check_agents_md(tmp_path)
+        assert result.ok is False
+        assert "outdated" in result.message
+        assert "0.0.1" in result.message
+
+    def test_no_version_marker(self, tmp_path):
+        """AGENTS.md without version marker is outdated."""
+        (tmp_path / "AGENTS.md").write_text("# AGENTS\n\nNo version marker.\n", encoding="utf-8")
+        result = check_agents_md(tmp_path)
+        assert result.ok is False
+        assert "outdated" in result.message
+
+
+# ---------------------------------------------------------------------------
+# check_claude_settings
+# ---------------------------------------------------------------------------
+
+
+class TestCheckClaudeSettings:
+    """Tests for check_claude_settings diagnostic check."""
+
+    def test_correct_settings(self, tmp_path):
+        """Settings with both permission entries passes."""
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir()
+        config = {"permissions": {"allow": ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]}}
+        (settings_dir / "settings.json").write_text(
+            json.dumps(config, indent=2), encoding="utf-8"
+        )
+        result = check_claude_settings(tmp_path)
+        assert result.ok is True
+        assert "permission" in result.message.lower()
+
+    def test_missing_settings(self, tmp_path):
+        """Missing .claude/settings.json fails."""
+        result = check_claude_settings(tmp_path)
+        assert result.ok is False
+        assert "not found" in result.message
+
+    def test_settings_missing_wildcard(self, tmp_path):
+        """Settings without the wildcard fails."""
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir()
+        config = {"permissions": {"allow": ["some_other_permission"]}}
+        (settings_dir / "settings.json").write_text(
+            json.dumps(config, indent=2), encoding="utf-8"
+        )
+        result = check_claude_settings(tmp_path)
+        assert result.ok is False
+        assert "Missing" in result.message or "missing" in result.message.lower()
+
+    def test_settings_empty_json(self, tmp_path):
+        """Empty JSON object in settings.json fails (no permissions key)."""
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir()
+        (settings_dir / "settings.json").write_text("{}", encoding="utf-8")
+        result = check_claude_settings(tmp_path)
+        assert result.ok is False
+
+    def test_settings_invalid_json(self, tmp_path):
+        """Invalid JSON in settings.json fails."""
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir()
+        (settings_dir / "settings.json").write_text("{bad json}", encoding="utf-8")
+        result = check_claude_settings(tmp_path)
+        assert result.ok is False
+        assert "Invalid JSON" in result.message
+
+    def test_settings_with_additional_permissions(self, tmp_path):
+        """Settings with both entries among other permissions passes."""
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir()
+        config = {
+            "permissions": {
+                "allow": ["other_tool", "mcp__tapps-mcp", "mcp__tapps-mcp__*", "another"],
+            },
+        }
+        (settings_dir / "settings.json").write_text(
+            json.dumps(config, indent=2), encoding="utf-8"
+        )
+        result = check_claude_settings(tmp_path)
+        assert result.ok is True
+
+    def test_settings_missing_bare_entry(self, tmp_path):
+        """Settings with only wildcard (no bare entry) fails."""
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir()
+        config = {"permissions": {"allow": ["mcp__tapps-mcp__*"]}}
+        (settings_dir / "settings.json").write_text(
+            json.dumps(config, indent=2), encoding="utf-8"
+        )
+        result = check_claude_settings(tmp_path)
+        assert result.ok is False
+        assert "mcp__tapps-mcp" in result.message
+
+
+# ---------------------------------------------------------------------------
+# check_hooks
+# ---------------------------------------------------------------------------
+
+
+class TestCheckHooks:
+    """Tests for check_hooks diagnostic check."""
+
+    def test_claude_hooks_present(self, tmp_path):
+        """Claude hooks directory with tapps-* files passes."""
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-quality-check.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        result = check_hooks(tmp_path)
+        assert result.ok is True
+        assert "Claude Code" in result.message
+
+    def test_cursor_hooks_present(self, tmp_path):
+        """Cursor hooks directory with tapps-* files passes."""
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-validate.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        result = check_hooks(tmp_path)
+        assert result.ok is True
+        assert "Cursor" in result.message
+
+    def test_both_hooks_present(self, tmp_path):
+        """Both Claude and Cursor hooks directories passes with both listed."""
+        claude_hooks = tmp_path / ".claude" / "hooks"
+        claude_hooks.mkdir(parents=True)
+        (claude_hooks / "tapps-hook.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        cursor_hooks = tmp_path / ".cursor" / "hooks"
+        cursor_hooks.mkdir(parents=True)
+        (cursor_hooks / "tapps-hook.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        result = check_hooks(tmp_path)
+        assert result.ok is True
+        assert "Claude Code" in result.message
+        assert "Cursor" in result.message
+
+    def test_no_hooks_directories(self, tmp_path):
+        """No hooks directories at all fails."""
+        result = check_hooks(tmp_path)
+        assert result.ok is False
+        assert "No TappsMCP hooks" in result.message
+
+    def test_hooks_dir_exists_but_no_tapps_files(self, tmp_path):
+        """Hooks directory exists but has no tapps-* files fails."""
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "other-hook.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        result = check_hooks(tmp_path)
+        assert result.ok is False
+
+    def test_empty_hooks_directory(self, tmp_path):
+        """Empty hooks directory fails."""
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        result = check_hooks(tmp_path)
+        assert result.ok is False

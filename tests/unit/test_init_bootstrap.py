@@ -16,19 +16,20 @@ class TestBootstrapClaudeSettings:
     """Tests for .claude/settings.json permission pre-configuration."""
 
     def test_creates_new_settings_file(self, tmp_path):
-        """Creates .claude/settings.json when it does not exist."""
+        """Creates .claude/settings.json with both permission entries."""
         action = _bootstrap_claude_settings(tmp_path)
         assert action == "created"
         settings_file = tmp_path / ".claude" / "settings.json"
         assert settings_file.exists()
         data = json.loads(settings_file.read_text(encoding="utf-8"))
+        assert "mcp__tapps-mcp" in data["permissions"]["allow"]
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
 
-    def test_skips_when_wildcard_already_present(self, tmp_path):
-        """Skips when the wildcard entry already exists."""
+    def test_skips_when_both_entries_present(self, tmp_path):
+        """Skips when both permission entries already exist."""
         settings_dir = tmp_path / ".claude"
         settings_dir.mkdir()
-        config = {"permissions": {"allow": ["mcp__tapps-mcp__*"]}}
+        config = {"permissions": {"allow": ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]}}
         (settings_dir / "settings.json").write_text(
             json.dumps(config, indent=2) + "\n", encoding="utf-8"
         )
@@ -38,10 +39,10 @@ class TestBootstrapClaudeSettings:
 
         # File should be unchanged
         data = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
-        assert data["permissions"]["allow"] == ["mcp__tapps-mcp__*"]
+        assert data["permissions"]["allow"] == ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
 
     def test_appends_to_existing_allow_list(self, tmp_path):
-        """Appends wildcard to existing allow list without removing existing entries."""
+        """Appends both entries to existing allow list without removing existing ones."""
         settings_dir = tmp_path / ".claude"
         settings_dir.mkdir()
         config = {"permissions": {"allow": ["Bash(*)"]}}
@@ -54,6 +55,7 @@ class TestBootstrapClaudeSettings:
 
         data = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
         assert "Bash(*)" in data["permissions"]["allow"]
+        assert "mcp__tapps-mcp" in data["permissions"]["allow"]
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
 
     def test_adds_permissions_key_when_missing(self, tmp_path):
@@ -70,6 +72,7 @@ class TestBootstrapClaudeSettings:
 
         data = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
         assert data["theme"] == "dark"
+        assert "mcp__tapps-mcp" in data["permissions"]["allow"]
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
 
     def test_creates_claude_directory(self, tmp_path):
@@ -88,14 +91,14 @@ class TestBootstrapClaudeSettings:
         assert not raw.endswith("\n\n")
 
     def test_idempotent_multiple_calls(self, tmp_path):
-        """Multiple calls do not duplicate the wildcard entry."""
+        """Multiple calls do not duplicate permission entries."""
         _bootstrap_claude_settings(tmp_path)
         _bootstrap_claude_settings(tmp_path)
         _bootstrap_claude_settings(tmp_path)
 
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
-        count = data["permissions"]["allow"].count("mcp__tapps-mcp__*")
-        assert count == 1
+        assert data["permissions"]["allow"].count("mcp__tapps-mcp") == 1
+        assert data["permissions"]["allow"].count("mcp__tapps-mcp__*") == 1
 
     def test_preserves_existing_keys(self, tmp_path):
         """Preserves all existing top-level keys in settings.json."""
@@ -121,6 +124,7 @@ class TestBootstrapClaudeSettings:
         assert data["editor"]["fontSize"] == 14
         assert data["permissions"]["deny"] == ["rm -rf"]
         assert "Bash(*)" in data["permissions"]["allow"]
+        assert "mcp__tapps-mcp" in data["permissions"]["allow"]
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
 
     def test_handles_empty_file(self, tmp_path):
@@ -133,6 +137,23 @@ class TestBootstrapClaudeSettings:
         assert action == "updated"
 
         data = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
+        assert "mcp__tapps-mcp" in data["permissions"]["allow"]
+        assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
+
+    def test_upgrades_wildcard_only_to_both(self, tmp_path):
+        """Adds bare entry when only wildcard exists (upgrade path)."""
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir()
+        config = {"permissions": {"allow": ["mcp__tapps-mcp__*"]}}
+        (settings_dir / "settings.json").write_text(
+            json.dumps(config, indent=2) + "\n", encoding="utf-8"
+        )
+
+        action = _bootstrap_claude_settings(tmp_path)
+        assert action == "updated"
+
+        data = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
+        assert "mcp__tapps-mcp" in data["permissions"]["allow"]
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
 
 
@@ -174,6 +195,7 @@ class TestAutoDetectClaudeSettings:
         settings_file = claude_dir / "settings.json"
         assert settings_file.exists()
         data = json.loads(settings_file.read_text(encoding="utf-8"))
+        assert "mcp__tapps-mcp" in data["permissions"]["allow"]
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
         assert result["claude_settings"]["action"] in ("created", "updated")
 
@@ -188,6 +210,7 @@ class TestAutoDetectClaudeSettings:
         settings_file = claude_dir / "settings.json"
         assert settings_file.exists()
         data = json.loads(settings_file.read_text(encoding="utf-8"))
+        assert "mcp__tapps-mcp" in data["permissions"]["allow"]
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
         assert result["claude_settings"]["action"] in ("created", "updated")
 

@@ -13,7 +13,7 @@
 ## Stage: Discover
 
 **Completed:** <!-- ISO timestamp -->
-**Tools called:** tapps_server_info, tapps_project_profile
+**Tools called:** tapps_session_start (combines server info + project profile)
 
 **Findings:**
 - <!-- Server version and installed checkers -->
@@ -54,7 +54,7 @@
 ## Stage: Validate
 
 **Completed:** <!-- ISO timestamp -->
-**Tools called:** <!-- tapps_score_file, tapps_quality_gate, tapps_security_scan -->
+**Tools called:** <!-- tapps_validate_changed (batch) or tapps_score_file, tapps_quality_gate, tapps_security_scan (per-file) -->
 
 **Findings:**
 - <!-- Full scores per file -->

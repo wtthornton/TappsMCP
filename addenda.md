@@ -106,7 +106,15 @@ When you run `tapps_init(platform="cursor")`, TappsMCP also generates:
 
 ### Upgrading TappsMCP
 
-After `pip install -U tapps-mcp`:
+After `pip install -U tapps-mcp`, use the CLI upgrade command:
+
+```bash
+tapps-mcp upgrade                     # auto-detect host, update all files
+tapps-mcp upgrade --host claude-code  # target a specific host
+tapps-mcp upgrade --dry-run           # preview changes without writing
+```
+
+Or use the MCP tool for fine-grained control:
 
 | What to refresh | How |
 |-----------------|-----|
@@ -170,6 +178,9 @@ For semantic expert search (optional): `pip install tapps-mcp[rag]`
 | Cursor shows "Error" for tapps-mcp | Ensure args end with `serve`, add `--no-sync` if using uv |
 | Scoring shows `degraded: true` | Install missing checkers: `pip install ruff mypy bandit radon` |
 | Docker: host paths rejected | Set `TAPPS_MCP_HOST_PROJECT_ROOT` to the host path the IDE uses |
+| MCP tools keep prompting for permission | Add both `mcp__tapps-mcp` and `mcp__tapps-mcp__*` to `.claude/settings.json` `permissions.allow`. Run `tapps-mcp upgrade --host claude-code` to fix automatically. |
+| `tapps_validate_changed` rejected | Use `tapps_quick_check` on individual files as fallback. Ensure `dontAsk` mode is not active. |
+| Tools rejected after fixing permissions | Restart your MCP host (Claude Code / Cursor / VS Code) to pick up settings changes |
 
 ---
 

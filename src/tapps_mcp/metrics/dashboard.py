@@ -7,7 +7,7 @@ collected metrics data.
 from __future__ import annotations
 
 import json
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import Any
 
 import structlog

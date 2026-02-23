@@ -20,7 +20,7 @@ uv sync
 ### Running Tests
 
 ```bash
-# All tests (1675+ tests)
+# All tests (1995+ tests)
 uv run pytest tests/ -v
 
 # With coverage (80% minimum required)

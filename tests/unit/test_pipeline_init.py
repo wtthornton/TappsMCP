@@ -3,8 +3,12 @@
 from typing import ClassVar
 
 from tapps_mcp import __version__
-from tapps_mcp.pipeline.init import bootstrap_pipeline
-from tapps_mcp.prompts.prompt_loader import load_agents_template
+from tapps_mcp.pipeline.init import (
+    _bootstrap_claude,
+    _replace_tapps_section,
+    bootstrap_pipeline,
+)
+from tapps_mcp.prompts.prompt_loader import load_agents_template, load_platform_rules
 
 
 class TestBootstrapPipeline:
@@ -321,3 +325,124 @@ class TestAgentsMdIntegration:
         assert result["agents_md"]["action"] == "created"
         assert "AGENTS.md" in result["created"]
         assert result["agents_md"]["version"] == __version__
+
+
+class TestBootstrapClaudeOverwrite:
+    """Tests for _bootstrap_claude() overwrite behaviour."""
+
+    def test_claude_platform_overwrite_replaces_tapps_section(self, tmp_path):
+        """When overwrite=True, the TAPPS section should be replaced, not duplicated."""
+        claude_md = tmp_path / "CLAUDE.md"
+        old_tapps = load_platform_rules("claude")
+        user_content = "# My Project\n\nCustom content.\n"
+        claude_md.write_text(user_content + "\n\n" + old_tapps, encoding="utf-8")
+
+        action = _bootstrap_claude(tmp_path, overwrite=True)
+
+        assert action == "updated"
+        content = claude_md.read_text(encoding="utf-8")
+        # Should have TAPPS content exactly once
+        assert content.count("# TAPPS Quality Pipeline") == 1
+        # Should preserve user content
+        assert "# My Project" in content
+        assert "Custom content." in content
+
+    def test_claude_platform_overwrite_no_heading_falls_back(self, tmp_path):
+        """When overwrite=True but no '# TAPPS Quality Pipeline' heading found,
+        still replaces content via fallback."""
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.write_text(
+            "# My Project\n\nHas TAPPS reference but no heading.\n", encoding="utf-8"
+        )
+
+        action = _bootstrap_claude(tmp_path, overwrite=True)
+
+        assert action == "updated"
+        content = claude_md.read_text(encoding="utf-8")
+        assert "# TAPPS Quality Pipeline" in content
+
+    def test_claude_overwrite_false_skips_when_tapps_present(self, tmp_path):
+        """When overwrite=False and TAPPS is already present, skip."""
+        claude_md = tmp_path / "CLAUDE.md"
+        old_tapps = load_platform_rules("claude")
+        claude_md.write_text("# Project\n\n" + old_tapps, encoding="utf-8")
+
+        action = _bootstrap_claude(tmp_path, overwrite=False)
+
+        assert action == "skipped"
+
+    def test_claude_creates_when_file_missing(self, tmp_path):
+        """When CLAUDE.md does not exist, create it."""
+        action = _bootstrap_claude(tmp_path)
+
+        assert action == "created"
+        content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "TAPPS" in content
+
+    def test_claude_appends_when_no_tapps_present(self, tmp_path):
+        """When CLAUDE.md exists but has no TAPPS content, append."""
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.write_text("# My Project\n\nJust custom rules.\n", encoding="utf-8")
+
+        action = _bootstrap_claude(tmp_path, overwrite=False)
+
+        assert action == "updated"
+        content = claude_md.read_text(encoding="utf-8")
+        assert "# My Project" in content
+        assert "TAPPS" in content
+
+
+class TestReplaceTappsSection:
+    """Tests for _replace_tapps_section() helper."""
+
+    def test_replaces_tapps_section_preserving_surrounding(self):
+        existing = (
+            "# My Project\n\nIntro.\n\n"
+            "# TAPPS Quality Pipeline\n\nOld content.\n\n"
+            "# Another Section\n\nMore."
+        )
+        new_tapps = "# TAPPS Quality Pipeline - MANDATORY\n\nNew content."
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        assert "# My Project" in result
+        assert "Intro." in result
+        assert "New content." in result
+        assert "Old content." not in result
+        assert "# Another Section" in result
+        assert "More." in result
+
+    def test_replaces_tapps_at_end_of_file(self):
+        existing = "# My Project\n\nIntro.\n\n# TAPPS Quality Pipeline\n\nOld content."
+        new_tapps = "# TAPPS Quality Pipeline - MANDATORY\n\nNew content."
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        assert "# My Project" in result
+        assert "New content." in result
+        assert "Old content." not in result
+
+    def test_fallback_when_no_tapps_heading(self):
+        existing = "# My Project\n\nNo TAPPS heading here."
+        new_tapps = "# TAPPS Quality Pipeline\n\nNew."
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        assert "# My Project" in result
+        assert "# TAPPS Quality Pipeline" in result
+        assert "New." in result
+
+    def test_replaces_tapps_section_with_sub_headings(self):
+        """TAPPS section with sub-headings (##, ###) should be fully replaced."""
+        existing = (
+            "# My Project\n\nIntro.\n\n"
+            "# TAPPS Quality Pipeline\n\n## Sub heading\n\nOld sub content.\n\n"
+            "# Another Section\n\nMore."
+        )
+        new_tapps = "# TAPPS Quality Pipeline\n\nFresh content only."
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        assert "Fresh content only." in result
+        assert "Old sub content." not in result
+        assert "# Another Section" in result

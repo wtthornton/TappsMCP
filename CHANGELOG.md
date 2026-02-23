@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added (Implementation Plan Execution — 2026-02-22)
+### Added (Init/Upgrade/Permissions - 2026-02-23)
+
+- **`tapps-mcp upgrade` CLI command** - validates and updates all generated files (AGENTS.md, platform rules, hooks, agents, skills, `.claude/settings.json`) after upgrading TappsMCP.
+- **Dual permission entries** - `_bootstrap_claude_settings()` now adds both `mcp__tapps-mcp` (bare server match, reliable) and `mcp__tapps-mcp__*` (wildcard, Claude Code 2.0.70+) to work around known Claude Code permission bugs (#3107, #13077, #27139).
+- **AGENTS.md troubleshooting section** - new "Troubleshooting: MCP tool permissions" section with permission fix instructions and fallback guidance.
+- **Doctor checks** - `check_agents_md()`, `check_claude_settings()` (validates both permission entries), `check_hooks()` for comprehensive diagnostics.
+- **Tool fallback guidance** - `tapps_validate_changed` and `tapps_quality_gate` docstrings now include fallback instructions when the tool is rejected.
+- **AGENTS.md smart-merge** - `_bootstrap_claude()` overwrite bug fixed (was duplicating TAPPS content instead of replacing).
+- **Template version injection** - `load_agents_template()` dynamically prepends version marker instead of hardcoding.
+
+### Changed (Init/Upgrade/Permissions - 2026-02-23)
+
+- EXPECTED_TOOLS updated from 17 to 21 (added `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_research`).
+- EXPECTED_SECTIONS updated from 5 to 8 (added `tapps_session_start vs tapps_init`, `Platform hooks and automation`, `Troubleshooting: MCP tool permissions`).
+- agents_template.md rewritten to match production AGENTS.md (99 lines to 217 lines).
+- Platform rules (platform_claude.md, platform_cursor.md) now reference `tapps_workflow` MCP prompt correctly.
+- Handoff and runlog templates updated with `tapps_session_start` and `tapps_validate_changed`.
+
+### Removed (Documentation Cleanup - 2026-02-23)
+
+- Deleted 7 completed planning/task docs from `docs/`: CLARITY_RECOMMENDATIONS.md, COVERAGE_METRICS_IMPLEMENTATION_TASK.md, FEEDBACK_ISSUES_PLAN.md, REVIEW_TRACKING.md, CRITICAL_HIGH_REVIEW_PLAN.md, IMPLEMENTATION_PLAN_CRITICAL_HIGH_MEDIUM.md, SELF_REVIEW_FINDINGS.md.
+- Deleted 18 completed Epic 12 story files from `docs/planning/epics/EPIC-12-PLATFORM-INTEGRATION/stories/` (research/ and README retained for architectural context).
+
+### Added (Implementation Plan Execution - 2026-02-22)
 
 - **Docker Compose explicit networks** — `docker-compose.yml` now defines `tapps-network` and assigns the `tapps-mcp` service to it.
 - **Expert RAG relevance threshold** — `SimpleKnowledgeBase` and `VectorKnowledgeBase` filter chunks below `relevance_threshold` (default 0.2/0.3); reduces irrelevant expert consultation results.

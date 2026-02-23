@@ -6,6 +6,7 @@ registered on the ``mcp`` instance via :func:`register`.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import time
 from typing import TYPE_CHECKING, Any
@@ -22,6 +23,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from mcp.server.fastmcp import FastMCP
+
+# Maximum files to validate concurrently (balances speed vs subprocess pressure).
+_VALIDATE_CONCURRENCY = 5
 
 _ANNOTATIONS_READ_ONLY = ToolAnnotations(
     readOnlyHint=True,
@@ -48,6 +52,9 @@ async def tapps_validate_changed(
     Detects changed Python files (via git diff) or accepts an explicit
     comma-separated list. Runs score + quality gate + security scan on each
     file. Skipping means quality issues in changed files go undetected.
+
+    If this tool is unavailable or rejected, use tapps_quick_check on
+    individual changed files as a fallback.
 
     Args:
         file_paths: Comma-separated file paths (empty = auto-detect via git diff).
@@ -102,34 +109,53 @@ async def tapps_validate_changed(
     paths = paths[:MAX_BATCH_FILES]
 
     scorer = CodeScorer()
+    sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
+
+    async def _validate_one(path: Path) -> dict[str, Any]:
+        async with sem:
+            file_result: dict[str, Any] = {"file_path": str(path)}
+            try:
+                score = await scorer.score_file(path)
+                file_result["overall_score"] = round(score.overall_score, 2)
+
+                gate = evaluate_gate(score, preset=preset)
+                file_result["gate_passed"] = gate.passed
+                if gate.failures:
+                    file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
+
+                if include_security:
+                    from tapps_mcp.security.secret_scanner import SecretScanner
+
+                    # Reuse bandit results from scoring; only run secret scanner
+                    secret_result = SecretScanner().scan_file(str(path))
+
+                    bandit_count = len(score.security_issues)
+                    secret_count = secret_result.total_findings
+
+                    bandit_crit_high = sum(
+                        1
+                        for i in score.security_issues
+                        if i.severity in ("critical", "high")
+                    )
+                    file_result["security_passed"] = (
+                        bandit_crit_high + secret_result.high_severity
+                    ) == 0
+                    file_result["security_issues"] = bandit_count + secret_count
+            except Exception as exc:
+                file_result["errors"] = [str(exc)]
+            return file_result
+
+    raw_results = await asyncio.gather(
+        *[_validate_one(p) for p in paths],
+        return_exceptions=True,
+    )
+
     results: list[dict[str, Any]] = []
-
-    for path in paths:
-        file_result: dict[str, Any] = {"file_path": str(path)}
-        try:
-            score = await scorer.score_file(path)
-            file_result["overall_score"] = round(score.overall_score, 2)
-
-            gate = evaluate_gate(score, preset=preset)
-            file_result["gate_passed"] = gate.passed
-            if gate.failures:
-                file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
-
-            if include_security:
-                from tapps_mcp.security.security_scanner import run_security_scan
-
-                sec = run_security_scan(
-                    str(path),
-                    scan_secrets=True,
-                    cwd=str(settings.project_root),
-                    timeout=settings.tool_timeout,
-                )
-                file_result["security_passed"] = sec.passed
-                file_result["security_issues"] = sec.total_issues
-        except Exception as exc:
-            file_result["errors"] = [str(exc)]
-
-        results.append(file_result)
+    for i, raw in enumerate(raw_results):
+        if isinstance(raw, BaseException):
+            results.append({"file_path": str(paths[i]), "errors": [str(raw)]})
+        else:
+            results.append(raw)
 
     all_passed = all(r.get("gate_passed", False) for r in results)
     total_sec = sum(r.get("security_issues", 0) for r in results)

@@ -56,8 +56,16 @@ def load_runlog_template() -> str:
 
 
 def load_agents_template() -> str:
-    """Load the AGENTS.md template for consuming projects."""
-    return _read_resource("agents_template.md")
+    """Load the AGENTS.md template for consuming projects.
+
+    Prepends the current version marker so that ``AgentsValidation`` considers
+    a freshly-written file up-to-date without hardcoding the version in the
+    template source file.
+    """
+    from tapps_mcp import __version__
+
+    content = _read_resource("agents_template.md")
+    return f"<!-- tapps-agents-version: {__version__} -->\n{content}"
 
 
 def load_platform_rules(platform: str) -> str:
