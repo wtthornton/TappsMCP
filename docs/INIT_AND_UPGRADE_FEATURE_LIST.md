@@ -1,6 +1,6 @@
 # Init and Upgrade — Feature List
 
-This document lists what each init-related process does. The codebase has **two init flows**; there is **no separate upgrade command**. Re-running init is idempotent where possible (existing files are skipped or merged).
+This document lists what each init-related process does. The codebase has **two init flows** plus **upgrade commands** (CLI: `tapps-mcp upgrade`, MCP: `tapps_upgrade`). Re-running init is idempotent where possible (existing files are skipped or merged).
 
 ---
 
@@ -82,9 +82,13 @@ So “upgrading” pipeline artifacts and caches is done by **calling `tapps_ini
 | Process | Entry point | Purpose |
 |--------|-------------|---------|
 | **tapps_init** | MCP tool `tapps_init` | Bootstrap pipeline files (handoff, runlog, AGENTS.md, TECH_STACK.md), optional platform rules, server verification, cache warming, expert RAG warming. |
+| **tapps_upgrade** | MCP tool `tapps_upgrade` | Refresh all generated files (AGENTS.md, rules, hooks, agents, skills, settings) after upgrading TappsMCP. Preserves custom command paths. |
+| **tapps_doctor** | MCP tool `tapps_doctor` | Diagnose configuration, rules, hooks, and connectivity with per-check pass/fail results. |
 | **CLI init** | `tapps-mcp init` | Generate or verify MCP host config so the IDE/host can start TappsMCP. |
+| **CLI upgrade** | `tapps-mcp upgrade` | CLI equivalent of `tapps_upgrade` — refresh all generated files. |
+| **CLI doctor** | `tapps-mcp doctor` | CLI equivalent of `tapps_doctor` — print diagnostic report. |
 
-There is **no separate upgrade command**. To refresh project pipeline state and caches, run **tapps_init** again. To refresh host MCP configuration, run **tapps-mcp init** again (optionally with `--check` first).
+To refresh all generated files at once, use **`tapps-mcp upgrade`** (CLI) or **`tapps_upgrade()`** (MCP tool). For fine-grained control, run **tapps_init** again with specific flags. To refresh host MCP configuration, run **tapps-mcp init** again (optionally with `--check` first).
 
 ---
 

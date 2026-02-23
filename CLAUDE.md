@@ -50,7 +50,7 @@ src/tapps_mcp/
   metrics/                                     # Collector, dashboard, alerts, trends, OTel, feedback
   prompts/                                     # Workflow prompt templates and platform rule templates
   distribution/                                # Setup generator (init, upgrade, doctor)
-  pipeline/                                    # Pipeline orchestration, AGENTS.md validation, platform generators
+  pipeline/                                    # Pipeline orchestration, upgrade, AGENTS.md validation, platform generators
 ```
 
 ---
@@ -64,7 +64,7 @@ uv sync
 # Run the MCP server (stdio)
 uv run tapps-mcp serve
 
-# Run all tests (2230+ tests)
+# Run all tests (2276+ tests)
 uv run pytest tests/ -v
 
 # Run with coverage
@@ -118,7 +118,7 @@ uv run tapps-mcp doctor
 |------|---------|
 | `server.py` | Main MCP server — registers all tools, resources, prompts |
 | `server_scoring_tools.py` | `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check` |
-| `server_pipeline_tools.py` | `tapps_validate_changed`, `tapps_session_start`, `tapps_init` |
+| `server_pipeline_tools.py` | `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_upgrade`, `tapps_doctor` |
 | `server_metrics_tools.py` | `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research` |
 | `scoring/scorer.py` | Core 7-category scoring engine |
 | `tools/parallel.py` | Parallel execution of ruff, mypy, bandit, radon, vulture |
@@ -128,8 +128,9 @@ uv run tapps-mcp doctor
 | `pipeline/init.py` | `tapps_init` bootstrap logic |
 | `pipeline/agents_md.py` | AGENTS.md validation and smart-merge logic |
 | `pipeline/platform_generators.py` | Hooks, agents, skills, CI workflow generation |
+| `pipeline/upgrade.py` | `tapps_upgrade` MCP tool — upgrade generated files |
 | `distribution/setup_generator.py` | `tapps-mcp init` and `tapps-mcp upgrade` CLI |
-| `distribution/doctor.py` | `tapps-mcp doctor` diagnostic checks |
+| `distribution/doctor.py` | `tapps-mcp doctor` and `tapps_doctor` MCP tool diagnostics |
 
 ---
 
@@ -161,4 +162,4 @@ When TappsMCP's own MCP server is available in your session, use it on this code
 - The `tapps-mcp init` CLI generates MCP host configuration for Claude Code, Cursor, or VS Code
 - The `tapps-mcp upgrade` CLI validates and updates all generated files after a TappsMCP version upgrade
 - The `tapps-mcp doctor` CLI diagnoses configuration and connectivity issues
-- All 18 epics are complete (0-17) — see `docs/planning/epics/README.md` for the full history
+- All 19 epics are complete (0-18) — see `docs/planning/epics/README.md` for the full history

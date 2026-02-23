@@ -6,7 +6,7 @@ When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor
 
 ## What TappsMCP is
 
-TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 24 tools for:
+TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 26 tools for:
 
 - **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Security scanning** (Bandit + secret detection with redacted context)
@@ -142,8 +142,8 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 **Claude Code** (`.claude/hooks/`): 7 hook scripts that enforce quality automatically:
 - **SessionStart** - Injects TappsMCP awareness on session start and after compaction
 - **PostToolUse (Edit/Write)** - Reminds you to run `tapps_quick_check` after Python edits
-- **Stop** - Blocks session end (exit 2) until `tapps_validate_changed` is called
-- **TaskCompleted** - Blocks task completion (exit 2) until validation passes
+- **Stop** - Reminds you to run `tapps_validate_changed` before session end (non-blocking)
+- **TaskCompleted** - Reminds you to validate before marking task complete (non-blocking)
 - **PreCompact** - Backs up scoring context before context window compaction
 - **SubagentStart** - Injects TappsMCP awareness into spawned subagents
 
@@ -170,7 +170,7 @@ Three SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
 
 When `tapps_init` is called with `agent_teams=True`, additional hooks enable a quality watchdog teammate pattern:
 - **TeammateIdle** - Keeps the quality watchdog active while issues remain
-- **TaskCompleted** - Blocks task completion if quality gates fail
+- **TaskCompleted** - Reminds about quality gate validation on task completion
 
 Set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to enable Agent Teams.
 

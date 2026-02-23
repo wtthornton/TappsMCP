@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-23
+
+### Added (Epic 18: MCP Upgrade Tool & Exe Path Handling)
+
+- **`tapps_upgrade` MCP tool** - validates and refreshes all generated files (AGENTS.md, platform rules, hooks, agents, skills, settings) from within an AI session. Uses `upgrade_mode` internally to preserve custom command paths (e.g. PyInstaller exe). Accepts `platform`, `force`, and `dry_run` parameters.
+- **`tapps_doctor` MCP tool** - structured diagnostic checks (binary, MCP configs, rules, AGENTS.md, settings, hooks, quality tools) returning per-check pass/fail with remediation hints. MCP equivalent of `tapps-mcp doctor` CLI.
+- **Auto-detect exe path** - `_detect_command_path()` uses `sys.frozen` for PyInstaller builds and `shutil.which` for PATH-based installs. MCP config `command` field is now set automatically instead of hardcoded.
+- **`_is_valid_tapps_command()` helper** - validates command as `tapps-mcp` or path to `tapps-mcp`/`tapps-mcp.exe` for doctor and config validation.
+- **`run_doctor_structured()`** - returns machine-parseable `{checks, pass_count, fail_count, all_passed}` dict for MCP consumption.
+
+### Changed (Epic 18)
+
+- **Non-blocking stop/task-completed hooks** - `tapps-stop.sh` and `tapps-task-completed.sh` now use `exit 0` instead of `exit 2`. Hooks still print reminders to stderr but do not block the session.
+- **Command preservation during upgrade** - `_merge_config()` and `_generate_config()` accept `upgrade_mode` parameter. When `True`, existing `command` and `args` are preserved, only `env` and `instructions` are updated.
+- **EXPECTED_TOOLS** updated from 24 to 26 (added `tapps_upgrade`, `tapps_doctor`).
+- **Version bump** 0.2.1 -> 0.3.0.
+
 ### Changed (Performance - 2026-02-23)
 
 - **tapps_validate_changed parallel file processing** - files are now scored concurrently via `asyncio.gather` with a semaphore (max 5 concurrent), replacing the sequential loop. Expected ~4-5x speedup on multi-file changesets.

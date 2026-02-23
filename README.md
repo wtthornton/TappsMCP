@@ -357,7 +357,9 @@ Quick index:
 | **tapps_dependency_scan** | Scan project dependencies for known vulnerabilities (pip-audit). |
 | **tapps_dependency_graph** | Build import graph, detect circular imports, and calculate coupling metrics. |
 | **tapps_init** | Initialize a pipeline run: profile the project, set context, and plan the workflow. |
-| **tapps_workflow** | Generate tool call order and recommendations for a specific task type. |
+| **tapps_upgrade** | Validate and refresh all generated files (AGENTS.md, rules, hooks) after upgrading TappsMCP. |
+| **tapps_doctor** | Diagnose configuration, rules, hooks, and connectivity — returns per-check pass/fail with hints. |
+| **tapps_workflow** | *(MCP prompt)* Generate tool call order and recommendations for a specific task type. |
 
 ---
 
@@ -494,6 +496,22 @@ Quick index:
 **What it does:** Generates a quality report for one or more scored files. Supports **json**, **markdown**, and **html** output formats. Combines scoring results, gate results, and optional metadata into a single structured report.
 
 **Why use it:** Produces a human-readable summary of quality analysis. Use after scoring and gating to give the user a clear, formatted overview of code quality status.
+
+---
+
+### tapps_upgrade
+
+**What it does:** Validates and refreshes all TappsMCP-generated files in a project after upgrading the server. Detects the platform (Claude Code, Cursor, or both) from existing config files and upgrades AGENTS.md (via smart-merge), platform rules, hooks, agents, skills, and settings. Uses `upgrade_mode` internally so custom command paths (e.g. PyInstaller exe) are never overwritten. Accepts optional `platform`, `force`, and `dry_run` parameters.
+
+**Why use it:** After upgrading TappsMCP (`pip install -U tapps-mcp`), generated files may be outdated — missing new tools, stale hook scripts, or old AGENTS.md sections. Call `tapps_upgrade(dry_run=true)` to preview what would change, then `tapps_upgrade()` to apply updates. This is the MCP-tool equivalent of the `tapps-mcp upgrade` CLI command, usable from within an AI session without dropping to a terminal.
+
+---
+
+### tapps_doctor
+
+**What it does:** Runs a suite of diagnostic checks and returns structured results. Checks include: binary availability on PATH, MCP config files for Claude Code (user and project), Cursor, and VS Code, CLAUDE.md and Cursor rules presence, AGENTS.md version and completeness, `.claude/settings.json` permission entries, hook files, and installed quality tools (ruff, mypy, bandit, radon, vulture, pip-audit). Returns per-check pass/fail with messages and remediation hints, plus aggregated `pass_count`, `fail_count`, and `all_passed`.
+
+**Why use it:** When TappsMCP tools are not working as expected — permission prompts, missing tools, degraded results — run `tapps_doctor()` to identify configuration issues. The structured output pinpoints exactly what needs fixing and suggests the command to fix it.
 
 ---
 
@@ -666,7 +684,8 @@ src/tapps_mcp/
 ├── __init__.py, cli.py, server.py      # Entry points and MCP server
 ├── server_helpers.py                   # Shared response builders
 ├── server_scoring_tools.py             # tapps_score_file, tapps_quality_gate, tapps_quick_check
-├── server_pipeline_tools.py            # tapps_validate_changed, tapps_session_start, tapps_init
+├── server_pipeline_tools.py            # tapps_validate_changed, tapps_session_start, tapps_init,
+│                                       #   tapps_upgrade, tapps_doctor
 ├── server_metrics_tools.py             # tapps_dashboard, tapps_stats, tapps_feedback, tapps_research
 ├── common/                             # Exceptions, logging, shared models, nudges
 ├── config/                             # Settings, default.yaml
@@ -685,7 +704,7 @@ src/tapps_mcp/
 ├── metrics/                            # Collector, dashboard, alerts, trends, OTel export, feedback
 ├── prompts/                            # Workflow prompt templates and platform rule templates
 ├── distribution/                       # Setup generator (init, upgrade, doctor)
-└── pipeline/                           # Pipeline orchestration, handoff, initialization,
+└── pipeline/                           # Pipeline orchestration, upgrade, handoff, initialization,
                                         #   AGENTS.md validation, platform generators
 plugin/
 └── cursor/                            # Ready-to-publish Cursor marketplace plugin
@@ -726,7 +745,7 @@ scripts/
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅
 
 ---
 

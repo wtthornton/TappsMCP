@@ -27,9 +27,17 @@ This updates AGENTS.md, platform rules, hooks, agents, skills, and `.claude/sett
 
 ---
 
-## 3. Or use the MCP tool for fine-grained control
+## 3. Or use the MCP tools from within a session
 
-Use the **`tapps_init`** MCP tool (via your AI assistant) with:
+**Quick upgrade (new in v0.3.0):** Use the **`tapps_upgrade`** MCP tool to refresh all generated files without leaving your AI session:
+
+```
+tapps_upgrade(dry_run=true)   # preview changes
+tapps_upgrade()               # apply updates
+tapps_upgrade(force=true)     # overwrite even if up-to-date
+```
+
+**Fine-grained control:** Use the **`tapps_init`** MCP tool (via your AI assistant) with:
 
 | Option | Purpose |
 |--------|---------|
@@ -75,7 +83,7 @@ A normal `tapps_init` run (without overwrite flags) will:
 | What | How |
 |------|-----|
 | Upgrade the package | `pip install -U tapps-mcp` |
-| Refresh everything (recommended) | `tapps-mcp upgrade` |
+| Refresh everything (recommended) | `tapps-mcp upgrade` (CLI) or `tapps_upgrade()` (MCP tool) |
 | Get latest AGENTS.md and workflow | `tapps_init(overwrite_agents_md=True)` |
 | Get latest platform rules | `tapps_init(overwrite_platform_rules=True, platform="cursor")` or `platform="claude"` |
 | Refresh MCP config | `tapps-mcp init --force` |
