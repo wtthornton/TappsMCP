@@ -222,21 +222,16 @@ class SessionStartOutput(StructuredOutput):
     has_tests: bool = False
 
 
-# Registry for looking up output schema by tool name
-OUTPUT_SCHEMA_REGISTRY: dict[str, type[StructuredOutput]] = {
-    "tapps_score_file": ScoreFileOutput,
-    "tapps_quality_gate": QualityGateOutput,
-    "tapps_quick_check": QuickCheckOutput,
-    "tapps_security_scan": SecurityScanOutput,
-    "tapps_validate_changed": ValidateChangedOutput,
-    "tapps_validate_config": ValidateConfigOutput,
-    "tapps_impact_analysis": ImpactOutput,
-    "tapps_consult_expert": ExpertOutput,
-    "tapps_checklist": ChecklistOutput,
-    "tapps_research": ResearchOutput,
-    "tapps_project_profile": ProfileOutput,
-    "tapps_session_start": SessionStartOutput,
-}
+# Registry for looking up output schema by tool name.
+#
+# DISABLED (v0.4.1): The MCP SDK validates the full return dict against the
+# declared outputSchema.  Our tools return an envelope
+# {"tool", "success", "elapsed_ms", "data": {...}} which does not match the
+# inner-content schemas.  Until tools return CallToolResult with proper
+# structuredContent, keep the registry empty to prevent validation errors.
+# Model classes above are still used to build the "structuredContent" key
+# embedded inside the JSON text response.
+OUTPUT_SCHEMA_REGISTRY: dict[str, type[StructuredOutput]] = {}
 
 
 def get_output_schema(tool_name: str) -> dict[str, Any] | None:

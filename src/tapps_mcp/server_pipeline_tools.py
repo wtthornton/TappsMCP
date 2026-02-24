@@ -212,7 +212,7 @@ async def tapps_validate_changed(
     return _with_nudges("tapps_validate_changed", resp)
 
 
-def tapps_session_start(
+async def tapps_session_start(
     project_root: str = "",
 ) -> dict[str, Any]:
     """REQUIRED as the FIRST call in every session. Combines server info
@@ -225,16 +225,20 @@ def tapps_session_start(
     from tapps_mcp.server import (
         _record_call,
         _record_execution,
+        _server_info_async,
         _with_nudges,
         tapps_project_profile,
-        tapps_server_info,
     )
 
     start = time.perf_counter_ns()
     _record_call("tapps_session_start")
 
-    info = tapps_server_info()
-    profile = tapps_project_profile(project_root=project_root)
+    # Run server info (async, parallel tool detection) and project profile
+    # (sync, wrapped in thread) concurrently for faster startup.
+    info, profile = await asyncio.gather(
+        _server_info_async(),
+        asyncio.to_thread(tapps_project_profile, project_root=project_root),
+    )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)

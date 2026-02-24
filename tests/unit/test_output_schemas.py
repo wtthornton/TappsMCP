@@ -740,49 +740,61 @@ class TestFileValidationResult:
 
 
 class TestRegistry:
-    """Tests for the output schema registry."""
+    """Tests for the output schema registry.
+
+    The registry is intentionally empty (v0.4.1) because the MCP SDK
+    validates the full return dict against the declared outputSchema,
+    but our tools return an envelope that doesn't match the inner schemas.
+    Schema wiring is disabled until handlers migrate to CallToolResult.
+    """
 
     def test_get_output_schema_known_tool(self) -> None:
-        """Returns dict for tapps_score_file."""
+        """Returns None for all tools while registry is disabled."""
         schema = get_output_schema("tapps_score_file")
-        assert schema is not None
-        assert isinstance(schema, dict)
-        assert "properties" in schema
+        assert schema is None
 
     def test_get_output_schema_unknown_tool(self) -> None:
         """Returns None for unknown tool name."""
         result = get_output_schema("tapps_nonexistent_tool")
         assert result is None
 
-    def test_registry_completeness(self) -> None:
-        """All registered tools produce valid schemas."""
-        for tool_name, cls in OUTPUT_SCHEMA_REGISTRY.items():
+    def test_registry_is_empty(self) -> None:
+        """Registry is intentionally empty to prevent MCP output validation errors."""
+        assert len(OUTPUT_SCHEMA_REGISTRY) == 0
+
+    def test_schema_models_still_importable(self) -> None:
+        """Schema model classes are preserved for structuredContent key usage."""
+        from tapps_mcp.common.output_schemas import (
+            ChecklistOutput,
+            ExpertOutput,
+            ImpactOutput,
+            ProfileOutput,
+            QualityGateOutput,
+            QuickCheckOutput,
+            ScoreFileOutput,
+            SecurityScanOutput,
+            SessionStartOutput,
+            ValidateChangedOutput,
+            ValidateConfigOutput,
+        )
+
+        models = [
+            ScoreFileOutput,
+            QualityGateOutput,
+            QuickCheckOutput,
+            SecurityScanOutput,
+            ValidateChangedOutput,
+            ValidateConfigOutput,
+            ImpactOutput,
+            ExpertOutput,
+            ChecklistOutput,
+            ProfileOutput,
+            SessionStartOutput,
+        ]
+        for cls in models:
             schema = cls.to_output_schema()
-            assert isinstance(schema, dict), f"Schema for {tool_name} is not a dict"
-            assert "properties" in schema, f"Schema for {tool_name} lacks 'properties'"
-
-    def test_registry_expected_tools(self) -> None:
-        """All expected tools are in the registry."""
-        expected = {
-            "tapps_score_file",
-            "tapps_quality_gate",
-            "tapps_quick_check",
-            "tapps_security_scan",
-            "tapps_validate_changed",
-            "tapps_validate_config",
-            "tapps_impact_analysis",
-            "tapps_consult_expert",
-            "tapps_checklist",
-            "tapps_research",
-            "tapps_project_profile",
-            "tapps_session_start",
-        }
-        assert set(OUTPUT_SCHEMA_REGISTRY.keys()) == expected
-
-    def test_get_output_schema_uses_registry(self) -> None:
-        """get_output_schema produces the same result as direct class call."""
-        for tool_name, cls in OUTPUT_SCHEMA_REGISTRY.items():
-            assert get_output_schema(tool_name) == cls.to_output_schema()
+            assert isinstance(schema, dict), f"{cls.__name__} schema is not a dict"
+            assert "properties" in schema, f"{cls.__name__} lacks 'properties'"
 
 
 # ---------------------------------------------------------------------------

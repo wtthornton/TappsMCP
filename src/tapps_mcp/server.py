@@ -11,6 +11,7 @@ Tool handlers are split across modules for maintainability:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -28,7 +29,10 @@ from tapps_mcp import __version__
 from tapps_mcp.common.logging import setup_logging
 from tapps_mcp.config.settings import load_settings
 from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
-from tapps_mcp.tools.tool_detection import detect_installed_tools
+from tapps_mcp.tools.tool_detection import (
+    detect_installed_tools,
+    detect_installed_tools_async,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -216,6 +220,122 @@ def tapps_server_info() -> dict[str, Any]:
 
     cache_dir = settings.project_root / ".tapps-mcp-cache"
     diagnostics = collect_diagnostics(api_key=settings.context7_api_key, cache_dir=cache_dir)
+
+    available_tools: list[str] = []
+    try:
+        tool_manager = mcp._tool_manager
+        available_tools = list(tool_manager._tools.keys())
+    except AttributeError:
+        available_tools = [
+            "tapps_server_info",
+            "tapps_session_start",
+            "tapps_score_file",
+            "tapps_security_scan",
+            "tapps_quality_gate",
+            "tapps_lookup_docs",
+            "tapps_validate_config",
+            "tapps_validate_changed",
+            "tapps_quick_check",
+            "tapps_consult_expert",
+            "tapps_list_experts",
+            "tapps_checklist",
+            "tapps_project_profile",
+            "tapps_session_notes",
+            "tapps_impact_analysis",
+            "tapps_report",
+            "tapps_init",
+            "tapps_upgrade",
+            "tapps_doctor",
+            "tapps_dashboard",
+            "tapps_stats",
+            "tapps_feedback",
+            "tapps_research",
+            "tapps_dead_code",
+            "tapps_dependency_scan",
+            "tapps_dependency_graph",
+        ]
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_server_info", start)
+
+    from tapps_mcp.pipeline.models import STAGE_TOOLS, PipelineStage
+
+    resp = success_response(
+        "tapps_server_info",
+        elapsed_ms,
+        {
+            "server": {
+                "name": "TappsMCP",
+                "version": __version__,
+                "protocol_version": "2025-11-25",
+            },
+            "configuration": {
+                "project_root": str(settings.project_root),
+                "quality_preset": settings.quality_preset,
+                "log_level": settings.log_level,
+            },
+            "available_tools": available_tools,
+            "installed_checkers": [t.model_dump() for t in installed],
+            "diagnostics": diagnostics.model_dump(),
+            "recommended_workflow": (
+                "FIRST: Call tapps_session_start() to initialize. "
+                "BEFORE using any library: Call tapps_lookup_docs(). "
+                "AFTER editing Python files: "
+                "Call tapps_score_file(quick=True) or tapps_quick_check(). "
+                "BEFORE declaring done: Call tapps_validate_changed() or tapps_quality_gate(). "
+                "FINAL step: Call tapps_checklist()."
+            ),
+            "quick_start": [
+                "1. FIRST: Call tapps_session_start() to initialize the session",
+                "2. BEFORE using any library API: Call tapps_lookup_docs(library='<name>')",
+                "3. DURING edits: Call tapps_quick_check(file_path='<path>') after each change",
+                "4. BEFORE declaring done: Call tapps_validate_changed() - all gates MUST pass",
+                "5. FINAL step: Call tapps_checklist(task_type='<type>') to verify completeness",
+            ],
+            "critical_rules": [
+                "BLOCKING: tapps_quality_gate MUST pass before work is complete",
+                "BLOCKING: tapps_lookup_docs MUST be called before using external library APIs",
+                "REQUIRED: tapps_score_file MUST be called on every modified Python file",
+                "NEVER skip tapps_checklist as the final verification step",
+            ],
+            "pipeline": {
+                "name": "TAPPS Quality Pipeline",
+                "stages": [s.value for s in PipelineStage],
+                "current_hint": (
+                    "Start with tapps_pipeline_overview prompt, or follow stages in order."
+                ),
+                "stage_tools": {s.value: tools for s, tools in STAGE_TOOLS.items()},
+                "handoff_file": "docs/TAPPS_HANDOFF.md",
+                "runlog_file": "docs/TAPPS_RUNLOG.md",
+                "prompts_available": True,
+            },
+        },
+    )
+    return _with_nudges("tapps_server_info", resp)
+
+
+async def _server_info_async() -> dict[str, Any]:
+    """Async variant of ``tapps_server_info`` for use by ``tapps_session_start``.
+
+    Runs tool detection in parallel (via ``detect_installed_tools_async``)
+    and diagnostics in a thread pool to avoid blocking the event loop.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_server_info")
+
+    settings = load_settings()
+
+    from tapps_mcp.diagnostics import collect_diagnostics
+
+    cache_dir = settings.project_root / ".tapps-mcp-cache"
+
+    # Run tool detection (parallel subprocesses) and diagnostics concurrently
+    installed, diagnostics = await asyncio.gather(
+        detect_installed_tools_async(),
+        asyncio.to_thread(
+            collect_diagnostics, api_key=settings.context7_api_key, cache_dir=cache_dir
+        ),
+    )
 
     available_tools: list[str] = []
     try:
@@ -1357,23 +1477,17 @@ server_pipeline_tools.register(mcp)
 server_metrics_tools.register(mcp)
 
 # ---------------------------------------------------------------------------
-# Wire outputSchema to tool registrations (Epic 13)
+# outputSchema wiring (Epic 13) — DISABLED in v0.4.1
 # ---------------------------------------------------------------------------
-# FastMCP auto-generates outputSchema from return type annotations, but our
-# handlers return dict[str, Any] (text+structured hybrid).  We patch the
-# fn_metadata.output_schema on each registered tool so MCP clients see the
-# declared JSON schema without changing handler signatures.
-
-try:
-    from tapps_mcp.common.output_schemas import OUTPUT_SCHEMA_REGISTRY
-
-    _tool_mgr = mcp._tool_manager
-    for _tool_name, _schema_cls in OUTPUT_SCHEMA_REGISTRY.items():
-        _tool_obj = _tool_mgr._tools.get(_tool_name)
-        if _tool_obj is not None:
-            _tool_obj.fn_metadata.output_schema = _schema_cls.to_output_schema()
-except Exception:
-    logger.debug("output_schema_wiring_failed", exc_info=True)
+# The MCP SDK validates the tool's full return dict against the declared
+# outputSchema.  Our handlers return an envelope dict (tool, success,
+# elapsed_ms, data) which does not match the inner-content schemas
+# (SessionStartOutput, ProfileOutput, etc.), causing validation errors like
+# "Output validation error: 'server_version' is a required property".
+#
+# Schema wiring is disabled until handlers are migrated to return
+# CallToolResult with proper structuredContent.  The schema model classes
+# are still used to build the "structuredContent" key inside the JSON text.
 
 # Re-export so ``from tapps_mcp.server import tapps_X`` keeps working
 tapps_score_file = server_scoring_tools.tapps_score_file

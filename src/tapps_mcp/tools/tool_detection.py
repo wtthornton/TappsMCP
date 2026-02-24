@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 
 from tapps_mcp.common.models import InstalledTool
-from tapps_mcp.tools.subprocess_runner import run_command
+from tapps_mcp.tools.subprocess_runner import run_command, run_command_async
 
 # Tools we check for, with their version flags and install hints
 _TOOL_SPECS: list[dict[str, str]] = [
@@ -95,5 +96,49 @@ def detect_installed_tools() -> list[InstalledTool]:
             )
         )
 
+    _cached_tools = results
+    return list(_cached_tools)
+
+
+async def _check_tool_async(spec: dict[str, str]) -> InstalledTool:
+    """Check a single tool asynchronously."""
+    name = spec["name"]
+    available = shutil.which(name) is not None
+    version: str | None = None
+
+    if available:
+        result = await run_command_async(
+            [name, spec["version_flag"]],
+            timeout=10,
+        )
+        if result.success:
+            raw = (result.stdout or result.stderr).strip()
+            version = raw.splitlines()[0] if raw else None
+
+    return InstalledTool(
+        name=name,
+        version=version,
+        available=available,
+        install_hint=spec["install_hint"] if not available else None,
+    )
+
+
+async def detect_installed_tools_async() -> list[InstalledTool]:
+    """Probe for known external tools in parallel using async subprocesses.
+
+    All 6 tools are checked concurrently via ``asyncio.gather``, giving
+    ~3-6x speedup over the sequential :func:`detect_installed_tools`.
+
+    Results share the same process-lifetime cache.  Call
+    :func:`_reset_tools_cache` to force re-detection.
+
+    Returns:
+        List of ``InstalledTool`` objects.
+    """
+    global _cached_tools  # noqa: PLW0603
+    if _cached_tools is not None:
+        return list(_cached_tools)
+
+    results = list(await asyncio.gather(*[_check_tool_async(s) for s in _TOOL_SPECS]))
     _cached_tools = results
     return list(_cached_tools)

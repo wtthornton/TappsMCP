@@ -22,19 +22,21 @@ def _reset_tracker() -> None:  # type: ignore[misc]
 
 
 class TestTappsSessionStart:
-    """Tests for the tapps_session_start composite tool."""
+    """Tests for the tapps_session_start composite tool (async)."""
 
-    def test_returns_success(self) -> None:
+    @pytest.mark.asyncio
+    async def test_returns_success(self) -> None:
         from tapps_mcp.server import tapps_session_start
 
-        result = tapps_session_start()
+        result = await tapps_session_start()
         assert result["success"] is True
         assert result["tool"] == "tapps_session_start"
 
-    def test_includes_server_and_profile_data(self) -> None:
+    @pytest.mark.asyncio
+    async def test_includes_server_and_profile_data(self) -> None:
         from tapps_mcp.server import tapps_session_start
 
-        result = tapps_session_start()
+        result = await tapps_session_start()
         data = result["data"]
         assert "server" in data
         assert "configuration" in data
@@ -44,25 +46,28 @@ class TestTappsSessionStart:
         # project_profile may be present or None depending on env
         assert "project_profile" in data
 
-    def test_records_all_calls(self) -> None:
+    @pytest.mark.asyncio
+    async def test_records_all_calls(self) -> None:
         from tapps_mcp.server import tapps_session_start
 
-        tapps_session_start()
+        await tapps_session_start()
         called = CallTracker.get_called_tools()
         assert "tapps_session_start" in called
         assert "tapps_server_info" in called
         assert "tapps_project_profile" in called
 
-    def test_includes_next_steps(self) -> None:
+    @pytest.mark.asyncio
+    async def test_includes_next_steps(self) -> None:
         from tapps_mcp.server import tapps_session_start
 
-        result = tapps_session_start()
+        result = await tapps_session_start()
         assert "next_steps" in result["data"]
 
-    def test_includes_pipeline_progress(self) -> None:
+    @pytest.mark.asyncio
+    async def test_includes_pipeline_progress(self) -> None:
         from tapps_mcp.server import tapps_session_start
 
-        result = tapps_session_start()
+        result = await tapps_session_start()
         progress = result["data"]["pipeline_progress"]
         assert "discover" in progress["completed_stages"]
 
