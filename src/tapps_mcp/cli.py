@@ -11,6 +11,9 @@ from tapps_mcp import __version__
 @click.version_option(package_name="tapps-mcp", version=__version__)
 def main() -> None:
     """TappsMCP: MCP server providing code quality tools."""
+    from tapps_mcp.distribution.exe_manager import cleanup_stale_old_exes
+
+    cleanup_stale_old_exes()
 
 
 @main.command()
@@ -154,6 +157,24 @@ def doctor(project_root: str) -> None:
     from tapps_mcp.distribution.doctor import run_doctor
 
     success = run_doctor(project_root=project_root)
+    if not success:
+        raise SystemExit(1)
+
+
+@main.command(name="replace-exe")
+@click.argument("new_exe_path", type=click.Path(exists=True))
+def replace_exe_cmd(new_exe_path: str) -> None:
+    """Replace the running exe with a new version (frozen exe only).
+
+    Renames the currently running tapps-mcp.exe to .old, then copies
+    NEW_EXE_PATH to the original location. Old processes keep running
+    from the renamed file. New sessions pick up the new binary.
+
+    The .old backup is cleaned up automatically on next startup.
+    """
+    from tapps_mcp.distribution.exe_manager import run_replace_exe
+
+    success = run_replace_exe(new_exe_path)
     if not success:
         raise SystemExit(1)
 

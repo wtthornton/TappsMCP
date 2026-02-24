@@ -296,6 +296,37 @@ def check_hooks(project_root: Path) -> CheckResult:
     )
 
 
+def check_stale_exe_backups() -> CheckResult:
+    """Check for stale ``.old`` exe backups next to the running binary.
+
+    Only relevant when running as a frozen exe.  Stale backups indicate
+    previous replace-exe operations where cleanup did not complete.
+    """
+    import sys as _sys
+
+    from tapps_mcp.distribution.exe_manager import detect_stale_backups
+
+    if not getattr(_sys, "frozen", False):
+        return CheckResult(
+            "Stale exe backups",
+            True,
+            "Not running as frozen exe (check not applicable)",
+        )
+
+    old_files = detect_stale_backups()
+    if not old_files:
+        return CheckResult("Stale exe backups", True, "No stale .old backups found")
+
+    names = [f.name for f in old_files]
+    return CheckResult(
+        "Stale exe backups",
+        False,
+        f"Stale exe backup(s) found: {', '.join(names)}",
+        "These will be cleaned up automatically on next startup, "
+        "or delete them manually if no other tapps-mcp processes are running.",
+    )
+
+
 def check_quality_tools() -> list[CheckResult]:
     """Check for installed quality tools (ruff, mypy, bandit, radon)."""
     from tapps_mcp.tools.tool_detection import detect_installed_tools
@@ -341,6 +372,7 @@ def _collect_checks(root: Path) -> list[CheckResult]:
     checks.append(check_agents_md(root))
     checks.append(check_claude_settings(root))
     checks.append(check_hooks(root))
+    checks.append(check_stale_exe_backups())
     checks.extend(check_quality_tools())
     return checks
 

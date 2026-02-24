@@ -1,6 +1,7 @@
 """Tests for the tapps-mcp doctor command."""
 
 import json
+import sys
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -18,6 +19,7 @@ from tapps_mcp.distribution.doctor import (
     check_cursor_rules,
     check_hooks,
     check_json_config,
+    check_stale_exe_backups,
     check_vscode_config,
     run_doctor,
 )
@@ -508,4 +510,56 @@ class TestCheckHooks:
         hooks_dir = tmp_path / ".claude" / "hooks"
         hooks_dir.mkdir(parents=True)
         result = check_hooks(tmp_path)
+        assert result.ok is False
+
+
+# ---------------------------------------------------------------------------
+# check_stale_exe_backups
+# ---------------------------------------------------------------------------
+
+
+class TestCheckStaleExeBackups:
+    """Tests for stale .old exe backup detection."""
+
+    def test_not_frozen_passes(self):
+        """Not applicable when not running as frozen exe."""
+        with patch.object(sys, "frozen", False, create=True):
+            result = check_stale_exe_backups()
+        assert result.ok is True
+        assert "not applicable" in result.message.lower()
+
+    def test_no_stale_files(self, tmp_path):
+        """Passes when no .old files exist."""
+        exe = tmp_path / "tapps-mcp.exe"
+        exe.write_bytes(b"\x00")
+        with (
+            patch.object(sys, "frozen", True, create=True),
+            patch.object(sys, "executable", str(exe)),
+        ):
+            result = check_stale_exe_backups()
+        assert result.ok is True
+
+    def test_detects_stale_old_file(self, tmp_path):
+        """Detects .old backup file."""
+        exe = tmp_path / "tapps-mcp.exe"
+        exe.write_bytes(b"\x00")
+        (tmp_path / "tapps-mcp.exe.old").write_bytes(b"\x00")
+        with (
+            patch.object(sys, "frozen", True, create=True),
+            patch.object(sys, "executable", str(exe)),
+        ):
+            result = check_stale_exe_backups()
+        assert result.ok is False
+        assert "tapps-mcp.exe.old" in result.message
+
+    def test_detects_timestamped_stale_file(self, tmp_path):
+        """Detects timestamped .old backup file."""
+        exe = tmp_path / "tapps-mcp.exe"
+        exe.write_bytes(b"\x00")
+        (tmp_path / "tapps-mcp.exe.old.1708800000").write_bytes(b"\x00")
+        with (
+            patch.object(sys, "frozen", True, create=True),
+            patch.object(sys, "executable", str(exe)),
+        ):
+            result = check_stale_exe_backups()
         assert result.ok is False

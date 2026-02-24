@@ -157,6 +157,7 @@ a = Analysis(
         "tapps_mcp.distribution",
         "tapps_mcp.distribution.setup_generator",
         "tapps_mcp.distribution.doctor",
+        "tapps_mcp.distribution.exe_manager",
         "tapps_mcp.pipeline",
         "tapps_mcp.pipeline.models",
         "tapps_mcp.pipeline.handoff",
