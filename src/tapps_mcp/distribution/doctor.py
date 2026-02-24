@@ -252,25 +252,47 @@ def check_claude_settings(project_root: Path) -> CheckResult:
 
 
 def check_hooks(project_root: Path) -> CheckResult:
-    """Check if TappsMCP hooks directory exists for at least one platform."""
+    """Check if TappsMCP hooks directory exists with session-start hook."""
     claude_hooks = project_root / ".claude" / "hooks"
     cursor_hooks = project_root / ".cursor" / "hooks"
     found: list[str] = []
+    missing_session_start: list[str] = []
+
     if claude_hooks.is_dir() and any(claude_hooks.glob("tapps-*")):
         found.append("Claude Code")
+        has_sh = (claude_hooks / "tapps-session-start.sh").exists()
+        has_ps1 = (claude_hooks / "tapps-session-start.ps1").exists()
+        if not has_sh and not has_ps1:
+            missing_session_start.append("Claude Code")
+
     if cursor_hooks.is_dir() and any(cursor_hooks.glob("tapps-*")):
         found.append("Cursor")
-    if found:
+        has_sh = (cursor_hooks / "tapps-before-mcp.sh").exists()
+        has_ps1 = (cursor_hooks / "tapps-before-mcp.ps1").exists()
+        if not has_sh and not has_ps1:
+            missing_session_start.append("Cursor")
+
+    if not found:
         return CheckResult(
             "Hooks",
-            True,
-            f"TappsMCP hooks found for: {', '.join(found)}",
+            False,
+            "No TappsMCP hooks found",
+            "Run: tapps-mcp upgrade",
         )
+
+    if missing_session_start:
+        return CheckResult(
+            "Hooks",
+            False,
+            f"TappsMCP hooks found for: {', '.join(found)}, "
+            f"but session-start hook missing for: {', '.join(missing_session_start)}",
+            "Run: tapps-mcp upgrade --force to regenerate hooks",
+        )
+
     return CheckResult(
         "Hooks",
-        False,
-        "No TappsMCP hooks found",
-        "Run: tapps-mcp upgrade",
+        True,
+        f"TappsMCP hooks found for: {', '.join(found)} (including session-start)",
     )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -82,3 +83,98 @@ def serialize_issues(
 ) -> list[dict[str, Any]]:
     """Serialize a list of Pydantic model issues, truncated to *limit*."""
     return [i.model_dump() for i in issues[:limit]]
+
+
+# ---------------------------------------------------------------------------
+# Session auto-initialization state
+# ---------------------------------------------------------------------------
+
+_session_lock = threading.Lock()
+_session_initialized: bool = False
+_session_context: dict[str, Any] = {}
+
+
+def is_session_initialized() -> bool:
+    """Check if the session has been initialized."""
+    return _session_initialized
+
+
+def mark_session_initialized(context: dict[str, Any] | None = None) -> None:
+    """Mark the session as initialized with optional context."""
+    global _session_initialized  # noqa: PLW0603
+    with _session_lock:
+        _session_initialized = True
+        if context:
+            _session_context.update(context)
+
+
+def get_session_context() -> dict[str, Any]:
+    """Return a copy of the cached session context."""
+    with _session_lock:
+        return dict(_session_context)
+
+
+def _reset_session_state() -> None:
+    """Reset session state (for testing)."""
+    global _session_initialized  # noqa: PLW0603
+    with _session_lock:
+        _session_initialized = False
+        _session_context.clear()
+
+
+async def ensure_session_initialized() -> None:
+    """Lightweight auto-init for async tool handlers.
+
+    When called before ``tapps_session_start`` has run, loads settings and
+    detects the project profile so that tools have project context.  After
+    the first successful call this becomes a no-op.
+    """
+    if _session_initialized:
+        return
+
+    import asyncio
+
+    from tapps_mcp.config.settings import load_settings
+
+    settings = load_settings()
+    profile_data: dict[str, Any] = {}
+
+    try:
+        from tapps_mcp.project.profiler import detect_project_profile
+
+        profile = await asyncio.to_thread(detect_project_profile, settings.project_root)
+        profile_data = {
+            "project_type": profile.project_type,
+            "has_tests": profile.has_tests,
+            "has_docker": profile.has_docker,
+            "has_ci": profile.has_ci,
+        }
+    except Exception:  # noqa: BLE001
+        pass
+
+    mark_session_initialized({
+        "project_root": str(settings.project_root),
+        "quality_preset": settings.quality_preset,
+        "auto_initialized": True,
+        "project_profile": profile_data,
+    })
+
+
+def ensure_session_initialized_sync() -> None:
+    """Lightweight auto-init for sync tool handlers.
+
+    Performs only sync-safe initialization (settings loading).  Does NOT
+    run project profiling which requires ``asyncio.to_thread``.
+    """
+    if _session_initialized:
+        return
+
+    from tapps_mcp.config.settings import load_settings
+
+    settings = load_settings()
+    mark_session_initialized({
+        "project_root": str(settings.project_root),
+        "quality_preset": settings.quality_preset,
+        "auto_initialized": True,
+        "sync_only": True,
+    })

@@ -27,12 +27,11 @@ _CLAUDE_HOOK_SCRIPTS: dict[str, str] = {
     "tapps-session-start.sh": """\
 #!/usr/bin/env bash
 # TappsMCP SessionStart hook (startup/resume)
-# Injects TappsMCP pipeline context into the session.
+# Directs the agent to call tapps_session_start as the first MCP action.
 INPUT=$(cat)
-echo "[TappsMCP] Session started — TappsMCP quality pipeline is active."
-echo "Available tools: tapps_quick_check, tapps_score_file, tapps_quality_gate,"
-echo "tapps_validate_changed, tapps_security_scan, tapps_consult_expert."
-echo "Run tapps_session_start to initialize the session context."
+echo "REQUIRED: Call tapps_session_start() NOW as your first action."
+echo "This initializes project context for all TappsMCP quality tools."
+echo "Tools called without session_start will have degraded accuracy."
 exit 0
 """,
     "tapps-session-compact.sh": """\
@@ -116,12 +115,11 @@ exit 0
 _CLAUDE_HOOK_SCRIPTS_PS: dict[str, str] = {
     "tapps-session-start.ps1": """\
 # TappsMCP SessionStart hook (startup/resume)
-# Injects TappsMCP pipeline context into the session.
+# Directs the agent to call tapps_session_start as the first MCP action.
 $null = $input | Out-Null
-Write-Output "[TappsMCP] Session started - TappsMCP quality pipeline is active."
-Write-Output "Available tools: tapps_quick_check, tapps_score_file, tapps_quality_gate,"
-Write-Output "tapps_validate_changed, tapps_security_scan, tapps_consult_expert."
-Write-Output "Run tapps_session_start to initialize the session context."
+Write-Output "REQUIRED: Call tapps_session_start() NOW as your first action."
+Write-Output "This initializes project context for all TappsMCP quality tools."
+Write-Output "Tools called without session_start will have degraded accuracy."
 exit 0
 """,
     "tapps-session-compact.ps1": """\
@@ -355,11 +353,21 @@ _CURSOR_HOOK_SCRIPTS: dict[str, str] = {
     "tapps-before-mcp.sh": """\
 #!/usr/bin/env bash
 # TappsMCP beforeMCPExecution hook
-# Logs MCP tool invocations for observability.
+# Logs MCP tool invocations and reminds to call session_start.
 INPUT=$(cat)
 PY="import sys,json; d=json.load(sys.stdin); print(d.get('tool','unknown'))"
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 TOOL=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
+case "$TOOL" in
+  tapps_*)
+    SENTINEL="${TMPDIR:-/tmp}/.tapps-session-started-$$"
+    if [ "$TOOL" = "tapps_session_start" ]; then
+      touch "$SENTINEL"
+    elif [ ! -f "$SENTINEL" ]; then
+      echo "REMINDER: Call tapps_session_start() first for best results."
+    fi
+    ;;
+esac
 echo "[TappsMCP] MCP tool invoked: $TOOL" >&2
 exit 0
 """,
@@ -395,13 +403,21 @@ exit 0
 _CURSOR_HOOK_SCRIPTS_PS: dict[str, str] = {
     "tapps-before-mcp.ps1": """\
 # TappsMCP beforeMCPExecution hook
-# Logs MCP tool invocations for observability.
+# Logs MCP tool invocations and reminds to call session_start.
 $rawInput = @($input) -join "`n"
 try {
     $data = $rawInput | ConvertFrom-Json
     $tool = if ($data.tool) { $data.tool } else { "unknown" }
 } catch {
     $tool = "unknown"
+}
+if ($tool -match '^tapps_') {
+    $sentinel = "$env:TEMP\.tapps-session-started-$PID"
+    if ($tool -eq 'tapps_session_start') {
+        $null = New-Item -ItemType File -Path $sentinel -Force
+    } elseif (-not (Test-Path $sentinel)) {
+        Write-Output "REMINDER: Call tapps_session_start() first for best results."
+    }
 }
 Write-Host "[TappsMCP] MCP tool invoked: $tool" -ForegroundColor Cyan
 exit 0

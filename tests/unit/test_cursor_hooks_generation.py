@@ -72,6 +72,20 @@ class TestCursorHooksScripts:
             assert "command -v python3" in content, f"{name} should probe python3"
             assert "command -v python" in content, f"{name} should fall back to python"
 
+    def test_before_mcp_checks_session_start(self, tmp_path):
+        """before-mcp hook should remind about tapps_session_start."""
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        content = (tmp_path / ".cursor" / "hooks" / "tapps-before-mcp.sh").read_text()
+        assert "tapps_session_start" in content
+        assert "REMINDER" in content
+
+    def test_before_mcp_ps1_checks_session_start(self, tmp_path):
+        """PowerShell before-mcp hook should remind about tapps_session_start."""
+        generate_cursor_hooks(tmp_path, force_windows=True)
+        content = (tmp_path / ".cursor" / "hooks" / "tapps-before-mcp.ps1").read_text()
+        assert "tapps_session_start" in content
+        assert "REMINDER" in content
+
 
 class TestCursorHooksConfig:
     """Tests for hooks.json configuration (bash / Unix)."""

@@ -94,6 +94,20 @@ class TestClaudeHooksScripts:
         content = (tmp_path / ".claude" / "hooks" / "tapps-post-edit.sh").read_text()
         assert "grep" not in content
 
+    def test_session_start_script_has_required_directive(self, tmp_path):
+        """Session-start hook should use directive language."""
+        generate_claude_hooks(tmp_path, force_windows=False)
+        content = (tmp_path / ".claude" / "hooks" / "tapps-session-start.sh").read_text()
+        assert "REQUIRED" in content
+        assert "tapps_session_start" in content
+
+    def test_session_start_ps1_has_required_directive(self, tmp_path):
+        """PowerShell session-start hook should use directive language."""
+        generate_claude_hooks(tmp_path, force_windows=True)
+        content = (tmp_path / ".claude" / "hooks" / "tapps-session-start.ps1").read_text()
+        assert "REQUIRED" in content
+        assert "tapps_session_start" in content
+
 
 class TestClaudeHooksConfig:
     """Tests for settings.json hooks configuration (bash / Unix)."""

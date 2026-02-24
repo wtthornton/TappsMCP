@@ -431,32 +431,33 @@ class TestCheckClaudeSettings:
 class TestCheckHooks:
     """Tests for check_hooks diagnostic check."""
 
-    def test_claude_hooks_present(self, tmp_path):
-        """Claude hooks directory with tapps-* files passes."""
+    def test_claude_hooks_with_session_start(self, tmp_path):
+        """Claude hooks directory with session-start hook passes."""
         hooks_dir = tmp_path / ".claude" / "hooks"
         hooks_dir.mkdir(parents=True)
-        (hooks_dir / "tapps-quality-check.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-session-start.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         result = check_hooks(tmp_path)
         assert result.ok is True
         assert "Claude Code" in result.message
+        assert "session-start" in result.message
 
-    def test_cursor_hooks_present(self, tmp_path):
-        """Cursor hooks directory with tapps-* files passes."""
+    def test_cursor_hooks_with_before_mcp(self, tmp_path):
+        """Cursor hooks directory with before-mcp hook passes."""
         hooks_dir = tmp_path / ".cursor" / "hooks"
         hooks_dir.mkdir(parents=True)
-        (hooks_dir / "tapps-validate.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         result = check_hooks(tmp_path)
         assert result.ok is True
         assert "Cursor" in result.message
 
     def test_both_hooks_present(self, tmp_path):
-        """Both Claude and Cursor hooks directories passes with both listed."""
+        """Both Claude and Cursor hooks with session-start hooks passes."""
         claude_hooks = tmp_path / ".claude" / "hooks"
         claude_hooks.mkdir(parents=True)
-        (claude_hooks / "tapps-hook.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (claude_hooks / "tapps-session-start.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         cursor_hooks = tmp_path / ".cursor" / "hooks"
         cursor_hooks.mkdir(parents=True)
-        (cursor_hooks / "tapps-hook.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (cursor_hooks / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         result = check_hooks(tmp_path)
         assert result.ok is True
         assert "Claude Code" in result.message
@@ -467,6 +468,32 @@ class TestCheckHooks:
         result = check_hooks(tmp_path)
         assert result.ok is False
         assert "No TappsMCP hooks" in result.message
+
+    def test_claude_hooks_missing_session_start(self, tmp_path):
+        """Claude hooks without session-start hook fails."""
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-post-edit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        result = check_hooks(tmp_path)
+        assert result.ok is False
+        assert "session-start hook missing" in result.message
+
+    def test_claude_hooks_ps1_session_start_passes(self, tmp_path):
+        """Claude hooks with PowerShell session-start passes."""
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-session-start.ps1").write_text("# ps1\n", encoding="utf-8")
+        result = check_hooks(tmp_path)
+        assert result.ok is True
+
+    def test_cursor_hooks_missing_before_mcp(self, tmp_path):
+        """Cursor hooks without before-mcp hook fails."""
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-after-edit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        result = check_hooks(tmp_path)
+        assert result.ok is False
+        assert "session-start hook missing" in result.message
 
     def test_hooks_dir_exists_but_no_tapps_files(self, tmp_path):
         """Hooks directory exists but has no tapps-* files fails."""

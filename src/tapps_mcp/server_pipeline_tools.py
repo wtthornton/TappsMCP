@@ -63,12 +63,13 @@ async def tapps_validate_changed(
         include_security: Whether to run security scan on each file.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
+    from tapps_mcp.server_helpers import _get_scorer, ensure_session_initialized
 
     start = time.perf_counter_ns()
     _record_call("tapps_validate_changed")
+    await ensure_session_initialized()
 
     from tapps_mcp.gates.evaluator import evaluate_gate
-    from tapps_mcp.server_helpers import _get_scorer
     from tapps_mcp.tools.batch_validator import (
         MAX_BATCH_FILES,
         detect_changed_python_files,
@@ -107,6 +108,13 @@ async def tapps_validate_changed(
     capped = len(paths) > MAX_BATCH_FILES
     extra_count = len(paths) - MAX_BATCH_FILES if capped else 0
     paths = paths[:MAX_BATCH_FILES]
+
+    # Warm the dependency cache if empty so scorer applies vulnerability penalties.
+    if settings.dependency_scan_enabled:
+        from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
+
+        if not get_dependency_findings(str(settings.project_root)):
+            await _warm_dependency_cache(settings)
 
     scorer = _get_scorer()
     sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
@@ -212,6 +220,39 @@ async def tapps_validate_changed(
     return _with_nudges("tapps_validate_changed", resp)
 
 
+async def _warm_dependency_cache(
+    settings: Any,
+) -> None:
+    """Best-effort background task to warm the dependency scan cache.
+
+    Called from :func:`tapps_session_start` so that subsequent
+    ``tapps_score_file`` calls can apply vulnerability penalties.
+    Failures are silently ignored — session start must never break.
+    """
+    import structlog
+
+    logger = structlog.get_logger(__name__)
+    try:
+        from tapps_mcp.tools.dependency_scan_cache import set_dependency_findings
+        from tapps_mcp.tools.pip_audit import run_pip_audit_async
+
+        result = await run_pip_audit_async(
+            project_root=str(settings.project_root),
+            source=settings.dependency_scan_source,
+            severity_threshold=settings.dependency_scan_severity_threshold,
+            ignore_ids=settings.dependency_scan_ignore_ids or None,
+            timeout=30,
+        )
+        if not result.error:
+            set_dependency_findings(str(settings.project_root), result.findings)
+            logger.debug(
+                "dependency_cache_warmed",
+                findings=len(result.findings),
+            )
+    except Exception:
+        logger.debug("dependency_cache_warming_failed", exc_info=True)
+
+
 async def tapps_session_start(
     project_root: str = "",
 ) -> dict[str, Any]:
@@ -239,6 +280,12 @@ async def tapps_session_start(
         _server_info_async(),
         asyncio.to_thread(tapps_project_profile, project_root=project_root),
     )
+
+    # Fire-and-forget: warm the dependency scan cache in background so
+    # subsequent tapps_score_file calls can apply vulnerability penalties.
+    settings = load_settings()
+    if settings.dependency_scan_enabled:
+        asyncio.create_task(_warm_dependency_cache(settings))
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)
@@ -292,6 +339,15 @@ async def tapps_session_start(
         _structlog.get_logger(__name__).debug(
             "structured_output_failed: tapps_session_start", exc_info=True
         )
+
+    from tapps_mcp.server_helpers import mark_session_initialized
+
+    mark_session_initialized({
+        "project_root": info["data"]["configuration"].get("project_root", ""),
+        "quality_preset": info["data"]["configuration"].get("quality_preset", "standard"),
+        "auto_initialized": False,
+        "project_profile": data.get("project_profile"),
+    })
 
     return _with_nudges("tapps_session_start", resp)
 

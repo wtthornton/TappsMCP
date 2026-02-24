@@ -17,7 +17,13 @@ from mcp.server.fastmcp import (
 from mcp.types import ToolAnnotations
 
 from tapps_mcp.config.settings import load_settings
-from tapps_mcp.server_helpers import _get_scorer, error_response, serialize_issues, success_response
+from tapps_mcp.server_helpers import (
+    _get_scorer,
+    ensure_session_initialized,
+    error_response,
+    serialize_issues,
+    success_response,
+)
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -62,6 +68,7 @@ async def tapps_score_file(
 
     start = time.perf_counter_ns()
     _record_call("tapps_score_file")
+    await ensure_session_initialized()
 
     try:
         resolved = _validate_file_path(file_path)
@@ -203,6 +210,7 @@ async def tapps_quality_gate(
 
     start = time.perf_counter_ns()
     _record_call("tapps_quality_gate")
+    await ensure_session_initialized()
 
     # If no preset specified and context available, try elicitation
     if not preset and ctx is not None:
@@ -316,6 +324,7 @@ async def tapps_quick_check(
 
     start = time.perf_counter_ns()
     _record_call("tapps_quick_check")
+    await ensure_session_initialized()
 
     try:
         resolved = _validate_file_path(file_path)
