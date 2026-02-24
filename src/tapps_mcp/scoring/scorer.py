@@ -105,7 +105,7 @@ class CodeScorer:
             code = resolved.read_text(encoding="utf-8", errors="replace")
         except (OSError, PermissionError) as exc:
             logger.error("file_read_failed", path=str_path, error=str(exc))
-            return self._error_result(str_path, str(exc))
+            return self._error_result(str_path)
 
         # Run external tools in parallel
         parallel = await run_all_tools(
@@ -497,7 +497,7 @@ class CodeScorer:
         penalty = sum(PERFORMANCE_PENALTY_MAP.get(i, 0.5) for i in seen)
         return clamp_individual(10.0 - penalty), sorted(seen)
 
-    def _error_result(self, path: str, message: str) -> ScoreResult:
+    def _error_result(self, path: str) -> ScoreResult:
         return ScoreResult(
             file_path=path,
             categories={},

@@ -10,6 +10,10 @@ import re
 from dataclasses import dataclass, field
 from typing import ClassVar
 
+import structlog
+
+logger = structlog.get_logger(__name__)
+
 
 @dataclass
 class GovernancePolicy:
@@ -106,6 +110,9 @@ class GovernanceLayer:
                     filtered = re.sub(pattern, "[REDACTED]", filtered)
 
         allowed = len(detected_issues) == 0
+
+        if not allowed and source:
+            logger.warning("content_filtered", source=source, issues=detected_issues)
 
         return FilterResult(
             allowed=allowed,

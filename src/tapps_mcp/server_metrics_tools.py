@@ -146,15 +146,22 @@ async def tapps_dashboard(
 
     if output_format == "json":
         data = dashboard.generate_json_dashboard(sections=sections)
+        data["time_range"] = time_range
     elif output_format == "markdown":
         content = dashboard.generate_markdown_dashboard(sections=sections)
-        data = {"format": "markdown", "content": content}
+        data = {"format": "markdown", "time_range": time_range, "content": content}
     elif output_format == "html":
         content = dashboard.generate_html_dashboard(sections=sections)
         path = dashboard.save_dashboard(fmt="html", sections=sections)
-        data = {"format": "html", "content": content, "saved_to": str(path)}
+        data = {
+            "format": "html",
+            "time_range": time_range,
+            "content": content,
+            "saved_to": str(path),
+        }
     else:
         data = dashboard.generate_json_dashboard(sections=sections)
+        data["time_range"] = time_range
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_dashboard", start)
