@@ -131,6 +131,24 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
 # Global nudge: remind about lookup_docs if never called
 _GLOBAL_LOOKUP_NUDGE = "REMINDER: Call tapps_lookup_docs() before using any external library API."
 
+# Global nudge: session not initialized
+_SESSION_INIT_NUDGE = (
+    "SETUP: tapps_session_start() was not called yet. "
+    "Call it to ensure project context (root path, profile) is set correctly."
+)
+
+# Tools that benefit from session initialization (scoring, validation, security)
+_SESSION_DEPENDENT_TOOLS = frozenset({
+    "tapps_score_file",
+    "tapps_quick_check",
+    "tapps_quality_gate",
+    "tapps_validate_changed",
+    "tapps_security_scan",
+    "tapps_dead_code",
+    "tapps_dependency_scan",
+    "tapps_dependency_graph",
+})
+
 
 def compute_next_steps(
     tool_name: str,
@@ -159,6 +177,14 @@ def compute_next_steps(
             break
         if condition(called, context):
             steps.append(text)
+
+    # Global nudge: session-init guard for scoring/validation tools
+    if (
+        len(steps) < _MAX_NUDGES
+        and tool_name in _SESSION_DEPENDENT_TOOLS
+        and not _SESSION_INIT_TOOLS.intersection(called)
+    ):
+        steps.insert(0, _SESSION_INIT_NUDGE)
 
     # Global nudge: lookup_docs reminder (only for non-discover tools)
     if (

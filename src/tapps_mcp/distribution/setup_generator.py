@@ -26,7 +26,7 @@ _TAPPS_SERVER_ENTRY: dict[str, Any] = {
     "command": "tapps-mcp",
     "args": ["serve"],
     "env": {
-        "TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}",
+        "TAPPS_MCP_PROJECT_ROOT": ".",
     },
 }
 
@@ -63,13 +63,21 @@ def _build_server_entry(host: str) -> dict[str, Any]:
 
     Claude Code gets an extra ``instructions`` field for Tool Search discovery.
     All platforms get the ``env`` block with ``TAPPS_MCP_PROJECT_ROOT``.
+
+    Claude Code uses ``"."`` because it launches the MCP server with CWD set to
+    the project root and does **not** resolve VS Code variables like
+    ``${workspaceFolder}``.  Cursor and VS Code resolve ``${workspaceFolder}``
+    natively so it is used there.
+
     Uses :func:`_detect_command_path` to determine the command.
     """
     command = _detect_command_path()
+    # Claude Code CWD == project root; VS Code/Cursor resolve ${workspaceFolder}
+    project_root_value = "." if host == "claude-code" else "${workspaceFolder}"
     entry: dict[str, Any] = {
         "command": command,
         "args": ["serve"],
-        "env": {"TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}"},
+        "env": {"TAPPS_MCP_PROJECT_ROOT": project_root_value},
     }
     if host == "claude-code":
         entry["instructions"] = _SERVER_INSTRUCTIONS

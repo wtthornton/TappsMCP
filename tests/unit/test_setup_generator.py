@@ -820,12 +820,12 @@ class TestEnvInConfig:
     """Tests for env block in generated MCP configs."""
 
     def test_claude_code_has_env(self, tmp_path):
-        """Claude Code config includes env with TAPPS_MCP_PROJECT_ROOT."""
+        """Claude Code config uses '.' (CWD == project root)."""
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
             _generate_config("claude-code", tmp_path / "project")
         data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
         entry = data["mcpServers"]["tapps-mcp"]
-        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "${workspaceFolder}"
+        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "."
 
     def test_cursor_has_env(self, tmp_path):
         """Cursor config includes env with TAPPS_MCP_PROJECT_ROOT."""

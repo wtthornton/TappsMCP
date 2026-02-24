@@ -144,6 +144,50 @@ class TestComputeNextSteps:
         steps = compute_next_steps("tapps_session_start")
         assert any("tapps_lookup_docs" in s for s in steps)
 
+    def test_session_init_nudge_for_score_file(self) -> None:
+        """score_file without session_start should nudge SETUP."""
+        CallTracker.record("tapps_score_file")
+        steps = compute_next_steps("tapps_score_file")
+        assert any("SETUP" in s for s in steps)
+
+    def test_session_init_nudge_for_validate_changed(self) -> None:
+        """validate_changed without session_start should nudge SETUP."""
+        CallTracker.record("tapps_validate_changed")
+        steps = compute_next_steps("tapps_validate_changed")
+        assert any("SETUP" in s for s in steps)
+
+    def test_session_init_nudge_for_quick_check(self) -> None:
+        """quick_check without session_start should nudge SETUP."""
+        CallTracker.record("tapps_quick_check")
+        steps = compute_next_steps("tapps_quick_check")
+        assert any("SETUP" in s for s in steps)
+
+    def test_no_session_init_nudge_when_session_started(self) -> None:
+        """No SETUP nudge when session_start was already called."""
+        CallTracker.record("tapps_session_start")
+        CallTracker.record("tapps_score_file")
+        steps = compute_next_steps("tapps_score_file")
+        assert not any("SETUP" in s for s in steps)
+
+    def test_no_session_init_nudge_when_server_info_called(self) -> None:
+        """No SETUP nudge when server_info was already called (also satisfies init)."""
+        CallTracker.record("tapps_server_info")
+        CallTracker.record("tapps_score_file")
+        steps = compute_next_steps("tapps_score_file")
+        assert not any("SETUP" in s for s in steps)
+
+    def test_session_init_nudge_appears_first(self) -> None:
+        """SETUP nudge should be the first item in steps list."""
+        CallTracker.record("tapps_score_file")
+        steps = compute_next_steps("tapps_score_file")
+        assert steps[0].startswith("SETUP:")
+
+    def test_no_session_init_nudge_for_non_dependent_tool(self) -> None:
+        """Session init nudge should not fire for non-dependent tools."""
+        CallTracker.record("tapps_checklist")
+        steps = compute_next_steps("tapps_checklist", {"complete": True})
+        assert not any("SETUP" in s for s in steps)
+
 
 # ---------------------------------------------------------------------------
 # compute_pipeline_progress

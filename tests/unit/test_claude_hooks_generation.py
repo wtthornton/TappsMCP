@@ -2,6 +2,8 @@
 
 Verifies that generate_claude_hooks() creates 7 shell scripts in .claude/hooks/
 and merges hook entries into .claude/settings.json.
+
+Includes tests for both bash (Unix) and PowerShell (Windows) variants.
 """
 
 from __future__ import annotations
@@ -16,14 +18,14 @@ from tapps_mcp.pipeline.platform_generators import generate_claude_hooks
 
 
 class TestClaudeHooksScripts:
-    """Tests for hook script file creation."""
+    """Tests for hook script file creation (bash / Unix)."""
 
     def test_hooks_dir_created(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         assert (tmp_path / ".claude" / "hooks").is_dir()
 
     def test_all_seven_scripts_created(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         hooks_dir = tmp_path / ".claude" / "hooks"
         expected = [
             "tapps-session-start.sh",
@@ -39,64 +41,80 @@ class TestClaudeHooksScripts:
 
     @pytest.mark.skipif(sys.platform == "win32", reason="Exec bit N/A on Windows")
     def test_scripts_are_executable(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         hooks_dir = tmp_path / ".claude" / "hooks"
         for script in hooks_dir.iterdir():
             mode = script.stat().st_mode
             assert mode & stat.S_IXUSR, f"{script.name} not executable"
 
     def test_stop_script_checks_stop_hook_active(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         content = (tmp_path / ".claude" / "hooks" / "tapps-stop.sh").read_text()
         assert "stop_hook_active" in content
 
     def test_stop_script_has_exit_0(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         content = (tmp_path / ".claude" / "hooks" / "tapps-stop.sh").read_text()
         assert "exit 0" in content
 
     def test_stop_script_is_non_blocking(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         content = (tmp_path / ".claude" / "hooks" / "tapps-stop.sh").read_text()
         # Stop hook should NOT block (exit 0, not exit 2)
         assert "exit 2" not in content
         assert content.strip().endswith("exit 0")
 
     def test_task_completed_is_non_blocking(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         content = (tmp_path / ".claude" / "hooks" / "tapps-task-completed.sh").read_text()
         # Task completed hook should NOT block (exit 0, not exit 2)
         assert "exit 2" not in content
         assert content.strip().endswith("exit 0")
 
     def test_scripts_start_with_shebang(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         hooks_dir = tmp_path / ".claude" / "hooks"
         for script in hooks_dir.iterdir():
             content = script.read_text()
             assert content.startswith("#!/usr/bin/env bash"), f"{script.name} missing shebang"
 
+    def test_bash_scripts_use_python_fallback(self, tmp_path):
+        """Bash hooks should fall back from python3 to python for Windows Git Bash."""
+        generate_claude_hooks(tmp_path, force_windows=False)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        # Check scripts that invoke Python
+        for name in ["tapps-post-edit.sh", "tapps-stop.sh"]:
+            content = (hooks_dir / name).read_text()
+            assert "command -v python3" in content, f"{name} should probe python3"
+            assert "command -v python" in content, f"{name} should fall back to python"
+
+    def test_post_edit_does_not_use_grep(self, tmp_path):
+        """Post-edit hook should not depend on external grep."""
+        generate_claude_hooks(tmp_path, force_windows=False)
+        content = (tmp_path / ".claude" / "hooks" / "tapps-post-edit.sh").read_text()
+        assert "grep" not in content
+
 
 class TestClaudeHooksConfig:
-    """Tests for settings.json hooks configuration."""
+    """Tests for settings.json hooks configuration (bash / Unix)."""
 
     def test_settings_json_created(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         assert (tmp_path / ".claude" / "settings.json").exists()
 
     def test_settings_has_hooks_key(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert "hooks" in data
 
     def test_stop_event_configured(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert "Stop" in data["hooks"]
         assert len(data["hooks"]["Stop"]) > 0
 
     def test_session_start_has_two_matchers(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         entries = data["hooks"]["SessionStart"]
         matchers = {e.get("matcher") for e in entries}
@@ -104,32 +122,32 @@ class TestClaudeHooksConfig:
         assert "compact" in matchers
 
     def test_post_tool_use_matches_edit_write(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         entries = data["hooks"]["PostToolUse"]
         matchers = [e.get("matcher") for e in entries]
         assert "Edit|Write" in matchers
 
     def test_task_completed_configured(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert "TaskCompleted" in data["hooks"]
         assert len(data["hooks"]["TaskCompleted"]) > 0
 
     def test_pre_compact_configured(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert "PreCompact" in data["hooks"]
         assert len(data["hooks"]["PreCompact"]) > 0
 
     def test_subagent_start_configured(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert "SubagentStart" in data["hooks"]
         assert len(data["hooks"]["SubagentStart"]) > 0
 
     def test_all_six_events_present(self, tmp_path):
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         expected_events = {
             "SessionStart",
@@ -140,6 +158,15 @@ class TestClaudeHooksConfig:
             "SubagentStart",
         }
         assert expected_events == set(data["hooks"].keys())
+
+    def test_bash_config_points_to_sh_files(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=False)
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        for event_entries in data["hooks"].values():
+            for entry in event_entries:
+                for hook in entry.get("hooks", []):
+                    cmd = hook.get("command", "")
+                    assert cmd.endswith(".sh"), f"Bash config should use .sh: {cmd}"
 
 
 class TestClaudeHooksMerge:
@@ -158,7 +185,7 @@ class TestClaudeHooksMerge:
         }
         (settings_dir / "settings.json").write_text(json.dumps(existing), encoding="utf-8")
 
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
 
         data = json.loads((settings_dir / "settings.json").read_text())
         post_tool = data["hooks"]["PostToolUse"]
@@ -173,7 +200,7 @@ class TestClaudeHooksMerge:
         existing = {"permissions": {"allow": ["mcp__tapps-mcp__*"]}}
         (settings_dir / "settings.json").write_text(json.dumps(existing), encoding="utf-8")
 
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
 
         data = json.loads((settings_dir / "settings.json").read_text())
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]
@@ -181,8 +208,8 @@ class TestClaudeHooksMerge:
 
     def test_idempotent(self, tmp_path):
         """Running twice doesn't duplicate entries."""
-        generate_claude_hooks(tmp_path)
-        generate_claude_hooks(tmp_path)
+        generate_claude_hooks(tmp_path, force_windows=False)
+        generate_claude_hooks(tmp_path, force_windows=False)
 
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         # SessionStart should still have exactly 2 entries
@@ -190,8 +217,131 @@ class TestClaudeHooksMerge:
 
     def test_result_dict(self, tmp_path):
         """Returns a summary dict with scripts_created and hooks_action."""
-        result = generate_claude_hooks(tmp_path)
+        result = generate_claude_hooks(tmp_path, force_windows=False)
         assert "scripts_created" in result
         assert len(result["scripts_created"]) == 7
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0
+
+
+# ---------------------------------------------------------------------------
+# PowerShell / Windows variant tests
+# ---------------------------------------------------------------------------
+
+
+class TestClaudeHooksScriptsWindows:
+    """Tests for PowerShell hook script creation (Windows)."""
+
+    def test_hooks_dir_created(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=True)
+        assert (tmp_path / ".claude" / "hooks").is_dir()
+
+    def test_all_seven_ps1_scripts_created(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=True)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        expected = [
+            "tapps-session-start.ps1",
+            "tapps-session-compact.ps1",
+            "tapps-post-edit.ps1",
+            "tapps-stop.ps1",
+            "tapps-task-completed.ps1",
+            "tapps-pre-compact.ps1",
+            "tapps-subagent-start.ps1",
+        ]
+        for name in expected:
+            assert (hooks_dir / name).exists(), f"Missing: {name}"
+
+    def test_no_sh_scripts_created(self, tmp_path):
+        """Windows mode should not create .sh scripts."""
+        generate_claude_hooks(tmp_path, force_windows=True)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        sh_files = list(hooks_dir.glob("*.sh"))
+        assert len(sh_files) == 0, f"Unexpected .sh files: {sh_files}"
+
+    def test_ps1_scripts_have_no_shebang(self, tmp_path):
+        """PowerShell scripts should not have a bash shebang."""
+        generate_claude_hooks(tmp_path, force_windows=True)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        for script in hooks_dir.iterdir():
+            content = script.read_text()
+            assert not content.startswith("#!"), f"{script.name} has unexpected shebang"
+
+    def test_stop_script_checks_stop_hook_active(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=True)
+        content = (tmp_path / ".claude" / "hooks" / "tapps-stop.ps1").read_text()
+        assert "stop_hook_active" in content
+
+    def test_stop_script_exits_0(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=True)
+        content = (tmp_path / ".claude" / "hooks" / "tapps-stop.ps1").read_text()
+        assert "exit 0" in content
+
+    def test_post_edit_detects_py_files(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=True)
+        content = (tmp_path / ".claude" / "hooks" / "tapps-post-edit.ps1").read_text()
+        assert ".py" in content
+        assert "ConvertFrom-Json" in content
+
+    def test_pre_compact_backs_up_context(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=True)
+        content = (tmp_path / ".claude" / "hooks" / "tapps-pre-compact.ps1").read_text()
+        assert "pre-compact-context.json" in content
+
+    def test_result_dict(self, tmp_path):
+        result = generate_claude_hooks(tmp_path, force_windows=True)
+        assert "scripts_created" in result
+        assert len(result["scripts_created"]) == 7
+        assert all(n.endswith(".ps1") for n in result["scripts_created"])
+        assert result["hooks_action"] == "created"
+        assert result["hooks_added"] > 0
+
+
+class TestClaudeHooksConfigWindows:
+    """Tests for settings.json hooks configuration (Windows / PowerShell)."""
+
+    def test_settings_has_hooks_key(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=True)
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        assert "hooks" in data
+
+    def test_all_six_events_present(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=True)
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        expected_events = {
+            "SessionStart",
+            "PostToolUse",
+            "Stop",
+            "TaskCompleted",
+            "PreCompact",
+            "SubagentStart",
+        }
+        assert expected_events == set(data["hooks"].keys())
+
+    def test_config_commands_use_powershell(self, tmp_path):
+        """All hook commands should invoke powershell with .ps1 files."""
+        generate_claude_hooks(tmp_path, force_windows=True)
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        for event_entries in data["hooks"].values():
+            for entry in event_entries:
+                for hook in entry.get("hooks", []):
+                    cmd = hook.get("command", "")
+                    assert "powershell" in cmd, f"Should use powershell: {cmd}"
+                    assert ".ps1" in cmd, f"Should reference .ps1: {cmd}"
+                    assert "-NoProfile" in cmd
+                    assert "-ExecutionPolicy Bypass" in cmd
+
+    def test_session_start_has_two_matchers(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=True)
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        entries = data["hooks"]["SessionStart"]
+        matchers = {e.get("matcher") for e in entries}
+        assert "startup|resume" in matchers
+        assert "compact" in matchers
+
+    def test_idempotent(self, tmp_path):
+        """Running twice doesn't duplicate entries."""
+        generate_claude_hooks(tmp_path, force_windows=True)
+        generate_claude_hooks(tmp_path, force_windows=True)
+
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        assert len(data["hooks"]["SessionStart"]) == 2

@@ -8,10 +8,16 @@ from __future__ import annotations
 
 import json
 import stat
+import sys
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def _is_windows() -> bool:
+    """Return True when running on Windows."""
+    return sys.platform == "win32"
 
 # ---------------------------------------------------------------------------
 # Claude Code hook script templates (Story 12.5)
@@ -44,11 +50,14 @@ exit 0
 # TappsMCP PostToolUse hook (Edit/Write)
 # Reminds the agent to run quality checks after file edits.
 INPUT=$(cat)
-PY="import sys,json; d=json.load(sys.stdin)"
-PY="$PY; ti=d.get('tool_input',{})"
-PY="$PY; print(ti.get('file_path',ti.get('path','')))"
-FILE=$(echo "$INPUT" | python3 -c "$PY" 2>/dev/null)
-if [ -n "$FILE" ] && echo "$FILE" | grep -qE '\\.py$'; then
+PY="import sys,json
+d=json.load(sys.stdin)
+ti=d.get('tool_input',{})
+f=ti.get('file_path',ti.get('path',''))
+if f.endswith('.py'): print(f)"
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+FILE=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
+if [ -n "$FILE" ]; then
   echo "Python file edited: $FILE"
   echo "Consider running tapps_quick_check on it."
 fi
@@ -60,9 +69,9 @@ exit 0
 # Reminds to run tapps_validate_changed but does NOT block.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 INPUT=$(cat)
-PY="import sys,json; d=json.load(sys.stdin)"
-PY="$PY; print(d.get('stop_hook_active','false'))"
-ACTIVE=$(echo "$INPUT" | python3 -c "$PY" 2>/dev/null)
+PY="import sys,json; d=json.load(sys.stdin); print(d.get('stop_hook_active','false'))"
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+ACTIVE=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
 if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
   exit 0
 fi
@@ -98,6 +107,191 @@ echo "[TappsMCP] This project uses TappsMCP for code quality."
 echo "Available MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed."
 exit 0
 """,
+}
+
+# ---------------------------------------------------------------------------
+# Claude Code hook script templates — PowerShell (Windows)
+# ---------------------------------------------------------------------------
+
+_CLAUDE_HOOK_SCRIPTS_PS: dict[str, str] = {
+    "tapps-session-start.ps1": """\
+# TappsMCP SessionStart hook (startup/resume)
+# Injects TappsMCP pipeline context into the session.
+$null = $input | Out-Null
+Write-Output "[TappsMCP] Session started - TappsMCP quality pipeline is active."
+Write-Output "Available tools: tapps_quick_check, tapps_score_file, tapps_quality_gate,"
+Write-Output "tapps_validate_changed, tapps_security_scan, tapps_consult_expert."
+Write-Output "Run tapps_session_start to initialize the session context."
+exit 0
+""",
+    "tapps-session-compact.ps1": """\
+# TappsMCP SessionStart hook (compact)
+# Re-injects TappsMCP context after context compaction.
+$null = $input | Out-Null
+Write-Output "[TappsMCP] Context was compacted - re-injecting TappsMCP awareness."
+Write-Output "Remember: use tapps_quick_check after editing Python files."
+Write-Output "Run tapps_validate_changed before declaring work complete."
+exit 0
+""",
+    "tapps-post-edit.ps1": """\
+# TappsMCP PostToolUse hook (Edit/Write)
+# Reminds the agent to run quality checks after file edits.
+$rawInput = @($input) -join "`n"
+try {
+    $data = $rawInput | ConvertFrom-Json
+    $file = if ($data.tool_input.file_path) { $data.tool_input.file_path }
+            elseif ($data.tool_input.path) { $data.tool_input.path }
+            else { "" }
+} catch {
+    $file = ""
+}
+if ($file -and $file -match '\\.py$') {
+    Write-Output "Python file edited: $file"
+    Write-Output "Consider running tapps_quick_check on it."
+}
+exit 0
+""",
+    "tapps-stop.ps1": """\
+# TappsMCP Stop hook
+# Reminds to run tapps_validate_changed but does NOT block.
+# IMPORTANT: Must check stop_hook_active to prevent infinite loops.
+$rawInput = @($input) -join "`n"
+try {
+    $data = $rawInput | ConvertFrom-Json
+    $active = $data.stop_hook_active
+} catch {
+    $active = $false
+}
+if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
+    exit 0
+}
+Write-Host "Reminder: Run tapps_validate_changed before ending the session." -ForegroundColor Yellow
+exit 0
+""",
+    "tapps-task-completed.ps1": """\
+# TappsMCP TaskCompleted hook
+# Reminds to run quality checks but does NOT block.
+$null = $input | Out-Null
+Write-Host "Reminder: run tapps_validate_changed to confirm quality." -ForegroundColor Yellow
+exit 0
+""",
+    "tapps-pre-compact.ps1": """\
+# TappsMCP PreCompact hook
+# Backs up scoring context before context window compaction.
+$rawInput = @($input) -join "`n"
+$projDir = $env:CLAUDE_PROJECT_DIR
+$backupDir = if ($projDir) { "$projDir/.tapps-mcp" } else { ".tapps-mcp" }
+if (-not (Test-Path $backupDir)) {
+    New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+}
+$outFile = "$backupDir/pre-compact-context.json"
+$rawInput | Set-Content -Path $outFile -Encoding UTF8
+Write-Output "[TappsMCP] Scoring context backed up to $outFile"
+exit 0
+""",
+    "tapps-subagent-start.ps1": """\
+# TappsMCP SubagentStart hook
+# Injects TappsMCP awareness into spawned subagents.
+$null = $input | Out-Null
+Write-Output "[TappsMCP] This project uses TappsMCP for code quality."
+Write-Output "Available MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed."
+exit 0
+""",
+}
+
+_CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
+    "SessionStart": [
+        {
+            "matcher": "startup|resume",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-session-start.ps1"
+                    ),
+                },
+            ],
+        },
+        {
+            "matcher": "compact",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-session-compact.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "PostToolUse": [
+        {
+            "matcher": "Edit|Write",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-post-edit.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "Stop": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-stop.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "TaskCompleted": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-task-completed.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "PreCompact": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-pre-compact.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "SubagentStart": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-subagent-start.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
 }
 
 _CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
@@ -163,9 +357,9 @@ _CURSOR_HOOK_SCRIPTS: dict[str, str] = {
 # TappsMCP beforeMCPExecution hook
 # Logs MCP tool invocations for observability.
 INPUT=$(cat)
-PY="import sys,json; d=json.load(sys.stdin)"
-PY="$PY; print(d.get('tool','unknown'))"
-TOOL=$(echo "$INPUT" | python3 -c "$PY" 2>/dev/null)
+PY="import sys,json; d=json.load(sys.stdin); print(d.get('tool','unknown'))"
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+TOOL=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
 echo "[TappsMCP] MCP tool invoked: $TOOL" >&2
 exit 0
 """,
@@ -174,9 +368,9 @@ exit 0
 # TappsMCP afterFileEdit hook (fire-and-forget)
 # Reminds the agent to check quality after file edits.
 INPUT=$(cat)
-PY="import sys,json; d=json.load(sys.stdin)"
-PY="$PY; print(d.get('file','unknown'))"
-FILE=$(echo "$INPUT" | python3 -c "$PY" 2>/dev/null)
+PY="import sys,json; d=json.load(sys.stdin); print(d.get('file','unknown'))"
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+FILE=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
 echo "File edited: $FILE"
 echo "Consider running tapps_quick_check to verify quality."
 exit 0
@@ -194,6 +388,55 @@ exit 0
 """,
 }
 
+# ---------------------------------------------------------------------------
+# Cursor hook script templates — PowerShell (Windows)
+# ---------------------------------------------------------------------------
+
+_CURSOR_HOOK_SCRIPTS_PS: dict[str, str] = {
+    "tapps-before-mcp.ps1": """\
+# TappsMCP beforeMCPExecution hook
+# Logs MCP tool invocations for observability.
+$rawInput = @($input) -join "`n"
+try {
+    $data = $rawInput | ConvertFrom-Json
+    $tool = if ($data.tool) { $data.tool } else { "unknown" }
+} catch {
+    $tool = "unknown"
+}
+Write-Host "[TappsMCP] MCP tool invoked: $tool" -ForegroundColor Cyan
+exit 0
+""",
+    "tapps-after-edit.ps1": """\
+# TappsMCP afterFileEdit hook (fire-and-forget)
+# Reminds the agent to check quality after file edits.
+$rawInput = @($input) -join "`n"
+try {
+    $data = $rawInput | ConvertFrom-Json
+    $file = if ($data.file) { $data.file }
+            elseif ($data.tool_input.file_path) { $data.tool_input.file_path }
+            elseif ($data.tool_input.path) { $data.tool_input.path }
+            else { "unknown" }
+} catch {
+    $file = "unknown"
+}
+Write-Output "File edited: $file"
+Write-Output "Consider running tapps_quick_check to verify quality."
+exit 0
+""",
+    "tapps-stop.ps1": """\
+# TappsMCP stop hook (Cursor)
+# Uses followup_message to prompt validation before session ends.
+# Note: Cursor does not support exit-2 blocking on the stop event.
+$null = $input | Out-Null
+$msg = "Before ending: please run tapps_validate_changed"
+$msg += " to confirm all changed files pass quality gates."
+Write-Output "{`"followup_message`": `"$msg`"}"
+exit 0
+""",
+}
+
+_PS1_PREFIX = "powershell -NoProfile -ExecutionPolicy Bypass -File "
+
 _CURSOR_HOOKS_CONFIG: list[dict[str, str]] = [
     {
         "event": "beforeMCPExecution",
@@ -206,6 +449,21 @@ _CURSOR_HOOKS_CONFIG: list[dict[str, str]] = [
     {
         "event": "stop",
         "command": ".cursor/hooks/tapps-stop.sh",
+    },
+]
+
+_CURSOR_HOOKS_CONFIG_PS: list[dict[str, str]] = [
+    {
+        "event": "beforeMCPExecution",
+        "command": _PS1_PREFIX + ".cursor/hooks/tapps-before-mcp.ps1",
+    },
+    {
+        "event": "afterFileEdit",
+        "command": _PS1_PREFIX + ".cursor/hooks/tapps-after-edit.ps1",
+    },
+    {
+        "event": "stop",
+        "command": _PS1_PREFIX + ".cursor/hooks/tapps-stop.ps1",
     },
 ]
 
@@ -464,23 +722,39 @@ Validate all changed files using TappsMCP:
 # ---------------------------------------------------------------------------
 
 
-def generate_claude_hooks(project_root: Path) -> dict[str, Any]:
+def generate_claude_hooks(
+    project_root: Path,
+    *,
+    force_windows: bool | None = None,
+) -> dict[str, Any]:
     """Generate Claude Code hook scripts and settings.json hooks config.
 
-    Creates ``.claude/hooks/`` with 7 shell scripts and merges hook entries
-    into ``.claude/settings.json``.
+    Creates ``.claude/hooks/`` with 7 scripts (bash on Unix, PowerShell on
+    Windows) and merges hook entries into ``.claude/settings.json``.
+
+    Args:
+        project_root: Target project root directory.
+        force_windows: Override platform detection for testing.
+            ``None`` (default) auto-detects via ``sys.platform``.
 
     Returns a summary dict with ``scripts_created`` and ``hooks_action``.
     """
+    win = force_windows if force_windows is not None else _is_windows()
+    script_templates = _CLAUDE_HOOK_SCRIPTS_PS if win else _CLAUDE_HOOK_SCRIPTS
+    hooks_config = _CLAUDE_HOOKS_CONFIG_PS if win else _CLAUDE_HOOKS_CONFIG
+
     hooks_dir = project_root / ".claude" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
     scripts_created: list[str] = []
-    for name, content in _CLAUDE_HOOK_SCRIPTS.items():
+    for name, content in script_templates.items():
         script_path = hooks_dir / name
         if not script_path.exists():
             script_path.write_text(content, encoding="utf-8")
-            script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+            if not win:
+                script_path.chmod(
+                    script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
+                )
             scripts_created.append(name)
 
     # Merge hooks config into .claude/settings.json
@@ -493,7 +767,7 @@ def generate_claude_hooks(project_root: Path) -> dict[str, Any]:
 
     existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
     hooks_added = 0
-    for event, entries in _CLAUDE_HOOKS_CONFIG.items():
+    for event, entries in hooks_config.items():
         if event not in existing_hooks:
             existing_hooks[event] = entries
             hooks_added += len(entries)
@@ -518,23 +792,39 @@ def generate_claude_hooks(project_root: Path) -> dict[str, Any]:
     }
 
 
-def generate_cursor_hooks(project_root: Path) -> dict[str, Any]:
+def generate_cursor_hooks(
+    project_root: Path,
+    *,
+    force_windows: bool | None = None,
+) -> dict[str, Any]:
     """Generate Cursor hook scripts and ``.cursor/hooks.json`` config.
 
-    Creates ``.cursor/hooks/`` with 3 shell scripts and merges hook entries
-    into ``.cursor/hooks.json``.
+    Creates ``.cursor/hooks/`` with 3 scripts (bash on Unix, PowerShell on
+    Windows) and merges hook entries into ``.cursor/hooks.json``.
+
+    Args:
+        project_root: Target project root directory.
+        force_windows: Override platform detection for testing.
+            ``None`` (default) auto-detects via ``sys.platform``.
 
     Returns a summary dict with ``scripts_created`` and ``hooks_action``.
     """
+    win = force_windows if force_windows is not None else _is_windows()
+    script_templates = _CURSOR_HOOK_SCRIPTS_PS if win else _CURSOR_HOOK_SCRIPTS
+    hooks_config = _CURSOR_HOOKS_CONFIG_PS if win else _CURSOR_HOOKS_CONFIG
+
     hooks_dir = project_root / ".cursor" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
     scripts_created: list[str] = []
-    for name, content in _CURSOR_HOOK_SCRIPTS.items():
+    for name, content in script_templates.items():
         script_path = hooks_dir / name
         if not script_path.exists():
             script_path.write_text(content, encoding="utf-8")
-            script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+            if not win:
+                script_path.chmod(
+                    script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
+                )
             scripts_created.append(name)
 
     # Merge hooks config into .cursor/hooks.json
@@ -549,7 +839,7 @@ def generate_cursor_hooks(project_root: Path) -> dict[str, Any]:
     existing_events = {e.get("event") for e in existing_hooks if isinstance(e, dict)}
 
     hooks_added = 0
-    for entry in _CURSOR_HOOKS_CONFIG:
+    for entry in hooks_config:
         if entry["event"] not in existing_events:
             existing_hooks.append(entry)
             hooks_added += 1
@@ -1026,14 +1316,14 @@ def generate_claude_plugin_bundle(
         script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         files_created.append(f"hooks/{name}")
 
-    # .mcp.json
+    # .mcp.json — Claude Code uses "." (CWD == project root, no ${workspaceFolder})
     mcp_config = {
         "mcpServers": {
             "tapps-mcp": {
                 "command": "uvx",
                 "args": ["tapps-mcp", "serve"],
                 "env": {
-                    "TAPPS_MCP_PROJECT_ROOT": ("${workspaceFolder}"),
+                    "TAPPS_MCP_PROJECT_ROOT": ".",
                 },
             },
         },
