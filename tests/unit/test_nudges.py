@@ -188,6 +188,30 @@ class TestComputeNextSteps:
         steps = compute_next_steps("tapps_checklist", {"complete": True})
         assert not any("SETUP" in s for s in steps)
 
+    def test_consult_expert_low_confidence_nudge(self) -> None:
+        """Low confidence from consult_expert should nudge tapps_research."""
+        CallTracker.record("tapps_consult_expert")
+        steps = compute_next_steps(
+            "tapps_consult_expert",
+            {"confidence": 0.3},
+        )
+        assert any("tapps_research" in s for s in steps)
+
+    def test_consult_expert_no_nudge_when_high_confidence(self) -> None:
+        """High confidence from consult_expert should not nudge tapps_research."""
+        CallTracker.record("tapps_consult_expert")
+        steps = compute_next_steps(
+            "tapps_consult_expert",
+            {"confidence": 0.8},
+        )
+        assert not any("tapps_research" in s for s in steps)
+
+    def test_research_nudges_score_file(self) -> None:
+        """After tapps_research, should nudge to score/quick_check."""
+        CallTracker.record("tapps_research")
+        steps = compute_next_steps("tapps_research")
+        assert any("tapps_score_file" in s or "tapps_quick_check" in s for s in steps)
+
 
 # ---------------------------------------------------------------------------
 # compute_pipeline_progress

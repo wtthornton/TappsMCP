@@ -78,6 +78,44 @@ class TestConsultExpert:
             assert result.fallback_library is not None
             assert result.fallback_topic is not None
 
+    def test_detected_domains_populated_on_auto_detect(self) -> None:
+        result = consult_expert("How do I prevent SQL injection?")
+        # Auto-detected: should have at least one detected domain
+        assert len(result.detected_domains) >= 1
+        assert result.detected_domains[0].domain == "security"
+        assert result.detected_domains[0].confidence > 0
+
+    def test_detected_domains_empty_when_explicit(self) -> None:
+        result = consult_expert(
+            "General coding question",
+            domain="testing-strategies",
+        )
+        assert result.detected_domains == []
+
+    def test_detected_domains_capped_at_three(self) -> None:
+        # A broad question touching many domains
+        result = consult_expert(
+            "How to test security of database API performance with logging?"
+        )
+        assert len(result.detected_domains) <= 3
+
+    def test_recommendation_high_confidence(self) -> None:
+        result = consult_expert("What are OWASP top 10 vulnerabilities?")
+        assert result.recommendation
+        if result.confidence >= 0.7:
+            assert "high-confidence" in result.recommendation
+
+    def test_recommendation_low_confidence(self) -> None:
+        result = consult_expert("Tell me something interesting about cats")
+        assert result.recommendation
+        if result.confidence < 0.5:
+            assert "tapps_research" in result.recommendation
+
+    def test_recommendation_always_present(self) -> None:
+        result = consult_expert("How to write pytest fixtures?")
+        assert isinstance(result.recommendation, str)
+        assert len(result.recommendation) > 0
+
 
 class TestListExperts:
     """Tests for list_experts."""

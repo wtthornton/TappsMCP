@@ -277,7 +277,16 @@ async def tapps_research(
     Consults the domain expert first, then automatically supplements with
     Context7 documentation when expert RAG has no results or confidence is
     low.  Saves a round-trip compared to calling tapps_consult_expert and
-    tapps_lookup_docs separately.
+    tapps_lookup_docs separately.  This is the recommended tool for expert
+    guidance.
+
+    Available domains (omit domain to auto-detect from question):
+      security, performance-optimization, testing-strategies,
+      code-quality-analysis, software-architecture, development-workflow,
+      data-privacy-compliance, accessibility, user-experience,
+      documentation-knowledge-management, ai-frameworks, agent-learning,
+      observability-monitoring, api-design-integration, cloud-infrastructure,
+      database-data-management
 
     Args:
         question: The technical question to research (natural language).

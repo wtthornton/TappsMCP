@@ -27,9 +27,11 @@ from tapps_mcp.experts.confidence import (
 from tapps_mcp.experts.domain_detector import DomainDetector
 from tapps_mcp.experts.domain_utils import sanitize_domain_for_path
 from tapps_mcp.experts.models import (
+    HIGH_CONFIDENCE_THRESHOLD,
     LOW_CONFIDENCE_THRESHOLD,
     ConfidenceFactors,
     ConsultationResult,
+    DomainMapping,
     ExpertInfo,
 )
 from tapps_mcp.experts.rag import _extract_keywords
@@ -136,11 +138,13 @@ def consult_expert(
         answer, confidence score, and source references.
     """
     # 1. Resolve domain.
+    detected: list[DomainMapping] = []
     if domain:
         resolved_domain = domain
     else:
         mappings = DomainDetector.detect_from_question(question)
         resolved_domain = mappings[0].domain if mappings else "software-architecture"
+        detected = mappings[:3]  # top-3 for transparency
 
     expert = ExpertRegistry.get_expert_for_domain(resolved_domain)
     if expert is None:
@@ -257,6 +261,23 @@ def consult_expert(
         )
         answer = f"{answer}\n\n---\n\n**Note:** {low_confidence_nudge}"
 
+    # Actionable recommendation based on confidence level
+    _lib = suggested_library or "python"
+    _topic = suggested_topic or "overview"
+    if confidence >= HIGH_CONFIDENCE_THRESHOLD:
+        recommendation = "Expert guidance is high-confidence. Proceed with implementation."
+    elif confidence >= LOW_CONFIDENCE_THRESHOLD:
+        recommendation = (
+            f"Moderate confidence. Consider supplementing with "
+            f"tapps_lookup_docs(library='{_lib}', topic='{_topic}')."
+        )
+    else:
+        recommendation = (
+            f"Low confidence. Call tapps_research(question=...) for combined "
+            f"expert + docs, or tapps_lookup_docs(library='{_lib}', "
+            f"topic='{_topic}') directly."
+        )
+
     return ConsultationResult(
         domain=resolved_domain,
         expert_id=expert.expert_id,
@@ -266,6 +287,8 @@ def consult_expert(
         factors=factors,
         sources=sources,
         chunks_used=len(chunks),
+        detected_domains=detected,
+        recommendation=recommendation,
         low_confidence_nudge=low_confidence_nudge,
         suggested_tool=suggested_tool,
         suggested_library=suggested_library,

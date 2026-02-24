@@ -107,7 +107,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 
 ## Recommended workflow
 
-1. **Session start:** Call `tapps_session_start` (combines server info + project profile). Optionally call `tapps_list_experts` if you may need experts.
+1. **Session start:** Call `tapps_session_start` (combines server info + project profile).
 2. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` to persist constraints and decisions so they survive long sessions.
 3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
@@ -116,7 +116,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
    - Call `tapps_validate_changed()` to score + gate + security scan all changed files.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).
+7. **When in doubt:** Use `tapps_research` for domain-specific questions with automatic docs supplementation. Use `tapps_consult_expert` if you only need RAG-backed expert guidance without docs fallback. Use `tapps_validate_config` for Docker/infra files.
 
 ---
 

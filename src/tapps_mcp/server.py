@@ -439,8 +439,11 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
         file_path: Path to the Python file to scan.
         scan_secrets: Whether to scan for hardcoded secrets (default: True).
     """
+    from tapps_mcp.server_helpers import ensure_session_initialized_sync
+
     start = time.perf_counter_ns()
     _record_call("tapps_security_scan")
+    ensure_session_initialized_sync()
 
     try:
         resolved = _validate_file_path(file_path)
@@ -694,9 +697,19 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     """REQUIRED for domain-specific decisions. Routes to one of 16 built-in
     experts and returns RAG-backed guidance with confidence scores.
 
+    Available domains (omit domain to auto-detect from question):
+      security, performance-optimization, testing-strategies,
+      code-quality-analysis, software-architecture, development-workflow,
+      data-privacy-compliance, accessibility, user-experience,
+      documentation-knowledge-management, ai-frameworks, agent-learning,
+      observability-monitoring, api-design-integration, cloud-infrastructure,
+      database-data-management
+
+    For combined expert + docs in one call, use tapps_research instead.
+
     Args:
         question: The technical question to ask (natural language).
-        domain: Optional domain override (e.g. "security", "testing-strategies").
+        domain: Optional domain from the list above. Omit to auto-detect from question.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_consult_expert")
@@ -720,6 +733,11 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "factors": result.factors.model_dump(),
             "sources": result.sources,
             "chunks_used": result.chunks_used,
+            "detected_domains": [
+                {"domain": d.domain, "confidence": d.confidence}
+                for d in result.detected_domains
+            ],
+            "recommendation": result.recommendation,
             "low_confidence_nudge": result.low_confidence_nudge,
             "suggested_tool": result.suggested_tool,
             "suggested_library": result.suggested_library,
@@ -745,12 +763,21 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     except Exception:
         logger.debug("structured_output_failed: tapps_consult_expert", exc_info=True)
 
-    return _with_nudges("tapps_consult_expert", resp)
+    return _with_nudges(
+        "tapps_consult_expert",
+        resp,
+        context={"confidence": round(result.confidence, 4)},
+    )
 
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_list_experts() -> dict[str, Any]:
-    """Returns the 16 built-in experts with domain, description, and knowledge-base status."""
+    """Returns the 16 built-in experts with domain, description, and knowledge-base status.
+
+    Not required before calling tapps_consult_expert - that tool's description
+    lists all domains and auto-detects from the question when domain is omitted.
+    Use this only when you need expert metadata (knowledge file counts, RAG status).
+    """
     start = time.perf_counter_ns()
     _record_call("tapps_list_experts")
 
@@ -1104,8 +1131,11 @@ async def tapps_dead_code(file_path: str, min_confidence: int = 80) -> dict[str,
         file_path: Path to the Python file to scan.
         min_confidence: Minimum confidence threshold (0-100, default 80).
     """
+    from tapps_mcp.server_helpers import ensure_session_initialized
+
     start = time.perf_counter_ns()
     _record_call("tapps_dead_code")
+    await ensure_session_initialized()
 
     try:
         resolved = _validate_file_path(file_path)
@@ -1165,19 +1195,48 @@ async def tapps_dependency_scan(project_root: str = "") -> dict[str, Any]:
     Args:
         project_root: Project root path (default: server's configured root).
     """
+    from tapps_mcp.server_helpers import ensure_session_initialized
+
     start = time.perf_counter_ns()
     _record_call("tapps_dependency_scan")
+    await ensure_session_initialized()
+
+    settings = load_settings()
+
+    if not settings.dependency_scan_enabled:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_dependency_scan", start)
+        resp = success_response(
+            "tapps_dependency_scan",
+            elapsed_ms,
+            {
+                "scanned_packages": 0,
+                "vulnerable_packages": 0,
+                "total_findings": 0,
+                "scan_source": "disabled",
+                "by_severity": {},
+                "severity_counts": {},
+                "summary": "Dependency scanning is disabled (dependency_scan_enabled=False).",
+            },
+        )
+        return _with_nudges("tapps_dependency_scan", resp)
 
     from tapps_mcp.tools.pip_audit import run_pip_audit_async
 
-    settings = load_settings()
     root = project_root if project_root else str(settings.project_root)
 
     result = await run_pip_audit_async(
         project_root=root,
+        source=settings.dependency_scan_source,
         severity_threshold=settings.dependency_scan_severity_threshold,
         ignore_ids=settings.dependency_scan_ignore_ids or None,
     )
+
+    # Populate session cache so scorer.py applies dependency penalties
+    if not result.error:
+        from tapps_mcp.tools.dependency_scan_cache import set_dependency_findings
+
+        set_dependency_findings(root, result.findings)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_dependency_scan", start)
@@ -1218,7 +1277,7 @@ async def tapps_dependency_scan(project_root: str = "") -> dict[str, Any]:
 
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
-def tapps_dependency_graph(
+async def tapps_dependency_graph(
     project_root: str = "",
     detect_cycles: bool = True,
     include_coupling: bool = True,
@@ -1230,10 +1289,11 @@ def tapps_dependency_graph(
         detect_cycles: Whether to detect circular dependency cycles.
         include_coupling: Whether to calculate coupling metrics.
     """
+    from tapps_mcp.server_helpers import ensure_session_initialized
+
     start = time.perf_counter_ns()
     _record_call("tapps_dependency_graph")
-
-    from tapps_mcp.project.import_graph import build_import_graph
+    await ensure_session_initialized()
 
     settings = load_settings()
     root = settings.project_root
@@ -1242,58 +1302,99 @@ def tapps_dependency_graph(
 
         root = Path(project_root).resolve()
 
-    graph = build_import_graph(root)
-    data: dict[str, Any] = {
-        "project_root": str(root),
-        "total_modules": len(graph.modules),
-        "total_edges": len(graph.edges),
-    }
+    def _build_graph_sync() -> dict[str, Any]:
+        """Run graph building, cycle detection, and coupling analysis synchronously."""
+        from tapps_mcp.project.import_graph import build_import_graph
 
-    if detect_cycles:
-        from tapps_mcp.project.cycle_detector import (
-            detect_cycles as _detect,
-        )
-        from tapps_mcp.project.cycle_detector import (
-            suggest_cycle_fixes,
-        )
-
-        analysis = _detect(graph)
-        data["cycles"] = {
-            "total": len(analysis.cycles),
-            "runtime_cycles": analysis.runtime_cycles,
-            "type_checking_cycles": analysis.type_checking_cycles,
-            "details": [
-                {
-                    "modules": c.modules,
-                    "length": c.length,
-                    "severity": c.severity,
-                    "description": c.description,
-                }
-                for c in analysis.cycles[:10]
-            ],
+        graph = build_import_graph(root)
+        result: dict[str, Any] = {
+            "project_root": str(root),
+            "total_modules": len(graph.modules),
+            "total_edges": len(graph.edges),
         }
-        data["cycle_suggestions"] = suggest_cycle_fixes(analysis.cycles[:5])
 
-    if include_coupling:
-        from tapps_mcp.project.coupling_metrics import calculate_coupling, suggest_coupling_fixes
+        if detect_cycles:
+            from tapps_mcp.project.cycle_detector import (
+                detect_cycles as _detect,
+            )
+            from tapps_mcp.project.cycle_detector import (
+                suggest_cycle_fixes,
+            )
 
-        couplings = calculate_coupling(graph)
-        hubs = [c for c in couplings if c.is_hub]
-        data["coupling"] = {
-            "total_modules_analysed": len(couplings),
-            "hub_count": len(hubs),
-            "top_coupled": [
-                {
-                    "module": c.module,
-                    "afferent": c.afferent,
-                    "efferent": c.efferent,
-                    "instability": round(c.instability, 3),
-                    "is_hub": c.is_hub,
-                }
-                for c in couplings[:10]
-            ],
+            analysis = _detect(graph)
+            result["cycles"] = {
+                "total": len(analysis.cycles),
+                "runtime_cycles": analysis.runtime_cycles,
+                "type_checking_cycles": analysis.type_checking_cycles,
+                "details": [
+                    {
+                        "modules": c.modules,
+                        "length": c.length,
+                        "severity": c.severity,
+                        "description": c.description,
+                    }
+                    for c in analysis.cycles[:10]
+                ],
+            }
+            result["cycle_suggestions"] = suggest_cycle_fixes(analysis.cycles[:5])
+
+        if include_coupling:
+            from tapps_mcp.project.coupling_metrics import (
+                calculate_coupling,
+                suggest_coupling_fixes,
+            )
+
+            couplings = calculate_coupling(graph)
+            hubs = [c for c in couplings if c.is_hub]
+            result["coupling"] = {
+                "total_modules_analysed": len(couplings),
+                "hub_count": len(hubs),
+                "top_coupled": [
+                    {
+                        "module": c.module,
+                        "afferent": c.afferent,
+                        "efferent": c.efferent,
+                        "instability": round(c.instability, 3),
+                        "is_hub": c.is_hub,
+                    }
+                    for c in couplings[:10]
+                ],
+            }
+            result["coupling_suggestions"] = suggest_coupling_fixes(couplings[:5])
+
+        # Attach external imports for cross-tool integration
+        result["_external_imports"] = {
+            pkg: list(mods) for pkg, mods in graph.external_imports.items()
         }
-        data["coupling_suggestions"] = suggest_coupling_fixes(couplings[:5])
+        return result
+
+    data = await asyncio.to_thread(_build_graph_sync)
+
+    # Cross-reference with cached vulnerability findings when available
+    external_imports = data.pop("_external_imports", {})
+    if external_imports:
+        from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
+
+        dep_findings = get_dependency_findings(str(root))
+        if dep_findings:
+            from tapps_mcp.project.vulnerability_impact import analyze_vulnerability_impact
+
+            impact = analyze_vulnerability_impact(dep_findings, external_imports)
+            if impact.impacts:
+                data["vulnerability_impact"] = {
+                    "total_vulnerable_imports": impact.total_vulnerable_imports,
+                    "most_exposed_modules": impact.most_exposed_modules[:10],
+                    "impacts": [
+                        {
+                            "package": vi.package,
+                            "vulnerability_id": vi.vulnerability_id,
+                            "severity": vi.severity,
+                            "importing_modules": vi.importing_modules[:10],
+                            "import_count": vi.import_count,
+                        }
+                        for vi in impact.impacts[:10]
+                    ],
+                }
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_dependency_graph", start)
