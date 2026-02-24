@@ -108,47 +108,6 @@ async def tapps_validate_changed(
     extra_count = len(paths) - MAX_BATCH_FILES if capped else 0
     paths = paths[:MAX_BATCH_FILES]
 
-    # Run dependency scan once and cache for scorer (project-level, not per-file)
-    dep_data: dict[str, Any] = {}
-    dep_findings_for_gate: list = []
-    if settings.dependency_scan_enabled:
-        from tapps_mcp.tools.dependency_scan_cache import set_dependency_findings
-        from tapps_mcp.tools.pip_audit import run_pip_audit_async
-
-        dep_result = await run_pip_audit_async(
-            project_root=str(settings.project_root),
-            source=settings.dependency_scan_source,
-            severity_threshold=settings.dependency_scan_severity_threshold,
-            ignore_ids=settings.dependency_scan_ignore_ids or None,
-        )
-        set_dependency_findings(str(settings.project_root), dep_result.findings)
-        dep_findings_for_gate = dep_result.findings
-        dep_data = {
-            "dependency_scan": {
-                "scanned_packages": dep_result.scanned_packages,
-                "vulnerable_packages": dep_result.vulnerable_packages,
-                "total_findings": len(dep_result.findings),
-                "scan_source": dep_result.scan_source,
-            }
-        }
-        if dep_result.findings:
-            by_sev: dict[str, int] = {}
-            for f in dep_result.findings:
-                by_sev[f.severity] = by_sev.get(f.severity, 0) + 1
-            dep_data["dependency_scan"]["severity_counts"] = by_sev
-            dep_data["dependency_scan"]["findings"] = [
-                {
-                    "package": f.package,
-                    "installed_version": f.installed_version,
-                    "fixed_version": f.fixed_version,
-                    "vulnerability_id": f.vulnerability_id,
-                    "severity": f.severity,
-                }
-                for f in dep_result.findings[:10]
-            ]
-        if dep_result.error:
-            dep_data["dependency_scan"]["error"] = dep_result.error
-
     scorer = _get_scorer()
     sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
 
@@ -199,33 +158,24 @@ async def tapps_validate_changed(
     all_passed = all(r.get("gate_passed", False) for r in results)
     total_sec = sum(r.get("security_issues", 0) for r in results)
 
-    # Gate: fail if critical/high dependency vulnerabilities (when include_security)
-    dep_crit_high = sum(
-        1
-        for f in dep_findings_for_gate
-        if getattr(f, "severity", "") in ("critical", "high")
-    )
-    dep_sec_failed = include_security and dep_crit_high > 0
-    all_passed = all_passed and not dep_sec_failed
-
     summary = format_batch_summary(results)
     if capped:
         summary += f" ({extra_count} additional files not validated - cap {MAX_BATCH_FILES})"
-    if dep_data.get("dependency_scan", {}).get("total_findings", 0) > 0:
-        summary += f" | Dependency scan: {dep_data['dependency_scan']['total_findings']} vulns"
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_changed", start, gate_passed=all_passed)
 
-    resp_data: dict[str, Any] = {
-        "files_validated": len(results),
-        "all_gates_passed": all_passed,
-        "total_security_issues": total_sec,
-        "results": results,
-        "summary": summary,
-    }
-    resp_data.update(dep_data)
-    resp = success_response("tapps_validate_changed", elapsed_ms, resp_data)
+    resp = success_response(
+        "tapps_validate_changed",
+        elapsed_ms,
+        {
+            "files_validated": len(results),
+            "all_gates_passed": all_passed,
+            "total_security_issues": total_sec,
+            "results": results,
+            "summary": summary,
+        },
+    )
 
     # Attach structured output
     try:
@@ -286,51 +236,6 @@ def tapps_session_start(
     info = tapps_server_info()
     profile = tapps_project_profile(project_root=project_root)
 
-    # Run dependency scan for early visibility; cache for scorer
-    dep_summary: dict[str, Any] = {}
-    settings = load_settings()
-    if settings.dependency_scan_enabled:
-        import asyncio
-
-        from tapps_mcp.tools.dependency_scan_cache import set_dependency_findings
-        from tapps_mcp.tools.pip_audit import run_pip_audit_async
-
-        root = str(settings.project_root)
-        try:
-            coro = run_pip_audit_async(
-                project_root=root,
-                source=settings.dependency_scan_source,
-                severity_threshold=settings.dependency_scan_severity_threshold,
-                ignore_ids=settings.dependency_scan_ignore_ids or None,
-            )
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:
-                dep_result = asyncio.run(coro)
-            else:
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    dep_result = pool.submit(asyncio.run, coro).result()
-            set_dependency_findings(root, dep_result.findings)
-            dep_summary = {
-                "scanned_packages": dep_result.scanned_packages,
-                "vulnerable_packages": dep_result.vulnerable_packages,
-                "total_findings": len(dep_result.findings),
-                "scan_source": dep_result.scan_source,
-            }
-            if dep_result.findings:
-                by_sev: dict[str, int] = {}
-                for f in dep_result.findings:
-                    by_sev[f.severity] = by_sev.get(f.severity, 0) + 1
-                dep_summary["severity_counts"] = by_sev
-            if dep_result.error:
-                dep_summary["error"] = dep_result.error
-        except Exception as e:
-            import structlog
-            structlog.get_logger(__name__).debug(
-                "dependency_scan_failed_session_start", error=str(e)
-            )
-
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)
 
@@ -343,8 +248,6 @@ def tapps_session_start(
         "critical_rules": info["data"].get("critical_rules", []),
         "pipeline": info["data"]["pipeline"],
     }
-    if dep_summary:
-        data["dependency_scan"] = dep_summary
 
     if profile.get("success"):
         data["project_profile"] = profile["data"]
@@ -358,20 +261,34 @@ def tapps_session_start(
         data["project_profile_error"] = err_msg
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
+
+    # Attach structured output
     try:
         from tapps_mcp.common.output_schemas import SessionStartOutput
 
+        checker_names = [
+            c.get("name", "") if isinstance(c, dict) else getattr(c, "name", "")
+            for c in info["data"].get("installed_checkers", [])
+        ]
+        pp = data.get("project_profile") or {}
         structured = SessionStartOutput(
-            has_project_profile=profile.get("success", False),
-            dependency_scan=dep_summary,
-            has_pipeline=bool(info["data"].get("pipeline")),
+            server_version=info["data"]["server"].get("version", ""),
+            project_root=info["data"]["configuration"].get("project_root", ""),
+            project_type=pp.get("project_type"),
+            quality_preset=info["data"]["configuration"].get("quality_preset", "standard"),
+            installed_checkers=[n for n in checker_names if n],
+            has_ci=pp.get("has_ci", False),
+            has_docker=pp.get("has_docker", False),
+            has_tests=pp.get("has_tests", False),
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
-        import structlog
-        structlog.get_logger(__name__).debug(
+        import structlog as _structlog
+
+        _structlog.get_logger(__name__).debug(
             "structured_output_failed: tapps_session_start", exc_info=True
         )
+
     return _with_nudges("tapps_session_start", resp)
 
 

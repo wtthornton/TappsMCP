@@ -14,11 +14,14 @@ from tapps_mcp.common.output_schemas import (
     FileValidationResult,
     GateFailure,
     ImpactOutput,
+    ProfileOutput,
     QualityGateOutput,
     QuickCheckOutput,
+    ResearchOutput,
     ScoreFileOutput,
     SecurityFindingOutput,
     SecurityScanOutput,
+    SessionStartOutput,
     StructuredOutput,
     ValidateChangedOutput,
     ValidateConfigOutput,
@@ -770,7 +773,6 @@ class TestRegistry:
             "tapps_impact_analysis",
             "tapps_consult_expert",
             "tapps_checklist",
-            "tapps_dependency_scan",
             "tapps_research",
             "tapps_project_profile",
             "tapps_session_start",
@@ -781,3 +783,186 @@ class TestRegistry:
         """get_output_schema produces the same result as direct class call."""
         for tool_name, cls in OUTPUT_SCHEMA_REGISTRY.items():
             assert get_output_schema(tool_name) == cls.to_output_schema()
+
+
+# ---------------------------------------------------------------------------
+# ResearchOutput
+# ---------------------------------------------------------------------------
+
+
+class TestResearchOutput:
+    """Tests for ResearchOutput model."""
+
+    def test_research_output_schema(self) -> None:
+        """Verify schema has expected properties."""
+        schema = ResearchOutput.to_output_schema()
+        props = schema["properties"]
+        assert "domain" in props
+        assert "expert_name" in props
+        assert "answer" in props
+        assert "confidence" in props
+        assert "sources" in props
+        assert "docs_supplemented" in props
+        assert "docs_library" in props
+        assert "docs_topic" in props
+
+    def test_research_output_serialize(self) -> None:
+        """Full serialization with docs supplemented."""
+        output = ResearchOutput(
+            domain="security",
+            expert_name="Security Expert",
+            answer="Use parameterized queries.",
+            confidence=0.85,
+            sources=["sql-injection.md"],
+            docs_supplemented=True,
+            docs_library="sqlalchemy",
+            docs_topic="queries",
+        )
+        content = output.to_structured_content()
+        assert content["domain"] == "security"
+        assert content["expert_name"] == "Security Expert"
+        assert content["confidence"] == 0.85
+        assert content["docs_supplemented"] is True
+        assert content["docs_library"] == "sqlalchemy"
+        assert content["docs_topic"] == "queries"
+
+    def test_research_output_defaults(self) -> None:
+        """Default values are correct."""
+        output = ResearchOutput(
+            domain="testing",
+            expert_name="Test Expert",
+            answer="Write more tests.",
+            confidence=0.7,
+        )
+        assert output.docs_supplemented is False
+        assert output.docs_library is None
+        assert output.docs_topic is None
+        assert output.sources == []
+
+    def test_research_output_confidence_validation(self) -> None:
+        """Confidence out of range raises ValidationError."""
+        with pytest.raises(ValidationError):
+            ResearchOutput(
+                domain="x",
+                expert_name="X",
+                answer="y",
+                confidence=1.5,
+            )
+
+
+# ---------------------------------------------------------------------------
+# ProfileOutput
+# ---------------------------------------------------------------------------
+
+
+class TestProfileOutput:
+    """Tests for ProfileOutput model."""
+
+    def test_profile_output_schema(self) -> None:
+        """Verify schema has expected properties."""
+        schema = ProfileOutput.to_output_schema()
+        props = schema["properties"]
+        assert "project_root" in props
+        assert "project_type" in props
+        assert "project_type_confidence" in props
+        assert "has_ci" in props
+        assert "has_docker" in props
+        assert "has_tests" in props
+        assert "test_frameworks" in props
+        assert "package_managers" in props
+        assert "quality_recommendations" in props
+
+    def test_profile_output_serialize(self) -> None:
+        """Full serialization with populated fields."""
+        output = ProfileOutput(
+            project_root="/home/user/project",
+            project_type="library",
+            project_type_confidence=0.92,
+            has_ci=True,
+            has_docker=True,
+            has_tests=True,
+            test_frameworks=["pytest"],
+            package_managers=["uv"],
+            quality_recommendations=["Add type hints"],
+        )
+        content = output.to_structured_content()
+        assert content["project_root"] == "/home/user/project"
+        assert content["project_type"] == "library"
+        assert content["project_type_confidence"] == 0.92
+        assert content["has_ci"] is True
+        assert content["has_docker"] is True
+        assert content["has_tests"] is True
+        assert content["test_frameworks"] == ["pytest"]
+        assert content["package_managers"] == ["uv"]
+        assert content["quality_recommendations"] == ["Add type hints"]
+
+    def test_profile_output_defaults(self) -> None:
+        """Default values are correct."""
+        output = ProfileOutput(
+            project_root="/tmp",
+            project_type="unknown",
+            project_type_confidence=0.5,
+        )
+        assert output.has_ci is False
+        assert output.has_docker is False
+        assert output.has_tests is False
+        assert output.test_frameworks == []
+        assert output.package_managers == []
+        assert output.quality_recommendations == []
+
+
+# ---------------------------------------------------------------------------
+# SessionStartOutput
+# ---------------------------------------------------------------------------
+
+
+class TestSessionStartOutput:
+    """Tests for SessionStartOutput model."""
+
+    def test_session_start_output_schema(self) -> None:
+        """Verify schema has expected properties."""
+        schema = SessionStartOutput.to_output_schema()
+        props = schema["properties"]
+        assert "server_version" in props
+        assert "project_root" in props
+        assert "project_type" in props
+        assert "quality_preset" in props
+        assert "installed_checkers" in props
+        assert "has_ci" in props
+        assert "has_docker" in props
+        assert "has_tests" in props
+
+    def test_session_start_output_serialize(self) -> None:
+        """Full serialization with populated fields."""
+        output = SessionStartOutput(
+            server_version="0.10.0",
+            project_root="/home/user/project",
+            project_type="mcp-server",
+            quality_preset="strict",
+            installed_checkers=["ruff", "mypy", "bandit"],
+            has_ci=True,
+            has_docker=False,
+            has_tests=True,
+        )
+        content = output.to_structured_content()
+        assert content["server_version"] == "0.10.0"
+        assert content["project_root"] == "/home/user/project"
+        assert content["project_type"] == "mcp-server"
+        assert content["quality_preset"] == "strict"
+        assert content["installed_checkers"] == ["ruff", "mypy", "bandit"]
+        assert content["has_ci"] is True
+        assert content["has_docker"] is False
+        assert content["has_tests"] is True
+
+    def test_session_start_output_defaults(self) -> None:
+        """Default values are correct."""
+        output = SessionStartOutput(
+            server_version="1.0.0",
+            project_root="/tmp",
+        )
+        assert output.project_type is None
+        assert output.quality_preset == "standard"
+        assert output.installed_checkers == []
+        assert output.has_ci is False
+        assert output.has_docker is False
+        assert output.has_tests is False

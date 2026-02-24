@@ -190,13 +190,6 @@ def tapps_stats(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_stats", start)
 
-    from tapps_mcp.config.settings import load_settings
-    from tapps_mcp.knowledge.lookup import _build_provider_registry
-
-    settings = load_settings()
-    registry = _build_provider_registry(settings=settings)
-    provider_stats = registry.get_stats()
-
     resp = success_response(
         "tapps_stats",
         elapsed_ms,
@@ -209,7 +202,6 @@ def tapps_stats(
             "gate_pass_rate": summary.gate_pass_rate,
             "avg_score": summary.avg_score,
             "tools": tool_breakdowns,
-            "provider_stats": provider_stats,
         },
     )
     return _with_nudges("tapps_stats", resp)
@@ -316,7 +308,7 @@ async def tapps_research(
 
             settings = load_settings()
             cache = KBCache(settings.project_root / ".tapps-mcp-cache")
-            engine = LookupEngine(cache, settings=settings)
+            engine = LookupEngine(cache, api_key=settings.context7_api_key)
             try:
                 lr = await engine.lookup(
                     library=lookup_library,
@@ -373,27 +365,29 @@ async def tapps_research(
             "fallback_topic": result.fallback_topic,
         },
     )
+
+    # Attach structured output
     try:
         from tapps_mcp.common.output_schemas import ResearchOutput
 
         structured = ResearchOutput(
             domain=result.domain,
-            expert_id=result.expert_id,
             expert_name=result.expert_name,
             answer=answer,
-            confidence=result.confidence,
-            chunks_used=result.chunks_used,
+            confidence=round(result.confidence, 4),
+            sources=result.sources,
             docs_supplemented=docs_content is not None,
             docs_library=docs_library,
             docs_topic=docs_topic,
-            sources=result.sources,
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
-        import structlog
-        structlog.get_logger(__name__).debug(
+        import structlog as _structlog
+
+        _structlog.get_logger(__name__).debug(
             "structured_output_failed: tapps_research", exc_info=True
         )
+
     return _with_nudges("tapps_research", resp)
 
 
