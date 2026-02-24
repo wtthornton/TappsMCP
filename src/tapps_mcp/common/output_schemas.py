@@ -182,6 +182,46 @@ class ChecklistOutput(StructuredOutput):
     total_calls: int = 0
 
 
+class ResearchOutput(StructuredOutput):
+    """Structured output for tapps_research."""
+
+    domain: str
+    expert_name: str
+    answer: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    sources: list[str] = Field(default_factory=list)
+    docs_supplemented: bool = False
+    docs_library: str | None = None
+    docs_topic: str | None = None
+
+
+class ProfileOutput(StructuredOutput):
+    """Structured output for tapps_project_profile."""
+
+    project_root: str
+    project_type: str
+    project_type_confidence: float = Field(ge=0.0, le=1.0)
+    has_ci: bool = False
+    has_docker: bool = False
+    has_tests: bool = False
+    test_frameworks: list[str] = Field(default_factory=list)
+    package_managers: list[str] = Field(default_factory=list)
+    quality_recommendations: list[str] = Field(default_factory=list)
+
+
+class SessionStartOutput(StructuredOutput):
+    """Structured output for tapps_session_start."""
+
+    server_version: str
+    project_root: str
+    project_type: str | None = None
+    quality_preset: str = "standard"
+    installed_checkers: list[str] = Field(default_factory=list)
+    has_ci: bool = False
+    has_docker: bool = False
+    has_tests: bool = False
+
+
 # Registry for looking up output schema by tool name
 OUTPUT_SCHEMA_REGISTRY: dict[str, type[StructuredOutput]] = {
     "tapps_score_file": ScoreFileOutput,
@@ -193,6 +233,9 @@ OUTPUT_SCHEMA_REGISTRY: dict[str, type[StructuredOutput]] = {
     "tapps_impact_analysis": ImpactOutput,
     "tapps_consult_expert": ExpertOutput,
     "tapps_checklist": ChecklistOutput,
+    "tapps_research": ResearchOutput,
+    "tapps_project_profile": ProfileOutput,
+    "tapps_session_start": SessionStartOutput,
 }
 
 

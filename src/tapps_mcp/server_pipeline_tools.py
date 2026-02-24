@@ -261,6 +261,34 @@ def tapps_session_start(
         data["project_profile_error"] = err_msg
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import SessionStartOutput
+
+        checker_names = [
+            c.get("name", "") if isinstance(c, dict) else getattr(c, "name", "")
+            for c in info["data"].get("installed_checkers", [])
+        ]
+        pp = data.get("project_profile") or {}
+        structured = SessionStartOutput(
+            server_version=info["data"]["server"].get("version", ""),
+            project_root=info["data"]["configuration"].get("project_root", ""),
+            project_type=pp.get("project_type"),
+            quality_preset=info["data"]["configuration"].get("quality_preset", "standard"),
+            installed_checkers=[n for n in checker_names if n],
+            has_ci=pp.get("has_ci", False),
+            has_docker=pp.get("has_docker", False),
+            has_tests=pp.get("has_tests", False),
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        import structlog as _structlog
+
+        _structlog.get_logger(__name__).debug(
+            "structured_output_failed: tapps_session_start", exc_info=True
+        )
+
     return _with_nudges("tapps_session_start", resp)
 
 

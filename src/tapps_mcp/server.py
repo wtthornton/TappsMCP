@@ -609,6 +609,22 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "fallback_topic": result.fallback_topic,
         },
     )
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import ExpertOutput
+
+        structured = ExpertOutput(
+            domain=result.domain,
+            expert_name=result.expert_name,
+            answer=result.answer,
+            confidence=round(result.confidence, 4),
+            sources=result.sources,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        logger.debug("structured_output_failed: tapps_consult_expert", exc_info=True)
+
     return _with_nudges("tapps_consult_expert", resp)
 
 
@@ -652,6 +668,23 @@ def tapps_checklist(task_type: str = "review") -> dict[str, Any]:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_checklist", start)
         resp = success_response("tapps_checklist", elapsed_ms, result.model_dump())
+
+        # Attach structured output
+        try:
+            from tapps_mcp.common.output_schemas import ChecklistOutput
+
+            structured = ChecklistOutput(
+                task_type=result.task_type,
+                complete=result.complete,
+                called=result.called,
+                missing_required=result.missing_required,
+                missing_recommended=result.missing_recommended,
+                total_calls=result.total_calls,
+            )
+            resp["structuredContent"] = structured.to_structured_content()
+        except Exception:
+            logger.debug("structured_output_failed: tapps_checklist", exc_info=True)
+
         return _with_nudges("tapps_checklist", resp, {"complete": result.complete})
     except ImportError:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -730,6 +763,26 @@ def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
             "quality_recommendations": profile.quality_recommendations,
         },
     )
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import ProfileOutput
+
+        structured = ProfileOutput(
+            project_root=str(root),
+            project_type=profile.project_type,
+            project_type_confidence=round(profile.project_type_confidence, 2),
+            has_ci=profile.has_ci,
+            has_docker=profile.has_docker,
+            has_tests=profile.has_tests,
+            test_frameworks=profile.test_frameworks,
+            package_managers=profile.package_managers,
+            quality_recommendations=profile.quality_recommendations,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        logger.debug("structured_output_failed: tapps_project_profile", exc_info=True)
+
     return _with_nudges("tapps_project_profile", resp)
 
 
@@ -837,6 +890,24 @@ def tapps_impact_analysis(file_path: str, change_type: str = "modified") -> dict
             "recommendations": report.recommendations,
         },
     )
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import ImpactOutput
+
+        structured = ImpactOutput(
+            changed_file=report.changed_file,
+            change_type=report.change_type,
+            severity=report.severity,
+            total_affected=report.total_affected,
+            direct_dependents=[d.file_path for d in report.direct_dependents],
+            test_files=[t.file_path for t in report.test_files],
+            recommendations=report.recommendations,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        logger.debug("structured_output_failed: tapps_impact_analysis", exc_info=True)
+
     return _with_nudges("tapps_impact_analysis", resp)
 
 
@@ -1284,6 +1355,25 @@ from tapps_mcp import (  # noqa: E402
 server_scoring_tools.register(mcp)
 server_pipeline_tools.register(mcp)
 server_metrics_tools.register(mcp)
+
+# ---------------------------------------------------------------------------
+# Wire outputSchema to tool registrations (Epic 13)
+# ---------------------------------------------------------------------------
+# FastMCP auto-generates outputSchema from return type annotations, but our
+# handlers return dict[str, Any] (text+structured hybrid).  We patch the
+# fn_metadata.output_schema on each registered tool so MCP clients see the
+# declared JSON schema without changing handler signatures.
+
+try:
+    from tapps_mcp.common.output_schemas import OUTPUT_SCHEMA_REGISTRY
+
+    _tool_mgr = mcp._tool_manager
+    for _tool_name, _schema_cls in OUTPUT_SCHEMA_REGISTRY.items():
+        _tool_obj = _tool_mgr._tools.get(_tool_name)
+        if _tool_obj is not None:
+            _tool_obj.fn_metadata.output_schema = _schema_cls.to_output_schema()
+except Exception:
+    logger.debug("output_schema_wiring_failed", exc_info=True)
 
 # Re-export so ``from tapps_mcp.server import tapps_X`` keeps working
 tapps_score_file = server_scoring_tools.tapps_score_file
