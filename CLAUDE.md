@@ -163,4 +163,4 @@ When TappsMCP's own MCP server is available in your session, use it on this code
 - The `tapps-mcp init` CLI generates MCP host configuration for Claude Code, Cursor, or VS Code
 - The `tapps-mcp upgrade` CLI validates and updates all generated files after a TappsMCP version upgrade
 - The `tapps-mcp doctor` CLI diagnoses configuration and connectivity issues
-- All 19 epics are complete (0-18) — see `docs/planning/epics/README.md` for the full history
+- All 18 epics are complete (0-17, with 10+11 combined) — see `docs/planning/epics/README.md` for the full history

@@ -365,6 +365,29 @@ async def tapps_research(
             "fallback_topic": result.fallback_topic,
         },
     )
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import ResearchOutput
+
+        structured = ResearchOutput(
+            domain=result.domain,
+            expert_name=result.expert_name,
+            answer=answer,
+            confidence=round(result.confidence, 4),
+            sources=result.sources,
+            docs_supplemented=docs_content is not None,
+            docs_library=docs_library,
+            docs_topic=docs_topic,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        import structlog as _structlog
+
+        _structlog.get_logger(__name__).debug(
+            "structured_output_failed: tapps_research", exc_info=True
+        )
+
     return _with_nudges("tapps_research", resp)
 
 
