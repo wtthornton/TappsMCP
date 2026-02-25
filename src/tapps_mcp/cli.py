@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import click
 
 from tapps_mcp import __version__
@@ -159,6 +161,52 @@ def doctor(project_root: str) -> None:
     success = run_doctor(project_root=project_root)
     if not success:
         raise SystemExit(1)
+
+
+@main.command("validate-changed")
+@click.option(
+    "--quick/--full",
+    default=True,
+    help="Quick (ruff-only) or full validation. Default: quick.",
+)
+@click.option(
+    "--project-root",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    help="Project root (default: current directory).",
+)
+def validate_changed_cmd(quick: bool, project_root: str) -> None:
+    """Validate all changed Python files (same logic as the MCP tool).
+
+    Run this before ending a session to confirm changed files pass quality gates.
+    Uses git to detect changed files, then runs quick (ruff-only) or full
+    (ruff + mypy + bandit + radon + vulture) checks per file.
+    """
+    import asyncio
+
+    from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+    # So load_settings() and git run in the right project
+    if project_root != ".":
+        os.chdir(project_root)
+
+    async def _run() -> None:
+        result = await tapps_validate_changed(
+            file_paths="",
+            quick=quick,
+            include_security=not quick,
+        )
+        if not result.get("success"):
+            click.echo(result.get("error", "Validation failed."), err=True)
+            raise SystemExit(1)
+        data = result.get("data", {})
+        summary = data.get("summary", "")
+        all_passed = data.get("all_gates_passed", False)
+        click.echo(summary)
+        if not all_passed:
+            raise SystemExit(1)
+
+    asyncio.run(_run())
 
 
 @main.command(name="replace-exe")

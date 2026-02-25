@@ -441,19 +441,6 @@ echo "File edited: $FILE"
 echo "Consider running tapps_quick_check to verify quality."
 exit 0
 """,
-    "tapps-stop.sh": """\
-#!/usr/bin/env bash
-# TappsMCP stop hook (Cursor)
-# If validation passed recently (marker < 60 min), no followup (avoids loop). Else prompt.
-MARKER=".tapps-mcp/sessions/last_validate_ok"
-if [[ -f "$MARKER" ]] && [[ -n $(find "$MARKER" -mmin -60 2>/dev/null) ]]; then
-  echo '{}'
-  exit 0
-fi
-MSG="Before ending: please run tapps_validate_changed to confirm all changed files pass quality gates."
-echo "{\\"followup_message\\": \\"$MSG\\"}"
-exit 0
-""",
 }
 
 # ---------------------------------------------------------------------------
@@ -499,24 +486,6 @@ Write-Output "File edited: $file"
 Write-Output "Consider running tapps_quick_check to verify quality."
 exit 0
 """,
-    "tapps-stop.ps1": """\
-# TappsMCP stop hook (Cursor)
-# If validation passed recently (marker < 60 min), output no followup (avoids loop).
-# Otherwise prompt to run tapps_validate_changed.
-$null = $input | Out-Null
-$marker = ".tapps-mcp/sessions/last_validate_ok"
-if (Test-Path $marker) {
-    $age = (Get-Date) - (Get-Item $marker -ErrorAction SilentlyContinue).LastWriteTime
-    if ($age -and $age.TotalMinutes -le 60) {
-        Write-Output "{}"
-        exit 0
-    }
-}
-$msg = "Before ending: please run tapps_validate_changed"
-$msg += " to confirm all changed files pass quality gates."
-Write-Output "{`"followup_message`": `"$msg`"}"
-exit 0
-""",
 }
 
 _PS1_PREFIX = "powershell -NoProfile -ExecutionPolicy Bypass -File "
@@ -524,7 +493,6 @@ _PS1_PREFIX = "powershell -NoProfile -ExecutionPolicy Bypass -File "
 _CURSOR_HOOKS_CONFIG: dict[str, list[dict[str, str]]] = {
     "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
     "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
-    "stop": [{"command": ".cursor/hooks/tapps-stop.sh"}],
 }
 
 _CURSOR_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
@@ -533,9 +501,6 @@ _CURSOR_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
     ],
     "afterFileEdit": [
         {"command": _PS1_PREFIX + ".cursor/hooks/tapps-after-edit.ps1"},
-    ],
-    "stop": [
-        {"command": _PS1_PREFIX + ".cursor/hooks/tapps-stop.ps1"},
     ],
 }
 
@@ -1004,12 +969,10 @@ def generate_cursor_hooks(
     hooks_dir = project_root / ".cursor" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
-    # Stop hook is always overwritten so upgrade gets the conditional-marker fix.
-    scripts_always_overwrite = {"tapps-stop.ps1", "tapps-stop.sh"}
     scripts_created: list[str] = []
     for name, content in script_templates.items():
         script_path = hooks_dir / name
-        if not script_path.exists() or name in scripts_always_overwrite:
+        if not script_path.exists():
             script_path.write_text(content, encoding="utf-8")
             if not win:
                 script_path.chmod(
@@ -1023,6 +986,13 @@ def generate_cursor_hooks(
     for old_script in hooks_dir.glob(f"tapps-*{wrong_ext}"):
         old_script.unlink()
         scripts_removed.append(old_script.name)
+
+    # Remove deprecated stop hook scripts (validation is via tapps-mcp validate-changed)
+    for name in ("tapps-stop.ps1", "tapps-stop.sh"):
+        path = hooks_dir / name
+        if path.exists():
+            path.unlink()
+            scripts_removed.append(name)
 
     # Merge hooks config into .cursor/hooks.json
     hooks_file = project_root / ".cursor" / "hooks.json"
@@ -1044,6 +1014,9 @@ def generate_cursor_hooks(
         existing_hooks_raw = migrated
 
     existing_hooks: dict[str, list[dict[str, str]]] = existing_hooks_raw
+
+    # Remove stop hook; use CLI command tapps-mcp validate-changed instead.
+    existing_hooks.pop("stop", None)
 
     hooks_added = 0
     for event, entries in hooks_config.items():
