@@ -305,3 +305,112 @@ class TestCursorHooksConfigWindows:
 
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
         assert len(data["hooks"]) == 3
+
+
+# ---------------------------------------------------------------------------
+# Cross-platform migration tests
+# ---------------------------------------------------------------------------
+
+
+class TestCursorHooksPlatformMigration:
+    """Tests for migrating hooks between .sh and .ps1 on platform change."""
+
+    def test_upgrade_replaces_sh_hooks_on_windows(self, tmp_path):
+        """Init as Unix, then upgrade on Windows — hooks.json should use PowerShell."""
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
+        # Verify it starts with .sh commands
+        for entries in data["hooks"].values():
+            for entry in entries:
+                assert entry["command"].endswith(".sh")
+
+        # Now "upgrade" on Windows
+        result = generate_cursor_hooks(tmp_path, force_windows=True)
+
+        data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
+        for event, entries in data["hooks"].items():
+            for entry in entries:
+                assert "powershell" in entry["command"], (
+                    f"{event} should use powershell after migration: {entry['command']}"
+                )
+                assert ".ps1" in entry["command"]
+        assert result["hooks_migrated"] > 0
+        assert result["hooks_action"] == "migrated"
+
+    def test_upgrade_replaces_ps1_hooks_on_unix(self, tmp_path):
+        """Init as Windows, then upgrade on Unix — hooks.json should use .sh."""
+        generate_cursor_hooks(tmp_path, force_windows=True)
+        data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
+        for entries in data["hooks"].values():
+            for entry in entries:
+                assert "powershell" in entry["command"]
+
+        # Now "upgrade" on Unix
+        result = generate_cursor_hooks(tmp_path, force_windows=False)
+
+        data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
+        for event, entries in data["hooks"].items():
+            for entry in entries:
+                assert entry["command"].endswith(".sh"), (
+                    f"{event} should use .sh after migration: {entry['command']}"
+                )
+        assert result["hooks_migrated"] > 0
+
+    def test_upgrade_preserves_custom_hooks(self, tmp_path):
+        """Custom non-tapps hooks should be untouched during migration."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        existing = {
+            "version": 1,
+            "hooks": {
+                "afterFileEdit": [
+                    {"command": "my-custom-linter.sh"},
+                    {"command": ".cursor/hooks/tapps-after-edit.sh"},
+                ],
+                "stop": [{"command": ".cursor/hooks/tapps-stop.sh"}],
+            },
+        }
+        (cursor_dir / "hooks.json").write_text(json.dumps(existing), encoding="utf-8")
+
+        generate_cursor_hooks(tmp_path, force_windows=True)
+
+        data = json.loads((cursor_dir / "hooks.json").read_text())
+        # Custom hook preserved exactly
+        assert data["hooks"]["afterFileEdit"][0] == {"command": "my-custom-linter.sh"}
+        # Tapps hook migrated to powershell
+        tapps_cmd = data["hooks"]["afterFileEdit"][1]["command"]
+        assert "powershell" in tapps_cmd
+        assert ".ps1" in tapps_cmd
+
+    def test_wrong_platform_scripts_cleaned_up(self, tmp_path):
+        """Old .sh scripts should be removed when upgrading to Windows."""
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        assert len(list(hooks_dir.glob("*.sh"))) == 3
+
+        result = generate_cursor_hooks(tmp_path, force_windows=True)
+
+        assert len(list(hooks_dir.glob("*.sh"))) == 0, "All .sh scripts should be removed"
+        assert len(list(hooks_dir.glob("*.ps1"))) == 3, "PS1 scripts should be created"
+        assert len(result["scripts_removed"]) > 0
+
+    def test_wrong_platform_ps1_scripts_cleaned_on_unix(self, tmp_path):
+        """Old .ps1 scripts should be removed when upgrading to Unix."""
+        generate_cursor_hooks(tmp_path, force_windows=True)
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        assert len(list(hooks_dir.glob("*.ps1"))) == 3
+
+        result = generate_cursor_hooks(tmp_path, force_windows=False)
+
+        assert len(list(hooks_dir.glob("*.ps1"))) == 0, "All .ps1 scripts should be removed"
+        assert len(list(hooks_dir.glob("*.sh"))) == 3, "Bash scripts should be created"
+        assert len(result["scripts_removed"]) > 0
+
+    def test_migration_is_idempotent(self, tmp_path):
+        """Running migration twice should not change anything the second time."""
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        generate_cursor_hooks(tmp_path, force_windows=True)  # migrate
+        result = generate_cursor_hooks(tmp_path, force_windows=True)  # second run
+
+        assert result["hooks_migrated"] == 0
+        assert result["hooks_action"] == "skipped"

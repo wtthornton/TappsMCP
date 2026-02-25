@@ -19,6 +19,64 @@ def _is_windows() -> bool:
     """Return True when running on Windows."""
     return sys.platform == "win32"
 
+
+def _is_wrong_platform_command(command: str, *, win: bool) -> bool:
+    """Return True if *command* references a tapps hook for the wrong platform.
+
+    Only matches commands containing ``tapps-`` so that user-defined custom
+    hooks are never touched.
+    """
+    if "tapps-" not in command:
+        return False
+    if win:
+        # On Windows we expect .ps1 — flag .sh references
+        return command.rstrip().endswith(".sh")
+    # On Unix we expect .sh — flag powershell/.ps1 references
+    return ".ps1" in command and "powershell" in command.lower()
+
+
+def _migrate_claude_hook_commands(
+    existing_hooks: dict[str, Any],
+    correct_config: dict[str, list[dict[str, Any]]],
+    *,
+    win: bool,
+) -> int:
+    """Replace wrong-platform commands inside Claude Code hook entries.
+
+    Claude hooks use nested structure:
+    ``{"matcher": "...", "hooks": [{"type": "command", "command": "..."}]}``.
+
+    Returns the number of commands migrated.
+    """
+    migrated = 0
+    for event, matcher_entries in existing_hooks.items():
+        if not isinstance(matcher_entries, list):
+            continue
+        for matcher_entry in matcher_entries:
+            if not isinstance(matcher_entry, dict):
+                continue
+            inner_hooks = matcher_entry.get("hooks", [])
+            if not isinstance(inner_hooks, list):
+                continue
+            for ih_idx, hook in enumerate(inner_hooks):
+                if not isinstance(hook, dict):
+                    continue
+                cmd = hook.get("command", "")
+                if not _is_wrong_platform_command(cmd, win=win):
+                    continue
+                # Find the replacement from correct_config by matcher
+                matcher = matcher_entry.get("matcher")
+                if event in correct_config:
+                    for correct_entry in correct_config[event]:
+                        if correct_entry.get("matcher") == matcher:
+                            correct_inner = correct_entry.get("hooks", [])
+                            if ih_idx < len(correct_inner):
+                                inner_hooks[ih_idx] = correct_inner[ih_idx]
+                                migrated += 1
+                            break
+    return migrated
+
+
 # ---------------------------------------------------------------------------
 # Claude Code hook script templates (Story 12.5)
 # ---------------------------------------------------------------------------
@@ -863,6 +921,13 @@ def generate_claude_hooks(
                 )
             scripts_created.append(name)
 
+    # Clean up wrong-platform tapps scripts (e.g. .sh on Windows)
+    wrong_ext = ".sh" if win else ".ps1"
+    scripts_removed: list[str] = []
+    for old_script in hooks_dir.glob(f"tapps-*{wrong_ext}"):
+        old_script.unlink()
+        scripts_removed.append(old_script.name)
+
     # Merge hooks config into .claude/settings.json
     settings_file = project_root / ".claude" / "settings.json"
     if settings_file.exists():
@@ -887,14 +952,19 @@ def generate_claude_hooks(
                     existing_hooks[event].append(entry)
                     hooks_added += 1
 
+    # Replace wrong-platform commands in existing hook entries
+    hooks_migrated = _migrate_claude_hook_commands(existing_hooks, hooks_config, win=win)
+
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
-    action = "created" if hooks_added > 0 else "skipped"
+    action = "migrated" if hooks_migrated > 0 else ("created" if hooks_added > 0 else "skipped")
     return {
         "scripts_created": scripts_created,
+        "scripts_removed": scripts_removed,
         "hooks_action": action,
         "hooks_added": hooks_added,
+        "hooks_migrated": hooks_migrated,
     }
 
 
@@ -933,6 +1003,13 @@ def generate_cursor_hooks(
                 )
             scripts_created.append(name)
 
+    # Clean up wrong-platform tapps scripts (e.g. .sh on Windows)
+    wrong_ext = ".sh" if win else ".ps1"
+    scripts_removed: list[str] = []
+    for old_script in hooks_dir.glob(f"tapps-*{wrong_ext}"):
+        old_script.unlink()
+        scripts_removed.append(old_script.name)
+
     # Merge hooks config into .cursor/hooks.json
     hooks_file = project_root / ".cursor" / "hooks.json"
     if hooks_file.exists():
@@ -960,16 +1037,29 @@ def generate_cursor_hooks(
             existing_hooks[event] = entries
             hooks_added += 1
 
+    # Replace wrong-platform tapps commands in existing events
+    hooks_migrated = 0
+    for event, entries in existing_hooks.items():
+        for i, entry in enumerate(entries):
+            cmd = entry.get("command", "")
+            if _is_wrong_platform_command(cmd, win=win):
+                if event in hooks_config:
+                    # Replace with the correct-platform entry
+                    existing_hooks[event][i] = hooks_config[event][0]
+                    hooks_migrated += 1
+
     config["version"] = 1
     config["hooks"] = existing_hooks
     hooks_file.parent.mkdir(parents=True, exist_ok=True)
     hooks_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
-    action = "created" if hooks_added > 0 else "skipped"
+    action = "migrated" if hooks_migrated > 0 else ("created" if hooks_added > 0 else "skipped")
     return {
         "scripts_created": scripts_created,
+        "scripts_removed": scripts_removed,
         "hooks_action": action,
         "hooks_added": hooks_added,
+        "hooks_migrated": hooks_migrated,
     }
 
 

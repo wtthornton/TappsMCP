@@ -359,3 +359,94 @@ class TestClaudeHooksConfigWindows:
 
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert len(data["hooks"]["SessionStart"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Cross-platform migration tests
+# ---------------------------------------------------------------------------
+
+
+class TestClaudeHooksPlatformMigration:
+    """Tests for migrating hooks between .sh and .ps1 on platform change."""
+
+    def _all_hook_commands(self, settings_data: dict) -> list[str]:
+        """Extract all command strings from nested Claude hook entries."""
+        commands = []
+        for _event, matcher_entries in settings_data.get("hooks", {}).items():
+            if not isinstance(matcher_entries, list):
+                continue
+            for me in matcher_entries:
+                if not isinstance(me, dict):
+                    continue
+                for hook in me.get("hooks", []):
+                    if isinstance(hook, dict) and "command" in hook:
+                        commands.append(hook["command"])
+        return commands
+
+    def test_upgrade_replaces_sh_hooks_on_windows(self, tmp_path):
+        """Init as Unix, then upgrade on Windows — settings should use PowerShell."""
+        generate_claude_hooks(tmp_path, force_windows=False)
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        cmds = self._all_hook_commands(data)
+        assert all(c.endswith(".sh") for c in cmds), "Should start with .sh"
+
+        result = generate_claude_hooks(tmp_path, force_windows=True)
+
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        cmds = self._all_hook_commands(data)
+        assert all("powershell" in c and ".ps1" in c for c in cmds), (
+            f"All should use powershell after migration: {cmds}"
+        )
+        assert result["hooks_migrated"] > 0
+        assert result["hooks_action"] == "migrated"
+
+    def test_upgrade_replaces_ps1_hooks_on_unix(self, tmp_path):
+        """Init as Windows, then upgrade on Unix — settings should use .sh."""
+        generate_claude_hooks(tmp_path, force_windows=True)
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        cmds = self._all_hook_commands(data)
+        assert all("powershell" in c for c in cmds)
+
+        result = generate_claude_hooks(tmp_path, force_windows=False)
+
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        cmds = self._all_hook_commands(data)
+        assert all(c.endswith(".sh") for c in cmds), (
+            f"All should use .sh after migration: {cmds}"
+        )
+        assert result["hooks_migrated"] > 0
+
+    def test_wrong_platform_scripts_cleaned_up(self, tmp_path):
+        """Old .sh scripts should be removed when upgrading to Windows."""
+        generate_claude_hooks(tmp_path, force_windows=False)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        assert len(list(hooks_dir.glob("tapps-*.sh"))) > 0
+
+        result = generate_claude_hooks(tmp_path, force_windows=True)
+
+        assert len(list(hooks_dir.glob("tapps-*.sh"))) == 0
+        assert len(list(hooks_dir.glob("tapps-*.ps1"))) > 0
+        assert len(result["scripts_removed"]) > 0
+
+    def test_migration_preserves_non_tapps_settings(self, tmp_path):
+        """Non-hook settings in settings.json should be preserved."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir(parents=True)
+        (claude_dir / "settings.json").write_text(
+            json.dumps({"customSetting": True}), encoding="utf-8"
+        )
+
+        generate_claude_hooks(tmp_path, force_windows=False)
+        generate_claude_hooks(tmp_path, force_windows=True)  # migrate
+
+        data = json.loads((claude_dir / "settings.json").read_text())
+        assert data["customSetting"] is True
+
+    def test_migration_is_idempotent(self, tmp_path):
+        """Running migration twice should not change anything the second time."""
+        generate_claude_hooks(tmp_path, force_windows=False)
+        generate_claude_hooks(tmp_path, force_windows=True)  # migrate
+        result = generate_claude_hooks(tmp_path, force_windows=True)  # second run
+
+        assert result["hooks_migrated"] == 0
+        assert result["hooks_action"] == "skipped"
