@@ -23,9 +23,14 @@
 | [Epic 15](EPIC-15-DEPENDENCY-VULNERABILITY-SCANNING.md) | Dependency Vulnerability Scanning (pip-audit) | P0 | ~2 weeks | Epic 0, Epic 1 | **Complete** — 2 source files, 47 tests, tapps_dependency_scan tool |
 | [Epic 16](EPIC-16-DOCUMENTATION-BACKEND-RESILIENCE.md) | Documentation Backend Resilience (Multi-Provider) | P0 | ~2-3 weeks | Epic 2 | **Complete** — 5 source files, 39 tests, multi-provider architecture |
 | [Epic 17](EPIC-17-CIRCULAR-DEPENDENCY-DETECTION.md) | Circular Dependency Detection | P0 | ~1.5-2 weeks | Epic 0, Epic 4 | **Complete** — 3 source files, 57 tests, tapps_dependency_graph tool |
+| [Epic 19](EPIC-19-GITHUB-ISSUE-PR-TEMPLATES.md) | GitHub Issue & PR Templates | P1 | ~1.5-2 weeks | Epic 8, Epic 12 | Planned |
+| [Epic 20](EPIC-20-GITHUB-ACTIONS-CI-ENHANCEMENT.md) | GitHub Actions CI Enhancement | P1 | ~2-2.5 weeks | Epic 8, Epic 12 | Planned |
+| [Epic 21](EPIC-21-GITHUB-COPILOT-AGENT-INTEGRATION.md) | GitHub Copilot Agent Integration + GitHub Expert | P0 | ~2.5-3 weeks | Epic 8, Epic 12, Epic 20 | Planned |
+| [Epic 22](EPIC-22-GITHUB-GOVERNANCE-SECURITY-CONFIG.md) | GitHub Governance & Security Config | P2 | ~1.5-2 weeks | Epic 19, Epic 20, Epic 21 | Planned |
 
 **Completed LOE:** ~32-42 weeks (Epics 0-17, all complete)
-**Total estimated LOE:** ~32-42 weeks (1 developer)
+**Planned LOE:** ~8.5-9.5 weeks (Epics 19-22)
+**Total estimated LOE:** ~40-51 weeks (1 developer)
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -55,9 +60,18 @@ Epic 14 (Dead Code Detection)        ← depends on Epic 0, Epic 1 (parallel wit
 Epic 15 (Dependency Vulnerability)   ← depends on Epic 0, Epic 1 (parallel with 13, 14)
 Epic 16 (Doc Backend Resilience)     ← depends on Epic 2 (parallel with 13-15, 17)
 Epic 17 (Circular Dep Detection)     ← depends on Epic 0, Epic 4 (parallel with 13-16)
+
+--- GitHub Agent-Friendly Wave (Epics 19-22) ---
+
+Epic 19 (Issue & PR Templates)       ← depends on Epic 8, Epic 12 (parallel with 20)
+Epic 20 (Actions CI Enhancement)     ← depends on Epic 8, Epic 12 (parallel with 19)
+Epic 21 (Copilot Agent Integration)  ← depends on Epic 20 (after setup-steps)
+Epic 22 (Governance & Security)      ← depends on Epic 19, Epic 20, Epic 21 (final wave)
 ```
 
 **Note:** Epics 13-17 are fully independent and can all be developed in parallel.
+
+**Note:** Epics 19-22 form a new "GitHub Agent-Friendly" wave. Epics 19 and 20 can run in parallel. Epic 21 depends on Epic 20 (copilot-setup-steps). Epic 22 is the capstone that references all generated files.
 
 **Note:** Epic 7 can start partially after Epic 1 (execution metrics, tool call tracking, basic dashboard) and grow incrementally as Epic 3 and Epic 5 deliver expert metrics and adaptive learning data. Stories 7.1, 7.4, 7.5, 7.6, 7.7 can begin after Epic 1. Stories 7.3 requires Epic 3. Story 7.2 benefits from Epic 5.
 
@@ -100,6 +114,10 @@ With 2 developers:
 | `tapps_dependency_scan` | Epic 15 | Week 24-26 |
 | Multi-provider `tapps_lookup_docs` | Epic 16 | Week 24-27 |
 | `tapps_dependency_graph` | Epic 17 | Week 24-26 |
+| GitHub Issue/PR templates in `tapps_init` | Epic 19 | Week 34-36 |
+| Enhanced CI workflows in `tapps_init` | Epic 20 | Week 36-38 |
+| Copilot agent profiles in `tapps_init` | Epic 21 | Week 38-40 |
+| Governance configs in `tapps_init` | Epic 22 | Week 40-42 |
 
 ## Metrics Infrastructure (Epic 7 — carried from TappsCodingAgents)
 

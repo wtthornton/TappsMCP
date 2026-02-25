@@ -75,7 +75,7 @@ class TestExtractImports:
         (pkg / "b.py").write_text("")
 
         project_modules = {"mypkg", "mypkg.a", "mypkg.b"}
-        edges = _extract_imports(a_file, "mypkg.a", project_modules, "mypkg")
+        edges, externals = _extract_imports(a_file, "mypkg.a", project_modules)
 
         assert len(edges) == 1
         assert edges[0].source_module == "mypkg.a"
@@ -92,7 +92,7 @@ class TestExtractImports:
         (pkg / "b.py").write_text("")
 
         project_modules = {"mypkg", "mypkg.a", "mypkg.b"}
-        edges = _extract_imports(a_file, "mypkg.a", project_modules, "mypkg")
+        edges, externals = _extract_imports(a_file, "mypkg.a", project_modules)
 
         assert len(edges) == 1
         assert edges[0].target_module == "mypkg.b"
@@ -107,7 +107,7 @@ class TestExtractImports:
         (pkg / "b.py").write_text("")
 
         project_modules = {"mypkg", "mypkg.a", "mypkg.b"}
-        edges = _extract_imports(a_file, "mypkg.a", project_modules, "mypkg")
+        edges, externals = _extract_imports(a_file, "mypkg.a", project_modules)
 
         assert len(edges) == 1
         assert edges[0].target_module == "mypkg.b"
@@ -127,7 +127,7 @@ class TestExtractImports:
         (pkg / "b.py").write_text("")
 
         project_modules = {"mypkg", "mypkg.a", "mypkg.b"}
-        edges = _extract_imports(a_file, "mypkg.a", project_modules, "mypkg")
+        edges, externals = _extract_imports(a_file, "mypkg.a", project_modules)
 
         assert len(edges) == 1
         assert edges[0].import_type == "type_checking"
@@ -144,13 +144,13 @@ class TestExtractImports:
         (pkg / "b.py").write_text("")
 
         project_modules = {"mypkg", "mypkg.a", "mypkg.b"}
-        edges = _extract_imports(a_file, "mypkg.a", project_modules, "mypkg")
+        edges, externals = _extract_imports(a_file, "mypkg.a", project_modules)
 
         assert len(edges) == 1
         assert edges[0].import_type == "conditional"
 
     def test_stdlib_ignored(self, tmp_path):
-        """Standard library imports are not included."""
+        """Standard library imports are not included in edges or externals."""
         pkg = tmp_path / "mypkg"
         pkg.mkdir()
         (pkg / "__init__.py").write_text("")
@@ -158,9 +158,10 @@ class TestExtractImports:
         a_file.write_text("import os\nimport sys\nfrom pathlib import Path\n")
 
         project_modules = {"mypkg", "mypkg.a"}
-        edges = _extract_imports(a_file, "mypkg.a", project_modules, "mypkg")
+        edges, externals = _extract_imports(a_file, "mypkg.a", project_modules)
 
         assert len(edges) == 0
+        assert len(externals) == 0
 
     def test_syntax_error_returns_empty(self, tmp_path):
         """Files with syntax errors return no edges."""
@@ -171,9 +172,25 @@ class TestExtractImports:
         bad_file.write_text("def broken(\n")
 
         project_modules = {"mypkg", "mypkg.bad"}
-        edges = _extract_imports(bad_file, "mypkg.bad", project_modules, "mypkg")
+        edges, externals = _extract_imports(bad_file, "mypkg.bad", project_modules)
 
         assert edges == []
+        assert externals == set()
+
+    def test_external_import_detected(self, tmp_path):
+        """Third-party imports appear in the externals set."""
+        pkg = tmp_path / "mypkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        a_file = pkg / "a.py"
+        a_file.write_text("import requests\nfrom flask import Flask\n")
+
+        project_modules = {"mypkg", "mypkg.a"}
+        edges, externals = _extract_imports(a_file, "mypkg.a", project_modules)
+
+        assert len(edges) == 0
+        assert "requests" in externals
+        assert "flask" in externals
 
 
 # ---------------------------------------------------------------------------
