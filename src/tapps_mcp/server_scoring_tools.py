@@ -185,6 +185,7 @@ async def tapps_score_file(
         resp,
         {
             "security_issue_count": len(result.security_issues),
+            "overall_score": round(result.overall_score, 2),
         },
     )
 

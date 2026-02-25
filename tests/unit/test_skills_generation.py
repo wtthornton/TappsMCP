@@ -12,12 +12,13 @@ from tapps_mcp.pipeline.platform_generators import generate_skills
 class TestClaudeSkills:
     """Tests for Claude Code skill generation."""
 
-    def test_creates_three_skills(self, tmp_path):
+    def test_creates_all_skills(self, tmp_path):
         generate_skills(tmp_path, "claude")
         base = tmp_path / ".claude" / "skills"
         assert (base / "tapps-score" / "SKILL.md").exists()
         assert (base / "tapps-gate" / "SKILL.md").exists()
         assert (base / "tapps-validate" / "SKILL.md").exists()
+        assert (base / "tapps-review-pipeline" / "SKILL.md").exists()
 
     def test_score_skill_has_tools_string(self, tmp_path):
         """Claude Code SKILL.md has tools as a comma-separated string."""
@@ -50,22 +51,39 @@ class TestClaudeSkills:
     def test_all_skills_have_frontmatter(self, tmp_path):
         generate_skills(tmp_path, "claude")
         base = tmp_path / ".claude" / "skills"
-        for skill in ["tapps-score", "tapps-gate", "tapps-validate"]:
+        for skill in ["tapps-score", "tapps-gate", "tapps-validate", "tapps-review-pipeline"]:
             content = (base / skill / "SKILL.md").read_text()
             assert content.startswith("---\n"), f"{skill} missing frontmatter"
             assert "name:" in content
             assert "description:" in content
 
+    def test_review_pipeline_references_validate_and_checklist(self, tmp_path):
+        generate_skills(tmp_path, "claude")
+        base = tmp_path / ".claude" / "skills"
+        content = (base / "tapps-review-pipeline" / "SKILL.md").read_text()
+        assert "mcp__tapps-mcp__tapps_validate_changed" in content
+        assert "mcp__tapps-mcp__tapps_checklist" in content
+        assert "tapps-review-fixer" in content
+
 
 class TestCursorSkills:
     """Tests for Cursor skill generation."""
 
-    def test_creates_three_skills(self, tmp_path):
+    def test_creates_all_skills(self, tmp_path):
         generate_skills(tmp_path, "cursor")
         base = tmp_path / ".cursor" / "skills"
         assert (base / "tapps-score" / "SKILL.md").exists()
         assert (base / "tapps-gate" / "SKILL.md").exists()
         assert (base / "tapps-validate" / "SKILL.md").exists()
+        assert (base / "tapps-review-pipeline" / "SKILL.md").exists()
+
+    def test_review_pipeline_uses_short_tool_names(self, tmp_path):
+        generate_skills(tmp_path, "cursor")
+        base = tmp_path / ".cursor" / "skills"
+        content = (base / "tapps-review-pipeline" / "SKILL.md").read_text()
+        assert "tapps_validate_changed" in content
+        assert "tapps_checklist" in content
+        assert "mcp__tapps-mcp__" not in content
 
     def test_score_skill_has_mcp_tools_list(self, tmp_path):
         """Cursor SKILL.md has mcp_tools as a YAML list."""
@@ -123,7 +141,7 @@ class TestSkipExisting:
 
     def test_result_dict_tracks_created(self, tmp_path):
         result = generate_skills(tmp_path, "claude")
-        assert len(result["created"]) == 3
+        assert len(result["created"]) == 4
         assert len(result["skipped"]) == 0
 
     def test_unknown_platform_returns_error(self, tmp_path):

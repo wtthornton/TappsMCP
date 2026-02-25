@@ -113,6 +113,121 @@ for _domain, _libs in {
 
 _EXPERT_FALLBACK_MIN_CONFIDENCE = 0.3
 
+# ---------------------------------------------------------------------------
+# Constants extracted to avoid duplication
+# ---------------------------------------------------------------------------
+
+_FALLBACK_TOOL_LIST: list[str] = [
+    "tapps_server_info",
+    "tapps_session_start",
+    "tapps_score_file",
+    "tapps_security_scan",
+    "tapps_quality_gate",
+    "tapps_lookup_docs",
+    "tapps_validate_config",
+    "tapps_validate_changed",
+    "tapps_quick_check",
+    "tapps_consult_expert",
+    "tapps_list_experts",
+    "tapps_checklist",
+    "tapps_project_profile",
+    "tapps_session_notes",
+    "tapps_impact_analysis",
+    "tapps_report",
+    "tapps_init",
+    "tapps_upgrade",
+    "tapps_doctor",
+    "tapps_dashboard",
+    "tapps_stats",
+    "tapps_feedback",
+    "tapps_research",
+    "tapps_dead_code",
+    "tapps_dependency_scan",
+    "tapps_dependency_graph",
+]
+
+_SECURITY_SCAN_FINDING_LIMIT: int = 50
+
+_VALID_CONFIG_TYPES: frozenset[str] = frozenset({
+    "dockerfile",
+    "docker_compose",
+    "websocket",
+    "mqtt",
+    "influxdb",
+})
+
+_MAX_CONFIG_FILE_SIZE: int = 1_048_576  # 1 MB
+
+_VALID_LOOKUP_MODES: frozenset[str] = frozenset({"code", "info"})
+
+
+def _get_available_tools() -> list[str]:
+    """Return the list of registered MCP tools, with fallback to a static list."""
+    try:
+        tool_manager = mcp._tool_manager
+        return list(tool_manager._tools.keys())
+    except AttributeError:
+        logger.warning("mcp_tool_manager_inaccessible", hint="using fallback tool list")
+        return list(_FALLBACK_TOOL_LIST)
+
+
+def _build_server_info_data(
+    settings: Any,
+    installed: Any,
+    diagnostics: Any,
+    available_tools: list[str],
+) -> dict[str, Any]:
+    """Build the data dict for tapps_server_info / _server_info_async."""
+    from tapps_mcp.pipeline.models import STAGE_TOOLS, PipelineStage
+
+    return {
+        "server": {
+            "name": "TappsMCP",
+            "version": __version__,
+            "protocol_version": "2025-11-25",
+        },
+        "configuration": {
+            "project_root": str(settings.project_root),
+            "quality_preset": settings.quality_preset,
+            "log_level": settings.log_level,
+        },
+        "available_tools": available_tools,
+        "installed_checkers": [t.model_dump() for t in installed],
+        "diagnostics": diagnostics.model_dump(),
+        "recommended_workflow": (
+            "FIRST: Call tapps_session_start() to initialize. "
+            "BEFORE using any library: Call tapps_lookup_docs(). "
+            "AFTER editing Python files: "
+            "Call tapps_score_file(quick=True) or tapps_quick_check(). "
+            "BEFORE declaring done: Call tapps_validate_changed() or tapps_quality_gate(). "
+            "FINAL step: Call tapps_checklist()."
+        ),
+        "quick_start": [
+            "1. FIRST: Call tapps_session_start() to initialize the session",
+            "2. BEFORE using any library API: Call tapps_lookup_docs(library='<name>')",
+            "3. DURING edits: Call tapps_quick_check(file_path='<path>') after each change",
+            "4. BEFORE declaring done: Call tapps_validate_changed() - all gates MUST pass",
+            "5. FINAL step: Call tapps_checklist(task_type='<type>') to verify completeness",
+        ],
+        "critical_rules": [
+            "BLOCKING: tapps_quality_gate MUST pass before work is complete",
+            "BLOCKING: tapps_lookup_docs MUST be called before using external library APIs",
+            "REQUIRED: tapps_score_file MUST be called on every modified Python file",
+            "NEVER skip tapps_checklist as the final verification step",
+        ],
+        "pipeline": {
+            "name": "TAPPS Quality Pipeline",
+            "stages": [s.value for s in PipelineStage],
+            "current_hint": (
+                "Start with tapps_pipeline_overview prompt, or follow stages in order."
+            ),
+            "stage_tools": {s.value: tools for s, tools in STAGE_TOOLS.items()},
+            "handoff_file": "docs/TAPPS_HANDOFF.md",
+            "runlog_file": "docs/TAPPS_RUNLOG.md",
+            "prompts_available": True,
+        },
+    }
+
 
 def _library_to_domain(library: str) -> str:
     """Map library name to best-matching expert domain for fallback lookup."""
@@ -184,18 +299,25 @@ def _with_nudges(
     response: dict[str, Any],
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Inject ``next_steps`` and ``pipeline_progress`` into a response dict."""
+    """Inject ``next_steps``, ``pipeline_progress``, and ``suggested_workflow`` into a response."""
     if not response.get("success", False):
         return response
-    from tapps_mcp.common.nudges import compute_next_steps, compute_pipeline_progress
+    from tapps_mcp.common.nudges import (
+        compute_next_steps,
+        compute_pipeline_progress,
+        compute_suggested_workflow,
+    )
 
     steps = compute_next_steps(tool_name, context)
     progress = compute_pipeline_progress()
+    workflow = compute_suggested_workflow(tool_name, context)
     data = response.get("data", {})
     if steps:
         data["next_steps"] = steps
     if progress:
         data["pipeline_progress"] = progress
+    if workflow:
+        data["suggested_workflow"] = workflow
     return response
 
 
@@ -221,96 +343,13 @@ def tapps_server_info() -> dict[str, Any]:
     cache_dir = settings.project_root / ".tapps-mcp-cache"
     diagnostics = collect_diagnostics(api_key=settings.context7_api_key, cache_dir=cache_dir)
 
-    available_tools: list[str] = []
-    try:
-        tool_manager = mcp._tool_manager
-        available_tools = list(tool_manager._tools.keys())
-    except AttributeError:
-        available_tools = [
-            "tapps_server_info",
-            "tapps_session_start",
-            "tapps_score_file",
-            "tapps_security_scan",
-            "tapps_quality_gate",
-            "tapps_lookup_docs",
-            "tapps_validate_config",
-            "tapps_validate_changed",
-            "tapps_quick_check",
-            "tapps_consult_expert",
-            "tapps_list_experts",
-            "tapps_checklist",
-            "tapps_project_profile",
-            "tapps_session_notes",
-            "tapps_impact_analysis",
-            "tapps_report",
-            "tapps_init",
-            "tapps_upgrade",
-            "tapps_doctor",
-            "tapps_dashboard",
-            "tapps_stats",
-            "tapps_feedback",
-            "tapps_research",
-            "tapps_dead_code",
-            "tapps_dependency_scan",
-            "tapps_dependency_graph",
-        ]
+    available_tools = _get_available_tools()
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_server_info", start)
 
-    from tapps_mcp.pipeline.models import STAGE_TOOLS, PipelineStage
-
-    resp = success_response(
-        "tapps_server_info",
-        elapsed_ms,
-        {
-            "server": {
-                "name": "TappsMCP",
-                "version": __version__,
-                "protocol_version": "2025-11-25",
-            },
-            "configuration": {
-                "project_root": str(settings.project_root),
-                "quality_preset": settings.quality_preset,
-                "log_level": settings.log_level,
-            },
-            "available_tools": available_tools,
-            "installed_checkers": [t.model_dump() for t in installed],
-            "diagnostics": diagnostics.model_dump(),
-            "recommended_workflow": (
-                "FIRST: Call tapps_session_start() to initialize. "
-                "BEFORE using any library: Call tapps_lookup_docs(). "
-                "AFTER editing Python files: "
-                "Call tapps_score_file(quick=True) or tapps_quick_check(). "
-                "BEFORE declaring done: Call tapps_validate_changed() or tapps_quality_gate(). "
-                "FINAL step: Call tapps_checklist()."
-            ),
-            "quick_start": [
-                "1. FIRST: Call tapps_session_start() to initialize the session",
-                "2. BEFORE using any library API: Call tapps_lookup_docs(library='<name>')",
-                "3. DURING edits: Call tapps_quick_check(file_path='<path>') after each change",
-                "4. BEFORE declaring done: Call tapps_validate_changed() - all gates MUST pass",
-                "5. FINAL step: Call tapps_checklist(task_type='<type>') to verify completeness",
-            ],
-            "critical_rules": [
-                "BLOCKING: tapps_quality_gate MUST pass before work is complete",
-                "BLOCKING: tapps_lookup_docs MUST be called before using external library APIs",
-                "REQUIRED: tapps_score_file MUST be called on every modified Python file",
-                "NEVER skip tapps_checklist as the final verification step",
-            ],
-            "pipeline": {
-                "name": "TAPPS Quality Pipeline",
-                "stages": [s.value for s in PipelineStage],
-                "current_hint": (
-                    "Start with tapps_pipeline_overview prompt, or follow stages in order."
-                ),
-                "stage_tools": {s.value: tools for s, tools in STAGE_TOOLS.items()},
-                "handoff_file": "docs/TAPPS_HANDOFF.md",
-                "runlog_file": "docs/TAPPS_RUNLOG.md",
-                "prompts_available": True,
-            },
-        },
-    )
+    data = _build_server_info_data(settings, installed, diagnostics, available_tools)
+    resp = success_response("tapps_server_info", elapsed_ms, data)
     return _with_nudges("tapps_server_info", resp)
 
 
@@ -337,96 +376,13 @@ async def _server_info_async() -> dict[str, Any]:
         ),
     )
 
-    available_tools: list[str] = []
-    try:
-        tool_manager = mcp._tool_manager
-        available_tools = list(tool_manager._tools.keys())
-    except AttributeError:
-        available_tools = [
-            "tapps_server_info",
-            "tapps_session_start",
-            "tapps_score_file",
-            "tapps_security_scan",
-            "tapps_quality_gate",
-            "tapps_lookup_docs",
-            "tapps_validate_config",
-            "tapps_validate_changed",
-            "tapps_quick_check",
-            "tapps_consult_expert",
-            "tapps_list_experts",
-            "tapps_checklist",
-            "tapps_project_profile",
-            "tapps_session_notes",
-            "tapps_impact_analysis",
-            "tapps_report",
-            "tapps_init",
-            "tapps_upgrade",
-            "tapps_doctor",
-            "tapps_dashboard",
-            "tapps_stats",
-            "tapps_feedback",
-            "tapps_research",
-            "tapps_dead_code",
-            "tapps_dependency_scan",
-            "tapps_dependency_graph",
-        ]
+    available_tools = _get_available_tools()
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_server_info", start)
 
-    from tapps_mcp.pipeline.models import STAGE_TOOLS, PipelineStage
-
-    resp = success_response(
-        "tapps_server_info",
-        elapsed_ms,
-        {
-            "server": {
-                "name": "TappsMCP",
-                "version": __version__,
-                "protocol_version": "2025-11-25",
-            },
-            "configuration": {
-                "project_root": str(settings.project_root),
-                "quality_preset": settings.quality_preset,
-                "log_level": settings.log_level,
-            },
-            "available_tools": available_tools,
-            "installed_checkers": [t.model_dump() for t in installed],
-            "diagnostics": diagnostics.model_dump(),
-            "recommended_workflow": (
-                "FIRST: Call tapps_session_start() to initialize. "
-                "BEFORE using any library: Call tapps_lookup_docs(). "
-                "AFTER editing Python files: "
-                "Call tapps_score_file(quick=True) or tapps_quick_check(). "
-                "BEFORE declaring done: Call tapps_validate_changed() or tapps_quality_gate(). "
-                "FINAL step: Call tapps_checklist()."
-            ),
-            "quick_start": [
-                "1. FIRST: Call tapps_session_start() to initialize the session",
-                "2. BEFORE using any library API: Call tapps_lookup_docs(library='<name>')",
-                "3. DURING edits: Call tapps_quick_check(file_path='<path>') after each change",
-                "4. BEFORE declaring done: Call tapps_validate_changed() - all gates MUST pass",
-                "5. FINAL step: Call tapps_checklist(task_type='<type>') to verify completeness",
-            ],
-            "critical_rules": [
-                "BLOCKING: tapps_quality_gate MUST pass before work is complete",
-                "BLOCKING: tapps_lookup_docs MUST be called before using external library APIs",
-                "REQUIRED: tapps_score_file MUST be called on every modified Python file",
-                "NEVER skip tapps_checklist as the final verification step",
-            ],
-            "pipeline": {
-                "name": "TAPPS Quality Pipeline",
-                "stages": [s.value for s in PipelineStage],
-                "current_hint": (
-                    "Start with tapps_pipeline_overview prompt, or follow stages in order."
-                ),
-                "stage_tools": {s.value: tools for s, tools in STAGE_TOOLS.items()},
-                "handoff_file": "docs/TAPPS_HANDOFF.md",
-                "runlog_file": "docs/TAPPS_RUNLOG.md",
-                "prompts_available": True,
-            },
-        },
-    )
+    data = _build_server_info_data(settings, installed, diagnostics, available_tools)
+    resp = success_response("tapps_server_info", elapsed_ms, data)
     return _with_nudges("tapps_server_info", resp)
 
 
@@ -480,8 +436,12 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
             "medium_count": result.medium_count,
             "low_count": result.low_count,
             "bandit_available": result.bandit_available,
-            "bandit_issues": serialize_issues(result.bandit_issues, limit=30),
-            "secret_findings": serialize_issues(result.secret_findings, limit=30),
+            "bandit_issues": serialize_issues(
+                result.bandit_issues, limit=_SECURITY_SCAN_FINDING_LIMIT
+            ),
+            "secret_findings": serialize_issues(
+                result.secret_findings, limit=_SECURITY_SCAN_FINDING_LIMIT
+            ),
         },
         degraded=not result.bandit_available,
     )
@@ -494,7 +454,7 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
         )
 
         findings: list[SecurityFindingOutput] = []
-        for i in result.bandit_issues[:50]:
+        for i in result.bandit_issues[:_SECURITY_SCAN_FINDING_LIMIT]:
             findings.append(
                 SecurityFindingOutput(
                     code=i.code,
@@ -505,11 +465,11 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
                     confidence=i.confidence,
                 )
             )
-        for f in result.secret_findings[:50]:
+        for f in result.secret_findings[:_SECURITY_SCAN_FINDING_LIMIT]:
             findings.append(
                 SecurityFindingOutput(
                     code=f.secret_type,
-                    message=f.secret_type,
+                    message=f.context or f.secret_type,
                     file=f.file_path,
                     line=f.line_number,
                     severity=f.severity,
@@ -529,9 +489,17 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
-        logger.debug("structured_output_failed: tapps_security_scan", exc_info=True)
+        logger.warning("structured_output_failed", tool="tapps_security_scan", exc_info=True)
 
     return _with_nudges("tapps_security_scan", resp)
+
+
+def _sanitize_lookup_param(value: str, max_len: int = 100) -> str:
+    """Strip control characters and truncate lookup parameters."""
+    import re as _re
+
+    cleaned = _re.sub(r"[\x00-\x1f\x7f]", "", value).strip()
+    return cleaned[:max_len]
 
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)
@@ -551,17 +519,34 @@ async def tapps_lookup_docs(
     start = time.perf_counter_ns()
     _record_call("tapps_lookup_docs")
 
-    from tapps_mcp.knowledge.cache import KBCache
-    from tapps_mcp.knowledge.lookup import LookupEngine
+    # Validate mode parameter
+    if mode not in _VALID_LOOKUP_MODES:
+        return error_response(
+            "tapps_lookup_docs",
+            "invalid_mode",
+            f"Invalid mode '{mode}'. Must be one of: {', '.join(sorted(_VALID_LOOKUP_MODES))}",
+        )
 
-    settings = load_settings()
-    cache = KBCache(settings.project_root / ".tapps-mcp-cache")
-    engine = LookupEngine(cache, api_key=settings.context7_api_key)
+    # Sanitize inputs
+    library = _sanitize_lookup_param(library)
+    topic = _sanitize_lookup_param(topic)
+
+    if not library:
+        return error_response("tapps_lookup_docs", "invalid_library", "Library name is required.")
+
+    from tapps_mcp.server_helpers import _get_lookup_engine
+
+    engine = _get_lookup_engine()
 
     try:
         result = await engine.lookup(library, topic, mode=mode)
-    finally:
-        await engine.close()
+    except Exception:
+        logger.warning("lookup_engine_error", library=library, topic=topic, exc_info=True)
+        return error_response(
+            "tapps_lookup_docs",
+            "lookup_failed",
+            f"Documentation lookup failed for '{library}' / '{topic}'.",
+        )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -580,13 +565,6 @@ async def tapps_lookup_docs(
     if result.fuzzy_score is not None:
         data["fuzzy_score"] = result.fuzzy_score
 
-    _record_execution(
-        "tapps_lookup_docs",
-        start,
-        status="success" if result.success else "failed",
-        error_code="api_key_missing" if (result.error and "API key" in result.error) else None,
-    )
-
     response = success_response("tapps_lookup_docs", elapsed_ms, data)
     response["success"] = result.success
     if result.error:
@@ -596,7 +574,8 @@ async def tapps_lookup_docs(
         try:
             from tapps_mcp.experts.engine import consult_expert
 
-            cr = consult_expert(
+            cr = await asyncio.to_thread(
+                consult_expert,
                 question=f"How do I use {library} for {topic}? Best practices and API usage.",
                 domain=_library_to_domain(library),
                 max_chunks=3,
@@ -613,9 +592,19 @@ async def tapps_lookup_docs(
                     "for more targeted questions."
                 )
         except Exception:
-            logger.debug("expert_fallback_failed", library=library, topic=topic)
+            logger.warning(
+                "expert_fallback_failed", library=library, topic=topic, exc_info=True
+            )
     if result.warning:
         response["warning"] = result.warning
+
+    _record_execution(
+        "tapps_lookup_docs",
+        start,
+        status="success" if result.success else "failed",
+        error_code="api_key_missing" if (result.error and "API key" in result.error) else None,
+    )
+
     return _with_nudges("tapps_lookup_docs", response)
 
 
@@ -635,14 +624,47 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
     except (ValueError, FileNotFoundError) as exc:
         return error_response("tapps_validate_config", "path_denied", str(exc))
 
-    content = resolved.read_text(encoding="utf-8")
+    # Validate config_type against allowlist
+    explicit_type = None if config_type == "auto" else config_type
+    if explicit_type is not None and explicit_type not in _VALID_CONFIG_TYPES:
+        return error_response(
+            "tapps_validate_config",
+            "invalid_config_type",
+            f"Invalid config_type '{explicit_type}'. "
+            f"Must be 'auto' or one of: {', '.join(sorted(_VALID_CONFIG_TYPES))}",
+        )
+
+    # Enforce file size limit
+    try:
+        file_size = resolved.stat().st_size
+    except OSError as exc:
+        return error_response("tapps_validate_config", "file_error", str(exc))
+    if file_size > _MAX_CONFIG_FILE_SIZE:
+        return error_response(
+            "tapps_validate_config",
+            "file_too_large",
+            f"Config file is {file_size:,} bytes, exceeding the {_MAX_CONFIG_FILE_SIZE:,} byte limit.",
+        )
+
+    try:
+        content = resolved.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        return error_response(
+            "tapps_validate_config",
+            "decode_error",
+            f"Cannot decode file as UTF-8: {exc}",
+        )
+
     from tapps_mcp.validators.base import validate_config
 
-    explicit_type = None if config_type == "auto" else config_type
     result = validate_config(str(resolved), content, config_type=explicit_type)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_config", start, file_path=str(resolved))
+
+    finding_count = len(result.findings)
+    critical_count = sum(1 for f in result.findings if f.severity == "critical")
+    warning_count = sum(1 for f in result.findings if f.severity == "warning")
 
     resp = success_response(
         "tapps_validate_config",
@@ -653,9 +675,9 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
             "valid": result.valid,
             "findings": [f.model_dump() for f in result.findings],
             "suggestions": result.suggestions,
-            "finding_count": len(result.findings),
-            "critical_count": sum(1 for f in result.findings if f.severity == "critical"),
-            "warning_count": sum(1 for f in result.findings if f.severity == "warning"),
+            "finding_count": finding_count,
+            "critical_count": critical_count,
+            "warning_count": warning_count,
         },
     )
 
@@ -679,15 +701,15 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
             file_path=result.file_path,
             config_type=result.config_type,
             valid=result.valid,
-            finding_count=len(result.findings),
-            critical_count=sum(1 for f in result.findings if f.severity == "critical"),
-            warning_count=sum(1 for f in result.findings if f.severity == "warning"),
+            finding_count=finding_count,
+            critical_count=critical_count,
+            warning_count=warning_count,
             findings=config_findings,
             suggestions=result.suggestions,
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
-        logger.debug("structured_output_failed: tapps_validate_config", exc_info=True)
+        logger.warning("structured_output_failed", tool="tapps_validate_config", exc_info=True)
 
     return _with_nudges("tapps_validate_config", resp)
 

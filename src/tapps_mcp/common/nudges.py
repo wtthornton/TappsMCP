@@ -215,6 +215,81 @@ def compute_next_steps(
     return steps[:_MAX_NUDGES]
 
 
+# ---------------------------------------------------------------------------
+# Multi-step workflow suggestions
+# ---------------------------------------------------------------------------
+# Each rule: (condition(ctx) -> bool, ordered step list)
+_WorkflowRule = tuple[Any, list[str]]  # (callable, list[str])
+
+_WORKFLOW_MIN_CHANGED_FILES = 2  # trigger review pipeline when > 1 changed file
+_WORKFLOW_LOW_SCORE_THRESHOLD = 70  # trigger fix-rescore loop below this score
+
+_WORKFLOW_RULES: dict[str, list[_WorkflowRule]] = {
+    "tapps_session_start": [
+        (
+            lambda ctx: (
+                (ctx or {}).get("changed_python_file_count", 0) >= _WORKFLOW_MIN_CHANGED_FILES
+            ),
+            [
+                "Multiple changed Python files detected.",
+                "Run /tapps-review-pipeline to spawn parallel review-fixer agents.",
+                "Or: call tapps_validate_changed() to batch-check all files.",
+            ],
+        ),
+    ],
+    "tapps_score_file": [
+        (
+            lambda ctx: (
+                (ctx or {}).get("overall_score", 100) < _WORKFLOW_LOW_SCORE_THRESHOLD
+            ),
+            [
+                "Score is below 70 - fix the issues flagged above.",
+                "Re-run tapps_score_file() to verify improvements.",
+                "Then call tapps_quality_gate() to confirm the file passes.",
+            ],
+        ),
+    ],
+    "tapps_quality_gate": [
+        (
+            lambda ctx: (ctx or {}).get("gate_passed") is False,
+            [
+                "Quality gate failed - address the failing categories.",
+                "Fix the highest-impact issues first (see suggestions above).",
+                "Re-run tapps_quality_gate() after fixes to verify.",
+            ],
+        ),
+    ],
+}
+
+
+def compute_suggested_workflow(
+    tool_name: str,
+    context: dict[str, Any] | None = None,
+) -> list[str] | None:
+    """Return an ordered workflow suggestion for the given tool, or None.
+
+    Unlike :func:`compute_next_steps` which returns single-step nudges,
+    this returns a multi-step workflow when the tool output indicates a
+    non-trivial follow-up sequence (e.g. review pipeline for many changed
+    files, or fix-rescore-gate loop for low scores).
+
+    Args:
+        tool_name: The tool that was just called.
+        context: Optional dict with tool-specific state.
+
+    Returns:
+        Ordered list of workflow step strings, or ``None`` if no workflow
+        is triggered.
+    """
+    rules = _WORKFLOW_RULES.get(tool_name)
+    if not rules:
+        return None
+    for condition, steps in rules:
+        if condition(context):
+            return list(steps)
+    return None
+
+
 def compute_pipeline_progress() -> dict[str, Any]:
     """Return pipeline stage completion status based on which tools have been called.
 

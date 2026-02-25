@@ -13,12 +13,13 @@ from tapps_mcp.pipeline.platform_generators import generate_subagent_definitions
 class TestClaudeAgents:
     """Tests for Claude Code subagent generation."""
 
-    def test_creates_three_agents(self, tmp_path):
+    def test_creates_all_agents(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         agents_dir = tmp_path / ".claude" / "agents"
         assert (agents_dir / "tapps-reviewer.md").exists()
         assert (agents_dir / "tapps-researcher.md").exists()
         assert (agents_dir / "tapps-validator.md").exists()
+        assert (agents_dir / "tapps-review-fixer.md").exists()
 
     def test_reviewer_has_comma_separated_tools(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -67,22 +68,58 @@ class TestClaudeAgents:
 
     def test_agents_have_yaml_frontmatter(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
-        for name in ["tapps-reviewer.md", "tapps-researcher.md", "tapps-validator.md"]:
+        for name in [
+            "tapps-reviewer.md",
+            "tapps-researcher.md",
+            "tapps-validator.md",
+            "tapps-review-fixer.md",
+        ]:
             content = (tmp_path / ".claude" / "agents" / name).read_text()
             assert content.startswith("---\n"), f"{name} missing YAML frontmatter"
             # Should have closing ---
             assert content.count("---") >= 2, f"{name} missing closing ---"
 
+    def test_review_fixer_has_write_and_edit_tools(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "Write" in content
+        assert "Edit" in content
+        assert "Bash" in content
+
+    def test_review_fixer_references_score_and_gate(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "tapps_score_file" in content
+        assert "tapps_quality_gate" in content
+
+    def test_review_fixer_has_model_sonnet(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "model: sonnet" in content
+
 
 class TestCursorAgents:
     """Tests for Cursor subagent generation."""
 
-    def test_creates_three_agents(self, tmp_path):
+    def test_creates_all_agents(self, tmp_path):
         generate_subagent_definitions(tmp_path, "cursor")
         agents_dir = tmp_path / ".cursor" / "agents"
         assert (agents_dir / "tapps-reviewer.md").exists()
         assert (agents_dir / "tapps-researcher.md").exists()
         assert (agents_dir / "tapps-validator.md").exists()
+        assert (agents_dir / "tapps-review-fixer.md").exists()
+
+    def test_review_fixer_has_edit_tools(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "cursor")
+        content = (tmp_path / ".cursor" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "edit_file" in content
+        assert "run_terminal_command" in content
+
+    def test_review_fixer_uses_short_tool_names(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "cursor")
+        content = (tmp_path / ".cursor" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "tapps_score_file" in content
+        assert "mcp__tapps-mcp__" not in content
 
     def test_reviewer_uses_yaml_list_tools(self, tmp_path):
         """Cursor uses YAML array for tools, not comma-separated string."""
@@ -143,7 +180,7 @@ class TestSkipExisting:
 
     def test_result_dict_tracks_created_and_skipped(self, tmp_path):
         result = generate_subagent_definitions(tmp_path, "claude")
-        assert len(result["created"]) == 3
+        assert len(result["created"]) == 4
         assert len(result["skipped"]) == 0
 
     def test_unknown_platform_returns_error(self, tmp_path):

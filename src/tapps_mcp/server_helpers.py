@@ -6,6 +6,7 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from tapps_mcp.knowledge.lookup import LookupEngine as _LookupEngineType
     from tapps_mcp.scoring.scorer import CodeScorer as _CodeScorerType
 
 # ---------------------------------------------------------------------------
@@ -29,6 +30,33 @@ def _reset_scorer_cache() -> None:
     """Reset the cached :class:`CodeScorer` singleton (for testing)."""
     global _scorer  # noqa: PLW0603
     _scorer = None
+
+
+# ---------------------------------------------------------------------------
+# LookupEngine singleton — avoids re-instantiating on every tool call.
+# ---------------------------------------------------------------------------
+
+_lookup_engine: _LookupEngineType | None = None
+
+
+def _get_lookup_engine() -> _LookupEngineType:
+    """Return a lazily-initialized :class:`LookupEngine` singleton."""
+    global _lookup_engine  # noqa: PLW0603
+    if _lookup_engine is None:
+        from tapps_mcp.config.settings import load_settings
+        from tapps_mcp.knowledge.cache import KBCache
+        from tapps_mcp.knowledge.lookup import LookupEngine
+
+        settings = load_settings()
+        cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+        _lookup_engine = LookupEngine(cache, settings=settings)
+    return _lookup_engine
+
+
+def _reset_lookup_engine_cache() -> None:
+    """Reset the cached :class:`LookupEngine` singleton (for testing)."""
+    global _lookup_engine  # noqa: PLW0603
+    _lookup_engine = None
 
 
 def error_response(tool_name: str, code: str, message: str) -> dict[str, Any]:

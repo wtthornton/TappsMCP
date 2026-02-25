@@ -10,6 +10,7 @@ from tapps_mcp.common.nudges import (
     _MAX_NUDGES,
     compute_next_steps,
     compute_pipeline_progress,
+    compute_suggested_workflow,
 )
 from tapps_mcp.tools.checklist import CallTracker
 
@@ -214,6 +215,98 @@ class TestComputeNextSteps:
 
 
 # ---------------------------------------------------------------------------
+# compute_suggested_workflow
+# ---------------------------------------------------------------------------
+
+
+class TestComputeSuggestedWorkflow:
+    """Tests for compute_suggested_workflow()."""
+
+    def test_unknown_tool_returns_none(self) -> None:
+        result = compute_suggested_workflow("tapps_nonexistent_tool")
+        assert result is None
+
+    def test_no_context_returns_none(self) -> None:
+        result = compute_suggested_workflow("tapps_session_start")
+        assert result is None
+
+    def test_session_start_with_many_changed_files(self) -> None:
+        result = compute_suggested_workflow(
+            "tapps_session_start",
+            {"changed_python_file_count": 5},
+        )
+        assert result is not None
+        assert len(result) >= 2
+        assert any("review-pipeline" in s for s in result)
+
+    def test_session_start_with_two_files_triggers(self) -> None:
+        result = compute_suggested_workflow(
+            "tapps_session_start",
+            {"changed_python_file_count": 2},
+        )
+        assert result is not None
+
+    def test_session_start_with_one_file_returns_none(self) -> None:
+        result = compute_suggested_workflow(
+            "tapps_session_start",
+            {"changed_python_file_count": 1},
+        )
+        assert result is None
+
+    def test_session_start_with_zero_files_returns_none(self) -> None:
+        result = compute_suggested_workflow(
+            "tapps_session_start",
+            {"changed_python_file_count": 0},
+        )
+        assert result is None
+
+    def test_score_file_low_score(self) -> None:
+        result = compute_suggested_workflow(
+            "tapps_score_file",
+            {"overall_score": 55},
+        )
+        assert result is not None
+        assert len(result) >= 2
+        assert any("tapps_score_file" in s for s in result)
+        assert any("tapps_quality_gate" in s for s in result)
+
+    def test_score_file_high_score_returns_none(self) -> None:
+        result = compute_suggested_workflow(
+            "tapps_score_file",
+            {"overall_score": 85},
+        )
+        assert result is None
+
+    def test_quality_gate_failed(self) -> None:
+        result = compute_suggested_workflow(
+            "tapps_quality_gate",
+            {"gate_passed": False},
+        )
+        assert result is not None
+        assert len(result) >= 2
+        assert any("tapps_quality_gate" in s for s in result)
+
+    def test_quality_gate_passed_returns_none(self) -> None:
+        result = compute_suggested_workflow(
+            "tapps_quality_gate",
+            {"gate_passed": True},
+        )
+        assert result is None
+
+    def test_returns_copy_not_reference(self) -> None:
+        """Ensure returned list is a copy, not the original."""
+        result1 = compute_suggested_workflow(
+            "tapps_score_file",
+            {"overall_score": 50},
+        )
+        result2 = compute_suggested_workflow(
+            "tapps_score_file",
+            {"overall_score": 50},
+        )
+        assert result1 is not result2
+
+
+# ---------------------------------------------------------------------------
 # compute_pipeline_progress
 # ---------------------------------------------------------------------------
 
@@ -324,3 +417,49 @@ class TestWithNudges:
         )
         steps = result["data"].get("next_steps", [])
         assert any("FAILED" in s for s in steps)
+
+    def test_suggested_workflow_injected_when_triggered(self) -> None:
+        from tapps_mcp.server import _with_nudges
+
+        CallTracker.record("tapps_score_file")
+        response: dict[str, Any] = {
+            "success": True,
+            "data": {"file_path": "test.py", "overall_score": 50},
+        }
+        result = _with_nudges(
+            "tapps_score_file",
+            response,
+            {"overall_score": 50},
+        )
+        assert "suggested_workflow" in result["data"]
+        assert isinstance(result["data"]["suggested_workflow"], list)
+        assert len(result["data"]["suggested_workflow"]) >= 2
+
+    def test_suggested_workflow_absent_when_not_triggered(self) -> None:
+        from tapps_mcp.server import _with_nudges
+
+        CallTracker.record("tapps_score_file")
+        response: dict[str, Any] = {
+            "success": True,
+            "data": {"file_path": "test.py", "overall_score": 90},
+        }
+        result = _with_nudges(
+            "tapps_score_file",
+            response,
+            {"overall_score": 90},
+        )
+        assert "suggested_workflow" not in result["data"]
+
+    def test_suggested_workflow_absent_on_error(self) -> None:
+        from tapps_mcp.server import _with_nudges
+
+        response: dict[str, Any] = {
+            "success": False,
+            "error": {"code": "test", "message": "test"},
+        }
+        result = _with_nudges(
+            "tapps_score_file",
+            response,
+            {"overall_score": 50},
+        )
+        assert "data" not in result or "suggested_workflow" not in result.get("data", {})

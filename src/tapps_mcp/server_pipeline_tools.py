@@ -349,7 +349,29 @@ async def tapps_session_start(
         "project_profile": data.get("project_profile"),
     })
 
-    return _with_nudges("tapps_session_start", resp)
+    # Detect changed Python files for workflow nudges
+    nudge_ctx: dict[str, Any] = {}
+    try:
+        import subprocess
+
+        diff_result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=str(load_settings().project_root),
+            timeout=5,
+            check=False,
+        )
+        if diff_result.returncode == 0:
+            changed_py = [
+                f for f in diff_result.stdout.strip().splitlines() if f.endswith(".py")
+            ]
+            nudge_ctx["changed_python_file_count"] = len(changed_py)
+    except Exception:  # noqa: S110
+        # Best-effort: git may not be available or repo may not exist
+        pass
+
+    return _with_nudges("tapps_session_start", resp, nudge_ctx)
 
 
 async def tapps_init(

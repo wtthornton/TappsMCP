@@ -117,6 +117,17 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
 7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).
 
+### Review Pipeline (multi-file)
+
+For reviewing and fixing multiple files in parallel, use the `/tapps-review-pipeline` skill:
+
+1. It detects changed Python files and spawns `tapps-review-fixer` agents (one per file or batch)
+2. Each agent scores the file, fixes issues, and runs the quality gate
+3. Results are merged and validated with `tapps_validate_changed`
+4. A summary table shows before/after scores, gate status, and fixes applied
+
+You can also invoke the `tapps-review-fixer` agent directly on individual files for combined review+fix in a single pass.
+
 ---
 
 ## Checklist task types
