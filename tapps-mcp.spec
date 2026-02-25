@@ -1,25 +1,12 @@
-# PyInstaller spec for tapps-mcp one-file Windows executable.
-# Run from repo root: pyinstaller tapps-mcp.spec
-# Output: dist/tapps-mcp.exe
+# -*- mode: python ; coding: utf-8 -*-
 
-from pathlib import Path
-
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
-# Ensure tapps_mcp and all subpackages (including tools.checklist) are included
-hiddenimports = collect_submodules("tapps_mcp")
-datas = collect_data_files("tapps_mcp")
-
-# Repo root and src for analysis
-repo_root = Path(SPECPATH)
-pathex = [str(repo_root / "src")]
 
 a = Analysis(
-    [str(repo_root / "scripts" / "tapps_mcp_console.py")],
-    pathex=pathex,
+    ['scripts\\run_tapps_mcp.py'],
+    pathex=[],
     binaries=[],
-    datas=datas,
-    hiddenimports=hiddenimports,
+    datas=[],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -27,7 +14,6 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -36,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="tapps-mcp",
+    name='tapps-mcp',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

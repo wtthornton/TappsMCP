@@ -1,3 +1,3 @@
 """TappsMCP: MCP server providing code quality tools."""
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"

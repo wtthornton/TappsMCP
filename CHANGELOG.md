@@ -30,6 +30,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **tapps_dead_code** — Uses `dead_code_whitelist_patterns` from settings when scanning.
 - **Epic 14** — Marked complete. Epic 13 status updated: 6/8 tools wired, outputSchema not yet in tool registration.
 
+## [0.4.2] - 2026-02-25
+
+### Removed
+
+- **Cursor stop hook** — Removed the Cursor `stop` hook and script (tapps-stop.ps1/.sh). Validation before session end is now manual via `tapps-mcp validate-changed` or the MCP tool.
+
+### Added
+
+- **`tapps-mcp validate-changed` CLI** — New subcommand to run the same validation as the MCP tool from the terminal: `tapps-mcp validate-changed [--quick|--full] [--project-root PATH]`. Exits with code 1 if the gate fails.
+
+### Changed
+
+- **Cursor hook generation** — Init/upgrade no longer add a stop hook; existing stop scripts are removed on upgrade.
+- **Pipeline rule** — `.cursor/rules/tapps-pipeline.mdc` mentions the CLI alternative for pre-completion validation.
+
 ## [0.3.0] - 2026-02-23
 
 ### Added (Epic 18: MCP Upgrade Tool & Exe Path Handling)
