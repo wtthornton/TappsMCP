@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import subprocess
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -16,6 +18,27 @@ logger = structlog.get_logger(__name__)
 # Maximum files to validate in a single batch call.
 # Raised from 10 to 50 to handle larger changesets without silent truncation.
 MAX_BATCH_FILES = 50
+
+# Git diff timeout (seconds). Kept low so the "no changed files" path returns quickly.
+_GIT_DIFF_TIMEOUT = 5
+
+
+def _git_diff_names(project_root: Path, *args: str) -> set[str]:
+    """Run git diff --name-only with given args; return set of filenames or empty."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", *args],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=_GIT_DIFF_TIMEOUT,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout:
+            return set(result.stdout.strip().splitlines())
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return set()
 
 
 @dataclass
@@ -36,7 +59,8 @@ def detect_changed_python_files(
 ) -> list[Path]:
     """Detect changed Python files using git diff.
 
-    Checks both unstaged and staged changes, deduplicates results.
+    Runs unstaged and staged git diffs in parallel for minimal latency.
+    Deduplicates and returns sorted .py paths that exist.
 
     Args:
         project_root: The git repository root.
@@ -46,38 +70,18 @@ def detect_changed_python_files(
         Sorted, deduplicated list of changed .py file paths.
     """
     files: set[str] = set()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        fut_unstaged = executor.submit(_git_diff_names, project_root, base_ref)
+        fut_staged = executor.submit(_git_diff_names, project_root, "--cached")
+        try:
+            files.update(fut_unstaged.result(timeout=_GIT_DIFF_TIMEOUT + 1))
+        except (FuturesTimeoutError, OSError):
+            logger.warning("git_diff_unstaged_failed")
+        try:
+            files.update(fut_staged.result(timeout=_GIT_DIFF_TIMEOUT + 1))
+        except (FuturesTimeoutError, OSError):
+            logger.warning("git_diff_staged_failed")
 
-    # Unstaged changes
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--name-only", base_ref],
-            cwd=str(project_root),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        if result.returncode == 0:
-            files.update(result.stdout.strip().splitlines())
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        logger.warning("git_diff_unstaged_failed")
-
-    # Staged changes
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--name-only", "--cached"],
-            cwd=str(project_root),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        if result.returncode == 0:
-            files.update(result.stdout.strip().splitlines())
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        logger.warning("git_diff_staged_failed")
-
-    # Filter to .py files that exist
     py_files: list[Path] = []
     for raw_name in sorted(files):
         cleaned = raw_name.strip()

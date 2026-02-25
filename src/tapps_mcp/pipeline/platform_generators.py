@@ -444,12 +444,14 @@ exit 0
     "tapps-stop.sh": """\
 #!/usr/bin/env bash
 # TappsMCP stop hook (Cursor)
-# Uses followup_message to prompt validation before session ends.
-# Note: Cursor does not support exit-2 blocking on the stop event.
-INPUT=$(cat)
-MSG="Before ending: please run tapps_validate_changed"
-MSG="$MSG to confirm all changed files pass quality gates."
-echo "{\"followup_message\": \"$MSG\"}"
+# If validation passed recently (marker < 60 min), no followup (avoids loop). Else prompt.
+MARKER=".tapps-mcp/sessions/last_validate_ok"
+if [[ -f "$MARKER" ]] && [[ -n $(find "$MARKER" -mmin -60 2>/dev/null) ]]; then
+  echo '{}'
+  exit 0
+fi
+MSG="Before ending: please run tapps_validate_changed to confirm all changed files pass quality gates."
+echo "{\\"followup_message\\": \\"$MSG\\"}"
 exit 0
 """,
 }
@@ -499,9 +501,17 @@ exit 0
 """,
     "tapps-stop.ps1": """\
 # TappsMCP stop hook (Cursor)
-# Uses followup_message to prompt validation before session ends.
-# Note: Cursor does not support exit-2 blocking on the stop event.
+# If validation passed recently (marker < 60 min), output no followup (avoids loop).
+# Otherwise prompt to run tapps_validate_changed.
 $null = $input | Out-Null
+$marker = ".tapps-mcp/sessions/last_validate_ok"
+if (Test-Path $marker) {
+    $age = (Get-Date) - (Get-Item $marker -ErrorAction SilentlyContinue).LastWriteTime
+    if ($age -and $age.TotalMinutes -le 60) {
+        Write-Output "{}"
+        exit 0
+    }
+}
 $msg = "Before ending: please run tapps_validate_changed"
 $msg += " to confirm all changed files pass quality gates."
 Write-Output "{`"followup_message`": `"$msg`"}"
@@ -910,10 +920,12 @@ def generate_claude_hooks(
     hooks_dir = project_root / ".claude" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
+    # Stop hook is always overwritten so upgrade gets the conditional-marker fix.
+    scripts_always_overwrite = {"tapps-stop.ps1", "tapps-stop.sh"}
     scripts_created: list[str] = []
     for name, content in script_templates.items():
         script_path = hooks_dir / name
-        if not script_path.exists():
+        if not script_path.exists() or name in scripts_always_overwrite:
             script_path.write_text(content, encoding="utf-8")
             if not win:
                 script_path.chmod(
@@ -992,10 +1004,12 @@ def generate_cursor_hooks(
     hooks_dir = project_root / ".cursor" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
+    # Stop hook is always overwritten so upgrade gets the conditional-marker fix.
+    scripts_always_overwrite = {"tapps-stop.ps1", "tapps-stop.sh"}
     scripts_created: list[str] = []
     for name, content in script_templates.items():
         script_path = hooks_dir / name
-        if not script_path.exists():
+        if not script_path.exists() or name in scripts_always_overwrite:
             script_path.write_text(content, encoding="utf-8")
             if not win:
                 script_path.chmod(

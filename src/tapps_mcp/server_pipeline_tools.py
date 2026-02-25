@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
-_VALIDATE_CONCURRENCY = 5
+_VALIDATE_CONCURRENCY = 10
 
 # Prevent garbage collection of fire-and-forget background tasks.
 # Without strong references, asyncio tasks may be collected before completion.
@@ -46,34 +46,87 @@ _ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT = ToolAnnotations(
 )
 
 
+_PROGRESS_HEARTBEAT_INTERVAL = 5  # seconds between progress notifications
+
+# Marker file for stop hook: if present and recent, hook skips "run validate" reminder.
+_VALIDATE_OK_MARKER = ".tapps-mcp/sessions/last_validate_ok"
+
+
+def _write_validate_ok_marker(project_root: Path) -> None:
+    """Write a marker so the Cursor stop hook can skip the reminder when validation just passed."""
+    try:
+        marker = project_root / _VALIDATE_OK_MARKER
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(time.time()), encoding="utf-8")
+    except OSError:
+        pass
+
+
+async def _validate_progress_heartbeat(
+    ctx: Any,
+    total_files: int,
+    start_ns: int,
+    stop_event: asyncio.Event,
+) -> None:
+    """Send progress notifications every _PROGRESS_HEARTBEAT_INTERVAL seconds.
+    Stops when stop_event is set. No-op if ctx has no report_progress.
+    """
+    report = getattr(ctx, "report_progress", None)
+    if not callable(report):
+        return
+    while True:
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=_PROGRESS_HEARTBEAT_INTERVAL)
+        except asyncio.TimeoutError:
+            pass
+        if stop_event.is_set():
+            return
+        elapsed_sec = (time.perf_counter_ns() - start_ns) / 1_000_000_000.0
+        try:
+            await report(
+                progress=elapsed_sec,
+                total=None,
+                message=f"Validating {total_files} files... (in progress)",
+            )
+        except Exception:
+            pass
+
+
 async def tapps_validate_changed(
     file_paths: str = "",
     base_ref: str = "HEAD",
     preset: str = "standard",
     include_security: bool = True,
+    quick: bool = True,
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """REQUIRED before declaring work complete on multi-file changes.
     Detects changed Python files (via git diff) or accepts an explicit
-    comma-separated list. Runs score + quality gate + security scan on each
+    comma-separated list. Runs score + quality gate (+ optional security) on each
     file. Skipping means quality issues in changed files go undetected.
 
     If this tool is unavailable or rejected, use tapps_quick_check on
     individual changed files as a fallback.
 
+    Default is quick=True (ruff-only, typically under 10s). Pass quick=False
+    for full validation (ruff, mypy, bandit, radon, vulture per file, 1-5+ min).
+
     Args:
         file_paths: Comma-separated file paths (empty = auto-detect via git diff).
         base_ref: Git ref to diff against (default: HEAD for unstaged changes).
         preset: Quality gate preset - "standard", "strict", or "framework".
-        include_security: Whether to run security scan on each file.
+        include_security: Whether to run security scan on each file (ignored if quick=True).
+        quick: If True (default), ruff-only scoring for speed. If False, full validation.
+        ctx: Optional MCP context (injected by host); used for progress notifications.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
     from tapps_mcp.server_helpers import _get_scorer, ensure_session_initialized
 
     start = time.perf_counter_ns()
     _record_call("tapps_validate_changed")
-    await ensure_session_initialized()
 
-    from tapps_mcp.gates.evaluator import evaluate_gate
+    # Fast path: resolve changed files first. Session init and scorer are only
+    # used when there are files to validate (see ensure_session_initialized below).
     from tapps_mcp.tools.batch_validator import (
         MAX_BATCH_FILES,
         detect_changed_python_files,
@@ -95,7 +148,16 @@ async def tapps_validate_changed(
 
     if not paths:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-        _record_execution("tapps_validate_changed", start)
+        # Defer metrics recording so we return immediately and avoid client timeout/abort.
+        # Metrics are recorded in a background task after the response is sent.
+        def _deferred_record() -> None:
+            _record_execution("tapps_validate_changed", start)
+
+        task = asyncio.create_task(asyncio.to_thread(_deferred_record))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+
+        _write_validate_ok_marker(settings.project_root)
         resp = success_response(
             "tapps_validate_changed",
             elapsed_ms,
@@ -112,53 +174,91 @@ async def tapps_validate_changed(
     capped = len(paths) > MAX_BATCH_FILES
     extra_count = len(paths) - MAX_BATCH_FILES if capped else 0
     paths = paths[:MAX_BATCH_FILES]
+    total_files = len(paths)
 
-    # Warm the dependency cache if empty so scorer applies vulnerability penalties.
-    if settings.dependency_scan_enabled:
-        from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
-
-        if not get_dependency_findings(str(settings.project_root)):
-            await _warm_dependency_cache(settings)
-
-    scorer = _get_scorer()
-    sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
-
-    async def _validate_one(path: Path) -> dict[str, Any]:
-        async with sem:
-            file_result: dict[str, Any] = {"file_path": str(path)}
+    stop_progress = asyncio.Event()
+    progress_task: asyncio.Task[None] | None = None
+    if ctx is not None and total_files > 0:
+        report = getattr(ctx, "report_progress", None)
+        if callable(report):
             try:
-                score = await scorer.score_file(path)
-                file_result["overall_score"] = round(score.overall_score, 2)
+                await report(
+                    progress=0.0,
+                    total=None,
+                    message=f"Validating {total_files} files...",
+                )
+            except Exception:
+                pass
+        progress_task = asyncio.create_task(
+            _validate_progress_heartbeat(ctx, total_files, start, stop_progress),
+        )
 
-                gate = evaluate_gate(score, preset=preset)
-                file_result["gate_passed"] = gate.passed
-                if gate.failures:
-                    file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
+    try:
+        await ensure_session_initialized()
 
-                if include_security:
-                    from tapps_mcp.security.secret_scanner import SecretScanner
+        from tapps_mcp.gates.evaluator import evaluate_gate
 
-                    # Reuse bandit results from scoring; only run secret scanner
-                    secret_result = SecretScanner().scan_file(str(path))
+        # Warm dependency cache in background when empty (do not block validation).
+        if settings.dependency_scan_enabled and not quick:
+            from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
 
-                    bandit_count = len(score.security_issues)
-                    secret_count = secret_result.total_findings
+            if not get_dependency_findings(str(settings.project_root)):
+                task = asyncio.create_task(_warm_dependency_cache(settings))
+                _background_tasks.add(task)
+                task.add_done_callback(_background_tasks.discard)
 
-                    bandit_crit_high = sum(
-                        1 for i in score.security_issues if i.severity in ("critical", "high")
-                    )
-                    file_result["security_passed"] = (
-                        bandit_crit_high + secret_result.high_severity
-                    ) == 0
-                    file_result["security_issues"] = bandit_count + secret_count
-            except Exception as exc:
-                file_result["errors"] = [str(exc)]
-            return file_result
+        scorer = _get_scorer()
+        sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
+        do_security = include_security and not quick
 
-    raw_results = await asyncio.gather(
-        *[_validate_one(p) for p in paths],
-        return_exceptions=True,
-    )
+        async def _validate_one(path: Path) -> dict[str, Any]:
+            async with sem:
+                file_result: dict[str, Any] = {"file_path": str(path)}
+                try:
+                    if quick:
+                        score = await asyncio.to_thread(scorer.score_file_quick, path)
+                    else:
+                        score = await scorer.score_file(path)
+                    file_result["overall_score"] = round(score.overall_score, 2)
+
+                    gate = evaluate_gate(score, preset=preset)
+                    file_result["gate_passed"] = gate.passed
+                    if gate.failures:
+                        file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
+
+                    if do_security:
+                        from tapps_mcp.security.secret_scanner import SecretScanner
+
+                        # Reuse bandit results from scoring; only run secret scanner
+                        secret_result = SecretScanner().scan_file(str(path))
+
+                        bandit_count = len(score.security_issues)
+                        secret_count = secret_result.total_findings
+
+                        bandit_crit_high = sum(
+                            1 for i in score.security_issues if i.severity in ("critical", "high")
+                        )
+                        file_result["security_passed"] = (
+                            bandit_crit_high + secret_result.high_severity
+                        ) == 0
+                        file_result["security_issues"] = bandit_count + secret_count
+                    elif quick:
+                        file_result["security_passed"] = True
+                        file_result["security_issues"] = 0
+                except Exception as exc:
+                    file_result["errors"] = [str(exc)]
+                return file_result
+
+        raw_results = await asyncio.gather(
+            *[_validate_one(p) for p in paths],
+            return_exceptions=True,
+        )
+    finally:
+        if progress_task is not None:
+            stop_progress.set()
+            progress_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await progress_task
 
     results: list[dict[str, Any]] = []
     for i, raw in enumerate(raw_results):
@@ -171,11 +271,15 @@ async def tapps_validate_changed(
     total_sec = sum(r.get("security_issues", 0) for r in results)
 
     summary = format_batch_summary(results)
+    if quick:
+        summary = f"[Quick mode - ruff only] {summary}"
     if capped:
         summary += f" ({extra_count} additional files not validated - cap {MAX_BATCH_FILES})"
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_changed", start, gate_passed=all_passed)
+    if all_passed:
+        _write_validate_ok_marker(settings.project_root)
 
     resp = success_response(
         "tapps_validate_changed",

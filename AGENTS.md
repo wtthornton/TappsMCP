@@ -42,7 +42,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
 | **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
 | **tapps_quality_gate** | **Before declaring work complete** - ensures the file passes the configured quality preset. Do not consider work done until this passes (or the user accepts the risk). |
-| **tapps_validate_changed** | **Before declaring multi-file work complete** - auto-detects changed files via git diff and runs score + gate + security on each. |
+| **tapps_validate_changed** | **Before declaring multi-file work complete** - auto-detects changed files via git diff and runs score + gate on each. **Default is quick (ruff-only, under ~10s).** Pass `quick: false` for full validation (mypy, bandit, radon, vulture, 1–5+ min). Sends progress notifications when the client supports them. |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library - use the returned docs to avoid hallucinated APIs. |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
 | **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file -> `domain="testing-strategies"`). |
@@ -225,3 +225,5 @@ The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard 
 2. Verify the TappsMCP server is running: `tapps-mcp doctor`
 3. Check that your permission mode is not `dontAsk` (which auto-denies unlisted tools)
 4. As a last resort, use `tapps_quick_check` on individual files instead of `tapps_validate_changed`
+
+**If `tapps_validate_changed` is too slow or times out:** The tool **defaults to quick mode** (ruff-only, under ~10s). If you explicitly pass `quick: false` for full validation and it times out, increase the MCP request timeout for the TappsMCP server (e.g. to 300000 ms / 5 minutes) in your IDE or client config. The server sends progress notifications every few seconds when the client supports them.
