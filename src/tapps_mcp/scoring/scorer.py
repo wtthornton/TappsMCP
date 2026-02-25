@@ -118,7 +118,7 @@ class CodeScorer:
         )
 
         # Build category scores
-        categories = self._build_categories(code, resolved, parallel)
+        categories, dep_vuln_count = self._build_categories(code, resolved, parallel)
         overall = self._calculate_overall(categories)
 
         return ScoreResult(
@@ -129,7 +129,7 @@ class CodeScorer:
             type_issues=parallel.type_issues,
             security_issues=parallel.security_issues,
             dead_code_count=len(parallel.dead_code),
-            dependency_vuln_count=self._dependency_vuln_count,
+            dependency_vuln_count=dep_vuln_count,
             degraded=parallel.degraded,
             missing_tools=parallel.missing_tools,
             tool_errors=parallel.tool_errors,
@@ -148,10 +148,12 @@ class CodeScorer:
         code: str,
         file_path: Path,
         parallel: ParallelResults,
-    ) -> dict[str, CategoryScore]:
+    ) -> tuple[dict[str, CategoryScore], int]:
+        """Build all category scores, returning (categories, dependency_vuln_count)."""
         w = self._weights
         cats: dict[str, CategoryScore] = {}
-        self._dependency_vuln_count = 0
+        dependency_vuln_count = 0
+        dead_code_struct_penalty = 0.0
 
         # 1) Complexity (radon cc -> 0-10, lower complexity = higher quality)
         cplx_details: dict[str, object] = {"functions_analysed": len(parallel.radon_cc)}
@@ -213,8 +215,8 @@ class CodeScorer:
             suggestions=sec_suggestions,
         )
 
-        # Store for ScoreResult.dependency_vuln_count
-        self._dependency_vuln_count = len(dep_findings)
+        # Track for ScoreResult.dependency_vuln_count
+        dependency_vuln_count = len(dep_findings)
 
         # 3) Maintainability (radon mi -> 0-10, with dead code penalty)
         maint_details: dict[str, object] = {"mi_value": parallel.radon_mi}
@@ -240,10 +242,7 @@ class CodeScorer:
             maint_details["dead_code_count"] = len(parallel.dead_code)
             maint_details["dead_code_penalty"] = round(dc_maint_penalty, 2)
             maint_suggestions = suggest_dead_code_fixes(parallel.dead_code[:5])
-            # Store structure penalty for later use
-            self._dead_code_struct_penalty = dc_struct_penalty
-        else:
-            self._dead_code_struct_penalty = 0.0
+            dead_code_struct_penalty = dc_struct_penalty
 
         cats["maintainability"] = CategoryScore(
             name="maintainability",
@@ -279,8 +278,8 @@ class CodeScorer:
 
         # 6) Structure (project layout, with dead code penalty)
         structure = self._structure_score(file_path)
-        if self._dead_code_struct_penalty > 0:
-            structure = clamp_individual(structure - self._dead_code_struct_penalty / 10.0)
+        if dead_code_struct_penalty > 0:
+            structure = clamp_individual(structure - dead_code_struct_penalty / 10.0)
         cats["structure"] = CategoryScore(
             name="structure",
             score=structure,
@@ -313,7 +312,7 @@ class CodeScorer:
             details={"issue_count": len(parallel.type_issues)},
         )
 
-        return cats
+        return cats, dependency_vuln_count
 
     def _calculate_overall(self, categories: dict[str, CategoryScore]) -> float:
         """Weighted overall score (0-100).

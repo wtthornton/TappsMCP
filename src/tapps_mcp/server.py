@@ -643,7 +643,8 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
         return error_response(
             "tapps_validate_config",
             "file_too_large",
-            f"Config file is {file_size:,} bytes, exceeding the {_MAX_CONFIG_FILE_SIZE:,} byte limit.",
+            f"Config file is {file_size:,} bytes, "
+            f"exceeding the {_MAX_CONFIG_FILE_SIZE:,} byte limit.",
         )
 
     try:
@@ -736,9 +737,24 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     start = time.perf_counter_ns()
     _record_call("tapps_consult_expert")
 
+    # Validate inputs
+    question = _sanitize_lookup_param(question, max_len=2000)
+    if not question:
+        return error_response(
+            "tapps_consult_expert", "invalid_question", "Question is required."
+        )
+
     from tapps_mcp.experts.engine import consult_expert
 
-    result = consult_expert(question=question, domain=domain or None)
+    try:
+        result = consult_expert(question=question, domain=domain or None)
+    except Exception:
+        logger.warning("consult_expert_error", question=question[:80], exc_info=True)
+        return error_response(
+            "tapps_consult_expert",
+            "consultation_failed",
+            "Expert consultation failed. Try a different question or domain.",
+        )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_consult_expert", start)

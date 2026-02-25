@@ -477,12 +477,22 @@ def _run_cache_warming(
     project_root: Path,
     libraries: list[str],
 ) -> dict[str, Any]:
-    """Run cache warming for libraries from tech stack."""
+    """Run cache warming for libraries from tech stack.
+
+    Normally called from a worker thread (via ``asyncio.to_thread`` in
+    ``tapps_init``), so ``asyncio.run()`` is safe.  The ``RuntimeError``
+    guard handles the edge case where this is called from an already-
+    running event loop.
+    """
     import asyncio
+
+    import structlog
 
     from tapps_mcp.config.settings import load_settings
     from tapps_mcp.knowledge.cache import KBCache
     from tapps_mcp.knowledge.warming import warm_cache
+
+    logger = structlog.get_logger(__name__)
 
     settings = load_settings()
     api_key = settings.context7_api_key
@@ -516,6 +526,16 @@ def _run_cache_warming(
                 libraries=libraries[:20],
                 max_libraries=20,
             )
+        )
+    except RuntimeError as exc:
+        # asyncio.run() raises RuntimeError when called from an already-
+        # running event loop.  This should not happen when the caller uses
+        # asyncio.to_thread(), but guard defensively and log a warning.
+        warmed = 0
+        error = f"RuntimeError: {exc}"
+        logger.warning(
+            "cache_warming_event_loop_conflict",
+            error=str(exc),
         )
     except Exception as exc:  # pragma: no cover - defensive guardrail
         warmed = 0
@@ -631,7 +651,11 @@ def _bootstrap_claude_settings(project_root: Path) -> str:
         return "created"
 
     raw = settings_file.read_text(encoding="utf-8")
-    config = json.loads(raw) if raw.strip() else {}
+    try:
+        config = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        # Malformed JSON — leave the file untouched rather than corrupting it.
+        return "skipped"
 
     permissions = config.setdefault("permissions", {})
     allow_list: list[str] = permissions.setdefault("allow", [])

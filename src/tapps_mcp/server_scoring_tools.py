@@ -7,6 +7,7 @@ registered on the ``mcp`` instance via :func:`register`.
 from __future__ import annotations
 
 import ast
+import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING, Any
@@ -78,15 +79,21 @@ async def tapps_score_file(
     scorer = _get_scorer()
     fixes_applied = 0
 
-    if quick:
-        if fix:
-            from tapps_mcp.tools.ruff import run_ruff_fix
+    try:
+        if quick:
+            if fix:
+                from tapps_mcp.tools.ruff import run_ruff_fix
 
-            fixes_applied = run_ruff_fix(str(resolved), cwd=str(resolved.parent))
+                fixes_applied = await asyncio.to_thread(
+                    run_ruff_fix, str(resolved), cwd=str(resolved.parent)
+                )
 
-        result = scorer.score_file_quick(resolved)
-    else:
-        result = await scorer.score_file(resolved, mode=mode)
+            result = await asyncio.to_thread(scorer.score_file_quick, resolved)
+        else:
+            result = await scorer.score_file(resolved, mode=mode)
+    except Exception as exc:
+        _logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        return error_response("tapps_score_file", "scoring_failed", str(exc))
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -231,7 +238,11 @@ async def tapps_quality_gate(
     from tapps_mcp.gates.evaluator import evaluate_gate
 
     scorer = _get_scorer()
-    score_result = await scorer.score_file(resolved)
+    try:
+        score_result = await scorer.score_file(resolved)
+    except Exception as exc:
+        _logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        return error_response("tapps_quality_gate", "scoring_failed", str(exc))
     gate_result = evaluate_gate(score_result, preset=preset)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -338,7 +349,11 @@ async def tapps_quick_check(
     settings = load_settings()
     scorer = _get_scorer()
 
-    score_result = scorer.score_file_quick(resolved)
+    try:
+        score_result = await asyncio.to_thread(scorer.score_file_quick, resolved)
+    except Exception as exc:
+        _logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        return error_response("tapps_quick_check", "scoring_failed", str(exc))
 
     # Supplement with AST complexity heuristic (Finding #9)
     complexity_hint: dict[str, Any] | None = None
@@ -353,7 +368,8 @@ async def tapps_quick_check(
 
     gate_result = evaluate_gate(score_result, preset=preset)
 
-    sec_result = run_security_scan(
+    sec_result = await asyncio.to_thread(
+        run_security_scan,
         str(resolved),
         scan_secrets=True,
         cwd=str(settings.project_root),

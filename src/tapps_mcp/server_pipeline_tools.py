@@ -27,6 +27,10 @@ if TYPE_CHECKING:
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
 _VALIDATE_CONCURRENCY = 5
 
+# Prevent garbage collection of fire-and-forget background tasks.
+# Without strong references, asyncio tasks may be collected before completion.
+_background_tasks: set[asyncio.Task[Any]] = set()
+
 _ANNOTATIONS_READ_ONLY = ToolAnnotations(
     readOnlyHint=True,
     destructiveHint=False,
@@ -285,7 +289,9 @@ async def tapps_session_start(
     # subsequent tapps_score_file calls can apply vulnerability penalties.
     settings = load_settings()
     if settings.dependency_scan_enabled:
-        asyncio.create_task(_warm_dependency_cache(settings))
+        task = asyncio.create_task(_warm_dependency_cache(settings))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)
@@ -349,24 +355,30 @@ async def tapps_session_start(
         "project_profile": data.get("project_profile"),
     })
 
-    # Detect changed Python files for workflow nudges
+    # Detect changed Python files for workflow nudges (run in thread to
+    # avoid blocking the event loop with subprocess.run).
     nudge_ctx: dict[str, Any] = {}
     try:
-        import subprocess
 
-        diff_result = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD"],
-            capture_output=True,
-            text=True,
-            cwd=str(load_settings().project_root),
-            timeout=5,
-            check=False,
-        )
-        if diff_result.returncode == 0:
-            changed_py = [
-                f for f in diff_result.stdout.strip().splitlines() if f.endswith(".py")
-            ]
-            nudge_ctx["changed_python_file_count"] = len(changed_py)
+        def _detect_changed_py() -> int:
+            import subprocess
+
+            diff_result = subprocess.run(
+                ["git", "diff", "--name-only", "HEAD"],
+                capture_output=True,
+                text=True,
+                cwd=str(load_settings().project_root),
+                timeout=5,
+                check=False,
+            )
+            if diff_result.returncode == 0:
+                return len([
+                    f for f in diff_result.stdout.strip().splitlines() if f.endswith(".py")
+                ])
+            return 0
+
+        count = await asyncio.to_thread(_detect_changed_py)
+        nudge_ctx["changed_python_file_count"] = count
     except Exception:  # noqa: S110
         # Best-effort: git may not be available or repo may not exist
         pass
@@ -451,7 +463,10 @@ async def tapps_init(
     from tapps_mcp.pipeline.init import bootstrap_pipeline
 
     settings = load_settings()
-    result = bootstrap_pipeline(
+    # Run in thread to avoid blocking the event loop — bootstrap_pipeline
+    # is sync and may run subprocesses, file I/O, and cache warming.
+    result = await asyncio.to_thread(
+        bootstrap_pipeline,
         settings.project_root,
         create_handoff=create_handoff,
         create_runlog=create_runlog,

@@ -6,13 +6,15 @@ registered on the ``mcp`` instance via :func:`register`.
 
 from __future__ import annotations
 
+import asyncio
+import re
 import time
 from typing import TYPE_CHECKING, Any
 
 from mcp.types import ToolAnnotations
 
 from tapps_mcp.config.settings import load_settings
-from tapps_mcp.server_helpers import success_response
+from tapps_mcp.server_helpers import error_response, success_response
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -41,6 +43,12 @@ _ANNOTATIONS_SIDE_EFFECT = ToolAnnotations(
 )
 
 _MIN_CONFIDENCE_FOR_DOCS = 0.5
+
+
+def _sanitize_param(value: str, max_len: int = 100) -> str:
+    """Strip control characters and truncate a parameter value."""
+    cleaned = re.sub(r"[\x00-\x1f\x7f]", "", value).strip()
+    return cleaned[:max_len]
 
 
 _PERIOD_DAYS: dict[str, int] = {"1d": 1, "7d": 7, "30d": 30}
@@ -299,112 +307,136 @@ async def tapps_research(
     start = time.perf_counter_ns()
     _record_call("tapps_research")
 
-    from tapps_mcp.experts.engine import consult_expert
-
-    result = consult_expert(
-        question=question,
-        domain=domain or None,
-    )
-
-    needs_docs = result.chunks_used == 0 or result.confidence < _MIN_CONFIDENCE_FOR_DOCS
-
-    docs_content: str | None = None
-    docs_source: str | None = None
-    docs_library: str | None = None
-    docs_topic: str | None = None
-    docs_error: str | None = None
-
-    if needs_docs:
-        lookup_library = library or result.suggested_library or "python"
-        lookup_topic = topic or result.suggested_topic or "overview"
-
-        try:
-            from tapps_mcp.knowledge.cache import KBCache
-            from tapps_mcp.knowledge.lookup import LookupEngine
-
-            settings = load_settings()
-            cache = KBCache(settings.project_root / ".tapps-mcp-cache")
-            engine = LookupEngine(cache, api_key=settings.context7_api_key)
-            try:
-                lr = await engine.lookup(
-                    library=lookup_library,
-                    topic=lookup_topic,
-                    mode="code",
-                )
-            finally:
-                await engine.close()
-
-            if lr.success and lr.content:
-                max_chars = settings.expert_fallback_max_chars
-                docs_content = lr.content[:max_chars]
-                docs_source = lr.source
-                docs_library = lookup_library
-                docs_topic = lookup_topic
-            else:
-                docs_error = "Docs lookup returned no content."
-        except Exception as exc:
-            docs_error = str(exc)
-
-    answer = result.answer
-    if docs_content:
-        answer = (
-            f"{answer}\n\n---\n\n"
-            f"### Documentation reference (auto-attached)\n\n"
-            f"Library: `{docs_library}` | Topic: `{docs_topic}` | Source: {docs_source}\n\n"
-            f"{docs_content}"
+    # Validate and sanitize inputs
+    question = _sanitize_param(question, max_len=2000)
+    if not question:
+        return error_response(
+            "tapps_research", "invalid_question", "Question is required."
         )
+    library = _sanitize_param(library)
+    topic = _sanitize_param(topic)
 
-    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_research", start)
-
-    resp = success_response(
-        "tapps_research",
-        elapsed_ms,
-        {
-            "domain": result.domain,
-            "expert_id": result.expert_id,
-            "expert_name": result.expert_name,
-            "answer": answer,
-            "confidence": round(result.confidence, 4),
-            "factors": result.factors.model_dump(),
-            "sources": result.sources,
-            "chunks_used": result.chunks_used,
-            "docs_supplemented": docs_content is not None,
-            "docs_library": docs_library,
-            "docs_topic": docs_topic,
-            "docs_error": docs_error,
-            "suggested_tool": result.suggested_tool,
-            "suggested_library": result.suggested_library,
-            "suggested_topic": result.suggested_topic,
-            "fallback_used": result.fallback_used,
-            "fallback_library": result.fallback_library,
-            "fallback_topic": result.fallback_topic,
-        },
-    )
-
-    # Attach structured output
     try:
-        from tapps_mcp.common.output_schemas import ResearchOutput
+        from tapps_mcp.experts.engine import consult_expert
 
-        structured = ResearchOutput(
-            domain=result.domain,
-            expert_name=result.expert_name,
-            answer=answer,
-            confidence=round(result.confidence, 4),
-            sources=result.sources,
-            docs_supplemented=docs_content is not None,
-            docs_library=docs_library,
-            docs_topic=docs_topic,
+        result = await asyncio.to_thread(
+            consult_expert,
+            question=question,
+            domain=domain or None,
         )
-        resp["structuredContent"] = structured.to_structured_content()
+
+        needs_docs = result.chunks_used == 0 or result.confidence < _MIN_CONFIDENCE_FOR_DOCS
+
+        docs_content: str | None = None
+        docs_source: str | None = None
+        docs_library: str | None = None
+        docs_topic: str | None = None
+        docs_error: str | None = None
+
+        if needs_docs:
+            lookup_library = library or result.suggested_library or "python"
+            lookup_topic = topic or result.suggested_topic or "overview"
+
+            try:
+                from tapps_mcp.knowledge.cache import KBCache
+                from tapps_mcp.knowledge.lookup import LookupEngine
+
+                settings = load_settings()
+                cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+                engine = LookupEngine(cache, api_key=settings.context7_api_key)
+                try:
+                    lr = await engine.lookup(
+                        library=lookup_library,
+                        topic=lookup_topic,
+                        mode="code",
+                    )
+                finally:
+                    await engine.close()
+
+                if lr.success and lr.content:
+                    max_chars = settings.expert_fallback_max_chars
+                    docs_content = lr.content[:max_chars]
+                    docs_source = lr.source
+                    docs_library = lookup_library
+                    docs_topic = lookup_topic
+                else:
+                    docs_error = "Docs lookup returned no content."
+            except Exception as exc:
+                docs_error = str(exc)
+
+        answer = result.answer
+        if docs_content:
+            answer = (
+                f"{answer}\n\n---\n\n"
+                f"### Documentation reference (auto-attached)\n\n"
+                f"Library: `{docs_library}` | Topic: `{docs_topic}` "
+                f"| Source: {docs_source}\n\n"
+                f"{docs_content}"
+            )
+
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_research", start)
+
+        resp = success_response(
+            "tapps_research",
+            elapsed_ms,
+            {
+                "domain": result.domain,
+                "expert_id": result.expert_id,
+                "expert_name": result.expert_name,
+                "answer": answer,
+                "confidence": round(result.confidence, 4),
+                "factors": result.factors.model_dump(),
+                "sources": result.sources,
+                "chunks_used": result.chunks_used,
+                "docs_supplemented": docs_content is not None,
+                "docs_library": docs_library,
+                "docs_topic": docs_topic,
+                "docs_error": docs_error,
+                "suggested_tool": result.suggested_tool,
+                "suggested_library": result.suggested_library,
+                "suggested_topic": result.suggested_topic,
+                "fallback_used": result.fallback_used,
+                "fallback_library": result.fallback_library,
+                "fallback_topic": result.fallback_topic,
+            },
+        )
+
+        # Attach structured output
+        try:
+            from tapps_mcp.common.output_schemas import ResearchOutput
+
+            structured = ResearchOutput(
+                domain=result.domain,
+                expert_name=result.expert_name,
+                answer=answer,
+                confidence=round(result.confidence, 4),
+                sources=result.sources,
+                docs_supplemented=docs_content is not None,
+                docs_library=docs_library,
+                docs_topic=docs_topic,
+            )
+            resp["structuredContent"] = structured.to_structured_content()
+        except Exception:
+            import structlog as _structlog
+
+            _structlog.get_logger(__name__).debug(
+                "structured_output_failed: tapps_research", exc_info=True
+            )
+
+        return _with_nudges("tapps_research", resp)
+
     except Exception:
         import structlog as _structlog
 
-        _structlog.get_logger(__name__).debug(
-            "structured_output_failed: tapps_research", exc_info=True
+        _structlog.get_logger(__name__).warning(
+            "tapps_research_error", question=question[:80], exc_info=True
         )
-
-    return _with_nudges("tapps_research", resp)
+        return error_response(
+            "tapps_research",
+            "research_failed",
+            "Research failed. Try a different question or domain.",
+        )
 
 
 def register(mcp_instance: FastMCP) -> None:

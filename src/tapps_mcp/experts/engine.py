@@ -90,7 +90,24 @@ def _infer_lookup_hints(question: str, domain: str) -> tuple[str, str]:
 
 
 def _lookup_docs_sync(library: str, topic: str) -> tuple[bool, str | None]:
-    """Run async docs lookup from this sync module."""
+    """Run async docs lookup from this sync module.
+
+    Detects whether an event loop is already running (e.g. when called from
+    ``tapps_research`` via ``asyncio.to_thread``).  If so, the fallback is
+    skipped — the caller (``tapps_research``) handles docs lookup directly.
+    """
+    # Guard against nested event loop: asyncio.run() raises RuntimeError
+    # when called inside an already-running loop.
+    try:
+        loop = asyncio.get_running_loop()  # noqa: F841
+        logger.debug(
+            "expert_context7_fallback_skipped",
+            reason="event loop already running; caller should handle docs lookup",
+        )
+        return False, None
+    except RuntimeError:
+        pass  # No running loop — safe to use asyncio.run()
+
     try:
         from tapps_mcp.config.settings import load_settings
         from tapps_mcp.knowledge.cache import KBCache
