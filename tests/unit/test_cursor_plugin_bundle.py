@@ -122,8 +122,9 @@ class TestPluginStructure:
     def test_hooks_json_has_cursor_events(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)
         data = json.loads((tmp_path / "hooks" / "hooks.json").read_text())
-        events = [e["event"] for e in data["hooks"]]
-        assert "beforeMCPExecution" in events or "stop" in events
+        assert data["version"] == 1
+        assert isinstance(data["hooks"], dict)
+        assert "beforeMCPExecution" in data["hooks"] or "stop" in data["hooks"]
 
     def test_rules_exist(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)

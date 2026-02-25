@@ -453,35 +453,23 @@ exit 0
 
 _PS1_PREFIX = "powershell -NoProfile -ExecutionPolicy Bypass -File "
 
-_CURSOR_HOOKS_CONFIG: list[dict[str, str]] = [
-    {
-        "event": "beforeMCPExecution",
-        "command": ".cursor/hooks/tapps-before-mcp.sh",
-    },
-    {
-        "event": "afterFileEdit",
-        "command": ".cursor/hooks/tapps-after-edit.sh",
-    },
-    {
-        "event": "stop",
-        "command": ".cursor/hooks/tapps-stop.sh",
-    },
-]
+_CURSOR_HOOKS_CONFIG: dict[str, list[dict[str, str]]] = {
+    "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+    "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+    "stop": [{"command": ".cursor/hooks/tapps-stop.sh"}],
+}
 
-_CURSOR_HOOKS_CONFIG_PS: list[dict[str, str]] = [
-    {
-        "event": "beforeMCPExecution",
-        "command": _PS1_PREFIX + ".cursor/hooks/tapps-before-mcp.ps1",
-    },
-    {
-        "event": "afterFileEdit",
-        "command": _PS1_PREFIX + ".cursor/hooks/tapps-after-edit.ps1",
-    },
-    {
-        "event": "stop",
-        "command": _PS1_PREFIX + ".cursor/hooks/tapps-stop.ps1",
-    },
-]
+_CURSOR_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
+    "beforeMCPExecution": [
+        {"command": _PS1_PREFIX + ".cursor/hooks/tapps-before-mcp.ps1"},
+    ],
+    "afterFileEdit": [
+        {"command": _PS1_PREFIX + ".cursor/hooks/tapps-after-edit.ps1"},
+    ],
+    "stop": [
+        {"command": _PS1_PREFIX + ".cursor/hooks/tapps-stop.ps1"},
+    ],
+}
 
 # ---------------------------------------------------------------------------
 # Subagent templates (Story 12.6)
@@ -851,15 +839,27 @@ def generate_cursor_hooks(
     else:
         config = {}
 
-    existing_hooks: list[dict[str, str]] = config.setdefault("hooks", [])
-    existing_events = {e.get("event") for e in existing_hooks if isinstance(e, dict)}
+    # Migrate old array format to new object format
+    existing_hooks_raw = config.get("hooks", {})
+    if isinstance(existing_hooks_raw, list):
+        migrated: dict[str, list[dict[str, str]]] = {}
+        for entry in existing_hooks_raw:
+            if isinstance(entry, dict) and "event" in entry:
+                event = entry["event"]
+                cmd_obj = {k: v for k, v in entry.items() if k != "event"}
+                migrated.setdefault(event, []).append(cmd_obj)
+        existing_hooks_raw = migrated
+
+    existing_hooks: dict[str, list[dict[str, str]]] = existing_hooks_raw
 
     hooks_added = 0
-    for entry in hooks_config:
-        if entry["event"] not in existing_events:
-            existing_hooks.append(entry)
+    for event, entries in hooks_config.items():
+        if event not in existing_hooks:
+            existing_hooks[event] = entries
             hooks_added += 1
 
+    config["version"] = 1
+    config["hooks"] = existing_hooks
     hooks_file.parent.mkdir(parents=True, exist_ok=True)
     hooks_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
@@ -1412,15 +1412,15 @@ def generate_cursor_plugin_bundle(
     # hooks/
     hooks_dir = output_dir / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
-    cursor_hooks_list = [
-        {
-            "event": e["event"],
-            "command": e["command"].replace(".cursor/hooks/", "hooks/"),
-        }
-        for e in _CURSOR_HOOKS_CONFIG
-    ]
+    cursor_hooks_obj: dict[str, list[dict[str, str]]] = {
+        event: [
+            {"command": cmd["command"].replace(".cursor/hooks/", "hooks/")}
+            for cmd in cmds
+        ]
+        for event, cmds in _CURSOR_HOOKS_CONFIG.items()
+    }
     (hooks_dir / "hooks.json").write_text(
-        json.dumps({"hooks": cursor_hooks_list}, indent=2) + "\n",
+        json.dumps({"version": 1, "hooks": cursor_hooks_obj}, indent=2) + "\n",
         encoding="utf-8",
     )
     files_created.append("hooks/hooks.json")

@@ -289,6 +289,30 @@ def check_hooks(project_root: Path) -> CheckResult:
             "Run: tapps-mcp upgrade --force to regenerate hooks",
         )
 
+    # Validate .cursor/hooks.json format (Cursor requires version + object hooks)
+    cursor_hooks_json = project_root / ".cursor" / "hooks.json"
+    if cursor_hooks_json.exists():
+        format_errors: list[str] = []
+        try:
+            data = json.loads(cursor_hooks_json.read_text(encoding="utf-8"))
+            if not isinstance(data.get("version"), (int, float)):
+                format_errors.append("missing or non-numeric 'version' field")
+            if isinstance(data.get("hooks"), list):
+                format_errors.append("'hooks' is an array (should be an object)")
+            elif not isinstance(data.get("hooks"), dict):
+                format_errors.append("'hooks' is not an object")
+        except (json.JSONDecodeError, OSError) as exc:
+            format_errors.append(f"could not parse: {exc}")
+
+        if format_errors:
+            return CheckResult(
+                "Hooks",
+                False,
+                f"TappsMCP hooks found for: {', '.join(found)}, "
+                f"but .cursor/hooks.json has invalid format: {'; '.join(format_errors)}",
+                "Run: tapps-mcp upgrade --force to regenerate hooks",
+            )
+
     return CheckResult(
         "Hooks",
         True,

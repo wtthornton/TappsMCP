@@ -1,7 +1,8 @@
 """Tests for Cursor hooks generation (Story 12.7).
 
 Verifies that generate_cursor_hooks() creates 3 shell scripts in .cursor/hooks/
-and merges hook entries into .cursor/hooks.json.
+and merges hook entries into .cursor/hooks.json using the Cursor-required format:
+``{"version": 1, "hooks": {"eventName": [{"command": "..."}], ...}}``.
 
 Includes tests for both bash (Unix) and PowerShell (Windows) variants.
 """
@@ -94,68 +95,102 @@ class TestCursorHooksConfig:
         generate_cursor_hooks(tmp_path, force_windows=False)
         assert (tmp_path / ".cursor" / "hooks.json").exists()
 
-    def test_hooks_json_has_hooks_key(self, tmp_path):
+    def test_hooks_json_has_version(self, tmp_path):
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
+        assert data["version"] == 1
+
+    def test_hooks_json_has_hooks_object(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
         assert "hooks" in data
-        assert isinstance(data["hooks"], list)
+        assert isinstance(data["hooks"], dict)
 
     def test_before_mcp_event_present(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        events = [e["event"] for e in data["hooks"]]
-        assert "beforeMCPExecution" in events
+        assert "beforeMCPExecution" in data["hooks"]
 
     def test_after_edit_event_present(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        events = [e["event"] for e in data["hooks"]]
-        assert "afterFileEdit" in events
+        assert "afterFileEdit" in data["hooks"]
 
     def test_stop_event_present(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        events = [e["event"] for e in data["hooks"]]
-        assert "stop" in events
+        assert "stop" in data["hooks"]
 
     def test_three_events_total(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
         assert len(data["hooks"]) == 3
 
+    def test_each_event_is_array_of_commands(self, tmp_path):
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
+        for event, entries in data["hooks"].items():
+            assert isinstance(entries, list), f"{event} should be a list"
+            for entry in entries:
+                assert "command" in entry, f"{event} entry missing 'command'"
+
     def test_bash_config_points_to_sh_files(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        for entry in data["hooks"]:
-            assert entry["command"].endswith(".sh"), f"Should use .sh: {entry['command']}"
+        for event, entries in data["hooks"].items():
+            for entry in entries:
+                assert entry["command"].endswith(".sh"), (
+                    f"Should use .sh: {entry['command']}"
+                )
 
 
 class TestCursorHooksMerge:
     """Tests for merging hooks into existing hooks.json."""
 
-    def test_preserves_existing_event(self, tmp_path):
-        """Pre-existing event entry is preserved, not replaced."""
+    def test_preserves_existing_event_new_format(self, tmp_path):
+        """Pre-existing event in new object format is preserved, not replaced."""
         cursor_dir = tmp_path / ".cursor"
         cursor_dir.mkdir(parents=True)
         existing = {
-            "hooks": [
-                {"event": "afterFileEdit", "command": "my-custom-script.sh"},
-            ],
+            "version": 1,
+            "hooks": {
+                "afterFileEdit": [{"command": "my-custom-script.sh"}],
+            },
         }
         (cursor_dir / "hooks.json").write_text(json.dumps(existing), encoding="utf-8")
 
         generate_cursor_hooks(tmp_path, force_windows=False)
 
         data = json.loads((cursor_dir / "hooks.json").read_text())
-        events = [e["event"] for e in data["hooks"]]
-        # afterFileEdit should appear once (the pre-existing one, not replaced)
-        assert events.count("afterFileEdit") == 1
-        # The custom command should be preserved
-        edit_entry = next(e for e in data["hooks"] if e["event"] == "afterFileEdit")
-        assert edit_entry["command"] == "my-custom-script.sh"
+        # afterFileEdit should keep the custom command
+        assert data["hooks"]["afterFileEdit"] == [{"command": "my-custom-script.sh"}]
         # New events should be added
-        assert "beforeMCPExecution" in events
-        assert "stop" in events
+        assert "beforeMCPExecution" in data["hooks"]
+        assert "stop" in data["hooks"]
+
+    def test_migrates_old_array_format(self, tmp_path):
+        """Old array-format hooks are migrated to object format."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        old_format = {
+            "hooks": [
+                {"event": "afterFileEdit", "command": "my-custom-script.sh"},
+            ],
+        }
+        (cursor_dir / "hooks.json").write_text(
+            json.dumps(old_format), encoding="utf-8"
+        )
+
+        generate_cursor_hooks(tmp_path, force_windows=False)
+
+        data = json.loads((cursor_dir / "hooks.json").read_text())
+        assert data["version"] == 1
+        assert isinstance(data["hooks"], dict)
+        # Migrated entry preserved
+        assert data["hooks"]["afterFileEdit"] == [{"command": "my-custom-script.sh"}]
+        # New events added
+        assert "beforeMCPExecution" in data["hooks"]
+        assert "stop" in data["hooks"]
 
     def test_idempotent(self, tmp_path):
         """Running twice doesn't duplicate entries."""
@@ -235,11 +270,16 @@ class TestCursorHooksScriptsWindows:
 class TestCursorHooksConfigWindows:
     """Tests for hooks.json configuration (Windows / PowerShell)."""
 
-    def test_hooks_json_has_hooks_key(self, tmp_path):
+    def test_hooks_json_has_version(self, tmp_path):
+        generate_cursor_hooks(tmp_path, force_windows=True)
+        data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
+        assert data["version"] == 1
+
+    def test_hooks_json_has_hooks_object(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=True)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
         assert "hooks" in data
-        assert isinstance(data["hooks"], list)
+        assert isinstance(data["hooks"], dict)
 
     def test_three_events_total(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=True)
@@ -250,12 +290,13 @@ class TestCursorHooksConfigWindows:
         """All hook commands should invoke powershell with .ps1 files."""
         generate_cursor_hooks(tmp_path, force_windows=True)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        for entry in data["hooks"]:
-            cmd = entry["command"]
-            assert "powershell" in cmd, f"Should use powershell: {cmd}"
-            assert ".ps1" in cmd, f"Should reference .ps1: {cmd}"
-            assert "-NoProfile" in cmd
-            assert "-ExecutionPolicy Bypass" in cmd
+        for event, entries in data["hooks"].items():
+            for entry in entries:
+                cmd = entry["command"]
+                assert "powershell" in cmd, f"Should use powershell: {cmd}"
+                assert ".ps1" in cmd, f"Should reference .ps1: {cmd}"
+                assert "-NoProfile" in cmd
+                assert "-ExecutionPolicy Bypass" in cmd
 
     def test_idempotent(self, tmp_path):
         """Running twice doesn't duplicate entries."""
