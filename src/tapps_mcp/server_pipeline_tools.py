@@ -98,6 +98,8 @@ async def tapps_validate_changed(
     preset: str = "standard",
     include_security: bool = True,
     quick: bool = True,
+    security_depth: str = "basic",
+    include_impact: bool = False,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """REQUIRED before declaring work complete on multi-file changes.
@@ -117,6 +119,9 @@ async def tapps_validate_changed(
         preset: Quality gate preset - "standard", "strict", or "framework".
         include_security: Whether to run security scan on each file (ignored if quick=True).
         quick: If True (default), ruff-only scoring for speed. If False, full validation.
+        security_depth: Security scan depth - "basic" (default) or "full". When "full",
+            security scan runs even in quick mode.
+        include_impact: Whether to run impact analysis on changed files (default: False).
         ctx: Optional MCP context (injected by host); used for progress notifications.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
@@ -139,7 +144,7 @@ async def tapps_validate_changed(
     if file_paths.strip():
         for raw_fp in file_paths.split(","):
             cleaned_fp = raw_fp.strip()
-            if not cleaned_fp:
+            if not cleaned_fp or not cleaned_fp.endswith(".py"):
                 continue
             with contextlib.suppress(ValueError, FileNotFoundError):
                 paths.append(_validate_file_path(cleaned_fp))
@@ -209,7 +214,7 @@ async def tapps_validate_changed(
 
         scorer = _get_scorer()
         sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
-        do_security = include_security and not quick
+        do_security_full = (security_depth == "full") or (include_security and not quick)
 
         async def _validate_one(path: Path) -> dict[str, Any]:
             async with sem:
@@ -226,7 +231,7 @@ async def tapps_validate_changed(
                     if gate.failures:
                         file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
 
-                    if do_security:
+                    if do_security_full:
                         from tapps_mcp.security.secret_scanner import SecretScanner
 
                         # Reuse bandit results from scoring; only run secret scanner
@@ -270,6 +275,49 @@ async def tapps_validate_changed(
     all_passed = all(r.get("gate_passed", False) for r in results)
     total_sec = sum(r.get("security_issues", 0) for r in results)
 
+    # Impact analysis (opt-in)
+    impact_data: dict[str, Any] | None = None
+    if include_impact and paths:
+        try:
+            from tapps_mcp.project.impact_analyzer import analyze_impact
+
+            impact_results: list[dict[str, Any]] = []
+            for p in paths:
+                try:
+                    report = analyze_impact(p, settings.project_root)
+                    impact_results.append({
+                        "file": str(p),
+                        "severity": report.severity,
+                        "direct_dependents": len(report.direct_dependents),
+                        "transitive_dependents": len(report.transitive_dependents),
+                        "test_files": len(report.test_files),
+                    })
+                except Exception:
+                    impact_results.append({"file": str(p), "severity": "unknown", "error": True})
+
+            max_severity = "low"
+            for ir in impact_results:
+                s = ir.get("severity", "low")
+                if s == "critical":
+                    max_severity = "critical"
+                    break
+                elif s == "high" and max_severity not in ("critical",):
+                    max_severity = "high"
+                elif s == "medium" and max_severity not in ("critical", "high"):
+                    max_severity = "medium"
+
+            total_affected = sum(
+                ir.get("direct_dependents", 0) + ir.get("transitive_dependents", 0)
+                for ir in impact_results
+            )
+            impact_data = {
+                "max_severity": max_severity,
+                "total_affected_files": total_affected,
+                "per_file": impact_results,
+            }
+        except Exception:
+            impact_data = {"error": "impact analysis failed"}
+
     summary = format_batch_summary(results)
     if quick:
         summary = f"[Quick mode - ruff only] {summary}"
@@ -281,16 +329,20 @@ async def tapps_validate_changed(
     if all_passed:
         _write_validate_ok_marker(settings.project_root)
 
+    resp_data: dict[str, Any] = {
+        "files_validated": len(results),
+        "all_gates_passed": all_passed,
+        "total_security_issues": total_sec,
+        "results": results,
+        "summary": summary,
+    }
+    if impact_data is not None:
+        resp_data["impact_summary"] = impact_data
+
     resp = success_response(
         "tapps_validate_changed",
         elapsed_ms,
-        {
-            "files_validated": len(results),
-            "all_gates_passed": all_passed,
-            "total_security_issues": total_sec,
-            "results": results,
-            "summary": summary,
-        },
+        resp_data,
     )
 
     # Attach structured output
@@ -316,6 +368,8 @@ async def tapps_validate_changed(
             total_files=len(results),
             passed_count=len(results) - failed_count,
             failed_count=failed_count,
+            security_depth=security_depth,
+            impact_summary=impact_data,
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:

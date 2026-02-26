@@ -125,6 +125,8 @@ class ValidateChangedOutput(StructuredOutput):
     total_files: int = 0
     passed_count: int = 0
     failed_count: int = 0
+    security_depth: str = "basic"
+    impact_summary: dict[str, Any] | None = None
 
 
 class ConfigFindingOutput(BaseModel):
@@ -193,6 +195,7 @@ class ResearchOutput(StructuredOutput):
     docs_supplemented: bool = False
     docs_library: str | None = None
     docs_topic: str | None = None
+    file_context: str | None = None
 
 
 class ProfileOutput(StructuredOutput):

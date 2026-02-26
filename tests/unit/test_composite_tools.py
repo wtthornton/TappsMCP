@@ -479,6 +479,77 @@ class TestTappsValidateChanged:
         mock_report.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_no_python_files_from_git_fast_path_no_session_init(
+        self, tmp_path: Path
+    ) -> None:
+        """When git returns only non-Python files, return immediately without session init.
+        Guards against stall when all changes are committed and diff has no .py files.
+        """
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        ensure_init = AsyncMock()
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.tools.batch_validator.detect_changed_python_files",
+                return_value=[],
+            ),
+            patch(
+                "tapps_mcp.server_helpers.ensure_session_initialized",
+                ensure_init,
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            result = await tapps_validate_changed(file_paths="")
+
+        assert result["success"] is True
+        assert result["data"]["files_validated"] == 0
+        assert result["data"]["summary"] == "No changed Python files found."
+        ensure_init.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_explicit_non_python_files_returns_fast_no_scorer(
+        self, tmp_path: Path
+    ) -> None:
+        """Explicit file_paths with only non-Python files returns immediately without scorer.
+        Prevents stall when client passes changed file list that contains only .json/.md etc.
+        """
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        md = tmp_path / "CLAUDE.md"
+        md.write_text("# doc\n", encoding="utf-8")
+        js = tmp_path / ".claude" / "settings.local.json"
+        js.parent.mkdir(parents=True, exist_ok=True)
+        js.write_text("{}", encoding="utf-8")
+
+        mock_scorer = MagicMock()
+        ensure_init = AsyncMock()
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", side_effect=Path),
+            patch(
+                "tapps_mcp.server_helpers.ensure_session_initialized",
+                ensure_init,
+            ),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            result = await tapps_validate_changed(
+                file_paths=f"{md},{js}",
+                quick=True,
+            )
+
+        assert result["success"] is True
+        assert result["data"]["files_validated"] == 0
+        assert result["data"]["summary"] == "No changed Python files found."
+        ensure_init.assert_not_called()
+        mock_scorer.score_file_quick.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_no_duplicate_security_scan(self, tmp_path: Path) -> None:
         """run_security_scan is NOT called; bandit results reused from score."""
         from tapps_mcp.scoring.models import ScoreResult

@@ -12,5 +12,9 @@
       "c:\\cursor"
     ]
   },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "tapps-mcp"
+  ],
   "defaultMode": "bypassPermissions"
 }

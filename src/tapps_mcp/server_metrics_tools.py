@@ -42,9 +42,6 @@ _ANNOTATIONS_SIDE_EFFECT = ToolAnnotations(
     openWorldHint=False,
 )
 
-_MIN_CONFIDENCE_FOR_DOCS = 0.5
-
-
 def _sanitize_param(value: str, max_len: int = 100) -> str:
     """Strip control characters and truncate a parameter value."""
     cleaned = re.sub(r"[\x00-\x1f\x7f]", "", value).strip()
@@ -279,14 +276,15 @@ async def tapps_research(
     domain: str = "",
     library: str = "",
     topic: str = "",
+    file_context: str = "",
 ) -> dict[str, Any]:
     """Combined expert consultation + documentation lookup in one call.
 
     Consults the domain expert first, then automatically supplements with
-    Context7 documentation when expert RAG has no results or confidence is
-    low.  Saves a round-trip compared to calling tapps_consult_expert and
-    tapps_lookup_docs separately.  This is the recommended tool for expert
-    guidance.
+    Context7 documentation.  Docs are always fetched to provide the most
+    complete answer.  Saves a round-trip compared to calling
+    tapps_consult_expert and tapps_lookup_docs separately.  This is the
+    recommended tool for expert guidance.
 
     Available domains (omit domain to auto-detect from question):
       security, performance-optimization, testing-strategies,
@@ -301,6 +299,7 @@ async def tapps_research(
         domain: Optional domain override for expert routing.
         library: Optional library name for docs lookup (auto-inferred when empty).
         topic: Optional topic for docs lookup (auto-inferred when empty).
+        file_context: Optional file path for inferring library from imports.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
@@ -308,7 +307,8 @@ async def tapps_research(
     _record_call("tapps_research")
 
     # Validate and sanitize inputs
-    question = _sanitize_param(question, max_len=2000)
+    question = _sanitize_param(question, max_len=5000)
+    file_context = _sanitize_param(file_context, max_len=500)
     if not question:
         return error_response(
             "tapps_research", "invalid_question", "Question is required."
@@ -325,44 +325,74 @@ async def tapps_research(
             domain=domain or None,
         )
 
-        needs_docs = result.chunks_used == 0 or result.confidence < _MIN_CONFIDENCE_FOR_DOCS
-
         docs_content: str | None = None
         docs_source: str | None = None
         docs_library: str | None = None
         docs_topic: str | None = None
         docs_error: str | None = None
 
-        if needs_docs:
-            lookup_library = library or result.suggested_library or "python"
-            lookup_topic = topic or result.suggested_topic or "overview"
-
+        # Infer library from file_context imports when not provided
+        if not library and file_context:
             try:
-                from tapps_mcp.knowledge.cache import KBCache
-                from tapps_mcp.knowledge.lookup import LookupEngine
+                from tapps_mcp.knowledge.import_analyzer import extract_external_imports
+                from tapps_mcp.server import _validate_file_path
 
+                resolved_ctx = _validate_file_path(file_context)
                 settings = load_settings()
-                cache = KBCache(settings.project_root / ".tapps-mcp-cache")
-                engine = LookupEngine(cache, api_key=settings.context7_api_key)
-                try:
-                    lr = await engine.lookup(
-                        library=lookup_library,
-                        topic=lookup_topic,
-                        mode="code",
-                    )
-                finally:
-                    await engine.close()
+                external = extract_external_imports(resolved_ctx, settings.project_root)
+                if external:
+                    library = external[0]
+            except Exception:
+                pass
 
-                if lr.success and lr.content:
-                    max_chars = settings.expert_fallback_max_chars
-                    docs_content = lr.content[:max_chars]
-                    docs_source = lr.source
-                    docs_library = lookup_library
-                    docs_topic = lookup_topic
+        # Infer library from tech stack when still empty
+        if not library and not result.suggested_library:
+            try:
+                from tapps_mcp.server_helpers import get_session_context
+
+                session_ctx = get_session_context()
+                profile = session_ctx.get("project_profile") or {}
+                tech_stack = profile.get("tech_stack", {})
+                libs: list[str] = tech_stack.get(
+                    "context7_priority", []
+                ) or tech_stack.get("libraries", [])
+                if libs:
+                    library = libs[0]
                 else:
-                    docs_error = "Docs lookup returned no content."
-            except Exception as exc:
-                docs_error = str(exc)
+                    library = "python"
+            except Exception:
+                library = "python"
+
+        # Always fetch docs to supplement expert answer
+        lookup_library = library or result.suggested_library or "python"
+        lookup_topic = topic or result.suggested_topic or "overview"
+
+        try:
+            from tapps_mcp.knowledge.cache import KBCache
+            from tapps_mcp.knowledge.lookup import LookupEngine
+
+            settings = load_settings()
+            cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+            engine = LookupEngine(cache, api_key=settings.context7_api_key)
+            try:
+                lr = await engine.lookup(
+                    library=lookup_library,
+                    topic=lookup_topic,
+                    mode="code",
+                )
+            finally:
+                await engine.close()
+
+            if lr.success and lr.content:
+                max_chars = settings.expert_fallback_max_chars
+                docs_content = lr.content[:max_chars]
+                docs_source = lr.source
+                docs_library = lookup_library
+                docs_topic = lookup_topic
+            else:
+                docs_error = "Docs lookup returned no content."
+        except Exception as exc:
+            docs_error = str(exc)
 
         answer = result.answer
         if docs_content:
@@ -415,6 +445,7 @@ async def tapps_research(
                 docs_supplemented=docs_content is not None,
                 docs_library=docs_library,
                 docs_topic=docs_topic,
+                file_context=file_context or None,
             )
             resp["structuredContent"] = structured.to_structured_content()
         except Exception:
