@@ -1,6 +1,6 @@
 """Tests for Cursor hooks generation (Story 12.7).
 
-Verifies that generate_cursor_hooks() creates 3 shell scripts in .cursor/hooks/
+Verifies that generate_cursor_hooks() creates 2 shell scripts in .cursor/hooks/
 and merges hook entries into .cursor/hooks.json using the Cursor-required format:
 ``{"version": 1, "hooks": {"eventName": [{"command": "..."}], ...}}``.
 
@@ -25,10 +25,10 @@ class TestCursorHooksScripts:
         generate_cursor_hooks(tmp_path, force_windows=False)
         assert (tmp_path / ".cursor" / "hooks").is_dir()
 
-    def test_all_three_scripts_created(self, tmp_path):
+    def test_all_two_scripts_created(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=False)
         hooks_dir = tmp_path / ".cursor" / "hooks"
-        expected = ["tapps-before-mcp.sh", "tapps-after-edit.sh", "tapps-stop.sh"]
+        expected = ["tapps-before-mcp.sh", "tapps-after-edit.sh"]
         for name in expected:
             assert (hooks_dir / name).exists(), f"Missing: {name}"
 
@@ -39,17 +39,6 @@ class TestCursorHooksScripts:
         for script in hooks_dir.iterdir():
             mode = script.stat().st_mode
             assert mode & stat.S_IXUSR, f"{script.name} not executable"
-
-    def test_stop_script_uses_followup_message(self, tmp_path):
-        generate_cursor_hooks(tmp_path, force_windows=False)
-        content = (tmp_path / ".cursor" / "hooks" / "tapps-stop.sh").read_text()
-        assert "followup_message" in content
-
-    def test_stop_script_no_exit_2(self, tmp_path):
-        """Cursor stop hook must not use exit 2 (not supported)."""
-        generate_cursor_hooks(tmp_path, force_windows=False)
-        content = (tmp_path / ".cursor" / "hooks" / "tapps-stop.sh").read_text()
-        assert "exit 2" not in content
 
     def test_after_edit_no_exit_2(self, tmp_path):
         """afterFileEdit is fire-and-forget; must not use exit 2."""
@@ -116,15 +105,10 @@ class TestCursorHooksConfig:
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
         assert "afterFileEdit" in data["hooks"]
 
-    def test_stop_event_present(self, tmp_path):
+    def test_two_events_total(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        assert "stop" in data["hooks"]
-
-    def test_three_events_total(self, tmp_path):
-        generate_cursor_hooks(tmp_path, force_windows=False)
-        data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        assert len(data["hooks"]) == 3
+        assert len(data["hooks"]) == 2
 
     def test_each_event_is_array_of_commands(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=False)
@@ -166,7 +150,6 @@ class TestCursorHooksMerge:
         assert data["hooks"]["afterFileEdit"] == [{"command": "my-custom-script.sh"}]
         # New events should be added
         assert "beforeMCPExecution" in data["hooks"]
-        assert "stop" in data["hooks"]
 
     def test_migrates_old_array_format(self, tmp_path):
         """Old array-format hooks are migrated to object format."""
@@ -190,7 +173,6 @@ class TestCursorHooksMerge:
         assert data["hooks"]["afterFileEdit"] == [{"command": "my-custom-script.sh"}]
         # New events added
         assert "beforeMCPExecution" in data["hooks"]
-        assert "stop" in data["hooks"]
 
     def test_idempotent(self, tmp_path):
         """Running twice doesn't duplicate entries."""
@@ -198,13 +180,13 @@ class TestCursorHooksMerge:
         generate_cursor_hooks(tmp_path, force_windows=False)
 
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        assert len(data["hooks"]) == 3
+        assert len(data["hooks"]) == 2
 
     def test_result_dict(self, tmp_path):
         """Returns a summary dict."""
         result = generate_cursor_hooks(tmp_path, force_windows=False)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 3
+        assert len(result["scripts_created"]) == 2
         assert result["hooks_action"] == "created"
 
 
@@ -220,10 +202,10 @@ class TestCursorHooksScriptsWindows:
         generate_cursor_hooks(tmp_path, force_windows=True)
         assert (tmp_path / ".cursor" / "hooks").is_dir()
 
-    def test_all_three_ps1_scripts_created(self, tmp_path):
+    def test_all_two_ps1_scripts_created(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=True)
         hooks_dir = tmp_path / ".cursor" / "hooks"
-        expected = ["tapps-before-mcp.ps1", "tapps-after-edit.ps1", "tapps-stop.ps1"]
+        expected = ["tapps-before-mcp.ps1", "tapps-after-edit.ps1"]
         for name in expected:
             assert (hooks_dir / name).exists(), f"Missing: {name}"
 
@@ -241,11 +223,6 @@ class TestCursorHooksScriptsWindows:
             content = script.read_text()
             assert not content.startswith("#!"), f"{script.name} has unexpected shebang"
 
-    def test_stop_script_uses_followup_message(self, tmp_path):
-        generate_cursor_hooks(tmp_path, force_windows=True)
-        content = (tmp_path / ".cursor" / "hooks" / "tapps-stop.ps1").read_text()
-        assert "followup_message" in content
-
     def test_after_edit_uses_convert_from_json(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=True)
         content = (tmp_path / ".cursor" / "hooks" / "tapps-after-edit.ps1").read_text()
@@ -261,7 +238,7 @@ class TestCursorHooksScriptsWindows:
     def test_result_dict(self, tmp_path):
         result = generate_cursor_hooks(tmp_path, force_windows=True)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 3
+        assert len(result["scripts_created"]) == 2
         assert all(n.endswith(".ps1") for n in result["scripts_created"])
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0
@@ -281,10 +258,10 @@ class TestCursorHooksConfigWindows:
         assert "hooks" in data
         assert isinstance(data["hooks"], dict)
 
-    def test_three_events_total(self, tmp_path):
+    def test_two_events_total(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=True)
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        assert len(data["hooks"]) == 3
+        assert len(data["hooks"]) == 2
 
     def test_config_commands_use_powershell(self, tmp_path):
         """All hook commands should invoke powershell with .ps1 files."""
@@ -304,7 +281,7 @@ class TestCursorHooksConfigWindows:
         generate_cursor_hooks(tmp_path, force_windows=True)
 
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
-        assert len(data["hooks"]) == 3
+        assert len(data["hooks"]) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +344,6 @@ class TestCursorHooksPlatformMigration:
                     {"command": "my-custom-linter.sh"},
                     {"command": ".cursor/hooks/tapps-after-edit.sh"},
                 ],
-                "stop": [{"command": ".cursor/hooks/tapps-stop.sh"}],
             },
         }
         (cursor_dir / "hooks.json").write_text(json.dumps(existing), encoding="utf-8")
@@ -386,24 +362,24 @@ class TestCursorHooksPlatformMigration:
         """Old .sh scripts should be removed when upgrading to Windows."""
         generate_cursor_hooks(tmp_path, force_windows=False)
         hooks_dir = tmp_path / ".cursor" / "hooks"
-        assert len(list(hooks_dir.glob("*.sh"))) == 3
+        assert len(list(hooks_dir.glob("*.sh"))) == 2
 
         result = generate_cursor_hooks(tmp_path, force_windows=True)
 
         assert len(list(hooks_dir.glob("*.sh"))) == 0, "All .sh scripts should be removed"
-        assert len(list(hooks_dir.glob("*.ps1"))) == 3, "PS1 scripts should be created"
+        assert len(list(hooks_dir.glob("*.ps1"))) == 2, "PS1 scripts should be created"
         assert len(result["scripts_removed"]) > 0
 
     def test_wrong_platform_ps1_scripts_cleaned_on_unix(self, tmp_path):
         """Old .ps1 scripts should be removed when upgrading to Unix."""
         generate_cursor_hooks(tmp_path, force_windows=True)
         hooks_dir = tmp_path / ".cursor" / "hooks"
-        assert len(list(hooks_dir.glob("*.ps1"))) == 3
+        assert len(list(hooks_dir.glob("*.ps1"))) == 2
 
         result = generate_cursor_hooks(tmp_path, force_windows=False)
 
         assert len(list(hooks_dir.glob("*.ps1"))) == 0, "All .ps1 scripts should be removed"
-        assert len(list(hooks_dir.glob("*.sh"))) == 3, "Bash scripts should be created"
+        assert len(list(hooks_dir.glob("*.sh"))) == 2, "Bash scripts should be created"
         assert len(result["scripts_removed"]) > 0
 
     def test_migration_is_idempotent(self, tmp_path):
