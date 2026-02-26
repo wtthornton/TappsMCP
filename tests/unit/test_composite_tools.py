@@ -371,6 +371,114 @@ class TestTappsValidateChanged:
         assert "1 files" in first.kwargs.get("message", "")
 
     @pytest.mark.asyncio
+    async def test_no_progress_when_ctx_is_none(self, tmp_path: Path) -> None:
+        """Tool completes successfully when ctx is None (the default)."""
+        from tapps_mcp.scoring.models import ScoreResult
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        mock_score = ScoreResult(
+            file_path="test.py",
+            categories={},
+            overall_score=85.0,
+            security_issues=[],
+        )
+        mock_scorer = MagicMock()
+        mock_scorer.score_file_quick = MagicMock(return_value=mock_score)
+        mock_gate = MagicMock(passed=True, failures=[])
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", side_effect=Path),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            mock_settings.return_value.dependency_scan_enabled = False
+            result = await tapps_validate_changed(
+                file_paths=str(f),
+                include_security=False,
+                quick=True,
+            )
+
+        assert result["success"] is True
+        assert result["data"]["files_validated"] == 1
+
+    @pytest.mark.asyncio
+    async def test_no_progress_when_ctx_lacks_report_progress(
+        self, tmp_path: Path
+    ) -> None:
+        """Tool completes when ctx exists but has no report_progress attribute."""
+        from tapps_mcp.scoring.models import ScoreResult
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        mock_score = ScoreResult(
+            file_path="test.py",
+            categories={},
+            overall_score=85.0,
+            security_issues=[],
+        )
+        mock_scorer = MagicMock()
+        mock_scorer.score_file_quick = MagicMock(return_value=mock_score)
+        mock_gate = MagicMock(passed=True, failures=[])
+
+        # ctx with no report_progress attribute
+        ctx = MagicMock(spec=[])
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", side_effect=Path),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=mock_scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            mock_settings.return_value.dependency_scan_enabled = False
+            result = await tapps_validate_changed(
+                file_paths=str(f),
+                include_security=False,
+                quick=True,
+                ctx=ctx,
+            )
+
+        assert result["success"] is True
+        assert result["data"]["files_validated"] == 1
+
+    @pytest.mark.asyncio
+    async def test_progress_not_sent_when_no_files(self, tmp_path: Path) -> None:
+        """report_progress is not called when there are no files to validate."""
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        mock_report = AsyncMock()
+        ctx = MagicMock()
+        ctx.report_progress = mock_report
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", side_effect=Path),
+            patch(
+                "tapps_mcp.tools.batch_validator.detect_changed_python_files",
+                return_value=[],
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            result = await tapps_validate_changed(
+                file_paths="",
+                ctx=ctx,
+            )
+
+        assert result["success"] is True
+        assert result["data"]["files_validated"] == 0
+        mock_report.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_no_duplicate_security_scan(self, tmp_path: Path) -> None:
         """run_security_scan is NOT called; bandit results reused from score."""
         from tapps_mcp.scoring.models import ScoreResult
