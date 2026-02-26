@@ -1158,13 +1158,13 @@ When Python files are referenced, enforce these quality standards:
 
 TappsMCP scores Python code across 7 categories (0-100 each):
 
-1. **Correctness** - Logic errors, type safety, edge cases
-2. **Security** - Vulnerabilities, injection risks, secrets
-3. **Maintainability** - Complexity, naming, structure
-4. **Performance** - Efficiency, resource usage, scaling
-5. **Documentation** - Docstrings, comments, clarity
-6. **Testing** - Coverage, edge cases, assertions
-7. **Style** - PEP 8, formatting, consistency
+1. **Complexity** - Cyclomatic complexity (radon cc / AST fallback)
+2. **Security** - Bandit + pattern heuristics
+3. **Maintainability** - Maintainability index (radon mi / AST fallback)
+4. **Test Coverage** - Heuristic from matching test file existence
+5. **Performance** - Nested loops, large functions, deep nesting
+6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
+7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
 
 ## Actions
 
@@ -1185,12 +1185,13 @@ description: >-
 
 Call `tapps_consult_expert(question)` for domain guidance.
 
-## Available Expert Domains
+## Available Expert Domains (17)
 
-- security, performance, architecture, testing
-- documentation, accessibility, devops, database
-- api, frontend, backend, data-science
-- ml, cloud, mobile, embedded
+- security, performance-optimization, testing-strategies, code-quality-analysis
+- software-architecture, development-workflow, data-privacy-compliance
+- accessibility, user-experience, documentation-knowledge-management
+- ai-frameworks, agent-learning, observability-monitoring
+- api-design-integration, cloud-infrastructure, database-data-management, github
 
 ## Usage
 

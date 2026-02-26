@@ -49,7 +49,7 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 - **Structured outputs** — Machine-parseable JSON (`structuredContent`) alongside human-readable text for 6 tools: `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`, `tapps_security_scan`, `tapps_validate_changed`, `tapps_validate_config` (MCP 2025-11-25).
 - **Documentation lookup** — Up-to-date library docs via [Context7](https://context7.com) with multi-provider fallback (llms.txt), fuzzy matching, and local cache.
 - **Config validation** — Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB patterns against best practices.
-- **Domain experts** — 16 built-in experts (security, testing, APIs, etc.) with RAG-backed answers and confidence scores.
+- **Domain experts** — 17 built-in experts (security, testing, APIs, GitHub, etc.) with RAG-backed answers and confidence scores.
 - **Project context** — Detect project type, tech stack, and structure for context-aware analysis.
 - **Session notes** — Persist key decisions and constraints across long AI sessions.
 - **Impact analysis** — Understand file dependencies before refactoring or changing APIs.
@@ -344,7 +344,7 @@ Quick index:
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, or infra configs. |
 | **tapps_consult_expert** | Ask a domain expert and get RAG-backed answer with confidence. |
 | **tapps_research** | Combined expert + docs lookup in one call (auto-supplements with Context7). |
-| **tapps_list_experts** | List the 16 built-in expert domains and their status. |
+| **tapps_list_experts** | List the 17 built-in expert domains and their status. |
 | **tapps_checklist** | See which tools were called this session and what is still missing. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure for context-aware analysis. |
 | **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. |
@@ -437,7 +437,7 @@ Quick index:
 
 ### tapps_consult_expert
 
-**What it does:** Sends a natural-language question to a domain expert. The server has 16 built-in domains (e.g. security, testing, API design, database, observability). You can leave **domain** empty for auto-routing from the question, or pass a domain id (e.g. `"security"`, `"testing-strategies"`). The expert uses RAG over curated knowledge files, returns an answer, a confidence score, contributing factors, and source chunks. Answers are filtered for PII/secrets before return.
+**What it does:** Sends a natural-language question to a domain expert. The server has 17 built-in domains (e.g. security, testing, API design, database, observability, GitHub). You can leave **domain** empty for auto-routing from the question, or pass a domain id (e.g. `"security"`, `"testing-strategies"`). The expert uses RAG over curated knowledge files, returns an answer, a confidence score, contributing factors, and source chunks. Answers are filtered for PII/secrets before return.
 
 **Why use it:** When the AI (or user) is unsure about patterns, trade-offs, or best practices in a specific area, a single call returns focused, sourced guidance instead of generic advice. Use for security decisions, test strategy, API design, DB schema, or observability so the response is grounded in the expert knowledge base and the confidence score signals how much to rely on it.
 
@@ -453,7 +453,7 @@ Quick index:
 
 ### tapps_list_experts
 
-**What it does:** Returns the list of all 16 built-in expert domains. For each expert it provides an id, display name, short description, and knowledge-base status (e.g. how many knowledge files are loaded). No parameters required.
+**What it does:** Returns the list of all 17 built-in expert domains. For each expert it provides an id, display name, short description, and knowledge-base status (e.g. how many knowledge files are loaded). No parameters required.
 
 **Why use it:** Lets the AI (or host) discover which domains exist before calling `tapps_consult_expert`. Use at session start or when the user asks "what can the experts help with?" so the right domain can be chosen and the right expert consulted.
 
@@ -701,7 +701,7 @@ src/tapps_mcp/
 │                                       #   multi-provider support (providers/)
 ├── validators/                         # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
 ├── experts/                            # Domain detector, engine, RAG, registry, confidence,
-│                                       #   vector RAG, knowledge management, 119 knowledge files
+│                                       #   vector RAG, knowledge management, 135+ knowledge files
 ├── project/                            # Project profiling, session notes, impact analysis, reports,
 │                                       #   import graph, cycle detection, coupling metrics
 ├── adaptive/                           # Adaptive scoring, expert voting, weight distribution

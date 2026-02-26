@@ -37,10 +37,11 @@ Static analysis tools examine code without executing it, identifying potential b
 ## Popular Static Analysis Tools
 
 ### Python
-- **Ruff**: Linting and formatting (recommended—single tool, 10–100x faster than alternatives)
-- **mypy**: Static type checking
-- **bandit**: Security vulnerability scanner
-- **radon**: Complexity and maintainability metrics
+- **Ruff** (v0.15+): Linting and formatting (recommended—single tool, 10–100x faster than alternatives)
+- **mypy** (v1.19+): Static type checking
+- **ty** (beta, by Astral): Extremely fast Rust-based type checker and language server
+- **bandit** (v1.9+): Security vulnerability scanner (includes AI/ML checks B614, B615)
+- **radon** (v6.0+): Complexity and maintainability metrics (supports .ipynb)
 
 ### JavaScript/TypeScript
 - **ESLint**: JavaScript/TypeScript linter
@@ -60,7 +61,7 @@ Static analysis tools examine code without executing it, identifying potential b
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.0
+    rev: v0.15.0
     hooks:
       - id: ruff
         args: [--fix]

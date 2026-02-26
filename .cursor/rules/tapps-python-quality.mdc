@@ -11,13 +11,13 @@ When Python files are referenced, enforce these quality standards:
 
 TappsMCP scores Python code across 7 categories (0-100 each):
 
-1. **Correctness** - Logic errors, type safety, edge cases
-2. **Security** - Vulnerabilities, injection risks, secrets
-3. **Maintainability** - Complexity, naming, structure
-4. **Performance** - Efficiency, resource usage, scaling
-5. **Documentation** - Docstrings, comments, clarity
-6. **Testing** - Coverage, edge cases, assertions
-7. **Style** - PEP 8, formatting, consistency
+1. **Complexity** - Cyclomatic complexity (radon cc / AST fallback)
+2. **Security** - Bandit + pattern heuristics
+3. **Maintainability** - Maintainability index (radon mi / AST fallback)
+4. **Test Coverage** - Heuristic from matching test file existence
+5. **Performance** - Nested loops, large functions, deep nesting
+6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
+7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
 
 ## Actions
 

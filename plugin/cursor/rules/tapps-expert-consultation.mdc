@@ -9,12 +9,13 @@ description: >-
 
 Call `tapps_consult_expert(question)` for domain guidance.
 
-## Available Expert Domains
+## Available Expert Domains (17)
 
-- security, performance, architecture, testing
-- documentation, accessibility, devops, database
-- api, frontend, backend, data-science
-- ml, cloud, mobile, embedded
+- security, performance-optimization, testing-strategies, code-quality-analysis
+- software-architecture, development-workflow, data-privacy-compliance
+- accessibility, user-experience, documentation-knowledge-management
+- ai-frameworks, agent-learning, observability-monitoring
+- api-design-integration, cloud-infrastructure, database-data-management, github
 
 ## Usage
 

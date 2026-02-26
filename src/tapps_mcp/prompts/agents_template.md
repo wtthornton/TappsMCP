@@ -16,7 +16,7 @@ TappsMCP is an MCP server that provides a comprehensive quality toolset for your
 - **Circular dependency detection** (import graph analysis, cycle detection, coupling metrics)
 - **Documentation lookup** (up-to-date library docs via Context7 with multi-provider fallback and cache)
 - **Config validation** (Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB best practices)
-- **Domain experts** (16 built-in experts with RAG-backed answers, optional vector search)
+- **Domain experts** (17 built-in experts with RAG-backed answers, optional vector search)
 - **Project context** (project type detection, tech stack, impact analysis)
 - **Session management** (persist decisions, constraints, and notes across long sessions)
 - **Quality reports** (JSON, Markdown, or HTML summaries)

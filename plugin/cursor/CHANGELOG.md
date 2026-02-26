@@ -10,6 +10,6 @@
 - Security scanning via Bandit + secret detection
 - Configurable quality gates (development, staging, production presets)
 - Context7 documentation lookup with SWR cache
-- 16 domain expert consultants via RAG engine
+- 17 domain expert consultants via RAG engine
 - 3 skills, 3 agents, 3 cursor rules, and Cursor hooks bundle
 - BugBot quality standards for automated PR review
