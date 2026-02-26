@@ -46,9 +46,9 @@ uv run tapps-mcp upgrade --dry-run  # preview generated file updates
 
 ### Server module split
 
-The MCP server is split across four files to stay under complexity limits. All share the same `mcp` FastMCP instance created in `server.py`:
+The MCP server is split across five files to stay under complexity limits. All share the same `mcp` FastMCP instance created in `server.py`:
 
-- **`server.py`** — Creates the `FastMCP("TappsMCP")` instance, registers MCP resources/prompts, and imports the other three modules which register their tools on the shared `mcp` object.
+- **`server.py`** — Creates the `FastMCP("TappsMCP")` instance, registers MCP resources/prompts, and 14 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`, `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`). Imports the other three modules which register their tools on the shared `mcp` object.
 - **`server_scoring_tools.py`** — `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** — `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_upgrade`, `tapps_doctor`
 - **`server_metrics_tools.py`** — `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`

@@ -195,7 +195,7 @@ Restart Claude Desktop after changing the config.
 | **tapps_quick_check** | Fast score + gate + basic security in one call. Use after each file edit. |
 | **tapps_security_scan** | Security scan (e.g. bandit + secret detection). |
 | **tapps_quality_gate** | Pass/fail vs thresholds (e.g. overall >= 70 for `standard`). Use before "done". |
-| **tapps_validate_changed** | Score + gate + security scan all changed files (auto-detects via git diff). |
+| **tapps_validate_changed** | Score + gate all changed files (auto-detects via git diff). Default quick mode (ruff-only). Includes impact analysis. |
 | **tapps_lookup_docs** | Fetch current library docs via Context7. Use before writing code that calls library APIs. |
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB configs against best practices. |
 | **tapps_consult_expert** | Ask a domain expert (16 domains) and get RAG-backed guidance with confidence scores. |

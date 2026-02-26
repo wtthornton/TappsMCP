@@ -182,7 +182,7 @@ class TestValidateChangedP0:
 
     @pytest.mark.asyncio
     async def test_include_impact_false_no_summary(self, tmp_path: Path) -> None:
-        """include_impact=False (default) should NOT include impact_summary."""
+        """include_impact=False should NOT include impact_summary."""
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
         f = tmp_path / "test.py"
