@@ -139,6 +139,39 @@ if __name__ == "__main__":
 }
 ```
 
+## MCP Specification History
+
+| Version | Date | Key Changes |
+|---------|------|-------------|
+| 2024-11-05 | Nov 2024 | Initial release by Anthropic |
+| 2025-06-18 | Jun 2025 | Structured tool outputs, OAuth, elicitation, `MCP-Protocol-Version` header |
+| 2025-11-25 | Nov 2025 | Tasks primitive (experimental), OpenID Connect, icons metadata, extension framework |
+
+As of December 2025, MCP governance was donated to the **Agentic AI Foundation (AAIF)** under the Linux Foundation.
+
+## MCP Clients (2026)
+
+Major clients supporting MCP: Claude Code, Claude Desktop, Cursor, Windsurf (Codeium), VS Code (GitHub Copilot agent mode), Cline, Zed, Replit, Continue.dev, Gemini CLI, and 500+ others.
+
+## Tool Annotations (2025-06-18+)
+
+```python
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("MyTools")
+
+@mcp.tool(annotations={
+    "title": "Score File",
+    "readOnlyHint": True,
+    "openWorldHint": False,
+})
+async def score_file(file_path: str) -> str:
+    """Score a Python file for quality."""
+    ...
+```
+
+Annotations help clients understand tool behaviour (read-only vs side-effect, open-world vs sandboxed).
+
 ## Best Practices
 
 ### Tool Design
@@ -148,6 +181,7 @@ if __name__ == "__main__":
 3. **Return strings**: Tools should return human-readable string output
 4. **Idempotent reads**: Read operations should be safe to repeat
 5. **Explicit errors**: Return error messages as strings, don't raise exceptions
+6. **Annotations**: Use `readOnlyHint`, `idempotentHint`, `openWorldHint` to guide client behaviour
 
 ### Security
 
@@ -156,6 +190,7 @@ if __name__ == "__main__":
 3. **No secrets in output**: Never return API keys or credentials
 4. **Least privilege**: Only expose necessary filesystem access
 5. **Rate limiting**: Protect expensive operations from excessive calls
+6. **OAuth for remote**: Use MCP's built-in OAuth for HTTP-transported servers
 
 ### Performance
 
@@ -183,3 +218,4 @@ if __name__ == "__main__":
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/)
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [FastMCP Documentation](https://gofastmcp.com/)
+- [MCP Spec 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25)

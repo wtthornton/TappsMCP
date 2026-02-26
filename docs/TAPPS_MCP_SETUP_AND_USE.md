@@ -198,7 +198,7 @@ Restart Claude Desktop after changing the config.
 | **tapps_validate_changed** | Score + gate + security scan all changed files (auto-detects via git diff). |
 | **tapps_lookup_docs** | Fetch current library docs via Context7. Use before writing code that calls library APIs. |
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB configs against best practices. |
-| **tapps_consult_expert** | Ask a domain expert (16 domains) and get RAG-backed guidance with confidence scores. |
+| **tapps_consult_expert** | Ask a domain expert (17 domains) and get RAG-backed guidance with confidence scores. |
 | **tapps_research** | Combined expert + docs lookup in one call (auto-supplements with Context7). |
 | **tapps_list_experts** | List available expert domains and their knowledge base status. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure. Call at session start for context-aware analysis. |

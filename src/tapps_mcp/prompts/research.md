@@ -7,7 +7,7 @@ Gather domain knowledge and library documentation before writing code. This prev
 ## Allowed Tools
 
 - `tapps_lookup_docs` - Look up current library documentation via Context7. Use before writing code that depends on external libraries.
-- `tapps_consult_expert` - Ask domain-specific questions (security, testing, APIs, databases, etc.). Routes to one of 16 built-in experts.
+- `tapps_consult_expert` - Ask domain-specific questions (security, testing, APIs, databases, etc.). Routes to one of 17 built-in experts.
 - `tapps_list_experts` - See which expert domains are available before consulting.
 
 ## Constraints

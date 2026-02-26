@@ -87,7 +87,7 @@ All file I/O goes through `security/path_validator.py`, which sandboxes operatio
 
 ### Expert system
 
-16 domain experts in `experts/` with 119 curated knowledge markdown files under `experts/knowledge/`. The `experts/engine.py` uses keyword-based RAG (or optional vector RAG with faiss). All retrieved content passes through `knowledge/rag_safety.py` for prompt injection filtering.
+17 domain experts in `experts/` with 135+ curated knowledge markdown files under `experts/knowledge/`. The `experts/engine.py` uses keyword-based RAG (or optional vector RAG with faiss). All retrieved content passes through `knowledge/rag_safety.py` for prompt injection filtering.
 
 ### Platform generation
 

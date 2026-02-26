@@ -17,7 +17,7 @@ from tapps_mcp.experts.models import ExpertConfig
 class ExpertRegistry:
     """Registry of built-in domain experts.
 
-    All 16 technical-domain experts are defined here.  The registry is
+    All 17 technical-domain experts are defined here.  The registry is
     read-only at runtime — experts cannot be added or removed.
     """
 

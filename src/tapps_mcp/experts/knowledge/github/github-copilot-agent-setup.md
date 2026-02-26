@@ -81,6 +81,24 @@ Register MCP servers in repository Copilot settings:
 The coding agent accesses MCP tools during autonomous sessions.
 Secrets for MCP servers come from the "copilot" environment.
 
+## GitHub Copilot CLI (GA — February 2026)
+
+GitHub Copilot CLI reached general availability in February 2026:
+
+- Ships with GitHub's MCP server built in, supports custom MCP servers
+- **Agent Skills**: Markdown-based skill files that load automatically when relevant
+- **Custom agents**: `.agent.md` files specifying tools, MCP servers, and instructions
+- **Models available**: Claude Opus 4.6, Claude Sonnet 4.6, GPT-5.3-Codex, Gemini 3 Pro
+- **Background delegation**: Prefix prompt with `&` to delegate to cloud coding agent
+
+## MCP in Copilot Agent Mode (2026)
+
+GitHub Copilot agent mode in VS Code is now GA with full MCP support:
+
+- MCP servers extend agent mode with external tools, APIs, and data sources
+- **GitHub MCP Server**: Open source local server for GitHub issues, PRs, search
+- Agent mode plans, executes, self-corrects, and runs terminal commands autonomously
+
 ## AGENTS.md Best Practices
 
 From GitHub's analysis of 2,500+ repositories:

@@ -1,6 +1,6 @@
 # Built-in Expert Knowledge Bases
 
-This directory contains knowledge bases for built-in framework experts. These knowledge bases provide technical domain expertise that ships with the TappsCodingAgents framework.
+This directory contains knowledge bases for built-in framework experts. These knowledge bases provide technical domain expertise that ships with TappsMCP.
 
 **Last reviewed**: 2026-02. Keep content current with latest practices; remove or replace deprecated material.
 
@@ -10,12 +10,13 @@ Each expert has its own subdirectory containing markdown knowledge files:
 
 ```
 knowledge/
-├── security/                      # Security Expert knowledge base
+├── security/                      # Security Expert (5 files)
+│   ├── modern-security-patterns.md
 │   ├── owasp-top10.md
 │   ├── secure-coding-practices.md
 │   ├── threat-modeling.md
 │   └── vulnerability-patterns.md
-├── performance/                   # Performance Expert (Phase 2)
+├── performance/                   # Performance Expert (8 files)
 │   ├── optimization-patterns.md
 │   ├── caching.md
 │   ├── scalability.md
@@ -24,7 +25,7 @@ knowledge/
 │   ├── resource-management.md
 │   ├── profiling.md
 │   └── anti-patterns.md
-├── testing/                       # Testing Expert (Phase 2)
+├── testing/                       # Testing Expert (11 files)
 │   ├── best-practices.md
 │   ├── test-strategies.md
 │   ├── test-design-patterns.md
@@ -32,8 +33,11 @@ knowledge/
 │   ├── mocking.md
 │   ├── test-data.md
 │   ├── coverage-analysis.md
-│   └── test-maintenance.md
-├── data-privacy-compliance/       # Data Privacy Expert (Phase 3)
+│   ├── test-maintenance.md
+│   ├── mcp-testing-patterns.md
+│   ├── modern-testing-patterns.md
+│   └── test-configuration-and-urls.md
+├── data-privacy-compliance/       # Data Privacy Expert (10 files)
 │   ├── gdpr.md
 │   ├── ccpa.md
 │   ├── hipaa.md
@@ -44,7 +48,7 @@ knowledge/
 │   ├── data-subject-rights.md
 │   ├── anonymization.md
 │   └── encryption-privacy.md
-├── accessibility/                 # Accessibility Expert (Phase 4)
+├── accessibility/                 # Accessibility Expert (9 files)
 │   ├── wcag-2.1.md
 │   ├── wcag-2.2.md
 │   ├── semantic-html.md
@@ -54,7 +58,7 @@ knowledge/
 │   ├── color-contrast.md
 │   ├── accessible-forms.md
 │   └── testing-accessibility.md
-├── user-experience/               # UX Expert (Phase 4)
+├── user-experience/               # UX Expert (8 files)
 │   ├── ux-principles.md
 │   ├── user-research.md
 │   ├── user-journeys.md
@@ -63,7 +67,7 @@ knowledge/
 │   ├── prototyping.md
 │   ├── usability-heuristics.md
 │   └── usability-testing.md
-├── observability-monitoring/      # Observability Expert (Phase 5)
+├── observability-monitoring/      # Observability Expert (8 files)
 │   ├── distributed-tracing.md
 │   ├── metrics-and-monitoring.md
 │   ├── logging-strategies.md
@@ -72,7 +76,7 @@ knowledge/
 │   ├── alerting-patterns.md
 │   ├── observability-best-practices.md
 │   └── open-telemetry.md
-├── api-design-integration/        # API Design Expert (Phase 5)
+├── api-design-integration/        # API Design Expert (14 files)
 │   ├── restful-api-design.md
 │   ├── graphql-patterns.md
 │   ├── grpc-best-practices.md
@@ -87,18 +91,19 @@ knowledge/
 │   ├── mqtt-patterns.md
 │   ├── async-protocol-patterns.md
 │   └── external-api-integration.md
-├── cloud-infrastructure/          # Cloud Infrastructure Expert (Phase 5)
+├── cloud-infrastructure/          # Cloud Infrastructure Expert (11 files)
 │   ├── cloud-native-patterns.md
 │   ├── containerization.md
 │   ├── container-health-checks.md
 │   ├── kubernetes-patterns.md
+│   ├── kubernetes-security-patterns.md
 │   ├── infrastructure-as-code.md
 │   ├── serverless-architecture.md
 │   ├── multi-cloud-strategies.md
 │   ├── cost-optimization.md
 │   ├── disaster-recovery.md
 │   └── dockerfile-patterns.md
-├── database-data-management/      # Database Expert (Phase 5)
+├── database-data-management/      # Database Expert (12 files)
 │   ├── database-design.md
 │   ├── sql-optimization.md
 │   ├── nosql-patterns.md
@@ -111,34 +116,52 @@ knowledge/
 │   ├── influxdb-connection-patterns.md
 │   ├── flux-query-optimization.md
 │   └── time-series-modeling.md
-├── software-architecture/         # Software Architecture Expert
+├── software-architecture/         # Software Architecture Expert (4 files)
+│   ├── mcp-server-architecture.md
 │   ├── microservices-patterns.md
 │   ├── service-communication.md
 │   └── docker-compose-patterns.md
-├── code-quality-analysis/         # Code Quality & Analysis Expert
+├── code-quality-analysis/         # Code Quality & Analysis Expert (5 files)
 │   ├── static-analysis-patterns.md
 │   ├── code-metrics.md
 │   ├── complexity-analysis.md
 │   ├── technical-debt-patterns.md
 │   └── quality-gates.md
-├── development-workflow/          # Development Workflow Expert (DevOps)
+├── development-workflow/          # Development Workflow Expert (6 files)
 │   ├── ci-cd-patterns.md
 │   ├── git-workflows.md
 │   ├── build-strategies.md
 │   ├── deployment-patterns.md
-│   └── automation-best-practices.md
-├── documentation-knowledge-management/ # Documentation & Knowledge Management Expert
+│   ├── automation-best-practices.md
+│   └── github-actions-advanced.md
+├── documentation-knowledge-management/ # Documentation & Knowledge Management Expert (4 files)
 │   ├── documentation-standards.md
 │   ├── api-documentation-patterns.md
 │   ├── knowledge-management.md
 │   └── technical-writing-guide.md
-├── agent-learning/                # Agent Learning Best Practices
+├── github/                        # GitHub Platform Expert (10 files)
+│   ├── github-actions-ci-patterns.md
+│   ├── github-actions-best-practices.md
+│   ├── github-agentic-workflows.md
+│   ├── github-copilot-agent-setup.md
+│   ├── github-issues-and-forms.md
+│   ├── github-mcp-integration.md
+│   ├── github-projects-api.md
+│   ├── github-pull-requests.md
+│   ├── github-rulesets-and-governance.md
+│   └── github-security-features.md
+├── agent-learning/                # Agent Learning Best Practices (4 files)
+│   ├── adaptive-learning-patterns.md
 │   ├── best-practices.md
 │   ├── pattern-extraction.md
 │   └── prompt-optimization.md
-└── ai-frameworks/                 # AI Frameworks Expert
+└── ai-frameworks/                 # AI Frameworks Expert (6 files)
+    ├── agent-orchestration-patterns.md
+    ├── llm-integration-patterns.md
+    ├── mcp-patterns.md
     ├── model-optimization.md
-    └── openvino-patterns.md
+    ├── openvino-patterns.md
+    └── rag-patterns.md
 ```
 
 ## Knowledge Base Format
