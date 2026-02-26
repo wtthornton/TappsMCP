@@ -8,11 +8,11 @@ from tapps_mcp.experts.registry import ExpertRegistry
 class TestExpertRegistry:
     """Tests for ExpertRegistry."""
 
-    def test_has_16_experts(self) -> None:
-        assert len(ExpertRegistry.BUILTIN_EXPERTS) == 16
+    def test_has_17_experts(self) -> None:
+        assert len(ExpertRegistry.BUILTIN_EXPERTS) == 17
 
-    def test_has_16_domains(self) -> None:
-        assert len(ExpertRegistry.TECHNICAL_DOMAINS) == 16
+    def test_has_17_domains(self) -> None:
+        assert len(ExpertRegistry.TECHNICAL_DOMAINS) == 17
 
     def test_all_experts_map_to_technical_domains(self) -> None:
         for expert in ExpertRegistry.BUILTIN_EXPERTS:

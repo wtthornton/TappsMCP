@@ -1,6 +1,6 @@
 # Epic 19: GitHub Issue & PR Templates
 
-**Status:** Planned
+**Status:** Complete (Stories 19.1–19.6)
 **Priority:** P1 — High (structured issue/PR templates make repos agent-parseable and reduce noise)
 **Estimated LOE:** ~1.5-2 weeks (1 developer)
 **Dependencies:** Epic 8 (Pipeline Orchestration), Epic 12 (Platform Integration)

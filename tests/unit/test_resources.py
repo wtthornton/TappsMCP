@@ -44,7 +44,7 @@ class TestGetKnowledgeResource:
         # Should list at least one known topic
         assert "owasp-top10" in result or "secure-coding" in result or "Available:" in result
 
-    def test_all_16_domains_recognised(self):
+    def test_all_17_domains_recognised(self):
         """Every domain in TECHNICAL_DOMAINS should not return 'Unknown domain'."""
         from tapps_mcp.experts.registry import ExpertRegistry
 
@@ -67,8 +67,8 @@ class TestListKnowledgeDomains:
         result = list_knowledge_domains()
         assert "# TappsMCP Knowledge Domains" in result
 
-    def test_contains_all_16_domain_dirs(self):
-        """The knowledge directory has 16 subdirectories (one per domain).
+    def test_contains_all_17_domain_dirs(self):
+        """The knowledge directory has 17 subdirectories (one per domain).
 
         Note: some directories use short names (e.g. 'performance' for
         'performance-optimization'), so we check for the directory names
@@ -83,8 +83,8 @@ class TestListKnowledgeDomains:
             / "knowledge"
         )
         domain_dirs = [d.name for d in sorted(knowledge_base.iterdir()) if d.is_dir()]
-        # There should be exactly 16 domain directories
-        assert len(domain_dirs) == 16
+        # There should be exactly 17 domain directories
+        assert len(domain_dirs) == 17
         for dname in domain_dirs:
             assert dname in result, f"Domain directory '{dname}' missing from listing"
 

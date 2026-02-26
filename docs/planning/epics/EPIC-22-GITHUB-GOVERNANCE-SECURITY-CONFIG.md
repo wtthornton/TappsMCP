@@ -1,6 +1,6 @@
 # Epic 22: GitHub Governance & Security Configuration
 
-**Status:** Planned
+**Status:** Complete (Stories 22.1–22.6)
 **Priority:** P2 — Important (security config completes the agent-friendly repository setup)
 **Estimated LOE:** ~1.5-2 weeks (1 developer)
 **Dependencies:** Epic 19 (Issue & PR Templates), Epic 20 (CI Enhancement), Epic 21 (Agent Integration)

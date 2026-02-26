@@ -120,9 +120,9 @@ class TestConsultExpert:
 class TestListExperts:
     """Tests for list_experts."""
 
-    def test_returns_16_experts(self) -> None:
+    def test_returns_17_experts(self) -> None:
         experts = list_experts()
-        assert len(experts) == 16
+        assert len(experts) == 17
 
     def test_each_expert_has_required_fields(self) -> None:
         for expert in list_experts():

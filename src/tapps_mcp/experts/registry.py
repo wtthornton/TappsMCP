@@ -1,4 +1,4 @@
-"""Built-in expert registry — 16-domain expert catalogue.
+"""Built-in expert registry — 17-domain expert catalogue.
 
 Each expert is an immutable ``ExpertConfig`` entry with a primary domain,
 knowledge-directory override (where it differs from the domain slug), and
@@ -38,6 +38,7 @@ class ExpertRegistry:
         "api-design-integration",
         "cloud-infrastructure",
         "database-data-management",
+        "github",
     }
 
     BUILTIN_EXPERTS: ClassVar[list[ExpertConfig]] = [
@@ -138,6 +139,15 @@ class ExpertRegistry:
             expert_name="Database & Data Management Expert",
             primary_domain="database-data-management",
             description="SQL/NoSQL, schema design, query optimisation, migrations.",
+        ),
+        ExpertConfig(
+            expert_id="expert-github",
+            expert_name="GitHub Platform Expert",
+            primary_domain="github",
+            description=(
+                "GitHub Actions, Issues, PRs, rulesets, Copilot agent integration, "
+                "and repository governance."
+            ),
         ),
     ]
 

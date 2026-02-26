@@ -1,6 +1,6 @@
 # Epic 21: GitHub Copilot Agent Integration
 
-**Status:** Planned
+**Status:** Complete (Stories 21.1–21.7)
 **Priority:** P0 — Critical (MCP is now GitHub's standard for AI tool integration; Copilot coding agent is GA)
 **Estimated LOE:** ~2.5-3 weeks (1 developer)
 **Dependencies:** Epic 8 (Pipeline Orchestration), Epic 12 (Platform Integration), Epic 20 (CI Enhancement)

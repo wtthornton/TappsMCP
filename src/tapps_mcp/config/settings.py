@@ -9,7 +9,7 @@ Precedence (highest to lowest):
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 import yaml
@@ -168,6 +168,15 @@ class TappsMCPSettings(BaseSettings):
     dependency_scan_source: str = Field(
         default="auto",
         description="Scan source: auto, environment, requirements, pyproject.",
+    )
+
+    # LLM engagement level (Epic 18)
+    llm_engagement_level: Literal["high", "medium", "low"] = Field(
+        default="medium",
+        description=(
+            "How intensely the LLM should use TappsMCP tools. "
+            "'high' = mandatory enforcement, 'medium' = balanced, 'low' = optional guidance."
+        ),
     )
 
     # Expert/doc coupling
