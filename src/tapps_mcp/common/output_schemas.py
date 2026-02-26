@@ -182,6 +182,7 @@ class ChecklistOutput(StructuredOutput):
     missing_required: list[str] = Field(default_factory=list)
     missing_recommended: list[str] = Field(default_factory=list)
     total_calls: int = 0
+    auto_run_results: dict[str, Any] | None = None
 
 
 class ResearchOutput(StructuredOutput):

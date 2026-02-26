@@ -215,24 +215,28 @@ class TestTappsChecklist:
     def setup_method(self):
         CallTracker.reset()
 
-    def test_empty_session(self):
-        result = tapps_checklist()
+    @pytest.mark.asyncio
+    async def test_empty_session(self):
+        result = await tapps_checklist()
         assert result["success"] is True
         assert result["data"]["task_type"] == "review"
         assert result["data"]["complete"] is False
 
-    def test_with_calls(self):
+    @pytest.mark.asyncio
+    async def test_with_calls(self):
         CallTracker.record("tapps_score_file")
         CallTracker.record("tapps_security_scan")
         CallTracker.record("tapps_quality_gate")
-        result = tapps_checklist("review")
+        result = await tapps_checklist("review")
         assert result["data"]["complete"] is True
 
-    def test_feature_task_type(self):
-        result = tapps_checklist("feature")
+    @pytest.mark.asyncio
+    async def test_feature_task_type(self):
+        result = await tapps_checklist("feature")
         assert result["data"]["task_type"] == "feature"
 
-    def test_records_self(self):
+    @pytest.mark.asyncio
+    async def test_records_self(self):
         CallTracker.reset()
-        tapps_checklist()
+        await tapps_checklist()
         assert "tapps_checklist" in CallTracker.get_called_tools()

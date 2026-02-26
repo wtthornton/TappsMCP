@@ -837,11 +837,16 @@ def tapps_list_experts() -> dict[str, Any]:
 
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
-def tapps_checklist(task_type: str = "review") -> dict[str, Any]:
+async def tapps_checklist(
+    task_type: str = "review",
+    auto_run: bool = False,
+) -> dict[str, Any]:
     """REQUIRED as the FINAL step before declaring work complete.
 
     Args:
         task_type: "feature" | "bugfix" | "refactor" | "security" | "review".
+        auto_run: When True, automatically run missing required validations
+            (via tapps_validate_changed) and re-evaluate the checklist.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_checklist")
@@ -850,9 +855,50 @@ def tapps_checklist(task_type: str = "review") -> dict[str, Any]:
         from tapps_mcp.tools.checklist import CallTracker
 
         result = CallTracker.evaluate(task_type)
+
+        auto_run_results: dict[str, Any] = {}
+
+        if auto_run and result.missing_required:
+            missing = set(result.missing_required)
+
+            # validate_changed covers score_file + quality_gate + security_scan
+            needs_validate = missing & {
+                "tapps_score_file",
+                "tapps_quality_gate",
+                "tapps_security_scan",
+                "tapps_validate_changed",
+                "tapps_quick_check",
+            }
+
+            if needs_validate:
+                try:
+                    from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+                    settings = load_settings()
+                    vc_result = await tapps_validate_changed(
+                        preset=settings.quality_preset,
+                    )
+                    vc_data = vc_result.get("data", {})
+                    auto_run_results["validate_changed"] = {
+                        "success": vc_result.get("success", False),
+                        "files_validated": vc_data.get("files_validated", 0),
+                        "all_gates_passed": vc_data.get("all_gates_passed", False),
+                    }
+                except Exception as exc:
+                    auto_run_results["validate_changed"] = {
+                        "success": False,
+                        "error": str(exc),
+                    }
+
+            # Re-evaluate after auto-running
+            result = CallTracker.evaluate(task_type)
+
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_checklist", start)
-        resp = success_response("tapps_checklist", elapsed_ms, result.model_dump())
+        resp_data = result.model_dump()
+        if auto_run_results:
+            resp_data["auto_run_results"] = auto_run_results
+        resp = success_response("tapps_checklist", elapsed_ms, resp_data)
 
         # Attach structured output
         try:
@@ -865,6 +911,7 @@ def tapps_checklist(task_type: str = "review") -> dict[str, Any]:
                 missing_required=result.missing_required,
                 missing_recommended=result.missing_recommended,
                 total_calls=result.total_calls,
+                auto_run_results=auto_run_results or None,
             )
             resp["structuredContent"] = structured.to_structured_content()
         except Exception:
@@ -1559,13 +1606,13 @@ def tapps_workflow(task_type: str = "general") -> str:
     workflows = {
         "general": (
             "TappsMCP Workflow - General\n\n"
-            "1. tapps_server_info\n2. tapps_project_profile\n"
+            "1. tapps_session_start\n2. tapps_project_profile (when project context needed)\n"
             "3. tapps_score_file(quick=True)\n4. tapps_score_file\n"
             "5. tapps_quality_gate\n6. tapps_checklist(task_type='review')"
         ),
         "feature": (
             "TappsMCP Workflow - New Feature\n\n"
-            "1. tapps_server_info\n2. tapps_project_profile\n"
+            "1. tapps_session_start\n2. tapps_project_profile (when project context needed)\n"
             "3. tapps_lookup_docs\n4. tapps_consult_expert\n"
             "5. tapps_score_file(quick=True)\n6. tapps_score_file\n"
             "7. tapps_security_scan\n8. tapps_quality_gate\n"
@@ -1573,27 +1620,27 @@ def tapps_workflow(task_type: str = "general") -> str:
         ),
         "bugfix": (
             "TappsMCP Workflow - Bug Fix\n\n"
-            "1. tapps_server_info\n2. tapps_impact_analysis\n"
+            "1. tapps_session_start\n2. tapps_impact_analysis\n"
             "3. tapps_score_file(quick=True)\n4. tapps_score_file\n"
             "5. tapps_quality_gate\n6. tapps_checklist(task_type='bugfix')"
         ),
         "refactor": (
             "TappsMCP Workflow - Refactoring\n\n"
-            "1. tapps_server_info\n2. tapps_impact_analysis\n"
+            "1. tapps_session_start\n2. tapps_impact_analysis\n"
             "3. tapps_consult_expert(domain='software-architecture')\n"
             "4. tapps_score_file(quick=True)\n5. tapps_score_file\n"
             "6. tapps_quality_gate\n7. tapps_checklist(task_type='refactor')"
         ),
         "security": (
             "TappsMCP Workflow - Security Review\n\n"
-            "1. tapps_server_info\n2. tapps_security_scan\n"
+            "1. tapps_session_start\n2. tapps_security_scan\n"
             "3. tapps_consult_expert(domain='security')\n"
             "4. tapps_score_file\n5. tapps_quality_gate(preset='strict')\n"
             "6. tapps_checklist(task_type='security')"
         ),
         "review": (
             "TappsMCP Workflow - Code Review\n\n"
-            "1. tapps_server_info\n2. tapps_score_file\n"
+            "1. tapps_session_start\n2. tapps_score_file\n"
             "3. tapps_security_scan\n4. tapps_quality_gate\n"
             "5. tapps_checklist(task_type='review')"
         ),

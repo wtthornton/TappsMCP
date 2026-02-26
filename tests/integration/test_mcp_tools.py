@@ -176,9 +176,10 @@ class TestMCPChecklistTool:
         yield
         CallTracker.reset()
 
-    def test_checklist_response_shape(self):
+    @pytest.mark.asyncio
+    async def test_checklist_response_shape(self):
         """Checklist returns well-formed response."""
-        result = tapps_checklist("review")
+        result = await tapps_checklist("review")
         assert result["tool"] == "tapps_checklist"
         assert result["success"] is True
         data = result["data"]
@@ -193,22 +194,24 @@ class TestMCPChecklistTool:
             assert "tool" in hint
             assert "reason" in hint
 
-    def test_checklist_tracks_session(self):
+    @pytest.mark.asyncio
+    async def test_checklist_tracks_session(self):
         """Checklist tracks calls across a session."""
         CallTracker.record("tapps_score_file")
         CallTracker.record("tapps_security_scan")
         CallTracker.record("tapps_quality_gate")
 
-        result = tapps_checklist("review")
+        result = await tapps_checklist("review")
         data = result["data"]
         assert data["complete"] is True
         # tapps_checklist itself is recorded by the tool
         assert "tapps_checklist" in data["called"]
 
-    def test_checklist_different_task_types(self):
+    @pytest.mark.asyncio
+    async def test_checklist_different_task_types(self):
         """Different task types have different requirements."""
-        feature_result = tapps_checklist("feature")
-        security_result = tapps_checklist("security")
+        feature_result = await tapps_checklist("feature")
+        security_result = await tapps_checklist("security")
 
         feat_req = feature_result["data"]["missing_required"]
         sec_req = security_result["data"]["missing_required"]
