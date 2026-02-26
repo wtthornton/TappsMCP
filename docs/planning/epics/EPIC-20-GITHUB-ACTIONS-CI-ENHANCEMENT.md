@@ -1,6 +1,6 @@
 # Epic 20: GitHub Actions CI Enhancement
 
-**Status:** Planned
+**Status:** Complete (Stories 20.1–20.7)
 **Priority:** P1 — High (existing CI workflow needs modernization; new workflows unlock agent-in-CI patterns)
 **Estimated LOE:** ~2-2.5 weeks (1 developer)
 **Dependencies:** Epic 8 (Pipeline Orchestration), Epic 12 (Platform Integration)

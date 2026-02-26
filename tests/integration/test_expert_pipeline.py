@@ -72,8 +72,8 @@ class TestExpertConsultationPipeline:
         assert result.domain is not None
         assert result.expert_name
 
-    def test_all_16_domains_consultable(self) -> None:
-        """Each of the 16 domains can handle a consultation."""
+    def test_all_17_domains_consultable(self) -> None:
+        """Each of the 17 domains can handle a consultation."""
         for expert in ExpertRegistry.get_all_experts():
             result = consult_expert(
                 f"Tell me about {expert.primary_domain} best practices",
@@ -90,7 +90,7 @@ class TestExpertListPipeline:
 
     def test_list_experts_returns_all(self) -> None:
         experts = list_experts()
-        assert len(experts) == 16
+        assert len(experts) == 17
 
     def test_knowledge_file_counts_nonzero(self) -> None:
         """At least some experts have knowledge files."""
@@ -198,8 +198,8 @@ class TestMCPToolHandlers:
         result: dict[str, Any] = tapps_list_experts()
         assert result["tool"] == "tapps_list_experts"
         assert result["success"] is True
-        assert result["data"]["expert_count"] == 16
-        assert len(result["data"]["experts"]) == 16
+        assert result["data"]["expert_count"] == 17
+        assert len(result["data"]["experts"]) == 17
 
         first = result["data"]["experts"][0]
         assert "expert_id" in first

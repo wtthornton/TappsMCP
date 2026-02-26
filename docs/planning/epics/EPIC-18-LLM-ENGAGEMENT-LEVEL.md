@@ -1,6 +1,6 @@
 # Epic 18: LLM Engagement Level Configuration
 
-**Status:** Planned
+**Status:** Complete (Story 18.1 — Configuration Foundation)
 **Priority:** P2 — Enables customer control over TappsMCP enforcement intensity
 **Estimated LOE:** ~2-3 weeks (1 developer)
 **Dependencies:** Epic 0 (Foundation), Epic 6 (Distribution), Epic 8 (Pipeline), Epic 12 (Platform Integration)

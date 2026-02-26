@@ -255,6 +255,28 @@ def upgrade_pipeline(
             )
 
     result["components"]["platforms"] = platform_results
+
+    # GitHub templates, CI, Copilot, and governance (platform-agnostic)
+    if not dry_run:
+        try:
+            from tapps_mcp.pipeline.github_ci import generate_all_ci_workflows
+
+            ci_result = generate_all_ci_workflows(project_root)
+            result["components"]["ci_workflows"] = ci_result
+        except Exception as exc:
+            result["errors"].append(f"CI workflows: {exc}")
+
+        try:
+            from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
+
+            copilot_result = generate_all_copilot_config(project_root)
+            result["components"]["github_copilot"] = copilot_result
+        except Exception as exc:
+            result["errors"].append(f"Copilot config: {exc}")
+    else:
+        result["components"]["ci_workflows"] = {"action": "would-regenerate"}
+        result["components"]["github_copilot"] = {"action": "would-regenerate"}
+
     result["success"] = len(result["errors"]) == 0
 
     return result

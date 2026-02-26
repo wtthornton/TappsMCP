@@ -138,14 +138,14 @@ class TestCheckVectorRag:
 class TestCheckKnowledgeBase:
     def test_all_domains_present(self) -> None:
         result = check_knowledge_base()
-        assert result.expected_domains == 16
-        assert result.total_domains == 16
+        assert result.expected_domains == 17
+        assert result.total_domains == 17
         assert result.missing_domains == []
         assert result.total_files > 0
 
     def test_reports_per_domain_counts(self) -> None:
         result = check_knowledge_base()
-        assert len(result.domains) == 16
+        assert len(result.domains) == 17
         for domain_info in result.domains:
             assert domain_info.file_count > 0
 
@@ -227,6 +227,6 @@ class TestServerInfoDiagnostics:
 
         result = tapps_server_info()
         kb = result["data"]["diagnostics"]["knowledge_base"]
-        assert kb["expected_domains"] == 16
+        assert kb["expected_domains"] == 17
         assert kb["total_files"] > 0
         assert isinstance(kb["domains"], list)
