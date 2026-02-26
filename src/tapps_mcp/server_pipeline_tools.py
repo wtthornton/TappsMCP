@@ -99,7 +99,7 @@ async def tapps_validate_changed(
     include_security: bool = True,
     quick: bool = True,
     security_depth: str = "basic",
-    include_impact: bool = False,
+    include_impact: bool = True,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """REQUIRED before declaring work complete on multi-file changes.
@@ -121,7 +121,7 @@ async def tapps_validate_changed(
         quick: If True (default), ruff-only scoring for speed. If False, full validation.
         security_depth: Security scan depth - "basic" (default) or "full". When "full",
             security scan runs even in quick mode.
-        include_impact: Whether to run impact analysis on changed files (default: False).
+        include_impact: Whether to run impact analysis on changed files (default: True).
         ctx: Optional MCP context (injected by host); used for progress notifications.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
@@ -275,16 +275,18 @@ async def tapps_validate_changed(
     all_passed = all(r.get("gate_passed", False) for r in results)
     total_sec = sum(r.get("security_issues", 0) for r in results)
 
-    # Impact analysis (opt-in)
+    # Impact analysis (on by default; build the import graph once and reuse)
     impact_data: dict[str, Any] | None = None
     if include_impact and paths:
         try:
-            from tapps_mcp.project.impact_analyzer import analyze_impact
+            from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
+
+            import_graph = build_import_graph(settings.project_root)
 
             impact_results: list[dict[str, Any]] = []
             for p in paths:
                 try:
-                    report = analyze_impact(p, settings.project_root)
+                    report = analyze_impact(p, settings.project_root, graph=import_graph)
                     impact_results.append({
                         "file": str(p),
                         "severity": report.severity,

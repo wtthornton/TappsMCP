@@ -39,7 +39,7 @@
 
 ### Changes
 1. Add `security_depth: str = "basic"` param (basic/full)
-2. Add `include_impact: bool = False` param
+2. Add `include_impact: bool = True` param (default on; opt-out with False)
 3. Change security gate: `security_depth="full"` overrides `quick` gate
 4. Add basic secret-scan-only path for `quick=True` + `include_security=True`
 5. After scoring, optionally run impact analysis (pre-build graph once, share across files)

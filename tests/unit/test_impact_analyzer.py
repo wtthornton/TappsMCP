@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tapps_mcp.project.impact_analyzer import analyze_impact
+from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
 from tapps_mcp.project.models import ImpactReport
 
 
@@ -186,6 +186,52 @@ class TestRecommendations:
         assert report.test_files, "Expected at least one test file"
         recs_lower = " ".join(report.recommendations).lower()
         assert "re-run" in recs_lower or "rerun" in recs_lower
+
+
+class TestBuildImportGraph:
+    """Tests for the public build_import_graph helper."""
+
+    def test_returns_graph(self, tmp_path: Path) -> None:
+        """build_import_graph returns a dict mapping modules to importing files."""
+        _write_file(tmp_path / "pkg" / "__init__.py", "")
+        _write_file(tmp_path / "pkg" / "core.py", "x = 1\n")
+        _write_file(
+            tmp_path / "pkg" / "consumer.py",
+            "from pkg.core import x\n",
+        )
+
+        graph = build_import_graph(tmp_path)
+
+        assert isinstance(graph, dict)
+        assert "pkg.core" in graph
+        assert str(tmp_path / "pkg" / "consumer.py") in graph["pkg.core"]
+
+    def test_graph_reuse_gives_same_results(self, tmp_path: Path) -> None:
+        """Passing a prebuilt graph to analyze_impact produces the same results."""
+        _write_file(tmp_path / "pkg" / "__init__.py", "")
+        _write_file(tmp_path / "pkg" / "core.py", "x = 1\n")
+        _write_file(
+            tmp_path / "pkg" / "consumer.py",
+            "from pkg.core import x\n",
+        )
+
+        # Without prebuilt graph
+        report_auto = analyze_impact(
+            file_path=tmp_path / "pkg" / "core.py",
+            project_root=tmp_path,
+        )
+
+        # With prebuilt graph
+        graph = build_import_graph(tmp_path)
+        report_reuse = analyze_impact(
+            file_path=tmp_path / "pkg" / "core.py",
+            project_root=tmp_path,
+            graph=graph,
+        )
+
+        assert report_auto.severity == report_reuse.severity
+        assert report_auto.total_affected == report_reuse.total_affected
+        assert len(report_auto.direct_dependents) == len(report_reuse.direct_dependents)
 
 
 class TestSkipDirs:

@@ -86,12 +86,27 @@ def _build_import_graph(
 # ---------------------------------------------------------------------------
 
 
+def build_import_graph(
+    project_root: Path,
+    *,
+    max_files: int = 2000,
+) -> dict[str, set[str]]:
+    """Build and return the project import graph.
+
+    Public wrapper around :func:`_build_import_graph` so callers (e.g.
+    ``tapps_validate_changed``) can build the graph once and pass it to
+    multiple :func:`analyze_impact` calls.
+    """
+    return _build_import_graph(project_root, max_files=max_files)
+
+
 def analyze_impact(
     file_path: Path,
     project_root: Path,
     change_type: str = "modified",
     *,
     max_depth: int = 3,
+    graph: dict[str, set[str]] | None = None,
 ) -> ImpactReport:
     """Analyse the blast radius of changing *file_path*.
 
@@ -100,6 +115,9 @@ def analyze_impact(
         project_root: Root of the project tree.
         change_type: ``"added"``, ``"modified"``, or ``"removed"``.
         max_depth: Maximum transitive depth to follow.
+        graph: Pre-built import graph (from :func:`build_import_graph`).
+            When ``None`` the graph is built on each call — pass a shared
+            graph when analysing multiple files to avoid redundant work.
 
     Returns:
         An :class:`ImpactReport` with affected files.
@@ -110,7 +128,8 @@ def analyze_impact(
         change_type=change_type,
     )
 
-    graph = _build_import_graph(project_root)
+    if graph is None:
+        graph = _build_import_graph(project_root)
     changed_module = _module_for_file(file_path, project_root)
 
     direct: list[FileImpact] = []

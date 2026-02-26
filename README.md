@@ -356,10 +356,10 @@ Quick index:
 | **tapps_dead_code** | Scan a Python file for unused functions, classes, imports, and variables (Vulture). |
 | **tapps_dependency_scan** | Scan project dependencies for known vulnerabilities (pip-audit). |
 | **tapps_dependency_graph** | Build import graph, detect circular imports, and calculate coupling metrics. |
-| **tapps_init** | Initialize a pipeline run: profile the project, set context, and plan the workflow. |
+| **tapps_init** | Bootstrap TappsMCP in a project: create AGENTS.md, TECH_STACK.md, platform rules, warm caches. |
 | **tapps_upgrade** | Validate and refresh all generated files (AGENTS.md, rules, hooks) after upgrading TappsMCP. |
 | **tapps_doctor** | Diagnose configuration, rules, hooks, and connectivity — returns per-check pass/fail with hints. |
-| **tapps_workflow** | *(MCP prompt)* Generate tool call order and recommendations for a specific task type. |
+| **tapps_workflow** | *(MCP prompt, not a tool)* Recommended tool call order for a specific task type. |
 
 ---
 
@@ -413,9 +413,9 @@ Quick index:
 
 ### tapps_validate_changed
 
-**What it does:** Detects changed Python files (via `git diff` against a base ref) or accepts an explicit comma-separated list. Runs full score + quality gate + security scan on each file. Returns per-file results with pass/fail status and aggregated summary.
+**What it does:** Detects changed Python files (via `git diff` against a base ref) or accepts an explicit comma-separated list. Default is `quick=True` (ruff-only scoring, under ~10s). Pass `quick=False` for full validation (ruff, mypy, bandit, radon). Includes impact analysis by default (`include_impact=True`) showing blast radius of changes. Returns per-file results with pass/fail status, impact summary, and aggregated summary.
 
-**Why use it:** Required before declaring multi-file work complete. Auto-detects what changed so you don't have to specify each file. Ensures no changed file slips through without quality validation.
+**Why use it:** Required before declaring multi-file work complete. Auto-detects what changed so you don't have to specify each file. Ensures no changed file slips through without quality validation. Impact analysis helps understand downstream effects of changes.
 
 ---
 
@@ -485,7 +485,7 @@ Quick index:
 
 ### tapps_impact_analysis
 
-**What it does:** Analyzes a Python file to determine its impact on the codebase. Returns the file's imports, what other files import it (dependents), exported symbols, and a dependency depth estimate. Accepts an optional `change_description` to scope the analysis.
+**What it does:** Analyzes a Python file to determine its blast radius. Builds an import graph, identifies direct dependents (files that import the changed file), transitive dependents (multi-hop), and affected test files. Returns severity assessment, total affected count, and recommendations. Accepts an optional `change_type` parameter (`"added"`, `"modified"`, or `"removed"`) to adjust severity assessment.
 
 **Why use it:** Before modifying a file, understand what else could break. Use when refactoring, renaming, or changing public APIs so the AI knows which downstream files may need updates.
 

@@ -154,6 +154,10 @@ class TestValidateChangedP0:
             patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=scorer),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
             patch(
+                "tapps_mcp.project.impact_analyzer.build_import_graph",
+                return_value={},
+            ),
+            patch(
                 "tapps_mcp.project.impact_analyzer.analyze_impact",
                 return_value=mock_report,
             ) as mock_analyze,
@@ -178,7 +182,7 @@ class TestValidateChangedP0:
 
     @pytest.mark.asyncio
     async def test_include_impact_false_no_summary(self, tmp_path: Path) -> None:
-        """include_impact=False (default) should NOT include impact_summary."""
+        """include_impact=False should NOT include impact_summary."""
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
         f = tmp_path / "test.py"
@@ -223,6 +227,10 @@ class TestValidateChangedP0:
             patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=scorer),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
             patch(
+                "tapps_mcp.project.impact_analyzer.build_import_graph",
+                return_value={},
+            ),
+            patch(
                 "tapps_mcp.project.impact_analyzer.analyze_impact",
                 side_effect=RuntimeError("graph build failed"),
             ),
@@ -248,7 +256,11 @@ class TestValidateChangedP0:
 
     @pytest.mark.asyncio
     async def test_backward_compat_no_new_params(self, tmp_path: Path) -> None:
-        """Calling with no new params should produce the same shape as before."""
+        """Calling with no new params should produce the same shape as before.
+
+        Since include_impact now defaults to True, the response includes
+        impact_summary with default values.
+        """
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
         f = tmp_path / "test.py"
@@ -256,12 +268,21 @@ class TestValidateChangedP0:
 
         scorer = _mock_scorer()
         mock_gate = MagicMock(passed=True, failures=[])
+        mock_report = _mock_impact_report(str(f), severity="low", direct=0, transitive=0, tests=0)
 
         with (
             patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch("tapps_mcp.server._validate_file_path", side_effect=Path),
             patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=scorer),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+            patch(
+                "tapps_mcp.project.impact_analyzer.build_import_graph",
+                return_value={},
+            ),
+            patch(
+                "tapps_mcp.project.impact_analyzer.analyze_impact",
+                return_value=mock_report,
+            ),
         ):
             mock_settings.return_value.project_root = tmp_path
             mock_settings.return_value.tool_timeout = 30
@@ -276,5 +297,53 @@ class TestValidateChangedP0:
         assert "total_security_issues" in data
         assert "results" in data
         assert "summary" in data
-        # No impact_summary when include_impact defaults to False
-        assert "impact_summary" not in data
+        # include_impact defaults to True so impact_summary is present
+        assert "impact_summary" in data
+
+    @pytest.mark.asyncio
+    async def test_graph_reuse_builds_once(self, tmp_path: Path) -> None:
+        """When include_impact=True and multiple files are validated,
+        build_import_graph should be called exactly once (graph reuse).
+        """
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        f1 = tmp_path / "a.py"
+        f2 = tmp_path / "b.py"
+        f1.write_text("x = 1\n", encoding="utf-8")
+        f2.write_text("y = 2\n", encoding="utf-8")
+
+        scorer = _mock_scorer()
+        mock_gate = MagicMock(passed=True, failures=[])
+        mock_report = _mock_impact_report(severity="low", direct=0, transitive=0, tests=0)
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", side_effect=Path),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+            patch(
+                "tapps_mcp.project.impact_analyzer.build_import_graph",
+                return_value={},
+            ) as mock_build,
+            patch(
+                "tapps_mcp.project.impact_analyzer.analyze_impact",
+                return_value=mock_report,
+            ) as mock_analyze,
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            mock_settings.return_value.dependency_scan_enabled = False
+
+            result = await tapps_validate_changed(
+                file_paths=f"{f1},{f2}",
+                quick=True,
+                include_impact=True,
+            )
+
+        assert result["success"] is True
+        # Graph built exactly once, not once per file
+        mock_build.assert_called_once()
+        # analyze_impact called once per file, each receiving the shared graph
+        assert mock_analyze.call_count == 2
+        for call in mock_analyze.call_args_list:
+            assert call.kwargs.get("graph") == {}
