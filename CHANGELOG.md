@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **tapps_dead_code** — Uses `dead_code_whitelist_patterns` from settings when scanning.
 - **Epic 14** — Marked complete. Epic 13 status updated: 6/8 tools wired, outputSchema not yet in tool registration.
 
+## [0.4.3] - 2026-02-25
+
+### Changed
+
+- **`tapps_session_start` is now lightweight** — Returns server info only (version, checkers, configuration); no project profile, dependency cache warm, or git diff. Call `tapps_project_profile` when you need project context (tech stack, type, CI/Docker/tests). Reduces cold-start latency to ~1s.
+
 ## [0.4.2] - 2026-02-25
 
 ### Removed
