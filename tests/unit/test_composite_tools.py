@@ -105,15 +105,14 @@ def _build_mock_profile() -> dict[str, Any]:
 
 @pytest.fixture()
 def _mock_tool_detection() -> Generator[None, None, None]:
-    """Patch async server info and project profile to avoid subprocesses/threads.
+    """Patch async server info to avoid subprocesses/threads.
 
     On Windows, asyncio.create_subprocess_exec and asyncio.to_thread inside
     pytest-asyncio can deadlock the ProactorEventLoop during teardown.
-    Mocking the top-level async functions eliminates all subprocess and
-    thread-pool operations.
+    Mocking the top-level async function eliminates subprocess and
+    thread-pool operations. Session start is lightweight (server info only).
     """
     mock_info = _build_mock_server_info()
-    mock_profile = _build_mock_profile()
 
     with (
         # Mock _server_info_async (called by tapps_session_start)
@@ -121,17 +120,6 @@ def _mock_tool_detection() -> Generator[None, None, None]:
             "tapps_mcp.server._server_info_async",
             new_callable=AsyncMock,
             return_value=mock_info,
-        ),
-        # Mock tapps_project_profile (called via asyncio.to_thread in session_start)
-        patch(
-            "tapps_mcp.server.tapps_project_profile",
-            return_value=mock_profile,
-        ),
-        # Mock _warm_dependency_cache (fire-and-forget task that spawns pip-audit
-        # subprocess — lingering IOCP handles deadlock event loop teardown)
-        patch(
-            "tapps_mcp.server_pipeline_tools._warm_dependency_cache",
-            new_callable=AsyncMock,
         ),
         # Mock sync tool detection (used by tapps_server_info sync path)
         patch(
@@ -174,7 +162,7 @@ class TestTappsSessionStart:
         assert result["tool"] == "tapps_session_start"
 
     @pytest.mark.asyncio
-    async def test_includes_server_and_profile_data(self) -> None:
+    async def test_includes_server_data_and_profile_hint(self) -> None:
         from tapps_mcp.server import tapps_session_start
 
         result = await tapps_session_start()
@@ -184,8 +172,9 @@ class TestTappsSessionStart:
         assert "pipeline" in data
         assert "quick_start" in data
         assert "critical_rules" in data
-        # project_profile may be present or None depending on env
-        assert "project_profile" in data
+        assert data["project_profile"] is None
+        assert "project_profile_hint" in data
+        assert "tapps_project_profile" in data["project_profile_hint"]
 
     @pytest.mark.asyncio
     async def test_records_session_start_call(self) -> None:

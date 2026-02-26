@@ -15,8 +15,8 @@ These are BLOCKING REQUIREMENTS, not suggestions. Skipping any step risks shippi
 ### Session Start (REQUIRED)
 
 You MUST call `tapps_session_start()` as the FIRST action in every session.
-This discovers server capabilities and detects the project's tech stack.
-Skipping this means all subsequent tools lack project context.
+This returns server info (version, checkers, config) only. Call `tapps_project_profile()` when you need project context (tech stack, type, recommendations).
+Skipping session start means you lack server capabilities and workflow guidance.
 
 ### Before Using Any Library API (BLOCKING)
 
@@ -59,7 +59,7 @@ This validates against security and operational best practices.
 
 Execute these stages IN ORDER for every code task:
 
-1. **Discover** - `tapps_session_start()` (combines server info + project profile)
+1. **Discover** - `tapps_session_start()` (server info); `tapps_project_profile()` when you need project context
 2. **Research** - `tapps_lookup_docs()` for libraries, `tapps_consult_expert()` for decisions
 3. **Develop** - `tapps_score_file(file_path, quick=True)` during edit-lint-fix loops
 4. **Validate** - `tapps_quick_check()` per file OR `tapps_validate_changed()` for batch
@@ -69,7 +69,7 @@ Execute these stages IN ORDER for every code task:
 
 | Skipped Tool | Consequence |
 |---|---|
-| `tapps_session_start` | No project context - tools give generic advice |
+| `tapps_session_start` | No server info or workflow guidance; call tapps_project_profile when you need project context |
 | `tapps_lookup_docs` | Hallucinated APIs - code will fail at runtime |
 | `tapps_quick_check` / scoring | Quality issues shipped silently |
 | `tapps_quality_gate` | No quality bar enforced - regressions go unnoticed |

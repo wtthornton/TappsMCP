@@ -35,7 +35,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 
 | Tool | When to use it |
 |------|----------------|
-| **tapps_session_start** | **FIRST call in every session** - combines server info + project profile in one call. Skipping means all tools lack project context. |
+| **tapps_session_start** | **FIRST call in every session** - returns server info (version, checkers, configuration) only. Call **tapps_project_profile** when you need project context. |
 | **tapps_server_info** | At **session start** - discover version, available tools, and installed checkers. Response includes a short `recommended_workflow` string. |
 | **tapps_score_file** | When **editing or reviewing** a Python file. Use `quick=True` during edit-lint-fix loops; use full (default) **before declaring work complete**. |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
@@ -47,7 +47,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file -> `domain="testing-strategies"`). |
 | **tapps_research** | When you need **combined expert + docs** in one call - consults the domain expert, then auto-supplements with Context7 documentation when RAG is empty or confidence is low. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
 | **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
-| **tapps_project_profile** | At **session start** or when you need project context - detects project type, tech stack, and structure so you can apply the right patterns. |
+| **tapps_project_profile** | When you need **project context** - detects project type, tech stack, CI/Docker/tests, and recommendations. Session start does not include profile; call this on demand. |
 | **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. |
 | **tapps_impact_analysis** | Before **modifying a file's public API** - shows what depends on it and what could break. |
 | **tapps_report** | After scoring/gating, when the user wants a **formatted quality summary** (Markdown, JSON, or HTML). |
@@ -70,12 +70,12 @@ You only see these tools when the host has started the TappsMCP server and attac
 | Aspect | tapps_session_start | tapps_init |
 |--------|---------------------|------------|
 | **When** | **First call in every session** | **Pipeline bootstrap** (once per project, or when upgrading) |
-| **Duration** | Fast (~1-3s) | Full run: 10-35+ seconds |
-| **Purpose** | Load server info + project profile into context | Create files (AGENTS.md, TECH_STACK.md, platform rules), optionally warm cache/RAG |
+| **Duration** | Fast (~1s, server info only) | Full run: 10-35+ seconds |
+| **Purpose** | Load server info (version, checkers, config) into context | Create files (AGENTS.md, TECH_STACK.md, platform rules), optionally warm cache/RAG |
 | **Side effects** | None (read-only) | Writes files, warms caches |
-| **Typical flow** | Call at session start, then work | Call once to bootstrap, or `dry_run: true` to preview |
+| **Typical flow** | Call at session start, then work; call **tapps_project_profile** when you need project context | Call once to bootstrap, or `dry_run: true` to preview |
 
-**Session start** -> `tapps_session_start`. Use this as the first call in every session so subsequent tools have project context.
+**Session start** -> `tapps_session_start`. Use this as the first call in every session. Call **tapps_project_profile** when you need project type, tech stack, or recommendations.
 
 **Pipeline/bootstrap** -> `tapps_init`. Use when you need to set up TappsMCP in a project (AGENTS.md, TECH_STACK.md, platform rules) or upgrade existing files.
 
@@ -106,7 +106,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 
 ## Recommended workflow
 
-1. **Session start:** Call `tapps_session_start` (combines server info + project profile). Optionally call `tapps_list_experts` if you may need experts.
+1. **Session start:** Call `tapps_session_start` (server info only). Call `tapps_project_profile` when you need project context (tech stack, type, recommendations). Optionally call `tapps_list_experts` if you may need experts.
 2. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` to persist constraints and decisions so they survive long sessions.
 3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.

@@ -264,11 +264,11 @@ Restart Claude Desktop after changing the config.
 
 ### For AI assistants
 
-When TappsMCP is connected, call **`tapps_session_start`** at session start (combines server info + project profile). Use **`tapps_quick_check`** after editing files; before declaring work complete, run **`tapps_validate_changed`** and **`tapps_checklist`**. Use **`tapps_lookup_docs`** before writing code that uses an external library. See **[AGENTS.md](AGENTS.md)** for when to use each tool and the full workflow.
+When TappsMCP is connected, call **`tapps_session_start`** at session start (server info only); call **`tapps_project_profile`** when you need project context. Use **`tapps_quick_check`** after editing files; before declaring work complete, run **`tapps_validate_changed`** and **`tapps_checklist`**. Use **`tapps_lookup_docs`** before writing code that uses an external library. See **[AGENTS.md](AGENTS.md)** for when to use each tool and the full workflow.
 
 ### Suggested workflow for the AI
 
-1. Call **`tapps_session_start`** at session start to initialize context.
+1. Call **`tapps_session_start`** at session start (server info). Call **`tapps_project_profile`** when you need tech stack, project type, or recommendations.
 2. Use **`tapps_quick_check`** (or `tapps_score_file` with `quick: true`) during edit-lint-fix loops.
 3. Use **`tapps_lookup_docs`** before writing code that uses an external library API.
 4. Use **`tapps_validate_changed`** before marking work complete (validates all changed files).
@@ -333,7 +333,7 @@ Quick index:
 
 | Tool | One-line purpose |
 |------|------------------|
-| **tapps_session_start** | **FIRST call** — combines server info + project profile in one call. |
+| **tapps_session_start** | **FIRST call** — server info only (version, checkers, config); call tapps_project_profile for project context. |
 | **tapps_server_info** | Discover server version, tools, checkers, and recommended workflow. |
 | **tapps_score_file** | Score a Python file 0–100 across 7 quality categories. |
 | **tapps_quick_check** | Fast score + gate + basic security in one call after editing a file. |
@@ -365,9 +365,9 @@ Quick index:
 
 ### tapps_session_start
 
-**What it does:** Combines `tapps_server_info` and `tapps_project_profile` in a single call. Returns server metadata, installed checker status, project type, tech stack, and structure. This is the **required first call** in every session.
+**What it does:** Returns server info only: version, configuration, installed checkers, diagnostics, quick_start, and pipeline. This is the **required first call** in every session. It does not run project profile; call **tapps_project_profile** when you need project type, tech stack, or recommendations.
 
-**Why use it:** Initializes the session with full context so all subsequent tool calls can use project-aware recommendations. Skipping this means tools lack project context and suggestions are generic.
+**Why use it:** Initializes the session with server capabilities so you know which checkers are available and the recommended workflow. Kept lightweight (~1s). Call tapps_project_profile on demand for project context.
 
 ---
 

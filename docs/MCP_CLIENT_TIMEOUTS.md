@@ -11,7 +11,7 @@ TappsMCP exposes several tools that can take 10–35+ seconds to complete. Some 
 | **tapps_init** (full) | 10–35+ seconds | Project profiling, cache warming (Context7 API), expert RAG warming |
 | **tapps_init** (dry_run) | ~2–5 seconds | Project profiling; skips cache/RAG and server verification |
 | **tapps_init** (verify_only) | ~1–3 seconds | Server/checker detection only |
-| **tapps_session_start** | ~1–3 seconds | Server info + project profile |
+| **tapps_session_start** | ~1 second | Server info only (version, checkers, config); call tapps_project_profile for project context |
 | **tapps_score_file** (full) | 3–15 seconds | Ruff, mypy, bandit, radon + AST analysis |
 | **tapps_quick_check** | ~2–8 seconds | Quick score + gate + basic security |
 | **tapps_validate_changed** | 5–60+ seconds | Depends on number of changed files |

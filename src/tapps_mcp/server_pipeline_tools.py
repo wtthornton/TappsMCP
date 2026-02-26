@@ -387,9 +387,10 @@ async def _warm_dependency_cache(
 ) -> None:
     """Best-effort background task to warm the dependency scan cache.
 
-    Called from :func:`tapps_session_start` so that subsequent
-    ``tapps_score_file`` calls can apply vulnerability penalties.
-    Failures are silently ignored — session start must never break.
+    Available for use by :func:`tapps_validate_changed` or on first
+    :func:`tapps_score_file` so subsequent scoring can apply vulnerability
+    penalties. Not called from :func:`tapps_session_start` (session start
+    is kept lightweight). Failures are silently ignored.
     """
     import structlog
 
@@ -418,38 +419,24 @@ async def _warm_dependency_cache(
 async def tapps_session_start(
     project_root: str = "",
 ) -> dict[str, Any]:
-    """REQUIRED as the FIRST call in every session. Combines server info
-    and project profile detection in a single call. Skipping means all
-    subsequent tools lack project context and recommendations are generic.
+    """REQUIRED as the FIRST call in every session. Returns server info
+    (version, checkers, configuration). Call :func:`tapps_project_profile`
+    when you need project context (tech stack, type, CI/Docker/tests).
 
     Args:
-        project_root: Project root path (default: server's configured root).
+        project_root: Unused; reserved for future use. Server uses configured root.
     """
     from tapps_mcp.server import (
         _record_call,
         _record_execution,
         _server_info_async,
         _with_nudges,
-        tapps_project_profile,
     )
 
     start = time.perf_counter_ns()
     _record_call("tapps_session_start")
 
-    # Run server info (async, parallel tool detection) and project profile
-    # (sync, wrapped in thread) concurrently for faster startup.
-    info, profile = await asyncio.gather(
-        _server_info_async(),
-        asyncio.to_thread(tapps_project_profile, project_root=project_root),
-    )
-
-    # Fire-and-forget: warm the dependency scan cache in background so
-    # subsequent tapps_score_file calls can apply vulnerability penalties.
-    settings = load_settings()
-    if settings.dependency_scan_enabled:
-        task = asyncio.create_task(_warm_dependency_cache(settings))
-        _background_tasks.add(task)
-        task.add_done_callback(_background_tasks.discard)
+    info = await _server_info_async()
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)
@@ -462,22 +449,13 @@ async def tapps_session_start(
         "quick_start": info["data"].get("quick_start", []),
         "critical_rules": info["data"].get("critical_rules", []),
         "pipeline": info["data"]["pipeline"],
+        "project_profile": None,
+        "project_profile_hint": "Call tapps_project_profile when you need project context (tech stack, type, CI/Docker/tests).",
     }
-
-    if profile.get("success"):
-        data["project_profile"] = profile["data"]
-    else:
-        data["project_profile"] = None
-        err = profile.get("error")
-        if isinstance(err, dict):
-            err_msg = err.get("message", "unknown")
-        else:
-            err_msg = str(err) if err is not None else "unknown"
-        data["project_profile_error"] = err_msg
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
 
-    # Attach structured output
+    # Attach structured output (no project fields; call tapps_project_profile for those)
     try:
         from tapps_mcp.common.output_schemas import SessionStartOutput
 
@@ -485,16 +463,15 @@ async def tapps_session_start(
             c.get("name", "") if isinstance(c, dict) else getattr(c, "name", "")
             for c in info["data"].get("installed_checkers", [])
         ]
-        pp = data.get("project_profile") or {}
         structured = SessionStartOutput(
             server_version=info["data"]["server"].get("version", ""),
             project_root=info["data"]["configuration"].get("project_root", ""),
-            project_type=pp.get("project_type"),
+            project_type=None,
             quality_preset=info["data"]["configuration"].get("quality_preset", "standard"),
             installed_checkers=[n for n in checker_names if n],
-            has_ci=pp.get("has_ci", False),
-            has_docker=pp.get("has_docker", False),
-            has_tests=pp.get("has_tests", False),
+            has_ci=False,
+            has_docker=False,
+            has_tests=False,
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
@@ -510,38 +487,10 @@ async def tapps_session_start(
         "project_root": info["data"]["configuration"].get("project_root", ""),
         "quality_preset": info["data"]["configuration"].get("quality_preset", "standard"),
         "auto_initialized": False,
-        "project_profile": data.get("project_profile"),
+        "project_profile": None,
     })
 
-    # Detect changed Python files for workflow nudges (run in thread to
-    # avoid blocking the event loop with subprocess.run).
-    nudge_ctx: dict[str, Any] = {}
-    try:
-
-        def _detect_changed_py() -> int:
-            import subprocess
-
-            diff_result = subprocess.run(
-                ["git", "diff", "--name-only", "HEAD"],
-                capture_output=True,
-                text=True,
-                cwd=str(load_settings().project_root),
-                timeout=5,
-                check=False,
-            )
-            if diff_result.returncode == 0:
-                return len([
-                    f for f in diff_result.stdout.strip().splitlines() if f.endswith(".py")
-                ])
-            return 0
-
-        count = await asyncio.to_thread(_detect_changed_py)
-        nudge_ctx["changed_python_file_count"] = count
-    except Exception:  # noqa: S110
-        # Best-effort: git may not be available or repo may not exist
-        pass
-
-    return _with_nudges("tapps_session_start", resp, nudge_ctx)
+    return _with_nudges("tapps_session_start", resp, {})
 
 
 async def tapps_init(
