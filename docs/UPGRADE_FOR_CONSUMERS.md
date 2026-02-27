@@ -43,7 +43,10 @@ tapps_upgrade(force=true)     # overwrite even if up-to-date
 |--------|---------|
 | `overwrite_agents_md=True` | Replace AGENTS.md with the latest template (new workflow, tool hints) |
 | `overwrite_platform_rules=True` | Refresh platform rule files (CLAUDE.md, .cursor/rules) |
+| `llm_engagement_level="high"` / `"medium"` / `"low"` | Use a specific engagement level for template language and checklist |
 | `platform="cursor"` or `"claude"` | Which platform rules to generate |
+
+To change engagement level only: use **`tapps_set_engagement_level(level)`** then `tapps_init(overwrite_agents_md=True)` to regenerate AGENTS.md and rules with the new level.
 
 ---
 

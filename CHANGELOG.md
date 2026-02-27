@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Epic 18: LLM Engagement Level)
+
+- **LLM engagement level** — Control how strongly the AI is prompted to use TappsMCP tools: **high** (mandatory), **medium** (balanced, default), or **low** (optional). Set via `.tapps-mcp.yaml` (`llm_engagement_level`), `TAPPS_MCP_LLM_ENGAGEMENT_LEVEL`, or the **`tapps_set_engagement_level(level)`** MCP tool.
+- **AGENTS.md and platform rules variants** — Templates `agents_template_high|medium|low.md` and `platform_{cursor|claude}_{high|medium|low}.md`; init and upgrade select by engagement level. High uses MUST/REQUIRED language; low uses optional/consider language.
+- **Checklist by engagement level** — `TASK_TOOL_MAP_HIGH`, `TASK_TOOL_MAP_MEDIUM`, `TASK_TOOL_MAP_LOW` vary required vs recommended tools; `tapps_checklist` and `tapps_workflow` accept `engagement_level`.
+- **Hooks and skills by engagement level** — Generated hook and skill content adjusts wording (mandatory vs optional) per level.
+- **`tapps_doctor`** — Reports `llm_engagement_level` in structured output and CLI when set in project config.
+- **CLI** — `tapps-mcp init --engagement-level high|medium|low` to bootstrap with a specific level.
+- **Documentation** — README "LLM Engagement Level" section; CLAUDE.md engagement-level template variants; AGENTS.md and tool tables updated for `tapps_set_engagement_level` and 27 tools.
+
 ### Added (Epic 13: Structured Outputs — partial, Epic 14: Dead Code — complete)
 
 - **Structured outputs for 6 tools** — `tapps_security_scan`, `tapps_validate_changed`, and `tapps_validate_config` now return `structuredContent` alongside human-readable text. Combined with existing scoring tools (`tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`), 6 tools provide machine-parseable JSON for programmatic consumption.

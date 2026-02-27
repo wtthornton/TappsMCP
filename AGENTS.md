@@ -7,7 +7,7 @@ When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor
 
 ## What TappsMCP is
 
-TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 26 tools for:
+TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 27 tools for:
 
 - **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Security scanning** (Bandit + secret detection with redacted context)
@@ -24,6 +24,7 @@ TappsMCP is an MCP server that provides a comprehensive quality toolset for your
 - **Metrics and feedback** (dashboard, usage stats, adaptive learning via feedback)
 - **Session checklist** (track which tools were used so you don't skip required steps)
 - **Pipeline orchestration** (batch validation, workflow prompts, project initialization)
+- **Engagement level** (set how strongly the AI is prompted to use tools: high / medium / low via `tapps_set_engagement_level`)
 - **Structured outputs** (machine-parseable JSON alongside human-readable text for all scoring tools)
 
 You only see these tools when the host has started the TappsMCP server and attached it to your session.
@@ -60,9 +61,10 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_dependency_scan** | When you want to **check for vulnerable dependencies** - scans pip packages for known CVEs using pip-audit. Use before releases or security reviews. |
 | **tapps_dependency_graph** | When you want to **understand module dependencies** - builds import graph, detects circular imports, and calculates coupling metrics. Use before refactoring or when investigating import errors. |
 | **tapps_workflow** | *(MCP prompt, not a tool)* When you want the **recommended tool call order** for a specific task type (general, feature, bugfix, refactor, security, review). |
-| **tapps_init** | At **pipeline bootstrap** - creates AGENTS.md, TECH_STACK.md, platform rules, optionally warms caches. Call once per project (or when upgrading). |
+| **tapps_init** | At **pipeline bootstrap** - creates AGENTS.md, TECH_STACK.md, platform rules, optionally warms caches. Call once per project (or when upgrading). Use `llm_engagement_level` to set high/medium/low. |
+| **tapps_set_engagement_level** | When the **user wants to change** how strongly TappsMCP prompts the AI (e.g. "set tappsmcp to high"). Writes `llm_engagement_level` to `.tapps-mcp.yaml`. Then run `tapps_init(overwrite_agents_md=True)` to regenerate AGENTS.md and platform rules with the new level. |
 | **tapps_upgrade** | After a **TappsMCP version update** - validates and refreshes AGENTS.md, platform rules, hooks, agents, skills, and settings. Preserves custom command paths (e.g. PyInstaller exe). Use `dry_run: true` to preview. |
-| **tapps_doctor** | When **diagnosing configuration issues** - checks binary availability, MCP configs, platform rules, generated files, hooks, and installed quality tools. Returns per-check pass/fail with remediation hints. |
+| **tapps_doctor** | When **diagnosing configuration issues** - checks binary availability, MCP configs, platform rules, generated files, hooks, and installed quality tools. Reports `llm_engagement_level` when set in `.tapps-mcp.yaml`. Returns per-check pass/fail with remediation hints. |
 
 ---
 

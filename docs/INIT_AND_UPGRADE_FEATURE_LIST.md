@@ -23,6 +23,7 @@ This document lists what each init-related process does. The codebase has **two 
 | **Platform rules** | `platform="claude"` or `"cursor"` | **Claude:** Appends TAPPS pipeline reference to `CLAUDE.md` (or creates it). **Cursor:** Creates `.cursor/rules/tapps-pipeline.md`. Empty string skips. |
 | **Overwrite platform rules** | `overwrite_platform_rules=True` | When true, refreshes platform rule files even if they exist. Use when upgrading TappsMCP to get latest templates. |
 | **Overwrite AGENTS.md** | `overwrite_agents_md=True` | When true, replaces AGENTS.md with the latest template. Use when upgrading to get new workflow. Default: false (validate and smart-merge only). |
+| **LLM engagement level** | `llm_engagement_level="high" \| "medium" \| "low"` | Selects which AGENTS.md and platform-rule template variant to use (MUST/REQUIRED vs optional language). Default: from `.tapps-mcp.yaml` or `medium`. Use with overwrite flags to apply a new level. |
 | **Cache warming** | `warm_cache_from_tech_stack=True` | Uses project profile’s Context7 priority list; pre-fetches docs for those libraries (up to 20) into `.tapps-mcp-cache`. Requires Context7 API key; skips if missing or no libraries. |
 | **Expert RAG warming** | `warm_expert_rag_from_tech_stack=True` | Maps tech stack (frameworks, libraries, domains) to expert domains; pre-builds vector RAG indices under `project_root/.tapps-mcp/rag_index/` for up to 10 domains so first `tapps_consult_expert` is fast. |
 | **Hooks generation** | `platform="claude"` or `"cursor"` | **Claude:** Creates 7 hook scripts in `.claude/hooks/` and merges hook config into `.claude/settings.json`. **Cursor:** Creates 3 hook scripts in `.cursor/hooks/` and merges into `.cursor/hooks.json`. Existing entries are preserved. |
@@ -69,7 +70,8 @@ So “upgrading” pipeline artifacts and caches is done by **calling `tapps_ini
 | **Config paths** | (per host) | **Claude Code:** `~/.claude.json` (user) or `.mcp.json` (project). **Cursor:** `project_root/.cursor/mcp.json`. **VS Code:** `project_root/.vscode/mcp.json`. |
 | **Server entry** | (merged into config) | Adds `tapps-mcp` with `command: "tapps-mcp"`, `args: ["serve"]` under `mcpServers` (Claude/Cursor) or `servers` (VS Code). |
 | **Force overwrite** | `--force` | Overwrite existing tapps-mcp entry without prompting. Use when upgrading or in non-interactive scripts. |
-| **Diagnostics** | `tapps-mcp doctor` | Separate command that diagnoses TappsMCP configuration, connectivity, and missing dependencies. |
+| **Engagement level** | `--engagement-level high \| medium \| low` | Bootstrap with a specific LLM engagement level; writes `.tapps-mcp.yaml` and uses that level for generated AGENTS.md and platform rules. |
+| **Diagnostics** | `tapps-mcp doctor` | Separate command that diagnoses TappsMCP configuration, connectivity, and missing dependencies. Reports `llm_engagement_level` when set. |
 
 ### Idempotency / “upgrade” behavior
 
@@ -83,7 +85,8 @@ So “upgrading” pipeline artifacts and caches is done by **calling `tapps_ini
 |--------|-------------|---------|
 | **tapps_init** | MCP tool `tapps_init` | Bootstrap pipeline files (handoff, runlog, AGENTS.md, TECH_STACK.md), optional platform rules, server verification, cache warming, expert RAG warming. |
 | **tapps_upgrade** | MCP tool `tapps_upgrade` | Refresh all generated files (AGENTS.md, rules, hooks, agents, skills, settings) after upgrading TappsMCP. Preserves custom command paths. |
-| **tapps_doctor** | MCP tool `tapps_doctor` | Diagnose configuration, rules, hooks, and connectivity with per-check pass/fail results. |
+| **tapps_set_engagement_level** | MCP tool `tapps_set_engagement_level` | Set `llm_engagement_level` in `.tapps-mcp.yaml` (high/medium/low). Run `tapps_init(overwrite_agents_md=True)` afterward to apply. |
+| **tapps_doctor** | MCP tool `tapps_doctor` | Diagnose configuration, rules, hooks, and connectivity with per-check pass/fail results; reports engagement level when set. |
 | **CLI init** | `tapps-mcp init` | Generate or verify MCP host config so the IDE/host can start TappsMCP. |
 | **CLI upgrade** | `tapps-mcp upgrade` | CLI equivalent of `tapps_upgrade` — refresh all generated files. |
 | **CLI doctor** | `tapps-mcp doctor` | CLI equivalent of `tapps_doctor` — print diagnostic report. |

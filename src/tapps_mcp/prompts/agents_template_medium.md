@@ -6,7 +6,7 @@ When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor
 
 ## What TappsMCP is
 
-TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 26 tools for:
+TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 27 tools for:
 
 - **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Security scanning** (Bandit + secret detection with redacted context)

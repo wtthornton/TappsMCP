@@ -26,7 +26,7 @@ EXPECTED_SECTIONS: list[str] = [
     "Troubleshooting: MCP tool permissions",
 ]
 
-# The 26 canonical tool names the template should mention
+# The 27 canonical tool names the template should mention
 EXPECTED_TOOLS: list[str] = [
     "tapps_server_info",
     "tapps_session_start",

@@ -26,6 +26,8 @@ following tools to maintain code quality throughout development.
 - `tapps_dependency_scan` — Check dependencies for known vulnerabilities.
 - `tapps_dependency_graph` — Build import graph and detect circular imports.
 - `tapps_checklist` — Verify all required quality steps were completed.
+- `tapps_set_engagement_level` — Set how strongly TappsMCP prompts the AI (high/medium/low); then run init with overwrite to apply.
+- `tapps_doctor` — Diagnose MCP config, rules, hooks, and report engagement level when set.
 
 ## Workflow
 

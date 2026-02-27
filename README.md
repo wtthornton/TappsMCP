@@ -1,8 +1,10 @@
 # TappsMCP
 
-**A quality toolset for AI coding assistants.** TappsMCP is an MCP server that gives LLMs and AI-powered IDEs deterministic code quality tools — scoring, security scanning, quality gates, documentation lookup, config validation, and domain expert consultation — all through structured tool calls instead of prompt injection.
+> **A quality toolset for AI coding assistants.** MCP server that gives LLMs and AI-powered IDEs deterministic code quality tools — scoring, security scanning, quality gates, documentation lookup, config validation, and domain expert consultation — through structured tool calls instead of prompt injection.
 
-**Use TappsMCP in your projects** to help Claude Code, Cursor, VS Code Copilot, and other MCP-capable clients produce higher-quality code with consistent, repeatable standards.
+Use TappsMCP in your projects so **Claude Code**, **Cursor**, **VS Code Copilot**, and other MCP-capable clients produce higher-quality code with consistent, repeatable standards.
+
+**Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
 [![CI](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -40,35 +42,57 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 
 ## Features
 
-- **Code scoring** — 0–100 score across 7 categories (complexity, security, maintainability, test coverage, performance, structure, developer experience).
-- **Security scanning** — Bandit + secret detection with redacted context.
-- **Quality gates** — Pass/fail against configurable presets (standard, strict, framework).
-- **Dead code detection** — Vulture-based detection of unused functions, classes, imports, and variables with confidence scoring, integrated into maintainability/structure scores.
-- **Dependency vulnerability scanning** — pip-audit integration for known CVEs in third-party packages with severity filtering.
-- **Circular dependency detection** — AST-based import graph, cycle detection, and coupling metrics (Ca/Ce/instability).
-- **Structured outputs** — Machine-parseable JSON (`structuredContent`) alongside human-readable text for 6 tools: `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`, `tapps_security_scan`, `tapps_validate_changed`, `tapps_validate_config` (MCP 2025-11-25).
-- **Documentation lookup** — Up-to-date library docs via [Context7](https://context7.com) with multi-provider fallback (llms.txt), fuzzy matching, and local cache.
-- **Config validation** — Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB patterns against best practices.
-- **Domain experts** — 17 built-in experts (security, testing, APIs, GitHub, etc.) with RAG-backed answers and confidence scores.
-- **Project context** — Detect project type, tech stack, and structure for context-aware analysis.
-- **Session notes** — Persist key decisions and constraints across long AI sessions.
-- **Impact analysis** — Understand file dependencies before refactoring or changing APIs.
-- **Quality reports** — Generate JSON, Markdown, or HTML quality summaries.
-- **Session checklist** — Track which tools were used so the AI doesn't skip required steps.
-- **Adaptive learning** — Scoring weights and expert voting adapt based on usage patterns (internal).
-- **Path safety** — All file operations restricted to a configurable project root.
-- **Platform hooks** — Auto-generated hook scripts for Claude Code (7 hooks) and Cursor (3 hooks) that enforce quality checks on edit, stop, and task completion.
-- **Subagent definitions** — Pre-built agent definitions (reviewer, researcher, validator) for Claude Code and Cursor with platform-specific formats.
-- **Skills generation** — SKILL.md templates for scoring, gating, and validation workflows on both platforms.
-- **Plugin bundles** — Ready-to-install plugin directories for Claude Code and Cursor with all hooks, agents, skills, rules, and MCP config bundled together.
-- **Cursor rule types** — Three-tier Cursor rules: always-on pipeline, auto-attach for Python files, agent-requested expert consultation.
-- **Agent Teams** — Quality watchdog teammate pattern for Claude Code Agent Teams with TeammateIdle and TaskCompleted hooks (opt-in).
-- **VS Code / Copilot instructions** — `.github/copilot-instructions.md` for GitHub Copilot with tool guidance, workflow, and scoring reference.
-- **Cursor BugBot rules** — `.cursor/BUGBOT.md` with quality standards, security rules, and scoring thresholds for automated PR review.
-- **MCP elicitation** — Interactive preset selection in `tapps_quality_gate` and init confirmation in `tapps_init` on supporting clients (graceful fallback on others).
-- **CI integration** — GitHub Actions workflow template and headless mode documentation for non-interactive quality gate enforcement.
-- **Cursor marketplace** — Ready-to-publish plugin bundle with marketplace.json, deep link, skills, agents, and hooks.
-- **Agent SDK examples** — Python and TypeScript examples for Claude Agent SDK integration (basic quality check, CI pipeline, subagent registration).
+TappsMCP exposes **27 MCP tools** plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
+
+### Code quality & scoring
+
+| Feature | Description |
+|--------|-------------|
+| **Code scoring** | 0–100 score across 7 categories: complexity, security, maintainability, test coverage, performance, structure, developer experience. Quick mode (ruff-only) or full (ruff, mypy, bandit, radon). |
+| **Quality gates** | Pass/fail against configurable presets: **standard**, **strict**, **framework**. |
+| **Structured outputs** | Machine-parseable JSON (`structuredContent`) for 6 tools: `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`, `tapps_security_scan`, `tapps_validate_changed`, `tapps_validate_config`. |
+| **Dead code detection** | Vulture-based unused functions, classes, imports, variables with confidence scoring; integrated into maintainability/structure. |
+| **Circular dependency detection** | AST import graph, cycle detection, coupling metrics (Ca/Ce/instability). |
+| **Session checklist** | Track which tools were called; required vs recommended by task type (feature, bugfix, refactor, security, review). **LLM engagement level** (high/medium/low) adjusts required tools and wording. |
+| **Adaptive learning** | Scoring weights and expert voting adapt from usage (internal). |
+
+### Security & dependencies
+
+| Feature | Description |
+|--------|-------------|
+| **Security scanning** | Bandit + secret detection with redacted context; severity counts and locations. |
+| **Dependency vulnerability scanning** | pip-audit for known CVEs; severity filtering. |
+| **Config validation** | Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB best-practice checks. |
+| **Path safety** | All file I/O restricted to configurable project root. |
+
+### Knowledge & context
+
+| Feature | Description |
+|--------|-------------|
+| **Documentation lookup** | Up-to-date library docs via [Context7](https://context7.com); multi-provider fallback, fuzzy matching, local cache. |
+| **Domain experts** | 17 built-in experts (security, testing, APIs, GitHub, etc.) with RAG-backed answers and confidence scores. |
+| **Project context** | Detect project type, tech stack, structure for context-aware analysis. |
+| **Session notes** | Persist decisions and constraints across long sessions. |
+| **Impact analysis** | File dependencies and blast radius before refactoring or API changes. |
+| **Quality reports** | JSON, Markdown, or HTML summaries. |
+
+### Pipeline & platform integration
+
+| Feature | Description |
+|--------|-------------|
+| **LLM engagement level** | **high** / **medium** / **low** — controls how strongly the AI is prompted (MUST/REQUIRED vs optional). Set via `.tapps-mcp.yaml`, env, or `tapps_set_engagement_level`. |
+| **Platform hooks** | Auto-generated hooks: Claude Code (7), Cursor (3); quality checks on edit, stop, task completion. |
+| **Subagent definitions** | Pre-built reviewer, researcher, validator for Claude Code and Cursor. |
+| **Skills generation** | SKILL.md templates (score, gate, validate) on both platforms. |
+| **Cursor rule types** | Always-on pipeline, auto-attach for Python, agent-requested expert consultation. |
+| **Plugin bundles** | Ready-to-install plugin dirs (hooks, agents, skills, rules, MCP config). |
+| **Agent Teams** | Quality watchdog teammate for Claude Code (TeammateIdle, TaskCompleted; opt-in). |
+| **VS Code / Copilot** | `.github/copilot-instructions.md` with tool guidance and workflow. |
+| **Cursor BugBot** | `.cursor/BUGBOT.md` for automated PR review standards. |
+| **CI integration** | GitHub Actions workflow template; headless mode docs. |
+| **Cursor marketplace** | Publishable plugin with marketplace.json, deep link, skills, agents, hooks. |
+| **Agent SDK examples** | Python and TypeScript examples (quality check, CI pipeline, subagent registration). |
+| **MCP elicitation** | Interactive preset in `tapps_quality_gate`, init confirmation in `tapps_init` where supported. |
 
 ---
 
@@ -282,24 +306,25 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server:
 
 | Command | Purpose |
 |---------|---------|
-| `tapps-mcp serve` | Start the MCP server (stdio or HTTP transport) |
-| `tapps-mcp init` | Generate MCP configuration for Claude Code, Cursor, or VS Code |
-| `tapps-mcp init --check` | Verify existing MCP configuration without writing |
-| `tapps-mcp init --force` | Overwrite existing config without prompting (for CI/scripts) |
-| `tapps-mcp upgrade` | Validate and update all generated files (AGENTS.md, platform rules, hooks, settings) after upgrading TappsMCP |
-| `tapps-mcp doctor` | Diagnose TappsMCP configuration and connectivity issues |
+| `tapps-mcp serve` | Start the MCP server (stdio or HTTP transport). |
+| `tapps-mcp init` | Generate MCP configuration for Claude Code, Cursor, or VS Code. Use `--engagement-level high\|medium\|low` to set LLM engagement. |
+| `tapps-mcp init --check` | Verify existing MCP configuration without writing. |
+| `tapps-mcp init --force` | Overwrite existing config without prompting (CI/scripts). |
+| `tapps-mcp upgrade` | Refresh all generated files (AGENTS.md, rules, hooks, settings) after upgrading TappsMCP. |
+| `tapps-mcp doctor` | Diagnose configuration and connectivity; reports `llm_engagement_level` when set. |
+| `tapps-mcp validate-changed` | Run quality validation on changed files from the CLI (same as MCP tool). |
 
 ### `tapps-mcp init` options
 
-```bash
-tapps-mcp init [OPTIONS]
-  --host     claude-code | cursor | vscode | auto   # Target client (default: auto-detect)
-  --scope    user | project                          # Config scope for Claude Code (default: user)
-  --force                                            # Overwrite without prompting
-  --check                                            # Verify only, no writes
-  --rules / --no-rules                               # Generate platform rule files (default: yes)
-  --project-root PATH                                # Project root (default: current dir)
-```
+| Option | Description |
+|--------|-------------|
+| `--host claude-code \| cursor \| vscode \| auto` | Target MCP client (default: auto-detect). |
+| `--scope user \| project` | Config scope for Claude Code (default: user). |
+| `--engagement-level high \| medium \| low` | LLM engagement level for generated AGENTS.md and rules (default: medium). |
+| `--force` | Overwrite existing config without prompting. |
+| `--check` | Verify only; no writes. |
+| `--rules` / `--no-rules` | Generate platform rule files (default: yes). |
+| `--project-root PATH` | Project root (default: current dir). |
 
 ### `tapps-mcp upgrade`
 
@@ -357,8 +382,9 @@ Quick index:
 | **tapps_dependency_scan** | Scan project dependencies for known vulnerabilities (pip-audit). |
 | **tapps_dependency_graph** | Build import graph, detect circular imports, and calculate coupling metrics. |
 | **tapps_init** | Bootstrap TappsMCP in a project: create AGENTS.md, TECH_STACK.md, platform rules, warm caches. |
+| **tapps_set_engagement_level** | Set LLM engagement level (high/medium/low) in `.tapps-mcp.yaml`; then run init with overwrite to apply. |
 | **tapps_upgrade** | Validate and refresh all generated files (AGENTS.md, rules, hooks) after upgrading TappsMCP. |
-| **tapps_doctor** | Diagnose configuration, rules, hooks, and connectivity — returns per-check pass/fail with hints. |
+| **tapps_doctor** | Diagnose configuration, rules, hooks, and connectivity; reports `llm_engagement_level` when set. |
 | **tapps_workflow** | *(MCP prompt, not a tool)* Recommended tool call order for a specific task type. |
 
 ---
@@ -507,9 +533,17 @@ Quick index:
 
 ---
 
+### tapps_set_engagement_level
+
+**What it does:** Writes `llm_engagement_level` (`high`, `medium`, or `low`) to the project `.tapps-mcp.yaml`, merging with existing keys. Validates the level and returns success or an error message. Does not regenerate AGENTS.md or platform rules; run `tapps_init(overwrite_agents_md=True)` (or `tapps-mcp init --engagement-level <level>`) afterward to apply the new level to generated content.
+
+**Why use it:** When the user asks to make TappsMCP stricter or more relaxed (e.g. "set tappsmcp to high"), call this tool then re-run init so AGENTS.md, platform rules, hooks, and checklist requirements reflect the chosen engagement level.
+
+---
+
 ### tapps_doctor
 
-**What it does:** Runs a suite of diagnostic checks and returns structured results. Checks include: binary availability on PATH, MCP config files for Claude Code (user and project), Cursor, and VS Code, CLAUDE.md and Cursor rules presence, AGENTS.md version and completeness, `.claude/settings.json` permission entries, hook files, and installed quality tools (ruff, mypy, bandit, radon, vulture, pip-audit). Returns per-check pass/fail with messages and remediation hints, plus aggregated `pass_count`, `fail_count`, and `all_passed`.
+**What it does:** Runs a suite of diagnostic checks and returns structured results. Checks include: binary availability on PATH, MCP config files for Claude Code (user and project), Cursor, and VS Code, CLAUDE.md and Cursor rules presence, AGENTS.md version and completeness, `.claude/settings.json` permission entries, hook files, and installed quality tools (ruff, mypy, bandit, radon, vulture, pip-audit). When `llm_engagement_level` is set in `.tapps-mcp.yaml`, the result includes an `llm_engagement_level` key. Returns per-check pass/fail with messages and remediation hints, plus aggregated `pass_count`, `fail_count`, and `all_passed`.
 
 **Why use it:** When TappsMCP tools are not working as expected — permission prompts, missing tools, degraded results — run `tapps_doctor()` to identify configuration issues. The structured output pinpoints exactly what needs fixing and suggests the command to fix it.
 
@@ -584,6 +618,7 @@ To change the level at runtime, use the **`tapps_set_engagement_level(level)`** 
 | **TAPPS_MCP_LOG_LEVEL** | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Default: `INFO`. |
 | **TAPPS_MCP_DEAD_CODE_MIN_CONFIDENCE** | Minimum confidence for dead code findings (0–100). Default: `80`. |
 | **TAPPS_MCP_DEAD_CODE_WHITELIST_PATTERNS** | Comma-separated file patterns to exclude (fnmatch). Default: `test_*,conftest.py`. |
+| **TAPPS_MCP_LLM_ENGAGEMENT_LEVEL** | Override engagement level (`high`, `medium`, `low`) for template language and checklist. Default: `medium`. |
 
 ---
 
@@ -703,7 +738,7 @@ src/tapps_mcp/
 ├── server_helpers.py                   # Shared response builders
 ├── server_scoring_tools.py             # tapps_score_file, tapps_quality_gate, tapps_quick_check
 ├── server_pipeline_tools.py            # tapps_validate_changed, tapps_session_start, tapps_init,
-│                                       #   tapps_upgrade, tapps_doctor
+│                                       #   tapps_set_engagement_level, tapps_upgrade, tapps_doctor
 ├── server_metrics_tools.py             # tapps_dashboard, tapps_stats, tapps_feedback, tapps_research
 ├── common/                             # Exceptions, logging, shared models, nudges
 ├── config/                             # Settings, default.yaml
@@ -763,7 +798,7 @@ scripts/
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅ · **LLM Engagement Level** ✅
 
 ---
 
