@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 from tapps_mcp.common.utils import utc_now
 from tapps_mcp.metrics.alerts import AlertManager
@@ -59,11 +62,29 @@ class DashboardGenerator:
         self._alert_manager = AlertManager()
         self._visualizer = AnalyticsVisualizer()
 
+    @staticmethod
+    def _parse_time_range(time_range: str) -> datetime | None:
+        """Parse a time_range string into a cutoff datetime, or None for 'all'."""
+        from datetime import UTC, timedelta
+        from datetime import datetime as dt
+
+        days_map = {"1d": 1, "7d": 7, "30d": 30, "90d": 90}
+        days = days_map.get(time_range)
+        if days is not None:
+            return dt.now(tz=UTC) - timedelta(days=days)
+        return None
+
     def generate_json_dashboard(
         self,
         sections: list[str] | None = None,
+        *,
+        since: datetime | None = None,
     ) -> dict[str, Any]:
-        """Generate a comprehensive JSON dashboard."""
+        """Generate a comprehensive JSON dashboard.
+
+        When *since* is provided, execution metrics are filtered to only
+        include data recorded after that timestamp.
+        """
         all_sections = sections or [
             "summary",
             "tool_metrics",
@@ -81,13 +102,13 @@ class DashboardGenerator:
         data: dict[str, Any] = {"timestamp": utc_now().isoformat()}
 
         builders: dict[str, Any] = {
-            "summary": self._build_summary,
-            "tool_metrics": self._build_tool_metrics,
-            "scoring_trends": self._build_scoring_trends,
+            "summary": lambda: self._build_summary(since=since),
+            "tool_metrics": lambda: self._build_tool_metrics(since=since),
+            "scoring_trends": lambda: self._build_scoring_trends(since=since),
             "expert_metrics": self._build_expert_metrics,
             "cache_metrics": self._build_cache_metrics,
             "provider_stats": self._build_provider_stats,
-            "quality_distribution": self._build_quality_distribution,
+            "quality_distribution": lambda: self._build_quality_distribution(since=since),
             "coverage_metrics": self._build_coverage_metrics,
             "alerts": self._build_alerts,
             "business_metrics": self._build_business_metrics,
@@ -104,9 +125,11 @@ class DashboardGenerator:
     def generate_markdown_dashboard(
         self,
         sections: list[str] | None = None,
+        *,
+        since: datetime | None = None,
     ) -> str:
         """Generate a markdown-formatted dashboard."""
-        json_data = self.generate_json_dashboard(sections)
+        json_data = self.generate_json_dashboard(sections, since=since)
         lines: list[str] = []
 
         lines.append("# TappsMCP Dashboard")
@@ -187,12 +210,14 @@ class DashboardGenerator:
     def generate_html_dashboard(
         self,
         sections: list[str] | None = None,
+        *,
+        since: datetime | None = None,
     ) -> str:
         """Generate an HTML dashboard with styled metric cards.
 
         Falls back to a simple HTML rendering if Jinja2 is unavailable.
         """
-        json_data = self.generate_json_dashboard(sections)
+        json_data = self.generate_json_dashboard(sections, since=since)
         return self._render_html(json_data)
 
     def save_dashboard(
@@ -221,8 +246,10 @@ class DashboardGenerator:
 
     # -- Section builders --
 
-    def _build_summary(self) -> dict[str, Any]:
-        exec_summary = self._execution.get_summary()
+    def _build_summary(
+        self, *, since: datetime | None = None,
+    ) -> dict[str, Any]:
+        exec_summary = self._execution.get_summary(since=since)
         conf_stats = self._confidence.get_statistics()
         rag_metrics = self._rag.get_metrics()
 
@@ -240,8 +267,10 @@ class DashboardGenerator:
             "success_rate": exec_summary.success_rate,
         }
 
-    def _build_tool_metrics(self) -> list[dict[str, Any]]:
-        breakdowns = self._execution.get_summary_by_tool()
+    def _build_tool_metrics(
+        self, *, since: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        breakdowns = self._execution.get_summary_by_tool(since=since)
         return [
             {
                 "tool_name": b.tool_name,
@@ -255,9 +284,14 @@ class DashboardGenerator:
             for b in breakdowns
         ]
 
-    def _build_scoring_trends(self) -> dict[str, Any]:
-        # Build trend from recent metrics
-        recent = self._execution.get_recent(limit=50)
+    def _build_scoring_trends(
+        self, *, since: datetime | None = None,
+    ) -> dict[str, Any]:
+        # Build trend from metrics (filtered by time range when provided)
+        if since is not None:
+            recent = self._execution.get_metrics(since=since)
+        else:
+            recent = self._execution.get_recent(limit=50)
         scores = [m.score for m in recent if m.score is not None]
         if scores:
             trend = calculate_trend("avg_score", scores)
@@ -314,11 +348,18 @@ class DashboardGenerator:
             return "60-69"
         return "0-59"
 
-    def _build_quality_distribution(self) -> dict[str, int]:
-        recent = self._execution.get_recent(limit=100)
+    def _build_quality_distribution(
+        self, *, since: datetime | None = None,
+    ) -> dict[str, int]:
+        if since is not None:
+            recent = self._execution.get_metrics(since=since)
+        else:
+            recent = self._execution.get_recent(limit=100)
         scores = [m.score for m in recent if m.score is not None]
 
-        distribution: dict[str, int] = {"90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "0-59": 0}
+        distribution: dict[str, int] = {
+            "90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "0-59": 0,
+        }
         for s in scores:
             distribution[self._score_bin(s)] += 1
 

@@ -55,18 +55,18 @@ TappsMCP already generates `AGENTS.md` and `.github/copilot-instructions.md`, bu
 
 ## Acceptance Criteria
 
-- [ ] Custom agent profile generated: `.github/agents/tapps-quality.md`
-- [ ] Path-scoped instructions generated for quality review patterns
-- [ ] Enhanced `copilot-instructions.md` with TappsMCP pipeline stages
-- [ ] Agentic workflow template generated for quality-check automation
-- [ ] All instruction files follow GitHub's 2025-2026 format specifications
-- [ ] Agent profile includes MCP server configuration for TappsMCP
-- [ ] New `github` domain expert registered with 10+ knowledge files
-- [ ] Domain detection keywords cover Actions, Issues, PRs, rulesets, Copilot, agentic workflows
-- [ ] `tapps_consult_expert(domain="github")` and `tapps_research` return GitHub-specific guidance
-- [ ] All generators integrated into `tapps_init` and `tapps_upgrade`
-- [ ] All changes covered by unit tests
-- [ ] Zero mypy/ruff errors
+- [x] Custom agent profile generated: `.github/agents/tapps-quality.md`
+- [x] Path-scoped instructions generated for quality review patterns
+- [x] Enhanced `copilot-instructions.md` with TappsMCP pipeline stages
+- [x] Agentic workflow template generated for quality-check automation
+- [x] All instruction files follow GitHub's 2025-2026 format specifications
+- [x] Agent profile includes MCP server configuration for TappsMCP
+- [x] New `github` domain expert registered with 10+ knowledge files
+- [x] Domain detection keywords cover Actions, Issues, PRs, rulesets, Copilot, agentic workflows
+- [x] `tapps_consult_expert(domain="github")` and `tapps_research` return GitHub-specific guidance
+- [x] All generators integrated into `tapps_init` and `tapps_upgrade`
+- [x] All changes covered by unit tests
+- [x] Zero mypy/ruff errors
 
 ## Implementation Order
 
@@ -92,7 +92,7 @@ Story 21.7 (GitHub Domain Expert) ───────────────�
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Generate custom Copilot agent profiles in `.github/agents/` that define quality-focused agents backed by TappsMCP's MCP tools.
 
@@ -100,9 +100,9 @@ Generate custom Copilot agent profiles in `.github/agents/` that define quality-
 - `src/tapps_mcp/pipeline/github_agents.py` (NEW)
 
 **Tasks:**
-- [ ] Create `github_agents.py` module in `pipeline/`
-- [ ] `generate_agent_profiles(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Generate `.github/agents/tapps-quality.md` with YAML frontmatter:
+- [x] Create `github_agents.py` module in `pipeline/`
+- [x] `generate_agent_profiles(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Generate `.github/agents/tapps-quality.md` with YAML frontmatter:
   ```yaml
   ---
   name: "quality-reviewer"
@@ -118,16 +118,16 @@ Generate custom Copilot agent profiles in `.github/agents/` that define quality-
     - "tapps_dead_code"
   ---
   ```
-- [ ] Body content: detailed instructions for the quality agent's behavior
+- [x] Body content: detailed instructions for the quality agent's behavior
   - Run `tapps_session_start` first
   - Score files after changes with `tapps_quick_check`
   - Run `tapps_validate_changed` before completing
   - Check for security issues with `tapps_security_scan`
   - Report quality metrics in PR comments
-- [ ] Generate `.github/agents/tapps-researcher.md` for documentation/expert consultation:
+- [x] Generate `.github/agents/tapps-researcher.md` for documentation/expert consultation:
   - Tools: `tapps_lookup_docs`, `tapps_consult_expert`, `tapps_research`, `tapps_list_experts`
   - Instructions: research libraries before using them, consult domain experts for architectural decisions
-- [ ] Skip generation if files exist (respect `overwrite` flag)
+- [x] Skip generation if files exist (respect `overwrite` flag)
 
 **Implementation Notes:**
 - Agent profiles are Markdown files with YAML frontmatter — GitHub's custom agents specification
@@ -144,7 +144,7 @@ Generate custom Copilot agent profiles in `.github/agents/` that define quality-
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Generate path-scoped instruction files in `.github/instructions/` that teach Copilot code review and the coding agent to apply different quality rules to different parts of the codebase.
 
@@ -152,30 +152,30 @@ Generate path-scoped instruction files in `.github/instructions/` that teach Cop
 - `src/tapps_mcp/pipeline/github_agents.py`
 
 **Tasks:**
-- [ ] `generate_path_instructions(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Generate `.github/instructions/quality.instructions.md` with YAML frontmatter:
+- [x] `generate_path_instructions(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Generate `.github/instructions/quality.instructions.md` with YAML frontmatter:
   ```yaml
   ---
   applyTo: "**/*.py"
   ---
   ```
   - Body: Python quality rules — run ruff, type-check with mypy, no print() statements, use structlog for logging, handle exceptions properly, avoid bare except
-- [ ] Generate `.github/instructions/security.instructions.md`:
+- [x] Generate `.github/instructions/security.instructions.md`:
   ```yaml
   ---
   applyTo: "**/*.py"
   ---
   ```
   - Body: Security rules — no hardcoded secrets, validate all file paths, sanitize user input, use parameterized queries, no `eval()` or `exec()`
-- [ ] Generate `.github/instructions/testing.instructions.md`:
+- [x] Generate `.github/instructions/testing.instructions.md`:
   ```yaml
   ---
   applyTo: "tests/**/*.py"
   ---
   ```
   - Body: Testing rules — use pytest fixtures, descriptive test names, cover happy path and edge cases, mock external dependencies, assert specific values not just truthiness
-- [ ] Auto-detect primary language from project profile for instruction content
-- [ ] Skip generation if files exist (respect `overwrite` flag)
+- [x] Auto-detect primary language from project profile for instruction content
+- [x] Skip generation if files exist (respect `overwrite` flag)
 
 **Implementation Notes:**
 - Path-scoped instructions were GA September 2025
@@ -192,7 +192,7 @@ Generate path-scoped instruction files in `.github/instructions/` that teach Cop
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Upgrade the existing `generate_copilot_instructions()` to include TappsMCP pipeline stages, tool references, and the full quality workflow.
 
@@ -200,18 +200,18 @@ Upgrade the existing `generate_copilot_instructions()` to include TappsMCP pipel
 - `src/tapps_mcp/pipeline/platform_generators.py`
 
 **Tasks:**
-- [ ] Update `generate_copilot_instructions()` in `platform_generators.py`
-- [ ] Add TappsMCP pipeline stages (Discover → Research → Develop → Validate → Verify)
-- [ ] Add explicit tool call sequence:
+- [x] Update `generate_copilot_instructions()` in `platform_generators.py`
+- [x] Add TappsMCP pipeline stages (Discover → Research → Develop → Validate → Verify)
+- [x] Add explicit tool call sequence:
   1. Start: `tapps_session_start()`
   2. After edits: `tapps_quick_check(file_path)`
   3. For domain questions: `tapps_research(question)`
   4. Before completion: `tapps_validate_changed()`
   5. Final check: `tapps_checklist(task_type)`
-- [ ] Add reference to custom agent profiles (`.github/agents/`)
-- [ ] Add reference to path-scoped instructions (`.github/instructions/`)
-- [ ] Include version marker comment for `tapps_upgrade` tracking
-- [ ] Backward compatible — existing installs updated via `tapps_upgrade`
+- [x] Add reference to custom agent profiles (`.github/agents/`)
+- [x] Add reference to path-scoped instructions (`.github/instructions/`)
+- [x] Include version marker comment for `tapps_upgrade` tracking
+- [x] Backward compatible — existing installs updated via `tapps_upgrade`
 
 **Implementation Notes:**
 - This file already exists in TappsMCP — this story enhances it, not replaces it
@@ -227,7 +227,7 @@ Upgrade the existing `generate_copilot_instructions()` to include TappsMCP pipel
 
 **Points:** 5
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Generate Markdown-based agentic workflow templates for the GitHub Agentic Workflows system (technical preview February 2026). These let AI agents run TappsMCP quality checks as part of CI.
 
@@ -235,19 +235,19 @@ Generate Markdown-based agentic workflow templates for the GitHub Agentic Workfl
 - `src/tapps_mcp/pipeline/github_agents.py`
 
 **Tasks:**
-- [ ] `generate_agentic_workflows(project_root) -> dict[str, Any]` function
-- [ ] Generate `.github/workflows/tapps-quality-review.md` — agentic workflow for PR quality review:
+- [x] `generate_agentic_workflows(project_root) -> dict[str, Any]` function
+- [x] Generate `.github/workflows/tapps-quality-review.md` — agentic workflow for PR quality review:
   - YAML frontmatter with trigger: `pull_request`
   - Agent: configurable (Claude Code, Copilot, or Codex)
   - Markdown body describing the task: "Review the PR for code quality issues using TappsMCP tools"
   - Steps: run `tapps_session_start`, score changed files, run quality gate, post findings as PR comment
-- [ ] Generate `.github/workflows/tapps-issue-triage.md` — agentic workflow for issue triage:
+- [x] Generate `.github/workflows/tapps-issue-triage.md` — agentic workflow for issue triage:
   - Trigger: `issues.opened`
   - Task: classify issue, suggest labels, check for duplicates
-- [ ] Add prominent comment noting these require the `gh aw` CLI extension (technical preview)
-- [ ] Make agent backend configurable via YAML frontmatter field
-- [ ] Skip generation if files exist (respect `overwrite` flag)
-- [ ] Gate behind a `create_agentic_workflows: bool = False` flag (opt-in since technical preview)
+- [x] Add prominent comment noting these require the `gh aw` CLI extension (technical preview)
+- [x] Make agent backend configurable via YAML frontmatter field
+- [x] Skip generation if files exist (respect `overwrite` flag)
+- [x] Gate behind a `create_agentic_workflows: bool = False` flag (opt-in since technical preview)
 
 **Implementation Notes:**
 - Agentic Workflows are in **technical preview** (February 2026) — gate behind opt-in flag
@@ -265,7 +265,7 @@ Generate Markdown-based agentic workflow templates for the GitHub Agentic Workfl
 
 **Points:** 8
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Add a 17th built-in domain expert for GitHub — covering Actions, Issues, PRs, rulesets, Copilot agent integration, agentic workflows, and repository governance. This ensures `tapps_consult_expert` and `tapps_research` can give GitHub-specific guidance grounded in RAG knowledge files, not just generic advice.
 
@@ -276,8 +276,8 @@ Add a 17th built-in domain expert for GitHub — covering Actions, Issues, PRs, 
 - `tests/unit/test_github_expert.py` (NEW)
 
 **Tasks:**
-- [ ] Register `github` domain in `TECHNICAL_DOMAINS` set in `registry.py`
-- [ ] Add `ExpertConfig` entry in `BUILTIN_EXPERTS`:
+- [x] Register `github` domain in `TECHNICAL_DOMAINS` set in `registry.py`
+- [x] Add `ExpertConfig` entry in `BUILTIN_EXPERTS`:
   ```python
   ExpertConfig(
       expert_id="expert-github",
@@ -286,7 +286,7 @@ Add a 17th built-in domain expert for GitHub — covering Actions, Issues, PRs, 
       description="GitHub Actions, Issues, PRs, rulesets, Copilot agent integration, and repository governance.",
   )
   ```
-- [ ] Add domain keywords to `DOMAIN_KEYWORDS` in `domain_detector.py`:
+- [x] Add domain keywords to `DOMAIN_KEYWORDS` in `domain_detector.py`:
   ```python
   "github": [
       "github", "github actions", "workflow", "github workflow",
@@ -300,7 +300,7 @@ Add a 17th built-in domain expert for GitHub — covering Actions, Issues, PRs, 
       "github mcp", "github project", "github api",
   ]
   ```
-- [ ] Create `src/tapps_mcp/experts/knowledge/github/` directory with 10 knowledge files:
+- [x] Create `src/tapps_mcp/experts/knowledge/github/` directory with 10 knowledge files:
 
 **Knowledge files to create:**
 
@@ -382,20 +382,20 @@ Add a 17th built-in domain expert for GitHub — covering Actions, Issues, PRs, 
     - Prompt injection protection patterns
     - Building MCP servers for GitHub integration
 
-- [ ] Ensure all knowledge files use consistent markdown structure: H1 title, H2 sections, code examples, best practices lists, checklists
-- [ ] Verify RAG retrieval works for GitHub queries (knowledge files auto-discovered via `rglob("*.md")`)
+- [x] Ensure all knowledge files use consistent markdown structure: H1 title, H2 sections, code examples, best practices lists, checklists
+- [x] Verify RAG retrieval works for GitHub queries (knowledge files auto-discovered via `rglob("*.md")`)
 
 **Tests (in `test_github_expert.py`):**
-- [ ] Test `github` domain is registered in `TECHNICAL_DOMAINS`
-- [ ] Test `ExpertConfig` entry exists with correct `expert_id` and `primary_domain`
-- [ ] Test domain detection: "How do I set up GitHub Actions?" → `github` domain detected
-- [ ] Test domain detection: "Configure branch protection rulesets" → `github` domain detected
-- [ ] Test domain detection: "Set up Copilot coding agent" → `github` domain detected
-- [ ] Test domain detection does NOT false-match: "git commit" should not trigger `github` (git != github)
-- [ ] Test knowledge directory exists with 10 `.md` files
-- [ ] Test RAG retrieval: query "github actions best practices" returns relevant chunks
-- [ ] Test RAG retrieval: query "copilot setup steps" returns relevant chunks
-- [ ] Test `tapps_consult_expert(question="...", domain="github")` returns non-empty response with confidence > 0
+- [x] Test `github` domain is registered in `TECHNICAL_DOMAINS`
+- [x] Test `ExpertConfig` entry exists with correct `expert_id` and `primary_domain`
+- [x] Test domain detection: "How do I set up GitHub Actions?" → `github` domain detected
+- [x] Test domain detection: "Configure branch protection rulesets" → `github` domain detected
+- [x] Test domain detection: "Set up Copilot coding agent" → `github` domain detected
+- [x] Test domain detection does NOT false-match: "git commit" should not trigger `github` (git != github)
+- [x] Test knowledge directory exists with 10 `.md` files
+- [x] Test RAG retrieval: query "github actions best practices" returns relevant chunks
+- [x] Test RAG retrieval: query "copilot setup steps" returns relevant chunks
+- [x] Test `tapps_consult_expert(question="...", domain="github")` returns non-empty response with confidence > 0
 
 **Implementation Notes:**
 - The expert system auto-discovers knowledge files via `rglob("*.md")` — no code changes needed beyond registration and keywords
@@ -414,7 +414,7 @@ Add a 17th built-in domain expert for GitHub — covering Actions, Issues, PRs, 
 
 **Points:** 3
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Wire all agent-related generators into `tapps_init` and `tapps_upgrade`.
 
@@ -425,16 +425,16 @@ Wire all agent-related generators into `tapps_init` and `tapps_upgrade`.
 - `src/tapps_mcp/distribution/doctor.py`
 
 **Tasks:**
-- [ ] Add `create_agent_profiles: bool = True` parameter to `tapps_init`
-- [ ] Add `create_agentic_workflows: bool = False` parameter to `tapps_init` (opt-in)
-- [ ] Call agent generators from `_setup_platform()` in `init.py`
-- [ ] Add agent files to `tapps_upgrade` refresh logic
-- [ ] Add agent checks to `tapps_doctor`:
+- [x] Add `create_agent_profiles: bool = True` parameter to `tapps_init`
+- [x] Add `create_agentic_workflows: bool = False` parameter to `tapps_init` (opt-in)
+- [x] Call agent generators from `_setup_platform()` in `init.py`
+- [x] Add agent files to `tapps_upgrade` refresh logic
+- [x] Add agent checks to `tapps_doctor`:
   - Check `.github/agents/tapps-quality.md` exists
   - Check `.github/instructions/quality.instructions.md` exists
   - Warn if `copilot-instructions.md` is outdated (version marker check)
-- [ ] Report created files in init/upgrade return dict under `"github_agents"` key
-- [ ] Respect `dry_run` flag
+- [x] Report created files in init/upgrade return dict under `"github_agents"` key
+- [x] Respect `dry_run` flag
 
 **Implementation Notes:**
 - Agent profiles and instructions are platform-agnostic (not Claude/Cursor specific) — generate for all platforms
@@ -449,7 +449,7 @@ Wire all agent-related generators into `tapps_init` and `tapps_upgrade`.
 
 **Points:** 5
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Comprehensive tests for all agent generators, instruction generators, and the GitHub domain expert.
 
@@ -458,20 +458,20 @@ Comprehensive tests for all agent generators, instruction generators, and the Gi
 - `tests/unit/test_github_expert.py` (NEW — see Story 21.7 for expert-specific test tasks)
 
 **Tasks:**
-- [ ] Test `generate_agent_profiles()` creates quality and researcher agent files
-- [ ] Test agent profile YAML frontmatter has correct `name`, `tools`, `description` fields
-- [ ] Test agent profile body includes TappsMCP tool call sequence
-- [ ] Test `generate_path_instructions()` creates quality, security, and testing instruction files
-- [ ] Test instruction YAML frontmatter has correct `applyTo` glob patterns
-- [ ] Test instruction content includes language-specific rules
-- [ ] Test enhanced `generate_copilot_instructions()` includes pipeline stages
-- [ ] Test `generate_agentic_workflows()` creates Markdown workflows with YAML frontmatter
-- [ ] Test agentic workflows are not generated when `create_agentic_workflows=False`
-- [ ] Test agentic workflows are generated when `create_agentic_workflows=True`
-- [ ] Test idempotency — skip when files exist, overwrite when flag set
-- [ ] Test `dry_run` returns plan without writing files
-- [ ] Test integration with `tapps_init` (mock project profile)
-- [ ] GitHub expert tests (in `test_github_expert.py` — detailed in Story 21.7)
+- [x] Test `generate_agent_profiles()` creates quality and researcher agent files
+- [x] Test agent profile YAML frontmatter has correct `name`, `tools`, `description` fields
+- [x] Test agent profile body includes TappsMCP tool call sequence
+- [x] Test `generate_path_instructions()` creates quality, security, and testing instruction files
+- [x] Test instruction YAML frontmatter has correct `applyTo` glob patterns
+- [x] Test instruction content includes language-specific rules
+- [x] Test enhanced `generate_copilot_instructions()` includes pipeline stages
+- [x] Test `generate_agentic_workflows()` creates Markdown workflows with YAML frontmatter
+- [x] Test agentic workflows are not generated when `create_agentic_workflows=False`
+- [x] Test agentic workflows are generated when `create_agentic_workflows=True`
+- [x] Test idempotency — skip when files exist, overwrite when flag set
+- [x] Test `dry_run` returns plan without writing files
+- [x] Test integration with `tapps_init` (mock project profile)
+- [x] GitHub expert tests (in `test_github_expert.py` — detailed in Story 21.7)
 
 **Definition of Done:** ~45 new tests covering agent profiles, instructions, agentic workflows, GitHub domain expert, and integration. Zero mypy/ruff errors.
 

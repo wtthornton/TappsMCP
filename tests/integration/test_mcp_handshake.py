@@ -22,7 +22,8 @@ class TestMCPHandshake:
 
         data = result["data"]
         assert data["server"]["name"] == "TappsMCP"
-        assert data["server"]["version"] == "0.4.1"
+        from tapps_mcp import __version__
+        assert data["server"]["version"] == __version__
         assert data["server"]["protocol_version"] == "2025-11-25"
 
         assert "available_tools" in data

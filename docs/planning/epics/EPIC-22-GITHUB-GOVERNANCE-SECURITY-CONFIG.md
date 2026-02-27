@@ -54,14 +54,14 @@ This epic generates what it can as files and provides actionable `gh` CLI comman
 
 ## Acceptance Criteria
 
-- [ ] CODEOWNERS template generated with auto-detected project structure
-- [ ] SECURITY.md template generated
-- [ ] Ruleset setup script generated with `gh api` commands
-- [ ] Post-init setup guide generated with step-by-step instructions
-- [ ] Setup guide covers: rulesets, Copilot MCP registration, merge queue, secret scanning
-- [ ] All generators integrated into `tapps_init` and `tapps_upgrade`
-- [ ] All changes covered by unit tests
-- [ ] Zero mypy/ruff errors
+- [x] CODEOWNERS template generated with auto-detected project structure
+- [x] SECURITY.md template generated
+- [x] Ruleset setup script generated with `gh api` commands
+- [x] Post-init setup guide generated with step-by-step instructions
+- [x] Setup guide covers: rulesets, Copilot MCP registration, merge queue, secret scanning
+- [x] All generators integrated into `tapps_init` and `tapps_upgrade`
+- [x] All changes covered by unit tests
+- [x] Zero mypy/ruff errors
 
 ## Implementation Order
 
@@ -85,7 +85,7 @@ Story 22.4 (Post-Init Setup Guide) ───────────┤
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Generate a `.github/CODEOWNERS` file using project structure analysis to assign review ownership.
 
@@ -93,24 +93,24 @@ Generate a `.github/CODEOWNERS` file using project structure analysis to assign 
 - `src/tapps_mcp/pipeline/github_governance.py` (NEW)
 
 **Tasks:**
-- [ ] Create `github_governance.py` module in `pipeline/`
-- [ ] `generate_codeowners(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Auto-detect top-level directories from project structure:
+- [x] Create `github_governance.py` module in `pipeline/`
+- [x] `generate_codeowners(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Auto-detect top-level directories from project structure:
   - `src/` → default owner
   - `tests/` → default owner
   - `.github/` → default owner
   - `docs/` → default owner
-- [ ] Generate `.github/CODEOWNERS` with:
+- [x] Generate `.github/CODEOWNERS` with:
   - Comment header explaining the file's purpose
   - `*` catch-all rule with `@org/team` placeholder
   - Per-directory rules with placeholder owners
   - Comment explaining how to replace placeholders with actual GitHub teams/users
-- [ ] Include security-sensitive paths with explicit ownership:
+- [x] Include security-sensitive paths with explicit ownership:
   - `*.lock` files
   - `pyproject.toml` / `package.json`
   - `.github/workflows/`
   - `Dockerfile` / `docker-compose.yml`
-- [ ] Skip generation if `.github/CODEOWNERS` already exists (respect `overwrite` flag)
+- [x] Skip generation if `.github/CODEOWNERS` already exists (respect `overwrite` flag)
 
 **Implementation Notes:**
 - CODEOWNERS uses `.gitignore`-style glob patterns
@@ -127,7 +127,7 @@ Generate a `.github/CODEOWNERS` file using project structure analysis to assign 
 
 **Points:** 2
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Generate a `SECURITY.md` file for responsible vulnerability disclosure.
 
@@ -135,15 +135,15 @@ Generate a `SECURITY.md` file for responsible vulnerability disclosure.
 - `src/tapps_mcp/pipeline/github_governance.py`
 
 **Tasks:**
-- [ ] `generate_security_policy(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Generate `SECURITY.md` with:
+- [x] `generate_security_policy(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Generate `SECURITY.md` with:
   - Supported versions table (with placeholder version numbers)
   - Reporting process (email, GitHub security advisories, or private vulnerability reporting)
   - Response timeline expectations
   - Scope of security issues
   - Link to GitHub's private vulnerability reporting feature
-- [ ] Auto-detect project name and version from `pyproject.toml` if available
-- [ ] Skip generation if `SECURITY.md` already exists (respect `overwrite` flag)
+- [x] Auto-detect project name and version from `pyproject.toml` if available
+- [x] Skip generation if `SECURITY.md` already exists (respect `overwrite` flag)
 
 **Implementation Notes:**
 - `SECURITY.md` is recognized by GitHub and linked from the repository's Security tab
@@ -158,7 +158,7 @@ Generate a `SECURITY.md` file for responsible vulnerability disclosure.
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Generate a shell script with `gh api` commands that create recommended repository rulesets.
 
@@ -166,8 +166,8 @@ Generate a shell script with `gh api` commands that create recommended repositor
 - `src/tapps_mcp/pipeline/github_governance.py`
 
 **Tasks:**
-- [ ] `generate_ruleset_script(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Generate `.github/scripts/setup-rulesets.sh` with:
+- [x] `generate_ruleset_script(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Generate `.github/scripts/setup-rulesets.sh` with:
   - Header with usage instructions and prerequisites (`gh` CLI authenticated)
   - Variables for repo owner, repo name, default branch
   - Ruleset 1 — **Branch Protection**:
@@ -182,10 +182,10 @@ Generate a shell script with `gh api` commands that create recommended repositor
     - Enable merge queue with squash merge method
     - Build concurrency: 5
     - Comment explaining when to enable
-- [ ] Use `gh api repos/{owner}/{repo}/rulesets --method POST` with JSON payloads
-- [ ] Include `--dry-run` flag that prints commands without executing
-- [ ] Include rollback instructions (ruleset IDs for deletion)
-- [ ] Generate PowerShell equivalent `.github/scripts/setup-rulesets.ps1` for Windows
+- [x] Use `gh api repos/{owner}/{repo}/rulesets --method POST` with JSON payloads
+- [x] Include `--dry-run` flag that prints commands without executing
+- [x] Include rollback instructions (ruleset IDs for deletion)
+- [x] Generate PowerShell equivalent `.github/scripts/setup-rulesets.ps1` for Windows
 
 **Implementation Notes:**
 - Rulesets are the modern replacement for branch protection rules
@@ -203,7 +203,7 @@ Generate a shell script with `gh api` commands that create recommended repositor
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Generate a comprehensive setup guide covering configurations that can't be done via files alone.
 
@@ -211,8 +211,8 @@ Generate a comprehensive setup guide covering configurations that can't be done 
 - `src/tapps_mcp/pipeline/github_governance.py`
 
 **Tasks:**
-- [ ] `generate_setup_guide(project_root, project_profile=None, created_files=None) -> dict[str, Any]` function
-- [ ] Generate `docs/GITHUB_SETUP_GUIDE.md` with sections:
+- [x] `generate_setup_guide(project_root, project_profile=None, created_files=None) -> dict[str, Any]` function
+- [x] Generate `docs/GITHUB_SETUP_GUIDE.md` with sections:
   - **What was created** — list of all files generated by `tapps_init` (from `created_files` param)
   - **Next steps: Repository Settings**
     1. Enable GitHub Copilot for the repository
@@ -234,8 +234,8 @@ Generate a comprehensive setup guide covering configurations that can't be done 
   - **Verification**
     - Checklist of all configurations to verify
     - `tapps-mcp doctor` output to confirm MCP connectivity
-- [ ] Conditionally include sections based on what was actually generated
-- [ ] Include `gh` CLI commands for every manual step where possible
+- [x] Conditionally include sections based on what was actually generated
+- [x] Include `gh` CLI commands for every manual step where possible
 
 **Implementation Notes:**
 - This is the bridge between file-based generation and API/UI-based configuration
@@ -253,7 +253,7 @@ Generate a comprehensive setup guide covering configurations that can't be done 
 
 **Points:** 3
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Wire all governance generators into `tapps_init` and `tapps_upgrade`.
 
@@ -264,16 +264,16 @@ Wire all governance generators into `tapps_init` and `tapps_upgrade`.
 - `src/tapps_mcp/distribution/doctor.py`
 
 **Tasks:**
-- [ ] Add `create_governance: bool = True` parameter to `tapps_init`
-- [ ] Call governance generators from `_setup_platform()` in `init.py`
-- [ ] Generate setup guide LAST (after all other files are created) so it can reference them
-- [ ] Add governance files to `tapps_upgrade` refresh logic
-- [ ] Add governance checks to `tapps_doctor`:
+- [x] Add `create_governance: bool = True` parameter to `tapps_init`
+- [x] Call governance generators from `_setup_platform()` in `init.py`
+- [x] Generate setup guide LAST (after all other files are created) so it can reference them
+- [x] Add governance files to `tapps_upgrade` refresh logic
+- [x] Add governance checks to `tapps_doctor`:
   - Check `.github/CODEOWNERS` exists
   - Check `SECURITY.md` exists
   - Warn if setup guide exists but rulesets haven't been applied (heuristic: check if `tapps-quality` is a required check via `gh api`)
-- [ ] Report created files in init/upgrade return dict under `"governance"` key
-- [ ] Respect `dry_run` flag
+- [x] Report created files in init/upgrade return dict under `"governance"` key
+- [x] Respect `dry_run` flag
 
 **Implementation Notes:**
 - Setup guide generation must be the LAST step since it references all created files
@@ -289,7 +289,7 @@ Wire all governance generators into `tapps_init` and `tapps_upgrade`.
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Comprehensive tests for all governance generators.
 
@@ -297,20 +297,20 @@ Comprehensive tests for all governance generators.
 - `tests/unit/test_github_governance.py` (NEW)
 
 **Tasks:**
-- [ ] Test `generate_codeowners()` creates file with project-structure paths
-- [ ] Test CODEOWNERS includes security-sensitive paths (workflows, lock files)
-- [ ] Test CODEOWNERS uses placeholder owners (not hardcoded names)
-- [ ] Test `generate_security_policy()` creates SECURITY.md with required sections
-- [ ] Test security policy auto-detects project name from pyproject.toml
-- [ ] Test `generate_ruleset_script()` creates both .sh and .ps1 scripts
-- [ ] Test ruleset script includes branch protection, required checks, and merge queue sections
-- [ ] Test ruleset script `gh api` commands have valid JSON payloads
-- [ ] Test `generate_setup_guide()` includes all sections
-- [ ] Test setup guide references actually created files (from `created_files` param)
-- [ ] Test setup guide includes `gh` CLI commands
-- [ ] Test idempotency — skip when files exist, overwrite when flag set
-- [ ] Test `dry_run` returns plan without writing files
-- [ ] Test integration with `tapps_init` (mock project profile)
+- [x] Test `generate_codeowners()` creates file with project-structure paths
+- [x] Test CODEOWNERS includes security-sensitive paths (workflows, lock files)
+- [x] Test CODEOWNERS uses placeholder owners (not hardcoded names)
+- [x] Test `generate_security_policy()` creates SECURITY.md with required sections
+- [x] Test security policy auto-detects project name from pyproject.toml
+- [x] Test `generate_ruleset_script()` creates both .sh and .ps1 scripts
+- [x] Test ruleset script includes branch protection, required checks, and merge queue sections
+- [x] Test ruleset script `gh api` commands have valid JSON payloads
+- [x] Test `generate_setup_guide()` includes all sections
+- [x] Test setup guide references actually created files (from `created_files` param)
+- [x] Test setup guide includes `gh` CLI commands
+- [x] Test idempotency — skip when files exist, overwrite when flag set
+- [x] Test `dry_run` returns plan without writing files
+- [x] Test integration with `tapps_init` (mock project profile)
 
 **Definition of Done:** ~30 new tests covering CODEOWNERS, SECURITY.md, ruleset scripts, and setup guide. Zero mypy/ruff errors.
 

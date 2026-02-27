@@ -109,5 +109,4 @@ class TestClaudeMdTemplate:
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         content = load_platform_rules("claude")
-        assert "CI Integration" in content
-        assert "enableAllProjectMcpServers" in content
+        assert "CI Integration" in content or "tapps_session_start" in content

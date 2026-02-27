@@ -72,3 +72,170 @@ class TestFeedbackTracker:
         long_context = "x" * 1000
         entry = tracker.record("tool_a", True, context=long_context)
         assert len(entry.context) == 500
+
+    def test_deduplication_same_feedback_is_duplicate(self, tracker):
+        """Same feedback within dedup window is detected as duplicate."""
+        tracker.record("tool_a", helpful=True, context="good")
+        assert tracker.is_duplicate("tool_a", True, "good") is True
+
+    def test_deduplication_different_feedback_not_duplicate(self, tracker):
+        """Different feedback is not flagged as duplicate."""
+        tracker.record("tool_a", helpful=True, context="good")
+        assert tracker.is_duplicate("tool_a", False, "good") is False
+        assert tracker.is_duplicate("tool_b", True, "good") is False
+        assert tracker.is_duplicate("tool_a", True, "different") is False
+
+    def test_deduplication_empty_tracker_not_duplicate(self, tracker):
+        """No feedback recorded means no duplicates."""
+        assert tracker.is_duplicate("tool_a", True, "") is False
+
+
+class TestFeedbackToolValidation:
+    """Tests for the tapps_feedback tool handler validation."""
+
+    def test_invalid_tool_name_returns_error(self):
+        from tapps_mcp.server_metrics_tools import _VALID_TOOL_NAMES
+
+        assert "tapps_score_file" in _VALID_TOOL_NAMES
+        assert "nonexistent_tool" not in _VALID_TOOL_NAMES
+
+    def test_scoring_tools_defined(self):
+        from tapps_mcp.server_metrics_tools import _SCORING_TOOLS
+
+        assert "tapps_score_file" in _SCORING_TOOLS
+        assert "tapps_quality_gate" in _SCORING_TOOLS
+        assert "tapps_quick_check" in _SCORING_TOOLS
+        assert "tapps_feedback" not in _SCORING_TOOLS
+
+
+class TestFeedbackWeightAdjustment:
+    """Tests for adaptive weight adjustment triggered by feedback."""
+
+    def test_adjust_scoring_weights_helpful(self):
+        from tapps_mcp.server_metrics_tools import _adjust_scoring_weights
+
+        result = _adjust_scoring_weights(helpful=True)
+        assert result is True
+
+    def test_adjust_scoring_weights_not_helpful(self):
+        from tapps_mcp.server_metrics_tools import _adjust_scoring_weights
+
+        result = _adjust_scoring_weights(helpful=False)
+        assert result is True
+
+    def test_adjust_scoring_weights_normalizes(self):
+        """Weights should still sum to ~1.0 after adjustment."""
+        from tapps_mcp.config.settings import load_settings
+        from tapps_mcp.server_metrics_tools import _adjust_scoring_weights
+
+        _adjust_scoring_weights(helpful=True)
+        settings = load_settings()
+        w = settings.scoring_weights
+        total = w.complexity + w.security + w.maintainability + w.test_coverage + (
+            w.performance + w.structure + w.devex
+        )
+        assert abs(total - 1.0) < 0.01
+
+
+class TestStatsRecommendations:
+    """Tests for _generate_stats_recommendations."""
+
+    def test_security_scan_low_usage(self):
+        from tapps_mcp.server_metrics_tools import _generate_stats_recommendations
+
+        class FakeSummary:
+            gate_pass_rate = 0.8
+
+        breakdowns = [
+            {"tool_name": "tapps_score_file", "call_count": 100, "avg_duration_ms": 50},
+            {"tool_name": "tapps_security_scan", "call_count": 5, "avg_duration_ms": 30},
+        ]
+        recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
+        assert any("auto-security" in r for r in recs)
+
+    def test_research_never_called(self):
+        from tapps_mcp.server_metrics_tools import _generate_stats_recommendations
+
+        class FakeSummary:
+            gate_pass_rate = 0.8
+
+        breakdowns = [
+            {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
+        ]
+        recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
+        assert any("tapps_research" in r for r in recs)
+
+    def test_high_gate_fail_rate(self):
+        from tapps_mcp.server_metrics_tools import _generate_stats_recommendations
+
+        class FakeSummary:
+            gate_pass_rate = 0.3
+
+        breakdowns = [
+            {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
+            {"tool_name": "tapps_research", "call_count": 2, "avg_duration_ms": 100},
+            {"tool_name": "tapps_checklist", "call_count": 1, "avg_duration_ms": 50},
+        ]
+        recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
+        assert any("Quality gate failing" in r for r in recs)
+
+    def test_checklist_never_called(self):
+        from tapps_mcp.server_metrics_tools import _generate_stats_recommendations
+
+        class FakeSummary:
+            gate_pass_rate = 0.9
+
+        breakdowns = [
+            {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
+            {"tool_name": "tapps_research", "call_count": 2, "avg_duration_ms": 100},
+            {"tool_name": "tapps_security_scan", "call_count": 5, "avg_duration_ms": 30},
+        ]
+        recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
+        assert any("tapps_checklist" in r for r in recs)
+
+    def test_slow_validate_changed(self):
+        from tapps_mcp.server_metrics_tools import _generate_stats_recommendations
+
+        class FakeSummary:
+            gate_pass_rate = 0.9
+
+        breakdowns = [
+            {"tool_name": "tapps_validate_changed", "call_count": 5, "avg_duration_ms": 90000},
+            {"tool_name": "tapps_research", "call_count": 2, "avg_duration_ms": 100},
+            {"tool_name": "tapps_checklist", "call_count": 1, "avg_duration_ms": 50},
+            {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
+            {"tool_name": "tapps_security_scan", "call_count": 5, "avg_duration_ms": 30},
+        ]
+        recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
+        assert any("tapps_quick_check per-file" in r for r in recs)
+
+    def test_no_recommendations_when_all_good(self):
+        from tapps_mcp.server_metrics_tools import _generate_stats_recommendations
+
+        class FakeSummary:
+            gate_pass_rate = 0.9
+
+        breakdowns = [
+            {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
+            {"tool_name": "tapps_security_scan", "call_count": 5, "avg_duration_ms": 30},
+            {"tool_name": "tapps_research", "call_count": 2, "avg_duration_ms": 100},
+            {"tool_name": "tapps_checklist", "call_count": 1, "avg_duration_ms": 50},
+        ]
+        recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
+        assert len(recs) == 0
+
+
+class TestContextSanitization:
+    """Tests for context sanitization in feedback."""
+
+    def test_sanitize_param_strips_control_chars(self):
+        from tapps_mcp.server_metrics_tools import _sanitize_param
+
+        result = _sanitize_param("hello\x00world\x1f!")
+        assert result == "helloworld!"
+
+    def test_sanitize_param_truncates(self):
+        from tapps_mcp.server_metrics_tools import _sanitize_param
+
+        result = _sanitize_param("x" * 200, max_len=100)
+        assert len(result) == 100

@@ -444,7 +444,7 @@ class TestExpectedToolsCount:
     def test_expected_tools_is_26(self) -> None:
         from tapps_mcp.pipeline.agents_md import EXPECTED_TOOLS
 
-        assert len(EXPECTED_TOOLS) == 26
+        assert len(EXPECTED_TOOLS) == 27
 
     def test_upgrade_in_expected_tools(self) -> None:
         from tapps_mcp.pipeline.agents_md import EXPECTED_TOOLS

@@ -120,6 +120,61 @@ class TestDashboardGenerator:
         assert "90-100" in dist
         assert "0-59" in dist
 
+    def test_time_range_filtering_excludes_old_data(self, metrics_dir):
+        """7d time range should exclude data older than 7 days."""
+        gen = DashboardGenerator(metrics_dir)
+        now = datetime.now(tz=UTC)
+        old = now - timedelta(days=15)
+
+        # Record old data (15 days ago)
+        gen._execution.record(
+            "tapps_score_file",
+            old,
+            old + timedelta(milliseconds=100),
+            status="success",
+            score=50.0,
+        )
+        # Record recent data (now)
+        gen._execution.record(
+            "tapps_score_file",
+            now,
+            now + timedelta(milliseconds=100),
+            status="success",
+            score=90.0,
+        )
+
+        since_7d = DashboardGenerator._parse_time_range("7d")
+        data = gen.generate_json_dashboard(sections=["summary"], since=since_7d)
+        summary = data["summary"]
+        # Only the recent call should be counted
+        assert summary["total_tool_calls"] == 1
+
+    def test_time_range_empty_range(self, metrics_dir):
+        """Dashboard with no data in time range returns zero counts."""
+        gen = DashboardGenerator(metrics_dir)
+        old = datetime.now(tz=UTC) - timedelta(days=30)
+        gen._execution.record(
+            "tapps_score_file",
+            old,
+            old + timedelta(milliseconds=100),
+            status="success",
+            score=80.0,
+        )
+
+        since_1d = DashboardGenerator._parse_time_range("1d")
+        data = gen.generate_json_dashboard(sections=["summary"], since=since_1d)
+        assert data["summary"]["total_tool_calls"] == 0
+
+    def test_parse_time_range_known(self):
+        """Known time ranges return a datetime."""
+        since = DashboardGenerator._parse_time_range("7d")
+        assert since is not None
+
+    def test_parse_time_range_unknown(self):
+        """Unknown time range returns None (all data)."""
+        since = DashboardGenerator._parse_time_range("all")
+        assert since is None
+
     def test_coverage_metrics_from_disk(self, metrics_dir):
         """Coverage metrics use disk data, so files_scored reflects file_path in records."""
         gen = DashboardGenerator(metrics_dir)

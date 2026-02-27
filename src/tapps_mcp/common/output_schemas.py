@@ -189,6 +189,34 @@ class ChecklistOutput(StructuredOutput):
     auto_run_results: dict[str, Any] | None = None
 
 
+class FeedbackOutput(StructuredOutput):
+    """Structured output for tapps_feedback."""
+
+    recorded: bool
+    tool_name: str
+    helpful: bool
+    duplicate_skipped: bool = False
+    weight_adjusted: bool = False
+
+
+class StatsOutput(StructuredOutput):
+    """Structured output for tapps_stats."""
+
+    period: str
+    total_calls: int = 0
+    success_rate: float = 0.0
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class DashboardOutput(StructuredOutput):
+    """Structured output for tapps_dashboard."""
+
+    time_range_applied: str = "7d"
+    total_tool_calls: int = 0
+    gate_pass_rate: float = 0.0
+    active_alerts: int = 0
+
+
 class ResearchOutput(StructuredOutput):
     """Structured output for tapps_research."""
 
@@ -201,6 +229,20 @@ class ResearchOutput(StructuredOutput):
     docs_library: str | None = None
     docs_topic: str | None = None
     file_context: str | None = None
+
+
+class DeadCodeOutput(StructuredOutput):
+    """Structured output for tapps_dead_code."""
+
+    file_path: str = ""
+    scope: str = "file"
+    total_findings: int = 0
+    files_scanned: int = 1
+    degraded: bool = False
+    min_confidence: int = 80
+    by_type: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
+    type_counts: dict[str, int] = Field(default_factory=dict)
+    summary: str = ""
 
 
 class ProfileOutput(StructuredOutput):

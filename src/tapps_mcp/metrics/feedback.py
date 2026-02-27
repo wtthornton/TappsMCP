@@ -8,12 +8,16 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import asdict, dataclass
+from datetime import timedelta
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
 import structlog
 
 from tapps_mcp.common.utils import utc_now
+
+# Deduplication window (same feedback within this period is skipped).
+_DEDUP_WINDOW = timedelta(minutes=5)
 
 logger = structlog.get_logger(__name__)
 
@@ -44,6 +48,33 @@ class FeedbackTracker:
         self._metrics_dir.mkdir(parents=True, exist_ok=True)
         self._file = self._metrics_dir / "feedback.jsonl"
         self._write_lock = threading.Lock()
+
+    def is_duplicate(
+        self,
+        tool_name: str,
+        helpful: bool,
+        context: str,
+    ) -> bool:
+        """Check if identical feedback was recorded within the dedup window."""
+        from datetime import UTC, datetime
+
+        cutoff = utc_now() - _DEDUP_WINDOW
+        for rec in reversed(self._load_all()):
+            try:
+                ts = datetime.fromisoformat(rec.timestamp)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=UTC)
+            except (ValueError, TypeError):
+                continue
+            if ts < cutoff:
+                break  # older records are before cutoff
+            if (
+                rec.tool_name == tool_name
+                and rec.helpful == helpful
+                and rec.context == context
+            ):
+                return True
+        return False
 
     def record(
         self,

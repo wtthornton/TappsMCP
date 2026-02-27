@@ -1210,51 +1210,124 @@ async def tapps_report(
 
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
-async def tapps_dead_code(file_path: str, min_confidence: int = 80) -> dict[str, Any]:
+async def tapps_dead_code(
+    file_path: str = "",
+    min_confidence: int = 80,
+    scope: str = "file",
+) -> dict[str, Any]:
     """Scan a Python file for dead code (unused functions, classes, imports, variables).
 
     Args:
-        file_path: Path to the Python file to scan.
+        file_path: Path to the Python file to scan (required when scope="file").
         min_confidence: Minimum confidence threshold (0-100, default 80).
+        scope: Scan scope - "file" (single file), "project" (all .py files),
+            or "changed" (git-changed .py files only).
     """
     from tapps_mcp.server_helpers import ensure_session_initialized
+    from tapps_mcp.tools.vulture import (
+        clamp_confidence,
+        collect_changed_python_files,
+        collect_python_files,
+        is_vulture_available,
+        run_vulture_async,
+        run_vulture_multi_async,
+    )
 
     start = time.perf_counter_ns()
     _record_call("tapps_dead_code")
     await ensure_session_initialized()
 
-    try:
-        resolved = _validate_file_path(file_path)
-    except (ValueError, FileNotFoundError) as exc:
-        return error_response("tapps_dead_code", "path_denied", str(exc))
+    min_confidence = clamp_confidence(min_confidence)
 
-    from tapps_mcp.tools.vulture import run_vulture_async
+    valid_scopes = {"file", "project", "changed"}
+    if scope not in valid_scopes:
+        return error_response(
+            "tapps_dead_code",
+            "invalid_scope",
+            f"Invalid scope '{scope}'. Must be one of: {', '.join(sorted(valid_scopes))}",
+        )
 
     settings = load_settings()
-    findings = await run_vulture_async(
-        str(resolved),
-        min_confidence=min_confidence,
-        whitelist_patterns=settings.dead_code_whitelist_patterns,
-        cwd=str(resolved.parent),
-    )
+
+    if scope == "file":
+        # Original single-file behavior
+        if not file_path:
+            return error_response(
+                "tapps_dead_code", "missing_file_path",
+                "file_path is required when scope='file'",
+            )
+        try:
+            resolved = _validate_file_path(file_path)
+        except (ValueError, FileNotFoundError) as exc:
+            return error_response("tapps_dead_code", "path_denied", str(exc))
+
+        degraded = not is_vulture_available()
+        findings = await run_vulture_async(
+            str(resolved),
+            min_confidence=min_confidence,
+            whitelist_patterns=settings.dead_code_whitelist_patterns,
+            cwd=str(resolved.parent),
+        )
+        files_scanned = 1
+        display_path = str(resolved)
+    else:
+        # Project-wide or changed-file scope
+        project_root = settings.project_root
+        if scope == "project":
+            file_list = collect_python_files(project_root)
+        else:
+            file_list = collect_changed_python_files(project_root)
+
+        if not file_list:
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+            _record_execution("tapps_dead_code", start)
+            resp = success_response(
+                "tapps_dead_code",
+                elapsed_ms,
+                {
+                    "file_path": "",
+                    "scope": scope,
+                    "total_findings": 0,
+                    "files_scanned": 0,
+                    "degraded": not is_vulture_available(),
+                    "min_confidence": min_confidence,
+                    "by_type": {},
+                    "type_counts": {},
+                    "summary": f"No Python files found for scope '{scope}'",
+                },
+            )
+            return _with_nudges("tapps_dead_code", resp)
+
+        result = await run_vulture_multi_async(
+            file_list,
+            min_confidence=min_confidence,
+            whitelist_patterns=settings.dead_code_whitelist_patterns,
+            cwd=str(project_root),
+            timeout=120,
+        )
+        findings = result.findings
+        files_scanned = result.files_scanned
+        degraded = result.degraded
+        display_path = str(project_root)
 
     # Group by type
     by_type: dict[str, list[dict[str, Any]]] = {}
     for f in findings:
-        by_type.setdefault(f.finding_type, []).append(
-            {
-                "name": f.name,
-                "line": f.line,
-                "confidence": f.confidence,
-                "message": f.message,
-            }
-        )
+        entry: dict[str, Any] = {
+            "name": f.name,
+            "line": f.line,
+            "confidence": f.confidence,
+            "message": f.message,
+        }
+        if scope != "file":
+            entry["file_path"] = f.file_path
+        by_type.setdefault(f.finding_type, []).append(entry)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_dead_code", start, file_path=str(resolved))
+    _record_execution("tapps_dead_code", start, file_path=display_path)
 
     type_counts = {k: len(v) for k, v in by_type.items()}
-    summary = f"Found {len(findings)} dead code items"
+    summary = f"Found {len(findings)} dead code items in {files_scanned} file(s)"
     if type_counts:
         parts = [f"{count} {typ}" for typ, count in sorted(type_counts.items())]
         summary += f" ({', '.join(parts)})"
@@ -1263,8 +1336,11 @@ async def tapps_dead_code(file_path: str, min_confidence: int = 80) -> dict[str,
         "tapps_dead_code",
         elapsed_ms,
         {
-            "file_path": str(resolved),
+            "file_path": display_path,
+            "scope": scope,
             "total_findings": len(findings),
+            "files_scanned": files_scanned,
+            "degraded": degraded,
             "min_confidence": min_confidence,
             "by_type": by_type,
             "type_counts": type_counts,

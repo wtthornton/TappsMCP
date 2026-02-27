@@ -80,19 +80,19 @@ class TestPlatformRules:
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         content = load_platform_rules("claude")
-        assert "BLOCKING REQUIREMENT" in content
-        assert "MUST" in content
-        assert "NEVER" in content
-        assert "REQUIRED" in content
+        # Medium engagement uses "should" language; high uses "BLOCKING REQUIREMENT"
+        assert "should" in content.lower() or "BLOCKING REQUIREMENT" in content
+        assert "tapps_session_start" in content
+        assert "tapps_quick_check" in content
 
     def test_cursor_rules_contain_enforcement_language(self):
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         content = load_platform_rules("cursor")
-        assert "BLOCKING REQUIREMENT" in content
-        assert "MUST" in content
-        assert "NEVER" in content
-        assert "REQUIRED" in content
+        # Medium engagement uses "should" language; high uses "BLOCKING REQUIREMENT"
+        assert "should" in content.lower() or "BLOCKING REQUIREMENT" in content
+        assert "tapps_session_start" in content
+        assert "tapps_quick_check" in content
 
 
 class TestHandoffRoundTrip:

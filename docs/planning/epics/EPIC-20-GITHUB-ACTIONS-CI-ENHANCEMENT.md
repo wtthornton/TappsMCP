@@ -53,17 +53,17 @@ The current `generate_ci_workflow()` produces a minimal single-job workflow. Thi
 
 ## Acceptance Criteria
 
-- [ ] Upgraded `tapps-quality.yml` with Artifacts v4, SHA-pinned actions, minimal permissions
-- [ ] Optional Arm64 runner configuration
-- [ ] CodeQL scanning workflow generated (`.github/workflows/codeql.yml`)
-- [ ] Copilot setup-steps workflow generated (`.github/workflows/copilot-setup-steps.yml`)
-- [ ] Dependabot auto-merge workflow generated (`.github/workflows/dependabot-automerge.yml`)
-- [ ] Reusable workflow module for TappsMCP quality checks
-- [ ] All workflows use `permissions:` block with minimal required scopes
-- [ ] Generator functions are ecosystem-aware (Python-focused but extensible)
-- [ ] All generators integrated into `tapps_init` and `tapps_upgrade`
-- [ ] All changes covered by unit tests
-- [ ] Zero mypy/ruff errors
+- [x] Upgraded `tapps-quality.yml` with Artifacts v4, SHA-pinned actions, minimal permissions
+- [x] Optional Arm64 runner configuration
+- [x] CodeQL scanning workflow generated (`.github/workflows/codeql.yml`)
+- [x] Copilot setup-steps workflow generated (`.github/workflows/copilot-setup-steps.yml`)
+- [x] Dependabot auto-merge workflow generated (`.github/workflows/dependabot-automerge.yml`)
+- [x] Reusable workflow module for TappsMCP quality checks
+- [x] All workflows use `permissions:` block with minimal required scopes
+- [x] Generator functions are ecosystem-aware (Python-focused but extensible)
+- [x] All generators integrated into `tapps_init` and `tapps_upgrade`
+- [x] All changes covered by unit tests
+- [x] Zero mypy/ruff errors
 
 ## Implementation Order
 
@@ -89,7 +89,7 @@ Story 20.4 (Auto-Merge Workflow) ──────────────┤
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Modernize the existing `generate_ci_workflow()` output to follow 2026 GitHub Actions best practices.
 
@@ -97,19 +97,19 @@ Modernize the existing `generate_ci_workflow()` output to follow 2026 GitHub Act
 - `src/tapps_mcp/pipeline/platform_generators.py`
 
 **Tasks:**
-- [ ] Update `generate_ci_workflow()` in `platform_generators.py` (current `_CI_WORKFLOW` string template at line ~1624) to produce a modernized `tapps-quality.yml`
-- [ ] Add explicit `permissions:` block with minimal scopes (`contents: read`, `pull-requests: write` for annotations)
-- [ ] SHA-pin all action references (e.g., `actions/checkout@v4` → `actions/checkout@<sha>`)
-- [ ] Use `actions/upload-artifact@v4` for quality report artifacts
-- [ ] Add `concurrency:` group to cancel superseded runs on same PR
-- [ ] Add `workflow_dispatch:` trigger for manual quality checks with inputs (preset, file_paths)
-- [ ] Add job-level `timeout-minutes: 15` to prevent runaway jobs
-- [ ] Add comment with Arm64 runner option: `# runs-on: ubuntu-24.04-arm  # 37% cheaper`
-- [ ] Use `actions/setup-python@v5` with version from project profile (default `"3.12"`)
-- [ ] Add `pip install tapps-mcp` step (or `uv pip install tapps-mcp`)
-- [ ] Quality check step: `tapps-mcp validate-changed --preset standard`
-- [ ] Upload quality report as artifact (Artifacts v4)
-- [ ] Backward compatible — existing installs get upgraded on `tapps_upgrade`
+- [x] Update `generate_ci_workflow()` in `platform_generators.py` (current `_CI_WORKFLOW` string template at line ~1624) to produce a modernized `tapps-quality.yml`
+- [x] Add explicit `permissions:` block with minimal scopes (`contents: read`, `pull-requests: write` for annotations)
+- [x] SHA-pin all action references (e.g., `actions/checkout@v4` → `actions/checkout@<sha>`)
+- [x] Use `actions/upload-artifact@v4` for quality report artifacts
+- [x] Add `concurrency:` group to cancel superseded runs on same PR
+- [x] Add `workflow_dispatch:` trigger for manual quality checks with inputs (preset, file_paths)
+- [x] Add job-level `timeout-minutes: 15` to prevent runaway jobs
+- [x] Add comment with Arm64 runner option: `# runs-on: ubuntu-24.04-arm  # 37% cheaper`
+- [x] Use `actions/setup-python@v5` with version from project profile (default `"3.12"`)
+- [x] Add `pip install tapps-mcp` step (or `uv pip install tapps-mcp`)
+- [x] Quality check step: `tapps-mcp validate-changed --preset standard`
+- [x] Upload quality report as artifact (Artifacts v4)
+- [x] Backward compatible — existing installs get upgraded on `tapps_upgrade`
 
 **Implementation Notes:**
 - SHA-pinning: use well-known SHAs for `actions/checkout@v4`, `actions/setup-python@v5`, `actions/upload-artifact@v4`
@@ -125,7 +125,7 @@ Modernize the existing `generate_ci_workflow()` output to follow 2026 GitHub Act
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Generate a CodeQL code scanning workflow that runs incremental analysis on PRs.
 
@@ -133,17 +133,17 @@ Generate a CodeQL code scanning workflow that runs incremental analysis on PRs.
 - `src/tapps_mcp/pipeline/github_workflows.py` (NEW)
 
 **Tasks:**
-- [ ] Create `github_workflows.py` module in `pipeline/` (string templates, NOT PyYAML — GitHub Actions YAML uses `${{ }}` expressions incompatible with YAML libraries)
-- [ ] `generate_codeql_workflow(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Generate `.github/workflows/codeql.yml` with:
+- [x] Create `github_workflows.py` module in `pipeline/` (string templates, NOT PyYAML — GitHub Actions YAML uses `${{ }}` expressions incompatible with YAML libraries)
+- [x] `generate_codeql_workflow(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Generate `.github/workflows/codeql.yml` with:
   - Triggers: `push` (default branch), `pull_request` (default branch), `schedule` (weekly)
   - `permissions: { actions: read, contents: read, security-events: write }`
   - `github/codeql-action/init@v4` with `languages: ["python"]` (auto-detect from profile)
   - `github/codeql-action/autobuild@v4`
   - `github/codeql-action/analyze@v4`
-- [ ] Auto-detect languages from project profile (Python, JavaScript, TypeScript, etc.)
-- [ ] SHA-pin all CodeQL action references
-- [ ] Skip generation if `.github/workflows/codeql.yml` already exists (respect `overwrite` flag)
+- [x] Auto-detect languages from project profile (Python, JavaScript, TypeScript, etc.)
+- [x] SHA-pin all CodeQL action references
+- [x] Skip generation if `.github/workflows/codeql.yml` already exists (respect `overwrite` flag)
 
 **Implementation Notes:**
 - CodeQL Action v4 is the current version (v3 deprecated October 2025)
@@ -159,7 +159,7 @@ Generate a CodeQL code scanning workflow that runs incremental analysis on PRs.
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Generate `.github/workflows/copilot-setup-steps.yml` that configures the Copilot coding agent's development environment with TappsMCP quality tools installed.
 
@@ -167,17 +167,17 @@ Generate `.github/workflows/copilot-setup-steps.yml` that configures the Copilot
 - `src/tapps_mcp/pipeline/github_workflows.py`
 
 **Tasks:**
-- [ ] `generate_copilot_setup_steps(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Generate `.github/workflows/copilot-setup-steps.yml` with:
+- [x] `generate_copilot_setup_steps(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Generate `.github/workflows/copilot-setup-steps.yml` with:
   - `name: "Copilot Setup Steps"`
   - Step 1: `actions/setup-python@v5` with version from project profile
   - Step 2: Install project dependencies (`uv sync` or `pip install -r requirements.txt`)
   - Step 3: Install TappsMCP (`uv pip install tapps-mcp` or `pip install tapps-mcp`)
   - Step 4: Install quality checkers (`pip install ruff mypy bandit radon`)
   - Step 5: Verify tools available (`tapps-mcp doctor` or simple version checks)
-- [ ] Auto-detect package manager from project profile (`uv`, `pip`, `poetry`, `pdm`)
-- [ ] Include comment explaining what this file is for
-- [ ] SHA-pin action references
+- [x] Auto-detect package manager from project profile (`uv`, `pip`, `poetry`, `pdm`)
+- [x] Include comment explaining what this file is for
+- [x] SHA-pin action references
 
 **Implementation Notes:**
 - This file is NOT a regular CI workflow — it's specifically for the Copilot coding agent
@@ -194,7 +194,7 @@ Generate `.github/workflows/copilot-setup-steps.yml` that configures the Copilot
 
 **Points:** 2
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Generate a workflow that auto-approves and auto-merges Dependabot PRs for patch and minor updates.
 
@@ -202,15 +202,15 @@ Generate a workflow that auto-approves and auto-merges Dependabot PRs for patch 
 - `src/tapps_mcp/pipeline/github_workflows.py`
 
 **Tasks:**
-- [ ] `generate_dependabot_automerge(project_root) -> dict[str, Any]` function
-- [ ] Generate `.github/workflows/dependabot-automerge.yml` with:
+- [x] `generate_dependabot_automerge(project_root) -> dict[str, Any]` function
+- [x] Generate `.github/workflows/dependabot-automerge.yml` with:
   - Trigger: `pull_request` from `dependabot[bot]`
   - `permissions: { contents: write, pull-requests: write }`
   - Step: Fetch Dependabot metadata (`dependabot/fetch-metadata@v2`)
   - Step: Auto-approve if patch or minor update (`gh pr review --approve`)
   - Step: Enable auto-merge (`gh pr merge --auto --squash`)
-- [ ] Only auto-merge `patch` and `minor` updates (not `major`)
-- [ ] SHA-pin action references
+- [x] Only auto-merge `patch` and `minor` updates (not `major`)
+- [x] SHA-pin action references
 
 **Implementation Notes:**
 - Uses `dependabot/fetch-metadata` to determine update type (major/minor/patch)
@@ -226,7 +226,7 @@ Generate a workflow that auto-approves and auto-merges Dependabot PRs for patch 
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Extract TappsMCP quality checks into a reusable workflow that other workflows can call.
 
@@ -234,15 +234,15 @@ Extract TappsMCP quality checks into a reusable workflow that other workflows ca
 - `src/tapps_mcp/pipeline/github_workflows.py`
 
 **Tasks:**
-- [ ] `generate_reusable_quality_workflow(project_root) -> dict[str, Any]` function
-- [ ] Generate `.github/workflows/tapps-quality-reusable.yml` with:
+- [x] `generate_reusable_quality_workflow(project_root) -> dict[str, Any]` function
+- [x] Generate `.github/workflows/tapps-quality-reusable.yml` with:
   - `on: workflow_call:` trigger
   - `inputs:` — `preset` (string, default "standard"), `python-version` (string, default "3.12"), `file_paths` (string, default "")
   - `secrets: inherit`
   - Job: install TappsMCP, run `tapps-mcp validate-changed`
   - Upload quality report artifact
-- [ ] Update `tapps-quality.yml` to optionally call the reusable workflow instead of inline steps
-- [ ] Reusable workflow supports both `uv` and `pip` installation paths
+- [x] Update `tapps-quality.yml` to optionally call the reusable workflow instead of inline steps
+- [x] Reusable workflow supports both `uv` and `pip` installation paths
 
 **Implementation Notes:**
 - Reusable workflows use `workflow_call` trigger (not `workflow_dispatch`)
@@ -258,7 +258,7 @@ Extract TappsMCP quality checks into a reusable workflow that other workflows ca
 
 **Points:** 3
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Wire all new workflow generators into `tapps_init` and `tapps_upgrade`.
 
@@ -269,16 +269,16 @@ Wire all new workflow generators into `tapps_init` and `tapps_upgrade`.
 - `src/tapps_mcp/distribution/doctor.py`
 
 **Tasks:**
-- [ ] Add `create_ci_workflows: bool = True` parameter to `tapps_init`
-- [ ] Refactor `_setup_platform()` in `init.py` — extract `_setup_github_workflows()` sub-function to keep the orchestrator manageable
-- [ ] Call all workflow generators from the new sub-function
-- [ ] Add new workflows to `tapps_upgrade` refresh logic
-- [ ] Add workflow checks to `tapps_doctor`:
+- [x] Add `create_ci_workflows: bool = True` parameter to `tapps_init`
+- [x] Refactor `_setup_platform()` in `init.py` — extract `_setup_github_workflows()` sub-function to keep the orchestrator manageable
+- [x] Call all workflow generators from the new sub-function
+- [x] Add new workflows to `tapps_upgrade` refresh logic
+- [x] Add workflow checks to `tapps_doctor`:
   - Check `tapps-quality.yml` exists and uses v4 artifacts
   - Check `copilot-setup-steps.yml` exists
   - Warn if `codeql.yml` is missing
-- [ ] Report created workflows in init/upgrade return dict under `"ci_workflows"` key
-- [ ] Respect `dry_run` flag
+- [x] Report created workflows in init/upgrade return dict under `"ci_workflows"` key
+- [x] Respect `dry_run` flag
 
 **Implementation Notes:**
 - CodeQL workflow is optional (some repos may not want it) — generate by default but document how to skip
@@ -293,7 +293,7 @@ Wire all new workflow generators into `tapps_init` and `tapps_upgrade`.
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Comprehensive tests for all workflow generators.
 
@@ -301,19 +301,19 @@ Comprehensive tests for all workflow generators.
 - `tests/unit/test_github_workflows.py` (NEW)
 
 **Tasks:**
-- [ ] Test upgraded `generate_ci_workflow()` includes Artifacts v4, permissions, concurrency
-- [ ] Test SHA-pinned action references are present
-- [ ] Test `workflow_dispatch` trigger with inputs
-- [ ] Test `generate_codeql_workflow()` with Python project profile
-- [ ] Test CodeQL language detection from project profile
-- [ ] Test `generate_copilot_setup_steps()` includes TappsMCP installation
-- [ ] Test setup-steps detects `uv` vs `pip` from project profile
-- [ ] Test `generate_dependabot_automerge()` only auto-merges patch/minor
-- [ ] Test `generate_reusable_quality_workflow()` has `workflow_call` trigger
-- [ ] Test reusable workflow has correct inputs (preset, python-version, file_paths)
-- [ ] Test idempotency — skip when files exist, overwrite when flag set
-- [ ] Test `dry_run` mode returns plan without writing
-- [ ] Test integration with `tapps_init` (mock project profile)
+- [x] Test upgraded `generate_ci_workflow()` includes Artifacts v4, permissions, concurrency
+- [x] Test SHA-pinned action references are present
+- [x] Test `workflow_dispatch` trigger with inputs
+- [x] Test `generate_codeql_workflow()` with Python project profile
+- [x] Test CodeQL language detection from project profile
+- [x] Test `generate_copilot_setup_steps()` includes TappsMCP installation
+- [x] Test setup-steps detects `uv` vs `pip` from project profile
+- [x] Test `generate_dependabot_automerge()` only auto-merges patch/minor
+- [x] Test `generate_reusable_quality_workflow()` has `workflow_call` trigger
+- [x] Test reusable workflow has correct inputs (preset, python-version, file_paths)
+- [x] Test idempotency — skip when files exist, overwrite when flag set
+- [x] Test `dry_run` mode returns plan without writing
+- [x] Test integration with `tapps_init` (mock project profile)
 
 **Definition of Done:** ~30 new tests covering all workflow generators and integration. Zero mypy/ruff errors.
 

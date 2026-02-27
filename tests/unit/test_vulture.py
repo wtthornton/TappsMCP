@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -9,10 +10,15 @@ import pytest
 from tapps_mcp.tools.subprocess_utils import CommandResult
 from tapps_mcp.tools.vulture import (
     DeadCodeFinding,
+    DeadCodeResult,
+    _matches_whitelist,
+    clamp_confidence,
+    collect_changed_python_files,
+    collect_python_files,
     is_vulture_available,
     parse_vulture_output,
     run_vulture_async,
-    _matches_whitelist,
+    run_vulture_multi_async,
 )
 
 # ---------------------------------------------------------------------------
@@ -271,3 +277,221 @@ class TestWhitelistFiltering:
         assert len(result) == 1
         assert result[0].file_path == "src/main.py"
         assert result[0].name == "os"
+
+
+# ---------------------------------------------------------------------------
+# clamp_confidence
+# ---------------------------------------------------------------------------
+class TestClampConfidence:
+    def test_in_range(self) -> None:
+        assert clamp_confidence(50) == 50
+
+    def test_below_zero(self) -> None:
+        assert clamp_confidence(-10) == 0
+
+    def test_above_100(self) -> None:
+        assert clamp_confidence(150) == 100
+
+    def test_boundaries(self) -> None:
+        assert clamp_confidence(0) == 0
+        assert clamp_confidence(100) == 100
+
+
+# ---------------------------------------------------------------------------
+# collect_python_files
+# ---------------------------------------------------------------------------
+class TestCollectPythonFiles:
+    def test_collects_py_files(self, tmp_path: Path) -> None:
+        (tmp_path / "main.py").write_text("pass")
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "sub" / "util.py").write_text("pass")
+        result = collect_python_files(tmp_path)
+        assert "main.py" in result
+        assert str(Path("sub") / "util.py").replace("\\", "/") in [
+            r.replace("\\", "/") for r in result
+        ]
+
+    def test_excludes_venv(self, tmp_path: Path) -> None:
+        (tmp_path / ".venv").mkdir()
+        (tmp_path / ".venv" / "lib.py").write_text("pass")
+        (tmp_path / "app.py").write_text("pass")
+        result = collect_python_files(tmp_path)
+        assert len(result) == 1
+        assert result[0] == "app.py"
+
+    def test_excludes_pycache(self, tmp_path: Path) -> None:
+        (tmp_path / "__pycache__").mkdir()
+        (tmp_path / "__pycache__" / "mod.py").write_text("pass")
+        result = collect_python_files(tmp_path)
+        assert result == []
+
+    def test_empty_dir(self, tmp_path: Path) -> None:
+        result = collect_python_files(tmp_path)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# collect_changed_python_files
+# ---------------------------------------------------------------------------
+class TestCollectChangedPythonFiles:
+    @patch("tapps_mcp.tools.vulture.subprocess.run")
+    def test_collects_changed_files(
+        self, mock_run: object, tmp_path: Path
+    ) -> None:
+        (tmp_path / "changed.py").write_text("pass")
+
+        import subprocess as sp
+
+        mock_run.side_effect = [  # type: ignore[union-attr]
+            sp.CompletedProcess(args=[], returncode=0, stdout="changed.py\n", stderr=""),
+            sp.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+        ]
+        result = collect_changed_python_files(tmp_path)
+        assert result == ["changed.py"]
+
+    @patch("tapps_mcp.tools.vulture.subprocess.run")
+    def test_deduplicates(self, mock_run: object, tmp_path: Path) -> None:
+        (tmp_path / "dup.py").write_text("pass")
+
+        import subprocess as sp
+
+        mock_run.side_effect = [  # type: ignore[union-attr]
+            sp.CompletedProcess(args=[], returncode=0, stdout="dup.py\n", stderr=""),
+            sp.CompletedProcess(args=[], returncode=0, stdout="dup.py\n", stderr=""),
+        ]
+        result = collect_changed_python_files(tmp_path)
+        assert result == ["dup.py"]
+
+    @patch("tapps_mcp.tools.vulture.subprocess.run")
+    def test_filters_non_py(self, mock_run: object, tmp_path: Path) -> None:
+        import subprocess as sp
+
+        mock_run.side_effect = [  # type: ignore[union-attr]
+            sp.CompletedProcess(
+                args=[], returncode=0, stdout="readme.md\napp.js\n", stderr=""
+            ),
+            sp.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+        ]
+        result = collect_changed_python_files(tmp_path)
+        assert result == []
+
+    @patch("tapps_mcp.tools.vulture.subprocess.run", side_effect=FileNotFoundError)
+    def test_git_not_available(self, _mock: object, tmp_path: Path) -> None:
+        result = collect_changed_python_files(tmp_path)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# run_vulture_multi_async
+# ---------------------------------------------------------------------------
+class TestRunVultureMultiAsync:
+    @pytest.mark.asyncio
+    async def test_empty_file_list(self) -> None:
+        result = await run_vulture_multi_async([])
+        assert result.files_scanned == 0
+        assert result.findings == []
+        assert result.degraded is False
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=False)
+    async def test_degraded_when_vulture_missing(self, _mock: object) -> None:
+        result = await run_vulture_multi_async(["a.py", "b.py"])
+        assert result.degraded is True
+        assert result.files_scanned == 2
+        assert result.findings == []
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.vulture.run_command_async")
+    @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True)
+    async def test_success_multi(self, _mock_avail: object, mock_cmd: object) -> None:
+        mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
+            returncode=1, stdout=SAMPLE_VULTURE_OUTPUT, stderr=""
+        )
+        result = await run_vulture_multi_async(
+            ["a.py", "b.py"], min_confidence=60
+        )
+        assert result.files_scanned == 2
+        assert len(result.findings) == 5
+        assert result.degraded is False
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.vulture.run_command_async")
+    @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True)
+    async def test_timeout_multi(self, _mock_avail: object, mock_cmd: object) -> None:
+        mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
+            returncode=-1, stdout="", stderr="Timed out", timed_out=True
+        )
+        result = await run_vulture_multi_async(["a.py"])
+        assert result.files_scanned == 1
+        assert result.findings == []
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.vulture.run_command_async")
+    @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True)
+    async def test_passes_all_files_in_command(
+        self, _mock_avail: object, mock_cmd: object
+    ) -> None:
+        mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
+            returncode=0, stdout="", stderr=""
+        )
+        await run_vulture_multi_async(
+            ["a.py", "b.py", "c.py"], min_confidence=70, cwd="/proj"
+        )
+        mock_cmd.assert_called_once_with(  # type: ignore[union-attr]
+            ["vulture", "a.py", "b.py", "c.py", "--min-confidence=70"],
+            cwd="/proj",
+            timeout=60,
+        )
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.vulture.run_command_async")
+    @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True)
+    async def test_whitelist_filters_multi(
+        self, _mock_avail: object, mock_cmd: object
+    ) -> None:
+        mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
+            returncode=1,
+            stdout=(
+                "tests/test_foo.py:10: unused function 'helper' (90% confidence)\n"
+                "src/main.py:5: unused import 'os' (80% confidence)\n"
+            ),
+            stderr="",
+        )
+        result = await run_vulture_multi_async(
+            ["tests/test_foo.py", "src/main.py"],
+            min_confidence=80,
+            whitelist_patterns=["test_*"],
+        )
+        assert len(result.findings) == 1
+        assert result.findings[0].file_path == "src/main.py"
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True)
+    @patch("tapps_mcp.tools.vulture.run_command_async")
+    async def test_clamps_confidence(
+        self, mock_cmd: object, _mock_avail: object
+    ) -> None:
+        mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
+            returncode=0, stdout="", stderr=""
+        )
+        result = await run_vulture_multi_async(["a.py"], min_confidence=200)
+        # Should clamp to 100, not error
+        assert result.files_scanned == 1
+
+
+# ---------------------------------------------------------------------------
+# DeadCodeResult dataclass
+# ---------------------------------------------------------------------------
+class TestDeadCodeResult:
+    def test_defaults(self) -> None:
+        r = DeadCodeResult()
+        assert r.findings == []
+        assert r.files_scanned == 0
+        assert r.degraded is False
+
+    def test_with_values(self) -> None:
+        finding = DeadCodeFinding(name="x", line=1, finding_type="variable", confidence=80)
+        r = DeadCodeResult(findings=[finding], files_scanned=3, degraded=True)
+        assert len(r.findings) == 1
+        assert r.files_scanned == 3
+        assert r.degraded is True

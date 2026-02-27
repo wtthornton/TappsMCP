@@ -147,26 +147,37 @@ async def tapps_dashboard(
         resp = success_response("tapps_dashboard", elapsed_ms, otel_data)
         return _with_nudges("tapps_dashboard", resp)
 
+    from tapps_mcp.metrics.dashboard import DashboardGenerator
+
     dashboard = hub.get_dashboard_generator()
+    since = DashboardGenerator._parse_time_range(time_range)
 
     if output_format == "json":
-        data = dashboard.generate_json_dashboard(sections=sections)
+        data = dashboard.generate_json_dashboard(sections=sections, since=since)
         data["time_range"] = time_range
+        data["time_range_applied"] = True
     elif output_format == "markdown":
-        content = dashboard.generate_markdown_dashboard(sections=sections)
-        data = {"format": "markdown", "time_range": time_range, "content": content}
+        content = dashboard.generate_markdown_dashboard(sections=sections, since=since)
+        data = {
+            "format": "markdown",
+            "time_range": time_range,
+            "time_range_applied": True,
+            "content": content,
+        }
     elif output_format == "html":
-        content = dashboard.generate_html_dashboard(sections=sections)
+        content = dashboard.generate_html_dashboard(sections=sections, since=since)
         path = dashboard.save_dashboard(fmt="html", sections=sections)
         data = {
             "format": "html",
             "time_range": time_range,
+            "time_range_applied": True,
             "content": content,
             "saved_to": str(path),
         }
     else:
-        data = dashboard.generate_json_dashboard(sections=sections)
+        data = dashboard.generate_json_dashboard(sections=sections, since=since)
         data["time_range"] = time_range
+        data["time_range_applied"] = True
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_dashboard", start)
@@ -199,6 +210,8 @@ def tapps_stats(
     else:
         summary, tool_breakdowns = _period_stats(hub, tool_name, period)
 
+    recommendations = _generate_stats_recommendations(summary, tool_breakdowns)
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_stats", start)
 
@@ -214,9 +227,99 @@ def tapps_stats(
             "gate_pass_rate": summary.gate_pass_rate,
             "avg_score": summary.avg_score,
             "tools": tool_breakdowns,
+            "recommendations": recommendations,
         },
     )
     return _with_nudges("tapps_stats", resp)
+
+
+_GATE_FAIL_THRESHOLD = 0.5
+_SLOW_VALIDATE_MS = 60000
+
+
+def _generate_stats_recommendations(
+    summary: object,
+    tool_breakdowns: list[dict[str, Any]],
+) -> list[str]:
+    """Generate actionable recommendations from usage patterns."""
+    recommendations: list[str] = []
+    tools_by_name: dict[str, dict[str, Any]] = {
+        t["tool_name"]: t for t in tool_breakdowns
+    }
+
+    score_calls = tools_by_name.get("tapps_score_file", {}).get("call_count", 0)
+    security_calls = tools_by_name.get("tapps_security_scan", {}).get("call_count", 0)
+
+    if score_calls > 0 and security_calls < score_calls * 0.2:
+        recommendations.append(
+            "Consider enabling auto-security in tapps_quick_check"
+        )
+
+    if "tapps_research" not in tools_by_name:
+        recommendations.append(
+            "Use tapps_research for domain-specific questions before implementation"
+        )
+
+    gate_rate = getattr(summary, "gate_pass_rate", None)
+    if gate_rate is not None and gate_rate < _GATE_FAIL_THRESHOLD:
+        recommendations.append(
+            "Quality gate failing frequently - consider running "
+            "tapps_quick_check more often during development"
+        )
+
+    if "tapps_checklist" not in tools_by_name:
+        recommendations.append(
+            "Always run tapps_checklist as your final verification step"
+        )
+
+    vc = tools_by_name.get("tapps_validate_changed", {})
+    if vc.get("avg_duration_ms", 0) > _SLOW_VALIDATE_MS:
+        recommendations.append(
+            "Consider using tapps_quick_check per-file for faster feedback"
+        )
+
+    return recommendations
+
+
+# Known tool names for validation.
+_VALID_TOOL_NAMES: frozenset[str] = frozenset({
+    "tapps_checklist",
+    "tapps_consult_expert",
+    "tapps_dashboard",
+    "tapps_dead_code",
+    "tapps_dependency_graph",
+    "tapps_dependency_scan",
+    "tapps_doctor",
+    "tapps_feedback",
+    "tapps_impact_analysis",
+    "tapps_init",
+    "tapps_list_experts",
+    "tapps_lookup_docs",
+    "tapps_project_profile",
+    "tapps_quality_gate",
+    "tapps_quick_check",
+    "tapps_report",
+    "tapps_research",
+    "tapps_score_file",
+    "tapps_security_scan",
+    "tapps_server_info",
+    "tapps_session_notes",
+    "tapps_session_start",
+    "tapps_set_engagement_level",
+    "tapps_stats",
+    "tapps_upgrade",
+    "tapps_validate_changed",
+    "tapps_validate_config",
+})
+
+# Scoring tools whose feedback triggers adaptive weight adjustment.
+_SCORING_TOOLS: frozenset[str] = frozenset({
+    "tapps_score_file",
+    "tapps_quality_gate",
+    "tapps_quick_check",
+})
+
+_WEIGHT_DELTA = 0.02
 
 
 def tapps_feedback(
@@ -239,17 +342,38 @@ def tapps_feedback(
     start = time.perf_counter_ns()
     _record_call("tapps_feedback")
 
+    # Validate tool_name
+    if tool_name not in _VALID_TOOL_NAMES:
+        return error_response(
+            "tapps_feedback",
+            "invalid_tool_name",
+            f"Unknown tool '{tool_name}'. Valid tools: "
+            + ", ".join(sorted(_VALID_TOOL_NAMES)),
+        )
+
+    # Sanitize context
+    sanitized_context = _sanitize_param(context or "", max_len=500)
+
     from tapps_mcp.metrics.feedback import FeedbackTracker
 
     hub = _get_metrics_hub()
     tracker = FeedbackTracker(hub.metrics_dir)
 
-    tracker.record(
-        tool_name=tool_name,
-        helpful=helpful,
-        context=context or "",
-        session_id=hub.session_id,
-    )
+    # Deduplication check
+    duplicate_skipped = tracker.is_duplicate(tool_name, helpful, sanitized_context)
+
+    if not duplicate_skipped:
+        tracker.record(
+            tool_name=tool_name,
+            helpful=helpful,
+            context=sanitized_context,
+            session_id=hub.session_id,
+        )
+
+    # Adaptive weight adjustment for scoring tools
+    weight_adjusted = False
+    if not duplicate_skipped and tool_name in _SCORING_TOOLS:
+        weight_adjusted = _adjust_scoring_weights(helpful)
 
     stats = tracker.get_statistics(tool_name=tool_name)
     overall_stats = tracker.get_statistics()
@@ -261,14 +385,58 @@ def tapps_feedback(
         "tapps_feedback",
         elapsed_ms,
         {
-            "recorded": True,
+            "recorded": not duplicate_skipped,
             "tool_name": tool_name,
             "helpful": helpful,
+            "duplicate_skipped": duplicate_skipped,
+            "weight_adjusted": weight_adjusted,
             "tool_stats": stats,
             "overall_stats": overall_stats,
         },
     )
     return _with_nudges("tapps_feedback", resp)
+
+
+def _adjust_scoring_weights(helpful: bool) -> bool:
+    """Nudge adaptive scoring weights based on feedback.
+
+    Returns True if weights were successfully adjusted.
+    """
+    try:
+        from tapps_mcp.config.settings import load_settings
+
+        settings = load_settings()
+        weights = settings.scoring_weights
+        weight_dict = {
+            "complexity": weights.complexity,
+            "security": weights.security,
+            "maintainability": weights.maintainability,
+            "test_coverage": weights.test_coverage,
+            "performance": weights.performance,
+            "structure": weights.structure,
+            "devex": weights.devex,
+        }
+
+        delta = _WEIGHT_DELTA if helpful else -_WEIGHT_DELTA
+        adjusted = {k: max(0.01, v + delta) for k, v in weight_dict.items()}
+
+        # Normalize to sum to 1.0
+        total = sum(adjusted.values())
+        if total > 0:
+            adjusted = {k: round(v / total, 6) for k, v in adjusted.items()}
+
+        # Update the cached settings scoring weights
+        for k, v in adjusted.items():
+            setattr(settings.scoring_weights, k, v)
+
+        return True
+    except Exception:
+        import structlog as _structlog
+
+        _structlog.get_logger(__name__).debug(
+            "weight_adjustment_failed", exc_info=True
+        )
+        return False
 
 
 async def tapps_research(

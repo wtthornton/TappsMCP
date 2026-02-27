@@ -10,7 +10,8 @@ from __future__ import annotations
 import fnmatch
 import re
 import shutil
-from dataclasses import dataclass
+import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import structlog
@@ -166,3 +167,132 @@ async def run_vulture_async(
         findings = [f for f in findings if not _matches_whitelist(f.file_path, whitelist_patterns)]
 
     return findings
+
+
+# ---------------------------------------------------------------------------
+# Multi-file / project-wide support
+# ---------------------------------------------------------------------------
+
+_EXCLUDED_DIRS: frozenset[str] = frozenset({
+    ".venv", "venv", "__pycache__", ".git", ".mypy_cache",
+    ".pytest_cache", ".ruff_cache", "node_modules", ".tox",
+})
+
+_GIT_DIFF_TIMEOUT = 5
+
+
+@dataclass
+class DeadCodeResult:
+    """Aggregate result from a multi-file dead code scan."""
+
+    findings: list[DeadCodeFinding] = field(default_factory=list)
+    files_scanned: int = 0
+    degraded: bool = False
+
+
+def collect_python_files(project_root: Path) -> list[str]:
+    """Collect all .py files under project_root, excluding common non-source dirs.
+
+    Args:
+        project_root: Root directory to scan.
+
+    Returns:
+        List of relative path strings.
+    """
+    result: list[str] = []
+    for path in sorted(project_root.rglob("*.py")):
+        # Skip excluded directories
+        parts = path.relative_to(project_root).parts
+        if any(part in _EXCLUDED_DIRS for part in parts):
+            continue
+        result.append(str(path.relative_to(project_root)))
+    return result
+
+
+def collect_changed_python_files(project_root: Path) -> list[str]:
+    """Collect changed .py files using git diff (unstaged + staged).
+
+    Args:
+        project_root: Git repository root.
+
+    Returns:
+        Sorted list of relative path strings for changed .py files that exist.
+    """
+    files: set[str] = set()
+    for extra_args in (["HEAD"], ["--cached"]):
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--name-only", *extra_args],
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                timeout=_GIT_DIFF_TIMEOUT,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout:
+                files.update(result.stdout.strip().splitlines())
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+
+    py_files: list[str] = []
+    for f in sorted(files):
+        if f.endswith(".py") and (project_root / f).is_file():
+            py_files.append(f)
+    return py_files
+
+
+def clamp_confidence(value: int) -> int:
+    """Clamp min_confidence to the valid 0-100 range."""
+    return max(0, min(100, value))
+
+
+async def run_vulture_multi_async(
+    file_paths: list[str],
+    *,
+    min_confidence: int = 80,
+    whitelist_patterns: list[str] | None = None,
+    cwd: str | None = None,
+    timeout: int = 60,
+) -> DeadCodeResult:
+    """Run vulture on multiple files at once for cross-file analysis.
+
+    Args:
+        file_paths: List of file paths to analyse.
+        min_confidence: Minimum confidence percentage (0-100).
+        whitelist_patterns: File name patterns to exclude (fnmatch on basename).
+        cwd: Working directory for the subprocess.
+        timeout: Timeout in seconds.
+
+    Returns:
+        DeadCodeResult with findings, file count, and degraded flag.
+    """
+    min_confidence = clamp_confidence(min_confidence)
+
+    if not file_paths:
+        return DeadCodeResult(files_scanned=0)
+
+    if not is_vulture_available():
+        logger.debug("vulture_not_installed")
+        return DeadCodeResult(files_scanned=len(file_paths), degraded=True)
+
+    cmd = [
+        "vulture",
+        *file_paths,
+        f"--min-confidence={min_confidence}",
+    ]
+
+    result = await run_command_async(cmd, cwd=cwd, timeout=timeout)
+
+    if result.timed_out:
+        logger.warning("vulture_timeout_multi", file_count=len(file_paths), timeout=timeout)
+        return DeadCodeResult(files_scanned=len(file_paths))
+
+    findings = parse_vulture_output(result.stdout, min_confidence=min_confidence)
+
+    if whitelist_patterns:
+        findings = [f for f in findings if not _matches_whitelist(f.file_path, whitelist_patterns)]
+
+    return DeadCodeResult(
+        findings=findings,
+        files_scanned=len(file_paths),
+    )

@@ -47,18 +47,18 @@ Without structured templates, AI agents create issues and PRs with inconsistent 
 
 ## Acceptance Criteria
 
-- [ ] `generate_issue_templates(project_root, project_profile)` creates `.github/ISSUE_TEMPLATE/` directory
-- [ ] Bug report form: structured YAML with reproduction steps, environment, expected behavior
-- [ ] Feature request form: structured YAML with problem description, proposed solution, alternatives
-- [ ] Task form: lightweight YAML for internal work tracking
-- [ ] Template config: `config.yml` disabling blank issues
-- [ ] `generate_pr_template(project_root)` creates `.github/PULL_REQUEST_TEMPLATE.md`
-- [ ] `generate_dependabot_config(project_root, project_profile)` creates `.github/dependabot.yml`
-- [ ] Dependabot config auto-detects ecosystems from project profile (pip/uv, npm, docker, github-actions)
-- [ ] All generators integrated into `tapps_init` flow and `tapps_upgrade` refresh
-- [ ] All generators are idempotent (skip if files exist, overwrite flag available)
-- [ ] All changes covered by unit tests
-- [ ] Zero mypy/ruff errors
+- [x] `generate_issue_templates(project_root, project_profile)` creates `.github/ISSUE_TEMPLATE/` directory
+- [x] Bug report form: structured YAML with reproduction steps, environment, expected behavior
+- [x] Feature request form: structured YAML with problem description, proposed solution, alternatives
+- [x] Task form: lightweight YAML for internal work tracking
+- [x] Template config: `config.yml` disabling blank issues
+- [x] `generate_pr_template(project_root)` creates `.github/PULL_REQUEST_TEMPLATE.md`
+- [x] `generate_dependabot_config(project_root, project_profile)` creates `.github/dependabot.yml`
+- [x] Dependabot config auto-detects ecosystems from project profile (pip/uv, npm, docker, github-actions)
+- [x] All generators integrated into `tapps_init` flow and `tapps_upgrade` refresh
+- [x] All generators are idempotent (skip if files exist, overwrite flag available)
+- [x] All changes covered by unit tests
+- [x] Zero mypy/ruff errors
 
 ## Implementation Order
 
@@ -82,7 +82,7 @@ Story 19.4 (Dependabot) ───────────┤
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Generate structured GitHub Issue form templates (YAML) in `.github/ISSUE_TEMPLATE/`. Templates use the 2025 issue forms syntax with typed body elements, validation, labels, and optional issue type/project assignment.
 
@@ -90,26 +90,26 @@ Generate structured GitHub Issue form templates (YAML) in `.github/ISSUE_TEMPLAT
 - `src/tapps_mcp/pipeline/github_templates.py` (NEW)
 
 **Tasks:**
-- [ ] Create `github_templates.py` module in `pipeline/`
-- [ ] `generate_issue_templates(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Generate `bug-report.yml`:
+- [x] Create `github_templates.py` module in `pipeline/`
+- [x] `generate_issue_templates(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Generate `bug-report.yml`:
   - `name`, `description`, `title` prefix `[Bug]: `
   - `labels: ["bug", "triage"]`
   - `type: "Bug"` (organization issue type)
   - Body elements: markdown greeting, textarea for description (required), textarea for reproduction steps (required), input for expected behavior, dropdown for severity (Critical/High/Medium/Low), textarea for environment (render: shell), checkboxes for "searched existing issues"
-- [ ] Generate `feature-request.yml`:
+- [x] Generate `feature-request.yml`:
   - `name`, `description`, `title` prefix `[Feature]: `
   - `labels: ["enhancement"]`
   - `type: "Feature"`
   - Body elements: textarea for problem/motivation (required), textarea for proposed solution (required), textarea for alternatives considered, dropdown for scope (Small/Medium/Large), checkboxes for "willing to contribute"
-- [ ] Generate `task.yml`:
+- [x] Generate `task.yml`:
   - `name`, `description`, `title` prefix `[Task]: `
   - `labels: ["task"]`
   - `type: "Task"`
   - Body elements: textarea for description (required), textarea for acceptance criteria, dropdown for priority (P0-P3)
-- [ ] Auto-detect project name from `pyproject.toml` or directory name for template descriptions
-- [ ] Templates written via `yaml.dump()` with `default_flow_style=False` for clean output
-- [ ] Skip generation if `.github/ISSUE_TEMPLATE/` already exists (respect `overwrite` flag)
+- [x] Auto-detect project name from `pyproject.toml` or directory name for template descriptions
+- [x] Templates written via `yaml.dump()` with `default_flow_style=False` for clean output
+- [x] Skip generation if `.github/ISSUE_TEMPLATE/` already exists (respect `overwrite` flag)
 
 **Implementation Notes:**
 - Use PyYAML (`pyyaml>=6.0.3` already a project dependency — used in `config/settings.py`)
@@ -126,7 +126,7 @@ Generate structured GitHub Issue form templates (YAML) in `.github/ISSUE_TEMPLAT
 
 **Points:** 3
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Generate a structured pull request template that AI agents (Copilot coding agent, Claude Code) and humans can fill consistently.
 
@@ -134,16 +134,16 @@ Generate a structured pull request template that AI agents (Copilot coding agent
 - `src/tapps_mcp/pipeline/github_templates.py`
 
 **Tasks:**
-- [ ] `generate_pr_template(project_root) -> dict[str, Any]` function
-- [ ] Generate `.github/PULL_REQUEST_TEMPLATE.md` with sections:
+- [x] `generate_pr_template(project_root) -> dict[str, Any]` function
+- [x] Generate `.github/PULL_REQUEST_TEMPLATE.md` with sections:
   - `## Summary` — brief description of changes
   - `## Changes` — bulleted list of what changed
   - `## Test plan` — how changes were tested
   - `## Breaking changes` — any breaking changes (or "None")
   - `## Related issues` — `Closes #` or `Fixes #` references
   - `## Checklist` — checkboxes: tests pass, no new warnings, docs updated if needed
-- [ ] Template uses HTML comments (`<!-- ... -->`) for section guidance that disappears when filled
-- [ ] Skip generation if `.github/PULL_REQUEST_TEMPLATE.md` already exists (respect `overwrite` flag)
+- [x] Template uses HTML comments (`<!-- ... -->`) for section guidance that disappears when filled
+- [x] Skip generation if `.github/PULL_REQUEST_TEMPLATE.md` already exists (respect `overwrite` flag)
 
 **Implementation Notes:**
 - PR templates are Markdown (not YAML) — simple string generation
@@ -159,7 +159,7 @@ Generate a structured pull request template that AI agents (Copilot coding agent
 
 **Points:** 2
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Generate the `.github/ISSUE_TEMPLATE/config.yml` that controls the template chooser behavior.
 
@@ -167,12 +167,12 @@ Generate the `.github/ISSUE_TEMPLATE/config.yml` that controls the template choo
 - `src/tapps_mcp/pipeline/github_templates.py`
 
 **Tasks:**
-- [ ] `generate_template_config(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Generate `config.yml` with:
+- [x] `generate_template_config(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Generate `config.yml` with:
   - `blank_issues_enabled: false` — force use of structured templates
   - `contact_links:` — optional external links (discussions, docs)
-- [ ] Auto-detect if project has GitHub Discussions URL from project profile
-- [ ] Skip generation if `config.yml` already exists in `.github/ISSUE_TEMPLATE/` (respect `overwrite` flag)
+- [x] Auto-detect if project has GitHub Discussions URL from project profile
+- [x] Skip generation if `config.yml` already exists in `.github/ISSUE_TEMPLATE/` (respect `overwrite` flag)
 
 **Implementation Notes:**
 - `config.yml` is optional but recommended — disabling blank issues forces structured input
@@ -186,7 +186,7 @@ Generate the `.github/ISSUE_TEMPLATE/config.yml` that controls the template choo
 
 **Points:** 5
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Generate `.github/dependabot.yml` with ecosystem-aware configuration, including `uv` support (GA March 2025) and grouped security updates (GA July 2025).
 
@@ -194,15 +194,15 @@ Generate `.github/dependabot.yml` with ecosystem-aware configuration, including 
 - `src/tapps_mcp/pipeline/github_templates.py`
 
 **Tasks:**
-- [ ] `generate_dependabot_config(project_root, project_profile=None) -> dict[str, Any]` function
-- [ ] Auto-detect ecosystems from project profile:
+- [x] `generate_dependabot_config(project_root, project_profile=None) -> dict[str, Any]` function
+- [x] Auto-detect ecosystems from project profile:
   - `pyproject.toml` with `uv.lock` → `package-ecosystem: "uv"`
   - `pyproject.toml` with `requirements.txt` → `package-ecosystem: "pip"`
   - `package.json` → `package-ecosystem: "npm"`
   - `Dockerfile` → `package-ecosystem: "docker"`
   - `.github/workflows/` → `package-ecosystem: "github-actions"`
-- [ ] Configure weekly schedule for each detected ecosystem
-- [ ] Add grouped security updates:
+- [x] Configure weekly schedule for each detected ecosystem
+- [x] Add grouped security updates:
   ```yaml
   groups:
     production-dependencies:
@@ -212,10 +212,10 @@ Generate `.github/dependabot.yml` with ecosystem-aware configuration, including 
       applies-to: version-updates
       dependency-type: "development"
   ```
-- [ ] Set `open-pull-requests-limit: 10` per ecosystem
-- [ ] Add `labels: ["dependencies"]` for all ecosystems
-- [ ] Add `labels: ["security"]` for security update groups
-- [ ] Skip generation if `.github/dependabot.yml` already exists (respect `overwrite` flag)
+- [x] Set `open-pull-requests-limit: 10` per ecosystem
+- [x] Add `labels: ["dependencies"]` for all ecosystems
+- [x] Add `labels: ["security"]` for security update groups
+- [x] Skip generation if `.github/dependabot.yml` already exists (respect `overwrite` flag)
 
 **Implementation Notes:**
 - Dependabot `uv` support is GA for both version updates (March 2025) and security updates (December 2025)
@@ -231,7 +231,7 @@ Generate `.github/dependabot.yml` with ecosystem-aware configuration, including 
 
 **Points:** 3
 **Priority:** Critical
-**Status:** Planned
+**Status:** Complete
 
 Wire all generators into the `tapps_init` bootstrap flow and `tapps_upgrade` refresh flow.
 
@@ -241,13 +241,13 @@ Wire all generators into the `tapps_init` bootstrap flow and `tapps_upgrade` ref
 - `src/tapps_mcp/server_pipeline_tools.py`
 
 **Tasks:**
-- [ ] Add `create_github_templates: bool = True` parameter to `tapps_init` MCP tool
-- [ ] Call `generate_issue_templates()`, `generate_pr_template()`, `generate_template_config()`, `generate_dependabot_config()` from `_setup_platform()` in `init.py`
-- [ ] Pass `project_profile` to generators that use ecosystem detection
-- [ ] Add GitHub templates to `tapps_upgrade` refresh logic — regenerate with `overwrite` when `force=True`
-- [ ] Add GitHub templates to `tapps_doctor` checks — verify `.github/ISSUE_TEMPLATE/` exists
-- [ ] Report created files in init/upgrade return dict under `"github_templates"` key
-- [ ] Respect `dry_run` flag — report what would be created without writing
+- [x] Add `create_github_templates: bool = True` parameter to `tapps_init` MCP tool
+- [x] Call `generate_issue_templates()`, `generate_pr_template()`, `generate_template_config()`, `generate_dependabot_config()` from `_setup_platform()` in `init.py`
+- [x] Pass `project_profile` to generators that use ecosystem detection
+- [x] Add GitHub templates to `tapps_upgrade` refresh logic — regenerate with `overwrite` when `force=True`
+- [x] Add GitHub templates to `tapps_doctor` checks — verify `.github/ISSUE_TEMPLATE/` exists
+- [x] Report created files in init/upgrade return dict under `"github_templates"` key
+- [x] Respect `dry_run` flag — report what would be created without writing
 
 **Implementation Notes:**
 - GitHub templates should be generated for ALL platforms (not just Claude/Cursor) since they're GitHub-specific, not IDE-specific
@@ -262,7 +262,7 @@ Wire all generators into the `tapps_init` bootstrap flow and `tapps_upgrade` ref
 
 **Points:** 3
 **Priority:** Important
-**Status:** Planned
+**Status:** Complete
 
 Comprehensive tests for all GitHub template generators.
 
@@ -270,21 +270,21 @@ Comprehensive tests for all GitHub template generators.
 - `tests/unit/test_github_templates.py` (NEW)
 
 **Tasks:**
-- [ ] Test `generate_issue_templates()` creates 3 YAML files with correct structure
-- [ ] Test bug report form has required fields (description, reproduction steps)
-- [ ] Test feature request form has required fields (problem, proposed solution)
-- [ ] Test task form has required fields (description)
-- [ ] Test all forms have valid YAML syntax (parse output with yaml.safe_load)
-- [ ] Test `generate_pr_template()` creates Markdown with all required sections
-- [ ] Test `generate_template_config()` creates valid YAML with `blank_issues_enabled: false`
-- [ ] Test `generate_dependabot_config()` detects ecosystems from project profile
-- [ ] Test `uv` ecosystem detection when `uv.lock` exists
-- [ ] Test `pip` ecosystem fallback when only `requirements.txt` exists
-- [ ] Test `github-actions` ecosystem detected from `.github/workflows/`
-- [ ] Test grouped security updates in Dependabot config
-- [ ] Test idempotency — skip when files exist, overwrite when flag set
-- [ ] Test integration with `tapps_init` (mock project profile)
-- [ ] Test `dry_run` returns plan without writing files
+- [x] Test `generate_issue_templates()` creates 3 YAML files with correct structure
+- [x] Test bug report form has required fields (description, reproduction steps)
+- [x] Test feature request form has required fields (problem, proposed solution)
+- [x] Test task form has required fields (description)
+- [x] Test all forms have valid YAML syntax (parse output with yaml.safe_load)
+- [x] Test `generate_pr_template()` creates Markdown with all required sections
+- [x] Test `generate_template_config()` creates valid YAML with `blank_issues_enabled: false`
+- [x] Test `generate_dependabot_config()` detects ecosystems from project profile
+- [x] Test `uv` ecosystem detection when `uv.lock` exists
+- [x] Test `pip` ecosystem fallback when only `requirements.txt` exists
+- [x] Test `github-actions` ecosystem detected from `.github/workflows/`
+- [x] Test grouped security updates in Dependabot config
+- [x] Test idempotency — skip when files exist, overwrite when flag set
+- [x] Test integration with `tapps_init` (mock project profile)
+- [x] Test `dry_run` returns plan without writing files
 
 **Definition of Done:** ~35 new tests covering all template generators, ecosystem detection, and init/upgrade integration. Zero mypy/ruff errors.
 
