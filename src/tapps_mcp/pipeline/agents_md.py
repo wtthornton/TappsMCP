@@ -51,6 +51,7 @@ EXPECTED_TOOLS: list[str] = [
     "tapps_init",
     "tapps_upgrade",
     "tapps_doctor",
+    "tapps_set_engagement_level",
     "tapps_dead_code",
     "tapps_dependency_scan",
     "tapps_dependency_graph",

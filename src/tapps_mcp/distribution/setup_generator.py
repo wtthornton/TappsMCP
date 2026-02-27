@@ -443,13 +443,23 @@ def _configure_multiple_hosts(
     return all_ok
 
 
-def _generate_rules(host: str, project_root: Path) -> None:
+def _generate_rules(
+    host: str,
+    project_root: Path,
+    engagement_level: str | None = None,
+) -> None:
     """Generate platform rule files, hooks, agents, and skills for the given host.
 
     Delegates to ``_bootstrap_claude`` and ``_bootstrap_cursor`` from
     ``tapps_mcp.pipeline.init``, and uses ``platform_generators`` for hooks,
-    subagents, and skills.
+    subagents, and skills. When *engagement_level* is None, reads from
+    project_root/.tapps-mcp.yaml or defaults to ``"medium"``.
     """
+    if engagement_level is None:
+        engagement_level = _read_engagement_level_from_project(project_root)
+    if engagement_level not in ("high", "medium", "low"):
+        engagement_level = "medium"
+
     from tapps_mcp.pipeline.init import (
         _bootstrap_claude,
         _bootstrap_claude_settings,
@@ -467,7 +477,7 @@ def _generate_rules(host: str, project_root: Path) -> None:
     )
 
     if host == "claude-code":
-        action = _bootstrap_claude(project_root)
+        action = _bootstrap_claude(project_root, engagement_level=engagement_level)
         if action == "created":
             click.echo(click.style("  Created CLAUDE.md with TAPPS pipeline rules", fg="green"))
         elif action == "updated":
@@ -481,29 +491,37 @@ def _generate_rules(host: str, project_root: Path) -> None:
             click.echo(click.style("  Updated .claude/settings.json with permissions", fg="green"))
         elif settings_action == "skipped":
             click.echo("  .claude/settings.json already has TappsMCP permissions (skipped)")
-        hooks_result = generate_claude_hooks(project_root)
+        hooks_result = generate_claude_hooks(
+            project_root, engagement_level=engagement_level
+        )
         _echo_gen_result("hooks", hooks_result)
         agents_result = generate_subagent_definitions(project_root, "claude")
         _echo_gen_result("agents", agents_result)
-        skills_result = generate_skills(project_root, "claude")
+        skills_result = generate_skills(
+            project_root, "claude", engagement_level=engagement_level
+        )
         _echo_gen_result("skills", skills_result)
         generate_ci_workflow(project_root)
         click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
         generate_copilot_instructions(project_root)
         click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
     elif host == "cursor":
-        action = _bootstrap_cursor(project_root)
+        action = _bootstrap_cursor(project_root, engagement_level=engagement_level)
         if action == "created":
             click.echo(click.style("  Created .cursor/rules/tapps-pipeline.md", fg="green"))
         elif action == "updated":
             click.echo(click.style("  Updated .cursor/rules/tapps-pipeline.md", fg="green"))
         elif action == "skipped":
             click.echo("  .cursor/rules/tapps-pipeline.md already exists (skipped)")
-        hooks_result = generate_cursor_hooks(project_root)
+        hooks_result = generate_cursor_hooks(
+            project_root, engagement_level=engagement_level
+        )
         _echo_gen_result("hooks", hooks_result)
         agents_result = generate_subagent_definitions(project_root, "cursor")
         _echo_gen_result("agents", agents_result)
-        skills_result = generate_skills(project_root, "cursor")
+        skills_result = generate_skills(
+            project_root, "cursor", engagement_level=engagement_level
+        )
         _echo_gen_result("skills", skills_result)
         rules_result = generate_cursor_rules(project_root)
         _echo_gen_result("cursor rules", rules_result)
@@ -529,6 +547,42 @@ def _echo_gen_result(kind: str, result: dict[str, Any]) -> None:
         click.echo(f"  {kind.capitalize()} already up to date (skipped)")
 
 
+def _read_engagement_level_from_project(project_root: Path) -> str:
+    """Read llm_engagement_level from project_root/.tapps-mcp.yaml if present."""
+    import yaml
+
+    config_path = project_root / ".tapps-mcp.yaml"
+    if not config_path.exists():
+        return "medium"
+    try:
+        with config_path.open(encoding="utf-8-sig") as f:
+            data = yaml.safe_load(f)
+        level = (data or {}).get("llm_engagement_level", "medium")
+        return level if level in ("high", "medium", "low") else "medium"
+    except Exception:
+        return "medium"
+
+
+def _write_engagement_level_to_yaml(project_root: Path, level: str) -> None:
+    """Write or merge llm_engagement_level into project_root/.tapps-mcp.yaml."""
+    import yaml
+
+    config_path = project_root / ".tapps-mcp.yaml"
+    data: dict[str, Any] = {}
+    if config_path.exists():
+        try:
+            with config_path.open(encoding="utf-8-sig") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception:
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data["llm_engagement_level"] = level
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with config_path.open("w", encoding="utf-8") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+
 def run_init(
     *,
     mcp_host: str = "auto",
@@ -538,6 +592,7 @@ def run_init(
     scope: str = "user",
     rules: bool = True,
     dry_run: bool = False,
+    engagement_level: str | None = None,
 ) -> bool:
     """Run the init command logic.
 
@@ -553,6 +608,8 @@ def run_init(
         rules: If ``True``, also generate platform rule files (CLAUDE.md or
             .cursor/rules/tapps-pipeline.md) alongside MCP config.
         dry_run: If ``True``, show what would be written without making changes.
+        engagement_level: When set (high/medium/low), write to .tapps-mcp.yaml and
+            use for platform rules. When ``None``, rules use medium or existing config.
     """
     root = Path(project_root).resolve()
     log.info(
@@ -564,6 +621,7 @@ def run_init(
         scope=scope,
         rules=rules,
         dry_run=dry_run,
+        engagement_level=engagement_level,
     )
 
     if mcp_host == "auto":
@@ -591,9 +649,12 @@ def run_init(
     if check:
         return _check_config(mcp_host, root, scope=scope)
 
+    if engagement_level is not None and not dry_run:
+        _write_engagement_level_to_yaml(root, engagement_level)
+
     ok = _generate_config(mcp_host, root, force=force, scope=scope, dry_run=dry_run)
     if ok and rules and not dry_run:
-        _generate_rules(mcp_host, root)
+        _generate_rules(mcp_host, root, engagement_level=engagement_level)
     return ok
 
 

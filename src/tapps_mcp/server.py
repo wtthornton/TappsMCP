@@ -137,6 +137,7 @@ _FALLBACK_TOOL_LIST: list[str] = [
     "tapps_init",
     "tapps_upgrade",
     "tapps_doctor",
+    "tapps_set_engagement_level",
     "tapps_dashboard",
     "tapps_stats",
     "tapps_feedback",
@@ -1597,12 +1598,23 @@ def tapps_pipeline_overview() -> str:
 
 
 @mcp.prompt()
-def tapps_workflow(task_type: str = "general") -> str:
+def tapps_workflow(
+    task_type: str = "general",
+    engagement_level: str | None = None,
+) -> str:
     """Generate the TappsMCP workflow prompt for a specific task type.
 
     Args:
         task_type: One of: general, feature, bugfix, refactor, security, review.
+        engagement_level: When set (high/medium/low), varies framing. When None,
+            uses load_settings().llm_engagement_level.
     """
+    from tapps_mcp.config.settings import load_settings
+
+    level = engagement_level or load_settings().llm_engagement_level
+    if level not in ("high", "medium", "low"):
+        level = "medium"
+
     workflows = {
         "general": (
             "TappsMCP Workflow - General\n\n"
@@ -1645,7 +1657,12 @@ def tapps_workflow(task_type: str = "general") -> str:
             "5. tapps_checklist(task_type='review')"
         ),
     }
-    return workflows.get(task_type, workflows["general"])
+    body = workflows.get(task_type, workflows["general"])
+    if level == "high":
+        return "You MUST call these tools in order.\n\n" + body
+    if level == "low":
+        return "Optional workflow — consider these tools when useful.\n\n" + body
+    return "Recommended tool call order:\n\n" + body
 
 
 # ---------------------------------------------------------------------------

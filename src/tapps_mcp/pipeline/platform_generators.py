@@ -857,6 +857,23 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 
 
 # ---------------------------------------------------------------------------
+# Engagement level: transform hook script wording (Epic 18.7)
+# ---------------------------------------------------------------------------
+
+
+def _hook_content_for_engagement(content: str, engagement_level: str) -> str:
+    """Adjust hook script echo/reminder text by engagement level."""
+    if engagement_level == "high":
+        content = content.replace("Consider running", "MUST run")
+        content = content.replace("Reminder:", "REQUIRED:")
+        content = content.replace("Reminder ", "REQUIRED: ")
+    elif engagement_level == "low":
+        content = content.replace("REQUIRED:", "Consider:")
+        content = content.replace("MUST run", "Consider running")
+        content = content.replace("You MUST run", "Consider running")
+    return content
+
+
 # Public generator functions
 # ---------------------------------------------------------------------------
 
@@ -865,6 +882,7 @@ def generate_claude_hooks(
     project_root: Path,
     *,
     force_windows: bool | None = None,
+    engagement_level: str = "medium",
 ) -> dict[str, Any]:
     """Generate Claude Code hook scripts and settings.json hooks config.
 
@@ -875,6 +893,7 @@ def generate_claude_hooks(
         project_root: Target project root directory.
         force_windows: Override platform detection for testing.
             ``None`` (default) auto-detects via ``sys.platform``.
+        engagement_level: high (MUST/REQUIRED), medium (current), low (Consider).
 
     Returns a summary dict with ``scripts_created`` and ``hooks_action``.
     """
@@ -891,7 +910,8 @@ def generate_claude_hooks(
     for name, content in script_templates.items():
         script_path = hooks_dir / name
         if not script_path.exists() or name in scripts_always_overwrite:
-            script_path.write_text(content, encoding="utf-8")
+            text = _hook_content_for_engagement(content, engagement_level)
+            script_path.write_text(text, encoding="utf-8")
             if not win:
                 script_path.chmod(
                     script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
@@ -949,6 +969,7 @@ def generate_cursor_hooks(
     project_root: Path,
     *,
     force_windows: bool | None = None,
+    engagement_level: str = "medium",
 ) -> dict[str, Any]:
     """Generate Cursor hook scripts and ``.cursor/hooks.json`` config.
 
@@ -959,6 +980,7 @@ def generate_cursor_hooks(
         project_root: Target project root directory.
         force_windows: Override platform detection for testing.
             ``None`` (default) auto-detects via ``sys.platform``.
+        engagement_level: high (MUST/REQUIRED), medium (current), low (Consider).
 
     Returns a summary dict with ``scripts_created`` and ``hooks_action``.
     """
@@ -973,7 +995,8 @@ def generate_cursor_hooks(
     for name, content in script_templates.items():
         script_path = hooks_dir / name
         if not script_path.exists():
-            script_path.write_text(content, encoding="utf-8")
+            text = _hook_content_for_engagement(content, engagement_level)
+            script_path.write_text(text, encoding="utf-8")
             if not win:
                 script_path.chmod(
                     script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
@@ -1083,12 +1106,18 @@ def generate_subagent_definitions(project_root: Path, platform: str) -> dict[str
     return {"created": created, "skipped": skipped}
 
 
-def generate_skills(project_root: Path, platform: str) -> dict[str, Any]:
+def generate_skills(
+    project_root: Path,
+    platform: str,
+    *,
+    engagement_level: str = "medium",
+) -> dict[str, Any]:
     """Generate SKILL.md files for the given platform.
 
     Creates 3 skill directories with ``SKILL.md`` in
     ``.claude/skills/`` or ``.cursor/skills/`` depending on the platform.
     Existing files are skipped to preserve user customizations.
+    When *engagement_level* is set, prepends a note (MANDATORY vs optional).
 
     Returns a summary dict with ``created`` and ``skipped`` lists.
     """
@@ -1101,6 +1130,12 @@ def generate_skills(project_root: Path, platform: str) -> dict[str, Any]:
     else:
         return {"created": [], "skipped": [], "error": f"Unknown platform: {platform}"}
 
+    engagement_note = ""
+    if engagement_level == "high":
+        engagement_note = "*Engagement: MANDATORY for high-enforcement projects.*\n\n"
+    elif engagement_level == "low":
+        engagement_note = "*Engagement: Optional for low-enforcement projects.*\n\n"
+
     created: list[str] = []
     skipped: list[str] = []
     for skill_name, content in templates.items():
@@ -1110,7 +1145,7 @@ def generate_skills(project_root: Path, platform: str) -> dict[str, Any]:
         if target.exists():
             skipped.append(skill_name)
         else:
-            target.write_text(content, encoding="utf-8")
+            target.write_text(engagement_note + content, encoding="utf-8")
             created.append(skill_name)
 
     return {"created": created, "skipped": skipped}

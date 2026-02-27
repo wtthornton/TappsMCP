@@ -42,6 +42,7 @@ class BootstrapConfig:
     agent_teams: bool = False
     dry_run: bool = False
     verify_only: bool = False
+    llm_engagement_level: str = "medium"
 
 
 @dataclass
@@ -116,6 +117,7 @@ def bootstrap_pipeline(
     agent_teams: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
+    llm_engagement_level: str | None = None,
 ) -> dict[str, Any]:
     """Create pipeline template files in the project.
 
@@ -135,6 +137,11 @@ def bootstrap_pipeline(
     if config is not None:
         cfg = config
     else:
+        level = llm_engagement_level
+        if level is None:
+            from tapps_mcp.config.settings import load_settings
+
+            level = load_settings().llm_engagement_level
         cfg = BootstrapConfig(
             create_handoff=create_handoff,
             create_runlog=create_runlog,
@@ -150,6 +157,7 @@ def bootstrap_pipeline(
             agent_teams=agent_teams,
             dry_run=dry_run,
             verify_only=verify_only,
+            llm_engagement_level=level or "medium",
         )
     state = _BootstrapState(project_root=project_root.resolve(), dry_run=dry_run)
 
@@ -251,7 +259,7 @@ def _create_templates(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     """Create or update AGENTS.md."""
     agents_path = state.project_root / "AGENTS.md"
-    template_content = load_agents_template()
+    template_content = load_agents_template(cfg.llm_engagement_level)
     if agents_path.exists():
         from tapps_mcp.pipeline.agents_md import update_agents_md
 
@@ -290,8 +298,11 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     )
 
     platform_action: str | None = None
+    engagement = cfg.llm_engagement_level
     if cfg.platform == "claude":
-        platform_action = _bootstrap_claude(state.project_root, cfg.overwrite_platform_rules)
+        platform_action = _bootstrap_claude(
+            state.project_root, cfg.overwrite_platform_rules, engagement_level=engagement
+        )
         if platform_action == "created":
             state.created.append("CLAUDE.md")
         settings_action = _bootstrap_claude_settings(state.project_root)
@@ -299,9 +310,13 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         if settings_action == "created":
             state.created.append(".claude/settings.json")
         # Hooks, agents, skills
-        state.result["hooks"] = generate_claude_hooks(state.project_root)
+        state.result["hooks"] = generate_claude_hooks(
+            state.project_root, engagement_level=engagement
+        )
         state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
-        state.result["skills"] = generate_skills(state.project_root, "claude")
+        state.result["skills"] = generate_skills(
+            state.project_root, "claude", engagement_level=engagement
+        )
         # Agent Teams (opt-in)
         if cfg.agent_teams:
             state.result["agent_teams"] = generate_agent_teams_hooks(state.project_root)
@@ -312,15 +327,21 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             state.project_root,
         )
     elif cfg.platform == "cursor":
-        platform_action = _bootstrap_cursor(state.project_root, cfg.overwrite_platform_rules)
+        platform_action = _bootstrap_cursor(
+            state.project_root, cfg.overwrite_platform_rules, engagement_level=engagement
+        )
         if platform_action in {"created", "updated"}:
             state.created.append(".cursor/rules/tapps-pipeline.md")
         elif platform_action == "skipped":
             state.skipped.append(".cursor/rules/tapps-pipeline.md")
         # Hooks, agents, skills, enhanced rules
-        state.result["hooks"] = generate_cursor_hooks(state.project_root)
+        state.result["hooks"] = generate_cursor_hooks(
+            state.project_root, engagement_level=engagement
+        )
         state.result["agents"] = generate_subagent_definitions(state.project_root, "cursor")
-        state.result["skills"] = generate_skills(state.project_root, "cursor")
+        state.result["skills"] = generate_skills(
+            state.project_root, "cursor", engagement_level=engagement
+        )
         state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
         # BugBot rules (Cursor-specific)
         state.result["bugbot_rules"] = generate_bugbot_rules(state.project_root)
@@ -623,13 +644,14 @@ def _run_expert_rag_warming(
 def _bootstrap_claude(
     project_root: Path,
     overwrite: bool = False,
+    engagement_level: str = "medium",
 ) -> str:
     """Create or update CLAUDE.md with TAPPS pipeline reference.
 
     Returns ``'created'``, ``'updated'``, or ``'skipped'``.
     """
     claude_md = project_root / "CLAUDE.md"
-    content = load_platform_rules("claude")
+    content = load_platform_rules("claude", engagement_level=engagement_level)
 
     if claude_md.exists():
         existing = claude_md.read_text(encoding="utf-8")
@@ -727,12 +749,13 @@ def _bootstrap_claude_settings(project_root: Path) -> str:
 def _bootstrap_cursor(
     project_root: Path,
     overwrite: bool = False,
+    engagement_level: str = "medium",
 ) -> str:
     """Create or update Cursor pipeline rule file.
 
     Returns ``'created'``, ``'updated'``, or ``'skipped'``.
     """
-    content = load_platform_rules("cursor")
+    content = load_platform_rules("cursor", engagement_level=engagement_level)
     rules_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
     rules_path.parent.mkdir(parents=True, exist_ok=True)
 

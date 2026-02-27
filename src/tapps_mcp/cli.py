@@ -82,6 +82,12 @@ def serve(transport: str, host: str, port: int) -> None:
     is_flag=True,
     help="Show what would be written without making changes.",
 )
+@click.option(
+    "--engagement-level",
+    type=click.Choice(["high", "medium", "low"]),
+    default=None,
+    help="LLM engagement level for generated rules (high=mandatory, medium=balanced, low=optional). Writes to .tapps-mcp.yaml.",
+)
 def init(
     mcp_host: str,
     project_root: str,
@@ -90,6 +96,7 @@ def init(
     scope: str,
     rules: bool,
     dry_run: bool,
+    engagement_level: str | None,
 ) -> None:
     """Generate MCP configuration for Claude Code, Cursor, or VS Code."""
     from tapps_mcp.distribution.setup_generator import run_init
@@ -102,6 +109,7 @@ def init(
         scope=scope,
         rules=rules,
         dry_run=dry_run,
+        engagement_level=engagement_level,
     )
     if not success:
         raise SystemExit(1)

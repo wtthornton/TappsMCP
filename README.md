@@ -559,6 +559,20 @@ scoring_weights:
   devex: 0.05
 ```
 
+### LLM Engagement Level
+
+Control how strongly the AI is prompted to use TappsMCP tools: **high** (mandatory), **medium** (balanced), or **low** (optional). Set in `.tapps-mcp.yaml` or via `TAPPS_MCP_LLM_ENGAGEMENT_LEVEL`:
+
+```yaml
+llm_engagement_level: medium   # high | medium | low
+```
+
+- **high** — AGENTS.md and platform rules use MUST/REQUIRED language; checklist requires more tools; hooks use strong reminders.
+- **medium** — Balanced (default). Recommended workflow and standard required tools.
+- **low** — Softer “consider” language; fewer required tools; optional reminders.
+
+To change the level at runtime, use the **`tapps_set_engagement_level(level)`** MCP tool (e.g. when the user says “set tappsmcp to high”). Then run `tapps_init` with `overwrite_agents_md=True` to regenerate AGENTS.md and platform rules with the new level. From the CLI: `tapps-mcp init --engagement-level high` (or `medium` / `low`).
+
 ### Environment variables
 
 | Variable | Description |

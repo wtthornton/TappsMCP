@@ -9,6 +9,7 @@ from click.testing import CliRunner
 from tapps_mcp.cli import main
 from tapps_mcp.distribution.doctor import (
     CheckResult,
+    _read_engagement_level,
     check_agents_md,
     check_binary_on_path,
     check_claude_code_project,
@@ -42,6 +43,38 @@ class TestCheckResult:
     def test_detail(self):
         r = CheckResult("test", False, "fail", "hint")
         assert r.detail == "hint"
+
+
+# ---------------------------------------------------------------------------
+# _read_engagement_level (Epic 18.8)
+# ---------------------------------------------------------------------------
+
+
+class TestReadEngagementLevel:
+    """Tests for _read_engagement_level."""
+
+    def test_no_file_returns_none(self, tmp_path):
+        assert _read_engagement_level(tmp_path) is None
+
+    def test_valid_level_high(self, tmp_path):
+        (tmp_path / ".tapps-mcp.yaml").write_text("llm_engagement_level: high\n")
+        assert _read_engagement_level(tmp_path) == "high"
+
+    def test_valid_level_medium(self, tmp_path):
+        (tmp_path / ".tapps-mcp.yaml").write_text("llm_engagement_level: medium\n")
+        assert _read_engagement_level(tmp_path) == "medium"
+
+    def test_valid_level_low(self, tmp_path):
+        (tmp_path / ".tapps-mcp.yaml").write_text("llm_engagement_level: low\n")
+        assert _read_engagement_level(tmp_path) == "low"
+
+    def test_invalid_level_returns_none(self, tmp_path):
+        (tmp_path / ".tapps-mcp.yaml").write_text("llm_engagement_level: strict\n")
+        assert _read_engagement_level(tmp_path) is None
+
+    def test_missing_key_returns_none(self, tmp_path):
+        (tmp_path / ".tapps-mcp.yaml").write_text("quality_preset: standard\n")
+        assert _read_engagement_level(tmp_path) is None
 
 
 # ---------------------------------------------------------------------------

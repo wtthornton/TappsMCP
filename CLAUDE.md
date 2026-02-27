@@ -50,7 +50,7 @@ The MCP server is split across five files to stay under complexity limits. All s
 
 - **`server.py`** — Creates the `FastMCP("TappsMCP")` instance, registers MCP resources/prompts, and 14 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`, `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`). Imports the other three modules which register their tools on the shared `mcp` object.
 - **`server_scoring_tools.py`** — `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
-- **`server_pipeline_tools.py`** — `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_upgrade`, `tapps_doctor`
+- **`server_pipeline_tools.py`** — `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`
 - **`server_metrics_tools.py`** — `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`
 - **`server_helpers.py`** — Shared utilities: response builders, singleton caches (`_get_scorer()`, `_get_settings()`)
 
@@ -69,6 +69,10 @@ Several features exist as both a CLI command (`cli.py` via Click) and an MCP too
 - `tapps-mcp init` (CLI) → `pipeline/init.py` ← `tapps_init` (MCP tool in `server_pipeline_tools.py`)
 - `tapps-mcp upgrade` (CLI) → `distribution/setup_generator.py` / `pipeline/upgrade.py` ← `tapps_upgrade` (MCP tool)
 - `tapps-mcp doctor` (CLI) → `distribution/doctor.py` ← `tapps_doctor` (MCP tool)
+
+### Engagement-level template variants (Epic 18)
+
+AGENTS.md and platform rules (Cursor/Claude) have three variants per engagement level: **high**, **medium**, **low**. Templates live under `src/tapps_mcp/prompts/` as `agents_template_high.md`, `agents_template_medium.md`, `agents_template_low.md`, and `platform_{cursor|claude}_{high|medium|low}.md`. The loader selects by `load_settings().llm_engagement_level` (or the `engagement_level` argument when provided). Checklist `TASK_TOOL_MAP_HIGH` / `TASK_TOOL_MAP_MEDIUM` / `TASK_TOOL_MAP_LOW` vary required vs recommended tools by level.
 
 ### Caching and singletons
 

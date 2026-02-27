@@ -304,6 +304,25 @@ class TestRunDoctorStructured:
             assert "ok" in check
             assert "message" in check
 
+    def test_includes_llm_engagement_level_when_configured(self, tmp_path: Path) -> None:
+        """When .tapps-mcp.yaml has llm_engagement_level, result includes it (Epic 18.8)."""
+        (tmp_path / ".tapps-mcp.yaml").write_text("llm_engagement_level: high\n")
+        with (
+            patch("tapps_mcp.distribution.doctor.Path.home", return_value=tmp_path),
+            patch("tapps_mcp.distribution.doctor.shutil.which", return_value=None),
+        ):
+            result = run_doctor_structured(project_root=str(tmp_path))
+        assert result.get("llm_engagement_level") == "high"
+
+    def test_omits_llm_engagement_level_without_config(self, tmp_path: Path) -> None:
+        """When .tapps-mcp.yaml is absent, result has no llm_engagement_level key."""
+        with (
+            patch("tapps_mcp.distribution.doctor.Path.home", return_value=tmp_path),
+            patch("tapps_mcp.distribution.doctor.shutil.which", return_value=None),
+        ):
+            result = run_doctor_structured(project_root=str(tmp_path))
+        assert "llm_engagement_level" not in result
+
 
 # ---------------------------------------------------------------------------
 # Story 6: Non-blocking stop hook templates

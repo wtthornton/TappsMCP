@@ -401,6 +401,24 @@ def _collect_checks(root: Path) -> list[CheckResult]:
     return checks
 
 
+def _read_engagement_level(project_root: Path) -> str | None:
+    """Read llm_engagement_level from project_root/.tapps-mcp.yaml if present."""
+    config_path = project_root / ".tapps-mcp.yaml"
+    if not config_path.exists():
+        return None
+    try:
+        import yaml
+
+        raw = config_path.read_text(encoding="utf-8-sig")
+        data = yaml.safe_load(raw) if raw.strip() else {}
+        level = (data or {}).get("llm_engagement_level")
+        if level in ("high", "medium", "low"):
+            return level
+    except Exception:
+        pass
+    return None
+
+
 def run_doctor_structured(*, project_root: str = ".") -> dict[str, Any]:
     """Run all diagnostic checks and return structured results.
 
@@ -429,12 +447,17 @@ def run_doctor_structured(*, project_root: str = ".") -> dict[str, Any]:
         else:
             fail_count += 1
 
-    return {
+    out: dict[str, Any] = {
         "checks": results,
         "pass_count": pass_count,
         "fail_count": fail_count,
         "all_passed": fail_count == 0,
     }
+    # Report engagement level when configured (Epic 18.8)
+    engagement = _read_engagement_level(root)
+    if engagement is not None:
+        out["llm_engagement_level"] = engagement
+    return out
 
 
 def run_doctor(*, project_root: str = ".") -> bool:
@@ -463,6 +486,10 @@ def run_doctor(*, project_root: str = ".") -> bool:
             if check.detail:
                 click.echo(f"        {check.detail}")
             fail_count += 1
+
+    engagement = _read_engagement_level(root)
+    if engagement is not None:
+        click.echo(click.style(f"  Config  llm_engagement_level: {engagement}", fg="cyan"))
 
     click.echo("")
     click.echo(f"Results: {pass_count} passed, {fail_count} failed")

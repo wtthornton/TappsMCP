@@ -74,11 +74,14 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_dependency_graph": (
         "Analyze import graph for circular dependencies and coupling. Use before major refactoring."
     ),
+    "tapps_set_engagement_level": (
+        "When the user requests to change enforcement intensity (e.g. \"set tappsmcp to high\" or \"make checks optional\")."
+    ),
 }
 
 
 # ---------------------------------------------------------------------------
-# Recommended tool sets per task type
+# Recommended tool sets per task type (medium = default)
 # ---------------------------------------------------------------------------
 
 TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
@@ -107,6 +110,73 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_checklist", "tapps_dead_code"],
         "optional": ["tapps_dependency_scan", "tapps_dependency_graph"],
     },
+}
+
+# High engagement: more tools required (stricter)
+TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
+    "feature": {
+        "required": ["tapps_score_file", "tapps_quality_gate", "tapps_security_scan"],
+        "recommended": ["tapps_validate_changed", "tapps_checklist"],
+        "optional": [],
+    },
+    "bugfix": {
+        "required": ["tapps_score_file", "tapps_quality_gate"],
+        "recommended": ["tapps_security_scan", "tapps_checklist"],
+        "optional": [],
+    },
+    "refactor": {
+        "required": ["tapps_score_file", "tapps_quality_gate", "tapps_dead_code"],
+        "recommended": ["tapps_dependency_graph", "tapps_security_scan", "tapps_checklist"],
+        "optional": [],
+    },
+    "security": {
+        "required": ["tapps_security_scan", "tapps_quality_gate", "tapps_score_file"],
+        "recommended": ["tapps_dependency_scan", "tapps_checklist"],
+        "optional": [],
+    },
+    "review": {
+        "required": ["tapps_score_file", "tapps_security_scan", "tapps_quality_gate", "tapps_checklist"],
+        "recommended": ["tapps_dead_code", "tapps_validate_changed"],
+        "optional": ["tapps_dependency_scan", "tapps_dependency_graph"],
+    },
+}
+
+# Low engagement: fewer tools required (lighter)
+TASK_TOOL_MAP_LOW: dict[str, dict[str, list[str]]] = {
+    "feature": {
+        "required": ["tapps_quality_gate"],
+        "recommended": ["tapps_score_file", "tapps_quick_check"],
+        "optional": ["tapps_security_scan", "tapps_checklist"],
+    },
+    "bugfix": {
+        "required": [],
+        "recommended": ["tapps_score_file", "tapps_quality_gate"],
+        "optional": ["tapps_security_scan", "tapps_checklist"],
+    },
+    "refactor": {
+        "required": ["tapps_quality_gate"],
+        "recommended": ["tapps_score_file", "tapps_dead_code"],
+        "optional": ["tapps_dependency_graph", "tapps_security_scan", "tapps_checklist"],
+    },
+    "security": {
+        "required": ["tapps_security_scan", "tapps_quality_gate"],
+        "recommended": ["tapps_score_file"],
+        "optional": ["tapps_dependency_scan", "tapps_checklist"],
+    },
+    "review": {
+        "required": ["tapps_quality_gate"],
+        "recommended": ["tapps_score_file", "tapps_security_scan", "tapps_checklist"],
+        "optional": ["tapps_dead_code", "tapps_dependency_scan", "tapps_dependency_graph"],
+    },
+}
+
+# Alias for medium (same as TASK_TOOL_MAP)
+TASK_TOOL_MAP_MEDIUM: dict[str, dict[str, list[str]]] = TASK_TOOL_MAP
+
+_ENGAGEMENT_TOOL_MAP: dict[str, dict[str, dict[str, list[str]]]] = {
+    "high": TASK_TOOL_MAP_HIGH,
+    "medium": TASK_TOOL_MAP_MEDIUM,
+    "low": TASK_TOOL_MAP_LOW,
 }
 
 
@@ -233,11 +303,26 @@ class CallTracker:
                     cls._persist_path.unlink()
 
     @classmethod
-    def evaluate(cls, task_type: str = "review") -> ChecklistResult:
-        """Evaluate the checklist for a given task type."""
-        tool_map = TASK_TOOL_MAP.get(task_type, TASK_TOOL_MAP["review"])
+    def evaluate(
+        cls,
+        task_type: str = "review",
+        engagement_level: str | None = None,
+    ) -> ChecklistResult:
+        """Evaluate the checklist for a given task type and engagement level.
+
+        When *engagement_level* is None, it is read from
+        ``load_settings().llm_engagement_level`` (high/medium/low).
+        """
+        if engagement_level is None:
+            from tapps_mcp.config.settings import load_settings
+
+            engagement_level = load_settings().llm_engagement_level
+        if engagement_level not in _ENGAGEMENT_TOOL_MAP:
+            engagement_level = "medium"
+        task_maps = _ENGAGEMENT_TOOL_MAP[engagement_level]
+        tool_map = task_maps.get(task_type, task_maps["review"])
         if not isinstance(tool_map, dict):
-            tool_map = TASK_TOOL_MAP["review"]
+            tool_map = task_maps["review"]
         with cls._lock:
             called = {c.tool_name for c in cls._calls}
             call_count = len(cls._calls)

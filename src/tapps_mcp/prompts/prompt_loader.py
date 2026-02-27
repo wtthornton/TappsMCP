@@ -10,6 +10,8 @@ import importlib.resources
 
 _STAGES = ("discover", "research", "develop", "validate", "verify")
 
+ENGAGEMENT_LEVELS = ("high", "medium", "low")
+
 _PACKAGE = "tapps_mcp.prompts"
 
 
@@ -55,30 +57,53 @@ def load_runlog_template() -> str:
     return _read_resource("runlog_template.md")
 
 
-def load_agents_template() -> str:
+def load_agents_template(engagement_level: str = "medium") -> str:
     """Load the AGENTS.md template for consuming projects.
 
-    Prepends the current version marker so that ``AgentsValidation`` considers
-    a freshly-written file up-to-date without hardcoding the version in the
-    template source file.
+    Args:
+        engagement_level: One of ``"high"``, ``"medium"``, ``"low"``. Selects
+            the template variant (mandatory vs balanced vs optional language).
+            Default ``"medium"`` preserves backward compatibility.
+
+    Returns:
+        Template content with version marker prepended so that
+        ``AgentsValidation`` considers a freshly-written file up-to-date.
+
+    Raises:
+        ValueError: If *engagement_level* is not one of high, medium, low.
     """
     from tapps_mcp import __version__
 
-    content = _read_resource("agents_template.md")
+    if engagement_level not in ENGAGEMENT_LEVELS:
+        msg = (
+            f"Invalid engagement_level {engagement_level!r}. "
+            f"Valid: {', '.join(ENGAGEMENT_LEVELS)}"
+        )
+        raise ValueError(msg)
+    content = _read_resource(f"agents_template_{engagement_level}.md")
     return f"<!-- tapps-agents-version: {__version__} -->\n{content}"
 
 
-def load_platform_rules(platform: str) -> str:
+def load_platform_rules(platform: str, engagement_level: str = "medium") -> str:
     """Load platform-specific rule content.
 
     Args:
         platform: ``"claude"`` or ``"cursor"``.
+        engagement_level: One of ``"high"``, ``"medium"``, ``"low"``. Selects
+            the template variant. Default ``"medium"`` preserves backward
+            compatibility.
 
     Raises:
-        ValueError: If *platform* is not recognized.
+        ValueError: If *platform* or *engagement_level* is not recognized.
     """
     valid_platforms = ("claude", "cursor")
     if platform not in valid_platforms:
         msg = f"Invalid platform {platform!r}. Valid: {', '.join(valid_platforms)}"
         raise ValueError(msg)
-    return _read_resource(f"platform_{platform}.md")
+    if engagement_level not in ENGAGEMENT_LEVELS:
+        msg = (
+            f"Invalid engagement_level {engagement_level!r}. "
+            f"Valid: {', '.join(ENGAGEMENT_LEVELS)}"
+        )
+        raise ValueError(msg)
+    return _read_resource(f"platform_{platform}_{engagement_level}.md")

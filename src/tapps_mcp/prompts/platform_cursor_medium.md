@@ -1,0 +1,86 @@
+---
+description: TAPPS quality pipeline - recommended code quality enforcement
+alwaysApply: true
+---
+
+# TAPPS Quality Pipeline
+
+This project uses the TAPPS MCP server for code quality enforcement.
+Every tool response includes `next_steps` - consider following them.
+
+## Recommended Tool Call Obligations
+
+You should follow these steps to avoid broken, insecure, or hallucinated code.
+
+### Session Start
+
+You should call `tapps_session_start()` as the first action in every session.
+This returns server info (version, checkers, config). Call `tapps_project_profile()` when you need project context (tech stack, type, recommendations).
+
+### Before Using Any Library API
+
+You should call `tapps_lookup_docs(library, topic)` before writing code that uses an external library.
+This prevents hallucinated APIs. Prefer looking up docs over guessing from memory.
+
+### After Editing Any Python File
+
+You should call `tapps_quick_check(file_path)` after editing any Python file.
+This runs scoring + quality gate + security scan in one call.
+Alternatively, call `tapps_score_file`, `tapps_quality_gate`, and `tapps_security_scan` individually.
+
+### Before Declaring Work Complete
+
+For multi-file changes: You should call `tapps_validate_changed()` to batch-validate all changed files.
+Run the quality gate before considering work done.
+You should call `tapps_checklist(task_type)` as the final step to verify no required tools were skipped.
+
+### Domain Decisions
+
+You should call `tapps_consult_expert(question)` when making domain-specific decisions
+(security, testing strategy, API design, database, etc.).
+This returns RAG-backed expert guidance with confidence scores.
+
+### Refactoring or Deleting Files
+
+You should call `tapps_impact_analysis(file_path)` before refactoring or deleting any file.
+This maps the blast radius via import graph analysis.
+
+### Infrastructure Config Changes
+
+You should call `tapps_validate_config(file_path)` when changing Dockerfile, docker-compose, or infra config.
+This validates against security and operational best practices.
+
+## 5-Stage Pipeline
+
+Recommended order for every code task:
+
+1. **Discover** - `tapps_session_start()` (server info); `tapps_project_profile()` when you need project context
+2. **Research** - `tapps_lookup_docs()` for libraries, `tapps_consult_expert()` for decisions
+3. **Develop** - `tapps_score_file(file_path, quick=True)` during edit-lint-fix loops
+4. **Validate** - `tapps_quick_check()` per file OR `tapps_validate_changed()` for batch
+5. **Verify** - `tapps_checklist(task_type)` as the final step
+
+## Consequences of Skipping
+
+| Skipped Tool | Consequence |
+|---|---|
+| `tapps_session_start` | No server info or workflow guidance; call tapps_project_profile when you need project context |
+| `tapps_lookup_docs` | Hallucinated APIs - code may fail at runtime |
+| `tapps_quick_check` / scoring | Quality issues may ship silently |
+| `tapps_quality_gate` | No quality bar enforced - regressions may go unnoticed |
+| `tapps_security_scan` | Vulnerabilities may ship to production |
+| `tapps_checklist` | No verification that process was followed |
+| `tapps_consult_expert` | Decisions made without domain expertise |
+| `tapps_impact_analysis` | Refactoring may break unknown dependents |
+| `tapps_dead_code` | Unused code may accumulate |
+| `tapps_dependency_scan` | Vulnerable dependencies may ship |
+| `tapps_dependency_graph` | Circular imports may cause runtime crashes |
+
+## Response Guidance
+
+Every tool response includes:
+- `next_steps`: Up to 3 imperative actions to take next - consider following them
+- `pipeline_progress`: Which stages are complete and what comes next
+
+Record progress in `docs/TAPPS_HANDOFF.md` and `docs/TAPPS_RUNLOG.md`.
+For task-specific recommended tool call order, use the `tapps_workflow` MCP prompt (e.g. `tapps_workflow(task_type="feature")`).

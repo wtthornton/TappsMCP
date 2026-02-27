@@ -2,6 +2,8 @@
 
 from tapps_mcp.tools.checklist import (
     TASK_TOOL_MAP,
+    TASK_TOOL_MAP_HIGH,
+    TASK_TOOL_MAP_LOW,
     CallTracker,
     ChecklistResult,
     ToolCallRecord,
@@ -120,6 +122,38 @@ class TestCallTracker:
         CallTracker.record("tapps_score_file")
         result = CallTracker.evaluate("feature")
         assert result.called == ["tapps_quality_gate", "tapps_score_file"]
+
+    def test_evaluate_engagement_high_feature_requires_more(self):
+        """High engagement: feature requires score, gate, security_scan."""
+        result = CallTracker.evaluate("feature", engagement_level="high")
+        assert "tapps_security_scan" in result.missing_required
+        assert "tapps_score_file" in result.missing_required
+        assert "tapps_quality_gate" in result.missing_required
+
+    def test_evaluate_engagement_high_feature_complete_with_all(self):
+        CallTracker.record("tapps_score_file")
+        CallTracker.record("tapps_quality_gate")
+        CallTracker.record("tapps_security_scan")
+        result = CallTracker.evaluate("feature", engagement_level="high")
+        assert result.complete is True
+        assert result.missing_required == []
+
+    def test_evaluate_engagement_low_feature_requires_less(self):
+        """Low engagement: feature only requires quality_gate."""
+        result = CallTracker.evaluate("feature", engagement_level="low")
+        assert "tapps_quality_gate" in result.missing_required
+        assert "tapps_score_file" in result.missing_recommended
+
+    def test_evaluate_engagement_low_feature_complete_with_gate_only(self):
+        CallTracker.record("tapps_quality_gate")
+        result = CallTracker.evaluate("feature", engagement_level="low")
+        assert result.complete is True
+
+    def test_engagement_maps_exist(self):
+        assert set(TASK_TOOL_MAP_HIGH.keys()) == set(TASK_TOOL_MAP.keys())
+        assert set(TASK_TOOL_MAP_LOW.keys()) == set(TASK_TOOL_MAP.keys())
+        assert "tapps_security_scan" in TASK_TOOL_MAP_HIGH["feature"]["required"]
+        assert "tapps_security_scan" not in TASK_TOOL_MAP_LOW["feature"]["required"]
 
 
 class TestChecklistResult:

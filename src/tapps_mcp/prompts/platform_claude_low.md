@@ -1,0 +1,54 @@
+# TAPPS Quality Pipeline (optional)
+
+This project can use the TAPPS MCP server for code quality. Tool responses include `next_steps` - consider them when useful.
+
+## Optional Tool Usage
+
+Consider these steps when they fit your task.
+
+### Session Start
+
+Consider calling `tapps_session_start()` at session start for server capabilities and project tech stack.
+
+### Before Using Any Library API
+
+Consider calling `tapps_lookup_docs(library, topic)` before using an external library to avoid hallucinated APIs.
+
+### After Editing Any Python File
+
+Consider calling `tapps_quick_check(file_path)` after editing Python files.
+
+### Before Declaring Work Complete
+
+Consider calling `tapps_validate_changed()` for multi-file changes and `tapps_checklist(task_type)` to verify steps.
+
+### Domain Decisions
+
+Consider calling `tapps_consult_expert(question)` for domain-specific decisions (security, testing, API design, etc.).
+
+### Refactoring or Deleting Files
+
+Consider calling `tapps_impact_analysis(file_path)` before refactoring or deleting to see dependents.
+
+### Infrastructure Config Changes
+
+Consider calling `tapps_validate_config(file_path)` when changing Dockerfile, docker-compose, or infra config.
+
+## 5-Stage Pipeline (optional)
+
+When following a full workflow:
+
+1. **Discover** - `tapps_session_start()`
+2. **Research** - `tapps_lookup_docs()`, `tapps_consult_expert()`
+3. **Develop** - `tapps_score_file(file_path, quick=True)` during edits
+4. **Validate** - `tapps_quick_check()` or `tapps_validate_changed()`
+5. **Verify** - `tapps_checklist(task_type)`
+
+## Response Guidance
+
+Tool responses include `next_steps` and `pipeline_progress`. Consider following them when appropriate.
+Use `tapps_workflow(task_type="feature")` for recommended tool order.
+
+## CI Integration
+
+TappsMCP can run in CI with `TAPPS_MCP_PROJECT_ROOT` and `tapps-mcp validate-changed`, or Claude Code headless with `tapps_validate_changed`.

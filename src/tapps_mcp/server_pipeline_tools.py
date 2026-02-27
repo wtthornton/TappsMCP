@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from mcp.server.fastmcp import (
@@ -17,11 +18,9 @@ from mcp.server.fastmcp import (
 from mcp.types import ToolAnnotations
 
 from tapps_mcp.config.settings import load_settings
-from tapps_mcp.server_helpers import success_response
+from tapps_mcp.server_helpers import error_response, success_response
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from mcp.server.fastmcp import FastMCP
 
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
@@ -510,6 +509,7 @@ async def tapps_init(
     agent_teams: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
+    llm_engagement_level: str | None = None,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
@@ -547,6 +547,8 @@ async def tapps_init(
             writing files or warming caches. Keeps dry_run lightweight (~2-5s).
         verify_only: When ``True``, run only server verification and return (~1-3s).
             Use for quick connectivity/checker checks without creating files.
+        llm_engagement_level: When set, use this level (high/medium/low) for
+            AGENTS.md and platform rules. When ``None``, use config/settings.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
@@ -591,6 +593,7 @@ async def tapps_init(
         agent_teams=agent_teams,
         dry_run=dry_run,
         verify_only=verify_only,
+        llm_engagement_level=llm_engagement_level,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -648,6 +651,84 @@ def tapps_upgrade(
     return _with_nudges("tapps_upgrade", resp)
 
 
+def tapps_set_engagement_level(level: str) -> dict[str, Any]:
+    """Set the LLM engagement level (high / medium / low) for the project.
+
+    Writes or updates ``llm_engagement_level`` in the project's ``.tapps-mcp.yaml``.
+    Use when the user asks to change enforcement intensity (e.g. \"set tappsmcp to high\"
+    or \"make quality checks optional\").
+
+    Args:
+        level: One of ``\"high\"`` (mandatory), ``\"medium\"`` (balanced),
+            ``\"low\"`` (optional guidance).
+    """
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
+    from tapps_mcp.security.path_validator import PathValidator
+
+    import yaml
+
+    start = time.perf_counter_ns()
+    _record_call("tapps_set_engagement_level")
+
+    valid = ("high", "medium", "low")
+    if level not in valid:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_set_engagement_level", start, status="failed")
+        return error_response(
+            "tapps_set_engagement_level",
+            elapsed_ms,
+            f"Invalid level {level!r}. Use one of: {', '.join(valid)}",
+        )
+
+    settings = load_settings()
+    root = Path(settings.project_root)
+    validator = PathValidator(root)
+    config_path = validator.validate_write_path(".tapps-mcp.yaml")
+
+    data: dict[str, Any] = {}
+    if config_path.exists():
+        try:
+            with config_path.open(encoding="utf-8-sig") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception as e:
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+            _record_execution("tapps_set_engagement_level", start, status="failed")
+            return error_response(
+                "tapps_set_engagement_level",
+                elapsed_ms,
+                f"Could not read existing .tapps-mcp.yaml: {e}",
+            )
+    if not isinstance(data, dict):
+        data = {}
+
+    data["llm_engagement_level"] = level
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with config_path.open("w", encoding="utf-8") as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    except OSError as e:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_set_engagement_level", start, status="failed")
+        return error_response(
+            "tapps_set_engagement_level",
+            elapsed_ms,
+            f"Could not write .tapps-mcp.yaml: {e}",
+        )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_set_engagement_level", start)
+
+    next_step = (
+        "Run tapps_init with overwrite_agents_md=True (and platform if needed) "
+        "to regenerate AGENTS.md and platform rules with the new level."
+    )
+    msg = (
+        f"Engagement level set to {level!r}. {next_step}"
+    )
+    resp = success_response("tapps_set_engagement_level", elapsed_ms, {"level": level, "message": msg})
+    return _with_nudges("tapps_set_engagement_level", resp)
+
+
 def tapps_doctor(
     project_root: str = "",
 ) -> dict[str, Any]:
@@ -685,5 +766,6 @@ def register(mcp_instance: FastMCP) -> None:
     mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_changed)
     mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_session_start)
     mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_init)
+    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_set_engagement_level)
     mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_upgrade)
     mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_doctor)
