@@ -68,7 +68,7 @@ tapps-mcp init --check            # verify MCP config is correct
 
 ---
 
-## 5. Re-run init for caches and TECH_STACK
+## 6. Re-run init for caches and TECH_STACK
 
 A normal `tapps_init` run (without overwrite flags) will:
 

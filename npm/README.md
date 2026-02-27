@@ -41,7 +41,7 @@ This is a thin wrapper that:
 
 ## Optional dependencies
 
-For best results, install these Python tools: `pip install ruff mypy bandit radon`
+For best results, install these Python tools: `pip install ruff mypy bandit radon vulture pip-audit`
 
 For semantic expert search: `pip install tapps-mcp[rag]`
 

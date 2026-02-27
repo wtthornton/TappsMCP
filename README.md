@@ -701,7 +701,7 @@ src/tapps_mcp/
 │                                       #   multi-provider support (providers/)
 ├── validators/                         # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
 ├── experts/                            # Domain detector, engine, RAG, registry, confidence,
-│                                       #   vector RAG, knowledge management, 135+ knowledge files
+│                                       #   vector RAG, knowledge management, 139 knowledge files
 ├── project/                            # Project profiling, session notes, impact analysis, reports,
 │                                       #   import graph, cycle detection, coupling metrics
 ├── adaptive/                           # Adaptive scoring, expert voting, weight distribution
