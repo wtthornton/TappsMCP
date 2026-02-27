@@ -29,7 +29,7 @@ TappsMCP is designed as a **shared quality infrastructure** that any MCP-capable
 ### Session workflow
 
 ```
-1. tapps_session_start         → Initialize context (server info + project profile)
+1. tapps_session_start         → Initialize session (server info only; call tapps_project_profile for project context)
 2. tapps_lookup_docs           → Before using any external library API
 3. tapps_quick_check           → After each file edit (fast feedback)
 4. tapps_validate_changed      → Before declaring work complete (all changed files)
@@ -149,8 +149,10 @@ TappsMCP works without these, but produces best results with them installed:
 | **mypy** | Type checking | `pip install mypy` | No type error detection |
 | **bandit** | Security scanning | `pip install bandit` | Heuristic-only security scoring |
 | **radon** | Complexity metrics | `pip install radon` | AST-based complexity fallback |
+| **vulture** | Dead code detection | `pip install vulture` | No dead code analysis |
+| **pip-audit** | Dependency vulnerability scanning | `pip install pip-audit` | No CVE scanning |
 
-Install all at once: `pip install ruff mypy bandit radon`
+Install all at once: `pip install ruff mypy bandit radon vulture pip-audit`
 
 For semantic expert search (optional): `pip install tapps-mcp[rag]`
 

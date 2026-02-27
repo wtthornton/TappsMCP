@@ -39,13 +39,14 @@ jobs:
         env:
           TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
         run: |
-          tapps-mcp validate-changed --preset staging
+          tapps-mcp validate-changed --quick
 ```
 
 ### Customizing the Workflow
 
-- Change `--preset staging` to `development` (lenient) or `production` (strict)
-- Add `--changed-files` to explicitly list files instead of auto-detection
+- Change `--quick` to `--full` for comprehensive validation (ruff + mypy + bandit + radon + vulture)
+- Set `TAPPS_MCP_QUALITY_PRESET` env var to `strict` or `framework` for higher thresholds
+- Use `--project-root /path` to specify a different project root
 - Set `TAPPS_MCP_CONTEXT7_API_KEY` for documentation lookup in CI
 
 ## Claude Code Headless Mode
@@ -56,7 +57,7 @@ Claude Code can run non-interactively in CI using `--headless`:
 # Run quality validation headlessly
 claude --headless \
   --allowedTools "mcp__tapps-mcp__tapps_validate_changed" \
-  "Run tapps_validate_changed with preset=staging"
+  "Run tapps_validate_changed on all changed files"
 ```
 
 ### Team Onboarding with --init-only
@@ -81,9 +82,13 @@ For CI systems that don't use Claude Code, invoke TappsMCP directly:
 # Install
 pip install tapps-mcp
 
-# Validate changed files
+# Validate changed files (quick mode, ruff-only)
 TAPPS_MCP_PROJECT_ROOT=/workspace \
-  tapps-mcp validate-changed --preset staging
+  tapps-mcp validate-changed --quick
+
+# Or full validation (ruff + mypy + bandit + radon + vulture)
+TAPPS_MCP_PROJECT_ROOT=/workspace \
+  tapps-mcp validate-changed --full
 ```
 
 ## VS Code / Headless Settings
