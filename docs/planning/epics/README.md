@@ -27,13 +27,8 @@
 | [Epic 20](EPIC-20-GITHUB-ACTIONS-CI-ENHANCEMENT.md) | GitHub Actions CI Enhancement | P1 | ~2-2.5 weeks | Epic 8, Epic 12 | **Complete** |
 | [Epic 21](EPIC-21-GITHUB-COPILOT-AGENT-INTEGRATION.md) | GitHub Copilot Agent Integration + GitHub Expert | P0 | ~2.5-3 weeks | Epic 8, Epic 12, Epic 20 | **Complete** |
 | [Epic 22](EPIC-22-GITHUB-GOVERNANCE-SECURITY-CONFIG.md) | GitHub Governance & Security Config | P2 | ~1.5-2 weeks | Epic 19, Epic 20, Epic 21 | **Complete** |
-| [Epic 23](EPIC-23-MULTI-LANGUAGE-SCORING.md) | Multi-Language Scoring Support | P2 | ~6-8 weeks | Epic 0, Epic 1, Epic 9 | **Proposed** |
-| [Epic 24](EPIC-24-STREAMABLE-HTTP-TRANSPORT.md) | MCP Streamable HTTP Transport | P1 | ~3-4 weeks | Epic 6 | **Proposed** |
-| [Epic 25](EPIC-25-IDE-MARKETPLACE-INTEGRATION.md) | IDE Marketplace Integration | P3 | ~4-6 weeks | Epic 6, Epic 24 | **Proposed** |
 
-**Completed LOE:** ~40-51 weeks (Epics 0-22, all complete)
-**Proposed LOE:** ~13-18 weeks (Epics 23-25)
-**Total estimated LOE:** ~53-69 weeks (1 developer)
+**Total LOE:** ~40-51 weeks (Epics 0-22, all complete)
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -71,11 +66,6 @@ Epic 20 (Actions CI Enhancement)     ← depends on Epic 8, Epic 12 (parallel wi
 Epic 21 (Copilot Agent Integration)  ← depends on Epic 20 (after setup-steps)
 Epic 22 (Governance & Security)      ← depends on Epic 19, Epic 20, Epic 21 (final wave)
 
---- Expansion Wave (Epics 23-25, Proposed) ---
-
-Epic 23 (Multi-Language Scoring)     ← depends on Epic 0, Epic 1, Epic 9 (large, independent)
-Epic 24 (HTTP Transport)             ← depends on Epic 6
-Epic 25 (IDE Marketplace)            ← depends on Epic 6, Epic 24
 ```
 
 **Note:** Epics 13-17 are fully independent and can all be developed in parallel.

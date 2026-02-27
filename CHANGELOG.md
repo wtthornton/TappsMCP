@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tapps_validate_changed`: `security_depth` parameter (`"basic"`/`"full"`) and `include_impact` parameter for blast radius analysis (P0)
 - `tapps_feedback`: Tool name validation, 5-minute deduplication, and real-time scoring weight adjustment (P4)
 - `tapps_stats`: Actionable `recommendations` field based on usage patterns (P4)
-- New epic proposals: Epic 23 (Multi-Language Scoring), Epic 24 (HTTP Transport), Epic 25 (IDE Marketplace)
+
 
 ### Fixed (P0-P4 Tool Tier Promotions)
 
