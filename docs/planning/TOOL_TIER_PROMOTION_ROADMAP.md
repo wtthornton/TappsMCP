@@ -144,6 +144,8 @@ Developers care about net productivity -- the entire workflow, not isolated mome
 | Add multi-file / directory scanning | Scan `src/` in one call instead of file-by-file |
 | Add severity threshold filter | Only care about HIGH+ in most sessions -- reduce noise |
 
+**Status: Resolved in P0.** Security scanning integrated into `tapps_validate_changed` via `security_depth` parameter. `security_depth="basic"` runs secret scanning only; `security_depth="full"` runs full bandit + secrets even in quick mode.
+
 **Verdict:** If security scanning is baked into tools already called every session, it becomes Tier 1 by default.
 
 ---
@@ -165,6 +167,8 @@ Developers care about net productivity -- the entire workflow, not isolated mome
 | Infer library from file being edited (use project profile) | No more defaulting to `library="python"` |
 | Add `file_context` parameter (path to file being worked on) | Expert advice grounded in actual code context |
 | Increase question limit from 2000 --> 5000 chars | Allow pasting code snippets in questions |
+
+**Status: Resolved in P2.** `file_context` parameter added for import-based library inference. Docs are now always fetched alongside expert consultation. Question limit raised to 5000 chars.
 
 **Verdict:** With file context and always-on docs, this becomes the go-to tool for every non-trivial decision.
 
@@ -189,6 +193,8 @@ Developers care about net productivity -- the entire workflow, not isolated mome
 | Include in `tapps_checklist` evaluation | Checklist flags "modified X but didn't check impact on Y" |
 | Expose `max_depth` parameter | Control analysis depth for large codebases |
 
+**Status: Resolved in P0.** Impact analysis integrated into `tapps_validate_changed` via `include_impact` parameter (default `True`). Import graph built once and shared across files.
+
 **Verdict:** Blast radius data in every `validate_changed` run = automatic promotion via integration.
 
 ---
@@ -210,6 +216,8 @@ Developers care about net productivity -- the entire workflow, not isolated mome
 | Run security scan if task_type is `"security"` or `"feature"` | Don't just remind -- execute |
 | Return actual pass/fail for each item with results | "Tests pass: YES, Security: 2 HIGH issues" vs "security_scan: not called" |
 | Add `auto_fix=True` option to run fixable items | One-shot "make everything green" |
+
+**Status: Resolved in P1.** `auto_run=True` parameter added. When set, missing required validations are automatically executed via `tapps_validate_changed`, and the checklist is re-evaluated after auto-running.
 
 **Verdict:** A checklist that executes rather than reminds = the ultimate "am I done?" tool.
 
@@ -234,6 +242,8 @@ Developers care about net productivity -- the entire workflow, not isolated mome
 | Surface degraded flag when vulture is missing | LLM needs to know when tool isn't actually scanning |
 | Integrate into `tapps_report` | Dead code metrics in project health dashboard |
 
+**Status: All limitations resolved in P3 implementation.** `scope` parameter supports `"file"`, `"project"`, and `"changed"` modes. `degraded` flag surfaces when vulture is missing. Structured output added.
+
 **Verdict:** With project-wide scanning and a `"changed"` scope, useful during every refactoring session.
 
 ---
@@ -247,6 +257,8 @@ Developers care about net productivity -- the entire workflow, not isolated mome
 - Unknown formats silently fall through to JSON
 - No structured output
 
+> **Status: Resolved in P4.** `time_range` now filters underlying data. `time_range_applied` field in response.
+
 **Current limitations (`tapps_feedback`):**
 - `tool_name` not validated against known tools -- arbitrary strings accepted
 - `context` not sanitized (unlike other tools)
@@ -254,9 +266,13 @@ Developers care about net productivity -- the entire workflow, not isolated mome
 - No deduplication -- same feedback recorded multiple times
 - Synchronous -- blocks event loop during disk write
 
+> **Status: All limitations resolved in P4.** Tool validation, deduplication, real-time weight adjustment implemented.
+
 **Current limitations (`tapps_stats`):**
 - Returns raw usage data with no actionable insights
 - No recommendations based on usage patterns
+
+> **Status: Resolved in P4.** Actionable recommendations generated from usage patterns.
 
 **Enhancement: Close the adaptive learning loop**
 
@@ -271,17 +287,19 @@ Developers care about net productivity -- the entire workflow, not isolated mome
 
 ## Priority Roadmap
 
-| Priority | Enhancement | Tools Affected | Effort | Promotion |
-|----------|-------------|----------------|--------|-----------|
-| **P0** | Bake security + impact into `validate_changed` | `security_scan`, `impact_analysis` | Medium | Both --> Tier 1 |
-| **P1** | Make `checklist` execute validations, not just track calls | `checklist` | Medium | --> Tier 1 |
-| **P2** | Always-on docs + file context in `research` | `research`, `lookup_docs` | Small | --> Tier 1 |
-| **P3** | Project-wide dead code with `"changed"` scope | `dead_code` | Medium | --> Tier 2+ |
-| **P4** | Close the adaptive feedback loop | `feedback`, `stats`, `dashboard` | Large | --> Tier 2 |
+| Priority | Enhancement | Tools Affected | Effort | Promotion | Status |
+|----------|-------------|----------------|--------|-----------|--------|
+| **P0** | Bake security + impact into `validate_changed` | `security_scan`, `impact_analysis` | Medium | Both --> Tier 1 | **Complete** |
+| **P1** | Make `checklist` execute validations, not just track calls | `checklist` | Medium | --> Tier 1 | **Complete** |
+| **P2** | Always-on docs + file context in `research` | `research`, `lookup_docs` | Small | --> Tier 1 | **Complete** |
+| **P3** | Project-wide dead code with `"changed"` scope | `dead_code` | Medium | --> Tier 2+ | **Complete** |
+| **P4** | Close the adaptive feedback loop | `feedback`, `stats`, `dashboard` | Large | --> Tier 2 | **Complete** |
 
 ### Key Insight
 
 The P0 change alone -- enriching `validate_changed` with security and impact data -- would effectively promote 3 tools to Tier 1 by making their value **automatic rather than opt-in**. The pattern across all promotions is the same: **tools that require the LLM to remember to call them will always be lower tier than tools integrated into the workflow the LLM already follows.**
+
+**Update (2026-02-27):** All P0-P4 items are now complete. Security scanning, impact analysis, auto-running checklists, always-on docs with file context, project-wide dead code detection, and the adaptive feedback loop have all been implemented and verified. The promotion strategy proved correct -- integrating capabilities into existing workflow tools (`validate_changed`, `checklist`, `research`) was more effective than expecting LLMs to call standalone tools at the right moment.
 
 ---
 

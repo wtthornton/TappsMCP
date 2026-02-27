@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (P0-P4 Tool Tier Promotions)
+
+- `tapps_dead_code`: `scope` parameter supporting `"file"`, `"project"`, and `"changed"` modes for cross-file dead code analysis (P3)
+- `tapps_checklist`: `auto_run` parameter that automatically runs missing required validations (P1)
+- `tapps_research`: `file_context` parameter for inferring library from file imports (P2)
+- `tapps_validate_changed`: `security_depth` parameter (`"basic"`/`"full"`) and `include_impact` parameter for blast radius analysis (P0)
+- `tapps_feedback`: Tool name validation, 5-minute deduplication, and real-time scoring weight adjustment (P4)
+- `tapps_stats`: Actionable `recommendations` field based on usage patterns (P4)
+- New epic proposals: Epic 23 (Multi-Language Scoring), Epic 24 (HTTP Transport), Epic 25 (IDE Marketplace)
+
+### Fixed (P0-P4 Tool Tier Promotions)
+
+- `tapps_dashboard`: `time_range` parameter now actually filters underlying data instead of being label-only (P4)
+- 9 pre-existing test failures (tool count, version, engagement level template assertions)
+
+### Changed (P0-P4 Tool Tier Promotions)
+
+- `tapps_research`: Docs are now always fetched alongside expert consultation (no longer gated on confidence threshold) (P2)
+- `tapps_dead_code`: Returns `degraded` flag when vulture is not installed
+
 ### Added (Epic 13: Structured Outputs — partial, Epic 14: Dead Code — complete)
 
 - **Structured outputs for 6 tools** — `tapps_security_scan`, `tapps_validate_changed`, and `tapps_validate_config` now return `structuredContent` alongside human-readable text. Combined with existing scoring tools (`tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`), 6 tools provide machine-parseable JSON for programmatic consumption.

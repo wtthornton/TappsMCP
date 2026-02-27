@@ -12,7 +12,7 @@ TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs
 # Install dependencies
 uv sync
 
-# Run all tests (2850+ tests)
+# Run all tests (2700+ tests)
 uv run pytest tests/ -v
 
 # Run a single test file

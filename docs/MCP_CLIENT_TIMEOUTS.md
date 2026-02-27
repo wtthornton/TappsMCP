@@ -14,7 +14,8 @@ TappsMCP exposes several tools that can take 10–35+ seconds to complete. Some 
 | **tapps_session_start** | ~1 second | Server info only (version, checkers, config); call tapps_project_profile for project context |
 | **tapps_score_file** (full) | 3–15 seconds | Ruff, mypy, bandit, radon + AST analysis |
 | **tapps_quick_check** | ~2–8 seconds | Quick score + gate + basic security |
-| **tapps_validate_changed** | 5–60+ seconds | Depends on number of changed files |
+| **tapps_validate_changed** | 5–60+ seconds | Depends on number of changed files; `include_impact=True` (default) adds overhead for import graph analysis. Use `include_impact=False` for faster runs when blast radius data is not needed. |
+| **tapps_checklist** (auto_run=True) | 10–60+ seconds | Delegates to `tapps_validate_changed` internally -- same timeout considerations apply. Duration depends on number of changed files and missing validations. |
 | **tapps_lookup_docs** | 1–10 seconds | Context7 API or cache |
 | **tapps_consult_expert** | 2–10 seconds | RAG lookup + retrieval |
 

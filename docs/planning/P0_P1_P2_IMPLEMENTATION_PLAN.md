@@ -1,11 +1,13 @@
 # P0, P1, P2 Tool Tier Promotion — Implementation Plan
 
+**Status:** COMPLETE — All P0, P1, P2 items implemented and verified 2026-02-27.
+
 **Date:** 2026-02-25
 **Sequence:** P2 (smallest) → P0 (medium) → P1 (largest)
 
 ---
 
-## P2: Always-On Docs + File Context in `tapps_research`
+## P2: Always-On Docs + File Context in `tapps_research` — **Status: Complete**
 
 ### Files to Modify
 - `src/tapps_mcp/server_metrics_tools.py` — `tapps_research` (line ~277)
@@ -29,7 +31,7 @@
 
 ---
 
-## P0: Security + Impact in `tapps_validate_changed`
+## P0: Security + Impact in `tapps_validate_changed` — **Status: Complete**
 
 ### Files to Modify
 - `src/tapps_mcp/server_pipeline_tools.py` — `tapps_validate_changed`
@@ -56,7 +58,7 @@
 
 ---
 
-## P1: Make `tapps_checklist` Execute Validations
+## P1: Make `tapps_checklist` Execute Validations — **Status: Complete**
 
 ### Files to Modify
 - `src/tapps_mcp/server.py` — `tapps_checklist` (line ~840)

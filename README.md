@@ -378,7 +378,7 @@ Quick index:
 | **tapps_dashboard** | View metrics dashboard with execution stats, expert performance, and trends. |
 | **tapps_stats** | Retrieve aggregated usage statistics and quality trends across sessions. |
 | **tapps_feedback** | Submit feedback on tool results to improve adaptive scoring and expert answers. |
-| **tapps_dead_code** | Scan a Python file for unused functions, classes, imports, and variables (Vulture). |
+| **tapps_dead_code** | Scan Python files for dead code — supports file, project-wide, or changed-files-only scanning with confidence scoring. |
 | **tapps_dependency_scan** | Scan project dependencies for known vulnerabilities (pip-audit). |
 | **tapps_dependency_graph** | Build import graph, detect circular imports, and calculate coupling metrics. |
 | **tapps_init** | Bootstrap TappsMCP in a project: create AGENTS.md, TECH_STACK.md, platform rules, warm caches. |
@@ -439,7 +439,7 @@ Quick index:
 
 ### tapps_validate_changed
 
-**What it does:** Detects changed Python files (via `git diff` against a base ref) or accepts an explicit comma-separated list. Default is `quick=True` (ruff-only scoring, under ~10s). Pass `quick=False` for full validation (ruff, mypy, bandit, radon). Includes impact analysis by default (`include_impact=True`) showing blast radius of changes. Returns per-file results with pass/fail status, impact summary, and aggregated summary.
+**What it does:** Detects changed Python files (via `git diff` against a base ref) or accepts an explicit comma-separated list. Default is `quick=True` (ruff-only scoring, under ~10s). Pass `quick=False` for full validation (ruff, mypy, bandit, radon). Includes impact analysis by default (`include_impact=True`) showing blast radius of changes. The `security_depth` parameter controls security scanning: `"basic"` (default) runs basic checks, `"full"` runs bandit + secret detection even in quick mode. Returns per-file results with pass/fail status, impact summary, and aggregated summary.
 
 **Why use it:** Required before declaring multi-file work complete. Auto-detects what changed so you don't have to specify each file. Ensures no changed file slips through without quality validation. Impact analysis helps understand downstream effects of changes.
 
@@ -471,9 +471,9 @@ Quick index:
 
 ### tapps_research
 
-**What it does:** Combined expert consultation + documentation lookup in one call. Consults the domain expert first, then automatically supplements with Context7 documentation when expert RAG has no results or confidence is low. Accepts optional `library` and `topic` parameters (auto-inferred when empty). Returns expert answer, confidence, sources, and any supplementary docs content.
+**What it does:** Combined expert consultation + documentation lookup in one call. Consults the domain expert first, then always supplements with Context7 documentation. Accepts optional `library` and `topic` parameters (auto-inferred when empty). The `file_context` parameter accepts a path to the file being edited, allowing the tool to infer the relevant library from imports. Returns expert answer, confidence, sources, and supplementary docs content.
 
-**Why use it:** Saves a round-trip compared to calling `tapps_consult_expert` and `tapps_lookup_docs` separately. Use when you need both expert guidance and current library documentation for a domain-specific question. The auto-supplementation means you always get documentation backing when the expert knowledge base has gaps.
+**Why use it:** Saves a round-trip compared to calling `tapps_consult_expert` and `tapps_lookup_docs` separately. Use when you need both expert guidance and current library documentation for a domain-specific question. Docs are always fetched to provide the most complete answer. Pass `file_context` when editing a specific file so the tool can auto-detect which library to look up from imports.
 
 ---
 
@@ -487,9 +487,9 @@ Quick index:
 
 ### tapps_checklist
 
-**What it does:** Tracks which TappsMCP tools have been called in the current server session and evaluates that against a **task type**: `feature`, `bugfix`, `refactor`, `security`, or `review`. For that task type, some tools are required, some recommended, some optional. The tool returns the list of called tools, missing required/recommended/optional tools, and for each missing tool a short **reason** (in `missing_required_hints`, `missing_recommended_hints`, `missing_optional_hints`) explaining why to call it. It also returns a **complete** flag (true when all required tools have been called) and total call count.
+**What it does:** Tracks which TappsMCP tools have been called in the current server session and evaluates that against a **task type**: `feature`, `bugfix`, `refactor`, `security`, or `review`. For that task type, some tools are required, some recommended, some optional. The tool returns the list of called tools, missing required/recommended/optional tools, and for each missing tool a short **reason** (in `missing_required_hints`, `missing_recommended_hints`, `missing_optional_hints`) explaining why to call it. It also returns a **complete** flag (true when all required tools have been called) and total call count. When `auto_run=True`, the tool automatically runs any missing required validations (via `tapps_validate_changed`) and re-evaluates the checklist.
 
-**Why use it:** Ensures the AI does not skip important steps (e.g. never running the quality gate or security scan) before declaring work complete. Call before saying "done"; if `complete` is false, the hints tell you exactly which tools to call and why. Task types align expectations (e.g. security tasks require a security scan) so the checklist matches the kind of work being done.
+**Why use it:** Ensures the AI does not skip important steps (e.g. never running the quality gate or security scan) before declaring work complete. Call before saying "done"; if `complete` is false, the hints tell you exactly which tools to call and why. Use `auto_run=True` to let the checklist fill in missing steps automatically. Task types align expectations (e.g. security tasks require a security scan) so the checklist matches the kind of work being done.
 
 ---
 
@@ -546,6 +546,38 @@ Quick index:
 **What it does:** Runs a suite of diagnostic checks and returns structured results. Checks include: binary availability on PATH, MCP config files for Claude Code (user and project), Cursor, and VS Code, CLAUDE.md and Cursor rules presence, AGENTS.md version and completeness, `.claude/settings.json` permission entries, hook files, and installed quality tools (ruff, mypy, bandit, radon, vulture, pip-audit). When `llm_engagement_level` is set in `.tapps-mcp.yaml`, the result includes an `llm_engagement_level` key. Returns per-check pass/fail with messages and remediation hints, plus aggregated `pass_count`, `fail_count`, and `all_passed`.
 
 **Why use it:** When TappsMCP tools are not working as expected — permission prompts, missing tools, degraded results — run `tapps_doctor()` to identify configuration issues. The structured output pinpoints exactly what needs fixing and suggests the command to fix it.
+
+---
+
+### tapps_dead_code
+
+**What it does:** Scans Python code for unused functions, classes, imports, and variables using Vulture (with AST fallback when Vulture is not installed). The `scope` parameter controls what is scanned: `"file"` (default) scans a single file specified by `file_path`, `"project"` scans all Python files in the project, and `"changed"` scans only files with uncommitted changes (via git diff). The `min_confidence` parameter (0-100, default 80) filters findings by confidence threshold. Returns a findings list with location, type, name, and confidence for each item, plus `files_scanned` count and `degraded` flag when Vulture is missing.
+
+**Why use it:** Dead code accumulates silently and increases maintenance burden. Use during refactoring to identify safe removal candidates, or with `scope="changed"` before committing to ensure new changes do not introduce unused code. The confidence scoring helps prioritize which findings to act on.
+
+---
+
+### tapps_dashboard
+
+**What it does:** Generates a comprehensive metrics dashboard covering scoring accuracy, gate pass rates, expert effectiveness, cache performance, quality trends, and alerts. The `time_range` parameter (`"1d"`, `"7d"`, `"30d"`, `"90d"`) filters the underlying data to the specified window. Supports `output_format` of `"json"` (default), `"markdown"`, `"html"`, or `"otel"`. The optional `sections` parameter lets you request specific dashboard sections (e.g. `["summary", "alerts", "recommendations"]`).
+
+**Why use it:** Provides visibility into how TappsMCP is performing across sessions. Use to identify patterns (e.g. consistently failing quality gates, low cache hit rates) and act on recommendations to improve the development workflow.
+
+---
+
+### tapps_stats
+
+**What it does:** Returns aggregated usage statistics for TappsMCP tools: call counts, success rates, average durations, cache hit rates, and gate pass rates. Filterable by `tool_name` (optional) and `period` (`"session"`, `"1d"`, `"7d"`, `"30d"`, `"all"`). The response includes a `recommendations` list with actionable suggestions based on usage patterns (e.g. "consider using tapps_quick_check more frequently during edits").
+
+**Why use it:** Helps understand tool adoption and identify workflow gaps. The recommendations surface specific improvements based on actual usage data rather than generic advice.
+
+---
+
+### tapps_feedback
+
+**What it does:** Submits feedback on whether a tool's output was helpful. Requires `tool_name` and `helpful` (boolean), with optional `context` for details. Validates `tool_name` against known tools and returns an error with the valid tool list for invalid names. Deduplicates identical feedback within 5 minutes to prevent noise. For scoring tools, feedback adjusts adaptive weights in real-time so subsequent scoring reflects what the user finds useful.
+
+**Why use it:** Closes the feedback loop so TappsMCP improves over time. When a tool gives unhelpful results, reporting it adjusts internal weights. When results are helpful, it reinforces the current behavior. Use after any tool call where the output was notably good or bad.
 
 ---
 
