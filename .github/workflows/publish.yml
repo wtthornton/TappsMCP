@@ -49,6 +49,28 @@ jobs:
           name: dist
           path: dist/
 
+  build-exe:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install project and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -e .
+      - name: Build tapps-mcp.exe
+        run: |
+          python -m PyInstaller --onefile -n tapps-mcp --console scripts/run_tapps_mcp.py
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: exe
+          path: dist/tapps-mcp.exe
+
   test-install:
     needs: build
     strategy:
@@ -98,7 +120,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    needs: publish-pypi
+    needs: [publish-pypi, build-exe]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -108,10 +130,15 @@ jobs:
         with:
           name: dist
           path: dist/
+      - uses: actions/download-artifact@v6
+        with:
+          name: exe
+          path: exe/
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          cp exe/tapps-mcp.exe dist/ 2>/dev/null || true
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
             --generate-notes \
