@@ -78,6 +78,14 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     ],
     "tapps_quick_check": [
         (
+            lambda _called, ctx: (ctx or {}).get("gate_passed") is False,
+            "Gate FAILED. Fix the issues, then re-run tapps_quick_check().",
+        ),
+        (
+            lambda _called, ctx: (ctx or {}).get("security_passed") is False,
+            "Security issues detected. Call tapps_security_scan() for full analysis.",
+        ),
+        (
             lambda called, _ctx: "tapps_checklist" not in called,
             "NEXT: Call tapps_checklist() as the final step before declaring done.",
         ),

@@ -26,7 +26,7 @@ class TestSecurityScanResult:
 
 
 class TestRunSecurityScan:
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value="/usr/bin/bandit")
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=True)
     @patch("tapps_mcp.security.security_scanner.run_bandit_check")
     @patch("tapps_mcp.security.security_scanner.SecretScanner")
     def test_full_scan_clean(self, mock_scanner_cls, mock_bandit, mock_which):
@@ -39,7 +39,7 @@ class TestRunSecurityScan:
         assert result.total_issues == 0
         assert result.bandit_available is True
 
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value="/usr/bin/bandit")
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=True)
     @patch("tapps_mcp.security.security_scanner.run_bandit_check")
     @patch("tapps_mcp.security.security_scanner.SecretScanner")
     def test_bandit_issues(self, mock_scanner_cls, mock_bandit, mock_which):
@@ -60,7 +60,7 @@ class TestRunSecurityScan:
         assert result.total_issues == 1
         assert result.high_count == 1
 
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value="/usr/bin/bandit")
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=True)
     @patch("tapps_mcp.security.security_scanner.run_bandit_check")
     @patch("tapps_mcp.security.security_scanner.SecretScanner")
     def test_secret_findings(self, mock_scanner_cls, mock_bandit, mock_which):
@@ -84,7 +84,7 @@ class TestRunSecurityScan:
         assert result.total_issues == 1
         assert result.high_count == 1
 
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value=None)
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=False)
     @patch("tapps_mcp.security.security_scanner.SecretScanner")
     def test_bandit_unavailable(self, mock_scanner_cls, mock_which):
         mock_scanner_inst = mock_scanner_cls.return_value
@@ -94,7 +94,7 @@ class TestRunSecurityScan:
         assert result.bandit_available is False
         assert result.passed is True
 
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value="/usr/bin/bandit")
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=True)
     @patch("tapps_mcp.security.security_scanner.run_bandit_check")
     @patch("tapps_mcp.security.security_scanner.SecretScanner")
     def test_scan_secrets_disabled(self, mock_scanner_cls, mock_bandit, mock_which):
@@ -105,7 +105,7 @@ class TestRunSecurityScan:
         assert result.secret_findings == []
         mock_scanner_cls.return_value.scan_file.assert_not_called()
 
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value="/usr/bin/bandit")
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=True)
     @patch("tapps_mcp.security.security_scanner.run_bandit_check")
     @patch("tapps_mcp.security.security_scanner.SecretScanner")
     def test_mixed_severities(self, mock_scanner_cls, mock_bandit, mock_which):

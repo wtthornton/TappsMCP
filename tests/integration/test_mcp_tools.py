@@ -104,7 +104,7 @@ class TestMCPSecurityScanTool:
         """Security scan returns well-formed response."""
         with (
             patch("tapps_mcp.server._validate_file_path", return_value=project),
-            patch("tapps_mcp.security.security_scanner.shutil.which", return_value=None),
+            patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=False),
         ):
             result = tapps_security_scan(str(project))
 

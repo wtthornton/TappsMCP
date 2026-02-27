@@ -87,6 +87,107 @@ class CodeScorer:
             degraded=False,
         )
 
+    def score_file_quick_enriched(self, file_path: Path) -> ScoreResult:
+        """Quick-enriched mode: ruff + AST heuristics for all 7 categories.
+
+        Runs ruff for linting, then supplements with AST-based heuristics
+        for complexity, security, maintainability, test_coverage, performance,
+        structure, and devex. No external tools beyond ruff are invoked.
+        """
+        resolved = file_path.resolve()
+        issues = run_ruff_check(str(resolved), cwd=str(resolved.parent))
+        lint_score = calculate_lint_score(issues)
+
+        try:
+            code = resolved.read_text(encoding="utf-8", errors="replace")
+        except (OSError, PermissionError) as exc:
+            logger.error("file_read_failed", path=str(resolved), error=str(exc))
+            return self._error_result(str(resolved))
+
+        w = self._weights
+        cats: dict[str, CategoryScore] = {}
+
+        # 1) Complexity (AST fallback)
+        complexity_raw = self._ast_complexity(code)
+        cats["complexity"] = CategoryScore(
+            name="complexity",
+            score=complexity_raw,
+            weight=w.complexity,
+            details={"fallback": True},
+        )
+
+        # 2) Security (heuristic)
+        sec_score = self._heuristic_security(code)
+        patterns_found = [p for p in _INSECURE_PATTERNS if p in code]
+        cats["security"] = CategoryScore(
+            name="security",
+            score=sec_score,
+            weight=w.security,
+            details={"fallback": True, "patterns_found": patterns_found},
+        )
+
+        # 3) Maintainability (AST)
+        maint_score = self._ast_maintainability(code)
+        cats["maintainability"] = CategoryScore(
+            name="maintainability",
+            score=maint_score,
+            weight=w.maintainability,
+            details={"fallback": True, "line_count": len(code.splitlines())},
+        )
+
+        # 4) Test coverage (heuristic)
+        coverage = self._coverage_heuristic(resolved)
+        cats["test_coverage"] = CategoryScore(
+            name="test_coverage",
+            score=coverage,
+            weight=w.test_coverage,
+            details={"stem": resolved.stem},
+        )
+
+        # 5) Performance (AST)
+        perf, perf_issues = self._ast_performance_detailed(code)
+        cats["performance"] = CategoryScore(
+            name="performance",
+            score=perf,
+            weight=w.performance,
+            details={"issues_found": sorted(perf_issues)},
+        )
+
+        # 6) Structure
+        structure = self._structure_score(resolved)
+        cats["structure"] = CategoryScore(
+            name="structure",
+            score=structure,
+            weight=w.structure,
+        )
+
+        # 7) DevEx
+        devex = self._devex_score(resolved)
+        cats["devex"] = CategoryScore(
+            name="devex",
+            score=devex,
+            weight=w.devex,
+        )
+
+        # Bonus: linting (informational, weight=0)
+        cats["linting"] = CategoryScore(
+            name="linting",
+            score=lint_score,
+            weight=0.0,
+            details={"issue_count": len(issues)},
+        )
+
+        overall = self._calculate_overall(cats)
+
+        return ScoreResult(
+            file_path=str(resolved),
+            categories=cats,
+            overall_score=overall,
+            lint_issues=issues,
+            degraded=True,
+            missing_tools=["bandit", "radon", "mypy"],
+        )
+
     async def score_file(self, file_path: Path, *, mode: str = "subprocess") -> ScoreResult:
         """Full mode: parallel ruff + mypy + bandit + radon → 7-category score.
 

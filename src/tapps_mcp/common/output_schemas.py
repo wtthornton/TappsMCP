@@ -81,6 +81,10 @@ class QuickCheckOutput(StructuredOutput):
     lint_issue_count: int = 0
     security_issue_count: int = 0
     suggestions: list[str] = Field(default_factory=list)
+    complexity_hint: dict[str, Any] | None = None
+    gate_failures: list[dict[str, Any]] = Field(default_factory=list)
+    quick_categories: dict[str, float] = Field(default_factory=dict)
+    fixes_applied: int | None = None
 
 
 class SecurityFindingOutput(BaseModel):

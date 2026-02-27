@@ -864,6 +864,225 @@ class TestTappsQuickCheck:
         assert "next_steps" in result["data"]
         assert "pipeline_progress" in result["data"]
 
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server.load_settings")
+    async def test_fix_parameter_applies_fixes(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        mock_validate.return_value = f
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "standard"
+        mock_settings.return_value.tool_timeout = 30
+
+        with patch("tapps_mcp.tools.ruff.run_ruff_fix", return_value=3) as mock_fix:
+            result = await tapps_quick_check(str(f), fix=True)
+
+        assert result["success"] is True
+        assert result["data"]["fixes_applied"] == 3
+        mock_fix.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server.load_settings")
+    async def test_fix_false_skips_fixes(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        mock_validate.return_value = f
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "standard"
+        mock_settings.return_value.tool_timeout = 30
+
+        with patch("tapps_mcp.tools.ruff.run_ruff_fix") as mock_fix:
+            result = await tapps_quick_check(str(f), fix=False)
+
+        assert result["success"] is True
+        assert "fixes_applied" not in result["data"]
+        mock_fix.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server.load_settings")
+    async def test_quick_categories_present(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        mock_validate.return_value = f
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "standard"
+        mock_settings.return_value.tool_timeout = 30
+
+        result = await tapps_quick_check(str(f))
+        assert result["success"] is True
+        cats = result["data"]["quick_categories"]
+        assert isinstance(cats, dict)
+        # Should have all 7 weighted categories
+        expected = {"complexity", "security", "maintainability", "test_coverage",
+                    "performance", "structure", "devex"}
+        assert set(cats.keys()) == expected
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server.load_settings")
+    async def test_nudge_gate_failed(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.scoring.models import CategoryScore, ScoreResult
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        mock_validate.return_value = f
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "strict"
+        mock_settings.return_value.tool_timeout = 30
+
+        # Create a low-scoring result to fail the gate
+        low_result = ScoreResult(
+            file_path=str(f),
+            categories={
+                "linting": CategoryScore(name="linting", score=2.0, weight=1.0),
+            },
+            overall_score=20.0,
+            degraded=True,
+            missing_tools=["bandit", "radon", "mypy"],
+        )
+
+        with patch(
+            "tapps_mcp.server_scoring_tools._get_scorer"
+        ) as mock_scorer_fn:
+            mock_scorer = MagicMock()
+            mock_scorer.score_file_quick_enriched.return_value = low_result
+            mock_scorer_fn.return_value = mock_scorer
+            result = await tapps_quick_check(str(f), preset="strict")
+
+        data = result["data"]
+        # Gate should fail with a 20.0 score on strict preset
+        assert data["gate_passed"] is False
+        # Nudge should mention gate failure
+        next_steps = data.get("next_steps", [])
+        assert any("Gate FAILED" in s for s in next_steps)
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server.load_settings")
+    async def test_nudge_security_failed(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        mock_validate.return_value = f
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "standard"
+        mock_settings.return_value.tool_timeout = 30
+
+        # Mock security scan to return a failure
+        from tapps_mcp.security.security_scanner import SecurityScanResult
+
+        failed_sec = SecurityScanResult(
+            passed=False,
+            total_issues=2,
+            critical_count=1,
+            bandit_available=True,
+        )
+
+        with patch(
+            "tapps_mcp.security.security_scanner.run_security_scan",
+            return_value=failed_sec,
+        ):
+            result = await tapps_quick_check(str(f))
+
+        data = result["data"]
+        assert data["security_passed"] is False
+        next_steps = data.get("next_steps", [])
+        assert any("Security issues" in s or "security" in s.lower() for s in next_steps)
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server.load_settings")
+    async def test_uncached_libraries_hint(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f = tmp_path / "test.py"
+        f.write_text("import requests\n", encoding="utf-8")
+        mock_validate.return_value = f
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "standard"
+        mock_settings.return_value.tool_timeout = 30
+
+        with (
+            patch(
+                "tapps_mcp.knowledge.import_analyzer.extract_external_imports",
+                return_value=["requests"],
+            ),
+            patch(
+                "tapps_mcp.knowledge.import_analyzer.find_uncached_libraries",
+                return_value=["requests"],
+            ),
+            patch("tapps_mcp.knowledge.cache.KBCache"),
+        ):
+            result = await tapps_quick_check(str(f))
+
+        data = result["data"]
+        assert "docs_hint" in data
+        assert "requests" in data["docs_hint"]
+
+    @pytest.mark.asyncio
+    async def test_structured_output_new_fields(self) -> None:
+        from tapps_mcp.common.output_schemas import QuickCheckOutput
+
+        output = QuickCheckOutput(
+            file_path="/test.py",
+            overall_score=75.0,
+            gate_passed=True,
+            gate_preset="standard",
+            security_passed=True,
+            lint_issue_count=0,
+            security_issue_count=0,
+            complexity_hint={"max_cc_estimate": 12, "level": "moderate"},
+            gate_failures=[{"category": "overall", "actual": 65.0, "threshold": 70.0}],
+            quick_categories={"complexity": 5.0, "security": 8.0},
+            fixes_applied=2,
+        )
+        content = output.to_structured_content()
+        assert content["complexity_hint"]["max_cc_estimate"] == 12
+        assert len(content["gate_failures"]) == 1
+        assert content["quick_categories"]["security"] == 8.0
+        assert content["fixes_applied"] == 2
+
 
 # ---------------------------------------------------------------------------
 # Checklist equivalence

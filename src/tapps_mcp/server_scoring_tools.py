@@ -321,6 +321,7 @@ async def tapps_quality_gate(
 async def tapps_quick_check(
     file_path: str,
     preset: str = "standard",
+    fix: bool = False,
 ) -> dict[str, Any]:
     """REQUIRED at minimum after editing any Python file. Runs quick
     score + quality gate + basic security check in one fast call,
@@ -331,6 +332,7 @@ async def tapps_quick_check(
     Args:
         file_path: Path to the Python file to check.
         preset: Quality gate preset - "standard", "strict", or "framework".
+        fix: If True, apply ruff auto-fixes before scoring.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
 
@@ -349,13 +351,32 @@ async def tapps_quick_check(
     settings = load_settings()
     scorer = _get_scorer()
 
+    # Optional ruff auto-fix before scoring
+    fixes_applied = 0
+    if fix:
+        from tapps_mcp.tools.ruff import run_ruff_fix
+
+        fixes_applied = await asyncio.to_thread(
+            run_ruff_fix, str(resolved), cwd=str(resolved.parent)
+        )
+
+    # Run enriched scoring and security scan in parallel
+    score_coro = asyncio.to_thread(scorer.score_file_quick_enriched, resolved)
+    sec_coro = asyncio.to_thread(
+        run_security_scan,
+        str(resolved),
+        scan_secrets=True,
+        cwd=str(settings.project_root),
+        timeout=settings.tool_timeout,
+    )
+
     try:
-        score_result = await asyncio.to_thread(scorer.score_file_quick, resolved)
+        score_result, sec_result = await asyncio.gather(score_coro, sec_coro)
     except Exception as exc:
-        _logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        _logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
         return error_response("tapps_quick_check", "scoring_failed", str(exc))
 
-    # Supplement with AST complexity heuristic (Finding #9)
+    # AST complexity hint (from the code already read by enriched scorer)
     complexity_hint: dict[str, Any] | None = None
     try:
         code = resolved.read_text(encoding="utf-8", errors="replace")
@@ -368,14 +389,6 @@ async def tapps_quick_check(
 
     gate_result = evaluate_gate(score_result, preset=preset)
 
-    sec_result = await asyncio.to_thread(
-        run_security_scan,
-        str(resolved),
-        scan_secrets=True,
-        cwd=str(settings.project_root),
-        timeout=settings.tool_timeout,
-    )
-
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
         "tapps_quick_check",
@@ -385,6 +398,13 @@ async def tapps_quick_check(
         score=round(score_result.overall_score, 2),
     )
 
+    # Build quick_categories from enriched result
+    quick_categories: dict[str, float] = {
+        name: round(cat.score, 2)
+        for name, cat in score_result.categories.items()
+        if cat.weight > 0
+    }
+
     data: dict[str, Any] = {
         "file_path": str(resolved),
         "overall_score": round(score_result.overall_score, 2),
@@ -393,7 +413,11 @@ async def tapps_quick_check(
         "security_passed": sec_result.passed,
         "lint_issue_count": len(score_result.lint_issues),
         "security_issue_count": sec_result.total_issues,
+        "quick_categories": quick_categories,
     }
+
+    if fix:
+        data["fixes_applied"] = fixes_applied
 
     if complexity_hint:
         data["complexity_hint"] = complexity_hint
@@ -417,6 +441,26 @@ async def tapps_quick_check(
     if suggestions:
         data["suggestions"] = suggestions
 
+    # Uncached libraries hint
+    try:
+        from tapps_mcp.knowledge.cache import KBCache
+        from tapps_mcp.knowledge.import_analyzer import (
+            extract_external_imports,
+            find_uncached_libraries,
+        )
+
+        cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+        external = extract_external_imports(resolved, settings.project_root)
+        uncached = find_uncached_libraries(external, cache)
+        if uncached:
+            data["uncached_libraries"] = uncached[:10]
+            data["docs_hint"] = (
+                f"Call tapps_lookup_docs for {', '.join(uncached[:5])} "
+                "to avoid hallucinated APIs"
+            )
+    except Exception:
+        _logger.debug("uncached_libraries detection failed", exc_info=True)
+
     resp = success_response(
         "tapps_quick_check",
         elapsed_ms,
@@ -437,12 +481,25 @@ async def tapps_quick_check(
             lint_issue_count=len(score_result.lint_issues),
             security_issue_count=sec_result.total_issues,
             suggestions=suggestions,
+            complexity_hint=complexity_hint,
+            gate_failures=[f.model_dump() for f in gate_result.failures],
+            quick_categories=quick_categories,
+            fixes_applied=fixes_applied if fix else None,
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
         _logger.debug("structured_output_failed: tapps_quick_check", exc_info=True)
 
-    return _with_nudges("tapps_quick_check", resp)
+    return _with_nudges(
+        "tapps_quick_check",
+        resp,
+        {
+            "gate_passed": gate_result.passed,
+            "security_passed": sec_result.passed,
+            "overall_score": round(score_result.overall_score, 2),
+            "security_issue_count": sec_result.total_issues,
+        },
+    )
 
 
 def ast_quick_complexity(code: str) -> int | None:
@@ -469,9 +526,17 @@ def ast_quick_complexity(code: str) -> int | None:
                         ast.ExceptHandler,
                         ast.With,
                         ast.Assert,
-                        ast.BoolOp,
                     ),
                 ):
+                    cc += 1
+                elif isinstance(child, ast.BoolOp):
+                    # Each boolean operator adds (n-1) branches
+                    cc += len(child.values) - 1
+                elif isinstance(child, ast.Match):
+                    # match statement itself is a branch point
+                    cc += 1
+                elif isinstance(child, ast.match_case):
+                    # Each case arm is an additional branch
                     cc += 1
             max_cc = max(max_cc, cc)
     return max_cc

@@ -32,7 +32,7 @@ class TestSecurityPipeline:
         )
         return f
 
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value=None)
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=False)
     def test_clean_file_no_bandit(self, mock_which, clean_file: Path):
         """Clean file passes even without bandit."""
         result = run_security_scan(str(clean_file))
@@ -40,7 +40,7 @@ class TestSecurityPipeline:
         assert result.total_issues == 0
         assert result.bandit_available is False
 
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value=None)
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=False)
     def test_secret_detected(self, mock_which, secret_file: Path):
         """Secret scanner catches hardcoded API key."""
         result = run_security_scan(str(secret_file))
@@ -49,7 +49,7 @@ class TestSecurityPipeline:
         assert result.high_count >= 1
         assert any(f.secret_type == "api_key" for f in result.secret_findings)
 
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value="/usr/bin/bandit")
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=True)
     @patch("tapps_mcp.tools.bandit.run_command")
     def test_bandit_plus_secrets(self, mock_cmd, mock_which, secret_file: Path):
         """Both bandit and secret scanning results are combined."""
@@ -81,7 +81,7 @@ class TestSecurityPipeline:
         assert len(result.secret_findings) >= 1
         assert result.total_issues == len(result.bandit_issues) + len(result.secret_findings)
 
-    @patch("tapps_mcp.security.security_scanner.shutil.which", return_value=None)
+    @patch("tapps_mcp.security.security_scanner._is_bandit_available", return_value=False)
     def test_secrets_disabled(self, mock_which, secret_file: Path):
         """With scan_secrets=False, only bandit runs."""
         result = run_security_scan(str(secret_file), scan_secrets=False)

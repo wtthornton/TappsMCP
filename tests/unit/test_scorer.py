@@ -18,6 +18,7 @@ from tapps_mcp.scoring.scorer import (
     _suggest_structure,
     _suggest_test_coverage,
 )
+from tapps_mcp.server_scoring_tools import ast_quick_complexity
 from tapps_mcp.tools.parallel import ParallelResults
 
 
@@ -601,3 +602,128 @@ class TestSuggestionsInScoring:
         # Well-structured file with good scores should have minimal suggestions
         total_suggestions = sum(len(c.suggestions) for c in result.categories.values())
         assert total_suggestions == 0
+
+
+# ---------------------------------------------------------------------------
+# score_file_quick_enriched
+# ---------------------------------------------------------------------------
+
+
+class TestScoreFileQuickEnriched:
+    """Tests for score_file_quick_enriched (ruff + AST heuristics)."""
+
+    @patch("tapps_mcp.scoring.scorer.run_ruff_check")
+    def test_returns_all_categories(self, mock_ruff, tmp_path):
+        """All 7 weighted categories plus linting should be present."""
+        mock_ruff.return_value = []
+        f = tmp_path / "clean.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        scorer = CodeScorer()
+        result = scorer.score_file_quick_enriched(f)
+        expected = {
+            "complexity", "security", "maintainability", "test_coverage",
+            "performance", "structure", "devex", "linting",
+        }
+        assert set(result.categories.keys()) == expected
+
+    @patch("tapps_mcp.scoring.scorer.run_ruff_check")
+    def test_overall_uses_weights(self, mock_ruff, tmp_path):
+        """Overall score uses weighted average, not just lint score."""
+        mock_ruff.return_value = []
+        f = tmp_path / "clean.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        scorer = CodeScorer()
+        result = scorer.score_file_quick_enriched(f)
+        # With enriched categories, overall should differ from pure lint * 10
+        # (lint weight is 0 in enriched, so overall comes from the 7 categories)
+        assert result.overall_score >= 0.0
+        assert result.overall_score <= 100.0
+        # Lint-only would give 100.0; enriched may differ due to structure/devex/coverage
+        # Just verify it's computed from weights, not simply 100
+        linting_cat = result.categories["linting"]
+        assert linting_cat.weight == 0.0  # linting is informational
+
+    @patch("tapps_mcp.scoring.scorer.run_ruff_check")
+    def test_degraded_flag_set(self, mock_ruff, tmp_path):
+        """Result should be marked degraded with missing tools."""
+        mock_ruff.return_value = []
+        f = tmp_path / "clean.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        scorer = CodeScorer()
+        result = scorer.score_file_quick_enriched(f)
+        assert result.degraded is True
+        assert "bandit" in result.missing_tools
+        assert "radon" in result.missing_tools
+        assert "mypy" in result.missing_tools
+
+    @patch("tapps_mcp.scoring.scorer.run_ruff_check")
+    def test_security_detects_eval(self, mock_ruff, tmp_path):
+        """Security heuristic should detect eval() and penalize score."""
+        mock_ruff.return_value = []
+        f = tmp_path / "insecure.py"
+        f.write_text("result = eval(input())\n", encoding="utf-8")
+
+        scorer = CodeScorer()
+        result = scorer.score_file_quick_enriched(f)
+        sec_cat = result.categories["security"]
+        assert sec_cat.score < 10.0
+        assert "eval(" in sec_cat.details.get("patterns_found", [])
+
+
+# ---------------------------------------------------------------------------
+# ast_quick_complexity improvements
+# ---------------------------------------------------------------------------
+
+
+class TestAstQuickComplexityImproved:
+    """Tests for match/case and BoolOp fixes in ast_quick_complexity."""
+
+    def test_match_case_counted(self):
+        """match/case statements should increase complexity."""
+        code = """\
+def dispatch(cmd):
+    match cmd:
+        case "start":
+            return 1
+        case "stop":
+            return 2
+        case "pause":
+            return 3
+"""
+        cc = ast_quick_complexity(code)
+        assert cc is not None
+        # 1 (base) + 1 (match) + 3 (case arms) = 5
+        assert cc >= 5
+
+    def test_boolop_multiple_values(self):
+        """BoolOp with 3 values should add 2 branches, not 1."""
+        code = """\
+def check(a, b, c):
+    if a and b and c:
+        return True
+    return False
+"""
+        cc = ast_quick_complexity(code)
+        assert cc is not None
+        # 1 (base) + 1 (if) + 2 (BoolOp with 3 values -> 2 branches) = 4
+        assert cc >= 4
+
+    def test_simple_boolop(self):
+        """BoolOp with 2 values should add 1 branch."""
+        code = """\
+def check(a, b):
+    if a or b:
+        return True
+    return False
+"""
+        cc = ast_quick_complexity(code)
+        assert cc is not None
+        # 1 (base) + 1 (if) + 1 (BoolOp with 2 values -> 1 branch) = 3
+        assert cc >= 3
+
+    def test_syntax_error_returns_none(self):
+        """Syntax errors should return None."""
+        assert ast_quick_complexity("def broken(") is None

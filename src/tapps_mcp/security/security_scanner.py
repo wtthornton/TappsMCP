@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
-
 import structlog
 from pydantic import BaseModel, Field
 
@@ -12,6 +10,20 @@ from tapps_mcp.security.secret_scanner import SecretFinding, SecretScanner
 from tapps_mcp.tools.bandit import run_bandit_check
 
 logger = structlog.get_logger(__name__)
+
+
+def _is_bandit_available() -> bool:
+    """Check bandit availability using the cached tool detection results."""
+    try:
+        from tapps_mcp.tools.tool_detection import detect_installed_tools
+
+        tools = detect_installed_tools()
+        return any(t.name == "bandit" and t.available for t in tools)
+    except Exception:
+        # Fallback to shutil.which if tool_detection is unavailable
+        import shutil
+
+        return shutil.which("bandit") is not None
 
 
 class SecurityScanResult(BaseModel):
@@ -51,7 +63,7 @@ def run_security_scan(
         Unified ``SecurityScanResult``.
     """
     bandit_issues: list[SecurityIssue] = []
-    bandit_available = shutil.which("bandit") is not None
+    bandit_available = _is_bandit_available()
 
     if bandit_available:
         bandit_issues = run_bandit_check(file_path, cwd=cwd, timeout=timeout)
