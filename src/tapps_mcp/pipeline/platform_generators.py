@@ -161,7 +161,7 @@ exit 0
 # Injects TappsMCP awareness into spawned subagents.
 INPUT=$(cat)
 echo "[TappsMCP] This project uses TappsMCP for code quality."
-echo "Available MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed."
+echo "MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed, tapps_memory."
 exit 0
 """,
 }
@@ -250,7 +250,7 @@ exit 0
 # Injects TappsMCP awareness into spawned subagents.
 $null = $input | Out-Null
 Write-Output "[TappsMCP] This project uses TappsMCP for code quality."
-Write-Output "Available MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed."
+Write-Output "MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed, tapps_memory."
 exit 0
 """,
 }
@@ -459,7 +459,7 @@ try {
     $tool = "unknown"
 }
 if ($tool -match '^tapps_') {
-    $sentinel = "$env:TEMP\.tapps-session-started-$PID"
+    $sentinel = "$env:TEMP\\.tapps-session-started-$PID"
     if ($tool -eq 'tapps_session_start') {
         $null = New-Item -ItemType File -Path $sentinel -Force
     } elseif (-not (Test-Path $sentinel)) {
@@ -777,6 +777,63 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 7. Call `mcp__tapps-mcp__tapps_checklist(task_type="review")` for final verification
 8. Present a summary table: file | before score | after score | gate | fixes applied
 """,
+    "tapps-research": """\
+---
+name: tapps-research
+description: >-
+  Research a technical question using domain experts and library docs.
+  Combines expert consultation with docs lookup for comprehensive answers.
+tools: >-
+  mcp__tapps-mcp__tapps_research,
+  mcp__tapps-mcp__tapps_consult_expert,
+  mcp__tapps-mcp__tapps_lookup_docs
+---
+
+Research a technical question using TappsMCP:
+
+1. Call `mcp__tapps-mcp__tapps_research` with the question for expert + docs
+2. If confidence < 0.7, call `mcp__tapps-mcp__tapps_lookup_docs` for the library
+3. If multi-domain, call `mcp__tapps-mcp__tapps_consult_expert` per domain
+4. Synthesize findings into a clear, actionable answer
+5. Include confidence scores and suggest follow-up research if needed
+""",
+    "tapps-security": """\
+---
+name: tapps-security
+description: >-
+  Run a comprehensive security audit including vulnerability scanning,
+  dependency CVE checks, and expert security consultation.
+tools: >-
+  mcp__tapps-mcp__tapps_security_scan,
+  mcp__tapps-mcp__tapps_dependency_scan,
+  mcp__tapps-mcp__tapps_consult_expert
+---
+
+Run a comprehensive security audit using TappsMCP:
+
+1. Call `mcp__tapps-mcp__tapps_security_scan` on the target file to detect vulnerabilities
+2. Call `mcp__tapps-mcp__tapps_dependency_scan` to check for known CVEs in dependencies
+3. Call `mcp__tapps-mcp__tapps_consult_expert` with domain "security" for additional guidance
+4. Group all findings by severity (critical, high, medium, low)
+5. Suggest a prioritized fix order starting with the highest-severity issues
+""",
+    "tapps-memory": """\
+---
+name: tapps-memory
+description: >-
+  Manage shared project memory for cross-session knowledge persistence.
+  Save, retrieve, search, and manage memory entries with tier classification.
+tools: mcp__tapps-mcp__tapps_memory, mcp__tapps-mcp__tapps_session_notes
+---
+
+Manage shared project memory using TappsMCP:
+
+1. Determine the action: save, get, list, search, or delete
+2. For saves, classify the memory tier (team, project, or session)
+3. Call `mcp__tapps-mcp__tapps_memory` with the appropriate action and parameters
+4. Display results with confidence scores and metadata
+5. Suggest tier promotions for frequently accessed session-level memories
+""",
 }
 
 _CURSOR_SKILLS: dict[str, str] = {
@@ -852,6 +909,65 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 6. Call `tapps_validate_changed` to verify all files pass
 7. Call `tapps_checklist(task_type="review")` for final verification
 8. Present a summary table: file | before score | after score | gate | fixes applied
+""",
+    "tapps-research": """\
+---
+name: tapps-research
+description: >-
+  Research a technical question using domain experts and library documentation.
+  Combines expert consultation with docs lookup for comprehensive answers.
+mcp_tools:
+  - tapps_research
+  - tapps_consult_expert
+  - tapps_lookup_docs
+---
+
+Research a technical question using TappsMCP:
+
+1. Call `tapps_research` with the question to get expert + docs in one call
+2. If confidence is below 0.7, call `tapps_lookup_docs` directly for the relevant library
+3. If the question spans multiple domains, call `tapps_consult_expert` per domain
+4. Synthesize findings into a clear, actionable answer
+5. Include confidence scores and suggest follow-up research if needed
+""",
+    "tapps-security": """\
+---
+name: tapps-security
+description: >-
+  Run a comprehensive security audit on a Python file including vulnerability scanning,
+  dependency CVE checks, and expert security consultation.
+mcp_tools:
+  - tapps_security_scan
+  - tapps_dependency_scan
+  - tapps_consult_expert
+---
+
+Run a comprehensive security audit using TappsMCP:
+
+1. Call `tapps_security_scan` on the target file to detect vulnerabilities
+2. Call `tapps_dependency_scan` to check for known CVEs in dependencies
+3. Call `tapps_consult_expert` with domain "security" for additional guidance
+4. Group all findings by severity (critical, high, medium, low)
+5. Suggest a prioritized fix order starting with the highest-severity issues
+""",
+    "tapps-memory": """\
+---
+name: tapps-memory
+description: >-
+  Manage shared project memory for cross-session knowledge persistence.
+  Save, retrieve, search, and manage memory entries with tier classification.
+mcp_tools:
+  - tapps_memory
+  - tapps_session_notes
+---
+
+Manage shared project memory using TappsMCP:
+
+1. Determine the action: save, get, list, search, or delete
+2. For saves, classify the memory tier (team, project, or session)
+3. Call `tapps_memory` with the appropriate action and parameters
+4. Display results with confidence scores and metadata
+5. Suggest tier promotions for frequently accessed session-level memories
 """,
 }
 
@@ -1114,7 +1230,7 @@ def generate_skills(
 ) -> dict[str, Any]:
     """Generate SKILL.md files for the given platform.
 
-    Creates 3 skill directories with ``SKILL.md`` in
+    Creates 7 skill directories with ``SKILL.md`` in
     ``.claude/skills/`` or ``.cursor/skills/`` depending on the platform.
     Existing files are skipped to preserve user customizations.
     When *engagement_level* is set, prepends a note (MANDATORY vs optional).
@@ -1167,6 +1283,7 @@ This project uses the TAPPS MCP server for code quality enforcement.
 ## Session Start (REQUIRED)
 
 Call `tapps_session_start()` as the FIRST action in every session.
+Then call `tapps_memory(action="search", query="...")` to recall past decisions.
 
 ## After Editing Python Files (REQUIRED)
 

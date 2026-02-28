@@ -279,8 +279,9 @@ client = httpx.AsyncClient(timeout=30.0)  # 30 seconds
 # Exponential backoff
 @retry(
     stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10)
+    wait=wait_exponential(multiplier=1, min=2, max=10),
 )
+def call_service(): ...
 ```
 
 ### 3. Circuit Breaker
@@ -288,6 +289,7 @@ client = httpx.AsyncClient(timeout=30.0)  # 30 seconds
 ```python
 # Prevent cascading failures
 @circuit(failure_threshold=5, recovery_timeout=60)
+def call_downstream(): ...
 ```
 
 ### 4. Health Checks

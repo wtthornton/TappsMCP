@@ -360,13 +360,15 @@ from(bucket: "homeiq")
 ```python
 # WebSocket event handler
 async def handle_state_change(event):
-    point = Point("home_assistant")
+    point = (
+        Point("home_assistant")
         .tag("entity_id", event.data["entity_id"])
         .tag("domain", event.data["domain"])
         .field("state", event.data["new_state"]["state"])
         .field("attributes", json.dumps(event.data["new_state"]["attributes"]))
         .time(event.time_fired)
-    
+    )
+
     write_api.write(bucket="homeiq", record=point)
 ```
 

@@ -444,10 +444,13 @@ async def handle_api_error(response: httpx.Response):
 ### 1. Use Retry Logic
 
 ```python
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 @retry(
     stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10)
+    wait=wait_exponential(multiplier=1, min=2, max=10),
 )
+def call_api(): ...
 ```
 
 ### 2. Implement Rate Limiting

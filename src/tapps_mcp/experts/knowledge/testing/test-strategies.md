@@ -71,6 +71,7 @@ def test_checkout_flow():
     # Checkout
     # Complete payment
     # Verify order
+    ...
 ```
 
 ## Test Types

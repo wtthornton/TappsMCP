@@ -6,7 +6,7 @@ When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor
 
 ## What TappsMCP is
 
-TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 27 tools for:
+TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 28 tools for:
 
 - **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Security scanning** (Bandit + secret detection with redacted context)
@@ -18,7 +18,8 @@ TappsMCP is an MCP server that provides a comprehensive quality toolset for your
 - **Config validation** (Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB best practices)
 - **Domain experts** (17 built-in experts with RAG-backed answers, optional vector search)
 - **Project context** (project type detection, tech stack, impact analysis)
-- **Session management** (persist decisions, constraints, and notes across long sessions)
+- **Shared memory** (persistent cross-session knowledge with decay, contradiction detection, and ranked retrieval)
+- **Session management** (persist decisions, constraints, and notes within a session; promote to memory for cross-session persistence)
 - **Quality reports** (JSON, Markdown, or HTML summaries)
 - **Metrics and feedback** (dashboard, usage stats, adaptive learning via feedback)
 - **Session checklist** (track which tools were used so you don't skip required steps)
@@ -48,7 +49,8 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_research** | When you need **combined expert + docs** in one call - consults the domain expert, then auto-supplements with Context7 documentation when RAG is empty or confidence is low. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
 | **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
 | **tapps_project_profile** | When you need **project context** - detects project type, tech stack, CI/Docker/tests, and recommendations. Session start does not include profile; call this on demand. |
-| **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. |
+| **tapps_memory** | **At session start** - search or list past decisions with `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")`. **Before session end** - save learnings with `tapps_memory(action="save", key="...", value="...", tier="...", tags=[...])`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |
+| **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. Use `action="promote"` to promote a session note to persistent cross-session memory. |
 | **tapps_impact_analysis** | Before **modifying a file's public API** - shows what depends on it and what could break. |
 | **tapps_report** | After scoring/gating, when the user wants a **formatted quality summary** (Markdown, JSON, or HTML). |
 | **tapps_checklist** | **Before declaring work complete** - reports which tools were called and which are missing (with reasons). Fix missing required steps before saying done. |
@@ -107,15 +109,16 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 ## Recommended workflow
 
 1. **Session start:** Call `tapps_session_start` (server info only). Call `tapps_project_profile` when you need project context (tech stack, type, recommendations). Optionally call `tapps_list_experts` if you may need experts.
-2. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` to persist constraints and decisions so they survive long sessions.
-3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
-4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
-5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
-6. **Before declaring work complete:**
+2. **Check project memory:** Call `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")` to recall past decisions and project context from previous sessions.
+3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
+4. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
+5. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
+6. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
+7. **Before declaring work complete:**
    - Call `tapps_validate_changed()` to score + gate + security scan all changed files.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).
+8. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).
 
 ### Review Pipeline (multi-file)
 
@@ -172,10 +175,14 @@ Three agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 
 ### Skills (auto-generated)
 
-Three SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
+Seven SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
 - **tapps-score** - Score a Python file across 7 quality categories
 - **tapps-gate** - Run a quality gate check and report pass/fail
 - **tapps-validate** - Validate all changed files before declaring work complete
+- **tapps-review-pipeline** - Orchestrate a parallel review-fix-validate pipeline
+- **tapps-research** - Research a technical question using domain experts and docs
+- **tapps-security** - Run a comprehensive security audit with vulnerability scanning
+- **tapps-memory** - Manage shared project memory for cross-session knowledge
 
 ### Agent Teams (opt-in, Claude Code only)
 

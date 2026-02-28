@@ -1,6 +1,6 @@
-"""Tests for skills generation (Story 12.8).
+"""Tests for skills generation (Story 12.8, Epic 27).
 
-Verifies that generate_skills() creates 3 SKILL.md files per platform with
+Verifies that generate_skills() creates 7 SKILL.md files per platform with
 correct frontmatter format differences between Claude Code and Cursor.
 """
 
@@ -19,6 +19,9 @@ class TestClaudeSkills:
         assert (base / "tapps-gate" / "SKILL.md").exists()
         assert (base / "tapps-validate" / "SKILL.md").exists()
         assert (base / "tapps-review-pipeline" / "SKILL.md").exists()
+        assert (base / "tapps-research" / "SKILL.md").exists()
+        assert (base / "tapps-security" / "SKILL.md").exists()
+        assert (base / "tapps-memory" / "SKILL.md").exists()
 
     def test_score_skill_has_tools_string(self, tmp_path):
         """Claude Code SKILL.md has tools as a comma-separated string."""
@@ -51,7 +54,15 @@ class TestClaudeSkills:
     def test_all_skills_have_frontmatter(self, tmp_path):
         generate_skills(tmp_path, "claude")
         base = tmp_path / ".claude" / "skills"
-        for skill in ["tapps-score", "tapps-gate", "tapps-validate", "tapps-review-pipeline"]:
+        for skill in [
+            "tapps-score",
+            "tapps-gate",
+            "tapps-validate",
+            "tapps-review-pipeline",
+            "tapps-research",
+            "tapps-security",
+            "tapps-memory",
+        ]:
             content = (base / skill / "SKILL.md").read_text()
             assert content.startswith("---\n"), f"{skill} missing frontmatter"
             assert "name:" in content
@@ -66,6 +77,30 @@ class TestClaudeSkills:
         assert "tapps-review-fixer" in content
 
 
+    def test_research_skill_references_tools(self, tmp_path):
+        generate_skills(tmp_path, "claude")
+        base = tmp_path / ".claude" / "skills"
+        content = (base / "tapps-research" / "SKILL.md").read_text()
+        assert "mcp__tapps-mcp__tapps_research" in content
+        assert "mcp__tapps-mcp__tapps_consult_expert" in content
+        assert "mcp__tapps-mcp__tapps_lookup_docs" in content
+
+    def test_security_skill_references_tools(self, tmp_path):
+        generate_skills(tmp_path, "claude")
+        base = tmp_path / ".claude" / "skills"
+        content = (base / "tapps-security" / "SKILL.md").read_text()
+        assert "mcp__tapps-mcp__tapps_security_scan" in content
+        assert "mcp__tapps-mcp__tapps_dependency_scan" in content
+        assert "mcp__tapps-mcp__tapps_consult_expert" in content
+
+    def test_memory_skill_references_tools(self, tmp_path):
+        generate_skills(tmp_path, "claude")
+        base = tmp_path / ".claude" / "skills"
+        content = (base / "tapps-memory" / "SKILL.md").read_text()
+        assert "mcp__tapps-mcp__tapps_memory" in content
+        assert "mcp__tapps-mcp__tapps_session_notes" in content
+
+
 class TestCursorSkills:
     """Tests for Cursor skill generation."""
 
@@ -76,6 +111,9 @@ class TestCursorSkills:
         assert (base / "tapps-gate" / "SKILL.md").exists()
         assert (base / "tapps-validate" / "SKILL.md").exists()
         assert (base / "tapps-review-pipeline" / "SKILL.md").exists()
+        assert (base / "tapps-research" / "SKILL.md").exists()
+        assert (base / "tapps-security" / "SKILL.md").exists()
+        assert (base / "tapps-memory" / "SKILL.md").exists()
 
     def test_review_pipeline_uses_short_tool_names(self, tmp_path):
         generate_skills(tmp_path, "cursor")
@@ -115,6 +153,32 @@ class TestCursorSkills:
         content = (tmp_path / ".cursor" / "skills" / "tapps-validate" / "SKILL.md").read_text()
         assert "tapps_validate_changed" in content
 
+    def test_research_skill_references_tools(self, tmp_path):
+        generate_skills(tmp_path, "cursor")
+        base = tmp_path / ".cursor" / "skills"
+        content = (base / "tapps-research" / "SKILL.md").read_text()
+        assert "tapps_research" in content
+        assert "tapps_consult_expert" in content
+        assert "tapps_lookup_docs" in content
+        assert "mcp__tapps-mcp__" not in content
+
+    def test_security_skill_references_tools(self, tmp_path):
+        generate_skills(tmp_path, "cursor")
+        base = tmp_path / ".cursor" / "skills"
+        content = (base / "tapps-security" / "SKILL.md").read_text()
+        assert "tapps_security_scan" in content
+        assert "tapps_dependency_scan" in content
+        assert "tapps_consult_expert" in content
+        assert "mcp__tapps-mcp__" not in content
+
+    def test_memory_skill_references_tools(self, tmp_path):
+        generate_skills(tmp_path, "cursor")
+        base = tmp_path / ".cursor" / "skills"
+        content = (base / "tapps-memory" / "SKILL.md").read_text()
+        assert "tapps_memory" in content
+        assert "tapps_session_notes" in content
+        assert "mcp__tapps-mcp__" not in content
+
 
 class TestSkipExisting:
     """Tests for skip-on-exists behavior."""
@@ -141,7 +205,7 @@ class TestSkipExisting:
 
     def test_result_dict_tracks_created(self, tmp_path):
         result = generate_skills(tmp_path, "claude")
-        assert len(result["created"]) == 4
+        assert len(result["created"]) == 7
         assert len(result["skipped"]) == 0
 
     def test_unknown_platform_returns_error(self, tmp_path):

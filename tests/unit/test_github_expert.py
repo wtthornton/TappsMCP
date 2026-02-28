@@ -81,13 +81,13 @@ class TestGitHubKnowledgeFiles:
         github_dir = kb_path / "github"
         assert github_dir.is_dir(), f"Missing: {github_dir}"
 
-    def test_has_10_knowledge_files(self):
+    def test_has_9_knowledge_files(self):
         from tapps_mcp.experts.registry import ExpertRegistry
 
         kb_path = ExpertRegistry.get_knowledge_base_path()
         github_dir = kb_path / "github"
         md_files = list(github_dir.glob("*.md"))
-        assert len(md_files) == 10, f"Expected 10, found {len(md_files)}: {[f.name for f in md_files]}"
+        assert len(md_files) == 9, f"Expected 9, found {len(md_files)}: {[f.name for f in md_files]}"
 
     def test_knowledge_files_not_empty(self):
         from tapps_mcp.experts.registry import ExpertRegistry
@@ -98,11 +98,11 @@ class TestGitHubKnowledgeFiles:
             content = md_file.read_text()
             assert len(content) > 100, f"{md_file.name} is too short ({len(content)} chars)"
 
-    def test_actions_best_practices_exists(self):
+    def test_actions_comprehensive_exists(self):
         from tapps_mcp.experts.registry import ExpertRegistry
 
         kb_path = ExpertRegistry.get_knowledge_base_path()
-        assert (kb_path / "github" / "github-actions-best-practices.md").exists()
+        assert (kb_path / "github" / "github-actions-comprehensive.md").exists()
 
     def test_copilot_agent_setup_exists(self):
         from tapps_mcp.experts.registry import ExpertRegistry

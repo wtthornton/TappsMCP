@@ -226,7 +226,7 @@ enhanced = await enhancer.enhance(prompt)
 ### Pattern 3: Workflow Integration
 
 **Adaptive Learning in Workflows:**
-```python
+```text
 # Simple Mode workflow automatically:
 # 1. Detects domains
 # 2. Suggests experts
@@ -235,7 +235,7 @@ enhanced = await enhancer.enhance(prompt)
 # 5. Improves over time
 
 @simple-mode *build "Create OAuth2 client"
-# → Automatically uses adaptive learning
+# -> Automatically uses adaptive learning
 ```
 
 ---

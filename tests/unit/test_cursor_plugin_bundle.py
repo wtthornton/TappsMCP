@@ -106,6 +106,10 @@ class TestPluginStructure:
         assert (tmp_path / "skills" / "tapps-score" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-gate" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-validate" / "SKILL.md").exists()
+        assert (tmp_path / "skills" / "tapps-review-pipeline" / "SKILL.md").exists()
+        assert (tmp_path / "skills" / "tapps-research" / "SKILL.md").exists()
+        assert (tmp_path / "skills" / "tapps-security" / "SKILL.md").exists()
+        assert (tmp_path / "skills" / "tapps-memory" / "SKILL.md").exists()
 
     def test_skills_have_name_frontmatter(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)
