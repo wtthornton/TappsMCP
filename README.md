@@ -42,7 +42,7 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 
 ## Features
 
-TappsMCP exposes **27 MCP tools** plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
+TappsMCP exposes **28 MCP tools** plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
 
 ### Code quality & scoring
 
@@ -72,7 +72,8 @@ TappsMCP exposes **27 MCP tools** plus workflow prompts. All tools are **determi
 | **Documentation lookup** | Up-to-date library docs via [Context7](https://context7.com); multi-provider fallback, fuzzy matching, local cache. |
 | **Domain experts** | 17 built-in experts (security, testing, APIs, GitHub, etc.) with RAG-backed answers and confidence scores. |
 | **Project context** | Detect project type, tech stack, structure for context-aware analysis. |
-| **Session notes** | Persist decisions and constraints across long sessions. |
+| **Shared memory** | Persistent, project-scoped memory with time-based decay, contradiction detection, ranked retrieval, and expert injection. Memories survive across sessions in SQLite (WAL + FTS5). Three tiers (architectural/pattern/context) with configurable half-lives. Auto-seeds from project profile. |
+| **Session notes** | In-memory decisions and constraints for a single session. Promotable to shared memory for persistence. |
 | **Impact analysis** | File dependencies and blast radius before refactoring or API changes. |
 | **Quality reports** | JSON, Markdown, or HTML summaries. |
 
@@ -288,15 +289,17 @@ Restart Claude Desktop after changing the config.
 
 ### For AI assistants
 
-When TappsMCP is connected, call **`tapps_session_start`** at session start (server info only); call **`tapps_project_profile`** when you need project context. Use **`tapps_quick_check`** after editing files; before declaring work complete, run **`tapps_validate_changed`** and **`tapps_checklist`**. Use **`tapps_lookup_docs`** before writing code that uses an external library. See **[AGENTS.md](AGENTS.md)** for when to use each tool and the full workflow.
+When TappsMCP is connected, call **`tapps_session_start`** at session start (server info + memory status); call **`tapps_project_profile`** when you need project context. Use **`tapps_memory`** to recall and save project decisions across sessions. Use **`tapps_quick_check`** after editing files; before declaring work complete, run **`tapps_validate_changed`** and **`tapps_checklist`**. Use **`tapps_lookup_docs`** before writing code that uses an external library. See **[AGENTS.md](AGENTS.md)** for when to use each tool and the full workflow.
 
 ### Suggested workflow for the AI
 
-1. Call **`tapps_session_start`** at session start (server info). Call **`tapps_project_profile`** when you need tech stack, project type, or recommendations.
-2. Use **`tapps_quick_check`** (or `tapps_score_file` with `quick: true`) during edit-lint-fix loops.
-3. Use **`tapps_lookup_docs`** before writing code that uses an external library API.
-4. Use **`tapps_validate_changed`** before marking work complete (validates all changed files).
-5. Call **`tapps_checklist`** to ensure no required steps were skipped.
+1. Call **`tapps_session_start`** at session start (server info + memory status). Call **`tapps_project_profile`** when you need tech stack, project type, or recommendations.
+2. Use **`tapps_memory search`** to recall relevant project context and past decisions.
+3. Use **`tapps_quick_check`** (or `tapps_score_file` with `quick: true`) during edit-lint-fix loops.
+4. Use **`tapps_lookup_docs`** before writing code that uses an external library API.
+5. Use **`tapps_validate_changed`** before marking work complete (validates all changed files).
+6. Use **`tapps_memory save`** to persist important decisions and learnings for future sessions.
+7. Call **`tapps_checklist`** to ensure no required steps were skipped.
 
 ---
 
@@ -372,7 +375,8 @@ Quick index:
 | **tapps_list_experts** | List the 17 built-in expert domains and their status. |
 | **tapps_checklist** | See which tools were called this session and what is still missing. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure for context-aware analysis. |
-| **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. |
+| **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. Promotable to shared memory. |
+| **tapps_memory** | Persistent shared memory: save, get, list, delete, search, reinforce, contradictions, gc, reseed, import, export. |
 | **tapps_impact_analysis** | Analyze the impact of changes on the codebase (imports, dependents). |
 | **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
 | **tapps_dashboard** | View metrics dashboard with execution stats, expert performance, and trends. |
@@ -503,9 +507,17 @@ Quick index:
 
 ### tapps_session_notes
 
-**What it does:** Persists key decisions, constraints, and context across a session. Supports **save** (store a note with category and optional tags), **get** (retrieve notes, optionally filtered by category), and **clear** operations. Notes survive within a server session and are stored in `.tapps-mcp/session/`.
+**What it does:** Persists key decisions, constraints, and context across a session. Supports **save** (store a note with category and optional tags), **get** (retrieve notes, optionally filtered by category), **list**, **clear**, and **promote** (copy a note to persistent shared memory via `tapps_memory`). Notes survive within a server session and are stored in `.tapps-mcp/session/`. Responses include a `migration_hint` suggesting `tapps_memory` for cross-session persistence.
 
-**Why use it:** In long sessions, the AI may forget decisions made earlier. Session notes let the AI save constraints ("user wants sync-only, no async") and retrieve them later so earlier context is not lost. Use throughout the session to record and recall important decisions.
+**Why use it:** In long sessions, the AI may forget decisions made earlier. Session notes let the AI save constraints ("user wants sync-only, no async") and retrieve them later so earlier context is not lost. Use `promote` to persist important notes to shared memory so they survive across sessions. For new projects, prefer `tapps_memory` directly for persistent storage.
+
+---
+
+### tapps_memory
+
+**What it does:** Persistent, project-scoped shared memory accessible to all MCP-connected agents. Memories are typed by tier (`architectural`, `pattern`, `context`), carry confidence scores (0.0-1.0 with source-based defaults), and persist across sessions in SQLite with WAL mode and FTS5 full-text search at `{project_root}/.tapps-mcp/memory/memory.db`. Supports 11 actions: **save** (with RAG safety filtering), **get** (with scope resolution: session > branch > project), **list** (filtered by tier/scope/tags), **delete**, **search** (FTS5 ranked retrieval with composite scoring), **reinforce** (reset decay clock, optional confidence boost), **contradictions** (detect memories that contradict current project state), **gc** (archive decayed memories), **reseed** (re-populate from project profile), **import** and **export** (JSON format with path validation). Time-based exponential decay with tier-specific half-lives (architectural: 180 days, pattern: 60 days, context: 14 days). Contradiction detection compares memories against `tapps_project_profile` for tech stack drift, missing files, and deleted branches. Relevant memories are auto-injected into `tapps_consult_expert` and `tapps_research` responses (configurable by engagement level). Max 500 memories per project with lowest-confidence eviction.
+
+**Why use it:** Agents start every session amnesiac about the project. Shared memory means the project remembers things, not the developer's tool. Save architectural decisions ("we use JWT with RS256"), patterns ("always mock the DB in unit tests"), and context ("current sprint focuses on auth"). Memories decay naturally so stale information loses trust. Contradiction detection catches drift (e.g., memory says "we use SQLAlchemy" after migrating to Prisma). Expert injection means `tapps_consult_expert` automatically includes relevant project memory in its response.
 
 ---
 
@@ -624,6 +636,26 @@ scoring_weights:
   structure: 0.05
   devex: 0.05
 ```
+
+### Shared memory
+
+Configure the persistent memory system (all values shown are defaults):
+
+```yaml
+memory:
+  enabled: true                       # Enable/disable memory system
+  gc_enabled: true                    # Auto-archive decayed memories at session start
+  contradiction_check_on_start: true  # Check for stale memories at session start
+  max_memories: 500                   # Max entries per project
+  inject_into_experts: true           # Auto-inject memories into expert/research responses
+  decay:
+    architectural_half_life_days: 180 # Slow decay for architectural decisions
+    pattern_half_life_days: 60        # Medium decay for coding patterns
+    context_half_life_days: 14        # Fast decay for session context
+    confidence_floor: 0.1             # Memories never decay below this
+```
+
+Memory data is stored at `{project_root}/.tapps-mcp/memory/` (SQLite database + JSONL audit log). Add `.tapps-mcp/memory/` to `.gitignore` — memory is project-local, not shared via version control.
 
 ### LLM Engagement Level
 
@@ -767,11 +799,13 @@ Pre-commit hooks are configured (`.pre-commit-config.yaml`). CI runs on push/PR 
 ```
 src/tapps_mcp/
 ├── __init__.py, cli.py, server.py      # Entry points and MCP server
-├── server_helpers.py                   # Shared response builders
+├── server_helpers.py                   # Shared response builders, singleton caches
 ├── server_scoring_tools.py             # tapps_score_file, tapps_quality_gate, tapps_quick_check
 ├── server_pipeline_tools.py            # tapps_validate_changed, tapps_session_start, tapps_init,
 │                                       #   tapps_set_engagement_level, tapps_upgrade, tapps_doctor
 ├── server_metrics_tools.py             # tapps_dashboard, tapps_stats, tapps_feedback, tapps_research
+├── server_memory_tools.py              # tapps_memory (save, get, list, delete, search, reinforce,
+│                                       #   contradictions, gc, reseed, import, export)
 ├── common/                             # Exceptions, logging, shared models, nudges
 ├── config/                             # Settings, default.yaml
 ├── security/                           # Path validation, IO guardrails, secrets, governance
@@ -783,6 +817,10 @@ src/tapps_mcp/
 ├── validators/                         # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
 ├── experts/                            # Domain detector, engine, RAG, registry, confidence,
 │                                       #   vector RAG, knowledge management, 139 knowledge files
+├── memory/                             # Shared memory system: models, SQLite persistence (WAL + FTS5),
+│                                       #   in-memory store, decay engine, contradiction detection,
+│                                       #   GC/archival, reinforcement, ranked retrieval, injection,
+│                                       #   profile seeding, import/export
 ├── project/                            # Project profiling, session notes, impact analysis, reports,
 │                                       #   import graph, cycle detection, coupling metrics
 ├── adaptive/                           # Adaptive scoring, expert voting, weight distribution
@@ -830,7 +868,7 @@ scripts/
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅ · **LLM Engagement Level** ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅ · LLM Engagement Level ✅ · GitHub Templates & CI ✅ · GitHub Copilot & Governance ✅ · **Shared Memory Foundation** ✅ · **Memory Intelligence** ✅ · **Memory Retrieval & Integration** ✅
 
 ---
 
