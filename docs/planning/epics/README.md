@@ -27,8 +27,11 @@
 | [Epic 20](EPIC-20-GITHUB-ACTIONS-CI-ENHANCEMENT.md) | GitHub Actions CI Enhancement | P1 | ~2-2.5 weeks | Epic 8, Epic 12 | **Complete** |
 | [Epic 21](EPIC-21-GITHUB-COPILOT-AGENT-INTEGRATION.md) | GitHub Copilot Agent Integration + GitHub Expert | P0 | ~2.5-3 weeks | Epic 8, Epic 12, Epic 20 | **Complete** |
 | [Epic 22](EPIC-22-GITHUB-GOVERNANCE-SECURITY-CONFIG.md) | GitHub Governance & Security Config | P2 | ~1.5-2 weeks | Epic 19, Epic 20, Epic 21 | **Complete** |
+| [Epic 23](EPIC-23-SHARED-MEMORY-FOUNDATION.md) | Shared Memory Foundation | P1 | ~2-3 weeks | Epic 0, Epic 4 | **Proposed** |
+| [Epic 24](EPIC-24-MEMORY-INTELLIGENCE.md) | Memory Intelligence (Decay, Contradictions) | P1 | ~2-3 weeks | Epic 23, Epic 4, Epic 5 | **Proposed** |
+| [Epic 25](EPIC-25-MEMORY-RETRIEVAL-INTEGRATION.md) | Memory Retrieval & Integration | P2 | ~2-3 weeks | Epic 23, Epic 24, Epic 3, Epic 4 | **Proposed** |
 
-**Total LOE:** ~40-51 weeks (Epics 0-22, all complete)
+**Total LOE:** ~40-51 weeks (Epics 0-22, all complete) + ~6-9 weeks proposed (Epics 23-25)
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -65,6 +68,12 @@ Epic 19 (Issue & PR Templates)       ← depends on Epic 8, Epic 12 (parallel wi
 Epic 20 (Actions CI Enhancement)     ← depends on Epic 8, Epic 12 (parallel with 19)
 Epic 21 (Copilot Agent Integration)  ← depends on Epic 20 (after setup-steps)
 Epic 22 (Governance & Security)      ← depends on Epic 19, Epic 20, Epic 21 (final wave)
+
+--- Shared Memory Wave (Epics 23-25) ---
+
+Epic 23 (Shared Memory Foundation)   ← depends on Epic 0, Epic 4
+  └── Epic 24 (Memory Intelligence)  ← also depends on Epic 5
+        └── Epic 25 (Memory Retrieval & Integration) ← also depends on Epic 3, Epic 8, Epic 18
 
 ```
 
@@ -117,6 +126,9 @@ With 2 developers:
 | Enhanced CI workflows in `tapps_init` | Epic 20 | Week 36-38 |
 | Copilot agent profiles in `tapps_init` | Epic 21 | Week 38-40 |
 | Governance configs in `tapps_init` | Epic 22 | Week 40-42 |
+| `tapps_memory` (CRUD, search) | Epic 23 | Week 43-45 |
+| Memory decay, reinforcement, contradiction detection | Epic 24 | Week 45-48 |
+| Ranked retrieval, expert injection, profile seeding, import/export | Epic 25 | Week 48-51 |
 
 ## Metrics Infrastructure (Epic 7 — carried from TappsCodingAgents)
 

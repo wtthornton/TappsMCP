@@ -442,6 +442,30 @@ async def tapps_session_start(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)
 
+    # Memory status (lazy, non-blocking)
+    memory_status: dict[str, Any] = {"enabled": False}
+    try:
+        settings = load_settings()
+        if settings.memory.enabled:
+            from tapps_mcp.server_helpers import _get_memory_store
+
+            mem_store = _get_memory_store()
+            if mem_store is not None:
+                snapshot = mem_store.snapshot()
+                stale_count = 0
+                contradicted_count = 0
+                for entry in snapshot.entries:
+                    if entry.contradicted:
+                        contradicted_count += 1
+                memory_status = {
+                    "enabled": True,
+                    "total": snapshot.total_count,
+                    "stale": stale_count,
+                    "contradicted": contradicted_count,
+                }
+    except Exception:
+        pass  # Memory status is best-effort
+
     data: dict[str, Any] = {
         "server": info["data"]["server"],
         "configuration": info["data"]["configuration"],
@@ -450,6 +474,7 @@ async def tapps_session_start(
         "quick_start": info["data"].get("quick_start", []),
         "critical_rules": info["data"].get("critical_rules", []),
         "pipeline": info["data"]["pipeline"],
+        "memory_status": memory_status,
         "project_profile": None,
         "project_profile_hint": "Call tapps_project_profile when you need project context (tech stack, type, CI/Docker/tests).",
     }

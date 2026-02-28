@@ -26,6 +26,7 @@ def _reset_caches() -> Generator[None, None, None]:
     from tapps_mcp.config.settings import _reset_settings_cache
     from tapps_mcp.server_helpers import (
         _reset_lookup_engine_cache,
+        _reset_memory_store_cache,
         _reset_scorer_cache,
         _reset_session_state,
     )
@@ -35,6 +36,7 @@ def _reset_caches() -> Generator[None, None, None]:
     _reset_settings_cache()
     _reset_scorer_cache()
     _reset_lookup_engine_cache()
+    _reset_memory_store_cache()
     _reset_session_state()
     _reset_tools_cache()
     clear_dependency_cache()

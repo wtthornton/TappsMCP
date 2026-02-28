@@ -572,6 +572,26 @@ async def tapps_research(
                 f"{docs_content}"
             )
 
+        # Memory injection (Epic 25)
+        memory_injected = 0
+        try:
+            from tapps_mcp.memory.injection import append_memory_to_answer, inject_memories
+            from tapps_mcp.server_helpers import _get_memory_store
+
+            settings = load_settings()
+            store = _get_memory_store()
+            mem_result = inject_memories(
+                question, store, settings.llm_engagement_level
+            )
+            answer = append_memory_to_answer(answer, mem_result)
+            memory_injected = mem_result.get("memory_injected", 0)
+        except Exception:
+            import structlog as _sl
+
+            _sl.get_logger(__name__).debug(
+                "memory_injection_failed: tapps_research", exc_info=True
+            )
+
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_research", start)
 
@@ -597,6 +617,7 @@ async def tapps_research(
                 "fallback_used": result.fallback_used,
                 "fallback_library": result.fallback_library,
                 "fallback_topic": result.fallback_topic,
+                "memory_injected": memory_injected,
             },
         )
 

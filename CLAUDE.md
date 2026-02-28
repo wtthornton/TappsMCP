@@ -46,13 +46,14 @@ uv run tapps-mcp upgrade --dry-run  # preview generated file updates
 
 ### Server module split
 
-The MCP server is split across five files to stay under complexity limits. All share the same `mcp` FastMCP instance created in `server.py`:
+The MCP server is split across six files to stay under complexity limits. All share the same `mcp` FastMCP instance created in `server.py`:
 
-- **`server.py`** — Creates the `FastMCP("TappsMCP")` instance, registers MCP resources/prompts, and 14 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`, `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`). Imports the other three modules which register their tools on the shared `mcp` object.
+- **`server.py`** — Creates the `FastMCP("TappsMCP")` instance, registers MCP resources/prompts, and 14 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`, `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`). Imports the other four modules which register their tools on the shared `mcp` object.
 - **`server_scoring_tools.py`** — `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** — `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`
 - **`server_metrics_tools.py`** — `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`
-- **`server_helpers.py`** — Shared utilities: response builders, singleton caches (`_get_scorer()`, `_get_settings()`)
+- **`server_memory_tools.py`** — `tapps_memory` (save, get, list, delete, search actions)
+- **`server_helpers.py`** — Shared utilities: response builders, singleton caches (`_get_scorer()`, `_get_settings()`, `_get_memory_store()`)
 
 ### Tool registration flow
 
@@ -76,9 +77,10 @@ AGENTS.md and platform rules (Cursor/Claude) have three variants per engagement 
 
 ### Caching and singletons
 
-Three module-level caches require reset in tests (done by autouse fixture in `tests/conftest.py`):
+Four module-level caches require reset in tests (done by autouse fixture in `tests/conftest.py`):
 - **Settings**: `load_settings()` in `config/settings.py` — cached singleton, reset via `_reset_settings_cache()`
 - **CodeScorer**: `_get_scorer()` in `server_helpers.py` — cached singleton, reset via `_reset_scorer_cache()`
+- **MemoryStore**: `_get_memory_store()` in `server_helpers.py` — cached singleton, reset via `_reset_memory_store_cache()`
 - **Tool detection**: `detect_installed_tools()` in `tools/tool_detection.py` — reset via `_reset_tools_cache()`
 
 ### Scoring pipeline
@@ -92,6 +94,10 @@ All file I/O goes through `security/path_validator.py`, which sandboxes operatio
 ### Expert system
 
 17 domain experts in `experts/` with 139 curated knowledge markdown files under `experts/knowledge/`. The `experts/engine.py` uses keyword-based RAG (or optional vector RAG with faiss). All retrieved content passes through `knowledge/rag_safety.py` for prompt injection filtering.
+
+### Memory subsystem
+
+`memory/` provides persistent cross-session knowledge sharing via `tapps_memory`. `memory/models.py` defines `MemoryEntry`, tier/source/scope enums, and validators. `memory/persistence.py` provides SQLite storage with WAL mode, FTS5 full-text search, schema versioning, and JSONL audit log. `memory/store.py` is the in-memory cache with write-through to SQLite, RAG safety on writes, and max-500-entry eviction. `server_memory_tools.py` exposes the `tapps_memory` MCP tool. Storage lives at `{project_root}/.tapps-mcp/memory/`.
 
 ### Platform generation
 

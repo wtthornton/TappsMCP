@@ -29,7 +29,12 @@ STAGE_ORDER: list[PipelineStage] = [
 
 # Tools allowed per stage.
 STAGE_TOOLS: dict[PipelineStage, list[str]] = {
-    PipelineStage.DISCOVER: ["tapps_server_info", "tapps_project_profile", "tapps_session_start"],
+    PipelineStage.DISCOVER: [
+        "tapps_server_info",
+        "tapps_project_profile",
+        "tapps_session_start",
+        "tapps_memory",
+    ],
     PipelineStage.RESEARCH: ["tapps_lookup_docs", "tapps_consult_expert", "tapps_list_experts"],
     PipelineStage.DEVELOP: ["tapps_score_file"],
     PipelineStage.VALIDATE: [
@@ -40,7 +45,7 @@ STAGE_TOOLS: dict[PipelineStage, list[str]] = {
         "tapps_validate_changed",
         "tapps_quick_check",
     ],
-    PipelineStage.VERIFY: ["tapps_checklist"],
+    PipelineStage.VERIFY: ["tapps_checklist", "tapps_memory"],
 }
 
 

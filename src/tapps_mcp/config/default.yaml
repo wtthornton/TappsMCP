@@ -19,3 +19,15 @@ adaptive:
   enabled: false
   learning_rate: 0.1
   min_outcomes: 5
+
+memory:
+  enabled: true
+  gc_enabled: true
+  contradiction_check_on_start: true
+  max_memories: 500
+  inject_into_experts: true
+  decay:
+    architectural_half_life_days: 180
+    pattern_half_life_days: 60
+    context_half_life_days: 14
+    confidence_floor: 0.1

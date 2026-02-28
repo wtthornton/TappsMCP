@@ -87,28 +87,28 @@ TOOL_REASONS: dict[str, str] = {
 TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
     "feature": {
         "required": ["tapps_score_file", "tapps_quality_gate"],
-        "recommended": ["tapps_security_scan"],
+        "recommended": ["tapps_security_scan", "tapps_memory"],
         "optional": ["tapps_checklist"],
     },
     "bugfix": {
         "required": ["tapps_score_file"],
         "recommended": ["tapps_quality_gate", "tapps_security_scan"],
-        "optional": ["tapps_checklist"],
+        "optional": ["tapps_checklist", "tapps_memory"],
     },
     "refactor": {
         "required": ["tapps_score_file", "tapps_quality_gate"],
-        "recommended": ["tapps_dead_code", "tapps_dependency_graph"],
+        "recommended": ["tapps_dead_code", "tapps_dependency_graph", "tapps_memory"],
         "optional": ["tapps_security_scan", "tapps_checklist"],
     },
     "security": {
         "required": ["tapps_security_scan", "tapps_quality_gate"],
         "recommended": ["tapps_score_file", "tapps_dependency_scan"],
-        "optional": ["tapps_checklist"],
+        "optional": ["tapps_checklist", "tapps_memory"],
     },
     "review": {
         "required": ["tapps_score_file", "tapps_security_scan", "tapps_quality_gate"],
         "recommended": ["tapps_checklist", "tapps_dead_code"],
-        "optional": ["tapps_dependency_scan", "tapps_dependency_graph"],
+        "optional": ["tapps_dependency_scan", "tapps_dependency_graph", "tapps_memory"],
     },
 }
 

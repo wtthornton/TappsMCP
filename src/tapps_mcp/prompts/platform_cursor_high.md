@@ -59,11 +59,11 @@ This validates against security and operational best practices.
 
 Execute these stages IN ORDER for every code task:
 
-1. **Discover** - `tapps_session_start()` (server info); `tapps_project_profile()` when you need project context
+1. **Discover** - `tapps_session_start()`, then `tapps_memory(action="search")` to recall project context
 2. **Research** - `tapps_lookup_docs()` for libraries, `tapps_consult_expert()` for decisions
 3. **Develop** - `tapps_score_file(file_path, quick=True)` during edit-lint-fix loops
 4. **Validate** - `tapps_quick_check()` per file OR `tapps_validate_changed()` for batch
-5. **Verify** - `tapps_checklist(task_type)` as the absolute final step
+5. **Verify** - `tapps_checklist(task_type)`, then `tapps_memory(action="save")` to persist learnings
 
 ## Consequences of Skipping
 

@@ -63,6 +63,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_upgrade** | After a **TappsMCP version update** - validates and refreshes AGENTS.md, platform rules, hooks, agents, skills, and settings. Preserves custom command paths (e.g. PyInstaller exe). Use `dry_run: true` to preview. |
 | **tapps_doctor** | When **diagnosing configuration issues** - checks binary availability, MCP configs, platform rules, generated files, hooks, and installed quality tools. Returns per-check pass/fail with remediation hints. |
 | **tapps_set_engagement_level** | When the user wants to change enforcement intensity (e.g. \"set tappsmcp to low\" or \"make checks optional\"). Writes to `.tapps-mcp.yaml`. |
+| **tapps_memory** | **OPTIONAL** - use `tapps_memory(action="save", ...)` to persist findings across sessions. Search with `tapps_memory(action="search", query="...")`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |
 
 ---
 
@@ -108,7 +109,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 ## Optional workflow (consider when useful)
 
 1. **Session start:** Consider calling `tapps_session_start` for server info. Call `tapps_project_profile` when you need project context. Optionally call `tapps_list_experts` if you may need experts.
-2. **Record key decisions:** Optionally use `tapps_session_notes(action="save", ...)` to persist constraints and decisions.
+2. **Record key decisions:** Optionally use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist findings across sessions.
 3. **Before using a library:** Consider calling `tapps_lookup_docs(library=...)` to avoid hallucinated APIs.
 4. **Before modifying a file's API:** Consider `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Consider `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after Python file edits.

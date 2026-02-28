@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from tapps_mcp.knowledge.lookup import LookupEngine as _LookupEngineType
+    from tapps_mcp.memory.store import MemoryStore as _MemoryStoreType
     from tapps_mcp.scoring.scorer import CodeScorer as _CodeScorerType
 
 # ---------------------------------------------------------------------------
@@ -57,6 +58,31 @@ def _reset_lookup_engine_cache() -> None:
     """Reset the cached :class:`LookupEngine` singleton (for testing)."""
     global _lookup_engine  # noqa: PLW0603
     _lookup_engine = None
+
+
+# ---------------------------------------------------------------------------
+# MemoryStore singleton — avoids re-instantiating on every tool call.
+# ---------------------------------------------------------------------------
+
+_memory_store: _MemoryStoreType | None = None
+
+
+def _get_memory_store() -> _MemoryStoreType:
+    """Return a lazily-initialized :class:`MemoryStore` singleton."""
+    global _memory_store  # noqa: PLW0603
+    if _memory_store is None:
+        from tapps_mcp.config.settings import load_settings
+        from tapps_mcp.memory.store import MemoryStore
+
+        settings = load_settings()
+        _memory_store = MemoryStore(settings.project_root)
+    return _memory_store
+
+
+def _reset_memory_store_cache() -> None:
+    """Reset the cached :class:`MemoryStore` singleton (for testing)."""
+    global _memory_store  # noqa: PLW0603
+    _memory_store = None
 
 
 def error_response(tool_name: str, code: str, message: str) -> dict[str, Any]:

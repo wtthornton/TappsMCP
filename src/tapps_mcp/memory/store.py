@@ -1,0 +1,311 @@
+"""In-memory cache backed by SQLite for the shared memory subsystem.
+
+Provides fast reads from an in-memory dict with write-through to SQLite.
+RAG safety checks on save prevent prompt injection in stored content.
+"""
+
+from __future__ import annotations
+
+import threading
+from typing import TYPE_CHECKING, Any
+
+import structlog
+
+from tapps_mcp.knowledge.rag_safety import check_content_safety
+from tapps_mcp.memory.models import (
+    MemoryEntry,
+    MemoryScope,
+    MemorySnapshot,
+    MemorySource,
+    MemoryTier,
+    _utc_now_iso,
+)
+from tapps_mcp.memory.persistence import MemoryPersistence
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+logger = structlog.get_logger(__name__)
+
+# Maximum number of memories per project.
+_MAX_ENTRIES = 500
+
+# RAG safety match count threshold for blocking content.
+_RAG_BLOCK_THRESHOLD = 3
+
+
+class MemoryStore:
+    """In-memory cache with SQLite write-through persistence.
+
+    Thread-safe via ``threading.Lock``. Write-through: every mutation
+    updates both the in-memory dict and SQLite synchronously.
+    """
+
+    def __init__(self, project_root: Path) -> None:
+        self._project_root = project_root
+        self._persistence = MemoryPersistence(project_root)
+        self._lock = threading.Lock()
+
+        # Cold-start: load all entries into memory
+        self._entries: dict[str, MemoryEntry] = {}
+        for entry in self._persistence.load_all():
+            self._entries[entry.key] = entry
+
+        logger.info(
+            "memory_store_initialized",
+            project_root=str(project_root),
+            entry_count=len(self._entries),
+        )
+
+    # ------------------------------------------------------------------
+    # CRUD operations
+    # ------------------------------------------------------------------
+
+    def save(
+        self,
+        key: str,
+        value: str,
+        tier: str = "pattern",
+        source: str = "agent",
+        source_agent: str = "unknown",
+        scope: str = "project",
+        tags: list[str] | None = None,
+        branch: str | None = None,
+        confidence: float = -1.0,
+    ) -> MemoryEntry | dict[str, Any]:
+        """Save or update a memory entry.
+
+        Returns the saved ``MemoryEntry``, or an error dict if RAG safety
+        blocks the content.
+        """
+        # RAG safety check on value
+        safety = check_content_safety(value)
+        if not safety.safe and safety.match_count >= _RAG_BLOCK_THRESHOLD:
+            logger.warning(
+                "memory_save_blocked",
+                key=key,
+                match_count=safety.match_count,
+                patterns=safety.flagged_patterns,
+            )
+            return {
+                "error": "content_blocked",
+                "message": "Memory value blocked by RAG safety filter.",
+                "flagged_patterns": safety.flagged_patterns,
+            }
+
+        # Sanitise if flagged but not blocked
+        if not safety.safe and safety.sanitised_content:
+            value = safety.sanitised_content
+
+        now = _utc_now_iso()
+        with self._lock:
+            existing = self._entries.get(key)
+
+            entry = MemoryEntry(
+                key=key,
+                value=value,
+                tier=MemoryTier(tier),
+                confidence=confidence,
+                source=MemorySource(source),
+                source_agent=source_agent,
+                scope=MemoryScope(scope),
+                tags=tags or [],
+                created_at=existing.created_at if existing else now,
+                updated_at=now,
+                last_accessed=now,
+                access_count=existing.access_count if existing else 0,
+                branch=branch,
+                # Preserve reserved fields on update
+                last_reinforced=existing.last_reinforced if existing else None,
+                reinforce_count=existing.reinforce_count if existing else 0,
+                contradicted=existing.contradicted if existing else False,
+                contradiction_reason=(
+                    existing.contradiction_reason if existing else None
+                ),
+                seeded_from=existing.seeded_from if existing else None,
+            )
+
+            # Max entries enforcement: evict lowest-confidence entry
+            if key not in self._entries and len(self._entries) >= _MAX_ENTRIES:
+                self._evict_lowest_confidence()
+
+            self._entries[key] = entry
+
+        self._persistence.save(entry)
+        return entry
+
+    def get(
+        self,
+        key: str,
+        scope: str | None = None,
+        branch: str | None = None,
+    ) -> MemoryEntry | None:
+        """Retrieve a memory entry by key.
+
+        When *scope* and *branch* are provided, applies scope resolution:
+        session > branch > project (most specific wins).
+
+        Updates ``last_accessed`` and ``access_count`` on read.
+        """
+        with self._lock:
+            if scope is not None and branch is not None:
+                entry = self._resolve_scope(key, scope, branch)
+            else:
+                entry = self._entries.get(key)
+
+            if entry is None:
+                return None
+
+            # Update access metadata
+            now = _utc_now_iso()
+            updated = entry.model_copy(
+                update={
+                    "last_accessed": now,
+                    "access_count": entry.access_count + 1,
+                }
+            )
+            self._entries[updated.key] = updated
+
+        self._persistence.save(updated)
+        return updated
+
+    def list_all(
+        self,
+        tier: str | None = None,
+        scope: str | None = None,
+        tags: list[str] | None = None,
+    ) -> list[MemoryEntry]:
+        """List entries with optional filters."""
+        with self._lock:
+            entries = list(self._entries.values())
+
+        if tier is not None:
+            entries = [e for e in entries if e.tier == tier]
+        if scope is not None:
+            entries = [e for e in entries if e.scope == scope]
+        if tags:
+            tag_set = set(tags)
+            entries = [e for e in entries if tag_set.intersection(e.tags)]
+
+        return entries
+
+    def delete(self, key: str) -> bool:
+        """Delete a memory entry by key. Returns True if deleted."""
+        with self._lock:
+            if key not in self._entries:
+                return False
+            del self._entries[key]
+
+        self._persistence.delete(key)
+        return True
+
+    def search(
+        self,
+        query: str,
+        tags: list[str] | None = None,
+        tier: str | None = None,
+        scope: str | None = None,
+    ) -> list[MemoryEntry]:
+        """Search via FTS5, with optional post-filters."""
+        results = self._persistence.search(query)
+
+        if tier is not None:
+            results = [r for r in results if r.tier == tier]
+        if scope is not None:
+            results = [r for r in results if r.scope == scope]
+        if tags:
+            tag_set = set(tags)
+            results = [r for r in results if tag_set.intersection(r.tags)]
+
+        return results
+
+    def update_fields(self, key: str, **fields: Any) -> MemoryEntry | None:  # noqa: ANN401
+        """Partial update of specific fields on an existing entry.
+
+        Preserves immutable fields like ``created_at``. Used by Epic 24
+        decay/contradiction/reinforcement systems.
+        """
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+
+            fields["updated_at"] = _utc_now_iso()
+            updated = entry.model_copy(update=fields)
+            self._entries[key] = updated
+
+        self._persistence.save(updated)
+        return updated
+
+    def count(self) -> int:
+        """Return the total number of memory entries."""
+        with self._lock:
+            return len(self._entries)
+
+    def snapshot(self) -> MemorySnapshot:
+        """Return a serializable snapshot of the full memory state."""
+        with self._lock:
+            entries = list(self._entries.values())
+
+        tier_counts: dict[str, int] = {}
+        for entry in entries:
+            tier_val = entry.tier.value if isinstance(entry.tier, MemoryTier) else str(entry.tier)
+            tier_counts[tier_val] = tier_counts.get(tier_val, 0) + 1
+
+        return MemorySnapshot(
+            project_root=str(self._project_root),
+            entries=entries,
+            total_count=len(entries),
+            tier_counts=tier_counts,
+        )
+
+    def close(self) -> None:
+        """Close the underlying persistence layer."""
+        self._persistence.close()
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _evict_lowest_confidence(self) -> None:
+        """Evict the entry with the lowest confidence to make room.
+
+        Must be called while holding ``self._lock``.
+        """
+        if not self._entries:
+            return
+
+        lowest_key = min(
+            self._entries, key=lambda k: self._entries[k].confidence
+        )
+        del self._entries[lowest_key]
+        self._persistence.delete(lowest_key)
+        logger.info("memory_evicted", key=lowest_key, reason="max_entries")
+
+    def _resolve_scope(
+        self, key: str, scope: str, branch: str
+    ) -> MemoryEntry | None:
+        """Resolve scope precedence: session > branch > project.
+
+        Must be called while holding ``self._lock``.
+        """
+        # Try most specific first
+        for try_scope in [MemoryScope.session, MemoryScope.branch, MemoryScope.project]:
+            if try_scope.value == scope or _scope_rank(try_scope) >= _scope_rank(
+                MemoryScope(scope)
+            ):
+                for entry in self._entries.values():
+                    if entry.key == key and entry.scope == try_scope:
+                        if try_scope == MemoryScope.branch and entry.branch != branch:
+                            continue
+                        return entry
+        return None
+
+
+def _scope_rank(scope: MemoryScope) -> int:
+    """Return numeric rank for scope precedence (higher = more specific)."""
+    return {
+        MemoryScope.project: 0,
+        MemoryScope.branch: 1,
+        MemoryScope.session: 2,
+    }.get(scope, 0)

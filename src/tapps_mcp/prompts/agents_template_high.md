@@ -63,6 +63,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_upgrade** | After a **TappsMCP version update** - validates and refreshes AGENTS.md, platform rules, hooks, agents, skills, and settings. Preserves custom command paths (e.g. PyInstaller exe). Use `dry_run: true` to preview. |
 | **tapps_doctor** | When **diagnosing configuration issues** - checks binary availability, MCP configs, platform rules, generated files, hooks, and installed quality tools. Returns per-check pass/fail with remediation hints. |
 | **tapps_set_engagement_level** | When the user requests to change enforcement intensity (e.g. \"set tappsmcp to high\"). Writes to `.tapps-mcp.yaml`; run `tapps_init` with overwrite to regenerate AGENTS.md and rules. |
+| **tapps_memory** | **REQUIRED at session start** - check `tapps_memory(action="list")` or `tapps_memory(action="search", query="...")` for project context. Save learnings with `tapps_memory(action="save", ...)` before session end. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |
 
 ---
 
@@ -108,7 +109,8 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 ## REQUIRED workflow (MUST follow in order)
 
 1. **Session start (REQUIRED):** You MUST call `tapps_session_start` first. Call `tapps_project_profile` when you need project context. Call `tapps_list_experts` if you may need experts.
-2. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` to persist constraints and decisions.
+2. **Check project memory (REQUIRED):** Call `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")` to recall past decisions and project context.
+3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
 3. **Before using a library (BLOCKING):** You MUST call `tapps_lookup_docs(library=...)` before writing code that uses an external library.
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits (REQUIRED):** You MUST call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each Python file edit.

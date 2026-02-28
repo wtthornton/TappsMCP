@@ -73,6 +73,45 @@ class AdaptiveSettings(BaseSettings):
     )
 
 
+class MemoryDecaySettings(BaseSettings):
+    """Decay half-life configuration for the memory subsystem."""
+
+    model_config = SettingsConfigDict(env_prefix="TAPPS_MCP_MEMORY_DECAY_")
+
+    architectural_half_life_days: int = Field(
+        default=180, ge=1, description="Half-life for architectural memories (days)."
+    )
+    pattern_half_life_days: int = Field(
+        default=60, ge=1, description="Half-life for pattern memories (days)."
+    )
+    context_half_life_days: int = Field(
+        default=14, ge=1, description="Half-life for context memories (days)."
+    )
+    confidence_floor: float = Field(
+        default=0.1, ge=0.0, le=1.0, description="Minimum decayed confidence."
+    )
+
+
+class MemorySettings(BaseSettings):
+    """Settings for the shared memory subsystem."""
+
+    model_config = SettingsConfigDict(env_prefix="TAPPS_MCP_MEMORY_")
+
+    enabled: bool = Field(default=True, description="Enable the memory subsystem.")
+    gc_enabled: bool = Field(default=True, description="Enable garbage collection.")
+    contradiction_check_on_start: bool = Field(
+        default=True, description="Run contradiction detection at session start."
+    )
+    max_memories: int = Field(
+        default=500, ge=1, description="Maximum number of active memories per project."
+    )
+    inject_into_experts: bool = Field(
+        default=True,
+        description="Inject relevant memories into expert consultations (Epic 25).",
+    )
+    decay: MemoryDecaySettings = Field(default_factory=MemoryDecaySettings)
+
+
 class TappsMCPSettings(BaseSettings):
     """Root settings for TappsMCP server."""
 
@@ -178,6 +217,9 @@ class TappsMCPSettings(BaseSettings):
             "'high' = mandatory enforcement, 'medium' = balanced, 'low' = optional guidance."
         ),
     )
+
+    # Memory subsystem (Epic 23-25)
+    memory: MemorySettings = Field(default_factory=MemorySettings)
 
     # Expert/doc coupling
     expert_auto_fallback: bool = Field(

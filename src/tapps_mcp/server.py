@@ -757,6 +757,23 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "Expert consultation failed. Try a different question or domain.",
         )
 
+    # Memory injection (Epic 25)
+    answer = result.answer
+    memory_injected = 0
+    try:
+        from tapps_mcp.memory.injection import append_memory_to_answer, inject_memories
+        from tapps_mcp.server_helpers import _get_memory_store
+
+        settings = load_settings()
+        store = _get_memory_store()
+        mem_result = inject_memories(
+            question, store, settings.llm_engagement_level
+        )
+        answer = append_memory_to_answer(answer, mem_result)
+        memory_injected = mem_result.get("memory_injected", 0)
+    except Exception:
+        logger.debug("memory_injection_failed: tapps_consult_expert", exc_info=True)
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_consult_expert", start)
 
@@ -767,7 +784,7 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "domain": result.domain,
             "expert_id": result.expert_id,
             "expert_name": result.expert_name,
-            "answer": result.answer,
+            "answer": answer,
             "confidence": round(result.confidence, 4),
             "factors": result.factors.model_dump(),
             "sources": result.sources,
@@ -784,6 +801,7 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "fallback_used": result.fallback_used,
             "fallback_library": result.fallback_library,
             "fallback_topic": result.fallback_topic,
+            "memory_injected": memory_injected,
         },
     )
 
@@ -1034,14 +1052,46 @@ def _get_session_store() -> SessionNoteStore:
     return _session_store
 
 
+def _promote_note_to_memory(note: Any, tier: str = "context") -> dict[str, Any]:
+    """Promote a session note to the memory store.
+
+    Returns a dict suitable for inclusion in the tool response.
+    """
+    try:
+        from tapps_mcp.server_helpers import _get_memory_store
+
+        mem_store = _get_memory_store()
+        entry = mem_store.save(
+            key=note.key,
+            value=note.value,
+            tier=tier,
+            source="agent",
+            source_agent="session-promote",
+            scope="session",
+            tags=["promoted-from-session-notes"],
+        )
+        return {
+            "action": "promote",
+            "promoted": True,
+            "memory_entry": entry.model_dump(),
+        }
+    except Exception as exc:
+        logger.debug("promote_to_memory_failed", key=note.key, error=str(exc))
+        return {
+            "action": "promote",
+            "promoted": False,
+            "error": str(exc),
+        }
+
+
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_session_notes(action: str, key: str = "", value: str = "") -> dict[str, Any]:
     """Persist notes across the session to avoid losing context.
 
     Args:
-        action: "save" | "get" | "list" | "clear".
-        key: Note key (required for save/get).
-        value: Note value (required for save).
+        action: "save" | "get" | "list" | "clear" | "promote".
+        key: Note key (required for save/get/promote).
+        value: Note value (required for save). For promote, optional tier name.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_session_notes")
@@ -1071,16 +1121,28 @@ def tapps_session_notes(action: str, key: str = "", value: str = "") -> dict[str
         data = {"action": "list", "notes": [n.model_dump() for n in store.list_all()]}
     elif action == "clear":
         data = {"action": "clear", "cleared_count": store.clear(key or None)}
+    elif action == "promote":
+        if not key:
+            return error_response(
+                "tapps_session_notes", "missing_params", "promote requires key"
+            )
+        found = store.get(key)
+        if found is None:
+            return error_response(
+                "tapps_session_notes", "not_found", f"Note '{key}' not found"
+            )
+        data = _promote_note_to_memory(found, value or "context")
     else:
         return error_response(
             "tapps_session_notes",
             "invalid_action",
-            f"Unknown action: {action}. Use save/get/list/clear.",
+            f"Unknown action: {action}. Use save/get/list/clear/promote.",
         )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_notes", start)
     data.update(store.metadata())
+    data["migration_hint"] = "Use tapps_memory for persistent cross-session storage."
     resp = success_response("tapps_session_notes", elapsed_ms, data)
     return _with_nudges("tapps_session_notes", resp)
 
@@ -1746,6 +1808,7 @@ def tapps_workflow(
 # ---------------------------------------------------------------------------
 
 from tapps_mcp import (  # noqa: E402
+    server_memory_tools,
     server_metrics_tools,
     server_pipeline_tools,
     server_scoring_tools,
@@ -1754,6 +1817,7 @@ from tapps_mcp import (  # noqa: E402
 server_scoring_tools.register(mcp)
 server_pipeline_tools.register(mcp)
 server_metrics_tools.register(mcp)
+server_memory_tools.register(mcp)
 
 # ---------------------------------------------------------------------------
 # outputSchema wiring (Epic 13) — DISABLED in v0.4.1
@@ -1779,6 +1843,7 @@ tapps_dashboard = server_metrics_tools.tapps_dashboard
 tapps_stats = server_metrics_tools.tapps_stats
 tapps_feedback = server_metrics_tools.tapps_feedback
 tapps_research = server_metrics_tools.tapps_research
+tapps_memory = server_memory_tools.tapps_memory
 
 
 # ---------------------------------------------------------------------------
