@@ -196,10 +196,10 @@ Restart Claude Desktop after changing the config.
 | **tapps_security_scan** | Security scan (e.g. bandit + secret detection). |
 | **tapps_quality_gate** | Pass/fail vs thresholds (e.g. overall >= 70 for `standard`). Use before "done". |
 | **tapps_validate_changed** | Score + gate all changed files (auto-detects via git diff). Default quick mode (ruff-only). Includes impact analysis. |
-| **tapps_lookup_docs** | Fetch current library docs via Context7. Use before writing code that calls library APIs. |
+| **tapps_lookup_docs** | Fetch current library docs via Context7 (when key set) or LlmsTxt (fallback). Use before writing code that calls library APIs. |
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB configs against best practices. |
 | **tapps_consult_expert** | Ask a domain expert (17 domains) and get RAG-backed guidance with confidence scores. |
-| **tapps_research** | Combined expert + docs lookup in one call (auto-supplements with Context7). |
+| **tapps_research** | Combined expert + docs lookup in one call (Context7 when key set, LlmsTxt fallback). |
 | **tapps_list_experts** | List available expert domains and their knowledge base status. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure. Call at session start for context-aware analysis. |
 | **tapps_session_notes** | Save/retrieve key decisions and constraints across a session. |
@@ -227,7 +227,7 @@ Restart Claude Desktop after changing the config.
 
 - **TAPPS_MCP_PROJECT_ROOT** – Restrict file operations to this directory (recommended for security). If unset, current working directory is used.
 - **TAPPS_MCP_HOST_PROJECT_ROOT** – Optional. When the server runs with a different root (e.g. Docker `/workspace`), set this to the **host path** the client/IDE uses (e.g. `C:\projects\myapp`). Then the server will accept absolute host paths from Cursor and map them to the project root, avoiding "path denied" errors.
-- **TAPPS_MCP_CONTEXT7_API_KEY** – Used by `tapps_lookup_docs` for live Context7 API fetches. Cache still works without it.
+- **TAPPS_MCP_CONTEXT7_API_KEY** – Used by `tapps_lookup_docs` for live Context7 API fetches when set; otherwise falls back to LlmsTxt. Cache still works without it.
 
 ---
 

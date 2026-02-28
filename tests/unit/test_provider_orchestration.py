@@ -264,36 +264,28 @@ class TestProviderRegistry:
 
 
 class TestBuildProviderRegistry:
-    def test_registry_order_with_settings(self) -> None:
-        """Registry registers Deepcon, Context7, Docfork, LlmsTxt in correct order."""
+    def test_registry_order_with_context7_key(self) -> None:
+        """Registry registers Context7 and LlmsTxt when context7 key is set."""
         from unittest.mock import MagicMock
 
         from tapps_mcp.knowledge.lookup import _build_provider_registry
 
         settings = MagicMock()
-        settings.deepcon_api_key = None
         settings.context7_api_key = MagicMock()  # Has key
-        settings.docfork_api_key = None
 
         registry = _build_provider_registry(settings=settings)
         names = [p.name() for p in registry.providers]
         assert names == ["context7", "llms_txt"]
-        assert "deepcon" not in names
-        assert "docfork" not in names
 
-    def test_registry_includes_all_when_keys_set(self) -> None:
-        """When all API keys are set, all providers are registered."""
+    def test_registry_llms_txt_only_when_no_context7_key(self) -> None:
+        """Registry registers only LlmsTxt when no context7 key is set."""
         from unittest.mock import MagicMock
-
-        from pydantic import SecretStr
 
         from tapps_mcp.knowledge.lookup import _build_provider_registry
 
         settings = MagicMock()
-        settings.deepcon_api_key = SecretStr("d")
-        settings.context7_api_key = SecretStr("c")
-        settings.docfork_api_key = SecretStr("f")
+        settings.context7_api_key = None
 
         registry = _build_provider_registry(settings=settings)
         names = [p.name() for p in registry.providers]
-        assert names == ["deepcon", "context7", "docfork", "llms_txt"]
+        assert names == ["llms_txt"]

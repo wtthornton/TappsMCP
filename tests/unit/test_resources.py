@@ -1,4 +1,4 @@
-"""Tests for MCP resources and the tapps_workflow prompt in server.py."""
+"""Tests for MCP resources and the tapps_workflow prompt."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from tapps_mcp.server import (
-    get_knowledge_resource,
-    get_quality_presets,
-    get_scoring_weights,
-    list_knowledge_domains,
-    tapps_workflow,
+from tapps_mcp.server_resources import (
+    _get_knowledge_resource as get_knowledge_resource,
+    _get_quality_presets as get_quality_presets,
+    _get_scoring_weights as get_scoring_weights,
+    _list_knowledge_domains as list_knowledge_domains,
+    _tapps_workflow as tapps_workflow,
 )
 
 # ---------------------------------------------------------------------------

@@ -152,14 +152,6 @@ class TappsMCPSettings(BaseSettings):
         default=None,
         description="Context7 API key (optional).",
     )
-    deepcon_api_key: SecretStr | None = Field(
-        default=None,
-        description="Deepcon API key (optional) for documentation lookup.",
-    )
-    docfork_api_key: SecretStr | None = Field(
-        default=None,
-        description="Docfork API key (optional) for documentation lookup.",
-    )
 
     # Scoring
     scoring_weights: ScoringWeights = Field(default_factory=ScoringWeights)

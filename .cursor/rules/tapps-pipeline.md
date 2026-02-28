@@ -16,6 +16,7 @@ These are BLOCKING REQUIREMENTS, not suggestions. Skipping any step risks shippi
 
 You MUST call `tapps_session_start()` as the FIRST action in every session.
 This returns server info (version, checkers, config) only. Call `tapps_project_profile()` when you need project context (tech stack, type, recommendations).
+Then call `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")` to recall past decisions and project context.
 Skipping session start means you lack server capabilities and workflow guidance.
 
 ### Before Using Any Library API (BLOCKING)

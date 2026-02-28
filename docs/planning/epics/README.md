@@ -30,8 +30,9 @@
 | [Epic 23](EPIC-23-SHARED-MEMORY-FOUNDATION.md) | Shared Memory Foundation | P1 | ~2-3 weeks | Epic 0, Epic 4 | **Proposed** |
 | [Epic 24](EPIC-24-MEMORY-INTELLIGENCE.md) | Memory Intelligence (Decay, Contradictions) | P1 | ~2-3 weeks | Epic 23, Epic 4, Epic 5 | **Proposed** |
 | [Epic 25](EPIC-25-MEMORY-RETRIEVAL-INTEGRATION.md) | Memory Retrieval & Integration | P2 | ~2-3 weeks | Epic 23, Epic 24, Epic 3, Epic 4 | **Proposed** |
+| [Epic 29](EPIC-29-DOC-PROVIDER-SIMPLIFICATION.md) | Doc Provider Simplification | P2 | ~1 week | Epic 2, Epic 16 | **Proposed** |
 
-**Total LOE:** ~40-51 weeks (Epics 0-22, all complete) + ~6-9 weeks proposed (Epics 23-25)
+**Total LOE:** ~40-51 weeks (Epics 0-22, all complete) + ~6-10 weeks proposed (Epics 23-25, 29)
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -74,6 +75,11 @@ Epic 22 (Governance & Security)      ← depends on Epic 19, Epic 20, Epic 21 (f
 Epic 23 (Shared Memory Foundation)   ← depends on Epic 0, Epic 4
   └── Epic 24 (Memory Intelligence)  ← also depends on Epic 5
         └── Epic 25 (Memory Retrieval & Integration) ← also depends on Epic 3, Epic 8, Epic 18
+
+--- Doc Provider Simplification ---
+
+Epic 29 (Doc Provider Simplification) ← depends on Epic 2, Epic 16
+  Context7 + LlmsTxt only; deprecate Deepcon, Docfork
 
 ```
 

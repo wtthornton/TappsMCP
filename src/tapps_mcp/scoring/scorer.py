@@ -251,153 +251,214 @@ class CodeScorer:
         parallel: ParallelResults,
     ) -> tuple[dict[str, CategoryScore], int]:
         """Build all category scores, returning (categories, dependency_vuln_count)."""
-        w = self._weights
         cats: dict[str, CategoryScore] = {}
-        dependency_vuln_count = 0
-        dead_code_struct_penalty = 0.0
 
-        # 1) Complexity (radon cc -> 0-10, lower complexity = higher quality)
-        cplx_details: dict[str, object] = {"functions_analysed": len(parallel.radon_cc)}
+        cats["complexity"] = self._score_complexity_category(code, parallel)
+        sec_cat, dep_vuln_count = self._score_security_category(code, parallel)
+        cats["security"] = sec_cat
+        maint_cat, dc_struct_penalty = self._score_maintainability_category(code, parallel)
+        cats["maintainability"] = maint_cat
+        cats["test_coverage"] = self._score_test_coverage_category(file_path)
+        cats["performance"] = self._score_performance_category(code)
+        cats["structure"] = self._score_structure_category(file_path, dc_struct_penalty)
+        cats["devex"] = self._score_devex_category(file_path)
+        self._add_informational_categories(cats, parallel)
+
+        return cats, dep_vuln_count
+
+    def _score_complexity_category(
+        self, code: str, parallel: ParallelResults
+    ) -> CategoryScore:
+        """Complexity category: radon CC or AST fallback (0-10)."""
+        w = self._weights
+        details: dict[str, object] = {"functions_analysed": len(parallel.radon_cc)}
         using_radon_cc = bool(parallel.radon_cc)
         if using_radon_cc:
-            complexity_raw = calculate_complexity_score(parallel.radon_cc)
+            score = calculate_complexity_score(parallel.radon_cc)
             max_entry = max(parallel.radon_cc, key=lambda e: float(str(e.get("complexity", 0))))
-            cplx_details["max_cc"] = float(str(max_entry.get("complexity", 0)))
-            cplx_details["max_cc_function"] = str(max_entry.get("name", ""))
+            details["max_cc"] = float(str(max_entry.get("complexity", 0)))
+            details["max_cc_function"] = str(max_entry.get("name", ""))
         else:
-            complexity_raw = self._ast_complexity(code)
-            cplx_details["fallback"] = True
-        cats["complexity"] = CategoryScore(
+            score = self._ast_complexity(code)
+            details["fallback"] = True
+        return CategoryScore(
             name="complexity",
-            score=complexity_raw,
+            score=score,
             weight=w.complexity,
-            details=cplx_details,
-            suggestions=_suggest_complexity(complexity_raw, cplx_details, using_radon_cc),
+            details=details,
+            suggestions=_suggest_complexity(score, details, using_radon_cc),
         )
 
-        # 2) Security (bandit -> 0-10, plus dependency vulnerability penalty)
-        sec_details: dict[str, object] = {"issue_count": len(parallel.security_issues)}
+    def _score_security_category(
+        self, code: str, parallel: ParallelResults
+    ) -> tuple[CategoryScore, int]:
+        """Security category: bandit + dependency vulnerabilities.
+
+        Returns (CategoryScore, dependency_vuln_count).
+        """
+        w = self._weights
+        details: dict[str, object] = {"issue_count": len(parallel.security_issues)}
         using_bandit = parallel.security_issues or "bandit" not in parallel.missing_tools
         if using_bandit:
-            sec_score = calculate_security_score(parallel.security_issues)
+            score = calculate_security_score(parallel.security_issues)
         else:
-            sec_score = self._heuristic_security(code)
-            sec_details["fallback"] = True
-            sec_details["patterns_found"] = [p for p in _INSECURE_PATTERNS if p in code]
+            score = self._heuristic_security(code)
+            details["fallback"] = True
+            details["patterns_found"] = [p for p in _INSECURE_PATTERNS if p in code]
 
-        # Apply dependency vulnerability penalty (from cached pip-audit results)
-        dep_findings: list = []
-        if self._settings.dependency_scan_enabled:
-            from tapps_mcp.scoring.dependency_security import (
-                calculate_dependency_penalty,
-                suggest_dependency_fixes,
-            )
-            from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
+        score, dep_findings = self._apply_dependency_penalty(score, details)
 
-            dep_findings = get_dependency_findings(str(self._settings.project_root))
-            if dep_findings:
-                penalty = calculate_dependency_penalty(dep_findings)
-                sec_score = clamp_individual(sec_score - penalty / 10.0)
-                sec_details["dependency_vulnerabilities"] = len(dep_findings)
-                sev_breakdown: dict[str, int] = {}
-                for f in dep_findings:
-                    sev_breakdown[f.severity] = sev_breakdown.get(f.severity, 0) + 1
-                sec_details["dependency_severity_breakdown"] = sev_breakdown
-
-        sec_suggestions = _suggest_security(sec_score, sec_details)
+        suggestions = _suggest_security(score, details)
         if dep_findings:
-            sec_suggestions = suggest_dependency_fixes(dep_findings)[:5] + sec_suggestions
+            from tapps_mcp.scoring.dependency_security import suggest_dependency_fixes
 
-        cats["security"] = CategoryScore(
+            suggestions = suggest_dependency_fixes(dep_findings)[:5] + suggestions
+
+        return CategoryScore(
             name="security",
-            score=sec_score,
+            score=score,
             weight=w.security,
-            details=sec_details,
-            suggestions=sec_suggestions,
-        )
+            details=details,
+            suggestions=suggestions,
+        ), len(dep_findings)
 
-        # Track for ScoreResult.dependency_vuln_count
-        dependency_vuln_count = len(dep_findings)
+    def _apply_dependency_penalty(
+        self, score: float, details: dict[str, object]
+    ) -> tuple[float, list]:
+        """Apply dependency vulnerability penalty if enabled.
 
-        # 3) Maintainability (radon mi -> 0-10, with dead code penalty)
-        maint_details: dict[str, object] = {"mi_value": parallel.radon_mi}
+        Returns (adjusted_score, findings_list).
+        """
+        if not self._settings.dependency_scan_enabled:
+            return score, []
+
+        from tapps_mcp.scoring.dependency_security import calculate_dependency_penalty
+        from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
+
+        dep_findings = get_dependency_findings(str(self._settings.project_root))
+        if not dep_findings:
+            return score, []
+
+        penalty = calculate_dependency_penalty(dep_findings)
+        score = clamp_individual(score - penalty / 10.0)
+        details["dependency_vulnerabilities"] = len(dep_findings)
+        sev_breakdown: dict[str, int] = {}
+        for f in dep_findings:
+            sev_breakdown[f.severity] = sev_breakdown.get(f.severity, 0) + 1
+        details["dependency_severity_breakdown"] = sev_breakdown
+        return score, dep_findings
+
+    def _score_maintainability_category(
+        self, code: str, parallel: ParallelResults
+    ) -> tuple[CategoryScore, float]:
+        """Maintainability category: radon MI + dead code penalty.
+
+        Returns (CategoryScore, dead_code_struct_penalty).
+        """
+        w = self._weights
+        details: dict[str, object] = {"mi_value": parallel.radon_mi}
         if "radon" not in parallel.missing_tools:
-            maint_score = calculate_maintainability_score(parallel.radon_mi)
+            score = calculate_maintainability_score(parallel.radon_mi)
         else:
-            maint_score = self._ast_maintainability(code)
-            maint_details["fallback"] = True
-        has_docstring = '"""' in code or "'''" in code
-        maint_details["has_docstring"] = has_docstring
-        maint_details["line_count"] = len(code.splitlines())
+            score = self._ast_maintainability(code)
+            details["fallback"] = True
+        details["has_docstring"] = '"""' in code or "'''" in code
+        details["line_count"] = len(code.splitlines())
 
-        # Dead code penalty (from vulture findings)
-        maint_suggestions: list[str] = []
+        dc_struct_penalty = 0.0
+        extra_suggestions: list[str] = []
         if parallel.dead_code:
-            from tapps_mcp.scoring.dead_code import (
-                calculate_dead_code_penalty,
-                suggest_dead_code_fixes,
+            score, dc_struct_penalty, extra_suggestions = self._apply_dead_code_penalty(
+                score, details, parallel.dead_code
             )
 
-            dc_maint_penalty, dc_struct_penalty = calculate_dead_code_penalty(parallel.dead_code)
-            maint_score = clamp_individual(maint_score - dc_maint_penalty / 10.0)
-            maint_details["dead_code_count"] = len(parallel.dead_code)
-            maint_details["dead_code_penalty"] = round(dc_maint_penalty, 2)
-            maint_suggestions = suggest_dead_code_fixes(parallel.dead_code[:5])
-            dead_code_struct_penalty = dc_struct_penalty
-
-        cats["maintainability"] = CategoryScore(
+        return CategoryScore(
             name="maintainability",
-            score=maint_score,
+            score=score,
             weight=w.maintainability,
-            details=maint_details,
-            suggestions=_suggest_maintainability(maint_score, maint_details) + maint_suggestions,
+            details=details,
+            suggestions=_suggest_maintainability(score, details) + extra_suggestions,
+        ), dc_struct_penalty
+
+    @staticmethod
+    def _apply_dead_code_penalty(
+        score: float,
+        details: dict[str, object],
+        dead_code: list,
+    ) -> tuple[float, float, list[str]]:
+        """Apply dead code penalties, returning (adjusted_score, struct_penalty, suggestions)."""
+        from tapps_mcp.scoring.dead_code import (
+            calculate_dead_code_penalty,
+            suggest_dead_code_fixes,
         )
 
-        # 4) Test coverage (heuristic)
+        dc_maint_penalty, dc_struct_penalty = calculate_dead_code_penalty(dead_code)
+        adjusted = clamp_individual(score - dc_maint_penalty / 10.0)
+        details["dead_code_count"] = len(dead_code)
+        details["dead_code_penalty"] = round(dc_maint_penalty, 2)
+        suggestions = suggest_dead_code_fixes(dead_code[:5])
+        return adjusted, dc_struct_penalty, suggestions
+
+    def _score_test_coverage_category(self, file_path: Path) -> CategoryScore:
+        """Test coverage category: heuristic based on test file existence."""
+        w = self._weights
         coverage = self._coverage_heuristic(file_path)
-        cov_details: dict[str, object] = {"stem": file_path.stem}
-        is_test = file_path.name.startswith("test_") or file_path.name.endswith("_test.py")
-        cov_details["is_test_file"] = is_test
-        cats["test_coverage"] = CategoryScore(
+        details: dict[str, object] = {"stem": file_path.stem}
+        details["is_test_file"] = (
+            file_path.name.startswith("test_") or file_path.name.endswith("_test.py")
+        )
+        return CategoryScore(
             name="test_coverage",
             score=coverage,
             weight=w.test_coverage,
-            details=cov_details,
-            suggestions=_suggest_test_coverage(coverage, cov_details),
+            details=details,
+            suggestions=_suggest_test_coverage(coverage, details),
         )
 
-        # 5) Performance (AST-based)
+    def _score_performance_category(self, code: str) -> CategoryScore:
+        """Performance category: AST-based analysis."""
+        w = self._weights
         perf, perf_issues = self._ast_performance_detailed(code)
-        perf_details: dict[str, object] = {"issues_found": sorted(perf_issues)}
-        cats["performance"] = CategoryScore(
+        details: dict[str, object] = {"issues_found": sorted(perf_issues)}
+        return CategoryScore(
             name="performance",
             score=perf,
             weight=w.performance,
-            details=perf_details,
-            suggestions=_suggest_performance(perf, perf_details),
+            details=details,
+            suggestions=_suggest_performance(perf, details),
         )
 
-        # 6) Structure (project layout, with dead code penalty)
+    def _score_structure_category(
+        self, file_path: Path, dead_code_struct_penalty: float
+    ) -> CategoryScore:
+        """Structure category: project layout with optional dead code penalty."""
+        w = self._weights
         structure = self._structure_score(file_path)
         if dead_code_struct_penalty > 0:
             structure = clamp_individual(structure - dead_code_struct_penalty / 10.0)
-        cats["structure"] = CategoryScore(
+        return CategoryScore(
             name="structure",
             score=structure,
             weight=w.structure,
             suggestions=_suggest_structure(structure),
         )
 
-        # 7) DevEx (tooling / docs)
+    def _score_devex_category(self, file_path: Path) -> CategoryScore:
+        """DevEx category: tooling and documentation signals."""
+        w = self._weights
         devex = self._devex_score(file_path)
-        cats["devex"] = CategoryScore(
+        return CategoryScore(
             name="devex",
             score=devex,
             weight=w.devex,
             suggestions=_suggest_devex(devex),
         )
 
-        # Bonus: linting & type-checking (informational, not weighted in overall)
+    @staticmethod
+    def _add_informational_categories(
+        cats: dict[str, CategoryScore], parallel: ParallelResults
+    ) -> None:
+        """Add linting and type-checking as informational (zero-weight) categories."""
         lint_s = calculate_lint_score(parallel.lint_issues)
         cats["linting"] = CategoryScore(
             name="linting",
@@ -412,8 +473,6 @@ class CodeScorer:
             weight=0.0,
             details={"issue_count": len(parallel.type_issues)},
         )
-
-        return cats, dependency_vuln_count
 
     def _calculate_overall(self, categories: dict[str, CategoryScore]) -> float:
         """Weighted overall score (0-100).

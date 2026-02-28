@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from mcp.server.fastmcp import (
     Context,  # noqa: TC002 — runtime import required for FastMCP annotation resolution
 )
@@ -22,6 +23,11 @@ from tapps_mcp.server_helpers import error_response, success_response
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
+    from tapps_mcp.config.settings import TappsMCPSettings
+    from tapps_mcp.scoring.scorer import CodeScorer
+
+_logger = structlog.get_logger(__name__)
 
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
 _VALIDATE_CONCURRENCY = 10
@@ -50,19 +56,20 @@ _PROGRESS_HEARTBEAT_INTERVAL = 5  # seconds between progress notifications
 # Marker file for stop hook: if present and recent, hook skips "run validate" reminder.
 _VALIDATE_OK_MARKER = ".tapps-mcp/sessions/last_validate_ok"
 
+# Severity ranking for impact analysis aggregation.
+_SEVERITY_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
+
 
 def _write_validate_ok_marker(project_root: Path) -> None:
-    """Write a marker so the Cursor stop hook can skip the reminder when validation just passed."""
-    try:
+    """Write a marker so the Cursor stop hook can skip the reminder."""
+    with contextlib.suppress(OSError):
         marker = project_root / _VALIDATE_OK_MARKER
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(str(time.time()), encoding="utf-8")
-    except OSError:
-        pass
 
 
 async def _validate_progress_heartbeat(
-    ctx: Any,
+    ctx: object,
     total_files: int,
     start_ns: int,
     stop_event: asyncio.Event,
@@ -74,21 +81,175 @@ async def _validate_progress_heartbeat(
     if not callable(report):
         return
     while True:
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop_event.wait(), timeout=_PROGRESS_HEARTBEAT_INTERVAL)
-        except asyncio.TimeoutError:
-            pass
         if stop_event.is_set():
             return
         elapsed_sec = (time.perf_counter_ns() - start_ns) / 1_000_000_000.0
-        try:
+        with contextlib.suppress(Exception):
             await report(
                 progress=elapsed_sec,
                 total=None,
                 message=f"Validating {total_files} files... (in progress)",
             )
-        except Exception:
-            pass
+
+
+def _discover_changed_files(
+    file_paths: str,
+    base_ref: str,
+    project_root: Path,
+) -> list[Path]:
+    """Resolve the list of Python files to validate.
+
+    When *file_paths* is non-empty, parse the comma-separated list and
+    validate each path.  Otherwise, auto-detect changed ``.py`` files
+    via ``git diff``.
+    """
+    from tapps_mcp.server import _validate_file_path
+    from tapps_mcp.tools.batch_validator import detect_changed_python_files
+
+    paths: list[Path] = []
+    if file_paths.strip():
+        for raw_fp in file_paths.split(","):
+            cleaned_fp = raw_fp.strip()
+            if not cleaned_fp or not cleaned_fp.endswith(".py"):
+                continue
+            with contextlib.suppress(ValueError, FileNotFoundError):
+                paths.append(_validate_file_path(cleaned_fp))
+    else:
+        paths = detect_changed_python_files(project_root, base_ref)
+    return paths
+
+
+async def _validate_single_file(
+    path: Path,
+    scorer: CodeScorer,
+    preset: str,
+    quick: bool,
+    do_security_full: bool,
+    sem: asyncio.Semaphore,
+) -> dict[str, Any]:
+    """Score and optionally security-scan a single file under concurrency limit."""
+    from tapps_mcp.gates.evaluator import evaluate_gate
+
+    async with sem:
+        file_result: dict[str, Any] = {"file_path": str(path)}
+        try:
+            if quick:
+                score = await asyncio.to_thread(scorer.score_file_quick, path)
+            else:
+                score = await scorer.score_file(path)
+            file_result["overall_score"] = round(score.overall_score, 2)
+
+            gate = evaluate_gate(score, preset=preset)
+            file_result["gate_passed"] = gate.passed
+            if gate.failures:
+                file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
+
+            if do_security_full:
+                from tapps_mcp.security.secret_scanner import SecretScanner
+
+                secret_result = SecretScanner().scan_file(str(path))
+                bandit_count = len(score.security_issues)
+                secret_count = secret_result.total_findings
+                bandit_crit_high = sum(
+                    1 for i in score.security_issues if i.severity in ("critical", "high")
+                )
+                file_result["security_passed"] = (
+                    bandit_crit_high + secret_result.high_severity
+                ) == 0
+                file_result["security_issues"] = bandit_count + secret_count
+            elif quick:
+                file_result["security_passed"] = True
+                file_result["security_issues"] = 0
+        except Exception as exc:
+            file_result["errors"] = [str(exc)]
+        return file_result
+
+
+def _compute_impact_analysis(
+    paths: list[Path],
+    project_root: Path,
+) -> dict[str, Any] | None:
+    """Build impact analysis data for the given file paths.
+
+    Returns a summary dict or ``None`` if impact analysis is not requested.
+    On failure, returns ``{"error": "impact analysis failed"}``.
+    """
+    try:
+        from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
+
+        import_graph = build_import_graph(project_root)
+
+        impact_results: list[dict[str, Any]] = []
+        for p in paths:
+            try:
+                impact_report = analyze_impact(p, project_root, graph=import_graph)
+                impact_results.append({
+                    "file": str(p),
+                    "severity": impact_report.severity,
+                    "direct_dependents": len(impact_report.direct_dependents),
+                    "transitive_dependents": len(impact_report.transitive_dependents),
+                    "test_files": len(impact_report.test_files),
+                })
+            except Exception:
+                impact_results.append({"file": str(p), "severity": "unknown", "error": True})
+
+        max_severity = "low"
+        for ir in impact_results:
+            s = ir.get("severity", "low")
+            if _SEVERITY_RANK.get(s, 0) > _SEVERITY_RANK.get(max_severity, 0):
+                max_severity = s
+
+        total_affected = sum(
+            ir.get("direct_dependents", 0) + ir.get("transitive_dependents", 0)
+            for ir in impact_results
+        )
+        return {
+            "max_severity": max_severity,
+            "total_affected_files": total_affected,
+            "per_file": impact_results,
+        }
+    except Exception:
+        return {"error": "impact analysis failed"}
+
+
+def _build_structured_validation_output(
+    results: list[dict[str, Any]],
+    all_passed: bool,
+    security_depth: str,
+    impact_data: dict[str, Any] | None,
+    resp: dict[str, Any],
+) -> None:
+    """Attach structured content to the response dict (best-effort)."""
+    try:
+        from tapps_mcp.common.output_schemas import (
+            FileValidationResult,
+            ValidateChangedOutput,
+        )
+
+        file_results = [
+            FileValidationResult(
+                file_path=r.get("file_path", ""),
+                score=r.get("overall_score", 0.0),
+                gate_passed=r.get("gate_passed", False),
+                security_passed=r.get("security_passed", True),
+            )
+            for r in results
+        ]
+        failed_count = sum(1 for r in results if not r.get("gate_passed", False))
+        structured = ValidateChangedOutput(
+            files=file_results,
+            overall_passed=all_passed,
+            total_files=len(results),
+            passed_count=len(results) - failed_count,
+            failed_count=failed_count,
+            security_depth=security_depth,
+            impact_summary=impact_data,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        _logger.debug("structured_output_failed: tapps_validate_changed", exc_info=True)
 
 
 async def tapps_validate_changed(
@@ -123,57 +284,18 @@ async def tapps_validate_changed(
         include_impact: Whether to run impact analysis on changed files (default: True).
         ctx: Optional MCP context (injected by host); used for progress notifications.
     """
-    from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
     from tapps_mcp.server_helpers import _get_scorer, ensure_session_initialized
+    from tapps_mcp.tools.batch_validator import MAX_BATCH_FILES, format_batch_summary
 
     start = time.perf_counter_ns()
     _record_call("tapps_validate_changed")
 
-    # Fast path: resolve changed files first. Session init and scorer are only
-    # used when there are files to validate (see ensure_session_initialized below).
-    from tapps_mcp.tools.batch_validator import (
-        MAX_BATCH_FILES,
-        detect_changed_python_files,
-        format_batch_summary,
-    )
-
     settings = load_settings()
-
-    paths: list[Path] = []
-    if file_paths.strip():
-        for raw_fp in file_paths.split(","):
-            cleaned_fp = raw_fp.strip()
-            if not cleaned_fp or not cleaned_fp.endswith(".py"):
-                continue
-            with contextlib.suppress(ValueError, FileNotFoundError):
-                paths.append(_validate_file_path(cleaned_fp))
-    else:
-        paths = detect_changed_python_files(settings.project_root, base_ref)
+    paths = _discover_changed_files(file_paths, base_ref, settings.project_root)
 
     if not paths:
-        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-        # Defer metrics recording so we return immediately and avoid client timeout/abort.
-        # Metrics are recorded in a background task after the response is sent.
-        def _deferred_record() -> None:
-            _record_execution("tapps_validate_changed", start)
-
-        task = asyncio.create_task(asyncio.to_thread(_deferred_record))
-        _background_tasks.add(task)
-        task.add_done_callback(_background_tasks.discard)
-
-        _write_validate_ok_marker(settings.project_root)
-        resp = success_response(
-            "tapps_validate_changed",
-            elapsed_ms,
-            {
-                "files_validated": 0,
-                "all_gates_passed": True,
-                "total_security_issues": 0,
-                "results": [],
-                "summary": "No changed Python files found.",
-            },
-        )
-        return _with_nudges("tapps_validate_changed", resp)
+        return _handle_no_changed_files(start, settings, _record_execution, _with_nudges)
 
     capped = len(paths) > MAX_BATCH_FILES
     extra_count = len(paths) - MAX_BATCH_FILES if capped else 0
@@ -181,80 +303,21 @@ async def tapps_validate_changed(
     total_files = len(paths)
 
     stop_progress = asyncio.Event()
-    progress_task: asyncio.Task[None] | None = None
-    if ctx is not None and total_files > 0:
-        report = getattr(ctx, "report_progress", None)
-        if callable(report):
-            try:
-                await report(
-                    progress=0.0,
-                    total=None,
-                    message=f"Validating {total_files} files...",
-                )
-            except Exception:
-                pass
-        progress_task = asyncio.create_task(
-            _validate_progress_heartbeat(ctx, total_files, start, stop_progress),
-        )
+    progress_task = _start_progress_reporting(ctx, total_files, start, stop_progress)
 
     try:
         await ensure_session_initialized()
-
-        from tapps_mcp.gates.evaluator import evaluate_gate
-
-        # Warm dependency cache in background when empty (do not block validation).
-        if settings.dependency_scan_enabled and not quick:
-            from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
-
-            if not get_dependency_findings(str(settings.project_root)):
-                task = asyncio.create_task(_warm_dependency_cache(settings))
-                _background_tasks.add(task)
-                task.add_done_callback(_background_tasks.discard)
+        _maybe_warm_dependency_cache(settings, quick)
 
         scorer = _get_scorer()
         sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
         do_security_full = (security_depth == "full") or (include_security and not quick)
 
-        async def _validate_one(path: Path) -> dict[str, Any]:
-            async with sem:
-                file_result: dict[str, Any] = {"file_path": str(path)}
-                try:
-                    if quick:
-                        score = await asyncio.to_thread(scorer.score_file_quick, path)
-                    else:
-                        score = await scorer.score_file(path)
-                    file_result["overall_score"] = round(score.overall_score, 2)
-
-                    gate = evaluate_gate(score, preset=preset)
-                    file_result["gate_passed"] = gate.passed
-                    if gate.failures:
-                        file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
-
-                    if do_security_full:
-                        from tapps_mcp.security.secret_scanner import SecretScanner
-
-                        # Reuse bandit results from scoring; only run secret scanner
-                        secret_result = SecretScanner().scan_file(str(path))
-
-                        bandit_count = len(score.security_issues)
-                        secret_count = secret_result.total_findings
-
-                        bandit_crit_high = sum(
-                            1 for i in score.security_issues if i.severity in ("critical", "high")
-                        )
-                        file_result["security_passed"] = (
-                            bandit_crit_high + secret_result.high_severity
-                        ) == 0
-                        file_result["security_issues"] = bandit_count + secret_count
-                    elif quick:
-                        file_result["security_passed"] = True
-                        file_result["security_issues"] = 0
-                except Exception as exc:
-                    file_result["errors"] = [str(exc)]
-                return file_result
-
         raw_results = await asyncio.gather(
-            *[_validate_one(p) for p in paths],
+            *[
+                _validate_single_file(p, scorer, preset, quick, do_security_full, sem)
+                for p in paths
+            ],
             return_exceptions=True,
         )
     finally:
@@ -264,66 +327,24 @@ async def tapps_validate_changed(
             with contextlib.suppress(asyncio.CancelledError):
                 await progress_task
 
-    results: list[dict[str, Any]] = []
-    for i, raw in enumerate(raw_results):
-        if isinstance(raw, BaseException):
-            results.append({"file_path": str(paths[i]), "errors": [str(raw)]})
-        else:
-            results.append(raw)
-
+    results = _collect_results(raw_results, paths)
     all_passed = all(r.get("gate_passed", False) for r in results)
     total_sec = sum(r.get("security_issues", 0) for r in results)
 
-    # Impact analysis (on by default; build the import graph once and reuse)
-    impact_data: dict[str, Any] | None = None
-    if include_impact and paths:
-        try:
-            from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
-
-            import_graph = build_import_graph(settings.project_root)
-
-            impact_results: list[dict[str, Any]] = []
-            for p in paths:
-                try:
-                    report = analyze_impact(p, settings.project_root, graph=import_graph)
-                    impact_results.append({
-                        "file": str(p),
-                        "severity": report.severity,
-                        "direct_dependents": len(report.direct_dependents),
-                        "transitive_dependents": len(report.transitive_dependents),
-                        "test_files": len(report.test_files),
-                    })
-                except Exception:
-                    impact_results.append({"file": str(p), "severity": "unknown", "error": True})
-
-            max_severity = "low"
-            for ir in impact_results:
-                s = ir.get("severity", "low")
-                if s == "critical":
-                    max_severity = "critical"
-                    break
-                elif s == "high" and max_severity not in ("critical",):
-                    max_severity = "high"
-                elif s == "medium" and max_severity not in ("critical", "high"):
-                    max_severity = "medium"
-
-            total_affected = sum(
-                ir.get("direct_dependents", 0) + ir.get("transitive_dependents", 0)
-                for ir in impact_results
-            )
-            impact_data = {
-                "max_severity": max_severity,
-                "total_affected_files": total_affected,
-                "per_file": impact_results,
-            }
-        except Exception:
-            impact_data = {"error": "impact analysis failed"}
+    impact_data = (
+        _compute_impact_analysis(paths, settings.project_root)
+        if include_impact and paths
+        else None
+    )
 
     summary = format_batch_summary(results)
     if quick:
         summary = f"[Quick mode - ruff only] {summary}"
     if capped:
-        summary += f" ({extra_count} additional files not validated - cap {MAX_BATCH_FILES})"
+        summary += (
+            f" ({extra_count} additional files not validated"
+            f" - cap {MAX_BATCH_FILES})"
+        )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_changed", start, gate_passed=all_passed)
@@ -340,51 +361,109 @@ async def tapps_validate_changed(
     if impact_data is not None:
         resp_data["impact_summary"] = impact_data
 
-    resp = success_response(
-        "tapps_validate_changed",
-        elapsed_ms,
-        resp_data,
-    )
-
-    # Attach structured output
-    try:
-        from tapps_mcp.common.output_schemas import (
-            FileValidationResult,
-            ValidateChangedOutput,
-        )
-
-        file_results = [
-            FileValidationResult(
-                file_path=r.get("file_path", ""),
-                score=r.get("overall_score", 0.0),
-                gate_passed=r.get("gate_passed", False),
-                security_passed=r.get("security_passed", True),
-            )
-            for r in results
-        ]
-        failed_count = sum(1 for r in results if not r.get("gate_passed", False))
-        structured = ValidateChangedOutput(
-            files=file_results,
-            overall_passed=all_passed,
-            total_files=len(results),
-            passed_count=len(results) - failed_count,
-            failed_count=failed_count,
-            security_depth=security_depth,
-            impact_summary=impact_data,
-        )
-        resp["structuredContent"] = structured.to_structured_content()
-    except Exception:
-        import structlog
-
-        structlog.get_logger(__name__).debug(
-            "structured_output_failed: tapps_validate_changed", exc_info=True
-        )
-
+    resp = success_response("tapps_validate_changed", elapsed_ms, resp_data)
+    _build_structured_validation_output(results, all_passed, security_depth, impact_data, resp)
     return _with_nudges("tapps_validate_changed", resp)
 
 
+def _handle_no_changed_files(
+    start: int,
+    settings: TappsMCPSettings,
+    record_execution: Any,  # noqa: ANN401
+    with_nudges: Any,  # noqa: ANN401
+) -> dict[str, Any]:
+    """Return early response when no changed Python files are found."""
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    def _deferred_record() -> None:
+        record_execution("tapps_validate_changed", start)
+
+    task = asyncio.create_task(asyncio.to_thread(_deferred_record))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+    _write_validate_ok_marker(settings.project_root)
+    resp = success_response(
+        "tapps_validate_changed",
+        elapsed_ms,
+        {
+            "files_validated": 0,
+            "all_gates_passed": True,
+            "total_security_issues": 0,
+            "results": [],
+            "summary": "No changed Python files found.",
+        },
+    )
+    return with_nudges("tapps_validate_changed", resp)
+
+
+def _start_progress_reporting(
+    ctx: Context[Any, Any, Any] | None,
+    total_files: int,
+    start: int,
+    stop_event: asyncio.Event,
+) -> asyncio.Task[None] | None:
+    """Start the progress heartbeat task if context supports it."""
+    if ctx is None or total_files <= 0:
+        return None
+    report = getattr(ctx, "report_progress", None)
+    if callable(report):
+        with contextlib.suppress(Exception):
+            # Fire initial progress via background task (store ref to prevent GC)
+            init_task = asyncio.create_task(
+                _report_initial_progress(report, total_files)
+            )
+            _background_tasks.add(init_task)
+            init_task.add_done_callback(_background_tasks.discard)
+    return asyncio.create_task(
+        _validate_progress_heartbeat(ctx, total_files, start, stop_event),
+    )
+
+
+async def _report_initial_progress(
+    report: Any,  # noqa: ANN401
+    total_files: int,
+) -> None:
+    """Send the initial progress=0 notification."""
+    with contextlib.suppress(Exception):
+        await report(
+            progress=0.0,
+            total=None,
+            message=f"Validating {total_files} files...",
+        )
+
+
+def _maybe_warm_dependency_cache(
+    settings: TappsMCPSettings,
+    quick: bool,
+) -> None:
+    """Warm dependency cache in background when empty (does not block)."""
+    if not settings.dependency_scan_enabled or quick:
+        return
+    from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
+
+    if not get_dependency_findings(str(settings.project_root)):
+        task = asyncio.create_task(_warm_dependency_cache(settings))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+
+
+def _collect_results(
+    raw_results: list[dict[str, Any] | BaseException],
+    paths: list[Path],
+) -> list[dict[str, Any]]:
+    """Normalize gather results, converting exceptions to error dicts."""
+    results: list[dict[str, Any]] = []
+    for i, raw in enumerate(raw_results):
+        if isinstance(raw, BaseException):
+            results.append({"file_path": str(paths[i]), "errors": [str(raw)]})
+        else:
+            results.append(raw)  # type: ignore[arg-type]
+    return results
+
+
 async def _warm_dependency_cache(
-    settings: Any,
+    settings: TappsMCPSettings,
 ) -> None:
     """Best-effort background task to warm the dependency scan cache.
 
@@ -393,9 +472,6 @@ async def _warm_dependency_cache(
     penalties. Not called from :func:`tapps_session_start` (session start
     is kept lightweight). Failures are silently ignored.
     """
-    import structlog
-
-    logger = structlog.get_logger(__name__)
     try:
         from tapps_mcp.tools.dependency_scan_cache import set_dependency_findings
         from tapps_mcp.tools.pip_audit import run_pip_audit_async
@@ -409,12 +485,12 @@ async def _warm_dependency_cache(
         )
         if not result.error:
             set_dependency_findings(str(settings.project_root), result.findings)
-            logger.debug(
+            _logger.debug(
                 "dependency_cache_warmed",
                 findings=len(result.findings),
             )
     except Exception:
-        logger.debug("dependency_cache_warming_failed", exc_info=True)
+        _logger.debug("dependency_cache_warming_failed", exc_info=True)
 
 
 async def tapps_session_start(
@@ -452,20 +528,22 @@ async def tapps_session_start(
             mem_store = _get_memory_store()
             if mem_store is not None:
                 snapshot = mem_store.snapshot()
-                stale_count = 0
-                contradicted_count = 0
-                for entry in snapshot.entries:
-                    if entry.contradicted:
-                        contradicted_count += 1
+                contradicted_count = sum(
+                    1 for entry in snapshot.entries if entry.contradicted
+                )
                 memory_status = {
                     "enabled": True,
                     "total": snapshot.total_count,
-                    "stale": stale_count,
+                    "stale": 0,
                     "contradicted": contradicted_count,
                 }
     except Exception:
-        pass  # Memory status is best-effort
+        _logger.debug("memory_status_check_failed", exc_info=True)
 
+    _project_profile_hint = (
+        "Call tapps_project_profile when you need project context"
+        " (tech stack, type, CI/Docker/tests)."
+    )
     data: dict[str, Any] = {
         "server": info["data"]["server"],
         "configuration": info["data"]["configuration"],
@@ -476,7 +554,7 @@ async def tapps_session_start(
         "pipeline": info["data"]["pipeline"],
         "memory_status": memory_status,
         "project_profile": None,
-        "project_profile_hint": "Call tapps_project_profile when you need project context (tech stack, type, CI/Docker/tests).",
+        "project_profile_hint": _project_profile_hint,
     }
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
@@ -493,7 +571,9 @@ async def tapps_session_start(
             server_version=info["data"]["server"].get("version", ""),
             project_root=info["data"]["configuration"].get("project_root", ""),
             project_type=None,
-            quality_preset=info["data"]["configuration"].get("quality_preset", "standard"),
+            quality_preset=info["data"]["configuration"].get(
+                "quality_preset", "standard"
+            ),
             installed_checkers=[n for n in checker_names if n],
             has_ci=False,
             has_docker=False,
@@ -501,17 +581,15 @@ async def tapps_session_start(
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
-        import structlog as _structlog
-
-        _structlog.get_logger(__name__).debug(
-            "structured_output_failed: tapps_session_start", exc_info=True
-        )
+        _logger.debug("structured_output_failed: tapps_session_start", exc_info=True)
 
     from tapps_mcp.server_helpers import mark_session_initialized
 
     mark_session_initialized({
         "project_root": info["data"]["configuration"].get("project_root", ""),
-        "quality_preset": info["data"]["configuration"].get("quality_preset", "standard"),
+        "quality_preset": info["data"]["configuration"].get(
+            "quality_preset", "standard"
+        ),
         "auto_initialized": False,
         "project_profile": None,
     })
@@ -592,14 +670,14 @@ async def tapps_init(
             return success_response(
                 "tapps_init",
                 elapsed_ms,
-                {"cancelled": True, "message": "tapps_init cancelled — no files were written."},
+                {"cancelled": True, "message": "tapps_init cancelled - no files were written."},
             )
-        # confirmed is True or None (unsupported) — proceed normally
+        # confirmed is True or None (unsupported) - proceed normally
 
     from tapps_mcp.pipeline.init import bootstrap_pipeline
 
     settings = load_settings()
-    # Run in thread to avoid blocking the event loop — bootstrap_pipeline
+    # Run in thread to avoid blocking the event loop - bootstrap_pipeline
     # is sync and may run subprocesses, file I/O, and cache warming.
     result = await asyncio.to_thread(
         bootstrap_pipeline,
@@ -687,10 +765,10 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
         level: One of ``\"high\"`` (mandatory), ``\"medium\"`` (balanced),
             ``\"low\"`` (optional guidance).
     """
-    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
-    from tapps_mcp.security.path_validator import PathValidator
-
     import yaml
+
+    from tapps_mcp.security.path_validator import PathValidator
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
     start = time.perf_counter_ns()
     _record_call("tapps_set_engagement_level")
@@ -717,7 +795,9 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
                 data = yaml.safe_load(f) or {}
         except Exception as e:
             elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-            _record_execution("tapps_set_engagement_level", start, status="failed")
+            _record_execution(
+                "tapps_set_engagement_level", start, status="failed"
+            )
             return error_response(
                 "tapps_set_engagement_level",
                 elapsed_ms,
@@ -733,7 +813,9 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     except OSError as e:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-        _record_execution("tapps_set_engagement_level", start, status="failed")
+        _record_execution(
+            "tapps_set_engagement_level", start, status="failed"
+        )
         return error_response(
             "tapps_set_engagement_level",
             elapsed_ms,
@@ -747,10 +829,12 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
         "Run tapps_init with overwrite_agents_md=True (and platform if needed) "
         "to regenerate AGENTS.md and platform rules with the new level."
     )
-    msg = (
-        f"Engagement level set to {level!r}. {next_step}"
+    msg = f"Engagement level set to {level!r}. {next_step}"
+    resp = success_response(
+        "tapps_set_engagement_level",
+        elapsed_ms,
+        {"level": level, "message": msg},
     )
-    resp = success_response("tapps_set_engagement_level", elapsed_ms, {"level": level, "message": msg})
     return _with_nudges("tapps_set_engagement_level", resp)
 
 

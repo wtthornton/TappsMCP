@@ -1,9 +1,12 @@
 """Tests for the pipeline prompt loader."""
 
+from unittest.mock import patch
+
 import pytest
 
 from tapps_mcp.prompts.prompt_loader import (
     ENGAGEMENT_LEVELS,
+    _read_resource,
     list_stages,
     load_agents_template,
     load_handoff_template,
@@ -148,3 +151,47 @@ class TestLoadPlatformRules:
     def test_invalid_engagement_level_raises(self):
         with pytest.raises(ValueError, match="Invalid engagement_level"):
             load_platform_rules("claude", engagement_level="invalid")
+
+
+class TestFrozenExeFallback:
+    """Tests for PyInstaller frozen-exe resource loading."""
+
+    def test_frozen_fallback_reads_file(self):
+        """When sys.frozen is True, _read_resource uses Path(__file__)-based resolution."""
+        with patch("tapps_mcp.prompts.prompt_loader.sys") as mock_sys:
+            mock_sys.frozen = True
+            content = _read_resource("overview.md")
+            assert isinstance(content, str)
+            assert len(content) > 100
+
+    def test_non_frozen_uses_importlib(self):
+        """When sys.frozen is absent, _read_resource uses importlib.resources."""
+        with patch("tapps_mcp.prompts.prompt_loader.sys") as mock_sys:
+            mock_sys.frozen = False
+            content = _read_resource("overview.md")
+            assert isinstance(content, str)
+            assert len(content) > 100
+
+    def test_frozen_fallback_missing_file_raises(self):
+        """Frozen fallback raises FileNotFoundError for missing files."""
+        with patch("tapps_mcp.prompts.prompt_loader.sys") as mock_sys:
+            mock_sys.frozen = True
+            with pytest.raises(FileNotFoundError):
+                _read_resource("nonexistent_file.md")
+
+    @pytest.mark.parametrize("filename", [
+        "overview.md",
+        "discover.md",
+        "handoff_template.md",
+    ])
+    def test_frozen_and_importlib_return_same_content(self, filename):
+        """Both paths return identical content for the same file."""
+        with patch("tapps_mcp.prompts.prompt_loader.sys") as mock_sys:
+            mock_sys.frozen = True
+            frozen_content = _read_resource(filename)
+
+        with patch("tapps_mcp.prompts.prompt_loader.sys") as mock_sys:
+            mock_sys.frozen = False
+            importlib_content = _read_resource(filename)
+
+        assert frozen_content == importlib_content

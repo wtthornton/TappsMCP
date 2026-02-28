@@ -69,7 +69,7 @@ TappsMCP exposes **28 MCP tools** plus workflow prompts. All tools are **determi
 
 | Feature | Description |
 |--------|-------------|
-| **Documentation lookup** | Up-to-date library docs via [Context7](https://context7.com); multi-provider fallback, fuzzy matching, local cache. |
+| **Documentation lookup** | Up-to-date library docs via Context7 (when `TAPPS_MCP_CONTEXT7_API_KEY` is set) and LlmsTxt (always, as fallback). Fuzzy matching, local cache. |
 | **Domain experts** | 17 built-in experts (security, testing, APIs, GitHub, etc.) with RAG-backed answers and confidence scores. |
 | **Project context** | Detect project type, tech stack, structure for context-aware analysis. |
 | **Shared memory** | Persistent, project-scoped memory with time-based decay, contradiction detection, ranked retrieval, and expert injection. Memories survive across sessions in SQLite (WAL + FTS5). Three tiers (architectural/pattern/context) with configurable half-lives. Auto-seeds from project profile. |
@@ -368,10 +368,10 @@ Quick index:
 | **tapps_security_scan** | Run Bandit + secret detection on a Python file. |
 | **tapps_quality_gate** | Pass/fail a file against a quality preset (standard/strict/framework). |
 | **tapps_validate_changed** | Score + gate + security scan all changed files (auto-detects via git diff). |
-| **tapps_lookup_docs** | Fetch current documentation for a library (Context7 + cache). |
+| **tapps_lookup_docs** | Fetch current documentation for a library (Context7 when key set, LlmsTxt fallback; cache). |
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, or infra configs. |
 | **tapps_consult_expert** | Ask a domain expert and get RAG-backed answer with confidence. |
-| **tapps_research** | Combined expert + docs lookup in one call (auto-supplements with Context7). |
+| **tapps_research** | Combined expert + docs lookup in one call (Context7 when key set, LlmsTxt fallback). |
 | **tapps_list_experts** | List the 17 built-in expert domains and their status. |
 | **tapps_checklist** | See which tools were called this session and what is still missing. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure for context-aware analysis. |
@@ -451,7 +451,7 @@ Quick index:
 
 ### tapps_lookup_docs
 
-**What it does:** Fetches current documentation for a given library (e.g. FastAPI, React, SQLAlchemy). Resolves the library name via fuzzy matching, checks a local cache first, and on cache miss can call the Context7 API (when `TAPPS_MCP_CONTEXT7_API_KEY` is set). Accepts an optional **topic** (e.g. "routing", "hooks") and **mode** ("code" for API-style docs, "info" for conceptual). All returned content is checked for prompt-injection patterns before being returned. Response includes source (cache vs API), cache hit flag, and optional token estimate.
+**What it does:** Fetches current documentation for a given library (e.g. FastAPI, React, SQLAlchemy). Uses Context7 when `TAPPS_MCP_CONTEXT7_API_KEY` is set; otherwise falls back to LlmsTxt (always available). Resolves the library name via fuzzy matching, checks a local cache first, and on cache miss fetches from the active provider. Accepts an optional **topic** (e.g. "routing", "hooks") and **mode** ("code" for API-style docs, "info" for conceptual). All returned content is checked for prompt-injection patterns before being returned. Response includes source (cache vs API), cache hit flag, and optional token estimate.
 
 **Why use it:** LLMs often hallucinate library APIs or use outdated signatures. Looking up real docs right before writing or fixing code reduces wrong method names, wrong parameters, and deprecated usage. Use it before implementing or refactoring code that depends on an external library. Cache keeps repeated lookups fast and allows offline use when the API key is not set.
 
@@ -475,7 +475,7 @@ Quick index:
 
 ### tapps_research
 
-**What it does:** Combined expert consultation + documentation lookup in one call. Consults the domain expert first, then always supplements with Context7 documentation. Accepts optional `library` and `topic` parameters (auto-inferred when empty). The `file_context` parameter accepts a path to the file being edited, allowing the tool to infer the relevant library from imports. Returns expert answer, confidence, sources, and supplementary docs content.
+**What it does:** Combined expert consultation + documentation lookup in one call. Consults the domain expert first, then supplements with docs from Context7 (when key set) or LlmsTxt (fallback). Accepts optional `library` and `topic` parameters (auto-inferred when empty). The `file_context` parameter accepts a path to the file being edited, allowing the tool to infer the relevant library from imports. Returns expert answer, confidence, sources, and supplementary docs content.
 
 **Why use it:** Saves a round-trip compared to calling `tapps_consult_expert` and `tapps_lookup_docs` separately. Use when you need both expert guidance and current library documentation for a domain-specific question. Docs are always fetched to provide the most complete answer. Pass `file_context` when editing a specific file so the tool can auto-detect which library to look up from imports.
 

@@ -15,7 +15,7 @@ TappsMCP is an MCP server that provides a comprehensive quality toolset for your
 - **Dead code detection** (Vulture-based unused function/class/import/variable detection with confidence scoring)
 - **Dependency vulnerability scanning** (pip-audit for known CVEs in third-party packages)
 - **Circular dependency detection** (import graph analysis, cycle detection, coupling metrics)
-- **Documentation lookup** (up-to-date library docs via Context7 with multi-provider fallback and cache)
+- **Documentation lookup** (up-to-date library docs via Context7 when key set, LlmsTxt fallback, cache)
 - **Config validation** (Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB best practices)
 - **Domain experts** (17 built-in experts with RAG-backed answers, optional vector search)
 - **Project context** (project type detection, tech stack, impact analysis)
@@ -48,7 +48,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_lookup_docs** | **Before writing code** that uses an external library - use the returned docs to avoid hallucinated APIs. |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
 | **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file -> `domain="testing-strategies"`). |
-| **tapps_research** | When you need **combined expert + docs** in one call - consults the domain expert, then always supplements with Context7 documentation. Pass `file_context` with the path to the file being edited to auto-infer library from imports. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
+| **tapps_research** | When you need **combined expert + docs** in one call - consults the domain expert, then supplements with Context7 (when key set) or LlmsTxt documentation. Pass `file_context` with the path to the file being edited to auto-infer library from imports. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
 | **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
 | **tapps_project_profile** | When you need **project context** - detects project type, tech stack, CI/Docker/tests, and recommendations. Session start does not include profile; call this on demand. |
 | **tapps_memory** | **At session start** - search or list past decisions with `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")`. **Before session end** - save learnings with `tapps_memory(action="save", key="...", value="...", tier="...", tags=[...])`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |

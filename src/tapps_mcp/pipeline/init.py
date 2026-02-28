@@ -502,6 +502,34 @@ def _run_server_verification(
     return result
 
 
+def _render_list_section(
+    heading: str, items: list[str] | None, fallback: str = "(none detected)"
+) -> list[str]:
+    """Render a markdown section with a heading and bullet list."""
+    lines = ["", f"## {heading}"]
+    for item in items or [fallback]:
+        lines.append(f"- {item}")
+    return lines
+
+
+def _render_infrastructure_section(profile: ProjectProfile) -> list[str]:
+    """Render the Infrastructure section of TECH_STACK.md."""
+    ci_str = "Yes (" + ", ".join(profile.ci_systems) + ")" if profile.has_ci else "No"
+    tests_str = (
+        "Yes (" + ", ".join(profile.test_frameworks) + ")" if profile.has_tests else "No"
+    )
+    docker_str = "Yes" if profile.has_docker else "No"
+    pkg_str = ", ".join(profile.package_managers) or "N/A"
+    return [
+        "",
+        "## Infrastructure",
+        f"- **CI:** {ci_str}",
+        f"- **Docker:** {docker_str}",
+        f"- **Tests:** {tests_str}",
+        f"- **Package managers:** {pkg_str}",
+    ]
+
+
 def _render_tech_stack_md(profile: ProjectProfile) -> str:
     """Render TECH_STACK.md content from project profile."""
     ts = profile.tech_stack
@@ -512,39 +540,18 @@ def _render_tech_stack_md(profile: ProjectProfile) -> str:
         f"- **Type:** {profile.project_type or 'unknown'}",
         f"- **Confidence:** {profile.project_type_confidence:.2f}",
         f"- **Reason:** {profile.project_type_reason or 'N/A'}",
-        "",
-        "## Languages",
     ]
-    for lang in ts.languages or ["(none detected)"]:
-        lines.append(f"- {lang}")
-    lines.extend(["", "## Frameworks"])
-    for fw in ts.frameworks or ["(none detected)"]:
-        lines.append(f"- {fw}")
-    lines.extend(["", "## Libraries"])
-    for lib in ts.libraries or ["(none detected)"]:
-        lines.append(f"- {lib}")
-    lines.extend(["", "## Domains"])
-    for d in ts.domains or ["(none detected)"]:
-        lines.append(f"- {d}")
+    lines.extend(_render_list_section("Languages", ts.languages))
+    lines.extend(_render_list_section("Frameworks", ts.frameworks))
+    lines.extend(_render_list_section("Libraries", ts.libraries))
+    lines.extend(_render_list_section("Domains", ts.domains))
+    # Context7 priority renders no fallback text when empty
     lines.extend(["", "## Context7 Priority (for doc lookups)"])
     for p in ts.context7_priority or []:
         lines.append(f"- {p}")
-    ci_str = "Yes (" + ", ".join(profile.ci_systems) + ")" if profile.has_ci else "No"
-    tests_str = "Yes (" + ", ".join(profile.test_frameworks) + ")" if profile.has_tests else "No"
-    lines.extend(
-        [
-            "",
-            "## Infrastructure",
-            f"- **CI:** {ci_str}",
-            f"- **Docker:** {'Yes' if profile.has_docker else 'No'}",
-            f"- **Tests:** {tests_str}",
-            f"- **Package managers:** {', '.join(profile.package_managers) or 'N/A'}",
-            "",
-            "## Recommendations",
-        ]
-    )
-    for rec in profile.quality_recommendations or ["(none)"]:
-        lines.append(f"- {rec}")
+    lines.extend(_render_infrastructure_section(profile))
+    lines.extend(_render_list_section("Recommendations",
+                                      profile.quality_recommendations, fallback="(none)"))
     lines.append("")
     return "\n".join(lines)
 

@@ -75,7 +75,8 @@ TOOL_REASONS: dict[str, str] = {
         "Analyze import graph for circular dependencies and coupling. Use before major refactoring."
     ),
     "tapps_set_engagement_level": (
-        "When the user requests to change enforcement intensity (e.g. \"set tappsmcp to high\" or \"make checks optional\")."
+        "When the user requests to change enforcement intensity"
+        " (e.g. 'set tappsmcp to high' or 'make checks optional')."
     ),
 }
 
@@ -135,7 +136,10 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
         "optional": [],
     },
     "review": {
-        "required": ["tapps_score_file", "tapps_security_scan", "tapps_quality_gate", "tapps_checklist"],
+        "required": [
+            "tapps_score_file", "tapps_security_scan",
+            "tapps_quality_gate", "tapps_checklist",
+        ],
         "recommended": ["tapps_dead_code", "tapps_validate_changed"],
         "optional": ["tapps_dependency_scan", "tapps_dependency_graph"],
     },

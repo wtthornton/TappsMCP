@@ -19,13 +19,13 @@ if (-not (Test-Path $VenvPython)) {
     Write-Host "Using existing $VenvPyinstaller; ensure project is installed (pip install -e .)."
 }
 
-$EntryScript = "scripts\run_tapps_mcp.py"
-if (-not (Test-Path $EntryScript)) {
-    Write-Error "Entry script not found: $EntryScript"
+$SpecFile = "tapps_mcp.spec"
+if (-not (Test-Path $SpecFile)) {
+    Write-Error "Spec file not found: $SpecFile"
 }
 
-Write-Host "Running PyInstaller (one-file, console)..."
-& $VenvPython -m PyInstaller --onefile -n tapps-mcp --console $EntryScript
+Write-Host "Running PyInstaller with spec file ($SpecFile)..."
+& $VenvPython -m PyInstaller $SpecFile --clean
 
 $Exe = "dist\tapps-mcp.exe"
 if (Test-Path $Exe) {

@@ -1,6 +1,8 @@
 # Epic 16: Documentation Backend Resilience (Multi-Provider)
 
 **Status:** Complete — Deepcon, Context7, Docfork, LlmsTxt providers; per-provider circuit breaker; provider metrics; cache provider_source
+
+> **Epic 29:** Simplified to 2 providers (Context7 + LlmsTxt). Deepcon and Docfork removed.
 **Priority:** P0 — Critical (Context7 free tier slashed 92% in Jan 2026; single-provider dependency)
 **Estimated LOE:** ~2-3 weeks (1 developer)
 **Dependencies:** Epic 2 (Knowledge & Docs)

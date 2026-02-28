@@ -2,5 +2,5 @@
 # Injects TappsMCP awareness into spawned subagents.
 $null = $input | Out-Null
 Write-Output "[TappsMCP] This project uses TappsMCP for code quality."
-Write-Output "Available MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed."
+Write-Output "Available MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed, tapps_memory."
 exit 0

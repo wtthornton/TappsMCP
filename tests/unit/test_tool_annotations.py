@@ -83,7 +83,7 @@ class TestToolAnnotationsPresent:
 
     def test_all_26_tools_registered(self) -> None:
         tools = mcp._tool_manager._tools
-        assert len(tools) == 27, f"Expected 27 tools, got {len(tools)}: {sorted(tools)}"
+        assert len(tools) == 28, f"Expected 28 tools, got {len(tools)}: {sorted(tools)}"
 
     def test_all_tools_have_annotations(self) -> None:
         tools = mcp._tool_manager._tools
@@ -145,7 +145,7 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and not tool.annotations.readOnlyHint
         ]
-        assert len(side_effect) == 5, f"Expected 5 side-effect tools, got {len(side_effect)}"
+        assert len(side_effect) == 6, f"Expected 6 side-effect tools, got {len(side_effect)}"
 
     def test_open_world_count(self) -> None:
         tools = mcp._tool_manager._tools

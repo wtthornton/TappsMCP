@@ -128,7 +128,7 @@ class TestDependencyScanTool:
         """When dependency_scan_enabled=False, tool returns without running."""
         from tapps_mcp.server import tapps_dependency_scan
 
-        with patch("tapps_mcp.server.load_settings") as mock_load:
+        with patch("tapps_mcp.server_analysis_tools.load_settings") as mock_load:
             settings = mock_load.return_value
             settings.dependency_scan_enabled = False
 
@@ -147,7 +147,7 @@ class TestDependencyScanTool:
 
         with (
             patch("tapps_mcp.tools.pip_audit.run_pip_audit_async", mock_audit),
-            patch("tapps_mcp.server.load_settings") as mock_load,
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_load,
         ):
             settings = mock_load.return_value
             settings.dependency_scan_enabled = True

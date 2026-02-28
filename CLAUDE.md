@@ -97,7 +97,7 @@ All file I/O goes through `security/path_validator.py`, which sandboxes operatio
 
 ### Memory subsystem
 
-`memory/` provides persistent cross-session knowledge sharing via `tapps_memory`. `memory/models.py` defines `MemoryEntry`, tier/source/scope enums, and validators. `memory/persistence.py` provides SQLite storage with WAL mode, FTS5 full-text search, schema versioning, and JSONL audit log. `memory/store.py` is the in-memory cache with write-through to SQLite, RAG safety on writes, and max-500-entry eviction. `server_memory_tools.py` exposes the `tapps_memory` MCP tool. Storage lives at `{project_root}/.tapps-mcp/memory/`.
+`memory/` provides persistent cross-session knowledge sharing via `tapps_memory`. Core: `memory/models.py` (MemoryEntry, enums, validators), `memory/persistence.py` (SQLite with WAL, FTS5, schema versioning, JSONL audit), `memory/store.py` (in-memory cache, write-through, RAG safety, eviction). Intelligence (Epic 24): `memory/decay.py` (time-based confidence decay), `memory/reinforcement.py` (access-based boosting), `memory/contradictions.py` (conflict detection), `memory/gc.py` (garbage collection). Retrieval (Epic 25): `memory/retrieval.py` (ranked retrieval), `memory/injection.py` (context injection), `memory/seeding.py` (initial population), `memory/io.py` (import/export). `server_memory_tools.py` exposes the `tapps_memory` MCP tool. Storage lives at `{project_root}/.tapps-mcp/memory/`.
 
 ### Platform generation
 

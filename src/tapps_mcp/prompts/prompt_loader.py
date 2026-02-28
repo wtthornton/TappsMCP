@@ -7,6 +7,8 @@ editable installs, wheel installs, and zip imports.
 from __future__ import annotations
 
 import importlib.resources
+import sys
+from pathlib import Path
 
 _STAGES = ("discover", "research", "develop", "validate", "verify")
 
@@ -21,7 +23,14 @@ def list_stages() -> list[str]:
 
 
 def _read_resource(filename: str) -> str:
-    """Read a text resource from the prompts package."""
+    """Read a text resource from the prompts package.
+
+    Falls back to ``Path(__file__)``-based resolution when running inside
+    a PyInstaller frozen executable where ``importlib.resources`` cannot
+    locate package data files.
+    """
+    if getattr(sys, "frozen", False):
+        return (Path(__file__).parent / filename).read_text(encoding="utf-8")
     ref = importlib.resources.files(_PACKAGE).joinpath(filename)
     return ref.read_text(encoding="utf-8")
 

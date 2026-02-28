@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (Epic 29: Doc Provider Simplification)
+
+- **Epic 29**: Removed `deepcon_api_key` and `docfork_api_key`. Doc lookup now uses Context7 + LlmsTxt only. Users with those keys set will have them ignored (no runtime error).
+
 ### Added (P0-P4 Tool Tier Promotions)
 
 - `tapps_dead_code`: `scope` parameter supporting `"file"`, `"project"`, and `"changed"` modes for cross-file dead code analysis (P3)

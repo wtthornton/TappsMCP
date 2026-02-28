@@ -8,7 +8,7 @@ This document describes how the **Context7 documentation cache** and **Expert RA
 
 ### Purpose
 
-`tapps_lookup_docs` fetches library documentation (e.g. FastAPI, React, SQLAlchemy) from the Context7 API. To reduce latency and API usage, responses are cached locally on disk.
+`tapps_lookup_docs` fetches library documentation (e.g. FastAPI, React, SQLAlchemy) using **Context7** (when `TAPPS_MCP_CONTEXT7_API_KEY` is set) or **LlmsTxt** (always available as fallback). To reduce latency and API usage, Context7 responses are cached locally on disk.
 
 ### Cache Location
 

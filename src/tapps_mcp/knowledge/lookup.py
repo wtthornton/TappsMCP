@@ -3,7 +3,7 @@
 Lookup flow:
   1. Cache check (exact match)
   2. Fuzzy match against cached libraries
-  3. Provider chain (Context7, llms.txt) — multi-backend with automatic fallback
+  3. Provider chain (Context7 if key, LlmsTxt always) — multi-backend with automatic fallback
   4. RAG safety check on retrieved content
   5. Cache store
   6. Stale fallback if API fails
@@ -46,24 +46,16 @@ def _build_provider_registry(
     *,
     settings: "TappsMCPSettings | None" = None,
 ) -> "ProviderRegistry":
-    """Build provider registry: Deepcon (if key), Context7 (if key), Docfork (if key), LlmsTxt (always)."""
+    """Build provider registry: Context7 (if key), LlmsTxt (always)."""
     from tapps_mcp.knowledge.providers.context7_provider import Context7Provider
-    from tapps_mcp.knowledge.providers.deepcon_provider import DeepconProvider
-    from tapps_mcp.knowledge.providers.docfork_provider import DocforkProvider
     from tapps_mcp.knowledge.providers.llms_txt_provider import LlmsTxtProvider
     from tapps_mcp.knowledge.providers.registry import ProviderRegistry
 
     registry: ProviderRegistry = ProviderRegistry()
-    deepcon_key = settings.deepcon_api_key if settings else None
     context7_key = settings.context7_api_key if settings else api_key
-    docfork_key = settings.docfork_api_key if settings else None
 
-    if deepcon_key is not None:
-        registry.register(DeepconProvider(api_key=deepcon_key))
     if context7_key is not None:
         registry.register(Context7Provider(api_key=context7_key))
-    if docfork_key is not None:
-        registry.register(DocforkProvider(api_key=docfork_key))
     registry.register(LlmsTxtProvider())
     return registry
 
