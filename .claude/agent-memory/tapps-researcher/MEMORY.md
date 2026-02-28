@@ -34,7 +34,7 @@ tapps_init --force  # Update AGENTS.md from 0.4.5 to 0.5.0
 
 ### Gaps (Non-Blocking)
 - server_*_tools.py modules tested via composites but lack isolation tests
-- Knowledge provider tests missing for deepcon/docfork
+- (Epic 29: Deepcon/Docfork providers removed; Context7 + LlmsTxt only)
 - 7 timing-dependent tests (mostly acceptable for async/circuit breaker)
 - 2 test files using time.sleep() could use mock patches
 

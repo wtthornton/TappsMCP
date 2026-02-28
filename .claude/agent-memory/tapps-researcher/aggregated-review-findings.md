@@ -44,10 +44,10 @@ No critical quality issues identified.
    - **Time estimate**: 2-3 hours
    - **Impact**: Better test isolation, faster feedback on tool changes
 
-2. **Under-tested Knowledge Providers** (Severity: MEDIUM)
-   - `knowledge/providers/deepcon_provider.py` - No dedicated tests
-   - `knowledge/providers/docfork_provider.py` - No dedicated tests
-   - **Recommendation**: Add provider isolation tests
+2. **Under-tested Knowledge Providers** (Severity: MEDIUM) — *Epic 29: Deepcon and Docfork providers removed; Context7 + LlmsTxt only.*
+   - `knowledge/providers/context7_provider.py` - covered via lookup tests
+   - `knowledge/providers/llms_txt_provider.py` - dedicated tests exist
+   - **Recommendation**: Provider isolation tests for context7, llms_txt if needed
    - **Time estimate**: 1-2 hours
    - **Impact**: Provider reliability assurance
 
@@ -187,8 +187,8 @@ Stories:
 **Goal**: Add dedicated tests for provider implementations
 
 Stories:
-- S1.2.1: Add tests for deepcon_provider.py
-- S1.2.2: Add tests for docfork_provider.py
+- S1.2.1: ~~Add tests for deepcon_provider.py~~ (Epic 29: removed)
+- S1.2.2: ~~Add tests for docfork_provider.py~~ (Epic 29: removed)
 - S1.2.3: Improve provider_orchestration test coverage
 
 ### Epic P1.3: Documentation Structure Improvements (1 hr)

@@ -268,7 +268,6 @@ should verify no untrusted input reaches subprocess calls.
 - `common/elicitation.py`, `common/utils.py`
 - `experts/hot_rank.py`, `experts/rag_warming.py`, `experts/retrieval_eval.py`
 - `knowledge/content_normalizer.py`
-- `knowledge/providers/deepcon_provider.py`, `knowledge/providers/docfork_provider.py`
 - `tools/dependency_scan_cache.py`
 - `project/vulnerability_impact.py`
 - `memory/decay.py`, `memory/reinforcement.py`, `memory/contradictions.py`,

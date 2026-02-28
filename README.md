@@ -813,7 +813,7 @@ src/tapps_mcp/
 ├── gates/                              # Gate presets, evaluator
 ├── tools/                              # Ruff, mypy, bandit, radon, vulture, pip-audit, parallel, checklist
 ├── knowledge/                          # Context7 client, cache, lookup, warming, RAG safety,
-│                                       #   multi-provider support (providers/)
+│                                       #   Context7 + LlmsTxt providers (providers/)
 ├── validators/                         # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
 ├── experts/                            # Domain detector, engine, RAG, registry, confidence,
 │                                       #   vector RAG, knowledge management, 139 knowledge files

@@ -11,7 +11,7 @@ class DocumentationProvider(Protocol):
     """Protocol that all documentation backends must implement."""
 
     def name(self) -> str:
-        """Provider name (e.g., 'context7', 'deepcon', 'docfork')."""
+        """Provider name (e.g., 'context7', 'llms_txt')."""
         ...
 
     def is_available(self) -> bool:

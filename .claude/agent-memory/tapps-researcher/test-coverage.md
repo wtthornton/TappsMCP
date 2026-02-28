@@ -47,8 +47,7 @@
 9. **knowledge/providers/*.py** - test_provider_orchestration.py + test_providers.py (limited detail)
    - context7_provider.py - limited tests
    - llms_txt_provider.py - limited tests
-   - deepcon_provider.py - unknown
-   - docfork_provider.py - unknown
+   - (Epic 29: deepcon_provider and docfork_provider removed; Context7 + LlmsTxt only)
 10. **knowledge/lookup.py** - test_lookup.py (basic coverage, mostly mocked)
 
 ### Untested or Minimal Modules (CRITICAL GAPS)
@@ -101,7 +100,7 @@
 
 ### Weaknesses
 1. **Knowledge module coverage**: Scattered across multiple files, some light
-2. **Provider implementation tests**: Limited coverage for deepcon_provider, docfork_provider
+2. **Provider implementation tests**: Context7 and LlmsTxt have coverage (Epic 29: Deepcon, Docfork removed)
 3. **Server tool isolation**: Tools tested through composite/integration tests but not in isolation
 4. **Circuit breaker edge cases**: Could use more failure scenario testing
 5. **Mock cleanup**: Some tests could benefit from explicit mock.reset_mock() calls
@@ -111,7 +110,7 @@
 ### Immediate (High Priority)
 1. **Add dedicated test_server_scoring_tools.py** - test each tool in isolation
 2. **Add dedicated test_server_metrics_tools.py** - test metrics tools individually
-3. **Improve knowledge/providers tests** - Add dedicated tests for deepcon_provider, docfork_provider
+3. **Improve knowledge/providers tests** - Context7, LlmsTxt covered; Epic 29 removed Deepcon, Docfork
 4. **Review knowledge/circuit_breaker.py** - Add more failure scenarios
 
 ### Medium Priority
@@ -139,5 +138,3 @@
 - src/tapps_mcp/server_scoring_tools.py
 - src/tapps_mcp/server_metrics_tools.py
 - src/tapps_mcp/server_pipeline_tools.py
-- src/tapps_mcp/knowledge/providers/deepcon_provider.py
-- src/tapps_mcp/knowledge/providers/docfork_provider.py

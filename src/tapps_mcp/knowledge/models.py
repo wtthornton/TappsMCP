@@ -14,7 +14,7 @@ class CacheEntry(BaseModel):
     context7_id: str | None = Field(default=None, description="Context7 library ID.")
     provider_source: str | None = Field(
         default=None,
-        description="Provider that populated the cache (e.g. context7, deepcon).",
+        description="Provider that populated the cache (e.g. context7, llms_txt).",
     )
     snippet_count: int = Field(default=0, description="Number of code snippets.")
     token_count: int = Field(default=0, description="Estimated token count.")

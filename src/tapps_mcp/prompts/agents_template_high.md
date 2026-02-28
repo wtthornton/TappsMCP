@@ -14,7 +14,7 @@ TappsMCP is an MCP server that provides a comprehensive quality toolset for your
 - **Dead code detection** (Vulture-based unused function/class/import/variable detection with confidence scoring)
 - **Dependency vulnerability scanning** (pip-audit for known CVEs in third-party packages)
 - **Circular dependency detection** (import graph analysis, cycle detection, coupling metrics)
-- **Documentation lookup** (up-to-date library docs via Context7 with multi-provider fallback and cache)
+- **Documentation lookup** (up-to-date library docs via Context7 + LlmsTxt fallback and cache)
 - **Config validation** (Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB best practices)
 - **Domain experts** (17 built-in experts with RAG-backed answers, optional vector search)
 - **Project context** (project type detection, tech stack, impact analysis)

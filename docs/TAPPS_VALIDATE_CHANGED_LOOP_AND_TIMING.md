@@ -6,20 +6,16 @@
 
 The text **"Before ending: please run tapps_validate_changed to confirm all changed files pass quality gates."** is produced by:
 
-- **Cursor stop hook**  
-  `.cursor/hooks.json` defines a `stop` hook that runs `.cursor/hooks/tapps-stop.ps1`.  
-  That script outputs a `followup_message` with that text. So whenever Cursor is about to end the session (e.g. user closes or switches context), the hook runs and the UI shows this reminder.
-
 - **Pipeline rules**  
   `.cursor/rules/tapps-pipeline.mdc` and `tapps-pipeline.md` state that you must call `tapps_validate_changed()` before declaring work complete. The agent is instructed to do that and to remind the user.
 
 So the “loop” is:
 
-1. User (or system) approaches session end → stop hook runs → reminder is shown.
+1. Rules instruct the agent to call `tapps_validate_changed()` before declaring work complete.
 2. User (or agent) runs `tapps_validate_changed`.
-3. If the call is **slow or aborted**, the user may try to end again → stop hook runs again → same reminder. No “validation completed” state is stored for the stop hook to check, so the reminder is shown every time.
+3. If the call is **slow or aborted**, the user may try to end again → rules still instruct validation on the next session → same reminder. No “validation completed” state is stored for the rules to check, so the reminder is shown every time.
 
-The hook does **not** know whether validation actually ran or succeeded; it only injects the message. So the only way to “break” the loop from the user’s perspective is for `tapps_validate_changed` to **finish successfully** (and ideally quickly) so the user can end the session without feeling stuck.
+> **Note:** The Cursor `stop` hook was removed. Validation reminders now come only from the pipeline rules. The rules do **not** know whether validation actually ran or succeeded. The only way to “break” the loop from the user’s perspective is for `tapps_validate_changed` to **finish successfully** (and ideally quickly) so the user can end the session without feeling stuck.
 
 ---
 
@@ -107,7 +103,7 @@ So when there are files to validate:
 - **User or UI cancellation**  
   The user (or UI) can cancel the running tool; the client then aborts the request and shows the same “Error: Aborted.”
 
-In both cases the server may have done part or all of the work, but the client never receives a normal success response, so the “before ending” reminder will appear again on the next stop.
+In both cases the server may have done part or all of the work, but the client never receives a normal success response, so the “before ending” reminder will appear again on the next session.
 
 ---
 
@@ -118,4 +114,4 @@ In both cases the server may have done part or all of the work, but the client n
 | No changed files  | _record_call (first-time + persist), git ≤5 s, _with_nudges | _record_execution (metrics)                  |
 | With files        | ensure_session_initialized (first time), N × (quick or full) | Dependency cache warm; progress heartbeat    |
 
-The loop is driven by the stop hook and rules always reminding to run `tapps_validate_changed`; timing and aborts are driven by client timeout and by any remaining blocking or slow work on the server before the response is sent.
+The flow is driven by rules instructing the agent to run `tapps_validate_changed` before declaring work complete; timing and aborts are driven by client timeout and by any remaining blocking or slow work on the server before the response is sent.
