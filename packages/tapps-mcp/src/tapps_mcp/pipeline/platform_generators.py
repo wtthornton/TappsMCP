@@ -9,11 +9,6 @@ submodules. Import from here for backward compatibility.
 
 from __future__ import annotations
 
-import json
-import stat
-import sys
-from typing import TYPE_CHECKING, Any
-
 # Re-export hook templates (needed by upgrade tests that access _CLAUDE_HOOK_SCRIPTS)
 from tapps_mcp.pipeline.platform_hook_templates import (
     AGENT_TEAMS_CLAUDE_MD_SECTION as _AGENT_TEAMS_CLAUDE_MD_SECTION,
@@ -32,296 +27,54 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 # Re-export generators from submodules for backward compatibility
 from tapps_mcp.pipeline.platform_bundles import (  # noqa: F401
     generate_agent_teams_hooks,
-    generate_bugbot_rules,
     generate_ci_workflow,
     generate_claude_plugin_bundle,
-    generate_copilot_instructions,
+    generate_claude_python_quality_rule,
     generate_cursor_plugin_bundle,
-    generate_cursor_rules,
+    generate_python_quality_rule,
     get_agent_teams_claude_md_section,
     get_ci_claude_md_section,
+)
+from tapps_mcp.pipeline.platform_hooks import (  # noqa: F401
+    generate_claude_hooks,
+    generate_cursor_hooks,
+    generate_memory_capture_hook,
+)
+from tapps_mcp.pipeline.platform_rules import (  # noqa: F401
+    generate_bugbot_rules,
+    generate_copilot_instructions,
+    generate_cursor_rules,
 )
 from tapps_mcp.pipeline.platform_skills import generate_skills  # noqa: F401
 from tapps_mcp.pipeline.platform_subagents import generate_subagent_definitions  # noqa: F401
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-
-def _is_windows() -> bool:
-    """Return True when running on Windows."""
-    return sys.platform == "win32"
-
-
-def _is_wrong_platform_command(command: str, *, win: bool) -> bool:
-    """Return True if *command* references a tapps hook for the wrong platform.
-
-    Only matches commands containing ``tapps-`` so that user-defined custom
-    hooks are never touched.
-    """
-    if "tapps-" not in command:
-        return False
-    if win:
-        # On Windows we expect .ps1 -- flag .sh references
-        return command.rstrip().endswith(".sh")
-    # On Unix we expect .sh -- flag powershell/.ps1 references
-    return ".ps1" in command and "powershell" in command.lower()
-
-
-def _migrate_claude_hook_commands(
-    existing_hooks: dict[str, Any],
-    correct_config: dict[str, list[dict[str, Any]]],
-    *,
-    win: bool,
-) -> int:
-    """Replace wrong-platform commands inside Claude Code hook entries.
-
-    Claude hooks use nested structure:
-    ``{"matcher": "...", "hooks": [{"type": "command", "command": "..."}]}``.
-
-    Returns the number of commands migrated.
-    """
-    migrated = 0
-    for event, matcher_entries in existing_hooks.items():
-        if not isinstance(matcher_entries, list):
-            continue
-        for matcher_entry in matcher_entries:
-            if not isinstance(matcher_entry, dict):
-                continue
-            inner_hooks = matcher_entry.get("hooks", [])
-            if not isinstance(inner_hooks, list):
-                continue
-            for ih_idx, hook in enumerate(inner_hooks):
-                if not isinstance(hook, dict):
-                    continue
-                cmd = hook.get("command", "")
-                if not _is_wrong_platform_command(cmd, win=win):
-                    continue
-                matcher = matcher_entry.get("matcher")
-                if event in correct_config:
-                    for correct_entry in correct_config[event]:
-                        if correct_entry.get("matcher") == matcher:
-                            correct_inner = correct_entry.get("hooks", [])
-                            if ih_idx < len(correct_inner):
-                                inner_hooks[ih_idx] = correct_inner[ih_idx]
-                                migrated += 1
-                            break
-    return migrated
-
-
-# ---------------------------------------------------------------------------
-# Engagement level: transform hook script wording (Epic 18.7)
-# ---------------------------------------------------------------------------
-
-
-def _hook_content_for_engagement(content: str, engagement_level: str) -> str:
-    """Adjust hook script echo/reminder text by engagement level."""
-    if engagement_level == "high":
-        content = content.replace("Consider running", "MUST run")
-        content = content.replace("Reminder:", "REQUIRED:")
-        content = content.replace("Reminder ", "REQUIRED: ")
-    elif engagement_level == "low":
-        content = content.replace("REQUIRED:", "Consider:")
-        content = content.replace("MUST run", "Consider running")
-        content = content.replace("You MUST run", "Consider running")
-    return content
-
-
-# ---------------------------------------------------------------------------
-# Public generator functions: hooks
-# ---------------------------------------------------------------------------
-
-
-def generate_claude_hooks(
-    project_root: Path,
-    *,
-    force_windows: bool | None = None,
-    engagement_level: str = "medium",
-) -> dict[str, Any]:
-    """Generate Claude Code hook scripts and settings.json hooks config.
-
-    Creates ``.claude/hooks/`` with 7 scripts (bash on Unix, PowerShell on
-    Windows) and merges hook entries into ``.claude/settings.json``.
-
-    Args:
-        project_root: Target project root directory.
-        force_windows: Override platform detection for testing.
-            ``None`` (default) auto-detects via ``sys.platform``.
-        engagement_level: high (MUST/REQUIRED), medium (current), low (Consider).
-
-    Returns a summary dict with ``scripts_created`` and ``hooks_action``.
-    """
-    win = force_windows if force_windows is not None else _is_windows()
-    script_templates = _CLAUDE_HOOK_SCRIPTS_PS if win else _CLAUDE_HOOK_SCRIPTS
-    hooks_config = _CLAUDE_HOOKS_CONFIG_PS if win else _CLAUDE_HOOKS_CONFIG
-
-    hooks_dir = project_root / ".claude" / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-
-    # Stop hook is always overwritten so upgrade gets the conditional-marker fix.
-    scripts_always_overwrite = {"tapps-stop.ps1", "tapps-stop.sh"}
-    scripts_created: list[str] = []
-    for name, content in script_templates.items():
-        script_path = hooks_dir / name
-        if not script_path.exists() or name in scripts_always_overwrite:
-            text = _hook_content_for_engagement(content, engagement_level)
-            script_path.write_text(text, encoding="utf-8")
-            if not win:
-                script_path.chmod(
-                    script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
-                )
-            scripts_created.append(name)
-
-    # Clean up wrong-platform tapps scripts (e.g. .sh on Windows)
-    wrong_ext = ".sh" if win else ".ps1"
-    scripts_removed: list[str] = []
-    for old_script in hooks_dir.glob(f"tapps-*{wrong_ext}"):
-        old_script.unlink()
-        scripts_removed.append(old_script.name)
-
-    # Merge hooks config into .claude/settings.json
-    settings_file = project_root / ".claude" / "settings.json"
-    if settings_file.exists():
-        raw = settings_file.read_text(encoding="utf-8")
-        config: dict[str, Any] = json.loads(raw) if raw.strip() else {}
-    else:
-        config = {}
-
-    existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
-    hooks_added = 0
-    for event, entries in hooks_config.items():
-        if event not in existing_hooks:
-            existing_hooks[event] = entries
-            hooks_added += len(entries)
-        else:
-            # Merge: add entries whose matchers don't already exist
-            existing_matchers = {
-                e.get("matcher") for e in existing_hooks[event] if isinstance(e, dict)
-            }
-            for entry in entries:
-                if entry.get("matcher") not in existing_matchers:
-                    existing_hooks[event].append(entry)
-                    hooks_added += 1
-
-    # Replace wrong-platform commands in existing hook entries
-    hooks_migrated = _migrate_claude_hook_commands(existing_hooks, hooks_config, win=win)
-
-    settings_file.parent.mkdir(parents=True, exist_ok=True)
-    settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-
-    action = "migrated" if hooks_migrated > 0 else ("created" if hooks_added > 0 else "skipped")
-    return {
-        "scripts_created": scripts_created,
-        "scripts_removed": scripts_removed,
-        "hooks_action": action,
-        "hooks_added": hooks_added,
-        "hooks_migrated": hooks_migrated,
-    }
-
-
-def generate_cursor_hooks(
-    project_root: Path,
-    *,
-    force_windows: bool | None = None,
-    engagement_level: str = "medium",
-) -> dict[str, Any]:
-    """Generate Cursor hook scripts and ``.cursor/hooks.json`` config.
-
-    Creates ``.cursor/hooks/`` with 3 scripts (bash on Unix, PowerShell on
-    Windows) and merges hook entries into ``.cursor/hooks.json``.
-
-    Args:
-        project_root: Target project root directory.
-        force_windows: Override platform detection for testing.
-            ``None`` (default) auto-detects via ``sys.platform``.
-        engagement_level: high (MUST/REQUIRED), medium (current), low (Consider).
-
-    Returns a summary dict with ``scripts_created`` and ``hooks_action``.
-    """
-    win = force_windows if force_windows is not None else _is_windows()
-    script_templates = _CURSOR_HOOK_SCRIPTS_PS if win else _CURSOR_HOOK_SCRIPTS
-    hooks_config = _CURSOR_HOOKS_CONFIG_PS if win else _CURSOR_HOOKS_CONFIG
-
-    hooks_dir = project_root / ".cursor" / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-
-    scripts_created: list[str] = []
-    for name, content in script_templates.items():
-        script_path = hooks_dir / name
-        if not script_path.exists():
-            text = _hook_content_for_engagement(content, engagement_level)
-            script_path.write_text(text, encoding="utf-8")
-            if not win:
-                script_path.chmod(
-                    script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
-                )
-            scripts_created.append(name)
-
-    # Clean up wrong-platform tapps scripts (e.g. .sh on Windows)
-    wrong_ext = ".sh" if win else ".ps1"
-    scripts_removed: list[str] = []
-    for old_script in hooks_dir.glob(f"tapps-*{wrong_ext}"):
-        old_script.unlink()
-        scripts_removed.append(old_script.name)
-
-    # Remove deprecated stop hook scripts (validation is via tapps-mcp validate-changed)
-    for name in ("tapps-stop.ps1", "tapps-stop.sh"):
-        path = hooks_dir / name
-        if path.exists():
-            path.unlink()
-            scripts_removed.append(name)
-
-    # Merge hooks config into .cursor/hooks.json
-    hooks_file = project_root / ".cursor" / "hooks.json"
-    if hooks_file.exists():
-        raw = hooks_file.read_text(encoding="utf-8")
-        config: dict[str, Any] = json.loads(raw) if raw.strip() else {}
-    else:
-        config = {}
-
-    # Migrate old array format to new object format
-    existing_hooks_raw = config.get("hooks", {})
-    if isinstance(existing_hooks_raw, list):
-        migrated: dict[str, list[dict[str, str]]] = {}
-        for entry in existing_hooks_raw:
-            if isinstance(entry, dict) and "event" in entry:
-                event = entry["event"]
-                cmd_obj = {k: v for k, v in entry.items() if k != "event"}
-                migrated.setdefault(event, []).append(cmd_obj)
-        existing_hooks_raw = migrated
-
-    existing_hooks: dict[str, list[dict[str, str]]] = existing_hooks_raw
-
-    # Remove stop hook; use CLI command tapps-mcp validate-changed instead.
-    existing_hooks.pop("stop", None)
-
-    hooks_added = 0
-    for event, entries in hooks_config.items():
-        if event not in existing_hooks:
-            existing_hooks[event] = entries
-            hooks_added += 1
-
-    # Replace wrong-platform tapps commands in existing events
-    hooks_migrated = 0
-    for event, entries in existing_hooks.items():
-        for i, entry in enumerate(entries):
-            cmd = entry.get("command", "")
-            if _is_wrong_platform_command(cmd, win=win):
-                if event in hooks_config:
-                    # Replace with the correct-platform entry
-                    existing_hooks[event][i] = hooks_config[event][0]
-                    hooks_migrated += 1
-
-    config["version"] = 1
-    config["hooks"] = existing_hooks
-    hooks_file.parent.mkdir(parents=True, exist_ok=True)
-    hooks_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-
-    action = "migrated" if hooks_migrated > 0 else ("created" if hooks_added > 0 else "skipped")
-    return {
-        "scripts_created": scripts_created,
-        "scripts_removed": scripts_removed,
-        "hooks_action": action,
-        "hooks_added": hooks_added,
-        "hooks_migrated": hooks_migrated,
-    }
+# Re-export private names used by tests (backward compat)
+__all__ = [
+    "_AGENT_TEAMS_CLAUDE_MD_SECTION",
+    "_AGENT_TEAMS_HOOKS_CONFIG",
+    "_AGENT_TEAMS_HOOK_SCRIPTS",
+    "_CLAUDE_HOOKS_CONFIG",
+    "_CLAUDE_HOOKS_CONFIG_PS",
+    "_CLAUDE_HOOK_SCRIPTS",
+    "_CLAUDE_HOOK_SCRIPTS_PS",
+    "_CURSOR_HOOKS_CONFIG",
+    "_CURSOR_HOOKS_CONFIG_PS",
+    "_CURSOR_HOOK_SCRIPTS",
+    "_CURSOR_HOOK_SCRIPTS_PS",
+    "generate_agent_teams_hooks",
+    "generate_bugbot_rules",
+    "generate_ci_workflow",
+    "generate_claude_hooks",
+    "generate_memory_capture_hook",
+    "generate_claude_plugin_bundle",
+    "generate_claude_python_quality_rule",
+    "generate_copilot_instructions",
+    "generate_cursor_hooks",
+    "generate_cursor_plugin_bundle",
+    "generate_cursor_rules",
+    "generate_python_quality_rule",
+    "generate_skills",
+    "generate_subagent_definitions",
+    "get_agent_teams_claude_md_section",
+    "get_ci_claude_md_section",
+]

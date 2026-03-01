@@ -11,6 +11,11 @@ from tapps_mcp.gates.models import GateFailure, GateResult, GateThresholds
 from tapps_mcp.scoring.models import CategoryScore, LintIssue, ScoreResult, SecurityIssue
 from tapps_mcp.security.security_scanner import SecurityScanResult
 from tapps_mcp.server_scoring_tools import (
+    _build_quality_gate_data,
+    _build_quick_check_data,
+    _build_score_file_data,
+    _compute_complexity_hint,
+    _resolve_preset,
     ast_quick_complexity,
     tapps_quality_gate,
     tapps_quick_check,
@@ -589,3 +594,184 @@ class TestAstQuickComplexity:
         cc = ast_quick_complexity(code)
         assert cc is not None
         assert cc >= 2
+
+
+# ---------------------------------------------------------------------------
+# _resolve_preset
+# ---------------------------------------------------------------------------
+
+
+class TestResolvePreset:
+    @pytest.mark.asyncio
+    async def test_returns_preset_when_provided(self) -> None:
+        result = await _resolve_preset("strict", None)
+        assert result == "strict"
+
+    @pytest.mark.asyncio
+    async def test_defaults_to_standard_when_empty(self) -> None:
+        result = await _resolve_preset("", None)
+        assert result == "standard"
+
+    @pytest.mark.asyncio
+    async def test_elicitation_used_when_ctx_provided(self) -> None:
+        ctx_mock = MagicMock()
+        with patch(
+            "tapps_mcp.common.elicitation.elicit_preset",
+            new_callable=AsyncMock,
+            return_value="framework",
+        ):
+            result = await _resolve_preset("", ctx_mock)
+        assert result == "framework"
+
+    @pytest.mark.asyncio
+    async def test_elicitation_returns_none_falls_back(self) -> None:
+        ctx_mock = MagicMock()
+        with patch(
+            "tapps_mcp.common.elicitation.elicit_preset",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            result = await _resolve_preset("", ctx_mock)
+        assert result == "standard"
+
+
+# ---------------------------------------------------------------------------
+# _build_quality_gate_data
+# ---------------------------------------------------------------------------
+
+
+class TestBuildQualityGateData:
+    def test_builds_data_passing_gate(self, tmp_path: Path) -> None:
+        resolved = tmp_path / "test.py"
+        score = _make_score_result(file_path=str(resolved))
+        gate = _make_gate_result(passed=True)
+
+        data, suggestions = _build_quality_gate_data(resolved, score, gate)
+
+        assert data["passed"] is True
+        assert data["file_path"] == str(resolved)
+        assert data["overall_score"] == 85.0
+        assert suggestions == []
+
+    def test_collects_suggestions_for_failing_categories(self, tmp_path: Path) -> None:
+        resolved = tmp_path / "test.py"
+        score = _make_score_result(file_path=str(resolved), overall_score=50.0)
+        gate = _make_gate_result(passed=False)  # fails on "security"
+
+        data, suggestions = _build_quality_gate_data(resolved, score, gate)
+
+        assert data["passed"] is False
+        assert "Fix X" in suggestions  # from security category
+
+    def test_includes_tool_errors_when_present(self, tmp_path: Path) -> None:
+        resolved = tmp_path / "test.py"
+        score = _make_score_result(file_path=str(resolved))
+        score.tool_errors = {"mypy": "not installed"}
+        gate = _make_gate_result(passed=True)
+
+        data, _ = _build_quality_gate_data(resolved, score, gate)
+
+        assert data["tool_errors"] == {"mypy": "not installed"}
+
+    def test_omits_tool_errors_when_empty(self, tmp_path: Path) -> None:
+        resolved = tmp_path / "test.py"
+        score = _make_score_result(file_path=str(resolved))
+        gate = _make_gate_result(passed=True)
+
+        data, _ = _build_quality_gate_data(resolved, score, gate)
+
+        assert "tool_errors" not in data
+
+
+# ---------------------------------------------------------------------------
+# _build_score_file_data
+# ---------------------------------------------------------------------------
+
+
+class TestBuildScoreFileData:
+    def test_basic_data_fields(self) -> None:
+        score = _make_score_result()
+        data, suggestions = _build_score_file_data(score, quick=False, fix=False, fixes_applied=0)
+
+        assert data["file_path"] == "test.py"
+        assert data["overall_score"] == 85.0
+        assert "linting" in data["categories"]
+        assert "Fix X" in suggestions
+
+    def test_quick_fix_includes_fixes_applied(self) -> None:
+        score = _make_score_result()
+        data, _ = _build_score_file_data(score, quick=True, fix=True, fixes_applied=7)
+
+        assert data["fixes_applied"] == 7
+
+    def test_no_fixes_applied_without_quick_fix(self) -> None:
+        score = _make_score_result()
+        data, _ = _build_score_file_data(score, quick=False, fix=False, fixes_applied=0)
+
+        assert "fixes_applied" not in data
+
+
+# ---------------------------------------------------------------------------
+# _build_quick_check_data
+# ---------------------------------------------------------------------------
+
+
+class TestBuildQuickCheckData:
+    def test_basic_quick_check_data(self, tmp_path: Path) -> None:
+        resolved = tmp_path / "test.py"
+        score = _make_score_result(file_path=str(resolved))
+        gate = _make_gate_result(passed=True)
+        sec = _make_security_scan_result()
+
+        data, suggestions = _build_quick_check_data(
+            resolved, score, sec, gate, "standard", None, 0, False,
+        )
+
+        assert data["gate_passed"] is True
+        assert data["security_passed"] is True
+        assert data["overall_score"] == 85.0
+        assert "fixes_applied" not in data
+
+    def test_includes_complexity_hint(self, tmp_path: Path) -> None:
+        resolved = tmp_path / "test.py"
+        score = _make_score_result(file_path=str(resolved))
+        gate = _make_gate_result(passed=True)
+        sec = _make_security_scan_result()
+        hint = {"max_cc_estimate": 15, "level": "high"}
+
+        data, suggestions = _build_quick_check_data(
+            resolved, score, sec, gate, "standard", hint, 0, False,
+        )
+
+        assert data["complexity_hint"] == hint
+        assert any("CC~15" in s for s in suggestions)
+
+
+# ---------------------------------------------------------------------------
+# _compute_complexity_hint
+# ---------------------------------------------------------------------------
+
+
+class TestComputeComplexityHint:
+    def test_returns_none_for_simple_code(self, tmp_path: Path) -> None:
+        f = tmp_path / "simple.py"
+        f.write_text("def foo():\n    return 1\n", encoding="utf-8")
+        assert _compute_complexity_hint(f) is None
+
+    def test_returns_hint_for_complex_code(self, tmp_path: Path) -> None:
+        lines = ["def foo(x):"]
+        for i in range(12):
+            lines.append(f"    if x == {i}:")
+            lines.append(f"        return {i}")
+        lines.append("    return -1\n")
+        f = tmp_path / "complex.py"
+        f.write_text("\n".join(lines), encoding="utf-8")
+
+        hint = _compute_complexity_hint(f)
+        assert hint is not None
+        assert hint["max_cc_estimate"] > 10
+        assert hint["level"] in ("moderate", "high")
+
+    def test_returns_none_for_missing_file(self, tmp_path: Path) -> None:
+        f = tmp_path / "nonexistent.py"
+        assert _compute_complexity_hint(f) is None

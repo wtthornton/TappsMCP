@@ -508,6 +508,64 @@ def _sanitize_lookup_param(value: str, max_len: int = 100) -> str:
     return cleaned[:max_len]
 
 
+def _lookup_error_code(error: str | None) -> str | None:
+    """Derive the error code from a lookup error message, or None if no error."""
+    if not error:
+        return None
+    return "api_key_missing" if "API key" in error else "lookup_failed"
+
+
+def _build_lookup_data(result: Any) -> dict[str, Any]:
+    """Build the data dict from a LookupResult, including optional fields."""
+    data: dict[str, Any] = {
+        "library": result.library,
+        "topic": result.topic,
+        "source": result.source,
+        "cache_hit": result.cache_hit,
+        "response_time_ms": result.response_time_ms,
+    }
+    if result.content is not None:
+        data["content"] = result.content
+        data["token_estimate"] = len(result.content) // 4
+    if result.context7_id is not None:
+        data["context7_id"] = result.context7_id
+    if result.fuzzy_score is not None:
+        data["fuzzy_score"] = result.fuzzy_score
+    return data
+
+
+async def _attach_expert_fallback(
+    response: dict[str, Any],
+    library: str,
+    topic: str,
+) -> None:
+    """Attach expert fallback to a lookup response when the primary lookup failed."""
+    try:
+        from tapps_core.experts.engine import consult_expert
+
+        cr = await asyncio.to_thread(
+            consult_expert,
+            question=f"How do I use {library} for {topic}? Best practices and API usage.",
+            domain=_library_to_domain(library),
+            max_chunks=3,
+            max_context_length=1500,
+        )
+        if cr.confidence >= _EXPERT_FALLBACK_MIN_CONFIDENCE and cr.answer:
+            response["expert_fallback"] = {
+                "content": cr.answer,
+                "confidence": round(cr.confidence, 2),
+                "sources": cr.sources[:3],
+            }
+            response["error"]["message"] += (
+                " Expert knowledge base fallback provided — use tapps_consult_expert "
+                "for more targeted questions."
+            )
+    except Exception:
+        logger.warning(
+            "expert_fallback_failed", library=library, topic=topic, exc_info=True
+        )
+
+
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)
 async def tapps_lookup_docs(
     library: str,
@@ -556,51 +614,13 @@ async def tapps_lookup_docs(
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
-    data: dict[str, Any] = {
-        "library": result.library,
-        "topic": result.topic,
-        "source": result.source,
-        "cache_hit": result.cache_hit,
-        "response_time_ms": result.response_time_ms,
-    }
-    if result.content is not None:
-        data["content"] = result.content
-        data["token_estimate"] = len(result.content) // 4
-    if result.context7_id is not None:
-        data["context7_id"] = result.context7_id
-    if result.fuzzy_score is not None:
-        data["fuzzy_score"] = result.fuzzy_score
-
+    data = _build_lookup_data(result)
     response = success_response("tapps_lookup_docs", elapsed_ms, data)
     response["success"] = result.success
+    err_code = _lookup_error_code(result.error)
     if result.error:
-        err_code = "api_key_missing" if "API key" in result.error else "lookup_failed"
         response["error"] = {"code": err_code, "message": result.error}
-        # Expert fallback when Context7 and cache fail — provide RAG-backed guidance
-        try:
-            from tapps_core.experts.engine import consult_expert
-
-            cr = await asyncio.to_thread(
-                consult_expert,
-                question=f"How do I use {library} for {topic}? Best practices and API usage.",
-                domain=_library_to_domain(library),
-                max_chunks=3,
-                max_context_length=1500,
-            )
-            if cr.confidence >= _EXPERT_FALLBACK_MIN_CONFIDENCE and cr.answer:
-                response["expert_fallback"] = {
-                    "content": cr.answer,
-                    "confidence": round(cr.confidence, 2),
-                    "sources": cr.sources[:3],
-                }
-                response["error"]["message"] += (
-                    " Expert knowledge base fallback provided — use tapps_consult_expert "
-                    "for more targeted questions."
-                )
-        except Exception:
-            logger.warning(
-                "expert_fallback_failed", library=library, topic=topic, exc_info=True
-            )
+        await _attach_expert_fallback(response, library, topic)
     if result.warning:
         response["warning"] = result.warning
 
@@ -608,7 +628,7 @@ async def tapps_lookup_docs(
         "tapps_lookup_docs",
         start,
         status="success" if result.success else "failed",
-        error_code="api_key_missing" if (result.error and "API key" in result.error) else None,
+        error_code=err_code,
     )
 
     return _with_nudges("tapps_lookup_docs", response)
@@ -806,6 +826,9 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "fallback_used": result.fallback_used,
             "fallback_library": result.fallback_library,
             "fallback_topic": result.fallback_topic,
+            "stale_knowledge": result.stale_knowledge,
+            "oldest_chunk_age_days": result.oldest_chunk_age_days,
+            "freshness_caveat": result.freshness_caveat,
             "memory_injected": memory_injected,
         },
     )
@@ -828,7 +851,10 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     return _with_nudges(
         "tapps_consult_expert",
         resp,
-        context={"confidence": round(result.confidence, 4)},
+        context={
+            "confidence": round(result.confidence, 4),
+            "stale_knowledge": result.stale_knowledge,
+        },
     )
 
 

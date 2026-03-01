@@ -184,6 +184,8 @@ a = Analysis(
         "tapps_mcp.pipeline.github_copilot",
         "tapps_mcp.pipeline.github_governance",
         "tapps_mcp.pipeline.platform_generators",
+        "tapps_mcp.pipeline.platform_hooks",
+        "tapps_mcp.pipeline.platform_rules",
         "tapps_mcp.pipeline.platform_bundles",
         "tapps_mcp.pipeline.platform_hook_templates",
         "tapps_mcp.pipeline.platform_skills",

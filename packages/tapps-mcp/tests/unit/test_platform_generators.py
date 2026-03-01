@@ -84,10 +84,10 @@ class TestHookTemplates:
     """Verify hook template dicts have expected keys and content."""
 
     def test_claude_sh_scripts_count(self) -> None:
-        assert len(_CLAUDE_HOOK_SCRIPTS) == 7
+        assert len(_CLAUDE_HOOK_SCRIPTS) == 8
 
     def test_claude_ps1_scripts_count(self) -> None:
-        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 7
+        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 8
 
     def test_cursor_sh_scripts_count(self) -> None:
         assert len(_CURSOR_HOOK_SCRIPTS) == 2
@@ -271,7 +271,7 @@ class TestMiscGenerators:
 
     def test_claude_hooks_creates_scripts(self, tmp_path: Path) -> None:
         result = generate_claude_hooks(tmp_path, force_windows=False)
-        assert len(result["scripts_created"]) == 7
+        assert len(result["scripts_created"]) == 8
 
     def test_cursor_hooks_creates_scripts(self, tmp_path: Path) -> None:
         result = generate_cursor_hooks(tmp_path, force_windows=False)

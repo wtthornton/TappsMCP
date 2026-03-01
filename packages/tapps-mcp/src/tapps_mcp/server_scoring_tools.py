@@ -238,6 +238,49 @@ def _attach_quality_gate_structured_output(
         _logger.debug("structured_output_failed: tapps_quality_gate", exc_info=True)
 
 
+async def _resolve_preset(
+    preset: str,
+    ctx: Context[Any, Any, Any] | None,
+) -> str:
+    """Resolve the quality gate preset, using elicitation if available."""
+    if not preset and ctx is not None:
+        from tapps_mcp.common.elicitation import elicit_preset
+
+        selected = await elicit_preset(ctx)
+        if selected is not None:
+            return selected
+    return preset or "standard"
+
+
+def _build_quality_gate_data(
+    resolved: Path,
+    score_result: ScoreResult,
+    gate_result: GateResult,
+) -> tuple[dict[str, Any], list[str]]:
+    """Build the response data dict and suggestions for quality_gate."""
+    failing_cats = {f.category for f in gate_result.failures}
+    gate_suggestions: list[str] = []
+    for name, cat in score_result.categories.items():
+        if name in failing_cats and cat.suggestions:
+            gate_suggestions.extend(cat.suggestions)
+
+    gate_data: dict[str, Any] = {
+        "file_path": str(resolved),
+        "passed": gate_result.passed,
+        "preset": gate_result.preset,
+        "overall_score": round(score_result.overall_score, 2),
+        "scores": {k: round(v, 2) for k, v in gate_result.scores.items()},
+        "thresholds": gate_result.thresholds.model_dump(),
+        "failures": [f.model_dump() for f in gate_result.failures],
+        "warnings": gate_result.warnings,
+        "suggestions": gate_suggestions,
+    }
+    if score_result.tool_errors:
+        gate_data["tool_errors"] = score_result.tool_errors
+
+    return gate_data, gate_suggestions
+
+
 async def tapps_quality_gate(
     file_path: str,
     preset: str = "",
@@ -261,15 +304,7 @@ async def tapps_quality_gate(
     _record_call("tapps_quality_gate")
     await ensure_session_initialized()
 
-    # If no preset specified and context available, try elicitation
-    if not preset and ctx is not None:
-        from tapps_mcp.common.elicitation import elicit_preset
-
-        selected = await elicit_preset(ctx)
-        if selected is not None:
-            preset = selected
-    if not preset:
-        preset = "standard"
+    preset = await _resolve_preset(preset, ctx)
 
     try:
         resolved = _validate_file_path(file_path)
@@ -296,25 +331,9 @@ async def tapps_quality_gate(
         degraded=score_result.degraded,
     )
 
-    failing_cats = {f.category for f in gate_result.failures}
-    gate_suggestions: list[str] = []
-    for name, cat in score_result.categories.items():
-        if name in failing_cats and cat.suggestions:
-            gate_suggestions.extend(cat.suggestions)
-
-    gate_data: dict[str, Any] = {
-        "file_path": str(resolved),
-        "passed": gate_result.passed,
-        "preset": gate_result.preset,
-        "overall_score": round(score_result.overall_score, 2),
-        "scores": {k: round(v, 2) for k, v in gate_result.scores.items()},
-        "thresholds": gate_result.thresholds.model_dump(),
-        "failures": [f.model_dump() for f in gate_result.failures],
-        "warnings": gate_result.warnings,
-        "suggestions": gate_suggestions,
-    }
-    if score_result.tool_errors:
-        gate_data["tool_errors"] = score_result.tool_errors
+    gate_data, gate_suggestions = _build_quality_gate_data(
+        resolved, score_result, gate_result,
+    )
 
     resp = success_response(
         "tapps_quality_gate",

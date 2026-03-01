@@ -566,34 +566,10 @@ class CodeScorer:
         root = _find_project_root(file_path)
         if root is None:
             return 0.0
-        # If the file itself is a test file
         if file_path.name.startswith("test_") or file_path.name.endswith("_test.py"):
             return 5.0
-        stem = file_path.stem
-        test_dirs = ["tests", "test", "tests/unit", "tests/integration"]
-        exact_patterns = [f"test_{stem}.py", f"{stem}_test.py"]
-        exact_count = 0
-        fuzzy_count = 0
-        for td in test_dirs:
-            td_path = root / td
-            if not td_path.is_dir():
-                continue
-            for pat in exact_patterns:
-                if (td_path / pat).exists():
-                    exact_count += 1
-            # Fuzzy: test_*{stem}*.py (e.g. test_server_tools.py for server.py)
-            for match in td_path.glob(f"test_*{stem}*.py"):
-                if match.name not in exact_patterns:
-                    fuzzy_count += 1
-        total = exact_count + fuzzy_count
-        multi_test_threshold = 2
-        if total >= multi_test_threshold:
-            return 7.0
-        if exact_count >= 1:
-            return 5.0
-        if fuzzy_count >= 1:
-            return 3.0
-        return 0.0
+        exact_count, fuzzy_count = _count_test_files(root, file_path.stem)
+        return _test_count_to_score(exact_count, fuzzy_count)
 
     _STRUCTURE_SIGNALS: ClassVar[list[tuple[float, list[str]]]] = [
         (2.5, ["pyproject.toml", "package.json"]),
@@ -683,19 +659,34 @@ _SCORE_LOW = 5
 
 def _check_function_size(node: ast.FunctionDef, seen: set[str]) -> None:
     """Flag oversized functions and deeply nested control flow."""
-    if hasattr(node, "end_lineno") and node.end_lineno is not None:
-        func_lines = node.end_lineno - node.lineno
-    else:
-        func_lines = 50  # estimate
-    if func_lines > VERY_LARGE_FUNCTION_LINES:
-        seen.add("very_large_function")
-    elif func_lines > LARGE_FUNCTION_LINES:
-        seen.add("large_function")
-    depth = _max_nesting_depth(node)
-    if depth > VERY_DEEP_NESTING_THRESHOLD:
-        seen.add("very_deep_nesting")
-    elif depth > DEEP_NESTING_THRESHOLD:
-        seen.add("deep_nesting")
+    func_lines = (
+        node.end_lineno - node.lineno
+        if hasattr(node, "end_lineno") and node.end_lineno is not None
+        else 50
+    )
+    _classify_threshold(
+        func_lines, LARGE_FUNCTION_LINES, VERY_LARGE_FUNCTION_LINES,
+        "large_function", "very_large_function", seen,
+    )
+    _classify_threshold(
+        _max_nesting_depth(node), DEEP_NESTING_THRESHOLD, VERY_DEEP_NESTING_THRESHOLD,
+        "deep_nesting", "very_deep_nesting", seen,
+    )
+
+
+def _classify_threshold(
+    value: int | float,
+    moderate_threshold: int | float,
+    severe_threshold: int | float,
+    moderate_label: str,
+    severe_label: str,
+    seen: set[str],
+) -> None:
+    """Add a label to *seen* based on threshold comparison."""
+    if value > severe_threshold:
+        seen.add(severe_label)
+    elif value > moderate_threshold:
+        seen.add(moderate_label)
 
 
 def _check_nested_for(node: ast.For, seen: set[str]) -> None:
@@ -711,6 +702,41 @@ def _check_expensive_comp(node: ast.ListComp, seen: set[str]) -> None:
     calls = sum(1 for n in ast.walk(node) if isinstance(n, ast.Call))
     if calls > _EXPENSIVE_CALL_THRESHOLD:
         seen.add("expensive_comprehension")
+
+
+def _count_test_files(root: Path, stem: str) -> tuple[int, int]:
+    """Count exact and fuzzy test file matches for a module stem.
+
+    Returns (exact_count, fuzzy_count).
+    """
+    test_dirs = ["tests", "test", "tests/unit", "tests/integration"]
+    exact_patterns = [f"test_{stem}.py", f"{stem}_test.py"]
+    exact_count = 0
+    fuzzy_count = 0
+    for td in test_dirs:
+        td_path = root / td
+        if not td_path.is_dir():
+            continue
+        for pat in exact_patterns:
+            if (td_path / pat).exists():
+                exact_count += 1
+        for match in td_path.glob(f"test_*{stem}*.py"):
+            if match.name not in exact_patterns:
+                fuzzy_count += 1
+    return exact_count, fuzzy_count
+
+
+def _test_count_to_score(exact_count: int, fuzzy_count: int) -> float:
+    """Convert test file counts to a coverage heuristic score."""
+    total = exact_count + fuzzy_count
+    multi_test_threshold = 2
+    if total >= multi_test_threshold:
+        return 7.0
+    if exact_count >= 1:
+        return 5.0
+    if fuzzy_count >= 1:
+        return 3.0
+    return 0.0
 
 
 def _find_project_root(file_path: Path) -> Path | None:
@@ -825,44 +851,45 @@ def _suggest_test_coverage(
     return tips
 
 
+_PERFORMANCE_SUGGESTIONS: dict[str, str] = {
+    "very_large_function": (
+        f"Function exceeds {VERY_LARGE_FUNCTION_LINES} lines. "
+        "Decompose into smaller functions."
+    ),
+    "large_function": (
+        f"Function exceeds {LARGE_FUNCTION_LINES} lines. Consider breaking it up."
+    ),
+    "very_deep_nesting": (
+        f"Nesting depth > {VERY_DEEP_NESTING_THRESHOLD}. "
+        "Extract inner logic into helpers or use early returns."
+    ),
+    "deep_nesting": (
+        f"Nesting depth > {DEEP_NESTING_THRESHOLD}. Extract inner logic into helpers."
+    ),
+    "nested_loops": (
+        "Nested for-loops detected. Consider alternative data structures or itertools."
+    ),
+    "expensive_comprehension": (
+        "List comprehension with many function calls. Consider a plain loop for clarity."
+    ),
+}
+
+
 def _suggest_performance(
     score: float,
     details: dict[str, object],
 ) -> list[str]:
     """Actionable suggestions for the performance category."""
-    tips: list[str] = []
     if not isinstance(details, dict):
-        return tips
+        return []
     issues = details.get("issues_found")
     if not isinstance(issues, list) or not issues:
-        return tips
-    for issue in issues:
-        issue_str = str(issue)
-        if issue_str == "very_large_function":
-            tips.append(
-                f"Function exceeds {VERY_LARGE_FUNCTION_LINES} lines. "
-                "Decompose into smaller functions."
-            )
-        elif issue_str == "large_function":
-            tips.append(f"Function exceeds {LARGE_FUNCTION_LINES} lines. Consider breaking it up.")
-        elif issue_str == "very_deep_nesting":
-            tips.append(
-                f"Nesting depth > {VERY_DEEP_NESTING_THRESHOLD}. "
-                "Extract inner logic into helpers or use early returns."
-            )
-        elif issue_str == "deep_nesting":
-            tips.append(
-                f"Nesting depth > {DEEP_NESTING_THRESHOLD}. Extract inner logic into helpers."
-            )
-        elif issue_str == "nested_loops":
-            tips.append(
-                "Nested for-loops detected. Consider alternative data structures or itertools."
-            )
-        elif issue_str == "expensive_comprehension":
-            tips.append(
-                "List comprehension with many function calls. Consider a plain loop for clarity."
-            )
-    return tips
+        return []
+    return [
+        _PERFORMANCE_SUGGESTIONS[str(i)]
+        for i in issues
+        if str(i) in _PERFORMANCE_SUGGESTIONS
+    ]
 
 
 def _suggest_structure(score: float) -> list[str]:

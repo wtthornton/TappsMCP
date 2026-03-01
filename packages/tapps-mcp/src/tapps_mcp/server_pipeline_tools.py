@@ -32,6 +32,15 @@ _logger = structlog.get_logger(__name__)
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
 _VALIDATE_CONCURRENCY = 10
 
+# Track whether auto-GC has already run this session.
+_session_gc_done: bool = False
+
+
+def _reset_session_gc_flag() -> None:
+    """Reset the auto-GC flag (for testing)."""
+    global _session_gc_done  # noqa: PLW0603
+    _session_gc_done = False
+
 # Prevent garbage collection of fire-and-forget background tasks.
 # Without strong references, asyncio tasks may be collected before completion.
 _background_tasks: set[asyncio.Task[Any]] = set()
@@ -193,6 +202,7 @@ def _compute_impact_analysis(
                     "test_files": len(impact_report.test_files),
                 })
             except Exception:
+                _logger.debug("impact_analysis_file_failed", file=str(p), exc_info=True)
                 impact_results.append({"file": str(p), "severity": "unknown", "error": True})
 
         max_severity = "low"
@@ -211,6 +221,7 @@ def _compute_impact_analysis(
             "per_file": impact_results,
         }
     except Exception:
+        _logger.debug("impact_analysis_failed", exc_info=True)
         return {"error": "impact analysis failed"}
 
 
@@ -493,6 +504,132 @@ async def _warm_dependency_cache(
         _logger.debug("dependency_cache_warming_failed", exc_info=True)
 
 
+def _maybe_auto_gc(
+    store: object,
+    current_count: int,
+    settings: object,
+) -> dict[str, Any] | None:
+    """Run garbage collection if memory usage exceeds the configured threshold.
+
+    Returns a summary dict when GC ran, or ``None`` if skipped.
+    Only runs once per session (guarded by ``_session_gc_done``).
+    """
+    global _session_gc_done  # noqa: PLW0603
+
+    if _session_gc_done:
+        return None
+
+    mem_settings = getattr(settings, "memory", None)
+    if mem_settings is None:
+        return None
+
+    gc_enabled = getattr(mem_settings, "gc_enabled", True)
+    if not gc_enabled:
+        return None
+
+    max_memories = getattr(mem_settings, "max_memories", 500)
+    threshold = getattr(mem_settings, "gc_auto_threshold", 0.8)
+    trigger_count = int(max_memories * threshold)
+
+    if current_count <= trigger_count:
+        return None
+
+    _session_gc_done = True
+
+    try:
+        from tapps_core.memory.decay import DecayConfig
+        from tapps_core.memory.gc import MemoryGarbageCollector
+
+        config = DecayConfig()
+        gc = MemoryGarbageCollector(config)
+
+        snapshot = store.snapshot()  # type: ignore[union-attr]
+        candidates = gc.identify_candidates(snapshot.entries)
+
+        archived_keys: list[str] = []
+        for candidate in candidates:
+            deleted = store.delete(candidate.key)  # type: ignore[union-attr]
+            if deleted:
+                archived_keys.append(candidate.key)
+
+        remaining = store.count()  # type: ignore[union-attr]
+
+        _logger.info(
+            "session_auto_gc_completed",
+            evicted=len(archived_keys),
+            remaining=remaining,
+            threshold=threshold,
+        )
+
+        return {
+            "ran": True,
+            "evicted": len(archived_keys),
+            "remaining": remaining,
+        }
+    except Exception:
+        _logger.debug("session_auto_gc_failed", exc_info=True)
+        return {"ran": False, "error": "auto-gc failed"}
+
+
+def _process_session_capture(
+    project_root: Path,
+    store: Any,  # noqa: ANN401
+) -> dict[str, Any] | None:
+    """Check for and process a session-capture.json left by the Stop hook.
+
+    If the file exists, reads it, persists the data to memory, deletes
+    the capture file, and returns a summary dict.  Returns ``None`` if
+    no capture file exists.  Failures are logged and silently ignored.
+    """
+    import json as _json
+
+    capture_path = project_root / ".tapps-mcp" / "session-capture.json"
+    if not capture_path.exists():
+        return None
+
+    try:
+        raw = capture_path.read_text(encoding="utf-8")
+        data = _json.loads(raw)
+        date_str = data.get("date", "unknown")
+        validated = data.get("validated", False)
+        files_edited = data.get("files_edited", 0)
+
+        value = (
+            f"Session on {date_str}: "
+            f"{'validated' if validated else 'not validated'}, "
+            f"{files_edited} Python file(s) edited."
+        )
+        store.save(
+            key=f"session-capture.{date_str}",
+            value=value,
+            tier="context",
+            source="system",
+            source_agent="tapps-memory-capture-hook",
+            scope="project",
+            tags=["session-capture", "auto"],
+        )
+
+        capture_path.unlink(missing_ok=True)
+
+        _logger.info(
+            "session_capture_processed",
+            date=date_str,
+            validated=validated,
+            files_edited=files_edited,
+        )
+        return {
+            "date": date_str,
+            "validated": validated,
+            "files_edited": files_edited,
+        }
+    except Exception:
+        _logger.debug("session_capture_processing_failed", exc_info=True)
+        # Clean up even on failure to avoid re-processing bad data
+        with contextlib.suppress(OSError):
+            capture_path.unlink(missing_ok=True)
+        return None
+
+
 async def tapps_session_start(
     project_root: str = "",
 ) -> dict[str, Any]:
@@ -520,6 +657,8 @@ async def tapps_session_start(
 
     # Memory status (lazy, non-blocking)
     memory_status: dict[str, Any] = {"enabled": False}
+    memory_gc_result: dict[str, Any] | None = None
+    session_capture_result: dict[str, Any] | None = None
     try:
         settings = load_settings()
         if settings.memory.enabled:
@@ -537,6 +676,16 @@ async def tapps_session_start(
                     "stale": 0,
                     "contradicted": contradicted_count,
                 }
+
+                # Auto-GC: run once per session when usage exceeds threshold
+                memory_gc_result = _maybe_auto_gc(
+                    mem_store, snapshot.total_count, settings,
+                )
+
+                # Process session capture from previous Stop hook (Epic 34.5)
+                session_capture_result = _process_session_capture(
+                    settings.project_root, mem_store,
+                )
     except Exception:
         _logger.debug("memory_status_check_failed", exc_info=True)
 
@@ -553,6 +702,8 @@ async def tapps_session_start(
         "critical_rules": info["data"].get("critical_rules", []),
         "pipeline": info["data"]["pipeline"],
         "memory_status": memory_status,
+        "memory_gc": memory_gc_result,
+        "session_capture": session_capture_result,
         "project_profile": None,
         "project_profile_hint": _project_profile_hint,
     }
@@ -610,6 +761,7 @@ async def tapps_init(
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
     agent_teams: bool = False,
+    memory_capture: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
@@ -646,6 +798,8 @@ async def tapps_init(
             sections/tools.
         agent_teams: When ``True`` and platform is ``"claude"``, generate Agent Teams
             hooks (TeammateIdle, TaskCompleted) for quality watchdog teammate.
+        memory_capture: When ``True`` and platform is ``"claude"``, generate a Stop
+            hook that captures session quality data for memory persistence.
         dry_run: When ``True``, compute and return what would be created without
             writing files or warming caches. Keeps dry_run lightweight (~2-5s).
         verify_only: When ``True``, run only server verification and return (~1-3s).
@@ -694,6 +848,7 @@ async def tapps_init(
         overwrite_platform_rules=overwrite_platform_rules,
         overwrite_agents_md=overwrite_agents_md,
         agent_teams=agent_teams,
+        memory_capture=memory_capture,
         dry_run=dry_run,
         verify_only=verify_only,
         llm_engagement_level=llm_engagement_level,
