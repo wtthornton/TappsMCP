@@ -147,6 +147,21 @@ The checklist uses this to decide which tools are required vs recommended vs opt
 
 ---
 
+## Memory systems
+
+Your project may have two complementary memory systems. Use the right one for each type of knowledge:
+
+- **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Session learnings, user preferences, build commands, IDE settings, debugging insights. Auto-managed by Claude Code across sessions.
+- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge. Structured with tier classification (architectural/pattern/context), confidence scoring, decay, contradiction detection, and cross-session persistence.
+
+**When to use which:**
+- Build commands, IDE preferences, personal workflow notes --> auto memory
+- Architecture decisions, quality patterns, cross-agent knowledge --> `tapps_memory`
+
+Use `tapps_memory` for architecture decisions and quality patterns.
+
+---
+
 ## Platform hooks and automation
 
 When `tapps_init` generates platform-specific files, it also creates **hooks**, **subagents**, and **skills** that automate parts of the workflow:

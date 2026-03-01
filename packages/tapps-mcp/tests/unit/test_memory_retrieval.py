@@ -277,7 +277,8 @@ class TestScoringHelpers:
         assert MemoryRetriever._normalize_relevance(0.0) == 0.0
 
     def test_normalize_relevance_positive(self) -> None:
-        score = MemoryRetriever._normalize_relevance(1.0)
+        # BM25 normalization: score / (score + 5.0)
+        score = MemoryRetriever._normalize_relevance(5.0)
         assert 0.0 < score < 1.0
         assert score == pytest.approx(0.5)
 

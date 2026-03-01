@@ -3,6 +3,9 @@
 Upgrades memory search from simple keyword matching to scored,
 ranked retrieval combining text relevance with memory-specific
 signals (confidence, recency, access frequency).
+
+Uses BM25 (Okapi) for text relevance scoring with automatic
+index building and invalidation.
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ from typing import TYPE_CHECKING
 import structlog
 from pydantic import BaseModel, Field
 
+from tapps_core.memory.bm25 import BM25Scorer
 from tapps_core.memory.decay import DecayConfig, calculate_decayed_confidence, is_stale
 from tapps_core.memory.models import MemoryEntry  # noqa: TC001
 
@@ -28,6 +32,10 @@ logger = structlog.get_logger(__name__)
 _MAX_RESULTS = 50
 _DEFAULT_RESULTS = 10
 _MIN_CONFIDENCE_FLOOR = 0.1
+
+# BM25 relevance normalization constant: score / (score + K)
+# Chosen so that a BM25 score of 5.0 maps to ~0.5 normalized.
+_BM25_NORM_K = 5.0
 
 
 class ScoredMemory(BaseModel):
@@ -64,6 +72,9 @@ class MemoryRetriever:
 
     def __init__(self, config: DecayConfig | None = None) -> None:
         self._config = config or DecayConfig()
+        self._bm25 = BM25Scorer()
+        self._bm25_entries: list[MemoryEntry] = []
+        self._bm25_corpus_size: int = 0
 
     def search(
         self,
@@ -146,6 +157,25 @@ class MemoryRetriever:
         return scored[:limit]
 
     # -----------------------------------------------------------------------
+    # BM25 index management
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _entry_to_document(entry: MemoryEntry) -> str:
+        """Convert a memory entry to a BM25-indexable document string."""
+        return f"{entry.key} {entry.value} {' '.join(entry.tags)}"
+
+    def _ensure_bm25_index(self, entries: list[MemoryEntry]) -> None:
+        """Build or rebuild the BM25 index when the corpus changes."""
+        if len(entries) == self._bm25_corpus_size:
+            return
+        documents = [self._entry_to_document(e) for e in entries]
+        self._bm25.build_index(documents)
+        self._bm25_entries = list(entries)
+        self._bm25_corpus_size = len(entries)
+        logger.debug("bm25_index_rebuilt", corpus_size=self._bm25_corpus_size)
+
+    # -----------------------------------------------------------------------
     # Candidate retrieval
     # -----------------------------------------------------------------------
 
@@ -154,25 +184,85 @@ class MemoryRetriever:
         query: str,
         store: MemoryStore,
     ) -> list[tuple[MemoryEntry, float]]:
-        """Retrieve candidate entries and compute relevance scores.
+        """Retrieve candidate entries and compute BM25 relevance scores.
 
-        Tries the store's FTS5-backed search first. If that returns
-        results, computes word overlap for relevance scoring. Falls
-        back to full in-memory scan if FTS5 search returns no results.
+        Tries the store's FTS5-backed search first for candidate
+        filtering, then scores them using BM25. Falls back to full
+        in-memory BM25 scan if FTS5 returns no results, and to word
+        overlap if BM25 scoring fails entirely.
         """
-        # Try FTS5 via store.search()
+        # Try FTS5 via store.search() for candidate filtering
         try:
             fts_results = store.search(query)
             if fts_results:
-                return [
-                    (entry, self._word_overlap_score(query, entry))
-                    for entry in fts_results
-                ]
+                return self._bm25_score_entries(query, fts_results, store)
         except Exception:
             logger.debug("fts5_search_failed", query=query)
 
-        # Fallback: in-memory word overlap search
-        return self._like_search(query, store)
+        # Fallback: full corpus BM25 scan
+        return self._bm25_full_scan(query, store)
+
+    def _bm25_score_entries(
+        self,
+        query: str,
+        entries: list[MemoryEntry],
+        store: MemoryStore,
+    ) -> list[tuple[MemoryEntry, float]]:
+        """Score a set of entries using BM25.
+
+        Builds the BM25 index over the full corpus (for proper IDF),
+        then looks up scores for the given entries.
+        """
+        try:
+            all_entries = store.list_all()
+            self._ensure_bm25_index(all_entries)
+
+            # Build a lookup: entry key -> index in corpus
+            key_to_idx = {e.key: i for i, e in enumerate(self._bm25_entries)}
+            all_scores = self._bm25.score(query)
+
+            results: list[tuple[MemoryEntry, float]] = []
+            for entry in entries:
+                idx = key_to_idx.get(entry.key)
+                if idx is not None and idx < len(all_scores):
+                    results.append((entry, all_scores[idx]))
+                else:
+                    # Entry not in index (new entry?), use word overlap
+                    results.append(
+                        (entry, self._word_overlap_score(query, entry))
+                    )
+            return results
+        except Exception:
+            logger.debug("bm25_scoring_failed_using_word_overlap", query=query)
+            return [
+                (entry, self._word_overlap_score(query, entry))
+                for entry in entries
+            ]
+
+    def _bm25_full_scan(
+        self,
+        query: str,
+        store: MemoryStore,
+    ) -> list[tuple[MemoryEntry, float]]:
+        """Full corpus BM25 scan as fallback.
+
+        Falls back to word overlap if BM25 fails.
+        """
+        all_entries = store.list_all()
+        if not all_entries:
+            return []
+
+        try:
+            self._ensure_bm25_index(all_entries)
+            scores = self._bm25.score(query)
+            return [
+                (entry, score)
+                for entry, score in zip(all_entries, scores)
+                if score > 0
+            ]
+        except Exception:
+            logger.debug("bm25_full_scan_failed_using_word_overlap", query=query)
+            return self._like_search(query, store)
 
     def _like_search(
         self,
@@ -213,11 +303,13 @@ class MemoryRetriever:
     def _normalize_relevance(raw_score: float) -> float:
         """Normalize relevance score to 0.0-1.0 range.
 
-        Uses a sigmoid-like normalization: ``score / (score + 1)``.
+        Uses sigmoid normalization: ``score / (score + K)`` where
+        K=5.0, tuned for BM25 scores (typical range 0-15+).
+        A BM25 score of 5.0 maps to 0.5 normalized.
         """
         if raw_score <= 0:
             return 0.0
-        return raw_score / (raw_score + 1.0)
+        return raw_score / (raw_score + _BM25_NORM_K)
 
     @staticmethod
     def _recency_score(entry: MemoryEntry, now: datetime) -> float:

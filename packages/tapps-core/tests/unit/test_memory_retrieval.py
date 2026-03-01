@@ -1,9 +1,9 @@
-"""Tests for ranked memory retrieval (Epic 25, Story 25.1)."""
+"""Tests for ranked memory retrieval (Epic 25, Story 25.1 + Epic 34.2 BM25)."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -277,7 +277,8 @@ class TestScoringHelpers:
         assert MemoryRetriever._normalize_relevance(0.0) == 0.0
 
     def test_normalize_relevance_positive(self) -> None:
-        score = MemoryRetriever._normalize_relevance(1.0)
+        # BM25 normalization: score / (score + 5.0)
+        score = MemoryRetriever._normalize_relevance(5.0)
         assert 0.0 < score < 1.0
         assert score == pytest.approx(0.5)
 
@@ -302,3 +303,162 @@ class TestScoringHelpers:
     def test_frequency_score_capped(self) -> None:
         entry = _make_entry(access_count=100)
         assert MemoryRetriever._frequency_score(entry) == 1.0
+
+
+# ---------------------------------------------------------------------------
+# BM25 integration tests (Epic 34.2)
+# ---------------------------------------------------------------------------
+
+
+class TestBM25Integration:
+    """Tests for BM25-based relevance scoring in MemoryRetriever."""
+
+    def test_stemming_matches_related_words(self) -> None:
+        """'testing' query should match a memory about 'test' via stemming."""
+        entries = [
+            _make_entry("test-framework", "test framework configuration"),
+            _make_entry("unrelated", "database connection pooling"),
+        ]
+        retriever = MemoryRetriever()
+        store = _make_store(entries)
+
+        results = retriever.search("testing", store)
+        assert len(results) >= 1
+        assert results[0].entry.key == "test-framework"
+
+    def test_idf_rare_term_scores_higher(self) -> None:
+        """A rare term should produce higher BM25 relevance than a common one."""
+        entries = [
+            _make_entry("python-setup", "python setup guide", confidence=0.8),
+            _make_entry("python-web", "python web framework", confidence=0.8),
+            _make_entry("python-data", "python data science", confidence=0.8),
+            _make_entry("rust-setup", "rust setup guide", confidence=0.8),
+        ]
+        retriever = MemoryRetriever()
+        store = _make_store(entries)
+
+        # "rust" is rare (1 doc), "python" is common (3 docs)
+        rust_results = retriever.search("rust", store)
+        python_results = retriever.search("python", store)
+
+        # The rust match should have higher BM25 relevance
+        assert len(rust_results) >= 1
+        assert len(python_results) >= 1
+        assert rust_results[0].bm25_relevance > python_results[0].bm25_relevance
+
+    def test_composite_scoring_still_works(self) -> None:
+        """BM25 integration preserves composite scoring formula."""
+        entries = [
+            _make_entry(
+                "high-conf",
+                "python framework config",
+                confidence=0.9,
+                updated_at=_RECENT,
+                access_count=10,
+            ),
+            _make_entry(
+                "low-conf",
+                "python framework config",
+                confidence=0.3,
+                updated_at=_RECENT,
+                access_count=1,
+            ),
+        ]
+        retriever = MemoryRetriever()
+        store = _make_store(entries)
+
+        results = retriever.search("python framework", store)
+        assert len(results) == 2
+        # High confidence + high frequency should outrank
+        assert results[0].entry.key == "high-conf"
+        # Both should have positive composite scores
+        assert all(r.score > 0 for r in results)
+        # bm25_relevance should be populated
+        assert all(r.bm25_relevance >= 0 for r in results)
+
+    def test_fallback_to_word_overlap_on_bm25_error(self) -> None:
+        """If BM25 scoring fails, fall back to word overlap."""
+        entries = [_make_entry("my-key", "python framework setup")]
+        retriever = MemoryRetriever()
+        store = _make_store(entries)
+
+        # Force BM25 to fail by corrupting internal state
+        with patch.object(
+            retriever._bm25, "score", side_effect=RuntimeError("BM25 broken")
+        ):
+            results = retriever.search("python framework", store)
+            # Should still get results via word overlap fallback
+            assert len(results) >= 1
+
+    def test_index_invalidation_on_store_size_change(self) -> None:
+        """BM25 index should rebuild when store size changes."""
+        entries_v1 = [
+            _make_entry("key-a", "alpha content"),
+        ]
+        entries_v2 = [
+            _make_entry("key-a", "alpha content"),
+            _make_entry("key-b", "beta content"),
+        ]
+        retriever = MemoryRetriever()
+
+        # First search builds index for 1 entry
+        store_v1 = _make_store(entries_v1)
+        retriever.search("alpha", store_v1)
+        assert retriever._bm25_corpus_size == 1
+
+        # Second search with 2 entries should rebuild
+        store_v2 = _make_store(entries_v2)
+        retriever.search("beta", store_v2)
+        assert retriever._bm25_corpus_size == 2
+
+    def test_empty_store_returns_no_results(self) -> None:
+        """An empty store should return no results."""
+        retriever = MemoryRetriever()
+        store = _make_store([])
+        store.search.return_value = []
+
+        results = retriever.search("anything", store)
+        assert results == []
+
+    def test_bm25_relevance_field_populated(self) -> None:
+        """The bm25_relevance field should be populated with BM25 score."""
+        entries = [_make_entry("pytest-config", "pytest configuration details")]
+        retriever = MemoryRetriever()
+        store = _make_store(entries)
+
+        results = retriever.search("pytest config", store)
+        assert len(results) == 1
+        assert results[0].bm25_relevance > 0.0
+        assert results[0].bm25_relevance <= 1.0
+
+    def test_word_overlap_still_available_as_method(self) -> None:
+        """_word_overlap_score should still be available as a fallback."""
+        entry = _make_entry("test-key", "python web framework")
+        score = MemoryRetriever._word_overlap_score("python web", entry)
+        assert score > 0.0
+
+    def test_entry_to_document_includes_tags(self) -> None:
+        """Document text should include key, value, and tags."""
+        entry = _make_entry(
+            "my-key", "my value", tags=["tag1", "tag2"]
+        )
+        doc = MemoryRetriever._entry_to_document(entry)
+        assert "my-key" in doc
+        assert "my value" in doc
+        assert "tag1" in doc
+        assert "tag2" in doc
+
+    def test_bm25_multi_term_query(self) -> None:
+        """Multi-term queries should match entries with multiple terms."""
+        entries = [
+            _make_entry("full-match", "python testing framework config"),
+            _make_entry("partial-match", "python web server"),
+            _make_entry("no-match", "database connection pooling"),
+        ]
+        retriever = MemoryRetriever()
+        store = _make_store(entries)
+
+        results = retriever.search("python testing framework", store)
+        # full-match should rank first (matches more query terms)
+        assert len(results) >= 1
+        assert results[0].entry.key == "full-match"

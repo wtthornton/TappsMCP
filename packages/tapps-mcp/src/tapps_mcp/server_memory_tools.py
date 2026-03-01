@@ -37,7 +37,7 @@ _ANNOTATIONS_MEMORY_READ = ToolAnnotations(
     openWorldHint=False,
 )
 
-_VALID_ACTIONS = {"save", "get", "list", "delete", "search"}
+_VALID_ACTIONS = {"save", "get", "list", "delete", "search", "reinforce", "gc"}
 
 
 async def tapps_memory(
@@ -61,8 +61,8 @@ async def tapps_memory(
     sessions and be available to all MCP-connected agents.
 
     Args:
-        action: One of "save", "get", "list", "delete", "search".
-        key: Memory key (required for save/get/delete). Lowercase slug.
+        action: One of "save", "get", "list", "delete", "search", "reinforce", "gc".
+        key: Memory key (required for save/get/delete/reinforce). Lowercase slug.
         value: Memory content (required for save). Max 4096 chars.
         tier: "architectural", "pattern", or "context" (default: "pattern").
         source: "human", "agent", "inferred", or "system" (default: "agent").
@@ -72,6 +72,15 @@ async def tapps_memory(
         branch: Git branch name (required when scope="branch").
         query: Search query (for search action).
         confidence: Override default confidence 0.0-1.0 (optional, -1 for default).
+
+    Actions:
+        save: Store a new memory or update an existing one.
+        get: Retrieve a memory by key.
+        list: List all memories with optional filters.
+        delete: Remove a memory by key.
+        search: Full-text search across memories.
+        reinforce: Boost confidence and reset decay clock for a memory (requires key).
+        gc: Run garbage collection to archive stale/contradicted memories.
     """
     await ensure_session_initialized()
     _record_call("tapps_memory")
@@ -108,6 +117,10 @@ async def tapps_memory(
             result_data = _handle_list(store, tier, scope, tag_list)
         elif action == "delete":
             result_data = _handle_delete(store, key)
+        elif action == "reinforce":
+            result_data = _handle_reinforce(store, key)
+        elif action == "gc":
+            result_data = _handle_gc(store)
         else:  # search
             result_data = _handle_search(store, query, tag_list, tier, scope)
     except Exception as exc:
@@ -255,6 +268,68 @@ def _handle_search(
         "results": [e.model_dump() for e in results],
         "count": len(results),
         "query": query,
+        "store_metadata": _store_metadata(store),
+    }
+
+
+def _handle_reinforce(store: MemoryStore, key: str) -> dict[str, Any]:
+    """Handle the reinforce action."""
+    if not key:
+        return {"error": "missing_key", "message": "Key is required for reinforce."}
+
+    entry = store.get(key)
+    if entry is None:
+        return {
+            "action": "reinforce",
+            "found": False,
+            "key": key,
+            "store_metadata": _store_metadata(store),
+        }
+
+    old_confidence = entry.confidence
+
+    from tapps_core.memory.decay import DecayConfig
+    from tapps_core.memory.reinforcement import reinforce
+
+    config = DecayConfig()
+    updates = reinforce(entry, config)
+    updated_entry = store.update_fields(key, **updates)
+
+    return {
+        "action": "reinforce",
+        "found": True,
+        "old_confidence": old_confidence,
+        "new_confidence": updates["confidence"],
+        "reinforce_count": updates["reinforce_count"],
+        "entry": updated_entry.model_dump() if updated_entry else entry.model_dump(),
+        "store_metadata": _store_metadata(store),
+    }
+
+
+def _handle_gc(store: MemoryStore) -> dict[str, Any]:
+    """Handle the gc (garbage collection) action."""
+    from tapps_core.memory.decay import DecayConfig
+    from tapps_core.memory.gc import MemoryGarbageCollector
+
+    config = DecayConfig()
+    gc = MemoryGarbageCollector(config)
+
+    snap = store.snapshot()
+    candidates = gc.identify_candidates(snap.entries)
+
+    archived_keys: list[str] = []
+    for candidate in candidates:
+        deleted = store.delete(candidate.key)
+        if deleted:
+            archived_keys.append(candidate.key)
+
+    remaining = store.count()
+
+    return {
+        "action": "gc",
+        "archived_count": len(archived_keys),
+        "archived_keys": archived_keys,
+        "remaining_count": remaining,
         "store_metadata": _store_metadata(store),
     }
 
