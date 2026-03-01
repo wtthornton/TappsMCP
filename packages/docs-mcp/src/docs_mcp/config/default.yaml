@@ -1,0 +1,14 @@
+# DocsMCP default configuration
+# Override in .docsmcp.yaml at your project root.
+
+output_dir: docs
+default_style: standard
+default_format: markdown
+include_toc: true
+include_badges: true
+changelog_format: keep-a-changelog
+adr_format: madr
+diagram_format: mermaid
+git_log_limit: 500
+log_level: INFO
+log_json: false

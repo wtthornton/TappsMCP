@@ -1,10 +1,18 @@
-# TappsMCP
+# Tapps Platform
 
-> **A quality toolset for AI coding assistants.** MCP server that gives LLMs and AI-powered IDEs deterministic code quality tools — scoring, security scanning, quality gates, documentation lookup, config validation, and domain expert consultation — through structured tool calls instead of prompt injection.
+> **A quality and documentation toolset for AI coding assistants.** Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs deterministic tools for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and domain expert consultation — through structured tool calls instead of prompt injection.
 
-Use TappsMCP in your projects so **Claude Code**, **Cursor**, **VS Code Copilot**, and other MCP-capable clients produce higher-quality code with consistent, repeatable standards.
+Use TappsMCP and DocsMCP in your projects so **Claude Code**, **Cursor**, **VS Code Copilot**, and other MCP-capable clients produce higher-quality code with consistent, repeatable standards.
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
+
+### Packages
+
+| Package | PyPI Name | Purpose | Tools |
+|---|---|---|---|
+| **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics) | 0 (library) |
+| **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 28 |
+| **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 3 (MVP) |
 
 [![CI](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -26,6 +34,7 @@ Use TappsMCP in your projects so **Claude Code**, **Cursor**, **VS Code Copilot*
 - [Docker](#docker)
 - [Development](#development)
 - [Project layout](#project-layout)
+- [DocsMCP (documentation server)](#docsmcp-documentation-server)
 - [Docs and roadmap](#docs-and-roadmap)
 - [Contributing](#contributing)
 - [License](#license)
@@ -137,24 +146,25 @@ The first run downloads the package; use `npx tapps-mcp@latest serve` to pin to 
 
 ### Install from source
 
-Clone the repo and install in editable mode with [uv](https://docs.astral.sh/uv/) (recommended) or pip:
+Clone the repo and install in editable mode with [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
 git clone https://github.com/tapps-mcp/tapps-mcp.git
 cd tapps-mcp
 ```
 
-**With uv:**
+**With uv (monorepo workspace):**
 
 ```bash
-uv sync
-# Run with: uv run tapps-mcp serve
+uv sync --all-packages           # install all 3 packages
+uv run tapps-mcp serve           # run TappsMCP
+uv run docsmcp serve             # run DocsMCP
 ```
 
-**With pip:**
+**With pip (single package):**
 
 ```bash
-pip install -e .
+pip install -e packages/tapps-mcp
 # Run with: tapps-mcp serve
 ```
 
@@ -770,72 +780,130 @@ After upgrading TappsMCP, run `tapps-mcp upgrade` to refresh all generated files
 
 ## Development
 
-```bash
-# Install with dev dependencies
-uv sync
+This is a **uv workspace monorepo** with three packages. All commands run from the **repository root**.
 
-# Tests (unit + integration)
-uv run pytest tests/ -v
+```bash
+# Install all packages (tapps-core, tapps-mcp, docs-mcp)
+uv sync --all-packages
+
+# Run all tests across the entire workspace (4300+ tests)
+uv run pytest packages/tapps-core/tests/ packages/tapps-mcp/tests/ packages/docs-mcp/tests/ -v
+
+# Run tests for a single package
+uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1087 tests)
+uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (3123 tests)
+uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (107 tests)
+
+# Run a single test file
+uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v
 
 # Coverage
-uv run pytest tests/ --cov=tapps_mcp --cov-report=term-missing
+uv run pytest packages/tapps-mcp/tests/ --cov=tapps_mcp --cov-report=term-missing
 
 # Type checking
-uv run mypy --strict src/tapps_mcp/
+uv run mypy --strict packages/tapps-mcp/src/tapps_mcp/
+uv run mypy --strict packages/tapps-core/src/tapps_core/
 
 # Linting
-uv run ruff check src/
-uv run ruff format --check src/
+uv run ruff check packages/*/src/
+uv run ruff format --check packages/*/src/
 ```
 
-Run all commands above from the **repository root** after `uv sync`. If you see `ModuleNotFoundError: No module named 'tapps_mcp'`, install the package first (`uv sync` or `pip install -e .`).
+If you see `ModuleNotFoundError`, run `uv sync --all-packages` first.
 
-Pre-commit hooks are configured (`.pre-commit-config.yaml`). CI runs on push/PR to `master`/`main` (lint + tests on Ubuntu, Windows, macOS × Python 3.12, 3.13).
+Pre-commit hooks are configured (`.pre-commit-config.yaml`). CI runs on push/PR to `master`/`main` (lint + tests on Ubuntu, Windows, macOS x Python 3.12, 3.13).
 
 ---
 
 ## Project layout
 
+This is a **uv workspace monorepo** with three packages under `packages/`:
+
 ```
-src/tapps_mcp/
-├── __init__.py, cli.py, server.py      # Entry points and MCP server
-├── server_helpers.py                   # Shared response builders, singleton caches
-├── server_scoring_tools.py             # tapps_score_file, tapps_quality_gate, tapps_quick_check
-├── server_pipeline_tools.py            # tapps_validate_changed, tapps_session_start, tapps_init,
-│                                       #   tapps_set_engagement_level, tapps_upgrade, tapps_doctor
-├── server_metrics_tools.py             # tapps_dashboard, tapps_stats, tapps_feedback, tapps_research
-├── server_memory_tools.py              # tapps_memory (save, get, list, delete, search, reinforce,
-│                                       #   contradictions, gc, reseed, import, export)
-├── common/                             # Exceptions, logging, shared models, nudges
-├── config/                             # Settings, default.yaml
-├── security/                           # Path validation, IO guardrails, secrets, governance
-├── scoring/                            # Score model, constants, scorer, dead code, dependency security
-├── gates/                              # Gate presets, evaluator
-├── tools/                              # Ruff, mypy, bandit, radon, vulture, pip-audit, parallel, checklist
-├── knowledge/                          # Context7 client, cache, lookup, warming, RAG safety,
-│                                       #   Context7 + LlmsTxt providers (providers/)
-├── validators/                         # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
-├── experts/                            # Domain detector, engine, RAG, registry, confidence,
-│                                       #   vector RAG, knowledge management, 139 knowledge files
-├── memory/                             # Shared memory system: models, SQLite persistence (WAL + FTS5),
-│                                       #   in-memory store, decay engine, contradiction detection,
-│                                       #   GC/archival, reinforcement, ranked retrieval, injection,
-│                                       #   profile seeding, import/export
-├── project/                            # Project profiling, session notes, impact analysis, reports,
-│                                       #   import graph, cycle detection, coupling metrics
-├── adaptive/                           # Adaptive scoring, expert voting, weight distribution
-├── metrics/                            # Collector, dashboard, alerts, trends, OTel export, feedback
-├── prompts/                            # Workflow prompt templates and platform rule templates
-├── distribution/                       # Setup generator (init, upgrade, doctor)
-└── pipeline/                           # Pipeline orchestration, upgrade, handoff, initialization,
-                                        #   AGENTS.md validation, platform generators
+packages/
+├── tapps-core/                        # Shared infrastructure library (no MCP tools)
+│   └── src/tapps_core/
+│       ├── common/                    # Exceptions, logging, shared models, utilities
+│       ├── config/                    # Settings, default.yaml
+│       ├── security/                  # Path validation, IO guardrails, secrets, governance
+│       ├── prompts/                   # Workflow prompt templates
+│       ├── knowledge/                 # Context7 client, cache, lookup, warming, RAG safety,
+│       │                              #   Context7 + LlmsTxt providers (providers/)
+│       ├── experts/                   # Domain detector, engine, RAG, 139 knowledge files
+│       ├── memory/                    # Shared memory: SQLite persistence, decay, retrieval
+│       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export
+│       └── adaptive/                  # Adaptive scoring, expert voting, weight distribution
+│
+├── tapps-mcp/                         # Code quality MCP server (28 tools)
+│   └── src/tapps_mcp/
+│       ├── server.py, cli.py          # Entry points and MCP server
+│       ├── server_*.py                # Tool modules (scoring, pipeline, metrics, memory, analysis)
+│       ├── scoring/                   # Score model, scorer, dead code, dependency security
+│       ├── gates/                     # Gate presets, evaluator
+│       ├── tools/                     # Ruff, mypy, bandit, radon, vulture, pip-audit, checklist
+│       ├── validators/                # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
+│       ├── project/                   # Project profiling, session notes, impact analysis
+│       ├── distribution/              # Setup generator (init, upgrade, doctor)
+│       ├── pipeline/                  # Pipeline orchestration, platform generators
+│       └── (re-exports)              # Backward-compatible re-exports from tapps-core
+│
+└── docs-mcp/                          # Documentation MCP server (3 tools, MVP)
+    └── src/docs_mcp/
+        ├── server.py, cli.py          # Entry points and MCP server
+        ├── server_helpers.py          # Response builders, singletons
+        └── config/                    # DocsMCP-specific settings, default.yaml
+
 plugin/
 └── cursor/                            # Ready-to-publish Cursor marketplace plugin
 examples/
 └── agent-sdk/                         # Claude Agent SDK integration examples (Python + TypeScript)
-scripts/
-└── validate-cursor-plugin.sh          # CI validation for plugin manifest
 ```
+
+**Backward compatibility:** `from tapps_mcp.config import load_settings` still works — tapps-mcp re-exports everything from tapps-core. Existing consuming projects need no changes.
+
+---
+
+## DocsMCP (documentation server)
+
+DocsMCP is a companion MCP server for documentation generation, drift detection, and maintenance. It shares infrastructure with TappsMCP via `tapps-core`.
+
+### Current tools (MVP)
+
+| Tool | Description |
+|------|-------------|
+| `docs_session_start` | Initialize session, detect project context, scan existing documentation |
+| `docs_project_scan` | Comprehensive documentation state audit with completeness scoring |
+| `docs_config` | View/update DocsMCP configuration (`.docsmcp.yaml`) |
+
+### CLI
+
+```bash
+docsmcp serve          # Start the DocsMCP MCP server
+docsmcp doctor         # Check configuration and dependencies
+docsmcp scan           # Run documentation inventory
+docsmcp generate       # Generate documentation (coming soon)
+docsmcp version        # Print version
+```
+
+### Configuration
+
+DocsMCP reads from `.docsmcp.yaml` in the project root:
+
+```yaml
+output_dir: docs
+default_style: standard        # minimal | standard | comprehensive
+default_format: markdown       # markdown | rst | plain
+include_toc: true
+include_badges: true
+changelog_format: keep-a-changelog
+adr_format: madr
+diagram_format: mermaid
+git_log_limit: 500
+```
+
+### Roadmap
+
+DocsMCP is in early development. Planned features include README generation, API documentation, changelog generation, Mermaid diagrams, drift detection, completeness validation, and multi-language support. See [docs/planning/DOCSMCP_PRD.md](docs/planning/DOCSMCP_PRD.md) for the full specification.
 
 ---
 
@@ -864,11 +932,13 @@ scripts/
 | [docs/ARCHITECTURE_CACHE_AND_RAG.md](docs/ARCHITECTURE_CACHE_AND_RAG.md) | Context7 cache SWR behavior and expert RAG index architecture. |
 | [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) | Docker build, run, env vars, and client connection. |
 | [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) | Architecture and design rationale. |
+| [docs/planning/TAPPS_PLATFORM_PRD.md](docs/planning/TAPPS_PLATFORM_PRD.md) | Platform restructure PRD (monorepo, extraction, composition). |
+| [docs/planning/DOCSMCP_PRD.md](docs/planning/DOCSMCP_PRD.md) | DocsMCP feature specification (18 tools, 12 epics). |
 | [docs/planning/epics/README.md](docs/planning/epics/README.md) | Epic index, dependency graph, tool delivery timeline. |
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅ · LLM Engagement Level ✅ · GitHub Templates & CI ✅ · GitHub Copilot & Governance ✅ · **Shared Memory Foundation** ✅ · **Memory Intelligence** ✅ · **Memory Retrieval & Integration** ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅ · LLM Engagement Level ✅ · GitHub Templates & CI ✅ · GitHub Copilot & Governance ✅ · Shared Memory Foundation ✅ · Memory Intelligence ✅ · Memory Retrieval & Integration ✅ · **Monorepo Workspace** ✅ · **tapps-core Extraction** ✅ · **DocsMCP Server Skeleton** ✅
 
 ---
 

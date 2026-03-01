@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.28,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tapps-core"
+version = "1.0.0"
+description = "Shared infrastructure library for Tapps platform (config, security, logging, knowledge, memory, experts, metrics)"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "TappsMCP Contributors" },
+]
+keywords = ["tapps", "infrastructure", "config", "security", "logging"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.12.5,<3",
+    "pydantic-settings>=2.13.1,<3",
+    "structlog>=25.5.0,<26",
+    "pyyaml>=6.0.3,<7",
+    "httpx>=0.28.1,<1",
+]
+
+[project.optional-dependencies]
+vector = [
+    "faiss-cpu>=1.13.2,<2",
+    "sentence-transformers>=5.2.3,<6",
+    "numpy>=2.4.2,<3",
+]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/tapps_core/"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tapps_core"]

@@ -1,42 +1,8 @@
-[build-system]
-requires = ["hatchling>=1.28,<2"]
-build-backend = "hatchling.build"
+[tool.uv.workspace]
+members = ["packages/*"]
 
-[project]
-name = "tapps-mcp"
-version = "0.5.0"
-description = "MCP server providing deterministic code quality tools for AI coding assistants"
-readme = "README.md"
-license = "MIT"
-requires-python = ">=3.12"
-authors = [
-    { name = "TappsMCP Contributors" },
-]
-keywords = ["mcp", "code-quality", "linting", "security", "scoring"]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Software Development :: Quality Assurance",
-    "Typing :: Typed",
-]
-dependencies = [
-    "mcp[cli]>=1.26.0,<2",
-    "pydantic>=2.12.5,<3",
-    "pydantic-settings>=2.13.1,<3",
-    "structlog>=25.5.0,<26",
-    "pyyaml>=6.0.3,<7",
-    "click>=8.3.1,<9",
-    "anyio>=4.12.1,<5",
-    "httpx>=0.28.1,<1",
-    "filelock>=3.24.3,<4",
-]
-
-[project.optional-dependencies]
-dev = [
+[tool.uv]
+dev-dependencies = [
     "pytest>=9.0.2,<10",
     "pytest-asyncio>=1.3.0,<2",
     "pytest-cov>=7.0.0,<8",
@@ -47,40 +13,15 @@ dev = [
     "types-PyYAML>=6.0.12",
     "playwright>=1.58.0,<2",
 ]
-rag = [
-    "faiss-cpu>=1.13.2,<2",
-    "sentence-transformers>=5.2.3,<6",
-    "numpy>=2.4.2,<3",
-]
-vector = [
-    "faiss-cpu>=1.13.2,<2",
-    "sentence-transformers>=5.2.3,<6",
-    "numpy>=2.4.2,<3",
-]
-pip-audit = [
-    "pip-audit>=2.7.0",
-]
-
-[project.scripts]
-tapps-mcp = "tapps_mcp.cli:main"
-
-[project.urls]
-Homepage = "https://github.com/tapps-mcp/tapps-mcp"
-Repository = "https://github.com/tapps-mcp/tapps-mcp"
-Documentation = "https://github.com/tapps-mcp/tapps-mcp#readme"
-Issues = "https://github.com/tapps-mcp/tapps-mcp/issues"
-Changelog = "https://github.com/tapps-mcp/tapps-mcp/blob/master/CHANGELOG.md"
-
-[tool.hatch.build.targets.sdist]
-include = ["src/tapps_mcp/"]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/tapps_mcp"]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["src", "tests"]
+src = [
+    "packages/tapps-core/src",
+    "packages/tapps-mcp/src",
+    "packages/docs-mcp/src",
+]
 
 [tool.ruff.lint]
 select = [
@@ -113,8 +54,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "examples/**/*.py" = ["T201", "PTH109"]
-"tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007"]
-"src/tapps_mcp/metrics/**/*.py" = ["PLR2004"]
+"packages/*/tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007"]
+"packages/tapps-mcp/src/tapps_mcp/metrics/**/*.py" = ["PLR2004"]
 "scripts/**/*.py" = ["T201", "E501", "PLR2004", "ANN"]
 
 [tool.mypy]
@@ -156,7 +97,11 @@ init_typed = true
 warn_required_dynamic_aliases = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = [
+    "packages/tapps-core/tests",
+    "packages/tapps-mcp/tests",
+    "packages/docs-mcp/tests",
+]
 asyncio_mode = "auto"
 timeout = 60
 markers = [
@@ -166,7 +111,7 @@ markers = [
 addopts = "-v --tb=short"
 
 [tool.coverage.run]
-source = ["tapps_mcp"]
+source = ["tapps_core", "tapps_mcp", "docs_mcp"]
 branch = true
 
 [tool.coverage.report]

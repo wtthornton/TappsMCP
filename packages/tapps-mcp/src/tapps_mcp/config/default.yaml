@@ -1,0 +1,33 @@
+# TappsMCP default configuration
+# Override per-project in .tapps-mcp.yaml or via TAPPS_MCP_* env vars.
+
+quality_preset: standard
+log_level: INFO
+log_json: false
+tool_timeout: 30
+
+scoring_weights:
+  complexity: 0.18
+  security: 0.27
+  maintainability: 0.24
+  test_coverage: 0.13
+  performance: 0.08
+  structure: 0.05
+  devex: 0.05
+
+adaptive:
+  enabled: false
+  learning_rate: 0.1
+  min_outcomes: 5
+
+memory:
+  enabled: true
+  gc_enabled: true
+  contradiction_check_on_start: true
+  max_memories: 500
+  inject_into_experts: true
+  decay:
+    architectural_half_life_days: 180
+    pattern_half_life_days: 60
+    context_half_life_days: 14
+    confidence_floor: 0.1

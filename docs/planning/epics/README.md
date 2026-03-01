@@ -31,8 +31,16 @@
 | [Epic 24](EPIC-24-MEMORY-INTELLIGENCE.md) | Memory Intelligence (Decay, Contradictions) | P1 | ~2-3 weeks | Epic 23, Epic 4, Epic 5 | **Proposed** |
 | [Epic 25](EPIC-25-MEMORY-RETRIEVAL-INTEGRATION.md) | Memory Retrieval & Integration | P2 | ~2-3 weeks | Epic 23, Epic 24, Epic 3, Epic 4 | **Proposed** |
 | [Epic 29](EPIC-29-DOC-PROVIDER-SIMPLIFICATION.md) | Doc Provider Simplification | P2 | ~1 week | Epic 2, Epic 16 | **Proposed** |
+| [Epic 30](EPIC-30-BENCHMARK-INFRASTRUCTURE.md) | Benchmark Infrastructure & AGENTBench Integration | P1 | ~3-4 weeks | Epic 8, Epic 18, Epic 28 | **Proposed** |
+| [Epic 31](EPIC-31-TEMPLATE-SELF-OPTIMIZATION.md) | Template Self-Optimization Loop | P1 | ~3-4 weeks | Epic 30, Epic 18, Epic 5 | **Proposed** |
+| [Epic 32](EPIC-32-MCP-TOOL-EFFECTIVENESS.md) | MCP Tool Effectiveness Benchmarking | P2 | ~3-4 weeks | Epic 30, Epic 7, Epic 5 | **Proposed** |
+| [Epic 33](EPIC-33-PLATFORM-ARTIFACT-CORRECTNESS.md) | Platform Artifact Correctness | P0 | ~1.5-2 weeks | Epic 8, Epic 12 | **Proposed** |
+| [Epic 34](EPIC-34-MEMORY-RETRIEVAL-UPGRADE.md) | Memory Retrieval & Reinforcement Upgrade | P1 | ~2 weeks | Epic 23, Epic 24, Epic 25 | **Proposed** |
+| [Epic 35](EPIC-35-EXPERT-ADAPTIVE-INTEGRATION.md) | Expert System Adaptive Integration | P1 | ~1.5-2 weeks | Epic 3, Epic 5, Epic 7 | **Proposed** |
+| [Epic 36](EPIC-36-HOOK-PLATFORM-EXPANSION.md) | Hook & Platform Generation Expansion | P1 | ~2-2.5 weeks | Epic 33, Epic 8, Epic 18 | **Proposed** |
+| [Epic 37](EPIC-37-PIPELINE-ONBOARDING-DISTRIBUTION.md) | Pipeline Onboarding & Distribution | P1 | ~2.5-3 weeks | Epic 33, Epic 36, Epic 6, Epic 8 | **Proposed** |
 
-**Total LOE:** ~40-51 weeks (Epics 0-22, all complete) + ~6-10 weeks proposed (Epics 23-25, 29)
+**Total LOE:** ~40-51 weeks (Epics 0-22, all complete) + ~25-35 weeks proposed (Epics 23-25, 29-37)
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -81,7 +89,35 @@ Epic 23 (Shared Memory Foundation)   ← depends on Epic 0, Epic 4
 Epic 29 (Doc Provider Simplification) ← depends on Epic 2, Epic 16
   Context7 + LlmsTxt only; deprecate Deepcon, Docfork
 
+--- Self-Improvement & Benchmarking Wave (Epics 30-32) ---
+
+Epic 30 (Benchmark Infrastructure)      ← depends on Epic 8, Epic 18, Epic 28
+  │  AGENTBench dataset, Docker evaluation, context injection
+  ├── Epic 31 (Template Self-Optimization) ← also depends on Epic 5
+  │     Redundancy analysis, ablation, engagement calibration, promotion gate
+  └── Epic 32 (MCP Tool Effectiveness)    ← also depends on Epic 7
+        Tool impact measurement, checklist calibration, adaptive feedback loop
+
+--- AI OS-Informed Improvements Wave (Epics 33-37) ---
+
+Epic 33 (Platform Artifact Correctness) ← depends on Epic 8, Epic 12
+  │  Fix skill/subagent frontmatter, path-scoped rules, permission rules
+  ├── Epic 36 (Hook & Platform Expansion)  ← also depends on Epic 18
+  │     SubagentStop/SessionEnd/PostToolUseFailure, prompt hooks, blocking hooks
+  └── Epic 37 (Pipeline Onboarding & Distribution) ← also depends on Epic 6, Epic 36
+        Interactive wizard, plugin packaging, upgrade rollback, cache eviction
+
+Epic 34 (Memory Retrieval Upgrade)       ← depends on Epic 23, Epic 24, Epic 25
+  BM25 scoring, reinforcement endpoint, auto-capture hook, auto-GC
+
+Epic 35 (Expert Adaptive Integration)    ← depends on Epic 3, Epic 5, Epic 7
+  Adaptive domain detector wiring, synonym expansion, knowledge freshness
+
 ```
+
+**Note:** Epics 30-32 form a "Self-Improvement & Benchmarking" wave. Epic 30 provides infrastructure. Epics 31 and 32 can run in parallel after Epic 30 completes.
+
+**Note:** Epics 33-37 form an "AI OS-Informed Improvements" wave based on cross-referencing AI OS architectural patterns against TappsMCP and validating against 2026 Claude Code docs. See [TAPPMCP_IMPROVEMENTS.md](../../reviews/TAPPMCP_IMPROVEMENTS.md) for the analysis. Epic 33 (P0) should be implemented first. Epics 34 and 35 are independent and can run in parallel. Epic 36 depends on Epic 33. Epic 37 depends on Epics 33 and 36.
 
 **Note:** Epics 13-17 are fully independent and can all be developed in parallel.
 

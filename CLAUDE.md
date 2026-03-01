@@ -6,45 +6,74 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs and AI coding assistants. It scores Python files, runs security scans, enforces quality gates, looks up library docs, validates configs, and consults domain experts — all via structured MCP tool calls. Any MCP-capable client (Claude Code, Cursor, VS Code Copilot) can use it. If you are a consuming project, see [AGENTS.md](AGENTS.md) instead.
 
+## Repository structure
+
+This is a **uv workspace monorepo** with three packages:
+
+| Package | Path | Purpose |
+|---|---|---|
+| **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, memory, experts, metrics, adaptive) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (28 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (3 tools, MVP) |
+
+tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
+
 ## Development commands
 
 ```bash
-# Install dependencies
-uv sync
+# Install all packages
+uv sync --all-packages
 
-# Run all tests (2700+ tests)
-uv run pytest tests/ -v
+# Run all tests (4300+ tests)
+uv run pytest packages/tapps-core/tests/ packages/tapps-mcp/tests/ packages/docs-mcp/tests/ -v
+
+# Run tests for a single package
+uv run pytest packages/tapps-core/tests/ -v      # 1087 tests
+uv run pytest packages/tapps-mcp/tests/ -v        # 3123 tests
+uv run pytest packages/docs-mcp/tests/ -v         # 107 tests
 
 # Run a single test file
-uv run pytest tests/unit/test_scorer.py -v
+uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v
 
 # Run a single test by name
-uv run pytest tests/unit/test_scorer.py -k "test_score_empty_file" -v
+uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -k "test_score_empty_file" -v
 
 # Run with coverage (80% minimum, fail_under enforced)
-uv run pytest tests/ --cov=tapps_mcp --cov-report=term-missing
+uv run pytest packages/tapps-mcp/tests/ --cov=tapps_mcp --cov-report=term-missing
 
 # Skip slow subprocess-heavy tests
-uv run pytest tests/ -m "not slow" -v
+uv run pytest packages/tapps-mcp/tests/ -m "not slow" -v
 
 # Type checking (strict mode)
-uv run mypy --strict src/tapps_mcp/
+uv run mypy --strict packages/tapps-mcp/src/tapps_mcp/
+uv run mypy --strict packages/tapps-core/src/tapps_core/
 
 # Linting and formatting
-uv run ruff check src/
-uv run ruff format --check src/
+uv run ruff check packages/*/src/
+uv run ruff format --check packages/*/src/
 
-# Run the MCP server (stdio)
-uv run tapps-mcp serve
+# Run the MCP servers (stdio)
+uv run tapps-mcp serve           # TappsMCP (code quality)
+uv run docsmcp serve             # DocsMCP (documentation)
 
 # CLI utilities
 uv run tapps-mcp doctor           # diagnose config issues
 uv run tapps-mcp upgrade --dry-run  # preview generated file updates
+uv run docsmcp doctor             # DocsMCP diagnostics
 ```
 
 ## Architecture
 
-### Server module split
+### Package dependency graph
+
+```
+tapps-core (library)  <──  tapps-mcp (28 tools)
+                      <──  docs-mcp  (3 tools)
+```
+
+Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics, adaptive) lives in `tapps-core`. Both MCP servers depend on it. Server files in tapps-mcp import from `tapps_core` directly for extracted packages.
+
+### Server module split (tapps-mcp)
 
 The MCP server is split across six files to stay under complexity limits. All share the same `mcp` FastMCP instance created in `server.py`:
 
@@ -62,7 +91,7 @@ To add a new MCP tool:
 2. Call `_record_call("tool_name")` at the top of the handler (for checklist tracking)
 3. Register the tool in the checklist task map (`tools/checklist.py`)
 4. Add to AGENTS.md and README.md tools reference
-5. Add tests in `tests/unit/` and optionally `tests/integration/`
+5. Add tests in `packages/tapps-mcp/tests/unit/` and optionally `tests/integration/`
 
 ### Dual CLI / MCP tool pattern
 
@@ -73,11 +102,11 @@ Several features exist as both a CLI command (`cli.py` via Click) and an MCP too
 
 ### Engagement-level template variants (Epic 18)
 
-AGENTS.md and platform rules (Cursor/Claude) have three variants per engagement level: **high**, **medium**, **low**. Templates live under `src/tapps_mcp/prompts/` as `agents_template_high.md`, `agents_template_medium.md`, `agents_template_low.md`, and `platform_{cursor|claude}_{high|medium|low}.md`. The loader selects by `load_settings().llm_engagement_level` (or the `engagement_level` argument when provided). Checklist `TASK_TOOL_MAP_HIGH` / `TASK_TOOL_MAP_MEDIUM` / `TASK_TOOL_MAP_LOW` vary required vs recommended tools by level.
+AGENTS.md and platform rules (Cursor/Claude) have three variants per engagement level: **high**, **medium**, **low**. Templates live under `packages/tapps-mcp/src/tapps_mcp/prompts/` as `agents_template_high.md`, `agents_template_medium.md`, `agents_template_low.md`, and `platform_{cursor|claude}_{high|medium|low}.md`. The loader selects by `load_settings().llm_engagement_level` (or the `engagement_level` argument when provided). Checklist `TASK_TOOL_MAP_HIGH` / `TASK_TOOL_MAP_MEDIUM` / `TASK_TOOL_MAP_LOW` vary required vs recommended tools by level.
 
 ### Caching and singletons
 
-Four module-level caches require reset in tests (done by autouse fixture in `tests/conftest.py`):
+Four module-level caches require reset in tests (done by autouse fixture in `packages/tapps-mcp/tests/conftest.py`):
 - **Settings**: `load_settings()` in `config/settings.py` — cached singleton, reset via `_reset_settings_cache()`
 - **CodeScorer**: `_get_scorer()` in `server_helpers.py` — cached singleton, reset via `_reset_scorer_cache()`
 - **MemoryStore**: `_get_memory_store()` in `server_helpers.py` — cached singleton, reset via `_reset_memory_store_cache()`
@@ -122,7 +151,7 @@ All file I/O goes through `security/path_validator.py`, which sandboxes operatio
 - **`structlog.get_logger()`**: Returns `Any` — use `# type: ignore[no-any-return]` in the wrapper.
 - **Ruff RUF012**: Mutable class-level attributes need `ClassVar` annotation.
 - **Windows testing**: Use `python -c "import time; time.sleep(N)"` for timeout tests — Git Bash intercepts `cmd /c timeout`.
-- **Patching lazy imports in server.py**: Some imports (e.g., `KBCache`, `LookupEngine`) happen inside tool handlers. Patch them at their source modules, not at `tapps_mcp.server`.
+- **Patching lazy imports in server.py**: Some imports (e.g., `KBCache`, `LookupEngine`) happen inside tool handlers and now come from `tapps_core`. Patch them at their source modules (e.g., `tapps_core.knowledge.lookup.LookupEngine`), not at `tapps_mcp.server` or the re-export wrappers.
 
 ## Self-hosted quality pipeline
 

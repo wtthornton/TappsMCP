@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling>=1.28,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "docs-mcp"
+version = "0.1.0"
+description = "Documentation MCP server for the Tapps platform"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "TappsMCP Contributors" },
+]
+keywords = ["mcp", "documentation", "docs"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "tapps-core>=1.0.0",
+    "mcp[cli]>=1.26.0,<2",
+    "click>=8.3.1,<9",
+    "jinja2>=3.1.6,<4",
+    "gitpython>=3.1.44,<4",
+]
+
+[tool.uv.sources]
+tapps-core = { workspace = true }
+
+[project.scripts]
+docsmcp = "docs_mcp.cli:cli"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/docs_mcp/"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docs_mcp"]
