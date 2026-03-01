@@ -63,7 +63,7 @@ TappsMCP exposes **28 MCP tools** plus workflow prompts. All tools are **determi
 | **Dead code detection** | Vulture-based unused functions, classes, imports, variables with confidence scoring; integrated into maintainability/structure. |
 | **Circular dependency detection** | AST import graph, cycle detection, coupling metrics (Ca/Ce/instability). |
 | **Session checklist** | Track which tools were called; required vs recommended by task type (feature, bugfix, refactor, security, review). **LLM engagement level** (high/medium/low) adjusts required tools and wording. |
-| **Adaptive learning** | Scoring weights and expert voting adapt from usage (internal). |
+| **Adaptive learning** | Scoring weights and expert voting adapt from usage. Adaptive domain detection routes queries based on learned feedback when enabled. Query expansion with ~60 synonym pairs improves domain detection recall. |
 
 ### Security & dependencies
 
@@ -79,9 +79,9 @@ TappsMCP exposes **28 MCP tools** plus workflow prompts. All tools are **determi
 | Feature | Description |
 |--------|-------------|
 | **Documentation lookup** | Up-to-date library docs via Context7 (when `TAPPS_MCP_CONTEXT7_API_KEY` is set) and LlmsTxt (always, as fallback). Fuzzy matching, local cache. |
-| **Domain experts** | 17 built-in experts (security, testing, APIs, GitHub, etc.) with RAG-backed answers and confidence scores. |
+| **Domain experts** | 17 built-in experts (security, testing, APIs, GitHub, etc.) with RAG-backed answers, confidence scores, and knowledge freshness warnings. |
 | **Project context** | Detect project type, tech stack, structure for context-aware analysis. |
-| **Shared memory** | Persistent, project-scoped memory with time-based decay, contradiction detection, ranked retrieval, and expert injection. Memories survive across sessions in SQLite (WAL + FTS5). Three tiers (architectural/pattern/context) with configurable half-lives. Auto-seeds from project profile. |
+| **Shared memory** | Persistent, project-scoped memory with BM25-scored retrieval (stemming + stop-word filtering), time-based decay, contradiction detection, and expert injection. Memories survive across sessions in SQLite (WAL + FTS5). Three tiers (architectural/pattern/context) with configurable half-lives. Auto-seeds from project profile. Auto-GC in `tapps_session_start` when memory exceeds 80% capacity. `reinforce` and `gc` actions exposed via MCP tool. |
 | **Session notes** | In-memory decisions and constraints for a single session. Promotable to shared memory for persistence. |
 | **Impact analysis** | File dependencies and blast radius before refactoring or API changes. |
 | **Quality reports** | JSON, Markdown, or HTML summaries. |
@@ -91,9 +91,9 @@ TappsMCP exposes **28 MCP tools** plus workflow prompts. All tools are **determi
 | Feature | Description |
 |--------|-------------|
 | **LLM engagement level** | **high** / **medium** / **low** — controls how strongly the AI is prompted (MUST/REQUIRED vs optional). Set via `.tapps-mcp.yaml`, env, or `tapps_set_engagement_level`. |
-| **Platform hooks** | Auto-generated hooks: Claude Code (7), Cursor (3); quality checks on edit, stop, task completion. |
-| **Subagent definitions** | Pre-built reviewer, researcher, validator for Claude Code and Cursor. |
-| **Skills generation** | SKILL.md templates (score, gate, validate) on both platforms. |
+| **Platform hooks** | Auto-generated hooks: Claude Code (8), Cursor (3); quality checks on edit, stop, task completion, optional memory capture on stop. |
+| **Subagent definitions** | Pre-built reviewer, researcher, validator, review-fixer for Claude Code and Cursor with `mcpServers`, `maxTurns`, role-appropriate `permissionMode`. |
+| **Skills generation** | SKILL.md templates (score, gate, validate, review, research, memory, security) with 2026 Claude Code `allowed-tools:` spec, `argument-hint`, `disable-model-invocation`. |
 | **Cursor rule types** | Always-on pipeline, auto-attach for Python, agent-requested expert consultation. |
 | **Plugin bundles** | Ready-to-install plugin dirs (hooks, agents, skills, rules, MCP config). |
 | **Agent Teams** | Quality watchdog teammate for Claude Code (TeammateIdle, TaskCompleted; opt-in). |

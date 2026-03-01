@@ -13,7 +13,7 @@ This is a **uv workspace monorepo** with three packages:
 | Package | Path | Purpose |
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, memory, experts, metrics, adaptive) |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (28 tools) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (28 tools, 31 actions) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (3 tools, MVP) |
 
 tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
@@ -24,12 +24,12 @@ tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp
 # Install all packages
 uv sync --all-packages
 
-# Run all tests (4300+ tests)
+# Run all tests (4500+ tests)
 uv run pytest packages/tapps-core/tests/ packages/tapps-mcp/tests/ packages/docs-mcp/tests/ -v
 
 # Run tests for a single package
-uv run pytest packages/tapps-core/tests/ -v      # 1087 tests
-uv run pytest packages/tapps-mcp/tests/ -v        # 3123 tests
+uv run pytest packages/tapps-core/tests/ -v      # 1225 tests
+uv run pytest packages/tapps-mcp/tests/ -v        # 3224 tests
 uv run pytest packages/docs-mcp/tests/ -v         # 107 tests
 
 # Run a single test file
@@ -81,7 +81,7 @@ The MCP server is split across six files to stay under complexity limits. All sh
 - **`server_scoring_tools.py`** — `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** — `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`
 - **`server_metrics_tools.py`** — `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`
-- **`server_memory_tools.py`** — `tapps_memory` (save, get, list, delete, search actions)
+- **`server_memory_tools.py`** — `tapps_memory` (save, get, list, delete, search, reinforce, gc, contradictions, reseed, import, export actions)
 - **`server_helpers.py`** — Shared utilities: response builders, singleton caches (`_get_scorer()`, `_get_settings()`, `_get_memory_store()`)
 
 ### Tool registration flow
@@ -122,15 +122,15 @@ All file I/O goes through `security/path_validator.py`, which sandboxes operatio
 
 ### Expert system
 
-17 domain experts in `experts/` with 139 curated knowledge markdown files under `experts/knowledge/`. The `experts/engine.py` uses keyword-based RAG (or optional vector RAG with faiss). All retrieved content passes through `knowledge/rag_safety.py` for prompt injection filtering.
+17 domain experts in `experts/` with 139 curated knowledge markdown files under `experts/knowledge/`. The `experts/engine.py` uses keyword-based RAG (or optional vector RAG with faiss). When `adaptive.enabled` is True, the `AdaptiveDomainDetector` routes queries based on learned feedback outcomes (with 0.4 confidence threshold), falling back to the static `DomainDetector`. Query expansion via `experts/query_expansion.py` (~60 synonym pairs) improves domain detection recall. Knowledge freshness warnings are included when retrieved chunks are >365 days old. All retrieved content passes through `knowledge/rag_safety.py` for prompt injection filtering.
 
 ### Memory subsystem
 
-`memory/` provides persistent cross-session knowledge sharing via `tapps_memory`. Core: `memory/models.py` (MemoryEntry, enums, validators), `memory/persistence.py` (SQLite with WAL, FTS5, schema versioning, JSONL audit), `memory/store.py` (in-memory cache, write-through, RAG safety, eviction). Intelligence (Epic 24): `memory/decay.py` (time-based confidence decay), `memory/reinforcement.py` (access-based boosting), `memory/contradictions.py` (conflict detection), `memory/gc.py` (garbage collection). Retrieval (Epic 25): `memory/retrieval.py` (ranked retrieval), `memory/injection.py` (context injection), `memory/seeding.py` (initial population), `memory/io.py` (import/export). `server_memory_tools.py` exposes the `tapps_memory` MCP tool. Storage lives at `{project_root}/.tapps-mcp/memory/`.
+`memory/` provides persistent cross-session knowledge sharing via `tapps_memory`. Core: `memory/models.py` (MemoryEntry, enums, validators), `memory/persistence.py` (SQLite with WAL, FTS5, schema versioning, JSONL audit), `memory/store.py` (in-memory cache, write-through, RAG safety, eviction). Intelligence (Epic 24): `memory/decay.py` (time-based confidence decay), `memory/reinforcement.py` (access-based boosting), `memory/contradictions.py` (conflict detection), `memory/gc.py` (garbage collection). Retrieval (Epic 25+34): `memory/retrieval.py` (BM25-scored ranked retrieval with stemming and stop-word filtering), `memory/bm25.py` (pure Python BM25 scoring engine), `memory/injection.py` (context injection), `memory/seeding.py` (initial population), `memory/io.py` (import/export). `server_memory_tools.py` exposes the `tapps_memory` MCP tool with 11 actions including `reinforce` (reset decay, boost confidence) and `gc` (archive decayed memories). Auto-GC triggers in `tapps_session_start` when memory exceeds 80% capacity (`gc_auto_threshold` setting). Storage lives at `{project_root}/.tapps-mcp/memory/`.
 
 ### Platform generation
 
-`pipeline/platform_generators.py` generates hooks, agents, skills, rules, and CI workflows for Claude Code and Cursor. `pipeline/agents_md.py` handles AGENTS.md smart-merge (preserving custom sections while updating tool definitions).
+Platform artifact generation is split across modules in `pipeline/`: `platform_generators.py` (facade re-exporting from split modules), `platform_hooks.py` (Claude Code hook generation), `platform_rules.py` (Cursor rules, Copilot instructions, BugBot config), `platform_skills.py` (Claude Code skills with 2026 `allowed-tools:` spec), `platform_subagents.py` (Claude Code subagents with `mcpServers`, `maxTurns`, role-appropriate `permissionMode`), `platform_bundles.py` (bundled generation including path-scoped quality rules), `platform_hook_templates.py` (hook script templates including memory capture Stop hooks). `pipeline/agents_md.py` handles AGENTS.md smart-merge (preserving custom sections while updating tool definitions). `pipeline/init.py` also generates `.claude/settings.json` permission rules (`mcp__tapps-mcp__*` auto-approval).
 
 ## Code conventions
 

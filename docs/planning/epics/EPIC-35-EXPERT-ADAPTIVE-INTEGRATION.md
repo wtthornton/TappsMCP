@@ -1,6 +1,6 @@
 # Epic 35: Expert System Adaptive Integration
 
-**Status:** Proposed
+**Status:** Complete (2026-03-01) — all 4 stories, 72 new tests
 **Priority:** P1 — High (adaptive domain detector exists but is not wired into the main consultation flow)
 **Estimated LOE:** ~1.5-2 weeks (1 developer)
 **Dependencies:** Epic 3 (Expert System), Epic 5 (Adaptive Learning), Epic 7 (Metrics)

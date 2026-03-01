@@ -27,20 +27,22 @@
 | [Epic 20](EPIC-20-GITHUB-ACTIONS-CI-ENHANCEMENT.md) | GitHub Actions CI Enhancement | P1 | ~2-2.5 weeks | Epic 8, Epic 12 | **Complete** |
 | [Epic 21](EPIC-21-GITHUB-COPILOT-AGENT-INTEGRATION.md) | GitHub Copilot Agent Integration + GitHub Expert | P0 | ~2.5-3 weeks | Epic 8, Epic 12, Epic 20 | **Complete** |
 | [Epic 22](EPIC-22-GITHUB-GOVERNANCE-SECURITY-CONFIG.md) | GitHub Governance & Security Config | P2 | ~1.5-2 weeks | Epic 19, Epic 20, Epic 21 | **Complete** |
-| [Epic 23](EPIC-23-SHARED-MEMORY-FOUNDATION.md) | Shared Memory Foundation | P1 | ~2-3 weeks | Epic 0, Epic 4 | **Proposed** |
-| [Epic 24](EPIC-24-MEMORY-INTELLIGENCE.md) | Memory Intelligence (Decay, Contradictions) | P1 | ~2-3 weeks | Epic 23, Epic 4, Epic 5 | **Proposed** |
-| [Epic 25](EPIC-25-MEMORY-RETRIEVAL-INTEGRATION.md) | Memory Retrieval & Integration | P2 | ~2-3 weeks | Epic 23, Epic 24, Epic 3, Epic 4 | **Proposed** |
-| [Epic 29](EPIC-29-DOC-PROVIDER-SIMPLIFICATION.md) | Doc Provider Simplification | P2 | ~1 week | Epic 2, Epic 16 | **Proposed** |
+| [Epic 23](EPIC-23-SHARED-MEMORY-FOUNDATION.md) | Shared Memory Foundation | P1 | ~2-3 weeks | Epic 0, Epic 4 | **Complete** |
+| [Epic 24](EPIC-24-MEMORY-INTELLIGENCE.md) | Memory Intelligence (Decay, Contradictions) | P1 | ~2-3 weeks | Epic 23, Epic 4, Epic 5 | **Complete** |
+| [Epic 25](EPIC-25-MEMORY-RETRIEVAL-INTEGRATION.md) | Memory Retrieval & Integration | P2 | ~2-3 weeks | Epic 23, Epic 24, Epic 3, Epic 4 | **Complete** |
+| [Epic 26-27](EPIC-26-EXPERT-KNOWLEDGE-ENHANCEMENT.md) | Expert Knowledge Enhancement & Skills | P1 | ~2-3 weeks | Epic 3, Epic 8 | **Complete** |
+| [Epic 28](EPIC-28-QUALITY-REVIEW-REMEDIATION.md) | Quality Review Remediation | P0 | ~10 days | Epic 1 | **Phase 1 Complete** — 6 failing files remediated, 4 new test files |
+| [Epic 29](EPIC-29-DOC-PROVIDER-SIMPLIFICATION.md) | Doc Provider Simplification | P2 | ~1 week | Epic 2, Epic 16 | **Complete** |
 | [Epic 30](EPIC-30-BENCHMARK-INFRASTRUCTURE.md) | Benchmark Infrastructure & AGENTBench Integration | P1 | ~3-4 weeks | Epic 8, Epic 18, Epic 28 | **Proposed** |
 | [Epic 31](EPIC-31-TEMPLATE-SELF-OPTIMIZATION.md) | Template Self-Optimization Loop | P1 | ~3-4 weeks | Epic 30, Epic 18, Epic 5 | **Proposed** |
 | [Epic 32](EPIC-32-MCP-TOOL-EFFECTIVENESS.md) | MCP Tool Effectiveness Benchmarking | P2 | ~3-4 weeks | Epic 30, Epic 7, Epic 5 | **Proposed** |
-| [Epic 33](EPIC-33-PLATFORM-ARTIFACT-CORRECTNESS.md) | Platform Artifact Correctness | P0 | ~1.5-2 weeks | Epic 8, Epic 12 | **Proposed** |
-| [Epic 34](EPIC-34-MEMORY-RETRIEVAL-UPGRADE.md) | Memory Retrieval & Reinforcement Upgrade | P1 | ~2 weeks | Epic 23, Epic 24, Epic 25 | **Proposed** |
-| [Epic 35](EPIC-35-EXPERT-ADAPTIVE-INTEGRATION.md) | Expert System Adaptive Integration | P1 | ~1.5-2 weeks | Epic 3, Epic 5, Epic 7 | **Proposed** |
+| [Epic 33](EPIC-33-PLATFORM-ARTIFACT-CORRECTNESS.md) | Platform Artifact Correctness | P0 | ~1.5-2 weeks | Epic 8, Epic 12 | **Complete** — all 5 stories, 142 tests |
+| [Epic 34](EPIC-34-MEMORY-RETRIEVAL-UPGRADE.md) | Memory Retrieval & Reinforcement Upgrade | P1 | ~2 weeks | Epic 23, Epic 24, Epic 25 | **Complete** — all 6 stories, 110 tests |
+| [Epic 35](EPIC-35-EXPERT-ADAPTIVE-INTEGRATION.md) | Expert System Adaptive Integration | P1 | ~1.5-2 weeks | Epic 3, Epic 5, Epic 7 | **Complete** — all 4 stories, 72 tests |
 | [Epic 36](EPIC-36-HOOK-PLATFORM-EXPANSION.md) | Hook & Platform Generation Expansion | P1 | ~2-2.5 weeks | Epic 33, Epic 8, Epic 18 | **Proposed** |
 | [Epic 37](EPIC-37-PIPELINE-ONBOARDING-DISTRIBUTION.md) | Pipeline Onboarding & Distribution | P1 | ~2.5-3 weeks | Epic 33, Epic 36, Epic 6, Epic 8 | **Proposed** |
 
-**Total LOE:** ~40-51 weeks (Epics 0-22, all complete) + ~25-35 weeks proposed (Epics 23-25, 29-37)
+**Total LOE:** ~55-70 weeks (Epics 0-29, 33-35, 28a all complete) + ~15-22 weeks remaining (Epics 28b-f, 30-32, 36-37)
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 

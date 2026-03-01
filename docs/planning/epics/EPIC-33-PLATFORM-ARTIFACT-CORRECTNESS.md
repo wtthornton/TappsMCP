@@ -1,6 +1,6 @@
 # Epic 33: Platform Artifact Correctness
 
-**Status:** Proposed
+**Status:** Complete (2026-03-01) — all 5 stories, 142 new tests
 **Priority:** P0 — Critical (TappsMCP generates skills/subagents with incorrect or missing frontmatter fields per 2026 Claude Code docs)
 **Estimated LOE:** ~1.5-2 weeks (1 developer)
 **Dependencies:** Epic 8 (Pipeline Orchestration)

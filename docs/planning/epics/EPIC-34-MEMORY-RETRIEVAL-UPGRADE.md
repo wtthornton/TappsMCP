@@ -1,6 +1,6 @@
 # Epic 34: Memory Retrieval & Reinforcement Upgrade
 
-**Status:** Proposed
+**Status:** Complete (2026-03-01) — all 6 stories, 110 new tests
 **Priority:** P1 — High (current word-overlap retrieval produces poor recall; reinforcement logic exists but is inaccessible)
 **Estimated LOE:** ~2 weeks (1 developer)
 **Dependencies:** Epic 23 (Shared Memory Foundation), Epic 24 (Memory Intelligence), Epic 25 (Memory Retrieval & Integration)
