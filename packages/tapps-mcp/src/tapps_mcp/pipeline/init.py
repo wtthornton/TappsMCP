@@ -42,6 +42,7 @@ class BootstrapConfig:
     overwrite_platform_rules: bool = False
     overwrite_agents_md: bool = False
     agent_teams: bool = False
+    memory_capture: bool = False
     dry_run: bool = False
     verify_only: bool = False
     llm_engagement_level: str = "medium"
@@ -117,6 +118,7 @@ def bootstrap_pipeline(
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
     agent_teams: bool = False,
+    memory_capture: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
@@ -157,6 +159,7 @@ def bootstrap_pipeline(
             overwrite_platform_rules=overwrite_platform_rules,
             overwrite_agents_md=overwrite_agents_md,
             agent_teams=agent_teams,
+            memory_capture=memory_capture,
             dry_run=dry_run,
             verify_only=verify_only,
             llm_engagement_level=level or "medium",
@@ -173,7 +176,9 @@ def bootstrap_pipeline(
         # Ensure Claude Code permissions even when platform != "claude",
         # if the .claude/ directory already exists (user is in Claude Code).
         if cfg.platform != "claude" and (state.project_root / ".claude").is_dir():
-            settings_action = _bootstrap_claude_settings(state.project_root)
+            settings_action = _bootstrap_claude_settings(
+                state.project_root, engagement_level=cfg.llm_engagement_level
+            )
             state.result["claude_settings"] = {"action": settings_action}
             if settings_action == "created":
                 state.created.append(".claude/settings.json")
@@ -292,6 +297,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         generate_bugbot_rules,
         generate_ci_workflow,
         generate_claude_hooks,
+        generate_claude_python_quality_rule,
         generate_copilot_instructions,
         generate_cursor_hooks,
         generate_cursor_rules,
@@ -307,7 +313,9 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         )
         if platform_action == "created":
             state.created.append("CLAUDE.md")
-        settings_action = _bootstrap_claude_settings(state.project_root)
+        settings_action = _bootstrap_claude_settings(
+            state.project_root, engagement_level=engagement
+        )
         state.result["claude_settings"] = {"action": settings_action}
         if settings_action == "created":
             state.created.append(".claude/settings.json")
@@ -319,9 +327,18 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         state.result["skills"] = generate_skills(
             state.project_root, "claude", engagement_level=engagement
         )
+        # Path-scoped Python quality rule
+        state.result["python_quality_rule"] = generate_claude_python_quality_rule(
+            state.project_root, engagement_level=engagement
+        )
         # Agent Teams (opt-in)
         if cfg.agent_teams:
             state.result["agent_teams"] = generate_agent_teams_hooks(state.project_root)
+        # Memory capture hook (opt-in, Epic 34.5)
+        if cfg.memory_capture:
+            from tapps_mcp.pipeline.platform_hooks import generate_memory_capture_hook
+
+            state.result["memory_capture"] = generate_memory_capture_hook(state.project_root)
         # CI workflow (generated for all platforms)
         state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
         # VS Code Copilot instructions (generated for all platforms)
@@ -711,8 +728,58 @@ def _replace_tapps_section(existing: str, new_tapps_content: str) -> str:
 # fallback (issue #3107), wildcard is the official syntax from v2.0.70+.
 _CLAUDE_PERMISSION_ENTRIES = ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
 
+# Extra permissions granted at high engagement level so the LLM can
+# auto-run quality checkers without user confirmation.
+_CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS = [
+    "Bash(uv run ruff *)",
+    "Bash(uv run mypy *)",
+]
 
-def _bootstrap_claude_settings(project_root: Path) -> str:
+
+def generate_permission_settings(
+    project_root: Path,
+    engagement_level: str = "medium",
+    existing_settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Generate ``.claude/settings.json`` content with permission rules.
+
+    Builds the base MCP permission entries and, at ``high`` engagement,
+    appends extra ``Bash(...)`` entries so the LLM can auto-run checkers.
+
+    Merges into *existing_settings* when provided (preserving all user
+    keys and deduplicating the ``permissions.allow`` list).
+
+    Args:
+        project_root: Target project root (unused today but reserved
+            for future per-project customisation).
+        engagement_level: ``"high"``, ``"medium"`` (default), or ``"low"``.
+        existing_settings: Parsed contents of an existing ``settings.json``.
+            ``None`` starts from an empty dict.
+
+    Returns:
+        The merged settings dict ready to be serialised to JSON.
+    """
+    import copy
+
+    config: dict[str, Any] = copy.deepcopy(existing_settings) if existing_settings else {}
+    permissions: dict[str, Any] = config.setdefault("permissions", {})
+    allow_list: list[str] = permissions.setdefault("allow", [])
+
+    desired: list[str] = list(_CLAUDE_PERMISSION_ENTRIES)
+    if engagement_level == "high":
+        desired.extend(_CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS)
+
+    for entry in desired:
+        if entry not in allow_list:
+            allow_list.append(entry)
+
+    return config
+
+
+def _bootstrap_claude_settings(
+    project_root: Path,
+    engagement_level: str = "medium",
+) -> str:
     """Create or update ``.claude/settings.json`` with permission entries.
 
     Adds **both** ``"mcp__tapps-mcp"`` (bare server match - confirmed
@@ -721,6 +788,9 @@ def _bootstrap_claude_settings(project_root: Path) -> str:
     Using both syntaxes works around a known Claude Code bug where the
     wildcard variant is sometimes not honoured (issues #13077, #14730,
     #27139).
+
+    At ``high`` engagement, also adds ``Bash(uv run ruff *)`` and
+    ``Bash(uv run mypy *)`` so the LLM can auto-run quality checkers.
 
     Returns ``'created'``, ``'updated'``, or ``'skipped'``.
     """
@@ -732,26 +802,29 @@ def _bootstrap_claude_settings(project_root: Path) -> str:
 
     if not settings_file.exists():
         settings_dir.mkdir(parents=True, exist_ok=True)
-        config: dict[str, Any] = {"permissions": {"allow": list(_CLAUDE_PERMISSION_ENTRIES)}}
+        config = generate_permission_settings(
+            project_root, engagement_level=engagement_level
+        )
         settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
         return "created"
 
     raw = settings_file.read_text(encoding="utf-8")
     try:
-        config = json.loads(raw) if raw.strip() else {}
+        existing: dict[str, Any] = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
         # Malformed JSON — leave the file untouched rather than corrupting it.
         return "skipped"
 
-    permissions = config.setdefault("permissions", {})
-    allow_list: list[str] = permissions.setdefault("allow", [])
+    merged = generate_permission_settings(
+        project_root,
+        engagement_level=engagement_level,
+        existing_settings=existing,
+    )
 
-    missing = [e for e in _CLAUDE_PERMISSION_ENTRIES if e not in allow_list]
-    if not missing:
+    if merged == existing:
         return "skipped"
 
-    allow_list.extend(missing)
-    settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    settings_file.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
     return "updated"
 
 

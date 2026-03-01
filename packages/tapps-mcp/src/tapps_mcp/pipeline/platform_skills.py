@@ -20,7 +20,8 @@ CLAUDE_SKILLS: dict[str, str] = {
 ---
 name: tapps-score
 description: Score a Python file across 7 quality categories and display a structured report.
-tools: mcp__tapps-mcp__tapps_score_file, mcp__tapps-mcp__tapps_quick_check
+allowed-tools: mcp__tapps-mcp__tapps_score_file, mcp__tapps-mcp__tapps_quick_check
+argument-hint: "[file-path]"
 ---
 
 Score the specified Python file using TappsMCP:
@@ -35,7 +36,9 @@ Score the specified Python file using TappsMCP:
 ---
 name: tapps-gate
 description: Run a quality gate check and report pass/fail with blocking issues.
-tools: mcp__tapps-mcp__tapps_quality_gate
+allowed-tools: mcp__tapps-mcp__tapps_quality_gate
+argument-hint: "[file-path]"
+disable-model-invocation: true
 ---
 
 Run a quality gate check using TappsMCP:
@@ -50,7 +53,8 @@ Run a quality gate check using TappsMCP:
 ---
 name: tapps-validate
 description: Validate all changed files meet quality thresholds before declaring work complete.
-tools: mcp__tapps-mcp__tapps_validate_changed
+allowed-tools: mcp__tapps-mcp__tapps_validate_changed
+disable-model-invocation: true
 ---
 
 Validate all changed files using TappsMCP:
@@ -67,7 +71,9 @@ name: tapps-review-pipeline
 description: >-
   Orchestrate a parallel review-fix-validate pipeline across multiple changed files.
   Spawns tapps-review-fixer agents in worktrees for parallel processing.
-tools: mcp__tapps-mcp__tapps_validate_changed, mcp__tapps-mcp__tapps_checklist
+allowed-tools: mcp__tapps-mcp__tapps_validate_changed, mcp__tapps-mcp__tapps_checklist
+context: fork
+agent: general-purpose
 ---
 
 Run a parallel review-fix-validate pipeline on changed Python files:
@@ -89,10 +95,13 @@ name: tapps-research
 description: >-
   Research a technical question using domain experts and library docs.
   Combines expert consultation with docs lookup for comprehensive answers.
-tools: >-
+allowed-tools: >-
   mcp__tapps-mcp__tapps_research,
   mcp__tapps-mcp__tapps_consult_expert,
   mcp__tapps-mcp__tapps_lookup_docs
+argument-hint: "[question]"
+context: fork
+model: haiku
 ---
 
 Research a technical question using TappsMCP:
@@ -109,10 +118,11 @@ name: tapps-security
 description: >-
   Run a comprehensive security audit including vulnerability scanning,
   dependency CVE checks, and expert security consultation.
-tools: >-
+allowed-tools: >-
   mcp__tapps-mcp__tapps_security_scan,
   mcp__tapps-mcp__tapps_dependency_scan,
   mcp__tapps-mcp__tapps_consult_expert
+argument-hint: "[file-path]"
 ---
 
 Run a comprehensive security audit using TappsMCP:
@@ -129,7 +139,8 @@ name: tapps-memory
 description: >-
   Manage shared project memory for cross-session knowledge persistence.
   Save, retrieve, search, and manage memory entries with tier classification.
-tools: mcp__tapps-mcp__tapps_memory, mcp__tapps-mcp__tapps_session_notes
+allowed-tools: mcp__tapps-mcp__tapps_memory, mcp__tapps-mcp__tapps_session_notes
+argument-hint: "[action] [key]"
 ---
 
 Manage shared project memory using TappsMCP:
@@ -283,15 +294,18 @@ def generate_skills(
     platform: str,
     *,
     engagement_level: str = "medium",
+    overwrite: bool = False,
 ) -> dict[str, Any]:
     """Generate SKILL.md files for the given platform.
 
     Creates 7 skill directories with ``SKILL.md`` in
     ``.claude/skills/`` or ``.cursor/skills/`` depending on the platform.
-    Existing files are skipped to preserve user customizations.
+    Existing files are skipped to preserve user customizations unless
+    *overwrite* is ``True`` (used by the upgrade path to refresh
+    corrected frontmatter).
     When *engagement_level* is set, prepends a note (MANDATORY vs optional).
 
-    Returns a summary dict with ``created`` and ``skipped`` lists.
+    Returns a summary dict with ``created``, ``updated``, and ``skipped`` lists.
     """
     if platform == "claude":
         skills_base = project_root / ".claude" / "skills"
@@ -309,15 +323,21 @@ def generate_skills(
         engagement_note = "*Engagement: Optional for low-enforcement projects.*\n\n"
 
     created: list[str] = []
+    updated: list[str] = []
     skipped: list[str] = []
     for skill_name, content in templates.items():
         skill_dir = skills_base / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
         target = skill_dir / "SKILL.md"
+        full_content = engagement_note + content
         if target.exists():
-            skipped.append(skill_name)
+            if overwrite:
+                target.write_text(full_content, encoding="utf-8")
+                updated.append(skill_name)
+            else:
+                skipped.append(skill_name)
         else:
-            target.write_text(engagement_note + content, encoding="utf-8")
+            target.write_text(full_content, encoding="utf-8")
             created.append(skill_name)
 
-    return {"created": created, "skipped": skipped}
+    return {"created": created, "updated": updated, "skipped": skipped}

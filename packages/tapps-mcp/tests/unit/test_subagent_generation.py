@@ -1,6 +1,6 @@
 """Tests for subagent definition generation (Story 12.6).
 
-Verifies that generate_subagent_definitions() creates 3 agent .md files per
+Verifies that generate_subagent_definitions() creates 4 agent .md files per
 platform with correct YAML frontmatter format differences between Claude Code
 and Cursor.
 """
@@ -31,15 +31,33 @@ class TestClaudeAgents:
         content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
         assert "model: sonnet" in content
 
-    def test_reviewer_has_permission_mode(self, tmp_path):
+    def test_reviewer_has_permission_mode_accept_edits(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
-        assert "permissionMode: dontAsk" in content
+        assert "permissionMode: acceptEdits" in content
 
     def test_reviewer_has_memory_project(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
         assert "memory: project" in content
+
+    def test_reviewer_has_max_turns_20(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
+        assert "maxTurns: 20" in content
+
+    def test_reviewer_has_skills(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
+        assert "skills:" in content
+        assert "  - tapps-score" in content
+        assert "  - tapps-gate" in content
+
+    def test_reviewer_has_mcp_servers(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
+        assert "mcpServers:" in content
+        assert "  tapps-mcp: {}" in content
 
     def test_researcher_has_model_haiku(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -51,15 +69,47 @@ class TestClaudeAgents:
         content = (tmp_path / ".claude" / "agents" / "tapps-researcher.md").read_text()
         assert "memory: project" in content
 
-    def test_validator_has_model_sonnet(self, tmp_path):
+    def test_researcher_has_max_turns_15(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
-        content = (tmp_path / ".claude" / "agents" / "tapps-validator.md").read_text()
-        assert "model: sonnet" in content
+        content = (tmp_path / ".claude" / "agents" / "tapps-researcher.md").read_text()
+        assert "maxTurns: 15" in content
 
-    def test_validator_has_permission_mode(self, tmp_path):
+    def test_researcher_has_permission_mode_plan(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-researcher.md").read_text()
+        assert "permissionMode: plan" in content
+
+    def test_researcher_has_mcp_servers(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-researcher.md").read_text()
+        assert "mcpServers:" in content
+        assert "  tapps-mcp: {}" in content
+
+    def test_validator_has_model_haiku(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-validator.md").read_text()
-        assert "permissionMode: dontAsk" in content
+        assert "model: haiku" in content
+
+    def test_validator_has_permission_mode_plan(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-validator.md").read_text()
+        assert "permissionMode: plan" in content
+
+    def test_validator_has_max_turns_10(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-validator.md").read_text()
+        assert "maxTurns: 10" in content
+
+    def test_validator_has_mcp_servers(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-validator.md").read_text()
+        assert "mcpServers:" in content
+        assert "  tapps-mcp: {}" in content
+
+    def test_validator_has_memory_project(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-validator.md").read_text()
+        assert "memory: project" in content
 
     def test_reviewer_body_references_mcp_tools(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -96,6 +146,80 @@ class TestClaudeAgents:
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
         assert "model: sonnet" in content
+
+    def test_review_fixer_has_max_turns_25(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "maxTurns: 25" in content
+
+    def test_review_fixer_has_permission_mode_accept_edits(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "permissionMode: acceptEdits" in content
+
+    def test_review_fixer_has_isolation_worktree(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "isolation: worktree" in content
+
+    def test_review_fixer_has_skills(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "skills:" in content
+        assert "  - tapps-score" in content
+        assert "  - tapps-gate" in content
+        assert "  - tapps-validate" in content
+
+    def test_review_fixer_has_mcp_servers(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "mcpServers:" in content
+        assert "  tapps-mcp: {}" in content
+
+    def test_review_fixer_has_memory_project(self, tmp_path):
+        generate_subagent_definitions(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
+        assert "memory: project" in content
+
+    def test_all_claude_agents_have_mcp_servers(self, tmp_path):
+        """All 4 Claude subagents must declare the tapps-mcp MCP server."""
+        generate_subagent_definitions(tmp_path, "claude")
+        agents_dir = tmp_path / ".claude" / "agents"
+        for name in [
+            "tapps-reviewer.md",
+            "tapps-researcher.md",
+            "tapps-validator.md",
+            "tapps-review-fixer.md",
+        ]:
+            content = (agents_dir / name).read_text()
+            assert "mcpServers:" in content, f"{name} missing mcpServers"
+            assert "  tapps-mcp: {}" in content, f"{name} missing tapps-mcp entry"
+
+    def test_all_claude_agents_have_max_turns(self, tmp_path):
+        """All 4 Claude subagents must declare maxTurns."""
+        generate_subagent_definitions(tmp_path, "claude")
+        agents_dir = tmp_path / ".claude" / "agents"
+        for name in [
+            "tapps-reviewer.md",
+            "tapps-researcher.md",
+            "tapps-validator.md",
+            "tapps-review-fixer.md",
+        ]:
+            content = (agents_dir / name).read_text()
+            assert "maxTurns:" in content, f"{name} missing maxTurns"
+
+    def test_all_claude_agents_have_memory_project(self, tmp_path):
+        """All 4 Claude subagents must declare memory: project."""
+        generate_subagent_definitions(tmp_path, "claude")
+        agents_dir = tmp_path / ".claude" / "agents"
+        for name in [
+            "tapps-reviewer.md",
+            "tapps-researcher.md",
+            "tapps-validator.md",
+            "tapps-review-fixer.md",
+        ]:
+            content = (agents_dir / name).read_text()
+            assert "memory: project" in content, f"{name} missing memory: project"
 
 
 class TestCursorAgents:

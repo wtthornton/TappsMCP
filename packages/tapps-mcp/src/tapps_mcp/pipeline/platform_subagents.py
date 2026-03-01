@@ -24,8 +24,14 @@ description: >-
   quality gates after editing Python files.
 tools: Read, Glob, Grep
 model: sonnet
-permissionMode: dontAsk
+maxTurns: 20
+permissionMode: acceptEdits
 memory: project
+skills:
+  - tapps-score
+  - tapps-gate
+mcpServers:
+  tapps-mcp: {}
 ---
 
 You are a TappsMCP quality reviewer. When invoked:
@@ -46,7 +52,11 @@ description: >-
   for the technologies used in this project.
 tools: Read, Glob, Grep
 model: haiku
+maxTurns: 15
+permissionMode: plan
 memory: project
+mcpServers:
+  tapps-mcp: {}
 ---
 
 You are a TappsMCP research assistant. When invoked:
@@ -67,9 +77,12 @@ description: >-
   Run pre-completion validation on all changed files to confirm they meet
   quality thresholds before declaring work complete.
 tools: Read, Glob, Grep
-model: sonnet
-permissionMode: dontAsk
+model: haiku
+maxTurns: 10
+permissionMode: plan
 memory: project
+mcpServers:
+  tapps-mcp: {}
 ---
 
 You are a TappsMCP validation agent. When invoked:
@@ -90,8 +103,16 @@ description: >-
   parallel multi-file review pipelines.
 tools: Read, Glob, Grep, Write, Edit, Bash
 model: sonnet
-permissionMode: dontAsk
+maxTurns: 25
+permissionMode: acceptEdits
 memory: project
+isolation: worktree
+skills:
+  - tapps-score
+  - tapps-gate
+  - tapps-validate
+mcpServers:
+  tapps-mcp: {}
 ---
 
 You are a TappsMCP review-fixer agent. For each file assigned to you:
@@ -213,14 +234,20 @@ Do not refactor beyond what the issues require.
 }
 
 
-def generate_subagent_definitions(project_root: Path, platform: str) -> dict[str, Any]:
+def generate_subagent_definitions(
+    project_root: Path,
+    platform: str,
+    *,
+    overwrite: bool = False,
+) -> dict[str, Any]:
     """Generate subagent definition files for the given platform.
 
-    Creates 3 agent ``.md`` files in ``.claude/agents/`` or ``.cursor/agents/``
+    Creates 4 agent ``.md`` files in ``.claude/agents/`` or ``.cursor/agents/``
     depending on the platform. Existing files are skipped to preserve
-    user customizations.
+    user customizations unless *overwrite* is ``True`` (used by the
+    upgrade path to refresh corrected frontmatter).
 
-    Returns a summary dict with ``created`` and ``skipped`` lists.
+    Returns a summary dict with ``created``, ``updated``, and ``skipped`` lists.
     """
     if platform == "claude":
         agents_dir = project_root / ".claude" / "agents"
@@ -234,13 +261,18 @@ def generate_subagent_definitions(project_root: Path, platform: str) -> dict[str
     agents_dir.mkdir(parents=True, exist_ok=True)
 
     created: list[str] = []
+    updated: list[str] = []
     skipped: list[str] = []
     for name, content in templates.items():
         target = agents_dir / name
         if target.exists():
-            skipped.append(name)
+            if overwrite:
+                target.write_text(content, encoding="utf-8")
+                updated.append(name)
+            else:
+                skipped.append(name)
         else:
             target.write_text(content, encoding="utf-8")
             created.append(name)
 
-    return {"created": created, "skipped": skipped}
+    return {"created": created, "updated": updated, "skipped": skipped}

@@ -61,6 +61,7 @@ def _upgrade_platform(
     *,
     force: bool = False,
     dry_run: bool = False,
+    engagement_level: str = "medium",
 ) -> dict[str, Any]:
     """Upgrade platform-specific files for a single host.
 
@@ -79,6 +80,7 @@ def _upgrade_platform(
     )
     from tapps_mcp.pipeline.platform_generators import (
         generate_claude_hooks,
+        generate_claude_python_quality_rule,
         generate_cursor_hooks,
         generate_cursor_rules,
         generate_skills,
@@ -108,11 +110,14 @@ def _upgrade_platform(
             result["components"]["hooks"] = "would-regenerate"
             result["components"]["agents"] = "would-regenerate"
             result["components"]["skills"] = "would-regenerate"
+            result["components"]["python_quality_rule"] = "would-regenerate"
         else:
             claude_action = _bootstrap_claude(project_root, overwrite=force)
             result["components"]["claude_md"] = claude_action
 
-            settings_action = _bootstrap_claude_settings(project_root)
+            settings_action = _bootstrap_claude_settings(
+                project_root, engagement_level=engagement_level
+            )
             result["components"]["settings"] = settings_action
 
             hooks_result = generate_claude_hooks(project_root)
@@ -121,11 +126,20 @@ def _upgrade_platform(
                 "hooks_added": hooks_result.get("hooks_added", 0),
             }
 
-            agents_result = generate_subagent_definitions(project_root, "claude")
+            agents_result = generate_subagent_definitions(
+                project_root, "claude", overwrite=True
+            )
             result["components"]["agents"] = agents_result
 
-            skills_result = generate_skills(project_root, "claude")
+            skills_result = generate_skills(
+                project_root, "claude", overwrite=True
+            )
             result["components"]["skills"] = skills_result
+
+            rule_result = generate_claude_python_quality_rule(
+                project_root, engagement_level=engagement_level
+            )
+            result["components"]["python_quality_rule"] = rule_result
 
     elif host == "cursor":
         if dry_run:
@@ -143,10 +157,14 @@ def _upgrade_platform(
                 "hooks_added": hooks_result.get("hooks_added", 0),
             }
 
-            agents_result = generate_subagent_definitions(project_root, "cursor")
+            agents_result = generate_subagent_definitions(
+                project_root, "cursor", overwrite=True
+            )
             result["components"]["agents"] = agents_result
 
-            skills_result = generate_skills(project_root, "cursor")
+            skills_result = generate_skills(
+                project_root, "cursor", overwrite=True
+            )
             result["components"]["skills"] = skills_result
 
             rules_result = generate_cursor_rules(project_root)
@@ -234,6 +252,11 @@ def upgrade_pipeline(
     if detected in ("cursor", "both"):
         hosts.append("cursor")
 
+    # Resolve engagement level from settings
+    from tapps_core.config.settings import load_settings
+
+    engagement_level = load_settings().llm_engagement_level
+
     # Per-host upgrades
     platform_results: list[dict[str, Any]] = []
     for host in hosts:
@@ -243,6 +266,7 @@ def upgrade_pipeline(
                 project_root,
                 force=force,
                 dry_run=dry_run,
+                engagement_level=engagement_level,
             )
             platform_results.append(host_result)
         except Exception as exc:
