@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -36,6 +37,8 @@ from tapps_core.experts.models import (
     ExpertConfig,
     ExpertInfo,
 )
+
+_STALE_KNOWLEDGE_DAYS = 365
 from tapps_core.experts.rag import _extract_keywords
 from tapps_core.experts.registry import ExpertRegistry
 from tapps_core.experts.vector_rag import VectorKnowledgeBase
@@ -144,6 +147,7 @@ class _ResolvedDomain:
     domain: str
     expert: ExpertConfig
     detected: list[DomainMapping]
+    adaptive_domain_used: bool = False
 
 
 @dataclass
@@ -153,6 +157,15 @@ class _KnowledgeResult:
     chunks: list[Any]
     context: str
     sources: list[Any]
+
+
+@dataclass
+class _FreshnessResult:
+    """Result of freshness checking step."""
+
+    stale_knowledge: bool = False
+    oldest_chunk_age_days: int | None = None
+    freshness_caveat: str | None = None
 
 
 @dataclass
@@ -177,20 +190,103 @@ class _AnswerResult:
     low_confidence_nudge: str | None = None
 
 
+_ADAPTIVE_MIN_CONFIDENCE = 0.4
+
+
+def _try_adaptive_detection(question: str) -> tuple[str | None, list[DomainMapping]]:
+    """Attempt domain detection via the adaptive detector.
+
+    Returns ``(domain, detected_mappings)`` if a high-confidence result is found,
+    or ``(None, [])`` if adaptive detection is unavailable or low-confidence.
+    """
+    try:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings()
+        if not settings.adaptive.enabled:
+            return None, []
+
+        from tapps_core.adaptive.persistence import FileOutcomeTracker
+
+        tracker = FileOutcomeTracker(settings.project_root)
+        outcome_count = len(tracker.load_outcomes())
+        if outcome_count < settings.adaptive.min_outcomes:
+            logger.debug(
+                "adaptive_domain_skip_insufficient_data",
+                outcomes=outcome_count,
+                min_required=settings.adaptive.min_outcomes,
+            )
+            return None, []
+
+        from tapps_core.experts.adaptive_domain_detector import AdaptiveDomainDetector
+
+        detector = AdaptiveDomainDetector()
+        # Run the async detect_domains synchronously.
+        import asyncio
+
+        suggestions = asyncio.run(detector.detect_domains(prompt=question))
+        if not suggestions:
+            return None, []
+
+        best = suggestions[0]
+        if best.confidence < _ADAPTIVE_MIN_CONFIDENCE:
+            logger.debug(
+                "adaptive_domain_low_confidence",
+                domain=best.domain,
+                confidence=best.confidence,
+            )
+            return None, []
+
+        # Convert DomainSuggestion list to DomainMapping list for compatibility.
+        detected = [
+            DomainMapping(
+                domain=s.domain,
+                confidence=s.confidence,
+                signals=[f"adaptive:{s.source}"],
+                reasoning=", ".join(s.evidence) if s.evidence else f"Adaptive: {s.source}",
+            )
+            for s in suggestions[:3]
+        ]
+        return best.domain, detected
+
+    except Exception as exc:
+        logger.debug("adaptive_domain_detection_failed", reason=str(exc))
+        return None, []
+
+
 def _resolve_domain(
     question: str, domain: str | None
 ) -> _ResolvedDomain:
     """Resolve the expert domain from a question or explicit override.
 
+    When adaptive learning is enabled and has sufficient training data,
+    the :class:`AdaptiveDomainDetector` is tried first.  If it returns a
+    result with confidence >= 0.4, that domain is used.  Otherwise the
+    static :class:`DomainDetector` provides the fallback.
+
     Raises ValueError if no expert can be found for the resolved domain.
     """
     detected: list[DomainMapping] = []
+    adaptive_used = False
+
     if domain:
         resolved_domain = domain
     else:
-        mappings = DomainDetector.detect_from_question(question)
-        resolved_domain = mappings[0].domain if mappings else "software-architecture"
-        detected = mappings[:3]
+        # Try adaptive detection first.
+        adaptive_domain, adaptive_detected = _try_adaptive_detection(question)
+        if adaptive_domain is not None:
+            resolved_domain = adaptive_domain
+            detected = adaptive_detected
+            adaptive_used = True
+            logger.debug(
+                "adaptive_domain_resolved",
+                domain=resolved_domain,
+                confidence=detected[0].confidence if detected else 0,
+            )
+        else:
+            mappings = DomainDetector.detect_from_question(question)
+            resolved_domain = mappings[0].domain if mappings else "software-architecture"
+            detected = mappings[:3]
 
     expert = ExpertRegistry.get_expert_for_domain(resolved_domain)
     if expert is None:
@@ -199,7 +295,12 @@ def _resolve_domain(
             msg = f"No expert found for domain: {resolved_domain}"
             raise ValueError(msg)
 
-    return _ResolvedDomain(domain=resolved_domain, expert=expert, detected=detected)
+    return _ResolvedDomain(
+        domain=resolved_domain,
+        expert=expert,
+        detected=detected,
+        adaptive_domain_used=adaptive_used,
+    )
 
 
 def _retrieve_knowledge(
@@ -232,6 +333,64 @@ def _retrieve_knowledge(
     context = kb.get_context(question, max_length=max_context_length) if chunks else ""
     sources = kb.get_sources(question, max_results=max_chunks)
     return _KnowledgeResult(chunks=chunks, context=context, sources=sources)
+
+
+def _check_freshness(
+    knowledge: _KnowledgeResult,
+    knowledge_base_path: Path,
+) -> _FreshnessResult:
+    """Check freshness of retrieved knowledge source files.
+
+    Examines the modification timestamps of source files for the top chunks.
+    If all top chunks (up to 3) come from files older than ``_STALE_KNOWLEDGE_DAYS``,
+    marks the knowledge as stale and produces a caveat message.
+    """
+    if not knowledge.chunks:
+        return _FreshnessResult()
+
+    from datetime import UTC, datetime
+
+    top_sources: list[str] = []
+    seen: set[str] = set()
+    for chunk in knowledge.chunks[:3]:
+        if chunk.source_file not in seen:
+            seen.add(chunk.source_file)
+            top_sources.append(chunk.source_file)
+
+    if not top_sources:
+        return _FreshnessResult()
+
+    now = datetime.now(tz=UTC)
+    ages_days: list[int] = []
+    for source in top_sources:
+        source_path = knowledge_base_path / source
+        if not source_path.exists():
+            continue
+        try:
+            mtime = datetime.fromtimestamp(source_path.stat().st_mtime, tz=UTC)
+            age = (now - mtime).days
+            ages_days.append(age)
+        except OSError:
+            pass
+
+    if not ages_days:
+        return _FreshnessResult()
+
+    oldest_age = max(ages_days)
+    all_stale = all(age > _STALE_KNOWLEDGE_DAYS for age in ages_days)
+
+    if all_stale:
+        caveat = (
+            f"Note: Retrieved knowledge may be outdated (oldest source: {oldest_age} days). "
+            "Consider verifying with tapps_lookup_docs() for the latest documentation."
+        )
+        return _FreshnessResult(
+            stale_knowledge=True,
+            oldest_chunk_age_days=oldest_age,
+            freshness_caveat=caveat,
+        )
+
+    return _FreshnessResult(oldest_chunk_age_days=oldest_age)
 
 
 def _compute_confidence(
@@ -387,10 +546,25 @@ def consult_expert(
     knowledge = _retrieve_knowledge(
         question, resolved.domain, resolved.expert, max_chunks, max_context_length
     )
+
+    # Freshness check: detect stale knowledge sources.
+    knowledge_dir_name = (
+        resolved.expert.knowledge_dir
+        or sanitize_domain_for_path(resolved.expert.primary_domain)
+    )
+    kb_path = ExpertRegistry.get_knowledge_base_path() / knowledge_dir_name
+    freshness = _check_freshness(knowledge, kb_path)
+
     conf = _compute_confidence(question, knowledge, resolved.domain)
     answer_result = _build_answer(
         question, resolved.expert, resolved.domain, knowledge, conf
     )
+
+    # Append freshness caveat to answer when knowledge is stale.
+    answer = answer_result.answer
+    if freshness.freshness_caveat:
+        answer = f"{answer}\n\n---\n\n**{freshness.freshness_caveat}**"
+
     recommendation = _build_recommendation(
         conf, answer_result.suggested_library, answer_result.suggested_topic
     )
@@ -399,7 +573,7 @@ def consult_expert(
         domain=resolved.domain,
         expert_id=resolved.expert.expert_id,
         expert_name=resolved.expert.expert_name,
-        answer=answer_result.answer,
+        answer=answer,
         confidence=conf.confidence,
         factors=conf.factors,
         sources=knowledge.sources,
@@ -413,6 +587,10 @@ def consult_expert(
         fallback_used=answer_result.fallback_used,
         fallback_library=answer_result.fallback_library,
         fallback_topic=answer_result.fallback_topic,
+        adaptive_domain_used=resolved.adaptive_domain_used,
+        stale_knowledge=freshness.stale_knowledge,
+        oldest_chunk_age_days=freshness.oldest_chunk_age_days,
+        freshness_caveat=freshness.freshness_caveat,
     )
 
 

@@ -116,6 +116,10 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     ],
     "tapps_consult_expert": [
         (
+            lambda _called, ctx: (ctx or {}).get("stale_knowledge") is True,
+            "Knowledge may be outdated. Call tapps_lookup_docs() for current documentation.",
+        ),
+        (
             lambda _called, ctx: (
                 (ctx or {}).get("confidence", 1.0) < LOW_CONFIDENCE_THRESHOLD
             ),

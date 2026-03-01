@@ -98,6 +98,22 @@ class ConsultationResult(BaseModel):
         default=None,
         description="Topic used for automatic docs fallback lookup.",
     )
+    adaptive_domain_used: bool = Field(
+        default=False,
+        description="Whether the adaptive domain detector was used for domain resolution.",
+    )
+    stale_knowledge: bool = Field(
+        default=False,
+        description="Whether retrieved knowledge may be outdated (all top chunks > 365 days old).",
+    )
+    oldest_chunk_age_days: int | None = Field(
+        default=None,
+        description="Age in days of the oldest knowledge source file used.",
+    )
+    freshness_caveat: str | None = Field(
+        default=None,
+        description="Caveat message when knowledge sources are potentially outdated.",
+    )
 
 
 class DomainMapping(BaseModel):

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from tapps_core.experts.models import DomainMapping
+from tapps_core.experts.query_expansion import expand_query
 from tapps_core.experts.registry import ExpertRegistry
 
 # ---------------------------------------------------------------------------
@@ -401,7 +402,9 @@ class DomainDetector:
             List of :class:`DomainMapping` sorted by confidence (descending).
             Only domains with a positive score are included.
         """
-        question_lower = question.lower()
+        # Expand synonyms before matching to improve recall.
+        question_expanded = expand_query(question)
+        question_lower = question_expanded.lower()
         # Strip punctuation for better keyword matching.
         question_clean = re.sub(r"[^\w\s-]", " ", question_lower)
 
