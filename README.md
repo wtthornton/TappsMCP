@@ -10,7 +10,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-4%2C800%2B_passing-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-5%2C100%2B_passing-brightgreen.svg)](#development)
 [![Tools](https://img.shields.io/badge/MCP_tools-28-blue.svg)](#tools-reference)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
@@ -38,7 +38,8 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 - **Unified feature flags** — optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** — auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** — `tapps_init` sets up quality infrastructure in any project with one call
-- **4,800+ tests** across 3 packages with strict mypy and ruff enforcement
+- **5,100+ tests** across 3 packages with strict mypy and ruff enforcement
+- **Benchmark infrastructure** — AGENTBench evaluation, template optimization, tool effectiveness measurement
 
 ---
 
@@ -352,6 +353,16 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server:
 | `tapps-mcp validate-changed` | Run quality validation on changed files from the CLI (same as MCP tool). |
 | `tapps-mcp build-plugin` | Generate a Claude Code plugin directory with skills, agents, hooks, MCP config, and rules. |
 | `tapps-mcp rollback` | Restore configuration files from a pre-upgrade backup. Use `--list` to see backups. |
+| `tapps-mcp benchmark run` | Run AGENTBench evaluation (context modes: none/tapps/human/all). |
+| `tapps-mcp benchmark analyze` | Analyze benchmark results with statistical comparison. |
+| `tapps-mcp benchmark report` | Generate markdown/CSV benchmark reports. |
+| `tapps-mcp benchmark tools report` | Generate tool effectiveness report. |
+| `tapps-mcp benchmark tools rank` | Show tool impact rankings. |
+| `tapps-mcp benchmark tools calibrate` | Data-driven checklist tier calibration. |
+| `tapps-mcp template optimize` | Run template optimization pipeline (redundancy + ablation + promotion). |
+| `tapps-mcp template ablate` | Section ablation analysis (identify harmful sections). |
+| `tapps-mcp template compare` | Compare two template versions side-by-side. |
+| `tapps-mcp template history` | Show template version history with scores. |
 
 ### `tapps-mcp init` options
 
@@ -882,7 +893,7 @@ uv sync --all-packages
 
 # Run tests per package (recommended — avoids conftest collisions)
 uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1,269 tests)
-uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (3,420 tests)
+uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (3,737 tests)
 uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (107 tests)
 
 # Run a single test file
@@ -934,6 +945,7 @@ packages/
 │       ├── tools/                     # Ruff, mypy, bandit, radon, vulture, pip-audit, checklist
 │       ├── validators/                # Dockerfile, docker-compose, WebSocket, MQTT, InfluxDB
 │       ├── project/                   # Project profiling, session notes, impact analysis
+│       ├── benchmark/                 # Benchmark infrastructure (AGENTBench, template optimization, tool effectiveness)
 │       ├── distribution/              # Setup generator (init, upgrade, doctor)
 │       ├── pipeline/                  # Pipeline orchestration, platform generators
 │       └── (re-exports)              # Backward-compatible re-exports from tapps-core
@@ -1029,7 +1041,7 @@ DocsMCP is in early development. Planned features include README generation, API
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅ · LLM Engagement Level ✅ · GitHub Templates & CI ✅ · GitHub Copilot & Governance ✅ · Shared Memory Foundation ✅ · Memory Intelligence ✅ · Memory Retrieval & Integration ✅ · Monorepo Workspace ✅ · tapps-core Extraction ✅ · DocsMCP Server Skeleton ✅ · Doc Provider Simplification ✅ · Platform Artifact Correctness ✅ · Memory Retrieval Upgrade ✅ · Expert Adaptive Integration ✅ · **Quality Review Remediation** ✅ · *Hook & Platform Expansion* (next) · *Benchmark Infrastructure* (planned)
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅ · LLM Engagement Level ✅ · GitHub Templates & CI ✅ · GitHub Copilot & Governance ✅ · Shared Memory Foundation ✅ · Memory Intelligence ✅ · Memory Retrieval & Integration ✅ · Monorepo Workspace ✅ · tapps-core Extraction ✅ · DocsMCP Server Skeleton ✅ · Doc Provider Simplification ✅ · Platform Artifact Correctness ✅ · Memory Retrieval Upgrade ✅ · Expert Adaptive Integration ✅ · Quality Review Remediation ✅ · Hook & Platform Expansion ✅ · Pipeline Onboarding & Distribution ✅ · **Benchmark Infrastructure** ✅ · **Template Self-Optimization** ✅ · **MCP Tool Effectiveness** ✅
 
 ---
 

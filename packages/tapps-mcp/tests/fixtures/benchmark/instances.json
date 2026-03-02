@@ -1,0 +1,72 @@
+[
+  {
+    "instance_id": "fixture-001-lint-fix",
+    "repo": "example/calculator",
+    "problem_description": "Fix unused import and line-too-long lint issues in calculator.py",
+    "clean_pr_patch": "--- a/calculator.py\n+++ b/calculator.py\n@@ -1,5 +1,4 @@\n-import os\n import math\n \n \n def add(a: float, b: float) -> float:\n     return a + b\n",
+    "test_commands": ["python -m pytest tests/"],
+    "test_file_names": ["tests/test_calculator.py"],
+    "test_file_contents": {"tests/test_calculator.py": "def test_add():\n    from calculator import add\n    assert add(1, 2) == 3\n"},
+    "docker_image": "",
+    "setup_commands": ["pip install pytest"],
+    "key_files": ["calculator.py"],
+    "risk_factors": null,
+    "rationale": "Remove unused os import to fix F401 lint warning"
+  },
+  {
+    "instance_id": "fixture-002-type-error",
+    "repo": "example/utils",
+    "problem_description": "Fix TypeError in string_utils.py where int is concatenated with str",
+    "clean_pr_patch": "--- a/string_utils.py\n+++ b/string_utils.py\n@@ -3,4 +3,4 @@\n def repeat_string(text: str, count: int) -> str:\n-    return text + count\n+    return text * count\n",
+    "test_commands": ["python -m pytest tests/"],
+    "test_file_names": ["tests/test_string_utils.py"],
+    "test_file_contents": {"tests/test_string_utils.py": "def test_repeat():\n    from string_utils import repeat_string\n    assert repeat_string('ab', 3) == 'ababab'\n"},
+    "docker_image": "",
+    "setup_commands": [],
+    "key_files": ["string_utils.py"],
+    "risk_factors": null,
+    "rationale": "Use multiplication instead of addition for string repetition"
+  },
+  {
+    "instance_id": "fixture-003-security-fix",
+    "repo": "example/webapp",
+    "problem_description": "Fix SQL injection vulnerability in user lookup query",
+    "clean_pr_patch": "--- a/db.py\n+++ b/db.py\n@@ -5,4 +5,4 @@\n def find_user(conn, username: str):\n-    query = f\"SELECT * FROM users WHERE name = '{username}'\"\n-    return conn.execute(query).fetchone()\n+    query = \"SELECT * FROM users WHERE name = ?\"\n+    return conn.execute(query, (username,)).fetchone()\n",
+    "test_commands": ["python -m pytest tests/"],
+    "test_file_names": ["tests/test_db.py"],
+    "test_file_contents": {"tests/test_db.py": "import sqlite3\n\ndef test_find_user():\n    conn = sqlite3.connect(':memory:')\n    conn.execute('CREATE TABLE users (name TEXT)')\n    conn.execute(\"INSERT INTO users VALUES ('alice')\")\n    from db import find_user\n    assert find_user(conn, 'alice') is not None\n"},
+    "docker_image": "",
+    "setup_commands": [],
+    "key_files": ["db.py"],
+    "risk_factors": ["sql-injection"],
+    "rationale": "Use parameterized query to prevent SQL injection"
+  },
+  {
+    "instance_id": "fixture-004-refactor",
+    "repo": "example/parser",
+    "problem_description": "Extract duplicate validation logic into a shared helper function",
+    "clean_pr_patch": "--- a/parser.py\n+++ b/parser.py\n@@ -1,14 +1,14 @@\n+def _validate_input(data: str) -> bool:\n+    return bool(data and data.strip())\n+\n def parse_name(data: str) -> str:\n-    if not data or not data.strip():\n+    if not _validate_input(data):\n         raise ValueError('empty input')\n     return data.strip().title()\n \n def parse_email(data: str) -> str:\n-    if not data or not data.strip():\n+    if not _validate_input(data):\n         raise ValueError('empty input')\n     return data.strip().lower()\n",
+    "test_commands": ["python -m pytest tests/"],
+    "test_file_names": ["tests/test_parser.py"],
+    "test_file_contents": {"tests/test_parser.py": "import pytest\nfrom parser import parse_name, parse_email\n\ndef test_parse_name():\n    assert parse_name('  john doe  ') == 'John Doe'\n\ndef test_parse_email():\n    assert parse_email(' John@Example.COM ') == 'john@example.com'\n\ndef test_empty_raises():\n    with pytest.raises(ValueError):\n        parse_name('')\n"},
+    "docker_image": "",
+    "setup_commands": [],
+    "key_files": ["parser.py"],
+    "risk_factors": null,
+    "rationale": "DRY principle - extract shared validation"
+  },
+  {
+    "instance_id": "fixture-005-with-agents-md",
+    "repo": "example/project-with-context",
+    "problem_description": "Fix off-by-one error in pagination logic",
+    "clean_pr_patch": "--- a/paginator.py\n+++ b/paginator.py\n@@ -4,4 +4,4 @@\n def paginate(items: list, page: int, page_size: int = 10) -> list:\n-    start = page * page_size\n+    start = (page - 1) * page_size\n     end = start + page_size\n     return items[start:end]\n",
+    "test_commands": ["python -m pytest tests/"],
+    "test_file_names": ["tests/test_paginator.py"],
+    "test_file_contents": {"tests/test_paginator.py": "from paginator import paginate\n\ndef test_first_page():\n    items = list(range(25))\n    assert paginate(items, 1, 10) == list(range(10))\n\ndef test_second_page():\n    items = list(range(25))\n    assert paginate(items, 2, 10) == list(range(10, 20))\n"},
+    "docker_image": "",
+    "setup_commands": [],
+    "key_files": ["paginator.py", "AGENTS.md"],
+    "risk_factors": null,
+    "rationale": "Pages should be 1-indexed, not 0-indexed"
+  }
+]

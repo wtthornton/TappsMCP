@@ -344,5 +344,23 @@ def replace_exe_cmd(new_exe_path: str) -> None:
         raise SystemExit(1)
 
 
+def _register_benchmark_group() -> None:
+    """Lazily register the benchmark subcommand group."""
+    from tapps_mcp.benchmark.cli_commands import benchmark_group
+
+    main.add_command(benchmark_group)
+
+
+def _register_template_group() -> None:
+    """Lazily register the template optimization subcommand group."""
+    from tapps_mcp.benchmark.cli_commands import template_group
+
+    main.add_command(template_group)
+
+
+_register_benchmark_group()
+_register_template_group()
+
+
 if __name__ == "__main__":
     main()

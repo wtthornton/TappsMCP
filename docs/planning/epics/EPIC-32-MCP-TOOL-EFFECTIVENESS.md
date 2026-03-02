@@ -4,7 +4,7 @@
 > actually improve coding agent task completion — using MCPMark-style deterministic
 > evaluation and closed-loop tool recommendation tuning.
 
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P2 — Improvement (validates tool-level value, not just template-level)
 **Estimated LOE:** ~3-4 weeks (1 developer)
 **Dependencies:** Epic 30 (Benchmark Infrastructure), Epic 7 (Metrics & Dashboard), Epic 5 (Adaptive Learning)

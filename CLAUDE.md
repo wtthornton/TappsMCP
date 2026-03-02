@@ -59,6 +59,18 @@ uv run tapps-mcp upgrade --dry-run  # preview generated file updates
 uv run tapps-mcp build-plugin      # generate Claude Code plugin directory
 uv run tapps-mcp rollback --list   # list available upgrade backups
 uv run docsmcp doctor             # DocsMCP diagnostics
+
+# Benchmark subsystem (Epics 30-32)
+uv run tapps-mcp benchmark run     # run AGENTBench evaluation
+uv run tapps-mcp benchmark analyze # analyze benchmark results
+uv run tapps-mcp benchmark report  # generate benchmark report
+uv run tapps-mcp template optimize # run template optimization pipeline
+uv run tapps-mcp template ablate   # section ablation analysis
+uv run tapps-mcp template compare  # compare template versions
+uv run tapps-mcp template history  # show template version history
+uv run tapps-mcp benchmark tools report    # tool effectiveness report
+uv run tapps-mcp benchmark tools rank      # tool ranking table
+uv run tapps-mcp benchmark tools calibrate # checklist calibration
 ```
 
 ## Architecture
@@ -150,6 +162,14 @@ src/tapps_mcp/
 │               github_governance.py
 ├── distribution/ setup_generator.py, doctor.py, exe_manager.py,
 │               plugin_builder.py, rollback.py
+├── benchmark/  __init__.py, models.py, config.py, dataset.py,
+│               context_injector.py, docker_runner.py, evaluator.py,
+│               mock_evaluator.py, analyzer.py, reporter.py,
+│               cli_commands.py, template_versions.py, redundancy.py,
+│               ablation.py, engagement_calibrator.py, failure_analyzer.py,
+│               promotion.py, tool_task_models.py, tool_evaluator.py,
+│               call_patterns.py, checklist_calibrator.py, expert_tracker.py,
+│               memory_tracker.py, adaptive_feedback.py, tool_report.py
 ├── validators/ base.py, dockerfile.py, docker_compose.py,
 │               influxdb.py, mqtt.py, websocket.py
 ```
@@ -162,6 +182,16 @@ To add a new MCP tool:
 3. Register the tool in the checklist task map (`tools/checklist.py`)
 4. Add to AGENTS.md and README.md tools reference
 5. Add tests in `packages/tapps-mcp/tests/unit/` and optionally `tests/integration/`
+
+### Benchmark subsystem
+
+The `benchmark/` package (Epics 30-32) provides infrastructure for measuring TappsMCP effectiveness:
+
+**Epic 30 — Benchmark Infrastructure:** AGENTBench dataset loading (HuggingFace/Parquet/JSON), context injection with redundancy analysis (Jaccard similarity), Docker-isolated evaluation with `EvaluatorBackend` protocol, results aggregation with McNemar's statistical significance test, JSONL/CSV persistence, and CLI commands (`tapps-mcp benchmark run|analyze|report`).
+
+**Epic 31 — Template Self-Optimization:** SQLite-backed template version tracking, TF-IDF + Jaccard redundancy scoring per section, section ablation runner (essential/neutral/harmful classification), engagement level cost-benefit calibrator, failure pattern analysis with suggestion generation (capped at 5), non-regression promotion gate, and CLI commands (`tapps-mcp template optimize|ablate|compare|history`).
+
+**Epic 32 — MCP Tool Effectiveness:** 21 builtin evaluation tasks across 5 categories (quality, security, architecture, debugging, refactoring), ALL_MINUS_ONE evaluation methodology with mock evaluator, call pattern analysis with efficiency metrics, data-driven checklist calibration by engagement level, expert/memory system effectiveness tracking, adaptive feedback with weight adjustments, and CLI commands (`tapps-mcp benchmark tools report|rank|calibrate`).
 
 ### Dual CLI / MCP tool pattern
 
