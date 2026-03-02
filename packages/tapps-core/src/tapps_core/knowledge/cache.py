@@ -117,6 +117,12 @@ class KBCache:
             self._stats.misses += 1
             return None
 
+        # Record access timestamp for LRU eviction
+        key = f"{library}/{topic}"
+        access_meta = self._load_metadata()
+        access_meta[key] = time.time()
+        self._save_metadata(access_meta)
+
         entry = CacheEntry(
             library=meta.get("library", library),
             topic=meta.get("topic", topic),
@@ -163,12 +169,21 @@ class KBCache:
             logger.warning("cache_write_lock_timeout", library=entry.library, topic=entry.topic)
             return
 
+        # Record access timestamp for LRU eviction
+        key = f"{entry.library}/{entry.topic}"
+        access_meta = self._load_metadata()
+        access_meta[key] = time.time()
+        self._save_metadata(access_meta)
+
         logger.debug(
             "cache_put",
             library=entry.library,
             topic=entry.topic,
             token_count=entry.token_count,
         )
+
+        # Check size and evict if over limit
+        self._check_size()
 
     def has(self, library: str, topic: str = "overview") -> bool:
         """Check whether a cache entry exists (does not check staleness)."""
@@ -261,6 +276,105 @@ class KBCache:
         self._stats.total_size_bytes = total_size
         self._stats.stale_entries = stale
         return self._stats
+
+    def evict_lru(self, max_mb: int = 100) -> int:
+        """Evict least-recently-used entries until cache is under *max_mb*.
+
+        Returns the number of evicted entries.
+        """
+        return self._check_size(max_mb)
+
+    # ------------------------------------------------------------------
+    # LRU metadata helpers
+    # ------------------------------------------------------------------
+
+    @property
+    def _metadata_path(self) -> Path:
+        """Path to the LRU access-timestamp metadata file."""
+        return self.cache_dir / "_metadata.json"
+
+    def _load_metadata(self) -> dict[str, float]:
+        """Load access-timestamp metadata from disk."""
+        if not self._metadata_path.exists():
+            return {}
+        try:
+            raw = self._metadata_path.read_text(encoding="utf-8")
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                return {str(k): float(v) for k, v in data.items()}
+            return {}
+        except (json.JSONDecodeError, OSError, ValueError):
+            return {}
+
+    def _save_metadata(self, metadata: dict[str, float]) -> None:
+        """Persist access-timestamp metadata to disk atomically."""
+        self._write_atomic(self._metadata_path, json.dumps(metadata, indent=2))
+
+    def _check_size(self, max_mb: int = 100) -> int:
+        """Evict LRU entries if total cache size exceeds *max_mb* MB.
+
+        Returns the number of evicted entries.
+        """
+        limit_bytes = max_mb * 1024 * 1024
+        total = self._total_cache_bytes()
+        if total <= limit_bytes:
+            return 0
+
+        metadata = self._load_metadata()
+        # Build list of (key, timestamp) sorted oldest-first
+        sorted_entries = sorted(metadata.items(), key=lambda kv: kv[1])
+
+        evicted = 0
+        for key, _ts in sorted_entries:
+            if total <= limit_bytes:
+                break
+            parts = key.split("/", 1)
+            if len(parts) != 2:  # noqa: PLR2004
+                continue
+            library, topic = parts
+
+            # Calculate size of this entry before removal
+            entry_size = self._entry_size(library, topic)
+            if entry_size == 0:
+                # Entry files already gone — just clean metadata
+                metadata.pop(key, None)
+                continue
+
+            self.remove(library, topic)
+            metadata.pop(key, None)
+            total -= entry_size
+            evicted += 1
+            logger.debug(
+                "cache_evict_lru",
+                library=library,
+                topic=topic,
+                freed_bytes=entry_size,
+            )
+
+        self._save_metadata(metadata)
+        return evicted
+
+    def _total_cache_bytes(self) -> int:
+        """Sum the size of all files under the cache directory recursively."""
+        total = 0
+        if not self.cache_dir.exists():
+            return total
+        for path in self.cache_dir.rglob("*"):
+            if path.is_file():
+                total += path.stat().st_size
+        return total
+
+    def _entry_size(self, library: str, topic: str) -> int:
+        """Return total bytes used by a single cache entry (md + meta + lock)."""
+        size = 0
+        for path in [
+            self._content_path(library, topic),
+            self._meta_path(library, topic),
+            self._lock_path(library, topic),
+        ]:
+            if path.exists():
+                size += path.stat().st_size
+        return size
 
     # ------------------------------------------------------------------
     # Internal helpers
