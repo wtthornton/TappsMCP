@@ -86,7 +86,7 @@ def serve(transport: str, host: str, port: int) -> None:
     "--engagement-level",
     type=click.Choice(["high", "medium", "low"]),
     default=None,
-    help="LLM engagement level for generated rules (high=mandatory, medium=balanced, low=optional). Writes to .tapps-mcp.yaml.",
+    help="LLM engagement level (high/medium/low). Writes to .tapps-mcp.yaml.",
 )
 def init(
     mcp_host: str,
@@ -215,6 +215,111 @@ def validate_changed_cmd(quick: bool, project_root: str) -> None:
             raise SystemExit(1)
 
     asyncio.run(_run())
+
+
+@main.command("build-plugin")
+@click.option(
+    "--output-dir",
+    default="./tapps-mcp-plugin",
+    type=click.Path(path_type=str),
+    help="Output directory for the plugin (default: ./tapps-mcp-plugin/).",
+)
+@click.option(
+    "--engagement-level",
+    type=click.Choice(["high", "medium", "low"]),
+    default="medium",
+    help="Engagement level for generated rules.",
+)
+def build_plugin(output_dir: str, engagement_level: str) -> None:
+    """Generate a Claude Code plugin directory from TappsMCP templates.
+
+    Creates a complete plugin with skills, agents, hooks, MCP config,
+    and platform rules that can be submitted to the Claude Code marketplace.
+    """
+    from pathlib import Path
+
+    from tapps_mcp.distribution.plugin_builder import PluginBuilder
+
+    builder = PluginBuilder(
+        output_dir=Path(output_dir).resolve(),
+        engagement_level=engagement_level,
+    )
+    plugin_dir = builder.build()
+    result = builder.result
+
+    click.echo(f"Plugin built at {plugin_dir}")
+    for component, status in result.get("components", {}).items():
+        if isinstance(status, list):
+            click.echo(f"  {component}: {len(status)} items")
+        else:
+            click.echo(f"  {component}: {status}")
+
+
+@main.command()
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root directory.",
+)
+@click.option(
+    "--backup-id",
+    default=None,
+    help="Restore a specific backup by timestamp.",
+)
+@click.option(
+    "--list",
+    "list_backups",
+    is_flag=True,
+    help="List available backups.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be restored without making changes.",
+)
+def rollback(
+    project_root: str, backup_id: str | None, list_backups: bool, dry_run: bool
+) -> None:
+    """Restore configuration files from a pre-upgrade backup.
+
+    By default restores from the latest backup.
+    Use --backup-id to select a specific one, or --list to see all.
+    """
+    from pathlib import Path
+
+    from tapps_mcp.distribution.rollback import BackupManager
+
+    root = Path(project_root).resolve()
+    mgr = BackupManager(root)
+
+    if list_backups:
+        backups = mgr.list_backups()
+        if not backups:
+            click.echo("No backups found.")
+            return
+        click.echo(f"{'Timestamp':<22} {'Version':<12} {'Files':<6} Path")
+        click.echo("-" * 70)
+        for b in backups:
+            click.echo(f"{b.timestamp:<22} {b.version:<12} {b.file_count:<6} {b.path}")
+        return
+
+    backup_dir = None
+    if backup_id:
+        backup_path = root / ".tapps-mcp" / "backups" / backup_id
+        if not backup_path.exists():
+            click.echo(f"Backup '{backup_id}' not found.", err=True)
+            raise SystemExit(1)
+        backup_dir = backup_path
+
+    restored = mgr.restore_backup(backup_dir, dry_run=dry_run)
+    if not restored:
+        click.echo("No files to restore (no backups available).", err=True)
+        raise SystemExit(1)
+
+    prefix = "[dry-run] Would restore" if dry_run else "Restored"
+    click.echo(f"{prefix} {len(restored)} file(s):")
+    for f in restored:
+        click.echo(f"  {f}")
 
 
 @main.command(name="replace-exe")

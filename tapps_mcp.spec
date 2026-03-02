@@ -173,6 +173,8 @@ a = Analysis(
         "tapps_mcp.distribution.setup_generator",
         "tapps_mcp.distribution.doctor",
         "tapps_mcp.distribution.exe_manager",
+        "tapps_mcp.distribution.plugin_builder",
+        "tapps_mcp.distribution.rollback",
         "tapps_mcp.pipeline",
         "tapps_mcp.pipeline.models",
         "tapps_mcp.pipeline.handoff",

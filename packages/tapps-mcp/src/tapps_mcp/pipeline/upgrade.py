@@ -194,6 +194,41 @@ def _detect_platform(project_root: Path) -> str:
     return ""
 
 
+def _collect_upgrade_targets(project_root: Path) -> list[Path]:
+    """Collect files that upgrade_pipeline will overwrite."""
+    targets: list[Path] = []
+    candidates = [
+        project_root / "AGENTS.md",
+        project_root / "CLAUDE.md",
+        project_root / ".claude" / "settings.json",
+        project_root / ".cursor" / "rules" / "tapps-pipeline.md",
+    ]
+    # Hook scripts
+    hooks_dir = project_root / ".claude" / "hooks"
+    if hooks_dir.is_dir():
+        for f in hooks_dir.iterdir():
+            if f.name.startswith("tapps-"):
+                targets.append(f)
+    # Skills
+    skills_dir = project_root / ".claude" / "skills"
+    if skills_dir.is_dir():
+        for f in skills_dir.iterdir():
+            if f.is_dir() and f.name.startswith("tapps-"):
+                skill_file = f / "SKILL.md"
+                if skill_file.exists():
+                    targets.append(skill_file)
+    # Agents
+    agents_dir = project_root / ".claude" / "agents"
+    if agents_dir.is_dir():
+        for f in agents_dir.iterdir():
+            if f.name.startswith("tapps-"):
+                targets.append(f)
+    for c in candidates:
+        if c.exists():
+            targets.append(c)
+    return targets
+
+
 def upgrade_pipeline(
     project_root: Path,
     *,
@@ -233,6 +268,26 @@ def upgrade_pipeline(
         "components": {},
         "errors": [],
     }
+
+    # Pre-upgrade backup (skip in dry-run mode)
+    if not dry_run:
+        try:
+            from tapps_mcp.distribution.rollback import BackupManager
+
+            mgr = BackupManager(project_root)
+            backup_targets = _collect_upgrade_targets(project_root)
+            if backup_targets:
+                backup_dir = mgr.create_backup(
+                    backup_targets,
+                    reason="pre-upgrade backup",
+                    version=__version__,
+                )
+                result["backup"] = str(backup_dir)
+                mgr.cleanup_old_backups(keep=5)
+        except Exception as exc:
+            # Backup failure should not block upgrade
+            log.warning("backup_failed", error=str(exc))
+            result["backup"] = f"failed: {exc}"
 
     # AGENTS.md (platform-independent)
     try:
