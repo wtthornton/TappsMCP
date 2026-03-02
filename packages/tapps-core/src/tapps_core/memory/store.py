@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from tapps_core.security.content_safety import check_content_safety
 from tapps_core.memory.models import (
     MemoryEntry,
     MemoryScope,
@@ -21,6 +20,7 @@ from tapps_core.memory.models import (
     _utc_now_iso,
 )
 from tapps_core.memory.persistence import MemoryPersistence
+from tapps_core.security.content_safety import check_content_safety
 
 if TYPE_CHECKING:
     from pathlib import Path
