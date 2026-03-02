@@ -70,11 +70,21 @@ _SEVERITY_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
 
 def _write_validate_ok_marker(project_root: Path) -> None:
-    """Write a marker so the Cursor stop hook can skip the reminder."""
+    """Write markers so hooks can detect that validation was run.
+
+    Writes two markers:
+    - ``_VALIDATE_OK_MARKER`` (legacy, for Cursor stop hook)
+    - ``.tapps-mcp/.validation-marker`` (for Claude Code blocking hooks)
+    """
+    ts = str(time.time())
     with contextlib.suppress(OSError):
         marker = project_root / _VALIDATE_OK_MARKER
         marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(str(time.time()), encoding="utf-8")
+        marker.write_text(ts, encoding="utf-8")
+    with contextlib.suppress(OSError):
+        validation_marker = project_root / ".tapps-mcp" / ".validation-marker"
+        validation_marker.parent.mkdir(parents=True, exist_ok=True)
+        validation_marker.write_text(ts, encoding="utf-8")
 
 
 async def _validate_progress_heartbeat(
