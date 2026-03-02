@@ -86,7 +86,11 @@ def serve(transport: str, host: str, port: int) -> None:
     "--engagement-level",
     type=click.Choice(["high", "medium", "low"]),
     default=None,
-    help="LLM engagement level for generated rules (high=mandatory, medium=balanced, low=optional). Writes to .tapps-mcp.yaml.",
+    help=(
+        "LLM engagement level for generated rules "
+        "(high=mandatory, medium=balanced, low=optional). "
+        "Writes to .tapps-mcp.yaml."
+    ),
 )
 def init(
     mcp_host: str,

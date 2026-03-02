@@ -13,7 +13,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from mcp.server.fastmcp import (
-    Context,  # noqa: TC002 — runtime import required for FastMCP annotation resolution
+    Context,
 )
 from mcp.types import ToolAnnotations
 

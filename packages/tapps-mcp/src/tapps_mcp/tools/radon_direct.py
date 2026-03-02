@@ -16,7 +16,7 @@ _RADON_AVAILABLE: bool | None = None
 
 def is_available() -> bool:
     """Check whether the radon library is importable."""
-    global _RADON_AVAILABLE  # noqa: PLW0603
+    global _RADON_AVAILABLE
     if _RADON_AVAILABLE is None:
         import importlib.util
 

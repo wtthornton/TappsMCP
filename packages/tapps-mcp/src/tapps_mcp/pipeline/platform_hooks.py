@@ -12,15 +12,33 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from tapps_mcp.pipeline.platform_hook_templates import (
-    CLAUDE_HOOKS_CONFIG as _CLAUDE_HOOKS_CONFIG,
-    CLAUDE_HOOKS_CONFIG_PS as _CLAUDE_HOOKS_CONFIG_PS,
     CLAUDE_HOOK_SCRIPTS as _CLAUDE_HOOK_SCRIPTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOK_SCRIPTS_PS as _CLAUDE_HOOK_SCRIPTS_PS,
-    CURSOR_HOOKS_CONFIG as _CURSOR_HOOKS_CONFIG,
-    CURSOR_HOOKS_CONFIG_PS as _CURSOR_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CLAUDE_HOOKS_CONFIG as _CLAUDE_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CLAUDE_HOOKS_CONFIG_PS as _CLAUDE_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     CURSOR_HOOK_SCRIPTS as _CURSOR_HOOK_SCRIPTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     CURSOR_HOOK_SCRIPTS_PS as _CURSOR_HOOK_SCRIPTS_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_HOOKS_CONFIG as _CURSOR_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_HOOKS_CONFIG_PS as _CURSOR_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_CAPTURE_HOOKS_CONFIG as _MEMORY_CAPTURE_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_CAPTURE_HOOKS_CONFIG_PS as _MEMORY_CAPTURE_HOOKS_CONFIG_PS,
 )
 
@@ -286,11 +304,10 @@ def generate_cursor_hooks(
     for event, entries in existing_hooks.items():
         for i, entry in enumerate(entries):
             cmd = entry.get("command", "")
-            if _is_wrong_platform_command(cmd, win=win):
-                if event in hooks_config:
-                    # Replace with the correct-platform entry
-                    existing_hooks[event][i] = hooks_config[event][0]
-                    hooks_migrated += 1
+            if _is_wrong_platform_command(cmd, win=win) and event in hooks_config:
+                # Replace with the correct-platform entry
+                existing_hooks[event][i] = hooks_config[event][0]
+                hooks_migrated += 1
 
     config["version"] = 1
     config["hooks"] = existing_hooks

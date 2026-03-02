@@ -33,7 +33,7 @@ class SessionNoteStore:
     def __init__(self, project_root: Path) -> None:
         self.project_root = project_root
         self.session_id = uuid.uuid4().hex[:12]
-        self.session_started = datetime.now(tz=timezone.utc).isoformat()  # noqa: UP017
+        self.session_started = datetime.now(tz=timezone.utc).isoformat()
         self._notes: dict[str, SessionNote] = {}
         self._lock = threading.Lock()
 
@@ -51,7 +51,7 @@ class SessionNoteStore:
 
     def save(self, key: str, value: str) -> SessionNote:
         """Store or update a note."""
-        now = datetime.now(tz=timezone.utc).isoformat()  # noqa: UP017
+        now = datetime.now(tz=timezone.utc).isoformat()
         with self._lock:
             existing = self._notes.get(key)
             note = SessionNote(
@@ -117,7 +117,7 @@ class SessionNoteStore:
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2)
-                os.replace(tmp, str(self._store_path))  # noqa: PTH105
+                os.replace(tmp, str(self._store_path))
             except OSError:
                 # Clean up temp on failure
                 with contextlib.suppress(OSError):

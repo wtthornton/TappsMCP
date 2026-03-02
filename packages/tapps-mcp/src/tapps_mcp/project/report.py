@@ -13,8 +13,8 @@ from typing import Any
 
 import structlog
 
-from tapps_mcp.gates.models import GateResult  # noqa: TC001
-from tapps_mcp.scoring.models import ScoreResult  # noqa: TC001
+from tapps_mcp.gates.models import GateResult
+from tapps_mcp.scoring.models import ScoreResult
 
 logger = structlog.get_logger(__name__)
 
@@ -98,7 +98,7 @@ def _build_summary(
         "total_lint_issues": total_lint,
         "total_type_issues": total_type,
         "total_security_issues": total_security,
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),  # noqa: UP017
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
     }
 
 

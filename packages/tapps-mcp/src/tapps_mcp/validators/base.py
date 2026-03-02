@@ -69,7 +69,7 @@ def detect_config_type(file_path: str, content: str | None = None) -> str | None
     return None
 
 
-def validate_config(  # noqa: PLR0911
+def validate_config(
     file_path: str,
     content: str,
     config_type: str | None = None,

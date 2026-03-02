@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime  # noqa: TC003
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-# Re-export from common.pipeline_models for backward compatibility
-from tapps_core.common.pipeline_models import PipelineStage as PipelineStage
 from tapps_core.common.pipeline_models import STAGE_ORDER as STAGE_ORDER
 from tapps_core.common.pipeline_models import STAGE_TOOLS as STAGE_TOOLS
+
+# Re-export from common.pipeline_models for backward compatibility
+from tapps_core.common.pipeline_models import PipelineStage as PipelineStage
 
 
 class StageResult(BaseModel):

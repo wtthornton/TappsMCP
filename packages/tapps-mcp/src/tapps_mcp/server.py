@@ -30,9 +30,9 @@ import structlog
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from tapps_mcp import __version__
 from tapps_core.common.logging import setup_logging
 from tapps_core.config.settings import load_settings
+from tapps_mcp import __version__
 from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
 from tapps_mcp.tools.tool_detection import (
     detect_installed_tools,
@@ -245,7 +245,7 @@ _checklist_persist_configured: bool = False
 
 def _record_call(tool_name: str) -> None:
     """Record a tool call in the session checklist tracker."""
-    global _checklist_persist_configured  # noqa: PLW0603
+    global _checklist_persist_configured
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
@@ -1072,7 +1072,7 @@ def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
 # Register tools from extracted modules & re-export for backward compatibility
 # ---------------------------------------------------------------------------
 
-from tapps_mcp import (  # noqa: E402
+from tapps_mcp import (
     server_analysis_tools,
     server_memory_tools,
     server_metrics_tools,
@@ -1148,7 +1148,7 @@ def run_server(
         mcp.run(transport="stdio")
     elif transport == "http":
         import uvicorn
-        from starlette.requests import Request  # noqa: TC002
+        from starlette.requests import Request
         from starlette.responses import HTMLResponse
         from starlette.routing import Route
 

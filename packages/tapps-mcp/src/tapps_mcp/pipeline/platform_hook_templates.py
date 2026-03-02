@@ -242,7 +242,7 @@ $validated = if (Test-Path $marker) { $true } else { $false }
 $dateStr = (Get-Date -Format "yyyy-MM-dd")
 try {
     $gitOutput = git diff --name-only HEAD 2>$null
-    $filesEdited = @($gitOutput | Where-Object { $_ -match '\.py$' }).Count
+    $filesEdited = @($gitOutput | Where-Object { $_ -match '\\.py$' }).Count
 } catch {
     $filesEdited = 0
 }

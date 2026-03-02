@@ -19,7 +19,7 @@ _scorer: _CodeScorerType | None = None
 
 def _get_scorer() -> _CodeScorerType:
     """Return a lazily-initialized :class:`CodeScorer` singleton."""
-    global _scorer  # noqa: PLW0603
+    global _scorer
     if _scorer is None:
         from tapps_mcp.scoring.scorer import CodeScorer
 
@@ -29,7 +29,7 @@ def _get_scorer() -> _CodeScorerType:
 
 def _reset_scorer_cache() -> None:
     """Reset the cached :class:`CodeScorer` singleton (for testing)."""
-    global _scorer  # noqa: PLW0603
+    global _scorer
     _scorer = None
 
 
@@ -42,7 +42,7 @@ _lookup_engine: _LookupEngineType | None = None
 
 def _get_lookup_engine() -> _LookupEngineType:
     """Return a lazily-initialized :class:`LookupEngine` singleton."""
-    global _lookup_engine  # noqa: PLW0603
+    global _lookup_engine
     if _lookup_engine is None:
         from tapps_core.config.settings import load_settings
         from tapps_core.knowledge.cache import KBCache
@@ -56,7 +56,7 @@ def _get_lookup_engine() -> _LookupEngineType:
 
 def _reset_lookup_engine_cache() -> None:
     """Reset the cached :class:`LookupEngine` singleton (for testing)."""
-    global _lookup_engine  # noqa: PLW0603
+    global _lookup_engine
     _lookup_engine = None
 
 
@@ -69,7 +69,7 @@ _memory_store: _MemoryStoreType | None = None
 
 def _get_memory_store() -> _MemoryStoreType:
     """Return a lazily-initialized :class:`MemoryStore` singleton."""
-    global _memory_store  # noqa: PLW0603
+    global _memory_store
     if _memory_store is None:
         from tapps_core.config.settings import load_settings
         from tapps_core.memory.store import MemoryStore
@@ -81,7 +81,7 @@ def _get_memory_store() -> _MemoryStoreType:
 
 def _reset_memory_store_cache() -> None:
     """Reset the cached :class:`MemoryStore` singleton (for testing)."""
-    global _memory_store  # noqa: PLW0603
+    global _memory_store
     _memory_store = None
 
 
@@ -155,7 +155,7 @@ def is_session_initialized() -> bool:
 
 def mark_session_initialized(context: dict[str, Any] | None = None) -> None:
     """Mark the session as initialized with optional context."""
-    global _session_initialized  # noqa: PLW0603
+    global _session_initialized
     with _session_lock:
         _session_initialized = True
         if context:
@@ -170,7 +170,7 @@ def get_session_context() -> dict[str, Any]:
 
 def _reset_session_state() -> None:
     """Reset session state (for testing)."""
-    global _session_initialized  # noqa: PLW0603
+    global _session_initialized
     with _session_lock:
         _session_initialized = False
         _session_context.clear()
@@ -203,8 +203,8 @@ async def ensure_session_initialized() -> None:
             "has_docker": profile.has_docker,
             "has_ci": profile.has_ci,
         }
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        pass  # Best-effort; profiling failure should not block session init
 
     mark_session_initialized({
         "project_root": str(settings.project_root),

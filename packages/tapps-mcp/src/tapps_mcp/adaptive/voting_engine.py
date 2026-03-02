@@ -7,7 +7,6 @@ module propagate to the core implementation.
 from __future__ import annotations
 
 import tapps_core.adaptive.voting_engine as _core_voting
-
 from tapps_core.adaptive.voting_engine import AdaptiveVotingEngine as AdaptiveVotingEngine
 from tapps_core.adaptive.weight_distributor import WeightDistributor as WeightDistributor
 

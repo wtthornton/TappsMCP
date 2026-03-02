@@ -415,7 +415,7 @@ def _read_engagement_level(project_root: Path) -> str | None:
         if level in ("high", "medium", "low"):
             return level
     except Exception:
-        pass
+        return None
     return None
 
 

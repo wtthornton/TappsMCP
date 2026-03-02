@@ -5,7 +5,7 @@ from __future__ import annotations
 import structlog
 from pydantic import BaseModel, Field
 
-from tapps_core.common.models import SecurityIssue  # noqa: TC001 — Pydantic needs at runtime
+from tapps_core.common.models import SecurityIssue
 from tapps_core.security.secret_scanner import SecretFinding, SecretScanner
 from tapps_mcp.tools.bandit import run_bandit_check
 

@@ -11,8 +11,8 @@ import json
 import re
 import tomllib
 from collections import Counter
-from collections.abc import Iterator  # noqa: TC003
-from pathlib import Path  # noqa: TC003
+from collections.abc import Iterator
+from pathlib import Path
 
 import structlog
 

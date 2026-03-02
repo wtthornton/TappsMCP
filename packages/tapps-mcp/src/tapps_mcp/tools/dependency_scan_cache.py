@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 
-from tapps_mcp.tools.pip_audit import VulnerabilityFinding  # noqa: TC001
+from tapps_mcp.tools.pip_audit import VulnerabilityFinding
 
 # TTL in seconds (5 minutes)
 _CACHE_TTL = 300

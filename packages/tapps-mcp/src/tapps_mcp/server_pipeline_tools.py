@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from mcp.server.fastmcp import (
-    Context,  # noqa: TC002 — runtime import required for FastMCP annotation resolution
+    Context,
 )
 from mcp.types import ToolAnnotations
 
@@ -38,7 +38,7 @@ _session_gc_done: bool = False
 
 def _reset_session_gc_flag() -> None:
     """Reset the auto-GC flag (for testing)."""
-    global _session_gc_done  # noqa: PLW0603
+    global _session_gc_done
     _session_gc_done = False
 
 # Prevent garbage collection of fire-and-forget background tasks.
@@ -380,8 +380,8 @@ async def tapps_validate_changed(
 def _handle_no_changed_files(
     start: int,
     settings: TappsMCPSettings,
-    record_execution: Any,  # noqa: ANN401
-    with_nudges: Any,  # noqa: ANN401
+    record_execution: Any,
+    with_nudges: Any,
 ) -> dict[str, Any]:
     """Return early response when no changed Python files are found."""
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -432,7 +432,7 @@ def _start_progress_reporting(
 
 
 async def _report_initial_progress(
-    report: Any,  # noqa: ANN401
+    report: Any,
     total_files: int,
 ) -> None:
     """Send the initial progress=0 notification."""
@@ -514,7 +514,7 @@ def _maybe_auto_gc(
     Returns a summary dict when GC ran, or ``None`` if skipped.
     Only runs once per session (guarded by ``_session_gc_done``).
     """
-    global _session_gc_done  # noqa: PLW0603
+    global _session_gc_done
 
     if _session_gc_done:
         return None
@@ -573,7 +573,7 @@ def _maybe_auto_gc(
 
 def _process_session_capture(
     project_root: Path,
-    store: Any,  # noqa: ANN401
+    store: Any,
 ) -> dict[str, Any] | None:
     """Check for and process a session-capture.json left by the Stop hook.
 

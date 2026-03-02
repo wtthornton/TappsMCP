@@ -15,7 +15,6 @@ from pathlib import Path
 
 # Re-export base functions from tapps_core
 from tapps_core.prompts.prompt_loader import ENGAGEMENT_LEVELS as ENGAGEMENT_LEVELS
-from tapps_core.prompts.prompt_loader import _read_resource as _read_resource_core
 from tapps_core.prompts.prompt_loader import list_stages as list_stages
 from tapps_core.prompts.prompt_loader import load_handoff_template as load_handoff_template
 from tapps_core.prompts.prompt_loader import load_overview as load_overview

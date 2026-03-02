@@ -175,7 +175,7 @@ async def run_radon_mi_async(file_path: str, *, cwd: str | None = None, timeout:
 
 def _is_radon_importable() -> bool:
     """Check whether the radon library is available for direct import."""
-    global _RADON_AVAILABLE  # noqa: PLW0603
+    global _RADON_AVAILABLE
     if _RADON_AVAILABLE is None:
         import importlib.util
 

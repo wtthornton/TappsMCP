@@ -52,7 +52,7 @@ def _reset_tools_cache() -> None:
 
     Call after installing or removing tools mid-session, or in test teardown.
     """
-    global _cached_tools  # noqa: PLW0603
+    global _cached_tools
     _cached_tools = None
 
 
@@ -65,7 +65,7 @@ def detect_installed_tools() -> list[InstalledTool]:
     Returns:
         List of ``InstalledTool`` objects.
     """
-    global _cached_tools  # noqa: PLW0603
+    global _cached_tools
     if _cached_tools is not None:
         return list(_cached_tools)
 
@@ -135,7 +135,7 @@ async def detect_installed_tools_async() -> list[InstalledTool]:
     Returns:
         List of ``InstalledTool`` objects.
     """
-    global _cached_tools  # noqa: PLW0603
+    global _cached_tools
     if _cached_tools is not None:
         return list(_cached_tools)
 

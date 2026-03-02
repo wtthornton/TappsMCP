@@ -9,23 +9,8 @@ submodules. Import from here for backward compatibility.
 
 from __future__ import annotations
 
-# Re-export hook templates (needed by upgrade tests that access _CLAUDE_HOOK_SCRIPTS)
-from tapps_mcp.pipeline.platform_hook_templates import (
-    AGENT_TEAMS_CLAUDE_MD_SECTION as _AGENT_TEAMS_CLAUDE_MD_SECTION,
-    AGENT_TEAMS_HOOKS_CONFIG as _AGENT_TEAMS_HOOKS_CONFIG,
-    AGENT_TEAMS_HOOK_SCRIPTS as _AGENT_TEAMS_HOOK_SCRIPTS,
-    CLAUDE_HOOKS_CONFIG as _CLAUDE_HOOKS_CONFIG,
-    CLAUDE_HOOKS_CONFIG_PS as _CLAUDE_HOOKS_CONFIG_PS,
-    CLAUDE_HOOK_SCRIPTS as _CLAUDE_HOOK_SCRIPTS,
-    CLAUDE_HOOK_SCRIPTS_PS as _CLAUDE_HOOK_SCRIPTS_PS,
-    CURSOR_HOOKS_CONFIG as _CURSOR_HOOKS_CONFIG,
-    CURSOR_HOOKS_CONFIG_PS as _CURSOR_HOOKS_CONFIG_PS,
-    CURSOR_HOOK_SCRIPTS as _CURSOR_HOOK_SCRIPTS,
-    CURSOR_HOOK_SCRIPTS_PS as _CURSOR_HOOK_SCRIPTS_PS,
-)
-
 # Re-export generators from submodules for backward compatibility
-from tapps_mcp.pipeline.platform_bundles import (  # noqa: F401
+from tapps_mcp.pipeline.platform_bundles import (
     generate_agent_teams_hooks,
     generate_ci_workflow,
     generate_claude_plugin_bundle,
@@ -35,18 +20,53 @@ from tapps_mcp.pipeline.platform_bundles import (  # noqa: F401
     get_agent_teams_claude_md_section,
     get_ci_claude_md_section,
 )
-from tapps_mcp.pipeline.platform_hooks import (  # noqa: F401
+
+# Re-export hook templates (needed by upgrade tests that access _CLAUDE_HOOK_SCRIPTS)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    AGENT_TEAMS_CLAUDE_MD_SECTION as _AGENT_TEAMS_CLAUDE_MD_SECTION,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    AGENT_TEAMS_HOOK_SCRIPTS as _AGENT_TEAMS_HOOK_SCRIPTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    AGENT_TEAMS_HOOKS_CONFIG as _AGENT_TEAMS_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CLAUDE_HOOK_SCRIPTS as _CLAUDE_HOOK_SCRIPTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CLAUDE_HOOK_SCRIPTS_PS as _CLAUDE_HOOK_SCRIPTS_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CLAUDE_HOOKS_CONFIG as _CLAUDE_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CLAUDE_HOOKS_CONFIG_PS as _CLAUDE_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_HOOK_SCRIPTS as _CURSOR_HOOK_SCRIPTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_HOOK_SCRIPTS_PS as _CURSOR_HOOK_SCRIPTS_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_HOOKS_CONFIG as _CURSOR_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_HOOKS_CONFIG_PS as _CURSOR_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hooks import (
     generate_claude_hooks,
     generate_cursor_hooks,
     generate_memory_capture_hook,
 )
-from tapps_mcp.pipeline.platform_rules import (  # noqa: F401
+from tapps_mcp.pipeline.platform_rules import (
     generate_bugbot_rules,
     generate_copilot_instructions,
     generate_cursor_rules,
 )
-from tapps_mcp.pipeline.platform_skills import generate_skills  # noqa: F401
-from tapps_mcp.pipeline.platform_subagents import generate_subagent_definitions  # noqa: F401
+from tapps_mcp.pipeline.platform_skills import generate_skills
+from tapps_mcp.pipeline.platform_subagents import generate_subagent_definitions
 
 # Re-export private names used by tests (backward compat)
 __all__ = [
@@ -65,13 +85,13 @@ __all__ = [
     "generate_bugbot_rules",
     "generate_ci_workflow",
     "generate_claude_hooks",
-    "generate_memory_capture_hook",
     "generate_claude_plugin_bundle",
     "generate_claude_python_quality_rule",
     "generate_copilot_instructions",
     "generate_cursor_hooks",
     "generate_cursor_plugin_bundle",
     "generate_cursor_rules",
+    "generate_memory_capture_hook",
     "generate_python_quality_rule",
     "generate_skills",
     "generate_subagent_definitions",

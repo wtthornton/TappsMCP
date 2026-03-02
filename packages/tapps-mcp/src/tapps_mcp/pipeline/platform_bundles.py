@@ -14,15 +14,15 @@ import stat
 from typing import TYPE_CHECKING, Any
 
 from tapps_mcp.pipeline.platform_hook_templates import (
-    AGENT_TEAMS_HOOKS_CONFIG,
-    AGENT_TEAMS_HOOK_SCRIPTS,
     AGENT_TEAMS_CLAUDE_MD_SECTION,
-    CLAUDE_HOOKS_CONFIG,
+    AGENT_TEAMS_HOOK_SCRIPTS,
+    AGENT_TEAMS_HOOKS_CONFIG,
     CLAUDE_HOOK_SCRIPTS,
-    CURSOR_HOOKS_CONFIG,
+    CLAUDE_HOOKS_CONFIG,
     CURSOR_HOOK_SCRIPTS,
+    CURSOR_HOOKS_CONFIG,
 )
-from tapps_mcp.pipeline.platform_rules import (  # noqa: F401
+from tapps_mcp.pipeline.platform_rules import (
     CURSOR_RULE_TEMPLATES,
     generate_bugbot_rules,
     generate_copilot_instructions,

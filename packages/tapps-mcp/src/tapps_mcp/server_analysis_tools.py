@@ -117,7 +117,7 @@ _session_store: SessionNoteStore | None = None
 
 def _get_session_store() -> SessionNoteStore:
     """Lazily create or return the session note store."""
-    global _session_store  # noqa: PLW0603
+    global _session_store
     if _session_store is None:
         from tapps_mcp.project.session_notes import SessionNoteStore
 
@@ -128,7 +128,7 @@ def _get_session_store() -> SessionNoteStore:
 
 def _reset_session_store() -> None:
     """Reset the session store singleton (for testing)."""
-    global _session_store  # noqa: PLW0603
+    global _session_store
     _session_store = None
 
 

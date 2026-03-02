@@ -511,7 +511,7 @@ async def tapps_research(
                 if external:
                     library = external[0]
             except Exception:
-                pass
+                pass  # Best-effort; file_context is optional
 
         # Infer library from tech stack when still empty
         if not library and not result.suggested_library:
@@ -524,10 +524,7 @@ async def tapps_research(
                 libs: list[str] = tech_stack.get(
                     "context7_priority", []
                 ) or tech_stack.get("libraries", [])
-                if libs:
-                    library = libs[0]
-                else:
-                    library = "python"
+                library = libs[0] if libs else "python"
             except Exception:
                 library = "python"
 
