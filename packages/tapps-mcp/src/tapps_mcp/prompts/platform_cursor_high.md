@@ -89,3 +89,15 @@ Every tool response includes:
 
 Record progress in `docs/TAPPS_HANDOFF.md` and `docs/TAPPS_RUNLOG.md`.
 For task-specific recommended tool call order, use the `tapps_workflow` MCP prompt (e.g. `tapps_workflow(task_type="feature")`).
+
+## Quality Gate Behavior
+
+Gate failures are sorted by **category weight** (highest-impact categories first).
+A **security floor of 50/100** is enforced — even if the overall score passes, the gate
+fails when the security category drops below 50.
+
+## Upgrade & Rollback
+
+After upgrading TappsMCP, run `tapps_upgrade` to refresh generated files.
+A timestamped backup is created automatically before any files are overwritten.
+Use `tapps-mcp rollback` (CLI) to view/restore previous configurations.

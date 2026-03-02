@@ -826,6 +826,12 @@ async def tapps_init(
     Optionally warms the Context7 cache from the detected tech stack.
     Optionally generates platform-specific rule files for Claude Code or Cursor.
 
+    On first run (no existing ``.claude/settings.json`` or ``.tapps-mcp.yaml``),
+    an interactive 5-question wizard is presented via MCP elicitation (quality
+    preset, engagement level, agent teams, skill tier, prompt hooks). Answers
+    are persisted in ``.tapps-mcp.yaml``. The wizard is skipped when explicit
+    parameters are provided or when the client does not support elicitation.
+
     Call once per project to set up the pipeline workflow.
 
     Duration: Full init can take 10-35+ seconds (profile, templates, cache/RAG
@@ -943,6 +949,11 @@ def tapps_upgrade(
     Validates and refreshes AGENTS.md, platform rules, hooks, agents,
     skills, and settings. Preserves custom command paths in MCP configs
     (e.g. PyInstaller exe paths are never overwritten).
+
+    Creates a timestamped backup of all files that will be overwritten
+    before making changes. Backups are stored in ``.tapps-mcp/backups/``
+    and can be restored with ``tapps-mcp rollback`` (CLI) or
+    ``tapps-mcp rollback --list`` to view available backups.
 
     Use ``dry_run=True`` to preview what would change.
 

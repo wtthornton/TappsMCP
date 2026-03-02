@@ -77,6 +77,16 @@ Every tool response includes:
 Record progress in `docs/TAPPS_HANDOFF.md` and `docs/TAPPS_RUNLOG.md`.
 For task-specific recommended tool call order, use the `tapps_workflow` MCP prompt (e.g. `tapps_workflow(task_type="feature")`).
 
+## Quality Gate Behavior
+
+Gate failures are sorted by category weight (highest-impact first).
+A security floor of 50/100 is enforced regardless of overall score.
+
+## Upgrade & Rollback
+
+After upgrading TappsMCP, run `tapps_upgrade` to refresh generated files.
+A timestamped backup is created before overwriting. Use `tapps-mcp rollback` to restore.
+
 ## Agent Teams (Optional)
 
 If using Claude Code Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`),
