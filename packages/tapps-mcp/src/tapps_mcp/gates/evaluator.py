@@ -10,9 +10,27 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from tapps_core.config.settings import PRESETS
+from tapps_core.config.settings import PRESETS, ScoringWeights
 from tapps_mcp.gates.models import GateFailure, GateResult, GateThresholds
 from tapps_mcp.scoring.constants import INDIVIDUAL_MAX
+
+# Category weights for failure priority ordering (from ScoringWeights defaults)
+_DEFAULT_WEIGHTS = ScoringWeights()
+_CATEGORY_WEIGHTS: dict[str, float] = {
+    "security": _DEFAULT_WEIGHTS.security,
+    "maintainability": _DEFAULT_WEIGHTS.maintainability,
+    "complexity": _DEFAULT_WEIGHTS.complexity,
+    "test_coverage": _DEFAULT_WEIGHTS.test_coverage,
+    "performance": _DEFAULT_WEIGHTS.performance,
+    "structure": _DEFAULT_WEIGHTS.structure,
+    "devex": _DEFAULT_WEIGHTS.devex,
+    "overall": 1.0,  # overall failures always sort first
+}
+
+# Security floor: if the security category score (0-100 equivalent) is below
+# this absolute threshold, the gate MUST fail regardless of overall score.
+_SECURITY_FLOOR: float = 50.0
+_SECURITY_FLOOR_INDIVIDUAL: float = _SECURITY_FLOOR / 10.0  # 5.0 on 0-10 scale
 
 if TYPE_CHECKING:
     from tapps_mcp.scoring.models import ScoreResult
@@ -44,6 +62,7 @@ def _fail(
             actual=actual,
             threshold=threshold,
             message=msg,
+            weight=_CATEGORY_WEIGHTS.get(category, 0.0),
         )
     )
 
@@ -150,12 +169,33 @@ def evaluate_gate(
             f"Performance {perf.score:.1f} < {thresholds.performance_min:.1f}",
         )
 
+    # 7) Critical security floor — absolute minimum regardless of thresholds
+    sec_for_floor = cats.get("security")
+    if sec_for_floor and sec_for_floor.score < _SECURITY_FLOOR_INDIVIDUAL:
+        # Only add floor failure if not already failing on security
+        has_security_failure = any(f.category == "security" for f in failures)
+        if not has_security_failure:
+            _fail(
+                failures,
+                "security",
+                sec_for_floor.score,
+                _SECURITY_FLOOR_INDIVIDUAL,
+                "CRITICAL: Security score below minimum threshold (50)",
+            )
+
+    # Sort failures by category weight (highest weight first)
+    failures.sort(key=lambda f: f.weight, reverse=True)
+
     # Collect suggestions from failing categories
     failing_cats = {f.category for f in failures}
     for name, cat in cats.items():
         if name in failing_cats and cat.suggestions:
             for tip in cat.suggestions:
                 warnings.append(f"[{name}] {tip}")
+
+    # Priority fix suggestion when multiple failures exist
+    if len(failures) > 1:
+        warnings.append("Fix these in order of priority (highest-weight categories first)")
 
     # Degraded result warning
     if score_result.degraded:

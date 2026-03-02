@@ -53,6 +53,7 @@ class GateFailure(BaseModel):
     actual: float = Field(description="Actual score.")
     threshold: float = Field(description="Required threshold.")
     message: str = Field(description="Human-readable failure description.")
+    weight: float = Field(default=0.0, description="Scoring weight for priority ordering.")
 
 
 class GateResult(BaseModel):

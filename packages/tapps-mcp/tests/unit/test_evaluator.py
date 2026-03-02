@@ -132,9 +132,11 @@ class TestEvaluateGate:
         assert result.scores["overall"] == 80.0
 
     def test_zero_threshold_not_checked(self):
-        # security_min=0.0 means security gate is not active
+        # security_min=0.0 means the threshold-based security gate is not active,
+        # but the critical security floor (score >= 5.0) still applies.
+        # Use a security score above the floor to verify threshold inactivity.
         thresholds = GateThresholds(overall_min=0.0, security_min=0.0)
-        score = _make_score(overall=0.0, security=0.0)
+        score = _make_score(overall=0.0, security=5.0)
         result = evaluate_gate(score, thresholds=thresholds)
         assert result.passed is True
 
