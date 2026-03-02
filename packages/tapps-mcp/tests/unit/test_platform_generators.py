@@ -84,10 +84,12 @@ class TestHookTemplates:
     """Verify hook template dicts have expected keys and content."""
 
     def test_claude_sh_scripts_count(self) -> None:
-        assert len(_CLAUDE_HOOK_SCRIPTS) == 8
+        # 8 original + 3 Epic 36 (subagent-stop, session-end, tool-failure)
+        assert len(_CLAUDE_HOOK_SCRIPTS) == 11
 
     def test_claude_ps1_scripts_count(self) -> None:
-        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 8
+        # 8 original + 3 Epic 36 (subagent-stop, session-end, tool-failure)
+        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 11
 
     def test_cursor_sh_scripts_count(self) -> None:
         assert len(_CURSOR_HOOK_SCRIPTS) == 2
@@ -270,9 +272,337 @@ class TestMiscGenerators:
         assert "CI Integration" in section
 
     def test_claude_hooks_creates_scripts(self, tmp_path: Path) -> None:
+        # Medium engagement (default): 7 events, 9 scripts
+        # (SessionStart has 2 scripts: start + compact, SubagentStop added)
         result = generate_claude_hooks(tmp_path, force_windows=False)
-        assert len(result["scripts_created"]) == 8
+        assert len(result["scripts_created"]) == 9
+        assert result["engagement_level"] == "medium"
 
     def test_cursor_hooks_creates_scripts(self, tmp_path: Path) -> None:
         result = generate_cursor_hooks(tmp_path, force_windows=False)
         assert len(result["scripts_created"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Epic 36 — Hook & Platform Generation Expansion
+# ---------------------------------------------------------------------------
+
+
+class TestEpic36NewHookTemplates:
+    """Tests for SubagentStop, SessionEnd, and PostToolUseFailure hooks."""
+
+    def test_subagent_stop_script_exists(self) -> None:
+        assert "tapps-subagent-stop.sh" in _CLAUDE_HOOK_SCRIPTS
+
+    def test_session_end_script_exists(self) -> None:
+        assert "tapps-session-end.sh" in _CLAUDE_HOOK_SCRIPTS
+
+    def test_tool_failure_script_exists(self) -> None:
+        assert "tapps-tool-failure.sh" in _CLAUDE_HOOK_SCRIPTS
+
+    def test_subagent_stop_ps1_exists(self) -> None:
+        assert "tapps-subagent-stop.ps1" in _CLAUDE_HOOK_SCRIPTS_PS
+
+    def test_session_end_ps1_exists(self) -> None:
+        assert "tapps-session-end.ps1" in _CLAUDE_HOOK_SCRIPTS_PS
+
+    def test_tool_failure_ps1_exists(self) -> None:
+        assert "tapps-tool-failure.ps1" in _CLAUDE_HOOK_SCRIPTS_PS
+
+    def test_subagent_stop_hook_is_advisory(self) -> None:
+        """SubagentStop does NOT support exit 2 — must exit 0."""
+        content = _CLAUDE_HOOK_SCRIPTS["tapps-subagent-stop.sh"]
+        assert "exit 0" in content
+        assert "exit 2" not in content
+
+    def test_session_end_hook_is_advisory(self) -> None:
+        """SessionEnd does NOT support exit 2 — must exit 0."""
+        content = _CLAUDE_HOOK_SCRIPTS["tapps-session-end.sh"]
+        assert "exit 0" in content
+        assert "exit 2" not in content
+
+    def test_tool_failure_hook_is_advisory(self) -> None:
+        """PostToolUseFailure does NOT support exit 2 — must exit 0."""
+        content = _CLAUDE_HOOK_SCRIPTS["tapps-tool-failure.sh"]
+        assert "exit 0" in content
+        assert "exit 2" not in content
+
+    def test_tool_failure_filters_tapps_tools(self) -> None:
+        """PostToolUseFailure hook only logs TappsMCP tools."""
+        content = _CLAUDE_HOOK_SCRIPTS["tapps-tool-failure.sh"]
+        assert "mcp__tapps" in content
+
+    def test_session_end_checks_marker(self) -> None:
+        """SessionEnd hook checks for validation marker file."""
+        content = _CLAUDE_HOOK_SCRIPTS["tapps-session-end.sh"]
+        assert ".validation-marker" in content
+
+    def test_hooks_config_has_new_events(self) -> None:
+        """Hook config includes the three new events."""
+        assert "SubagentStop" in _CLAUDE_HOOKS_CONFIG
+        assert "SessionEnd" in _CLAUDE_HOOKS_CONFIG
+        assert "PostToolUseFailure" in _CLAUDE_HOOKS_CONFIG
+
+    def test_hooks_config_ps_has_new_events(self) -> None:
+        """PS hook config includes the three new events."""
+        assert "SubagentStop" in _CLAUDE_HOOKS_CONFIG_PS
+        assert "SessionEnd" in _CLAUDE_HOOKS_CONFIG_PS
+        assert "PostToolUseFailure" in _CLAUDE_HOOKS_CONFIG_PS
+
+    def test_tool_failure_has_matcher(self) -> None:
+        """PostToolUseFailure config includes tool name matcher."""
+        entries = _CLAUDE_HOOKS_CONFIG["PostToolUseFailure"]
+        assert len(entries) == 1
+        assert entries[0].get("matcher") == "mcp__tapps-mcp__.*"
+
+
+class TestEpic36EngagementLevelBlocking:
+    """Tests for engagement-level blocking hooks (Story 36.5)."""
+
+    def test_blocking_scripts_exist(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            CLAUDE_HOOK_SCRIPTS_BLOCKING,
+        )
+        assert "tapps-task-completed.sh" in CLAUDE_HOOK_SCRIPTS_BLOCKING
+        assert "tapps-stop.sh" in CLAUDE_HOOK_SCRIPTS_BLOCKING
+
+    def test_blocking_ps_scripts_exist(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            CLAUDE_HOOK_SCRIPTS_BLOCKING_PS,
+        )
+        assert "tapps-task-completed.ps1" in CLAUDE_HOOK_SCRIPTS_BLOCKING_PS
+        assert "tapps-stop.ps1" in CLAUDE_HOOK_SCRIPTS_BLOCKING_PS
+
+    def test_blocking_task_completed_uses_exit_2(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            CLAUDE_HOOK_SCRIPTS_BLOCKING,
+        )
+        content = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-task-completed.sh"]
+        assert "exit 2" in content
+        assert "BLOCKED" in content
+
+    def test_blocking_stop_uses_exit_2(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            CLAUDE_HOOK_SCRIPTS_BLOCKING,
+        )
+        content = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-stop.sh"]
+        assert "exit 2" in content
+        assert "stop_hook_active" in content
+
+    def test_blocking_task_completed_checks_marker(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            CLAUDE_HOOK_SCRIPTS_BLOCKING,
+        )
+        content = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-task-completed.sh"]
+        assert ".validation-marker" in content
+
+    def test_blocking_task_completed_stale_detection(self) -> None:
+        """Blocking task-completed checks for stale marker (>1h)."""
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            CLAUDE_HOOK_SCRIPTS_BLOCKING,
+        )
+        content = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-task-completed.sh"]
+        assert "3600" in content
+
+
+class TestEpic36PromptHook:
+    """Tests for prompt-type hook configuration (Story 36.4)."""
+
+    def test_prompt_hook_config_exists(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            PROMPT_HOOK_CONFIG,
+        )
+        assert "PostToolUse" in PROMPT_HOOK_CONFIG
+
+    def test_prompt_hook_uses_haiku(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            PROMPT_HOOK_CONFIG,
+        )
+        entry = PROMPT_HOOK_CONFIG["PostToolUse"][0]
+        assert entry["type"] == "prompt"
+        assert entry["model"] == "haiku"
+
+    def test_prompt_hook_has_timeout(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            PROMPT_HOOK_CONFIG,
+        )
+        entry = PROMPT_HOOK_CONFIG["PostToolUse"][0]
+        assert entry["timeout"] == 15
+
+    def test_prompt_hook_matcher(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            PROMPT_HOOK_CONFIG,
+        )
+        entry = PROMPT_HOOK_CONFIG["PostToolUse"][0]
+        assert entry["matcher"] == "Edit|Write"
+
+
+class TestEpic36EngagementHookEvents:
+    """Tests for engagement-level hook event sets (Story 36.6)."""
+
+    def test_high_has_all_events(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            ENGAGEMENT_HOOK_EVENTS,
+        )
+        high = ENGAGEMENT_HOOK_EVENTS["high"]
+        assert "SubagentStop" in high
+        assert "SessionEnd" in high
+        assert "PostToolUseFailure" in high
+        assert "Stop" in high
+        assert "TaskCompleted" in high
+        assert len(high) == 9
+
+    def test_medium_has_standard_events(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            ENGAGEMENT_HOOK_EVENTS,
+        )
+        medium = ENGAGEMENT_HOOK_EVENTS["medium"]
+        assert "SessionStart" in medium
+        assert "SubagentStop" in medium
+        assert "SessionEnd" not in medium
+        assert "PostToolUseFailure" not in medium
+        assert len(medium) == 7
+
+    def test_low_is_minimal(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            ENGAGEMENT_HOOK_EVENTS,
+        )
+        low = ENGAGEMENT_HOOK_EVENTS["low"]
+        assert low == {"SessionStart"}
+
+
+class TestEpic36GenerateHooksEngagement:
+    """Tests for generate_claude_hooks with engagement levels."""
+
+    def test_high_engagement_creates_blocking_scripts(
+        self, tmp_path: Path,
+    ) -> None:
+        result = generate_claude_hooks(
+            tmp_path, force_windows=False, engagement_level="high",
+        )
+        assert result["engagement_level"] == "high"
+        # High engagement includes all 9 events
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        assert (hooks_dir / "tapps-subagent-stop.sh").exists()
+        assert (hooks_dir / "tapps-session-end.sh").exists()
+        assert (hooks_dir / "tapps-tool-failure.sh").exists()
+        # Blocking scripts should overwrite advisory ones
+        stop_content = (hooks_dir / "tapps-stop.sh").read_text()
+        assert "BLOCKED" in stop_content
+        assert "exit 2" in stop_content
+        task_content = (hooks_dir / "tapps-task-completed.sh").read_text()
+        assert "BLOCKED" in task_content
+        assert "exit 2" in task_content
+
+    def test_medium_engagement_advisory_only(
+        self, tmp_path: Path,
+    ) -> None:
+        result = generate_claude_hooks(
+            tmp_path, force_windows=False, engagement_level="medium",
+        )
+        assert result["engagement_level"] == "medium"
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        # SubagentStop should exist at medium
+        assert (hooks_dir / "tapps-subagent-stop.sh").exists()
+        # SessionEnd and PostToolUseFailure should NOT exist at medium
+        assert not (hooks_dir / "tapps-session-end.sh").exists()
+        assert not (hooks_dir / "tapps-tool-failure.sh").exists()
+        # Stop hook should be advisory (exit 0, no BLOCKED)
+        stop_content = (hooks_dir / "tapps-stop.sh").read_text()
+        assert "BLOCKED" not in stop_content
+
+    def test_low_engagement_minimal_hooks(
+        self, tmp_path: Path,
+    ) -> None:
+        result = generate_claude_hooks(
+            tmp_path, force_windows=False, engagement_level="low",
+        )
+        assert result["engagement_level"] == "low"
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        # Only SessionStart hooks should be created
+        assert (hooks_dir / "tapps-session-start.sh").exists()
+        assert (hooks_dir / "tapps-session-compact.sh").exists()
+        # No other hooks
+        assert not (hooks_dir / "tapps-stop.sh").exists()
+        assert not (hooks_dir / "tapps-task-completed.sh").exists()
+        assert not (hooks_dir / "tapps-subagent-stop.sh").exists()
+
+    def test_prompt_hooks_opt_in(self, tmp_path: Path) -> None:
+        result = generate_claude_hooks(
+            tmp_path, force_windows=False, prompt_hooks=True,
+        )
+        assert result["prompt_hooks"] is True
+        settings_file = tmp_path / ".claude" / "settings.json"
+        config = json.loads(settings_file.read_text())
+        # Should have a prompt-type entry in PostToolUse
+        post_tool_use = config["hooks"]["PostToolUse"]
+        has_prompt = any(
+            e.get("type") == "prompt" for e in post_tool_use
+        )
+        assert has_prompt
+
+    def test_prompt_hooks_default_off(self, tmp_path: Path) -> None:
+        result = generate_claude_hooks(
+            tmp_path, force_windows=False, prompt_hooks=False,
+        )
+        assert result["prompt_hooks"] is False
+        settings_file = tmp_path / ".claude" / "settings.json"
+        config = json.loads(settings_file.read_text())
+        post_tool_use = config["hooks"]["PostToolUse"]
+        has_prompt = any(
+            e.get("type") == "prompt" for e in post_tool_use
+        )
+        assert not has_prompt
+
+    def test_settings_json_has_new_events_at_high(
+        self, tmp_path: Path,
+    ) -> None:
+        generate_claude_hooks(
+            tmp_path, force_windows=False, engagement_level="high",
+        )
+        settings_file = tmp_path / ".claude" / "settings.json"
+        config = json.loads(settings_file.read_text())
+        hooks = config["hooks"]
+        assert "SubagentStop" in hooks
+        assert "SessionEnd" in hooks
+        assert "PostToolUseFailure" in hooks
+
+    def test_settings_json_no_new_events_at_low(
+        self, tmp_path: Path,
+    ) -> None:
+        generate_claude_hooks(
+            tmp_path, force_windows=False, engagement_level="low",
+        )
+        settings_file = tmp_path / ".claude" / "settings.json"
+        config = json.loads(settings_file.read_text())
+        hooks = config["hooks"]
+        assert "SessionStart" in hooks
+        assert "SubagentStop" not in hooks
+        assert "Stop" not in hooks
+
+
+class TestEpic36ValidationMarker:
+    """Tests for the validation marker file mechanism."""
+
+    def test_validate_ok_writes_both_markers(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _write_validate_ok_marker
+
+        _write_validate_ok_marker(tmp_path)
+        # Legacy marker
+        legacy = tmp_path / ".tapps-mcp" / "sessions" / "last_validate_ok"
+        assert legacy.exists()
+        # New marker for Claude hooks
+        new_marker = tmp_path / ".tapps-mcp" / ".validation-marker"
+        assert new_marker.exists()
+
+    def test_validation_marker_contains_timestamp(
+        self, tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_pipeline_tools import _write_validate_ok_marker
+
+        _write_validate_ok_marker(tmp_path)
+        marker = tmp_path / ".tapps-mcp" / ".validation-marker"
+        ts = float(marker.read_text())
+        import time
+        # Timestamp should be recent (within last 5 seconds)
+        assert time.time() - ts < 5

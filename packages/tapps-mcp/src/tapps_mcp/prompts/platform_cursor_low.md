@@ -54,3 +54,11 @@ When following a full workflow:
 
 Tool responses include `next_steps` and `pipeline_progress`. Consider following them when appropriate.
 Use `tapps_workflow(task_type="feature")` for recommended tool order.
+
+## Quality Gate Notes
+
+Gate failures are sorted by category weight. A security floor of 50/100 is enforced.
+
+## Upgrade & Rollback
+
+After upgrading TappsMCP, consider running `tapps_upgrade`. Use `tapps-mcp rollback` to restore previous configurations.

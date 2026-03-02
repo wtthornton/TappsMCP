@@ -40,7 +40,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_score_file** | When **editing or reviewing** a Python file. Use `quick=True` during edit-lint-fix loops; use full (default) **before declaring work complete**. |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
 | **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
-| **tapps_quality_gate** | **Before declaring work complete** - ensures the file passes the configured quality preset. Do not consider work done until this passes (or the user accepts the risk). |
+| **tapps_quality_gate** | **Before declaring work complete** - ensures the file passes the configured quality preset. Gate failures are sorted by category weight (highest-impact first); a security floor of 50/100 is enforced. Do not consider work done until this passes (or the user accepts the risk). |
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - auto-detects changed files via git diff and runs score + gate on each. **Default is quick mode** (ruff-only, under ~10s). Includes impact analysis by default. Pass `quick=false` for full validation. |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library - use the returned docs to avoid hallucinated APIs. |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
@@ -59,8 +59,8 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_dependency_scan** | When you want to **check for vulnerable dependencies** - scans pip packages for known CVEs using pip-audit. Use before releases or security reviews. |
 | **tapps_dependency_graph** | When you want to **understand module dependencies** - builds import graph, detects circular imports, and calculates coupling metrics. Use before refactoring or when investigating import errors. |
 | **tapps_workflow** | When you want the **recommended tool call order** for a specific task type (general, feature, bugfix, refactor, security, review). |
-| **tapps_init** | At **pipeline bootstrap** - creates AGENTS.md, TECH_STACK.md, platform rules, optionally warms caches. Call once per project (or when upgrading). |
-| **tapps_upgrade** | After a **TappsMCP version update** - validates and refreshes AGENTS.md, platform rules, hooks, agents, skills, and settings. Preserves custom command paths (e.g. PyInstaller exe). Use `dry_run: true` to preview. |
+| **tapps_init** | At **pipeline bootstrap** - creates AGENTS.md, TECH_STACK.md, platform rules, optionally warms caches. On first run, presents an interactive wizard (5 questions; answers persist in `.tapps-mcp.yaml`). Call once per project (or when upgrading). |
+| **tapps_upgrade** | After a **TappsMCP version update** - validates and refreshes AGENTS.md, platform rules, hooks, agents, skills, and settings. Creates a timestamped backup before overwriting (`tapps-mcp rollback` to restore). Preserves custom command paths (e.g. PyInstaller exe). Use `dry_run: true` to preview. |
 | **tapps_doctor** | When **diagnosing configuration issues** - checks binary availability, MCP configs, platform rules, generated files, hooks, and installed quality tools. Returns per-check pass/fail with remediation hints. |
 | **tapps_set_engagement_level** | When the user requests to change enforcement intensity (e.g. \"set tappsmcp to high\" or \"make quality checks optional\"). Writes to `.tapps-mcp.yaml`; run `tapps_init` with overwrite to regenerate AGENTS.md and rules. |
 | **tapps_memory** | **RECOMMENDED** - check `tapps_memory(action="search", query="...")` for relevant project decisions. Save important learnings with `tapps_memory(action="save", ...)`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |

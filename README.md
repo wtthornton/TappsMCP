@@ -132,7 +132,7 @@ python -m venv .venv
 pip install tapps-mcp
 ```
 
-**Upgrade:** `pip install -U tapps-mcp` then run `tapps-mcp upgrade` to refresh all generated files (AGENTS.md, platform rules, hooks, permissions). See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide.
+**Upgrade:** `pip install -U tapps-mcp` then run `tapps-mcp upgrade` to refresh all generated files (AGENTS.md, platform rules, hooks, permissions). A backup is created automatically before overwriting — use `tapps-mcp rollback` if needed. See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide.
 
 ### Install with npx (no Python install)
 
@@ -326,6 +326,8 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server:
 | `tapps-mcp upgrade` | Refresh all generated files (AGENTS.md, rules, hooks, settings) after upgrading TappsMCP. |
 | `tapps-mcp doctor` | Diagnose configuration and connectivity; reports `llm_engagement_level` when set. |
 | `tapps-mcp validate-changed` | Run quality validation on changed files from the CLI (same as MCP tool). |
+| `tapps-mcp build-plugin` | Generate a Claude Code plugin directory with skills, agents, hooks, MCP config, and rules. |
+| `tapps-mcp rollback` | Restore configuration files from a pre-upgrade backup. Use `--list` to see backups. |
 
 ### `tapps-mcp init` options
 
@@ -350,7 +352,32 @@ tapps-mcp upgrade --dry-run                 # preview changes without writing
 tapps-mcp upgrade --force                   # overwrite even if up-to-date
 ```
 
-Updates AGENTS.md, platform rules, hooks, agents, skills, and `.claude/settings.json` permissions.
+Updates AGENTS.md, platform rules, hooks, agents, skills, and `.claude/settings.json` permissions. A **backup** is automatically created before overwriting files. Use `tapps-mcp rollback` to restore from the latest backup if an upgrade causes issues.
+
+### `tapps-mcp build-plugin`
+
+Generate a Claude Code plugin directory for marketplace distribution:
+
+```bash
+tapps-mcp build-plugin                              # default output: ./tapps-mcp-plugin/
+tapps-mcp build-plugin --output-dir ./my-plugin     # custom output directory
+tapps-mcp build-plugin --engagement-level high       # high enforcement rules
+```
+
+Creates a complete plugin with `.claude-plugin/plugin.json` manifest, namespaced skills, agents, hooks, MCP config, rules, and settings.
+
+### `tapps-mcp rollback`
+
+Restore configuration files from a pre-upgrade backup:
+
+```bash
+tapps-mcp rollback                            # restore from latest backup
+tapps-mcp rollback --list                     # list available backups
+tapps-mcp rollback --backup-id 2026-03-02-153000  # restore specific backup
+tapps-mcp rollback --dry-run                  # preview without restoring
+```
+
+Backups are stored in `.tapps-mcp/backups/` and auto-cleaned (keeping the 5 most recent).
 
 ### `tapps-mcp doctor`
 
@@ -551,7 +578,7 @@ Quick index:
 
 **What it does:** Validates and refreshes all TappsMCP-generated files in a project after upgrading the server. Detects the platform (Claude Code, Cursor, or both) from existing config files and upgrades AGENTS.md (via smart-merge), platform rules, hooks, agents, skills, and settings. Uses `upgrade_mode` internally so custom command paths (e.g. PyInstaller exe) are never overwritten. Accepts optional `platform`, `force`, and `dry_run` parameters.
 
-**Why use it:** After upgrading TappsMCP (`pip install -U tapps-mcp`), generated files may be outdated — missing new tools, stale hook scripts, or old AGENTS.md sections. Call `tapps_upgrade(dry_run=true)` to preview what would change, then `tapps_upgrade()` to apply updates. This is the MCP-tool equivalent of the `tapps-mcp upgrade` CLI command, usable from within an AI session without dropping to a terminal.
+**Why use it:** After upgrading TappsMCP (`pip install -U tapps-mcp`), generated files may be outdated — missing new tools, stale hook scripts, or old AGENTS.md sections. Call `tapps_upgrade(dry_run=true)` to preview what would change, then `tapps_upgrade()` to apply updates. A backup is automatically created before overwriting (stored in `.tapps-mcp/backups/`). This is the MCP-tool equivalent of the `tapps-mcp upgrade` CLI command, usable from within an AI session without dropping to a terminal.
 
 ---
 
@@ -630,6 +657,8 @@ quality_preset: standard   # standard | strict | framework
 log_level: INFO            # DEBUG | INFO | WARNING | ERROR
 log_json: false            # JSON-structured logs
 tool_timeout: 30           # Subprocess timeout in seconds
+cache_max_mb: 100          # Knowledge cache max size in MB (LRU eviction)
+llm_engagement_level: medium  # high | medium | low
 dead_code_min_confidence: 80           # Minimum vulture confidence (0-100)
 dead_code_whitelist_patterns: ["test_*", "conftest.py"]  # File patterns to exclude
 ```

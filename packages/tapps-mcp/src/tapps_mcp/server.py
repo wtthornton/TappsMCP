@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from tapps_core.common.models import InstalledTool, StartupDiagnostics
     from tapps_core.config.settings import TappsMCPSettings
+    from tapps_core.knowledge.models import LookupResult
     from tapps_core.metrics.collector import MetricsHub
 
 import structlog
@@ -515,7 +516,7 @@ def _lookup_error_code(error: str | None) -> str | None:
     return "api_key_missing" if "API key" in error else "lookup_failed"
 
 
-def _build_lookup_data(result: Any) -> dict[str, Any]:
+def _build_lookup_data(result: LookupResult) -> dict[str, Any]:
     """Build the data dict from a LookupResult, including optional fields."""
     data: dict[str, Any] = {
         "library": result.library,

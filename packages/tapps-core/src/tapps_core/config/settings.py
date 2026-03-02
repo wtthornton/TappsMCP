@@ -219,6 +219,13 @@ class TappsMCPSettings(BaseSettings):
     # Memory subsystem (Epic 23-25)
     memory: MemorySettings = Field(default_factory=MemorySettings)
 
+    # Knowledge cache
+    cache_max_mb: int = Field(
+        default=100,
+        ge=1,
+        description="Maximum knowledge cache size in MB before LRU eviction triggers.",
+    )
+
     # Expert/doc coupling
     expert_auto_fallback: bool = Field(
         default=True,

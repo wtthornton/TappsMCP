@@ -95,6 +95,71 @@ echo "[TappsMCP] This project uses TappsMCP for code quality."
 echo "MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed, tapps_memory."
 exit 0
 """,
+    "tapps-subagent-stop.sh": """\
+#!/usr/bin/env bash
+# TappsMCP SubagentStop hook (Epic 36.1)
+# Advises on quality validation when subagent modified Python files.
+# IMPORTANT: SubagentStop does NOT support exit code 2 (advisory only).
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+# Check for Python file modifications (best-effort)
+HAS_PY=$(echo "$INPUT" | "$PYBIN" -c "
+import sys,json
+try:
+    d=json.load(sys.stdin)
+    # SubagentStop event may include changed files info
+    print('yes')
+except Exception:
+    print('no')
+" 2>/dev/null)
+if [ "$HAS_PY" = "yes" ]; then
+  echo "Subagent completed. Run tapps_quick_check or tapps_validate_changed" >&2
+  echo "on any Python files modified by this subagent." >&2
+fi
+exit 0
+""",
+    "tapps-session-end.sh": """\
+#!/usr/bin/env bash
+# TappsMCP SessionEnd hook (Epic 36.2)
+# Creates a quality summary at session end.
+# IMPORTANT: SessionEnd does NOT support exit code 2 (advisory only).
+INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+MARKER="$PROJECT_DIR/.tapps-mcp/.validation-marker"
+if [ -f "$MARKER" ]; then
+  echo "[TappsMCP] Session quality validated." >&2
+else
+  echo "[TappsMCP] Session ended without running quality validation." >&2
+  echo "Consider running tapps_validate_changed before ending sessions." >&2
+fi
+exit 0
+""",
+    "tapps-tool-failure.sh": """\
+#!/usr/bin/env bash
+# TappsMCP PostToolUseFailure hook (Epic 36.3)
+# Logs TappsMCP MCP tool failures for diagnostics.
+# IMPORTANT: PostToolUseFailure does NOT support exit code 2 (advisory only).
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+TOOL=$(echo "$INPUT" | "$PYBIN" -c "
+import sys,json
+d=json.load(sys.stdin)
+print(d.get('tool_name',''))
+" 2>/dev/null)
+# Only log failures from TappsMCP tools
+case "$TOOL" in
+  mcp__tapps-mcp__*|mcp__tapps_mcp__*)
+    ERROR=$(echo "$INPUT" | "$PYBIN" -c "
+import sys,json
+d=json.load(sys.stdin)
+print(d.get('error','unknown error')[:200])
+" 2>/dev/null)
+    echo "TappsMCP tool $TOOL failed: $ERROR" >&2
+    echo "Check MCP server connectivity and configuration." >&2
+    ;;
+esac
+exit 0
+""",
     "tapps-memory-capture.sh": """\
 #!/usr/bin/env bash
 # TappsMCP Stop hook - Memory Capture (Epic 34.5)
@@ -217,6 +282,54 @@ exit 0
 $null = $input | Out-Null
 Write-Output "[TappsMCP] This project uses TappsMCP for code quality."
 Write-Output "MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed, tapps_memory."
+exit 0
+""",
+    "tapps-subagent-stop.ps1": """\
+# TappsMCP SubagentStop hook (Epic 36.1)
+# Advises on quality validation when subagent modified Python files.
+# IMPORTANT: SubagentStop does NOT support exit code 2 (advisory only).
+$rawInput = @($input) -join "`n"
+$msg = "Subagent completed. Run tapps_quick_check or tapps_validate_changed"
+Write-Host $msg -ForegroundColor Yellow
+$msg2 = "on any Python files modified by this subagent."
+Write-Host $msg2 -ForegroundColor Yellow
+exit 0
+""",
+    "tapps-session-end.ps1": """\
+# TappsMCP SessionEnd hook (Epic 36.2)
+# Creates a quality summary at session end.
+# IMPORTANT: SessionEnd does NOT support exit code 2 (advisory only).
+$rawInput = @($input) -join "`n"
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) { $projDir = "." }
+$marker = "$projDir/.tapps-mcp/.validation-marker"
+if (Test-Path $marker) {
+    Write-Host "[TappsMCP] Session quality validated." -ForegroundColor Green
+} else {
+    $msg = "[TappsMCP] Session ended without running quality validation."
+    Write-Host $msg -ForegroundColor Yellow
+    $msg2 = "Consider running tapps_validate_changed before ending sessions."
+    Write-Host $msg2 -ForegroundColor Yellow
+}
+exit 0
+""",
+    "tapps-tool-failure.ps1": """\
+# TappsMCP PostToolUseFailure hook (Epic 36.3)
+# Logs TappsMCP MCP tool failures for diagnostics.
+# IMPORTANT: PostToolUseFailure does NOT support exit code 2 (advisory only).
+$rawInput = @($input) -join "`n"
+try {
+    $data = $rawInput | ConvertFrom-Json
+    $tool = if ($data.tool_name) { $data.tool_name } else { "" }
+} catch {
+    $tool = ""
+}
+if ($tool -match '^mcp__tapps[-_]mcp__') {
+    $err = if ($data.error) { $data.error } else { "unknown error" }
+    $error_msg = $err.Substring(0, [Math]::Min(200, $err.Length))
+    Write-Host "TappsMCP tool $tool failed: $error_msg" -ForegroundColor Red
+    Write-Host "Check MCP server connectivity and configuration." -ForegroundColor Yellow
+}
 exit 0
 """,
     "tapps-memory-capture.ps1": """\
@@ -348,6 +461,46 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
             ],
         },
     ],
+    "SubagentStop": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-subagent-stop.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "SessionEnd": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-session-end.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "PostToolUseFailure": [
+        {
+            "matcher": "mcp__tapps-mcp__.*",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-tool-failure.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
 }
 
 CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
@@ -398,6 +551,28 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
         {
             "hooks": [
                 {"type": "command", "command": ".claude/hooks/tapps-subagent-start.sh"},
+            ],
+        },
+    ],
+    "SubagentStop": [
+        {
+            "hooks": [
+                {"type": "command", "command": ".claude/hooks/tapps-subagent-stop.sh"},
+            ],
+        },
+    ],
+    "SessionEnd": [
+        {
+            "hooks": [
+                {"type": "command", "command": ".claude/hooks/tapps-session-end.sh"},
+            ],
+        },
+    ],
+    "PostToolUseFailure": [
+        {
+            "matcher": "mcp__tapps-mcp__.*",
+            "hooks": [
+                {"type": "command", "command": ".claude/hooks/tapps-tool-failure.sh"},
             ],
         },
     ],
@@ -535,6 +710,159 @@ MEMORY_CAPTURE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
             ],
         },
     ],
+}
+
+# ---------------------------------------------------------------------------
+# Engagement-level blocking hook variants (Epic 36.5)
+# ---------------------------------------------------------------------------
+
+CLAUDE_HOOK_SCRIPTS_BLOCKING: dict[str, str] = {
+    "tapps-task-completed.sh": """\
+#!/usr/bin/env bash
+# TappsMCP TaskCompleted hook (HIGH engagement — BLOCKING)
+# Blocks task completion if validation has not been run.
+INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+MARKER="$PROJECT_DIR/.tapps-mcp/.validation-marker"
+if [ -f "$MARKER" ]; then
+  PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+  AGE=$("$PYBIN" -c "
+import time,sys
+try:
+    t=float(open('$MARKER').read().strip())
+    print(int(time.time()-t))
+except Exception:
+    print(9999)
+" 2>/dev/null)
+  if [ "${AGE:-9999}" -gt 3600 ]; then
+    echo "BLOCKED: Validation marker is stale (>1h). Run tapps_validate_changed." >&2
+    exit 2
+  fi
+  exit 0
+fi
+echo "BLOCKED: tapps_validate_changed has not been run." >&2
+echo "Run it before completing this task." >&2
+exit 2
+""",
+    "tapps-stop.sh": """\
+#!/usr/bin/env bash
+# TappsMCP Stop hook (HIGH engagement — BLOCKING on first invocation)
+# Blocks if no quality validation was run this session.
+# IMPORTANT: Must check stop_hook_active to prevent infinite loops.
+INPUT=$(cat)
+PY="import sys,json; d=json.load(sys.stdin); print(d.get('stop_hook_active','false'))"
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+ACTIVE=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
+if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
+  exit 0
+fi
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+MARKER="$PROJECT_DIR/.tapps-mcp/.validation-marker"
+if [ -f "$MARKER" ]; then
+  exit 0
+fi
+echo "BLOCKED: No quality validation was run this session." >&2
+echo "Run tapps_validate_changed before ending." >&2
+exit 2
+""",
+}
+
+CLAUDE_HOOK_SCRIPTS_BLOCKING_PS: dict[str, str] = {
+    "tapps-task-completed.ps1": """\
+# TappsMCP TaskCompleted hook (HIGH engagement - BLOCKING)
+# Blocks task completion if validation has not been run.
+$null = $input | Out-Null
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) { $projDir = "." }
+$marker = "$projDir/.tapps-mcp/.validation-marker"
+if (Test-Path $marker) {
+    $content = Get-Content $marker -Raw
+    try {
+        $ts = [double]$content.Trim()
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        $age = $now - $ts
+        if ($age -gt 3600) {
+            $m = "BLOCKED: Validation stale (>1h). Run tapps_validate_changed."
+            Write-Host $m -ForegroundColor Red
+            exit 2
+        }
+    } catch {
+        $m = "BLOCKED: Invalid marker. Run tapps_validate_changed."
+        Write-Host $m -ForegroundColor Red
+        exit 2
+    }
+    exit 0
+}
+Write-Host "BLOCKED: tapps_validate_changed has not been run." -ForegroundColor Red
+Write-Host "Run it before completing this task." -ForegroundColor Red
+exit 2
+""",
+    "tapps-stop.ps1": """\
+# TappsMCP Stop hook (HIGH engagement - BLOCKING on first invocation)
+# Blocks if no quality validation was run this session.
+# IMPORTANT: Must check stop_hook_active to prevent infinite loops.
+$rawInput = @($input) -join "`n"
+try {
+    $data = $rawInput | ConvertFrom-Json
+    $active = $data.stop_hook_active
+} catch {
+    $active = $false
+}
+if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
+    exit 0
+}
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) { $projDir = "." }
+$marker = "$projDir/.tapps-mcp/.validation-marker"
+if (Test-Path $marker) {
+    exit 0
+}
+Write-Host "BLOCKED: No quality validation was run this session." -ForegroundColor Red
+Write-Host "Run tapps_validate_changed before ending." -ForegroundColor Red
+exit 2
+""",
+}
+
+# ---------------------------------------------------------------------------
+# Prompt-type hook configuration (Epic 36.4) — opt-in
+# ---------------------------------------------------------------------------
+
+PROMPT_HOOK_CONFIG: dict[str, list[dict[str, Any]]] = {
+    "PostToolUse": [
+        {
+            "matcher": "Edit|Write",
+            "type": "prompt",
+            "prompt": (
+                "A file was just modified. Based on this tool output: "
+                "$ARGUMENTS\n\nWas a Python file (.py) changed in a way "
+                "that could affect code quality? If Python code was added, "
+                "modified, or deleted, answer 'yes'. If only comments, "
+                "whitespace, or non-Python files were changed, answer 'no'."
+            ),
+            "model": "haiku",
+            "timeout": 15,
+        },
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# Engagement-level hook event sets (Epic 36.6)
+# ---------------------------------------------------------------------------
+
+# Events to include per engagement level (for generate_claude_hooks filtering)
+ENGAGEMENT_HOOK_EVENTS: dict[str, set[str]] = {
+    "high": {
+        "SessionStart", "PostToolUse", "Stop", "TaskCompleted",
+        "PreCompact", "SubagentStart", "SubagentStop", "SessionEnd",
+        "PostToolUseFailure",
+    },
+    "medium": {
+        "SessionStart", "PostToolUse", "Stop", "TaskCompleted",
+        "PreCompact", "SubagentStart", "SubagentStop",
+    },
+    "low": {
+        "SessionStart",
+    },
 }
 
 # ---------------------------------------------------------------------------

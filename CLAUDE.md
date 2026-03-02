@@ -59,6 +59,8 @@ uv run docsmcp serve             # DocsMCP (documentation)
 # CLI utilities
 uv run tapps-mcp doctor           # diagnose config issues
 uv run tapps-mcp upgrade --dry-run  # preview generated file updates
+uv run tapps-mcp build-plugin      # generate Claude Code plugin directory
+uv run tapps-mcp rollback --list   # list available upgrade backups
 uv run docsmcp doctor             # DocsMCP diagnostics
 ```
 
@@ -100,6 +102,8 @@ Several features exist as both a CLI command (`cli.py` via Click) and an MCP too
 - `tapps-mcp init` (CLI) → `pipeline/init.py` ← `tapps_init` (MCP tool in `server_pipeline_tools.py`)
 - `tapps-mcp upgrade` (CLI) → `distribution/setup_generator.py` / `pipeline/upgrade.py` ← `tapps_upgrade` (MCP tool)
 - `tapps-mcp doctor` (CLI) → `distribution/doctor.py` ← `tapps_doctor` (MCP tool)
+- `tapps-mcp build-plugin` (CLI-only) → `distribution/plugin_builder.py` — generates a Claude Code plugin directory
+- `tapps-mcp rollback` (CLI-only) → `distribution/rollback.py` — restores from pre-upgrade backups
 
 ### Engagement-level template variants (Epic 18)
 
@@ -113,17 +117,19 @@ Four module-level caches require reset in tests (done by autouse fixture in `pac
 - **MemoryStore**: `_get_memory_store()` in `server_helpers.py` — cached singleton, reset via `_reset_memory_store_cache()`
 - **Tool detection**: `detect_installed_tools()` in `tools/tool_detection.py` — reset via `_reset_tools_cache()`
 
+The **knowledge cache** (`KBCache` in `tapps_core/knowledge/cache.py`) supports LRU eviction: when total disk size exceeds `cache_max_mb` (default 100 MB), least-recently-accessed entries are evicted. Access timestamps are tracked in `_metadata.json`. Call `evict_lru()` directly or rely on automatic eviction after `put()`.
+
 ### Scoring pipeline
 
 `scoring/scorer.py` orchestrates the 7-category scoring engine. In full mode, `tools/parallel.py` runs ruff, mypy, bandit, and radon concurrently via `asyncio.gather`. Quick mode runs ruff only. When external tools are missing, AST-based fallbacks in `scoring/scorer.py` produce degraded results. The `tools/` directory has one module per external checker (ruff, mypy, bandit, radon, vulture, pip-audit) plus `ruff_direct.py` and `radon_direct.py` for library-mode execution.
 
 ### Security model
 
-All file I/O goes through `security/path_validator.py`, which sandboxes operations to `TAPPS_MCP_PROJECT_ROOT`. The `security/` package also handles secret scanning, IO guardrails, and governance checks.
+All file I/O goes through `security/path_validator.py`, which sandboxes operations to `TAPPS_MCP_PROJECT_ROOT`. The `security/` package also handles secret scanning, IO guardrails, governance checks, and content safety (`security/content_safety.py` — prompt injection filtering for all retrieved documentation and memory content).
 
 ### Expert system
 
-17 domain experts in `experts/` with 139 curated knowledge markdown files under `experts/knowledge/`. The `experts/engine.py` uses keyword-based RAG (or optional vector RAG with faiss). When `adaptive.enabled` is True, the `AdaptiveDomainDetector` routes queries based on learned feedback outcomes (with 0.4 confidence threshold), falling back to the static `DomainDetector`. Query expansion via `experts/query_expansion.py` (~60 synonym pairs) improves domain detection recall. Knowledge freshness warnings are included when retrieved chunks are >365 days old. All retrieved content passes through `knowledge/rag_safety.py` for prompt injection filtering.
+17 domain experts in `experts/` with 139 curated knowledge markdown files under `experts/knowledge/`. The `experts/engine.py` uses keyword-based RAG (or optional vector RAG with faiss), with core logic split into helpers (`_detect_domain`, `_retrieve_knowledge`, `_format_consultation_response`, `_apply_freshness_warnings`). When `adaptive.enabled` is True, the `AdaptiveDomainDetector` routes queries based on learned feedback outcomes (with 0.4 confidence threshold), falling back to the static `DomainDetector`. Query expansion via `experts/query_expansion.py` (~60 synonym pairs) improves domain detection recall. Knowledge freshness warnings are included when retrieved chunks are >365 days old. All retrieved content passes through `security/content_safety.py` for prompt injection filtering (formerly in `knowledge/rag_safety.py`, which now delegates to the security module).
 
 ### Memory subsystem
 
@@ -131,7 +137,15 @@ All file I/O goes through `security/path_validator.py`, which sandboxes operatio
 
 ### Platform generation
 
-Platform artifact generation is split across modules in `pipeline/`: `platform_generators.py` (facade re-exporting from split modules), `platform_hooks.py` (Claude Code hook generation), `platform_rules.py` (Cursor rules, Copilot instructions, BugBot config), `platform_skills.py` (Claude Code skills with 2026 `allowed-tools:` spec), `platform_subagents.py` (Claude Code subagents with `mcpServers`, `maxTurns`, role-appropriate `permissionMode`), `platform_bundles.py` (bundled generation including path-scoped quality rules), `platform_hook_templates.py` (hook script templates including memory capture Stop hooks). `pipeline/agents_md.py` handles AGENTS.md smart-merge (preserving custom sections while updating tool definitions). `pipeline/init.py` also generates `.claude/settings.json` permission rules (`mcp__tapps-mcp__*` auto-approval).
+Platform artifact generation is split across modules in `pipeline/`: `platform_generators.py` (facade re-exporting from split modules), `platform_hooks.py` (Claude Code hook generation), `platform_rules.py` (Cursor rules, Copilot instructions, BugBot config), `platform_skills.py` (Claude Code skills with 2026 `allowed-tools:` spec), `platform_subagents.py` (Claude Code subagents with `mcpServers`, `maxTurns`, role-appropriate `permissionMode`), `platform_bundles.py` (bundled generation including path-scoped quality rules), `platform_hook_templates.py` (hook script templates including memory capture Stop hooks). `pipeline/agents_md.py` handles AGENTS.md smart-merge (preserving custom sections while updating tool definitions). `pipeline/init.py` also generates `.claude/settings.json` permission rules (`mcp__tapps-mcp__*` auto-approval). When MCP elicitation is supported and no existing config is present, `tapps_init` runs an interactive 5-question wizard (`common/elicitation.py`) that collects quality preset, engagement level, agent teams, skill tier, and prompt hooks preferences before generating files.
+
+### Distribution and packaging
+
+`distribution/plugin_builder.py` provides the `PluginBuilder` class for generating Claude Code marketplace plugin directories (manifest, namespaced skills, agents, hooks.json, MCP config, rules, settings). `distribution/rollback.py` provides `BackupManager` for creating timestamped backups before upgrades (stored in `.tapps-mcp/backups/{timestamp}/` with `manifest.json`), listing backups, restoring from any backup, and auto-cleaning old backups (keeping the 5 most recent). `tapps_upgrade` automatically creates a backup before overwriting files.
+
+### Quality gate evaluation
+
+`gates/evaluator.py` checks 6 category scores + overall against thresholds. Failures are sorted by scoring weight (security 0.27 > maintainability 0.24 > complexity 0.18 > test coverage 0.13 > performance 0.08 > structure/devex 0.05). A security floor of 50 enforces that files with critical security issues always fail the gate regardless of overall score.
 
 ## Code conventions
 

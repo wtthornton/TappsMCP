@@ -35,6 +35,12 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOK_SCRIPTS as _CLAUDE_HOOK_SCRIPTS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    CLAUDE_HOOK_SCRIPTS_BLOCKING as _CLAUDE_HOOK_SCRIPTS_BLOCKING,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CLAUDE_HOOK_SCRIPTS_BLOCKING_PS as _CLAUDE_HOOK_SCRIPTS_BLOCKING_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOK_SCRIPTS_PS as _CLAUDE_HOOK_SCRIPTS_PS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -54,6 +60,12 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     CURSOR_HOOKS_CONFIG_PS as _CURSOR_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    ENGAGEMENT_HOOK_EVENTS as _ENGAGEMENT_HOOK_EVENTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    PROMPT_HOOK_CONFIG as _PROMPT_HOOK_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hooks import (
     generate_claude_hooks,
@@ -76,11 +88,15 @@ __all__ = [
     "_CLAUDE_HOOKS_CONFIG",
     "_CLAUDE_HOOKS_CONFIG_PS",
     "_CLAUDE_HOOK_SCRIPTS",
+    "_CLAUDE_HOOK_SCRIPTS_BLOCKING",
+    "_CLAUDE_HOOK_SCRIPTS_BLOCKING_PS",
     "_CLAUDE_HOOK_SCRIPTS_PS",
     "_CURSOR_HOOKS_CONFIG",
     "_CURSOR_HOOKS_CONFIG_PS",
     "_CURSOR_HOOK_SCRIPTS",
     "_CURSOR_HOOK_SCRIPTS_PS",
+    "_ENGAGEMENT_HOOK_EVENTS",
+    "_PROMPT_HOOK_CONFIG",
     "generate_agent_teams_hooks",
     "generate_bugbot_rules",
     "generate_ci_workflow",

@@ -24,7 +24,7 @@ class TestClaudeHooksScripts:
         generate_claude_hooks(tmp_path, force_windows=False)
         assert (tmp_path / ".claude" / "hooks").is_dir()
 
-    def test_all_seven_scripts_created(self, tmp_path):
+    def test_all_scripts_created(self, tmp_path):
         generate_claude_hooks(tmp_path, force_windows=False)
         hooks_dir = tmp_path / ".claude" / "hooks"
         expected = [
@@ -35,6 +35,8 @@ class TestClaudeHooksScripts:
             "tapps-task-completed.sh",
             "tapps-pre-compact.sh",
             "tapps-subagent-start.sh",
+            "tapps-subagent-stop.sh",
+            "tapps-memory-capture.sh",
         ]
         for name in expected:
             assert (hooks_dir / name).exists(), f"Missing: {name}"
@@ -160,7 +162,7 @@ class TestClaudeHooksConfig:
         assert "SubagentStart" in data["hooks"]
         assert len(data["hooks"]["SubagentStart"]) > 0
 
-    def test_all_six_events_present(self, tmp_path):
+    def test_all_events_present(self, tmp_path):
         generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         expected_events = {
@@ -170,6 +172,7 @@ class TestClaudeHooksConfig:
             "TaskCompleted",
             "PreCompact",
             "SubagentStart",
+            "SubagentStop",
         }
         assert expected_events == set(data["hooks"].keys())
 
@@ -233,7 +236,7 @@ class TestClaudeHooksMerge:
         """Returns a summary dict with scripts_created and hooks_action."""
         result = generate_claude_hooks(tmp_path, force_windows=False)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 8
+        assert len(result["scripts_created"]) == 9  # medium engagement
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0
 
@@ -250,7 +253,7 @@ class TestClaudeHooksScriptsWindows:
         generate_claude_hooks(tmp_path, force_windows=True)
         assert (tmp_path / ".claude" / "hooks").is_dir()
 
-    def test_all_seven_ps1_scripts_created(self, tmp_path):
+    def test_all_ps1_scripts_created(self, tmp_path):
         generate_claude_hooks(tmp_path, force_windows=True)
         hooks_dir = tmp_path / ".claude" / "hooks"
         expected = [
@@ -261,6 +264,8 @@ class TestClaudeHooksScriptsWindows:
             "tapps-task-completed.ps1",
             "tapps-pre-compact.ps1",
             "tapps-subagent-start.ps1",
+            "tapps-subagent-stop.ps1",
+            "tapps-memory-capture.ps1",
         ]
         for name in expected:
             assert (hooks_dir / name).exists(), f"Missing: {name}"
@@ -304,7 +309,7 @@ class TestClaudeHooksScriptsWindows:
     def test_result_dict(self, tmp_path):
         result = generate_claude_hooks(tmp_path, force_windows=True)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 8
+        assert len(result["scripts_created"]) == 9  # medium engagement
         assert all(n.endswith(".ps1") for n in result["scripts_created"])
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0
@@ -318,7 +323,7 @@ class TestClaudeHooksConfigWindows:
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert "hooks" in data
 
-    def test_all_six_events_present(self, tmp_path):
+    def test_all_events_present(self, tmp_path):
         generate_claude_hooks(tmp_path, force_windows=True)
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         expected_events = {
@@ -328,6 +333,7 @@ class TestClaudeHooksConfigWindows:
             "TaskCompleted",
             "PreCompact",
             "SubagentStart",
+            "SubagentStop",
         }
         assert expected_events == set(data["hooks"].keys())
 

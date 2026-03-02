@@ -70,11 +70,63 @@ _SEVERITY_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
 
 def _write_validate_ok_marker(project_root: Path) -> None:
-    """Write a marker so the Cursor stop hook can skip the reminder."""
+    """Write markers so hooks can detect that validation was run.
+
+    Writes two markers:
+    - ``_VALIDATE_OK_MARKER`` (legacy, for Cursor stop hook)
+    - ``.tapps-mcp/.validation-marker`` (for Claude Code blocking hooks)
+    """
+    ts = str(time.time())
     with contextlib.suppress(OSError):
         marker = project_root / _VALIDATE_OK_MARKER
         marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(str(time.time()), encoding="utf-8")
+        marker.write_text(ts, encoding="utf-8")
+    with contextlib.suppress(OSError):
+        validation_marker = project_root / ".tapps-mcp" / ".validation-marker"
+        validation_marker.parent.mkdir(parents=True, exist_ok=True)
+        validation_marker.write_text(ts, encoding="utf-8")
+
+
+async def _maybe_run_wizard(
+    ctx: Context[Any, Any, Any],
+    *,
+    llm_engagement_level: str | None,
+    platform: str,
+    agent_teams: bool,
+) -> object | None:
+    """Run the interactive wizard if this is a true first-run.
+
+    Returns a :class:`WizardResult` when the wizard ran and completed,
+    or ``None`` when skipped.
+    """
+    # Skip if explicit params were provided (not all defaults)
+    if llm_engagement_level is not None or platform or agent_teams:
+        return None
+
+    # Skip if existing config already present
+    settings = load_settings()
+    proj = settings.project_root
+    has_settings = (proj / ".claude" / "settings.json").exists()
+    has_yaml = (proj / ".tapps-mcp.yaml").exists()
+    if has_settings or has_yaml:
+        return None
+
+    from tapps_mcp.common.elicitation import run_init_wizard
+
+    wizard = await run_init_wizard(ctx)
+    if not wizard.completed:
+        return None
+
+    # Persist wizard answers in .tapps-mcp.yaml
+    yaml_content = (
+        f"llm_engagement_level: {wizard.engagement_level}\n"
+        f"quality_preset: {wizard.quality_preset}\n"
+    )
+    yaml_path = proj / ".tapps-mcp.yaml"
+    with contextlib.suppress(OSError):
+        yaml_path.write_text(yaml_content, encoding="utf-8")
+
+    return wizard
 
 
 async def _validate_progress_heartbeat(
@@ -774,6 +826,12 @@ async def tapps_init(
     Optionally warms the Context7 cache from the detected tech stack.
     Optionally generates platform-specific rule files for Claude Code or Cursor.
 
+    On first run (no existing ``.claude/settings.json`` or ``.tapps-mcp.yaml``),
+    an interactive 5-question wizard is presented via MCP elicitation (quality
+    preset, engagement level, agent teams, skill tier, prompt hooks). Answers
+    are persisted in ``.tapps-mcp.yaml``. The wizard is skipped when explicit
+    parameters are provided or when the client does not support elicitation.
+
     Call once per project to set up the pipeline workflow.
 
     Duration: Full init can take 10-35+ seconds (profile, templates, cache/RAG
@@ -828,6 +886,21 @@ async def tapps_init(
             )
         # confirmed is True or None (unsupported) - proceed normally
 
+    # Interactive wizard (Epic 37.1): triggers on true first-run with no
+    # explicit config and no explicit params, when elicitation is available.
+    if ctx is not None and not verify_only and not dry_run:
+        wizard_answers = await _maybe_run_wizard(
+            ctx,
+            llm_engagement_level=llm_engagement_level,
+            platform=platform,
+            agent_teams=agent_teams,
+        )
+        if wizard_answers is not None:
+            llm_engagement_level = wizard_answers.engagement_level
+            agent_teams = wizard_answers.agent_teams
+            if not platform:
+                platform = "claude"
+
     from tapps_mcp.pipeline.init import bootstrap_pipeline
 
     settings = load_settings()
@@ -876,6 +949,11 @@ def tapps_upgrade(
     Validates and refreshes AGENTS.md, platform rules, hooks, agents,
     skills, and settings. Preserves custom command paths in MCP configs
     (e.g. PyInstaller exe paths are never overwritten).
+
+    Creates a timestamped backup of all files that will be overwritten
+    before making changes. Backups are stored in ``.tapps-mcp/backups/``
+    and can be restored with ``tapps-mcp rollback`` (CLI) or
+    ``tapps-mcp rollback --list`` to view available backups.
 
     Use ``dry_run=True`` to preview what would change.
 
