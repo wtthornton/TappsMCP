@@ -9,24 +9,22 @@ from __future__ import annotations
 
 import structlog
 
+from tapps_core.config.feature_flags import feature_flags as _ff
+
 logger = structlog.get_logger(__name__)
 
+# Kept for backward compatibility with tests that patch _RADON_AVAILABLE.
 _RADON_AVAILABLE: bool | None = None
 
 
 def is_available() -> bool:
-    """Check whether the radon library is importable."""
-    global _RADON_AVAILABLE
-    if _RADON_AVAILABLE is None:
-        import importlib.util
+    """Check whether the radon library is importable.
 
-        try:
-            _RADON_AVAILABLE = (
-                importlib.util.find_spec("radon.complexity") is not None
-                and importlib.util.find_spec("radon.metrics") is not None
-            )
-        except (ModuleNotFoundError, ValueError):
-            _RADON_AVAILABLE = False
+    Delegates to :data:`tapps_core.config.feature_flags.feature_flags`.
+    """
+    global _RADON_AVAILABLE  # noqa: PLW0603
+    if _RADON_AVAILABLE is None:
+        _RADON_AVAILABLE = _ff.radon
     return _RADON_AVAILABLE
 
 

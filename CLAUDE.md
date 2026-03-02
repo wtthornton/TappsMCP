@@ -24,12 +24,9 @@ tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp
 # Install all packages
 uv sync --all-packages
 
-# Run all tests (4500+ tests)
-uv run pytest packages/tapps-core/tests/ packages/tapps-mcp/tests/ packages/docs-mcp/tests/ -v
-
-# Run tests for a single package
-uv run pytest packages/tapps-core/tests/ -v      # 1225 tests
-uv run pytest packages/tapps-mcp/tests/ -v        # 3224 tests
+# Run tests per package (recommended — avoids conftest collisions)
+uv run pytest packages/tapps-core/tests/ -v      # 1,269 tests
+uv run pytest packages/tapps-mcp/tests/ -v        # 3,420 tests
 uv run pytest packages/docs-mcp/tests/ -v         # 107 tests
 
 # Run a single test file
@@ -77,15 +74,85 @@ Shared infrastructure (config, security, logging, knowledge, memory, experts, me
 
 ### Server module split (tapps-mcp)
 
-The MCP server is split across seven tool files plus a shared helpers module. All share the same `mcp` FastMCP instance created in `server.py`:
+The MCP server is split across seven tool files plus a shared helpers module and a resources module. All share the same `mcp` FastMCP instance created in `server.py`:
 
-- **`server.py`** — Creates the `FastMCP("TappsMCP")` instance, registers MCP resources/prompts, and 8 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`). Imports the other six modules which register their tools on the shared `mcp` object.
+- **`server.py`** — Creates the `FastMCP("TappsMCP")` instance and 8 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`). Imports the other seven modules which register their tools/resources on the shared `mcp` object.
 - **`server_scoring_tools.py`** — `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** — `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`
 - **`server_metrics_tools.py`** — `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`
-- **`server_memory_tools.py`** — `tapps_memory` (save, get, list, delete, search, reinforce, gc, contradictions, reseed, import, export actions)
+- **`server_memory_tools.py`** — `tapps_memory` (save, get, list, delete, search, reinforce, gc actions)
 - **`server_analysis_tools.py`** — `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`
+- **`server_resources.py`** — MCP resources (knowledge, config) and prompts (pipeline, workflow)
 - **`server_helpers.py`** — Shared utilities: response builders, singleton caches (`_get_scorer()`, `_get_settings()`, `_get_memory_store()`)
+
+### Module map (tapps-mcp)
+
+```
+src/tapps_mcp/
+├── __init__.py, cli.py, diagnostics.py, server.py, server_helpers.py, py.typed
+├── server_scoring_tools.py, server_pipeline_tools.py, server_metrics_tools.py
+├── server_memory_tools.py, server_analysis_tools.py, server_resources.py
+├── common/     constants.py, elicitation.py, exceptions.py, logging.py,
+│               models.py, nudges.py, output_schemas.py, pipeline_models.py,
+│               utils.py
+├── config/     settings.py, default.yaml
+├── security/   path_validator.py, io_guardrails.py, governance.py, api_keys.py,
+│               secret_scanner.py, security_scanner.py, content_safety.py
+├── scoring/    models.py, constants.py, scorer.py, dead_code.py,
+│               dependency_security.py
+├── gates/      models.py, evaluator.py
+├── tools/      subprocess_utils.py, subprocess_runner.py, tool_detection.py,
+│               ruff.py, ruff_direct.py, mypy.py, bandit.py,
+│               radon.py, radon_direct.py, parallel.py, checklist.py,
+│               batch_validator.py, vulture.py, pip_audit.py,
+│               dependency_scan_cache.py
+├── knowledge/  models.py, cache.py, fuzzy_matcher.py, context7_client.py,
+│               rag_safety.py, lookup.py, circuit_breaker.py,
+│               library_detector.py, warming.py, import_analyzer.py,
+│               content_normalizer.py
+│   └── providers/ base.py, registry.py, context7_provider.py,
+│                  llms_txt_provider.py
+├── experts/    models.py, registry.py, domain_utils.py,
+│               domain_detector.py, adaptive_domain_detector.py,
+│               rag.py, rag_chunker.py, rag_embedder.py, rag_index.py,
+│               vector_rag.py, rag_warming.py, confidence.py, engine.py,
+│               hot_rank.py, retrieval_eval.py,
+│               knowledge_freshness.py, knowledge_validator.py,
+│               knowledge_ingestion.py
+│               knowledge/ (139 markdown files across 17 domains)
+├── adaptive/   models.py, protocols.py, persistence.py,
+│               scoring_engine.py, scoring_wrapper.py,
+│               voting_engine.py, weight_distributor.py
+├── metrics/    collector.py, execution_metrics.py, outcome_tracker.py,
+│               expert_metrics.py, confidence_metrics.py, rag_metrics.py,
+│               consultation_logger.py, expert_observability.py,
+│               business_metrics.py, quality_aggregator.py,
+│               alerts.py, trends.py, visualizer.py,
+│               dashboard.py, otel_export.py, feedback.py
+├── memory/     models.py, persistence.py, store.py, decay.py,
+│               reinforcement.py, contradictions.py, gc.py,
+│               retrieval.py, injection.py, seeding.py, io.py
+├── prompts/    prompt_loader.py,
+│               overview.md, discover.md, research.md, develop.md,
+│               validate.md, verify.md, handoff_template.md,
+│               runlog_template.md, platform_claude.md, platform_cursor.md
+├── project/    models.py, ast_parser.py, tech_stack.py,
+│               type_detector.py, profiler.py, session_notes.py,
+│               impact_analyzer.py, report.py, import_graph.py,
+│               cycle_detector.py, coupling_metrics.py,
+│               vulnerability_impact.py
+├── pipeline/   models.py, init.py, upgrade.py, handoff.py, agents_md.py,
+│               platform_generators.py, platform_hooks.py,
+│               platform_hook_templates.py, platform_rules.py,
+│               platform_skills.py, platform_subagents.py,
+│               platform_bundles.py,
+│               github_templates.py, github_ci.py, github_copilot.py,
+│               github_governance.py
+├── distribution/ setup_generator.py, doctor.py, exe_manager.py,
+│               plugin_builder.py, rollback.py
+├── validators/ base.py, dockerfile.py, docker_compose.py,
+│               influxdb.py, mqtt.py, websocket.py
+```
 
 ### Tool registration flow
 
@@ -111,11 +178,14 @@ AGENTS.md and platform rules (Cursor/Claude) have three variants per engagement 
 
 ### Caching and singletons
 
-Four module-level caches require reset in tests (done by autouse fixture in `packages/tapps-mcp/tests/conftest.py`):
+Five module-level caches require reset in tests (done by autouse fixture in `packages/tapps-mcp/tests/conftest.py` and `packages/tapps-core/tests/conftest.py`):
 - **Settings**: `load_settings()` in `config/settings.py` — cached singleton, reset via `_reset_settings_cache()`
 - **CodeScorer**: `_get_scorer()` in `server_helpers.py` — cached singleton, reset via `_reset_scorer_cache()`
 - **MemoryStore**: `_get_memory_store()` in `server_helpers.py` — cached singleton, reset via `_reset_memory_store_cache()`
 - **Tool detection**: `detect_installed_tools()` in `tools/tool_detection.py` — reset via `_reset_tools_cache()`
+- **Feature flags**: `feature_flags` singleton in `tapps_core/config/feature_flags.py` — reset via `feature_flags.reset()`
+
+The `FeatureFlags` class provides unified detection of optional dependencies (faiss, numpy, sentence_transformers, radon) via lazy-evaluated cached properties. Files that previously used scattered `try: import X except ImportError` now delegate to `feature_flags.faiss`, `feature_flags.radon`, etc.
 
 The **knowledge cache** (`KBCache` in `tapps_core/knowledge/cache.py`) supports LRU eviction: when total disk size exceeds `cache_max_mb` (default 100 MB), least-recently-accessed entries are evicted. Access timestamps are tracked in `_metadata.json`. Call `evict_lru()` directly or rely on automatic eviction after `put()`.
 
@@ -125,7 +195,7 @@ The **knowledge cache** (`KBCache` in `tapps_core/knowledge/cache.py`) supports 
 
 ### Security model
 
-All file I/O goes through `security/path_validator.py`, which sandboxes operations to `TAPPS_MCP_PROJECT_ROOT`. The `security/` package also handles secret scanning, IO guardrails, governance checks, and content safety (`security/content_safety.py` — prompt injection filtering for all retrieved documentation and memory content).
+All file I/O goes through `security/path_validator.py`, which sandboxes operations to `TAPPS_MCP_PROJECT_ROOT`. The `security/` package also handles secret scanning, IO guardrails, governance checks, and content safety (`security/content_safety.py` — prompt injection filtering for all retrieved documentation and memory content). Subprocess calls in `pipeline/init.py` for checker installation are protected by an `_ALLOWED_CHECKER_PACKAGES` allowlist (ruff, mypy, bandit, radon, vulture, pip-audit) — only hardcoded package names reach `subprocess.run`.
 
 ### Expert system
 

@@ -13,18 +13,19 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from mcp.server.fastmcp import (
-    Context,
-)
+from mcp.server.fastmcp import Context  # noqa: TC002 - MCP SDK needs runtime access
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
 from tapps_mcp.server_helpers import error_response, success_response
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from mcp.server.fastmcp import FastMCP
 
     from tapps_core.config.settings import TappsMCPSettings
+    from tapps_core.memory.store import MemoryStore
     from tapps_mcp.scoring.scorer import CodeScorer
 
 _logger = structlog.get_logger(__name__)
@@ -33,13 +34,14 @@ _logger = structlog.get_logger(__name__)
 _VALIDATE_CONCURRENCY = 10
 
 # Track whether auto-GC has already run this session.
-_session_gc_done: bool = False
+# Uses a mutable container to avoid PLW0603 ``global`` statements.
+_session_state: dict[str, bool] = {"gc_done": False}
 
 
 def _reset_session_gc_flag() -> None:
     """Reset the auto-GC flag (for testing)."""
-    global _session_gc_done
-    _session_gc_done = False
+    _session_state["gc_done"] = False
+
 
 # Prevent garbage collection of fire-and-forget background tasks.
 # Without strong references, asyncio tasks may be collected before completion.
@@ -246,13 +248,15 @@ def _compute_impact_analysis(
         for p in paths:
             try:
                 impact_report = analyze_impact(p, project_root, graph=import_graph)
-                impact_results.append({
-                    "file": str(p),
-                    "severity": impact_report.severity,
-                    "direct_dependents": len(impact_report.direct_dependents),
-                    "transitive_dependents": len(impact_report.transitive_dependents),
-                    "test_files": len(impact_report.test_files),
-                })
+                impact_results.append(
+                    {
+                        "file": str(p),
+                        "severity": impact_report.severity,
+                        "direct_dependents": len(impact_report.direct_dependents),
+                        "transitive_dependents": len(impact_report.transitive_dependents),
+                        "test_files": len(impact_report.test_files),
+                    }
+                )
             except Exception:
                 _logger.debug("impact_analysis_file_failed", file=str(p), exc_info=True)
                 impact_results.append({"file": str(p), "severity": "unknown", "error": True})
@@ -395,19 +399,14 @@ async def tapps_validate_changed(
     total_sec = sum(r.get("security_issues", 0) for r in results)
 
     impact_data = (
-        _compute_impact_analysis(paths, settings.project_root)
-        if include_impact and paths
-        else None
+        _compute_impact_analysis(paths, settings.project_root) if include_impact and paths else None
     )
 
     summary = format_batch_summary(results)
     if quick:
         summary = f"[Quick mode - ruff only] {summary}"
     if capped:
-        summary += (
-            f" ({extra_count} additional files not validated"
-            f" - cap {MAX_BATCH_FILES})"
-        )
+        summary += f" ({extra_count} additional files not validated - cap {MAX_BATCH_FILES})"
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_changed", start, gate_passed=all_passed)
@@ -432,8 +431,8 @@ async def tapps_validate_changed(
 def _handle_no_changed_files(
     start: int,
     settings: TappsMCPSettings,
-    record_execution: Any,
-    with_nudges: Any,
+    record_execution: Callable[..., object],
+    with_nudges: Callable[..., dict[str, object]],
 ) -> dict[str, Any]:
     """Return early response when no changed Python files are found."""
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -473,9 +472,7 @@ def _start_progress_reporting(
     if callable(report):
         with contextlib.suppress(Exception):
             # Fire initial progress via background task (store ref to prevent GC)
-            init_task = asyncio.create_task(
-                _report_initial_progress(report, total_files)
-            )
+            init_task = asyncio.create_task(_report_initial_progress(report, total_files))
             _background_tasks.add(init_task)
             init_task.add_done_callback(_background_tasks.discard)
     return asyncio.create_task(
@@ -484,7 +481,7 @@ def _start_progress_reporting(
 
 
 async def _report_initial_progress(
-    report: Any,
+    report: Callable[..., object],
     total_files: int,
 ) -> None:
     """Send the initial progress=0 notification."""
@@ -564,11 +561,9 @@ def _maybe_auto_gc(
     """Run garbage collection if memory usage exceeds the configured threshold.
 
     Returns a summary dict when GC ran, or ``None`` if skipped.
-    Only runs once per session (guarded by ``_session_gc_done``).
+    Only runs once per session (guarded by ``_session_state["gc_done"]``).
     """
-    global _session_gc_done
-
-    if _session_gc_done:
+    if _session_state["gc_done"]:
         return None
 
     mem_settings = getattr(settings, "memory", None)
@@ -586,7 +581,7 @@ def _maybe_auto_gc(
     if current_count <= trigger_count:
         return None
 
-    _session_gc_done = True
+    _session_state["gc_done"] = True
 
     try:
         from tapps_core.memory.decay import DecayConfig
@@ -625,7 +620,7 @@ def _maybe_auto_gc(
 
 def _process_session_capture(
     project_root: Path,
-    store: Any,
+    store: MemoryStore,
 ) -> dict[str, Any] | None:
     """Check for and process a session-capture.json left by the Stop hook.
 
@@ -719,9 +714,7 @@ async def tapps_session_start(
             mem_store = _get_memory_store()
             if mem_store is not None:
                 snapshot = mem_store.snapshot()
-                contradicted_count = sum(
-                    1 for entry in snapshot.entries if entry.contradicted
-                )
+                contradicted_count = sum(1 for entry in snapshot.entries if entry.contradicted)
                 memory_status = {
                     "enabled": True,
                     "total": snapshot.total_count,
@@ -731,12 +724,15 @@ async def tapps_session_start(
 
                 # Auto-GC: run once per session when usage exceeds threshold
                 memory_gc_result = _maybe_auto_gc(
-                    mem_store, snapshot.total_count, settings,
+                    mem_store,
+                    snapshot.total_count,
+                    settings,
                 )
 
                 # Process session capture from previous Stop hook (Epic 34.5)
                 session_capture_result = _process_session_capture(
-                    settings.project_root, mem_store,
+                    settings.project_root,
+                    mem_store,
                 )
     except Exception:
         _logger.debug("memory_status_check_failed", exc_info=True)
@@ -774,9 +770,7 @@ async def tapps_session_start(
             server_version=info["data"]["server"].get("version", ""),
             project_root=info["data"]["configuration"].get("project_root", ""),
             project_type=None,
-            quality_preset=info["data"]["configuration"].get(
-                "quality_preset", "standard"
-            ),
+            quality_preset=info["data"]["configuration"].get("quality_preset", "standard"),
             installed_checkers=[n for n in checker_names if n],
             has_ci=False,
             has_docker=False,
@@ -788,14 +782,14 @@ async def tapps_session_start(
 
     from tapps_mcp.server_helpers import mark_session_initialized
 
-    mark_session_initialized({
-        "project_root": info["data"]["configuration"].get("project_root", ""),
-        "quality_preset": info["data"]["configuration"].get(
-            "quality_preset", "standard"
-        ),
-        "auto_initialized": False,
-        "project_profile": None,
-    })
+    mark_session_initialized(
+        {
+            "project_root": info["data"]["configuration"].get("project_root", ""),
+            "quality_preset": info["data"]["configuration"].get("quality_preset", "standard"),
+            "auto_initialized": False,
+            "project_profile": None,
+        }
+    )
 
     return _with_nudges("tapps_session_start", resp, {})
 
@@ -1028,9 +1022,7 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
                 data = yaml.safe_load(f) or {}
         except Exception as e:
             elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-            _record_execution(
-                "tapps_set_engagement_level", start, status="failed"
-            )
+            _record_execution("tapps_set_engagement_level", start, status="failed")
             return error_response(
                 "tapps_set_engagement_level",
                 elapsed_ms,
@@ -1046,9 +1038,7 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     except OSError as e:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-        _record_execution(
-            "tapps_set_engagement_level", start, status="failed"
-        )
+        _record_execution("tapps_set_engagement_level", start, status="failed")
         return error_response(
             "tapps_set_engagement_level",
             elapsed_ms,

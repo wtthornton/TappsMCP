@@ -19,7 +19,7 @@ This document lists what each init-related process does. The codebase has **two 
 | **AGENTS.md** | `create_agents_md=True` | Creates `AGENTS.md` with AI assistant workflow from template **only if missing**; never overwrites so user customizations are preserved. |
 | **TECH_STACK.md** | `create_tech_stack_md=True` | Runs project profiler, then **creates or overwrites** `TECH_STACK.md` with project type, languages, frameworks, libraries, domains, Context7 priority, CI/Docker/tests, and recommendations. |
 | **Server verification** | `verify_server=True` | Verifies server info and lists installed vs missing checkers (ruff, mypy, bandit, radon). |
-| **Install missing checkers** | `install_missing_checkers=True` | After verification, attempts to `pip install` missing checkers using each checker’s install hint (opt-in). |
+| **Install missing checkers** | `install_missing_checkers=True` | After verification, attempts to `pip install` missing checkers using each checker’s install hint (opt-in). Only packages in the `_ALLOWED_CHECKER_PACKAGES` allowlist (ruff, mypy, bandit, radon, vulture, pip-audit) are installed — arbitrary package names are rejected. |
 | **Platform rules** | `platform="claude"` or `"cursor"` | **Claude:** Appends TAPPS pipeline reference to `CLAUDE.md` (or creates it). **Cursor:** Creates `.cursor/rules/tapps-pipeline.md`. Empty string skips. |
 | **Overwrite platform rules** | `overwrite_platform_rules=True` | When true, refreshes platform rule files even if they exist. Use when upgrading TappsMCP to get latest templates. |
 | **Overwrite AGENTS.md** | `overwrite_agents_md=True` | When true, replaces AGENTS.md with the latest template. Use when upgrading to get new workflow. Default: false (validate and smart-merge only). |
@@ -31,8 +31,10 @@ This document lists what each init-related process does. The codebase has **two 
 | **Skills generation** | `platform="claude"` or `"cursor"` | Creates 3 skill directories with `SKILL.md` (tapps-score, tapps-gate, tapps-validate) in `.claude/skills/` or `.cursor/skills/`. Skips existing files. |
 | **Cursor rule types** | `platform="cursor"` | Creates 3 `.mdc` rule files: `tapps-pipeline.mdc` (alwaysApply), `tapps-python-quality.mdc` (autoAttach `*.py`), `tapps-expert-consultation.mdc` (agentRequested). Reduces context bloat. |
 | **Agent Teams** | `agent_teams=True` | Opt-in. Generates TeammateIdle and TaskCompleted hooks for quality watchdog teammate in `.claude/hooks/` and merges into `.claude/settings.json`. Only applies when `platform="claude"`. |
-| **Dry run** | `dry_run=True` | Computes and returns what would be created without writing files or warming caches. Skips server verification. Keeps run lightweight (~2–5s). See [MCP_CLIENT_TIMEOUTS.md](MCP_CLIENT_TIMEOUTS.md). |
-| **Verify only** | `verify_only=True` | Runs only server verification and returns immediately (~1–3s). Use for quick connectivity/checker checks. |
+| **Memory capture** | `memory_capture=True` | Opt-in. Generates a Stop hook that captures session quality data for memory persistence (Claude Code only). |
+| **Interactive wizard** | (auto on first run) | When MCP elicitation is supported and no existing `.tapps-mcp.yaml` or `.claude/settings.json` exists, runs a 5-question interactive wizard to configure quality preset, engagement level, agent teams, skill tier, and prompt hooks. Skipped when explicit parameters are provided. |
+| **Dry run** | `dry_run=True` | Computes and returns what would be created without writing files or warming caches. Skips server verification. Keeps run lightweight (~2-5s). See [MCP_CLIENT_TIMEOUTS.md](MCP_CLIENT_TIMEOUTS.md). |
+| **Verify only** | `verify_only=True` | Runs only server verification and returns immediately (~1-3s). Use for quick connectivity/checker checks. |
 
 ### Result shape
 

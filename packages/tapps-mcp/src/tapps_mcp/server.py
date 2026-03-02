@@ -16,6 +16,7 @@ Tool handlers are split across modules for maintainability:
 from __future__ import annotations
 
 import asyncio
+import sys
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -241,21 +242,20 @@ def _library_to_domain(library: str) -> str:
     return _LIBRARY_DOMAIN_MAP.get(library.lower(), "software-architecture")
 
 
-_checklist_persist_configured: bool = False
+_checklist_state: dict[str, bool] = {"persist_configured": False}
 
 
 def _record_call(tool_name: str) -> None:
     """Record a tool call in the session checklist tracker."""
-    global _checklist_persist_configured
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
-        if not _checklist_persist_configured:
+        if not _checklist_state["persist_configured"]:
             settings = load_settings()
             sessions_dir = settings.project_root / ".tapps-mcp" / "sessions"
             persist_path = sessions_dir / "checklist_calls.jsonl"
             CallTracker.set_persist_path(persist_path)
-            _checklist_persist_configured = True
+            _checklist_state["persist_configured"] = True
         CallTracker.record(tool_name)
     except ImportError:
         logger.debug("checklist module unavailable, skipping call record", tool=tool_name)
@@ -1073,21 +1073,32 @@ def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
 # Register tools from extracted modules & re-export for backward compatibility
 # ---------------------------------------------------------------------------
 
-from tapps_mcp import (
-    server_analysis_tools,
-    server_memory_tools,
-    server_metrics_tools,
-    server_pipeline_tools,
-    server_resources,
-    server_scoring_tools,
-)
 
-server_scoring_tools.register(mcp)
-server_pipeline_tools.register(mcp)
-server_metrics_tools.register(mcp)
-server_memory_tools.register(mcp)
-server_analysis_tools.register(mcp)
-server_resources.register(mcp)
+def _register_tool_modules() -> None:
+    """Import and register tools from extracted server modules.
+
+    Wrapped in a function to avoid E402 (module-level import not at top).
+    The modules register their ``@mcp.tool()`` handlers on the shared ``mcp``
+    instance when ``.register(mcp)`` is called.
+    """
+    from tapps_mcp import (
+        server_analysis_tools,
+        server_memory_tools,
+        server_metrics_tools,
+        server_pipeline_tools,
+        server_resources,
+        server_scoring_tools,
+    )
+
+    server_scoring_tools.register(mcp)
+    server_pipeline_tools.register(mcp)
+    server_metrics_tools.register(mcp)
+    server_memory_tools.register(mcp)
+    server_analysis_tools.register(mcp)
+    server_resources.register(mcp)
+
+
+_register_tool_modules()
 
 # ---------------------------------------------------------------------------
 # outputSchema wiring (Epic 13) — DISABLED in v0.4.1
@@ -1102,25 +1113,32 @@ server_resources.register(mcp)
 # CallToolResult with proper structuredContent.  The schema model classes
 # are still used to build the "structuredContent" key inside the JSON text.
 
-# Re-export so ``from tapps_mcp.server import tapps_X`` keeps working
-tapps_score_file = server_scoring_tools.tapps_score_file
-tapps_quality_gate = server_scoring_tools.tapps_quality_gate
-tapps_quick_check = server_scoring_tools.tapps_quick_check
-tapps_validate_changed = server_pipeline_tools.tapps_validate_changed
-tapps_session_start = server_pipeline_tools.tapps_session_start
-tapps_init = server_pipeline_tools.tapps_init
-tapps_dashboard = server_metrics_tools.tapps_dashboard
-tapps_stats = server_metrics_tools.tapps_stats
-tapps_feedback = server_metrics_tools.tapps_feedback
-tapps_research = server_metrics_tools.tapps_research
-tapps_memory = server_memory_tools.tapps_memory
-tapps_session_notes = server_analysis_tools.tapps_session_notes
-tapps_impact_analysis = server_analysis_tools.tapps_impact_analysis
-tapps_report = server_analysis_tools.tapps_report
-tapps_dead_code = server_analysis_tools.tapps_dead_code
-tapps_dependency_scan = server_analysis_tools.tapps_dependency_scan
-tapps_dependency_graph = server_analysis_tools.tapps_dependency_graph
-_promote_note_to_memory = server_analysis_tools._promote_note_to_memory
+# Re-export so ``from tapps_mcp.server import tapps_X`` keeps working.
+# Modules were imported inside _register_tool_modules(); access via sys.modules.
+_scoring = sys.modules["tapps_mcp.server_scoring_tools"]
+_pipeline = sys.modules["tapps_mcp.server_pipeline_tools"]
+_metrics = sys.modules["tapps_mcp.server_metrics_tools"]
+_memory = sys.modules["tapps_mcp.server_memory_tools"]
+_analysis = sys.modules["tapps_mcp.server_analysis_tools"]
+
+tapps_score_file = _scoring.tapps_score_file
+tapps_quality_gate = _scoring.tapps_quality_gate
+tapps_quick_check = _scoring.tapps_quick_check
+tapps_validate_changed = _pipeline.tapps_validate_changed
+tapps_session_start = _pipeline.tapps_session_start
+tapps_init = _pipeline.tapps_init
+tapps_dashboard = _metrics.tapps_dashboard
+tapps_stats = _metrics.tapps_stats
+tapps_feedback = _metrics.tapps_feedback
+tapps_research = _metrics.tapps_research
+tapps_memory = _memory.tapps_memory
+tapps_session_notes = _analysis.tapps_session_notes
+tapps_impact_analysis = _analysis.tapps_impact_analysis
+tapps_report = _analysis.tapps_report
+tapps_dead_code = _analysis.tapps_dead_code
+tapps_dependency_scan = _analysis.tapps_dependency_scan
+tapps_dependency_graph = _analysis.tapps_dependency_graph
+_promote_note_to_memory = _analysis._promote_note_to_memory
 
 
 # ---------------------------------------------------------------------------
@@ -1149,7 +1167,7 @@ def run_server(
         mcp.run(transport="stdio")
     elif transport == "http":
         import uvicorn
-        from starlette.requests import Request
+        from starlette.requests import Request  # noqa: TC002
         from starlette.responses import HTMLResponse
         from starlette.routing import Route
 

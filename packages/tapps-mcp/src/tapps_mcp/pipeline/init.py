@@ -21,6 +21,11 @@ from tapps_mcp.prompts.prompt_loader import (
     load_platform_rules,
 )
 
+# Allowlist of packages that _run_server_verification may pip-install.
+# install_hints come from hardcoded CHECKER_SPECS in tool_detection.py;
+# this allowlist is defence-in-depth against unexpected hint values.
+_ALLOWED_CHECKER_PACKAGES = {"ruff", "mypy", "bandit", "radon", "vulture", "pip-audit"}
+
 
 class _SafeWriter(Protocol):
     def __call__(self, rel_path: str, content: str) -> None: ...
@@ -500,6 +505,8 @@ def _run_server_verification(
         for hint in install_hints:
             if hint and hint.startswith("pip install "):
                 pkg = hint.replace("pip install ", "").strip()
+                if pkg not in _ALLOWED_CHECKER_PACKAGES:
+                    continue
                 with contextlib.suppress(subprocess.TimeoutExpired, FileNotFoundError, OSError):
                     subprocess.run(
                         [sys.executable, "-m", "pip", "install", pkg],
@@ -534,9 +541,7 @@ def _render_list_section(
 def _render_infrastructure_section(profile: ProjectProfile) -> list[str]:
     """Render the Infrastructure section of TECH_STACK.md."""
     ci_str = "Yes (" + ", ".join(profile.ci_systems) + ")" if profile.has_ci else "No"
-    tests_str = (
-        "Yes (" + ", ".join(profile.test_frameworks) + ")" if profile.has_tests else "No"
-    )
+    tests_str = "Yes (" + ", ".join(profile.test_frameworks) + ")" if profile.has_tests else "No"
     docker_str = "Yes" if profile.has_docker else "No"
     pkg_str = ", ".join(profile.package_managers) or "N/A"
     return [
@@ -569,8 +574,9 @@ def _render_tech_stack_md(profile: ProjectProfile) -> str:
     for p in ts.context7_priority or []:
         lines.append(f"- {p}")
     lines.extend(_render_infrastructure_section(profile))
-    lines.extend(_render_list_section("Recommendations",
-                                      profile.quality_recommendations, fallback="(none)"))
+    lines.extend(
+        _render_list_section("Recommendations", profile.quality_recommendations, fallback="(none)")
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -802,9 +808,7 @@ def _bootstrap_claude_settings(
 
     if not settings_file.exists():
         settings_dir.mkdir(parents=True, exist_ok=True)
-        config = generate_permission_settings(
-            project_root, engagement_level=engagement_level
-        )
+        config = generate_permission_settings(project_root, engagement_level=engagement_level)
         settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
         return "created"
 

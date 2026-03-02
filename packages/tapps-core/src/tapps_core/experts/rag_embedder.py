@@ -11,15 +11,15 @@ from abc import ABC, abstractmethod
 
 import structlog
 
+from tapps_core.config.feature_flags import feature_flags as _ff
+
 logger = structlog.get_logger(__name__)
 
-# Optional dependency check.
-try:
-    from sentence_transformers import SentenceTransformer
+# Optional dependency check — delegates to centralized feature flags.
+SENTENCE_TRANSFORMERS_AVAILABLE = _ff.sentence_transformers
 
-    SENTENCE_TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    SENTENCE_TRANSFORMERS_AVAILABLE = False
+if SENTENCE_TRANSFORMERS_AVAILABLE:
+    from sentence_transformers import SentenceTransformer
 
 _DEFAULT_MODEL = "all-MiniLM-L6-v2"
 

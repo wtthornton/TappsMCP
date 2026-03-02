@@ -14,19 +14,18 @@ from typing import Any
 import structlog
 from pydantic import BaseModel, Field
 
+from tapps_core.config.feature_flags import feature_flags as _ff
 from tapps_core.experts.rag_chunker import Chunk
 from tapps_core.experts.rag_embedder import Embedder  # noqa: TC001
 
 logger = structlog.get_logger(__name__)
 
-# Optional dependency check.
-try:
+# Optional dependency check — delegates to centralized feature flags.
+FAISS_AVAILABLE = _ff.faiss
+
+if FAISS_AVAILABLE:
     import faiss
     import numpy as np
-
-    FAISS_AVAILABLE = True
-except ImportError:
-    FAISS_AVAILABLE = False
 
 
 class IndexMetadata(BaseModel):

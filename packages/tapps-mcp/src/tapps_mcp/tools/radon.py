@@ -11,6 +11,7 @@ import json
 
 import structlog
 
+from tapps_core.config.feature_flags import feature_flags as _ff
 from tapps_mcp.scoring.constants import COMPLEXITY_SCALING_FACTOR, clamp_individual
 from tapps_mcp.tools.subprocess_runner import run_command, run_command_async
 
@@ -174,18 +175,13 @@ async def run_radon_mi_async(file_path: str, *, cwd: str | None = None, timeout:
 
 
 def _is_radon_importable() -> bool:
-    """Check whether the radon library is available for direct import."""
-    global _RADON_AVAILABLE
-    if _RADON_AVAILABLE is None:
-        import importlib.util
+    """Check whether the radon library is available for direct import.
 
-        try:
-            _RADON_AVAILABLE = (
-                importlib.util.find_spec("radon.complexity") is not None
-                and importlib.util.find_spec("radon.metrics") is not None
-            )
-        except (ModuleNotFoundError, ValueError):
-            _RADON_AVAILABLE = False
+    Delegates to :data:`tapps_core.config.feature_flags.feature_flags`.
+    """
+    global _RADON_AVAILABLE  # noqa: PLW0603
+    if _RADON_AVAILABLE is None:
+        _RADON_AVAILABLE = _ff.radon
     return _RADON_AVAILABLE
 
 

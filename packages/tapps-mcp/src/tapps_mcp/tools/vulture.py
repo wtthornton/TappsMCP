@@ -174,8 +174,10 @@ async def run_vulture_async(
 # ---------------------------------------------------------------------------
 
 _EXCLUDED_DIRS: frozenset[str] = frozenset({
-    ".venv", "venv", "__pycache__", ".git", ".mypy_cache",
+    ".venv", "venv", "env", "ENV", "__pycache__", ".git", ".mypy_cache",
     ".pytest_cache", ".ruff_cache", "node_modules", ".tox",
+    "dist", "build", ".eggs", "htmlcov", ".tapps-agents",
+    ".tapps-mcp-cache", "site-packages",
 })
 
 _GIT_DIFF_TIMEOUT = 5
@@ -201,9 +203,12 @@ def collect_python_files(project_root: Path) -> list[str]:
     """
     result: list[str] = []
     for path in sorted(project_root.rglob("*.py")):
-        # Skip excluded directories
+        # Skip excluded directories (exact match or .venv* prefix)
         parts = path.relative_to(project_root).parts
-        if any(part in _EXCLUDED_DIRS for part in parts):
+        if any(
+            part in _EXCLUDED_DIRS or part.startswith(".venv")
+            for part in parts
+        ):
             continue
         result.append(str(path.relative_to(project_root)))
     return result

@@ -14,31 +14,36 @@ Thank you for considering contributing to TappsMCP! This document provides guide
 ```bash
 git clone https://github.com/tapps-mcp/tapps-mcp.git
 cd tapps-mcp
-uv sync
+uv sync --all-packages
 ```
 
 ### Running Tests
 
+This is a **uv workspace monorepo** — run tests per package to avoid conftest collisions:
+
 ```bash
-# All tests (2850+ tests)
-uv run pytest tests/ -v
+# Run tests per package (4,800+ tests total)
+uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1,269 tests)
+uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (3,420 tests)
+uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (107 tests)
 
 # With coverage (80% minimum required)
-uv run pytest tests/ --cov=tapps_mcp --cov-report=term-missing
+uv run pytest packages/tapps-mcp/tests/ --cov=tapps_mcp --cov-report=term-missing
 
 # Specific test file
-uv run pytest tests/unit/test_scorer.py -v
+uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v
 ```
 
 ### Linting and Type Checking
 
 ```bash
 # Lint
-uv run ruff check src/
-uv run ruff format --check src/
+uv run ruff check packages/*/src/
+uv run ruff format --check packages/*/src/
 
 # Type check (strict mode)
-uv run mypy --strict src/tapps_mcp/
+uv run mypy --strict packages/tapps-mcp/src/tapps_mcp/
+uv run mypy --strict packages/tapps-core/src/tapps_core/
 ```
 
 ### Verify Setup
@@ -84,14 +89,14 @@ uv run tapps-mcp serve
 1. Add the tool handler in the appropriate `server_*.py` file (or `server.py` for core tools)
 2. Use `@mcp.tool()` decorator with clear docstring (lead with "When to use")
 3. Add `_record_call("tool_name")` at the start of the handler
-4. Register the tool in the checklist task map (`tools/checklist.py`)
-5. Add tests in `tests/unit/` and optionally `tests/integration/`
+4. Register the tool in the checklist task map (`packages/tapps-mcp/src/tapps_mcp/tools/checklist.py`)
+5. Add tests in `packages/tapps-mcp/tests/unit/` and optionally `tests/integration/`
 6. Update `AGENTS.md` with the new tool's "When to use" entry
 7. Update `README.md` tools reference table
 
 ### Adding Knowledge Files
 
-Expert knowledge files live in `src/tapps_mcp/experts/knowledge/{domain}/`. To add a new topic:
+Expert knowledge files live in `packages/tapps-core/src/tapps_core/experts/knowledge/{domain}/`. To add a new topic:
 
 1. Create a markdown file in the appropriate domain directory
 2. Follow the existing format (title, sections, code examples)
@@ -100,12 +105,12 @@ Expert knowledge files live in `src/tapps_mcp/experts/knowledge/{domain}/`. To a
 
 ### Adding Validators
 
-Config validators live in `src/tapps_mcp/validators/`. To add a new validator:
+Config validators live in `packages/tapps-mcp/src/tapps_mcp/validators/`. To add a new validator:
 
 1. Create a new module in `validators/`
 2. Implement a validation function following the pattern in `base.py`
 3. Register it in the auto-detection logic in `base.py`
-4. Add tests in `tests/unit/`
+4. Add tests in `packages/tapps-mcp/tests/unit/`
 
 ## Project Context
 

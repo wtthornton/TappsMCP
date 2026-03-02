@@ -1,10 +1,25 @@
+<div align="center">
+
 # Tapps Platform
 
-> **A quality and documentation toolset for AI coding assistants.** Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs deterministic tools for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and domain expert consultation — through structured tool calls instead of prompt injection.
+**A quality and documentation toolset for AI coding assistants.**
 
-Use TappsMCP and DocsMCP in your projects so **Claude Code**, **Cursor**, **VS Code Copilot**, and other MCP-capable clients produce higher-quality code with consistent, repeatable standards.
+Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs deterministic tools for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and domain expert consultation.
+
+[![CI](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
+[![Tests](https://img.shields.io/badge/tests-4%2C800%2B_passing-brightgreen.svg)](#development)
+[![Tools](https://img.shields.io/badge/MCP_tools-28-blue.svg)](#tools-reference)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
+
+[Quick Start](#quick-start) · [Install](#install) · [Tools Reference](#tools-reference) · [Docs](#docs-and-roadmap)
+
+</div>
+
+---
 
 ### Packages
 
@@ -14,9 +29,16 @@ Use TappsMCP and DocsMCP in your projects so **Claude Code**, **Cursor**, **VS C
 | **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 28 |
 | **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 3 (MVP) |
 
-[![CI](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+### Key highlights
+
+- **28 deterministic MCP tools** — no LLM calls in the tool chain; same input always produces same output
+- **7-category code scoring** — complexity, security, maintainability, test coverage, performance, structure, developer experience
+- **17 domain experts** with 139 curated knowledge files and RAG-backed answers
+- **Persistent shared memory** — project decisions survive across sessions (SQLite + BM25 retrieval)
+- **Unified feature flags** — optional dependency detection (faiss, numpy, radon) with graceful degradation
+- **Platform generation** — auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
+- **Self-bootstrapping** — `tapps_init` sets up quality infrastructure in any project with one call
+- **4,800+ tests** across 3 packages with strict mypy and ruff enforcement
 
 ---
 
@@ -27,6 +49,8 @@ Use TappsMCP and DocsMCP in your projects so **Claude Code**, **Cursor**, **VS C
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Connecting your AI client](#connecting-your-ai-client)
+- [Bootstrapping TappsMCP in your project](#bootstrapping-tappsmcp-in-your-project)
+- [Upgrading](#upgrading)
 - [CLI utilities](#cli-utilities)
 - [Tools reference](#tools-reference)
 - [Configuration](#configuration)
@@ -803,7 +827,48 @@ Optional flags:
 - `install_missing_checkers=True` — auto-install missing ruff/mypy/bandit/radon
 - `agent_teams=True` — generate Agent Teams hooks for quality watchdog teammate (Claude Code only)
 
-After upgrading TappsMCP, run `tapps-mcp upgrade` to refresh all generated files, or re-run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True`. See [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md).
+After upgrading TappsMCP, run `tapps-mcp upgrade` to refresh all generated files, or re-run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True`. See [Upgrading](#upgrading) and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md).
+
+---
+
+## Upgrading
+
+When you upgrade TappsMCP, generated files (AGENTS.md, hooks, rules, skills) may need refreshing.
+
+### Quick upgrade (recommended)
+
+```bash
+pip install -U tapps-mcp                    # 1. Upgrade the package
+tapps-mcp upgrade --dry-run                 # 2. Preview what would change
+tapps-mcp upgrade                           # 3. Apply updates
+```
+
+A **backup** is automatically created before overwriting files. Use `tapps-mcp rollback` to restore if needed:
+
+```bash
+tapps-mcp rollback --list                   # List available backups
+tapps-mcp rollback                          # Restore from latest backup
+tapps-mcp rollback --backup-id <timestamp>  # Restore specific backup
+```
+
+### From within an AI session
+
+```
+tapps_upgrade(dry_run=true)                 # Preview changes
+tapps_upgrade()                             # Apply updates
+```
+
+### Fine-grained control
+
+| What to refresh | How |
+|-----------------|-----|
+| AGENTS.md (workflow, tool hints) | `tapps_init(overwrite_agents_md=True)` |
+| Platform rules (CLAUDE.md, .cursor/rules) | `tapps_init(overwrite_platform_rules=True, platform="claude")` |
+| TECH_STACK.md, caches, RAG indices | `tapps_init()` (default run refreshes these) |
+| MCP host config | `tapps-mcp init --force` |
+| Engagement level | `tapps_set_engagement_level("high")` then `tapps_init(overwrite_agents_md=True)` |
+
+See [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide.
 
 ---
 
@@ -815,12 +880,9 @@ This is a **uv workspace monorepo** with three packages. All commands run from t
 # Install all packages (tapps-core, tapps-mcp, docs-mcp)
 uv sync --all-packages
 
-# Run all tests across the entire workspace (4300+ tests)
-uv run pytest packages/tapps-core/tests/ packages/tapps-mcp/tests/ packages/docs-mcp/tests/ -v
-
-# Run tests for a single package
-uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1087 tests)
-uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (3123 tests)
+# Run tests per package (recommended — avoids conftest collisions)
+uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1,269 tests)
+uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (3,420 tests)
 uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (107 tests)
 
 # Run a single test file
@@ -967,7 +1029,7 @@ DocsMCP is in early development. Planned features include README generation, API
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 
-**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅ · LLM Engagement Level ✅ · GitHub Templates & CI ✅ · GitHub Copilot & Governance ✅ · Shared Memory Foundation ✅ · Memory Intelligence ✅ · Memory Retrieval & Integration ✅ · **Monorepo Workspace** ✅ · **tapps-core Extraction** ✅ · **DocsMCP Server Skeleton** ✅
+**Roadmap (epics):** Foundation & Security ✅ · Core Quality MVP ✅ · Knowledge & Docs ✅ · Expert System ✅ · Project Context ✅ · Adaptive Learning ✅ · Distribution ✅ · Metrics & Dashboard ✅ · Pipeline Orchestration ✅ · Scoring Reliability ✅ · Expert + Context7 Integration ✅ · Retrieval Optimization ✅ · Platform Integration ✅ · Structured Outputs ✅ · Dead Code Detection ✅ · Dependency Vulnerability Scanning ✅ · Doc Backend Resilience ✅ · Circular Dependency Detection ✅ · MCP Upgrade Tool & Exe Path Handling ✅ · LLM Engagement Level ✅ · GitHub Templates & CI ✅ · GitHub Copilot & Governance ✅ · Shared Memory Foundation ✅ · Memory Intelligence ✅ · Memory Retrieval & Integration ✅ · Monorepo Workspace ✅ · tapps-core Extraction ✅ · DocsMCP Server Skeleton ✅ · Doc Provider Simplification ✅ · Platform Artifact Correctness ✅ · Memory Retrieval Upgrade ✅ · Expert Adaptive Integration ✅ · **Quality Review Remediation** ✅ · *Hook & Platform Expansion* (next) · *Benchmark Infrastructure* (planned)
 
 ---
 

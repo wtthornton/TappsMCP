@@ -92,5 +92,9 @@ A normal `tapps_init` run (without overwrite flags) will:
 | Refresh MCP config | `tapps-mcp init --force` |
 | Refresh caches and TECH_STACK | `tapps_init()` (default) |
 | Verify upgrade | `tapps-mcp doctor` |
+| Rollback if upgrade causes issues | `tapps-mcp rollback` (restores from automatic pre-upgrade backup) |
+| List available backups | `tapps-mcp rollback --list` |
+
+Backups are stored in `.tapps-mcp/backups/` with the 5 most recent kept automatically. Each backup includes a `manifest.json` listing all files that were overwritten.
 
 See [INIT_AND_UPGRADE_FEATURE_LIST.md](INIT_AND_UPGRADE_FEATURE_LIST.md) for the full init and upgrade behavior.
