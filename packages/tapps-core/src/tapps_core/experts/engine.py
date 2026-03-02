@@ -335,6 +335,45 @@ def _retrieve_knowledge(
     return _KnowledgeResult(chunks=chunks, context=context, sources=sources)
 
 
+def _unique_top_sources(chunks: list[Any], limit: int = 3) -> list[str]:
+    """Extract unique source file names from the top *limit* chunks.
+
+    Preserves insertion order while deduplicating.
+    """
+    sources: list[str] = []
+    seen: set[str] = set()
+    for chunk in chunks[:limit]:
+        if chunk.source_file not in seen:
+            seen.add(chunk.source_file)
+            sources.append(chunk.source_file)
+    return sources
+
+
+def _collect_source_ages(
+    sources: list[str],
+    knowledge_base_path: Path,
+) -> list[int]:
+    """Compute file ages in days for each source that exists on disk.
+
+    Silently skips missing files and files that cannot be stat'd.
+    """
+    from datetime import UTC, datetime
+
+    now = datetime.now(tz=UTC)
+    ages_days: list[int] = []
+    for source in sources:
+        source_path = knowledge_base_path / source
+        if not source_path.exists():
+            continue
+        try:
+            mtime = datetime.fromtimestamp(source_path.stat().st_mtime, tz=UTC)
+            age = (now - mtime).days
+            ages_days.append(age)
+        except OSError:
+            pass
+    return ages_days
+
+
 def _check_freshness(
     knowledge: _KnowledgeResult,
     knowledge_base_path: Path,
@@ -348,31 +387,11 @@ def _check_freshness(
     if not knowledge.chunks:
         return _FreshnessResult()
 
-    from datetime import UTC, datetime
-
-    top_sources: list[str] = []
-    seen: set[str] = set()
-    for chunk in knowledge.chunks[:3]:
-        if chunk.source_file not in seen:
-            seen.add(chunk.source_file)
-            top_sources.append(chunk.source_file)
-
+    top_sources = _unique_top_sources(knowledge.chunks)
     if not top_sources:
         return _FreshnessResult()
 
-    now = datetime.now(tz=UTC)
-    ages_days: list[int] = []
-    for source in top_sources:
-        source_path = knowledge_base_path / source
-        if not source_path.exists():
-            continue
-        try:
-            mtime = datetime.fromtimestamp(source_path.stat().st_mtime, tz=UTC)
-            age = (now - mtime).days
-            ages_days.append(age)
-        except OSError:
-            pass
-
+    ages_days = _collect_source_ages(top_sources, knowledge_base_path)
     if not ages_days:
         return _FreshnessResult()
 
