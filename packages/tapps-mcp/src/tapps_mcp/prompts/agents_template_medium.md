@@ -1,69 +1,22 @@
 # TappsMCP - instructions for AI assistants
 
-When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor, VS Code Copilot, Claude Desktop, etc.), you have access to tools that provide **deterministic code quality checks, doc lookup, and domain expert advice**. TappsMCP is a quality toolset designed to help your project and LLM produce the best possible code - use it to avoid hallucinated APIs, missed quality steps, and inconsistent output.
+When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
+
+**File paths:** Use paths relative to project root (e.g. `src/main.py`). Absolute host paths also work when `TAPPS_MCP_HOST_PROJECT_ROOT` is set.
 
 ---
 
-## What TappsMCP is
+## Essential tools (always-on workflow)
 
-TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 28 tools for:
+| Tool | When to use |
+|------|--------------|
+| **tapps_session_start** | **FIRST call in every session** - server info only |
+| **tapps_quick_check** | **After editing any Python file** - quick score + gate + security |
+| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files |
+| **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
+| **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-- **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
-- **Security scanning** (Bandit + secret detection with redacted context)
-- **Quality gates** (pass/fail against configurable presets: standard, strict, framework)
-- **Dead code detection** (Vulture-based unused function/class/import/variable detection with confidence scoring)
-- **Dependency vulnerability scanning** (pip-audit for known CVEs in third-party packages)
-- **Circular dependency detection** (import graph analysis, cycle detection, coupling metrics)
-- **Documentation lookup** (up-to-date library docs via Context7 + LlmsTxt fallback and cache)
-- **Config validation** (Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB best practices)
-- **Domain experts** (17 built-in experts with RAG-backed answers, optional vector search)
-- **Project context** (project type detection, tech stack, impact analysis)
-- **Session management** (persist decisions, constraints, and notes across long sessions)
-- **Quality reports** (JSON, Markdown, or HTML summaries)
-- **Metrics and feedback** (dashboard, usage stats, adaptive learning via feedback)
-- **Session checklist** (track which tools were used so you don't skip required steps)
-- **Pipeline orchestration** (batch validation, workflow prompts, project initialization)
-- **Structured outputs** (machine-parseable JSON alongside human-readable text for all scoring tools)
-
-You only see these tools when the host has started the TappsMCP server and attached it to your session.
-
-**File paths:** For tools that take `file_path`, use **paths relative to the project root** (e.g. `src/main.py`, `tests/test_foo.py`) so they work with both stdio and Docker. If the server is configured with `TAPPS_MCP_HOST_PROJECT_ROOT` (e.g. when using Docker), you can also pass **absolute host paths** (e.g. `C:\projects\myapp\src\main.py`); the server will map them to the project root.
-
----
-
-## When to use each tool
-
-| Tool | When to use it |
-|------|----------------|
-| **tapps_session_start** | **FIRST call in every session** - returns server info (version, checkers, configuration) only. Call **tapps_project_profile** when you need project context. |
-| **tapps_server_info** | At **session start** - discover version, available tools, and installed checkers. Response includes a short `recommended_workflow` string. |
-| **tapps_score_file** | When **editing or reviewing** a Python file. Use `quick=True` during edit-lint-fix loops; use full (default) **before declaring work complete**. |
-| **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
-| **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
-| **tapps_quality_gate** | **Before declaring work complete** - ensures the file passes the configured quality preset. Gate failures are sorted by category weight (highest-impact first); a security floor of 50/100 is enforced. Do not consider work done until this passes (or the user accepts the risk). |
-| **tapps_validate_changed** | **Before declaring multi-file work complete** - auto-detects changed files via git diff and runs score + gate on each. **Default is quick mode** (ruff-only, under ~10s). Includes impact analysis by default. Pass `quick=false` for full validation. |
-| **tapps_lookup_docs** | **Before writing code** that uses an external library - use the returned docs to avoid hallucinated APIs. |
-| **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
-| **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file -> `domain="testing-strategies"`). |
-| **tapps_research** | When you need **combined expert + docs** in one call - consults the domain expert, then auto-supplements with Context7 documentation when RAG is empty or confidence is low. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
-| **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
-| **tapps_project_profile** | When you need **project context** - detects project type, tech stack, CI/Docker/tests, and recommendations. Session start does not include profile; call this on demand. |
-| **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. |
-| **tapps_impact_analysis** | Before **modifying a file's public API** - shows what depends on it and what could break. |
-| **tapps_report** | After scoring/gating, when the user wants a **formatted quality summary** (Markdown, JSON, or HTML). |
-| **tapps_checklist** | **Before declaring work complete** - reports which tools were called and which are missing (with reasons). Fix missing required steps before saying done. |
-| **tapps_dashboard** | When the user wants to **review how TappsMCP is performing** - scoring accuracy, gate pass rates, expert effectiveness, cache performance, quality trends, and alerts. Supports json, markdown, and html output. |
-| **tapps_stats** | When the user wants **usage statistics** - call counts, success rates, average durations, cache hit rates, and gate pass rates. Filterable by tool and time period. |
-| **tapps_feedback** | After receiving a tool result - report whether the output was **helpful or not**. This feedback improves adaptive scoring and expert weights over time. |
-| **tapps_dead_code** | When you want to **find unused code** in a Python file - detects unused functions, classes, imports, and variables with confidence scoring. Use during refactoring or code review. |
-| **tapps_dependency_scan** | When you want to **check for vulnerable dependencies** - scans pip packages for known CVEs using pip-audit. Use before releases or security reviews. |
-| **tapps_dependency_graph** | When you want to **understand module dependencies** - builds import graph, detects circular imports, and calculates coupling metrics. Use before refactoring or when investigating import errors. |
-| **tapps_workflow** | When you want the **recommended tool call order** for a specific task type (general, feature, bugfix, refactor, security, review). |
-| **tapps_init** | At **pipeline bootstrap** - creates AGENTS.md, TECH_STACK.md, platform rules, optionally warms caches. On first run, presents an interactive wizard (5 questions; answers persist in `.tapps-mcp.yaml`). Call once per project (or when upgrading). |
-| **tapps_upgrade** | After a **TappsMCP version update** - validates and refreshes AGENTS.md, platform rules, hooks, agents, skills, and settings. Creates a timestamped backup before overwriting (`tapps-mcp rollback` to restore). Preserves custom command paths (e.g. PyInstaller exe). Use `dry_run: true` to preview. |
-| **tapps_doctor** | When **diagnosing configuration issues** - checks binary availability, MCP configs, platform rules, generated files, hooks, and installed quality tools. Returns per-check pass/fail with remediation hints. |
-| **tapps_set_engagement_level** | When the user requests to change enforcement intensity (e.g. \"set tappsmcp to high\" or \"make quality checks optional\"). Writes to `.tapps-mcp.yaml`; run `tapps_init` with overwrite to regenerate AGENTS.md and rules. |
-| **tapps_memory** | **RECOMMENDED** - check `tapps_memory(action="search", query="...")` for relevant project decisions. Save important learnings with `tapps_memory(action="save", ...)`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |
+**For full tool reference** (28 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 

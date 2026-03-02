@@ -1,6 +1,6 @@
 # Epic 37: Pipeline Onboarding & Distribution
 
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P1 — High (plugin packaging enables one-click installation; interactive onboarding improves first-run experience)
 **Estimated LOE:** ~2.5-3 weeks (1 developer)
 **Dependencies:** Epic 33 (Platform Artifact Correctness), Epic 36 (Hook Expansion), Epic 6 (Distribution), Epic 8 (Pipeline Orchestration)

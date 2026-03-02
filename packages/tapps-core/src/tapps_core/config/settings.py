@@ -216,6 +216,15 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Destructive command guard (opt-in PreToolUse hook)
+    destructive_guard: bool = Field(
+        default=False,
+        description=(
+            "When True, generate a PreToolUse hook that blocks Bash commands "
+            "containing destructive patterns (rm -rf, format c:, etc.). Opt-in only."
+        ),
+    )
+
     # Memory subsystem (Epic 23-25)
     memory: MemorySettings = Field(default_factory=MemorySettings)
 

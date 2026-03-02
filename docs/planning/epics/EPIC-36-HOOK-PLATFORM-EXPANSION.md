@@ -1,6 +1,6 @@
 # Epic 36: Hook & Platform Generation Expansion
 
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P1 — High (expands hook coverage from 7 to 10 events, adds prompt-type hooks, engagement-level blocking)
 **Estimated LOE:** ~2-2.5 weeks (1 developer)
 **Dependencies:** Epic 33 (Platform Artifact Correctness), Epic 8 (Pipeline Orchestration), Epic 18 (LLM Engagement Level)

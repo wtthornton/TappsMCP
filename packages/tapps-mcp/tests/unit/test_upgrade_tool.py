@@ -439,19 +439,19 @@ class TestUpgradePipeline:
 
 
 class TestExpectedToolsCount:
-    """Verify tool counts match after adding tapps_upgrade and tapps_doctor."""
+    """Verify core tools are in EXPECTED_TOOLS (slimmed template P1)."""
 
-    def test_expected_tools_is_26(self) -> None:
+    def test_expected_tools_has_core_set(self) -> None:
         from tapps_mcp.pipeline.agents_md import EXPECTED_TOOLS
 
-        assert len(EXPECTED_TOOLS) == 28
+        assert len(EXPECTED_TOOLS) >= 6
 
-    def test_upgrade_in_expected_tools(self) -> None:
+    def test_session_start_in_expected_tools(self) -> None:
         from tapps_mcp.pipeline.agents_md import EXPECTED_TOOLS
 
-        assert "tapps_upgrade" in EXPECTED_TOOLS
+        assert "tapps_session_start" in EXPECTED_TOOLS
 
-    def test_doctor_in_expected_tools(self) -> None:
+    def test_init_in_expected_tools(self) -> None:
         from tapps_mcp.pipeline.agents_md import EXPECTED_TOOLS
 
-        assert "tapps_doctor" in EXPECTED_TOOLS
+        assert "tapps_init" in EXPECTED_TOOLS

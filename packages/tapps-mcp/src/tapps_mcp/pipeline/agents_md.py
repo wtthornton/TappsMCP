@@ -15,9 +15,9 @@ from tapps_mcp import __version__
 # ---------------------------------------------------------------------------
 
 # The 9 canonical sections in the AGENTS.md template (## headings)
+# Slimmed template (P1) uses "Essential tools" instead of "What TappsMCP is" + "When to use each tool"
 EXPECTED_SECTIONS: list[str] = [
-    "What TappsMCP is",
-    "When to use each tool",
+    "Essential tools (always-on workflow)",
     "tapps_session_start vs tapps_init",
     "Domain hints for tapps_consult_expert",
     "Recommended workflow",
@@ -27,36 +27,14 @@ EXPECTED_SECTIONS: list[str] = [
     "Troubleshooting: MCP tool permissions",
 ]
 
-# The 28 canonical tool names the template should mention
+# Core tools the template must mention (slimmed template references these; full table in skill)
 EXPECTED_TOOLS: list[str] = [
-    "tapps_server_info",
     "tapps_session_start",
-    "tapps_score_file",
     "tapps_quick_check",
-    "tapps_security_scan",
-    "tapps_quality_gate",
     "tapps_validate_changed",
-    "tapps_lookup_docs",
-    "tapps_validate_config",
-    "tapps_consult_expert",
-    "tapps_research",
-    "tapps_list_experts",
-    "tapps_project_profile",
-    "tapps_session_notes",
-    "tapps_memory",
-    "tapps_impact_analysis",
-    "tapps_report",
     "tapps_checklist",
-    "tapps_dashboard",
-    "tapps_stats",
-    "tapps_feedback",
+    "tapps_quality_gate",
     "tapps_init",
-    "tapps_upgrade",
-    "tapps_doctor",
-    "tapps_set_engagement_level",
-    "tapps_dead_code",
-    "tapps_dependency_scan",
-    "tapps_dependency_graph",
 ]
 
 _VERSION_RE = re.compile(r"<!--\s*tapps-agents-version:\s*([\d.]+)\s*-->")

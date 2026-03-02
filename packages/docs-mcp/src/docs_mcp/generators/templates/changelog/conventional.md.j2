@@ -1,0 +1,39 @@
+# Changelog
+{% if unreleased_entries %}
+
+## Unreleased
+{% for category, entries in unreleased_entries.items() %}
+
+### {{ category }}
+{% for entry in entries %}
+* {% if entry.scope %}**{{ entry.scope }}:** {% endif %}{{ entry.description }}{% if entry.commit_hash %} ({{ entry.commit_hash }}){% endif %}
+
+{% endfor %}
+{% endfor %}
+{% if unreleased_breaking %}
+
+### BREAKING CHANGES
+{% for entry in unreleased_breaking %}
+* {{ entry.description }}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% for version in versions %}
+
+## {{ version.version }} ({{ version.date }})
+{% for category, entries in version.grouped_entries.items() %}
+
+### {{ category }}
+{% for entry in entries %}
+* {% if entry.scope %}**{{ entry.scope }}:** {% endif %}{{ entry.description }}{% if entry.commit_hash %} ({{ entry.commit_hash }}){% endif %}
+
+{% endfor %}
+{% endfor %}
+{% if version.breaking_entries %}
+
+### BREAKING CHANGES
+{% for entry in version.breaking_entries %}
+* {{ entry.description }}
+{% endfor %}
+{% endif %}
+{% endfor %}

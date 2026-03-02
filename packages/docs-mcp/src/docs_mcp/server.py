@@ -717,3 +717,14 @@ def run_server(
     else:
         msg = f"Unknown transport: {transport}"
         raise ValueError(msg)
+
+
+# ---------------------------------------------------------------------------
+# Import tool modules that register on the shared ``mcp`` instance.
+# Must be at the bottom to avoid circular imports.
+# ---------------------------------------------------------------------------
+
+import docs_mcp.server_analysis as _server_analysis  # noqa: E402, F401
+import docs_mcp.server_gen_tools as _server_gen_tools  # noqa: E402, F401
+import docs_mcp.server_git_tools as _server_git_tools  # noqa: E402, F401
+import docs_mcp.server_val_tools as _server_val_tools  # noqa: E402, F401

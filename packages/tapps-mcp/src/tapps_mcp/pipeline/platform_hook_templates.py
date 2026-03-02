@@ -160,6 +160,38 @@ print(d.get('error','unknown error')[:200])
 esac
 exit 0
 """,
+    "tapps-pre-bash.sh": """\
+#!/usr/bin/env bash
+# TappsMCP PreToolUse hook (Bash) - destructive command guard (opt-in)
+# Blocks commands containing rm -rf, format c:, etc. Exit 2 = block, 0 = allow.
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+CMD=$(echo "$INPUT" | "$PYBIN" -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    ti = d.get('tool_input', {}) or {}
+    cmd = ti.get('command', '') or ti.get('cmd', '')
+    if not cmd and isinstance(ti.get('args'), list):
+        cmd = ' '.join(str(a) for a in ti['args'])
+    print(cmd if isinstance(cmd, str) else '')
+except Exception:
+    print('')
+" 2>/dev/null)
+# Blocklist (substring match, case-insensitive for format/del)
+BLOCK=0
+case "$CMD" in
+  *rm\ -rf*|*rm\ -fr*|*rm\ -r\ -f*|*rm\ -rf\ /*) BLOCK=1 ;;
+  *format\ c:*|*format\ c:/*|*format\ C:*|*format\ C:/*) BLOCK=1 ;;
+  *del\ /f\ /s\ /q*|*del\ /s\ /q*|*rd\ /s\ /q*) BLOCK=1 ;;
+  *:(){*:\|:&*}\;:*) BLOCK=1 ;;
+esac
+if [ "$BLOCK" = 1 ]; then
+  echo "TappsMCP: Blocked potentially destructive command." >&2
+  exit 2
+fi
+exit 0
+""",
     "tapps-memory-capture.sh": """\
 #!/usr/bin/env bash
 # TappsMCP Stop hook - Memory Capture (Epic 34.5)
@@ -329,6 +361,27 @@ if ($tool -match '^mcp__tapps[-_]mcp__') {
     $error_msg = $err.Substring(0, [Math]::Min(200, $err.Length))
     Write-Host "TappsMCP tool $tool failed: $error_msg" -ForegroundColor Red
     Write-Host "Check MCP server connectivity and configuration." -ForegroundColor Yellow
+}
+exit 0
+""",
+    "tapps-pre-bash.ps1": """\
+# TappsMCP PreToolUse hook (Bash) - destructive command guard (opt-in)
+# Blocks commands containing rm -rf, format c:, etc. Exit 2 = block, 0 = allow.
+$raw = @($input) -join "`n"
+$cmd = ""
+try {
+    $data = $raw | ConvertFrom-Json
+    $ti = $data.tool_input
+    if ($ti.command) { $cmd = $ti.command }
+    elseif ($ti.args) { $cmd = ($ti.args | ForEach-Object { $_ }) -join " " }
+} catch {}
+$block = $false
+if ($cmd -match 'rm\\s+-[rf]+' -and $cmd -match '/') { $block = $true }
+if ($cmd -match 'format\\s+[cC]:') { $block = $true }
+if ($cmd -match 'del\\s+/[fs]*\\s*/[sq]*' -or $cmd -match 'rd\\s+/s\\s+/q') { $block = $true }
+if ($block) {
+    Write-Error "TappsMCP: Blocked potentially destructive command."
+    exit 2
 }
 exit 0
 """,
@@ -705,6 +758,38 @@ MEMORY_CAPTURE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
                     "command": (
                         "powershell -NoProfile -ExecutionPolicy Bypass"
                         " -File .claude/hooks/tapps-memory-capture.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# Destructive command guard (opt-in PreToolUse hook)
+# ---------------------------------------------------------------------------
+
+DESTRUCTIVE_GUARD_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
+    "PreToolUse": [
+        {
+            "matcher": "Bash",
+            "hooks": [
+                {"type": "command", "command": ".claude/hooks/tapps-pre-bash.sh"},
+            ],
+        },
+    ],
+}
+
+DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
+    "PreToolUse": [
+        {
+            "matcher": "Bash",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-pre-bash.ps1"
                     ),
                 },
             ],

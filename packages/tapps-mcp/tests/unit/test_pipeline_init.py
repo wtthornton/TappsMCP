@@ -183,7 +183,7 @@ class TestBootstrapPipeline:
         assert result["agents_md"]["action"] == "created"
         content = (tmp_path / "AGENTS.md").read_text()
         assert "TappsMCP" in content
-        assert "tapps_server_info" in content
+        assert "tapps_session_start" in content
 
     def test_updates_agents_md_when_exists_and_outdated(self, tmp_path):
         (tmp_path / "AGENTS.md").write_text("# Custom agents\n")
@@ -198,7 +198,7 @@ class TestBootstrapPipeline:
         # New behavior: outdated file is updated, not skipped
         assert result["agents_md"]["action"] == "updated"
         content = (tmp_path / "AGENTS.md").read_text()
-        assert "tapps_server_info" in content  # template content merged in
+        assert "tapps_session_start" in content  # template content merged in
 
     def test_creates_tech_stack_md(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text("[project]\nname = 'foo'\ndependencies = []\n")
@@ -318,7 +318,7 @@ class TestAgentsMdIntegration:
         result = bootstrap_pipeline(tmp_path, **self._common, overwrite_agents_md=True)
         assert result["agents_md"]["action"] == "overwritten"
         content = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-        assert "tapps_server_info" in content
+        assert "tapps_session_start" in content
 
     def test_still_creates_when_missing(self, tmp_path):
         result = bootstrap_pipeline(tmp_path, **self._common)

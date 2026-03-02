@@ -1,0 +1,29 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+{% if unreleased_entries %}
+
+## [Unreleased]
+{% for category, entries in unreleased_entries.items() %}
+
+### {{ category }}
+{% for entry in entries %}
+- {{ entry.description }}{% if entry.scope %} ({{ entry.scope }}){% endif %}{% if entry.breaking %} **BREAKING**{% endif %}
+
+{% endfor %}
+{% endfor %}
+{% endif %}
+{% for version in versions %}
+
+## [{{ version.version }}] - {{ version.date }}
+{% for category, entries in version.grouped_entries.items() %}
+
+### {{ category }}
+{% for entry in entries %}
+- {{ entry.description }}{% if entry.scope %} ({{ entry.scope }}){% endif %}{% if entry.breaking %} **BREAKING**{% endif %}
+
+{% endfor %}
+{% endfor %}
+{% endfor %}

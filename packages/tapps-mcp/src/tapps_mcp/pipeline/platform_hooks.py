@@ -45,6 +45,12 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     ENGAGEMENT_HOOK_EVENTS as _ENGAGEMENT_HOOK_EVENTS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    DESTRUCTIVE_GUARD_HOOKS_CONFIG as _DESTRUCTIVE_GUARD_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS as _DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_CAPTURE_HOOKS_CONFIG as _MEMORY_CAPTURE_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -176,6 +182,7 @@ def _filter_scripts(
         "tapps-session-end": "SessionEnd",
         "tapps-tool-failure": "PostToolUseFailure",
         "tapps-memory-capture": "Stop",
+        "tapps-pre-bash": "PreToolUse",
     }
 
     filtered: dict[str, str] = {}
@@ -194,6 +201,7 @@ def generate_claude_hooks(
     force_windows: bool | None = None,
     engagement_level: str = "medium",
     prompt_hooks: bool = False,
+    destructive_guard: bool = False,
 ) -> dict[str, Any]:
     """Generate Claude Code hook scripts and settings.json hooks config.
 
@@ -212,17 +220,30 @@ def generate_claude_hooks(
         engagement_level: high (blocking), medium (advisory), low (minimal).
         prompt_hooks: When True, add a prompt-type PostToolUse hook using
             Haiku for intelligent file change detection (~$0.001/eval).
+        destructive_guard: When True, add a PreToolUse hook that blocks Bash
+            commands containing destructive patterns (rm -rf, format c:, etc.).
 
     Returns a summary dict with ``scripts_created`` and ``hooks_action``.
     """
     win = force_windows if force_windows is not None else _is_windows()
-    allowed_events = _ENGAGEMENT_HOOK_EVENTS.get(
-        engagement_level, _ENGAGEMENT_HOOK_EVENTS["medium"],
+    allowed_events = set(
+        _ENGAGEMENT_HOOK_EVENTS.get(
+            engagement_level, _ENGAGEMENT_HOOK_EVENTS["medium"],
+        ),
     )
+    if destructive_guard:
+        allowed_events.add("PreToolUse")
 
     # Select base scripts and config
     base_scripts = _CLAUDE_HOOK_SCRIPTS_PS if win else _CLAUDE_HOOK_SCRIPTS
-    hooks_config = _CLAUDE_HOOKS_CONFIG_PS if win else _CLAUDE_HOOKS_CONFIG
+    hooks_config = dict(_CLAUDE_HOOKS_CONFIG_PS if win else _CLAUDE_HOOKS_CONFIG)
+    if destructive_guard:
+        dg_config = (
+            _DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS if win
+            else _DESTRUCTIVE_GUARD_HOOKS_CONFIG
+        )
+        for event, entries in dg_config.items():
+            hooks_config.setdefault(event, []).extend(entries)
 
     # At high engagement, overlay blocking variants for Stop/TaskCompleted
     script_templates = dict(base_scripts)
@@ -328,6 +349,7 @@ def generate_claude_hooks(
         "hooks_migrated": hooks_migrated,
         "engagement_level": engagement_level,
         "prompt_hooks": prompt_hooks,
+        "destructive_guard": destructive_guard,
     }
 
 

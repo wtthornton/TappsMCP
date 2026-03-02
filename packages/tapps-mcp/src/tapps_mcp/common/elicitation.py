@@ -111,6 +111,14 @@ class WizardPromptHooks(BaseModel):
     enabled: bool = Field(description="Enable AI-powered quality judgment")
 
 
+class WizardOtherMcps(BaseModel):
+    """Schema for wizard 'add other MCPs' prompt."""
+
+    enabled: bool = Field(
+        description="Show guidance on adding complementary MCPs (GitHub, YouTube, etc.)",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Elicitation helpers
 # ---------------------------------------------------------------------------
@@ -168,6 +176,7 @@ class WizardResult:
     """Aggregated answers from the interactive first-run wizard."""
 
     __slots__ = (
+        "add_other_mcps",
         "agent_teams",
         "completed",
         "engagement_level",
@@ -182,6 +191,7 @@ class WizardResult:
         self.agent_teams: bool = False
         self.skill_tier: str = "full"
         self.prompt_hooks: bool = False
+        self.add_other_mcps: bool = False
         self.completed: bool = False
 
 
@@ -243,6 +253,17 @@ async def run_init_wizard(ctx: Context) -> WizardResult:  # type: ignore[type-ar
         )
         if r5.action == "accept" and r5.data is not None:
             result.prompt_hooks = r5.data.enabled
+
+        # 6. Other MCPs
+        r6 = await ctx.elicit(
+            message=(
+                "Get guidance on adding other MCPs (GitHub, YouTube, Sentry) "
+                "alongside TappsMCP? See docs/MCP_COMPOSITION.md for details."
+            ),
+            schema=WizardOtherMcps,
+        )
+        if r6.action == "accept" and r6.data is not None:
+            result.add_other_mcps = r6.data.enabled
 
         result.completed = True
     except Exception:  # noqa: S110 — graceful degradation for unsupported clients

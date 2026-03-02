@@ -808,6 +808,8 @@ async def tapps_init(
     overwrite_agents_md: bool = False,
     agent_teams: bool = False,
     memory_capture: bool = False,
+    destructive_guard: bool | None = None,
+    minimal: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
@@ -852,6 +854,12 @@ async def tapps_init(
             hooks (TeammateIdle, TaskCompleted) for quality watchdog teammate.
         memory_capture: When ``True`` and platform is ``"claude"``, generate a Stop
             hook that captures session quality data for memory persistence.
+        destructive_guard: When ``True``, add a PreToolUse hook that blocks Bash
+            commands containing destructive patterns (rm -rf, format c:, etc.).
+            When ``None``, uses value from settings. Default ``False``.
+        minimal: When ``True``, create only AGENTS.md, TECH_STACK.md, platform rules,
+            and MCP config. Skip hooks, skills, sub-agents, CI, governance, GitHub
+            templates, handoff/runlog, and cache warming.
         dry_run: When ``True``, compute and return what would be created without
             writing files or warming caches. Keeps dry_run lightweight (~2-5s).
         verify_only: When ``True``, run only server verification and return (~1-3s).
@@ -882,6 +890,8 @@ async def tapps_init(
 
     # Interactive wizard (Epic 37.1): triggers on true first-run with no
     # explicit config and no explicit params, when elicitation is available.
+    wizard_answers = None
+    add_other_mcps_hint = False
     if ctx is not None and not verify_only and not dry_run:
         wizard_answers = await _maybe_run_wizard(
             ctx,
@@ -895,9 +905,15 @@ async def tapps_init(
             if not platform:
                 platform = "claude"
 
+    if wizard_answers is not None and wizard_answers.add_other_mcps:
+        add_other_mcps_hint = True
+
     from tapps_mcp.pipeline.init import bootstrap_pipeline
 
     settings = load_settings()
+    dg = destructive_guard
+    if dg is None:
+        dg = getattr(settings, "destructive_guard", False)
     # Run in thread to avoid blocking the event loop - bootstrap_pipeline
     # is sync and may run subprocesses, file I/O, and cache warming.
     result = await asyncio.to_thread(
@@ -916,6 +932,8 @@ async def tapps_init(
         overwrite_agents_md=overwrite_agents_md,
         agent_teams=agent_teams,
         memory_capture=memory_capture,
+        destructive_guard=dg,
+        minimal=minimal,
         dry_run=dry_run,
         verify_only=verify_only,
         llm_engagement_level=llm_engagement_level,
@@ -928,6 +946,11 @@ async def tapps_init(
         status="success" if not result["errors"] else "failed",
     )
 
+    if add_other_mcps_hint:
+        result["add_other_mcps_hint"] = (
+            "See docs/MCP_COMPOSITION.md for guidance on adding GitHub, "
+            "YouTube, Sentry, and other MCPs alongside TappsMCP."
+        )
     resp = success_response("tapps_init", elapsed_ms, result)
     resp["success"] = not result["errors"]
     return _with_nudges("tapps_init", resp)

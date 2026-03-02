@@ -48,6 +48,8 @@ class BootstrapConfig:
     overwrite_agents_md: bool = False
     agent_teams: bool = False
     memory_capture: bool = False
+    destructive_guard: bool = False
+    minimal: bool = False
     dry_run: bool = False
     verify_only: bool = False
     llm_engagement_level: str = "medium"
@@ -124,6 +126,8 @@ def bootstrap_pipeline(
     overwrite_agents_md: bool = False,
     agent_teams: bool = False,
     memory_capture: bool = False,
+    destructive_guard: bool = False,
+    minimal: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
@@ -165,6 +169,8 @@ def bootstrap_pipeline(
             overwrite_agents_md=overwrite_agents_md,
             agent_teams=agent_teams,
             memory_capture=memory_capture,
+            destructive_guard=destructive_guard,
+            minimal=minimal,
             dry_run=dry_run,
             verify_only=verify_only,
             llm_engagement_level=level or "medium",
@@ -187,7 +193,21 @@ def bootstrap_pipeline(
             state.result["claude_settings"] = {"action": settings_action}
             if settings_action == "created":
                 state.created.append(".claude/settings.json")
-        _warm_caches(cfg, state)
+        if cfg.minimal:
+            state.result["cache_warming"] = {
+                "warmed": 0,
+                "attempted": 0,
+                "skipped": "minimal",
+                "libraries": [],
+            }
+            state.result["expert_rag_warming"] = {
+                "warmed": 0,
+                "attempted": 0,
+                "skipped": "minimal",
+                "domains": [],
+            }
+        else:
+            _warm_caches(cfg, state)
     else:
         state.result["platform_rules"] = {
             "platform": cfg.platform or "(none)",
@@ -245,10 +265,11 @@ def _detect_profile(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
 def _create_templates(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     """Create handoff, runlog, agents, and tech stack templates."""
-    if cfg.create_handoff:
-        state.safe_write("docs/TAPPS_HANDOFF.md", load_handoff_template())
-    if cfg.create_runlog:
-        state.safe_write("docs/TAPPS_RUNLOG.md", load_runlog_template())
+    if not cfg.minimal:
+        if cfg.create_handoff:
+            state.safe_write("docs/TAPPS_HANDOFF.md", load_handoff_template())
+        if cfg.create_runlog:
+            state.safe_write("docs/TAPPS_RUNLOG.md", load_runlog_template())
 
     # AGENTS.md
     if cfg.create_agents_md:
@@ -297,19 +318,6 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     if not cfg.platform:
         return
 
-    from tapps_mcp.pipeline.platform_generators import (
-        generate_agent_teams_hooks,
-        generate_bugbot_rules,
-        generate_ci_workflow,
-        generate_claude_hooks,
-        generate_claude_python_quality_rule,
-        generate_copilot_instructions,
-        generate_cursor_hooks,
-        generate_cursor_rules,
-        generate_skills,
-        generate_subagent_definitions,
-    )
-
     platform_action: str | None = None
     engagement = cfg.llm_engagement_level
     if cfg.platform == "claude":
@@ -324,32 +332,45 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         state.result["claude_settings"] = {"action": settings_action}
         if settings_action == "created":
             state.created.append(".claude/settings.json")
-        # Hooks, agents, skills
-        state.result["hooks"] = generate_claude_hooks(
-            state.project_root, engagement_level=engagement
-        )
-        state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
-        state.result["skills"] = generate_skills(
-            state.project_root, "claude", engagement_level=engagement
-        )
-        # Path-scoped Python quality rule
-        state.result["python_quality_rule"] = generate_claude_python_quality_rule(
-            state.project_root, engagement_level=engagement
-        )
-        # Agent Teams (opt-in)
-        if cfg.agent_teams:
-            state.result["agent_teams"] = generate_agent_teams_hooks(state.project_root)
-        # Memory capture hook (opt-in, Epic 34.5)
-        if cfg.memory_capture:
-            from tapps_mcp.pipeline.platform_hooks import generate_memory_capture_hook
+        if not cfg.minimal:
+            from tapps_mcp.pipeline.platform_generators import (
+                generate_agent_teams_hooks,
+                generate_ci_workflow,
+                generate_claude_hooks,
+                generate_claude_python_quality_rule,
+                generate_copilot_instructions,
+                generate_skills,
+                generate_subagent_definitions,
+            )
 
-            state.result["memory_capture"] = generate_memory_capture_hook(state.project_root)
-        # CI workflow (generated for all platforms)
-        state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
-        # VS Code Copilot instructions (generated for all platforms)
-        state.result["copilot_instructions"] = generate_copilot_instructions(
-            state.project_root,
-        )
+            state.result["hooks"] = generate_claude_hooks(
+                state.project_root,
+                engagement_level=engagement,
+                destructive_guard=cfg.destructive_guard,
+            )
+            state.result["agents"] = generate_subagent_definitions(
+                state.project_root, "claude"
+            )
+            state.result["skills"] = generate_skills(
+                state.project_root, "claude", engagement_level=engagement
+            )
+            state.result["python_quality_rule"] = generate_claude_python_quality_rule(
+                state.project_root, engagement_level=engagement
+            )
+            if cfg.agent_teams:
+                state.result["agent_teams"] = generate_agent_teams_hooks(
+                    state.project_root
+                )
+            if cfg.memory_capture:
+                from tapps_mcp.pipeline.platform_hooks import generate_memory_capture_hook
+
+                state.result["memory_capture"] = generate_memory_capture_hook(
+                    state.project_root
+                )
+            state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
+            state.result["copilot_instructions"] = generate_copilot_instructions(
+                state.project_root,
+            )
     elif cfg.platform == "cursor":
         platform_action = _bootstrap_cursor(
             state.project_root, cfg.overwrite_platform_rules, engagement_level=engagement
@@ -358,23 +379,32 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             state.created.append(".cursor/rules/tapps-pipeline.md")
         elif platform_action == "skipped":
             state.skipped.append(".cursor/rules/tapps-pipeline.md")
-        # Hooks, agents, skills, enhanced rules
-        state.result["hooks"] = generate_cursor_hooks(
-            state.project_root, engagement_level=engagement
-        )
-        state.result["agents"] = generate_subagent_definitions(state.project_root, "cursor")
-        state.result["skills"] = generate_skills(
-            state.project_root, "cursor", engagement_level=engagement
-        )
-        state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
-        # BugBot rules (Cursor-specific)
-        state.result["bugbot_rules"] = generate_bugbot_rules(state.project_root)
-        # CI workflow (generated for all platforms)
-        state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
-        # VS Code Copilot instructions (generated for all platforms)
-        state.result["copilot_instructions"] = generate_copilot_instructions(
-            state.project_root,
-        )
+        if not cfg.minimal:
+            from tapps_mcp.pipeline.platform_generators import (
+                generate_bugbot_rules,
+                generate_ci_workflow,
+                generate_copilot_instructions,
+                generate_cursor_hooks,
+                generate_cursor_rules,
+                generate_skills,
+                generate_subagent_definitions,
+            )
+
+            state.result["hooks"] = generate_cursor_hooks(
+                state.project_root, engagement_level=engagement
+            )
+            state.result["agents"] = generate_subagent_definitions(
+                state.project_root, "cursor"
+            )
+            state.result["skills"] = generate_skills(
+                state.project_root, "cursor", engagement_level=engagement
+            )
+            state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
+            state.result["bugbot_rules"] = generate_bugbot_rules(state.project_root)
+            state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
+            state.result["copilot_instructions"] = generate_copilot_instructions(
+                state.project_root,
+            )
     else:
         state.errors.append(f"Unknown platform: {cfg.platform!r}. Use 'claude' or 'cursor'.")
 
@@ -383,12 +413,11 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         "action": platform_action or "skipped",
     }
 
-    # GitHub templates, CI workflows, Copilot config, and governance
-    # (platform-agnostic — generated for all platforms)
-    _setup_github_templates(state)
-    _setup_github_ci(state)
-    _setup_github_copilot(state)
-    _setup_github_governance(state)
+    if not cfg.minimal:
+        _setup_github_templates(state)
+        _setup_github_ci(state)
+        _setup_github_copilot(state)
+        _setup_github_governance(state)
 
 
 def _setup_github_templates(state: _BootstrapState) -> None:

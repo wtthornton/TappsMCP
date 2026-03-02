@@ -89,9 +89,9 @@ class TestAgentsValidation:
         assert "Recommended workflow" not in v.sections_found
 
     def test_missing_tool_detected(self) -> None:
-        content = _template().replace("tapps_dashboard", "tapps_dash")
+        content = _template().replace("tapps_session_start", "tapps_session")
         v = AgentsValidation(content)
-        assert "tapps_dashboard" in v.tools_missing
+        assert "tapps_session_start" in v.tools_missing
 
     def test_user_custom_sections_ignored(self) -> None:
         content = _template() + "\n## My Custom Section\n\nCustom content.\n"
@@ -160,15 +160,15 @@ class TestMergeAgentsMd:
 
     def test_merge_updates_stale_section(self) -> None:
         template = _template()
-        # Modify a section body in the existing file
+        # Modify a section body in the existing file (Essential tools table)
         existing = template.replace(
-            "**Security scanning** (Bandit + secret detection with redacted context)",
-            "**Security scanning** (old description)",
+            "**tapps_session_start** | **FIRST call in every session**",
+            "**tapps_session_start** | OLD description",
         )
         merged, changes = merge_agents_md(existing, template)
-        assert any("updated_section:What TappsMCP is" in c for c in changes)
+        assert any("updated_section:Essential tools (always-on workflow)" in c for c in changes)
         # Merged should have the template version
-        assert "Bandit + secret detection with redacted context" in merged
+        assert "FIRST call in every session" in merged
 
     def test_merge_preserves_user_sections(self) -> None:
         template = _template()
@@ -180,7 +180,7 @@ class TestMergeAgentsMd:
     def test_merge_adds_version_marker(self) -> None:
         # Existing content without version marker — version comes via
         # the template preamble replacement, not the fallback path.
-        existing = "# TappsMCP\n\n## What TappsMCP is\n\nSome content.\n"
+        existing = "# TappsMCP\n\n## Essential tools (always-on workflow)\n\nSome content.\n"
         template = _template()
         merged, changes = merge_agents_md(existing, template)
         assert "tapps-agents-version" in merged
@@ -190,12 +190,12 @@ class TestMergeAgentsMd:
         template = _template()
         # Modify preamble
         existing = template.replace(
-            "deterministic code quality checks",
-            "old quality checks",
+            "code quality, doc lookup, and domain expert advice",
+            "old quality advice",
         )
         merged, changes = merge_agents_md(existing, template)
         assert "updated_preamble" in changes
-        assert "deterministic code quality checks" in merged
+        assert "code quality, doc lookup, and domain expert advice" in merged
 
 
 # ---------------------------------------------------------------------------
