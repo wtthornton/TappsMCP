@@ -106,23 +106,12 @@ async def tapps_memory(
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
     try:
-        if action == "save":
-            result_data = _handle_save(
-                store, key, value, tier, source, source_agent,
-                scope, tag_list, branch, confidence,
-            )
-        elif action == "get":
-            result_data = _handle_get(store, key, scope, branch)
-        elif action == "list":
-            result_data = _handle_list(store, tier, scope, tag_list)
-        elif action == "delete":
-            result_data = _handle_delete(store, key)
-        elif action == "reinforce":
-            result_data = _handle_reinforce(store, key)
-        elif action == "gc":
-            result_data = _handle_gc(store)
-        else:  # search
-            result_data = _handle_search(store, query, tag_list, tier, scope)
+        result_data = _dispatch_memory_action(
+            store, action, key=key, value=value, tier=tier,
+            source=source, source_agent=source_agent, scope=scope,
+            tag_list=tag_list, branch=branch, query=query,
+            confidence=confidence,
+        )
     except Exception as exc:
         return error_response(
             "tapps_memory",
@@ -132,6 +121,42 @@ async def tapps_memory(
 
     elapsed = int((time.perf_counter() - t0) * 1000)
     return success_response("tapps_memory", elapsed, result_data)
+
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+
+
+def _dispatch_memory_action(
+    store: MemoryStore,
+    action: str,
+    *,
+    key: str,
+    value: str,
+    tier: str,
+    source: str,
+    source_agent: str,
+    scope: str,
+    tag_list: list[str],
+    branch: str,
+    query: str,
+    confidence: float,
+) -> dict[str, Any]:
+    """Route *action* to the appropriate handler."""
+    handlers: dict[str, Any] = {
+        "save": lambda: _handle_save(
+            store, key, value, tier, source, source_agent,
+            scope, tag_list, branch, confidence,
+        ),
+        "get": lambda: _handle_get(store, key, scope, branch),
+        "list": lambda: _handle_list(store, tier, scope, tag_list),
+        "delete": lambda: _handle_delete(store, key),
+        "reinforce": lambda: _handle_reinforce(store, key),
+        "gc": lambda: _handle_gc(store),
+        "search": lambda: _handle_search(store, query, tag_list, tier, scope),
+    }
+    return handlers[action]()
 
 
 # ---------------------------------------------------------------------------

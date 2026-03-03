@@ -66,6 +66,8 @@ TappsMCP scores Python code across 7 categories (0-100 each):
 ## Actions
 
 - Call `tapps_quick_check(file_path)` on edited Python files
+- Use `tapps_research(question)` before using unfamiliar library APIs
+- Run `tapps_security_scan(file_path)` on security-sensitive changes
 - Any category scoring below 70 needs immediate attention
 - Call `tapps_score_file(file_path)` for full breakdown
 """

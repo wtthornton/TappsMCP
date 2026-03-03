@@ -635,6 +635,101 @@ async def tapps_lookup_docs(
     return _with_nudges("tapps_lookup_docs", response)
 
 
+# ---------------------------------------------------------------------------
+# tapps_validate_config helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_config_type(config_type: str) -> str | None | dict[str, Any]:
+    """Resolve config_type. Returns None for 'auto', the type string, or error_response."""
+    if config_type == "auto":
+        return None
+    if config_type not in _VALID_CONFIG_TYPES:
+        return error_response(
+            "tapps_validate_config",
+            "invalid_config_type",
+            f"Invalid config_type '{config_type}'. "
+            f"Must be 'auto' or one of: {', '.join(sorted(_VALID_CONFIG_TYPES))}",
+        )
+    return config_type
+
+
+def _read_config_content(resolved: Path) -> str | dict[str, Any]:
+    """Read config file with size and encoding validation.
+
+    Returns file content string on success, or error_response dict on failure.
+    """
+    try:
+        file_size = resolved.stat().st_size
+    except OSError as exc:
+        return error_response("tapps_validate_config", "file_error", str(exc))
+    if file_size > _MAX_CONFIG_FILE_SIZE:
+        return error_response(
+            "tapps_validate_config",
+            "file_too_large",
+            f"Config file is {file_size:,} bytes, "
+            f"exceeding the {_MAX_CONFIG_FILE_SIZE:,} byte limit.",
+        )
+    try:
+        return resolved.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        return error_response(
+            "tapps_validate_config",
+            "decode_error",
+            f"Cannot decode file as UTF-8: {exc}",
+        )
+
+
+def _build_config_response_data(result: Any) -> dict[str, Any]:
+    """Build the response data dict from a validation result."""
+    finding_count = len(result.findings)
+    critical_count = sum(1 for f in result.findings if f.severity == "critical")
+    warning_count = sum(1 for f in result.findings if f.severity == "warning")
+    return {
+        "file_path": result.file_path,
+        "config_type": result.config_type,
+        "valid": result.valid,
+        "findings": [f.model_dump() for f in result.findings],
+        "suggestions": result.suggestions,
+        "finding_count": finding_count,
+        "critical_count": critical_count,
+        "warning_count": warning_count,
+    }
+
+
+def _attach_config_structured_output(resp: dict[str, Any], result: Any) -> None:
+    """Attach structured output to config validation response in-place."""
+    try:
+        from tapps_mcp.common.output_schemas import (
+            ConfigFindingOutput,
+            ValidateConfigOutput,
+        )
+
+        config_findings = [
+            ConfigFindingOutput(
+                severity=f.severity,
+                message=f.message,
+                line=f.line,
+                category=f.category,
+            )
+            for f in result.findings
+        ]
+        data = resp.get("data", {})
+        structured = ValidateConfigOutput(
+            file_path=result.file_path,
+            config_type=result.config_type,
+            valid=result.valid,
+            finding_count=data.get("finding_count", len(result.findings)),
+            critical_count=data.get("critical_count", 0),
+            warning_count=data.get("warning_count", 0),
+            findings=config_findings,
+            suggestions=result.suggestions,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        logger.warning("structured_output_failed", tool="tapps_validate_config", exc_info=True)
+
+
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str, Any]:
     """REQUIRED when changing Dockerfile, docker-compose, or infra config.
@@ -651,93 +746,28 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
     except (ValueError, FileNotFoundError) as exc:
         return error_response("tapps_validate_config", "path_denied", str(exc))
 
-    # Validate config_type against allowlist
-    explicit_type = None if config_type == "auto" else config_type
-    if explicit_type is not None and explicit_type not in _VALID_CONFIG_TYPES:
-        return error_response(
-            "tapps_validate_config",
-            "invalid_config_type",
-            f"Invalid config_type '{explicit_type}'. "
-            f"Must be 'auto' or one of: {', '.join(sorted(_VALID_CONFIG_TYPES))}",
-        )
+    explicit_type = _resolve_config_type(config_type)
+    if isinstance(explicit_type, dict):
+        return explicit_type  # error_response
 
-    # Enforce file size limit
-    try:
-        file_size = resolved.stat().st_size
-    except OSError as exc:
-        return error_response("tapps_validate_config", "file_error", str(exc))
-    if file_size > _MAX_CONFIG_FILE_SIZE:
-        return error_response(
-            "tapps_validate_config",
-            "file_too_large",
-            f"Config file is {file_size:,} bytes, "
-            f"exceeding the {_MAX_CONFIG_FILE_SIZE:,} byte limit.",
-        )
-
-    try:
-        content = resolved.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        return error_response(
-            "tapps_validate_config",
-            "decode_error",
-            f"Cannot decode file as UTF-8: {exc}",
-        )
+    content_or_err = _read_config_content(resolved)
+    if isinstance(content_or_err, dict):
+        return content_or_err  # error_response
 
     from tapps_mcp.validators.base import validate_config
 
-    result = validate_config(str(resolved), content, config_type=explicit_type)
+    result = validate_config(str(resolved), content_or_err, config_type=explicit_type)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_config", start, file_path=str(resolved))
 
-    finding_count = len(result.findings)
-    critical_count = sum(1 for f in result.findings if f.severity == "critical")
-    warning_count = sum(1 for f in result.findings if f.severity == "warning")
-
     resp = success_response(
         "tapps_validate_config",
         elapsed_ms,
-        {
-            "file_path": result.file_path,
-            "config_type": result.config_type,
-            "valid": result.valid,
-            "findings": [f.model_dump() for f in result.findings],
-            "suggestions": result.suggestions,
-            "finding_count": finding_count,
-            "critical_count": critical_count,
-            "warning_count": warning_count,
-        },
+        _build_config_response_data(result),
     )
 
-    # Attach structured output
-    try:
-        from tapps_mcp.common.output_schemas import (
-            ConfigFindingOutput,
-            ValidateConfigOutput,
-        )
-
-        config_findings = [
-            ConfigFindingOutput(
-                severity=f.severity,
-                message=f.message,
-                line=f.line,
-                category=f.category,
-            )
-            for f in result.findings
-        ]
-        structured = ValidateConfigOutput(
-            file_path=result.file_path,
-            config_type=result.config_type,
-            valid=result.valid,
-            finding_count=finding_count,
-            critical_count=critical_count,
-            warning_count=warning_count,
-            findings=config_findings,
-            suggestions=result.suggestions,
-        )
-        resp["structuredContent"] = structured.to_structured_content()
-    except Exception:
-        logger.warning("structured_output_failed", tool="tapps_validate_config", exc_info=True)
+    _attach_config_structured_output(resp, result)
 
     return _with_nudges("tapps_validate_config", resp)
 

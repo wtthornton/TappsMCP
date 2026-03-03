@@ -84,12 +84,12 @@ class TestHookTemplates:
     """Verify hook template dicts have expected keys and content."""
 
     def test_claude_sh_scripts_count(self) -> None:
-        # 8 original + 3 Epic 36 (subagent-stop, session-end, tool-failure)
-        assert len(_CLAUDE_HOOK_SCRIPTS) == 11
+        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5)
+        assert len(_CLAUDE_HOOK_SCRIPTS) == 12
 
     def test_claude_ps1_scripts_count(self) -> None:
-        # 8 original + 3 Epic 36 (subagent-stop, session-end, tool-failure)
-        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 11
+        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5)
+        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 12
 
     def test_cursor_sh_scripts_count(self) -> None:
         assert len(_CURSOR_HOOK_SCRIPTS) == 2
@@ -173,14 +173,14 @@ class TestSkillTemplates:
     """Verify skill template dicts and generation."""
 
     def test_claude_skills_count(self) -> None:
-        assert len(CLAUDE_SKILLS) == 7
+        assert len(CLAUDE_SKILLS) == 10
 
     def test_cursor_skills_count(self) -> None:
-        assert len(CURSOR_SKILLS) == 7
+        assert len(CURSOR_SKILLS) == 10
 
     def test_generate_claude_skills(self, tmp_path: Path) -> None:
         result = generate_skills(tmp_path, "claude")
-        assert len(result["created"]) == 7
+        assert len(result["created"]) == 10
         assert (tmp_path / ".claude" / "skills" / "tapps-score" / "SKILL.md").exists()
 
     def test_generate_skills_high_engagement(self, tmp_path: Path) -> None:
@@ -198,7 +198,7 @@ class TestSkillTemplates:
     def test_generate_skills_skips_existing(self, tmp_path: Path) -> None:
         generate_skills(tmp_path, "claude")
         result = generate_skills(tmp_path, "claude")
-        assert len(result["skipped"]) == 7
+        assert len(result["skipped"]) == 10
         assert len(result["created"]) == 0
 
 

@@ -3,7 +3,8 @@ name: tapps-memory
 description: >-
   Manage shared project memory for cross-session knowledge persistence.
   Save, retrieve, search, and manage memory entries with tier classification.
-tools: mcp__tapps-mcp__tapps_memory, mcp__tapps-mcp__tapps_session_notes
+allowed-tools: mcp__tapps-mcp__tapps_memory, mcp__tapps-mcp__tapps_session_notes
+argument-hint: "[action] [key]"
 ---
 
 Manage shared project memory using TappsMCP:

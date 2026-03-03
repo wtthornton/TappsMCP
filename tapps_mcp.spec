@@ -65,6 +65,7 @@ a = Analysis(
         "tapps_mcp.scoring.models",
         "tapps_mcp.scoring.constants",
         "tapps_mcp.scoring.scorer",
+        "tapps_mcp.scoring.suggestions",
         "tapps_mcp.scoring.dead_code",
         "tapps_mcp.scoring.dependency_security",
         "tapps_mcp.gates",

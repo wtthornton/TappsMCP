@@ -3,10 +3,13 @@ name: tapps-research
 description: >-
   Research a technical question using domain experts and library docs.
   Combines expert consultation with docs lookup for comprehensive answers.
-tools: >-
+allowed-tools: >-
   mcp__tapps-mcp__tapps_research,
   mcp__tapps-mcp__tapps_consult_expert,
   mcp__tapps-mcp__tapps_lookup_docs
+argument-hint: "[question]"
+context: fork
+model: haiku
 ---
 
 Research a technical question using TappsMCP:

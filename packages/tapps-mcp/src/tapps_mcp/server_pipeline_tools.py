@@ -319,6 +319,30 @@ def _build_structured_validation_output(
         _logger.debug("structured_output_failed: tapps_validate_changed", exc_info=True)
 
 
+def _resolve_security_depth(
+    security_depth: str, include_security: bool, quick: bool
+) -> bool:
+    """Determine whether to run full security scanning."""
+    return (security_depth == "full") or (include_security and not quick)
+
+
+def _build_validation_summary(
+    results: list[dict[str, Any]],
+    quick: bool,
+    capped: bool,
+    extra_count: int,
+) -> str:
+    """Build the human-readable validation summary string."""
+    from tapps_mcp.tools.batch_validator import MAX_BATCH_FILES, format_batch_summary
+
+    summary = format_batch_summary(results)
+    if quick:
+        summary = f"[Quick mode - ruff only] {summary}"
+    if capped:
+        summary += f" ({extra_count} additional files not validated - cap {MAX_BATCH_FILES})"
+    return summary
+
+
 async def tapps_validate_changed(
     file_paths: str = "",
     base_ref: str = "HEAD",
@@ -378,7 +402,7 @@ async def tapps_validate_changed(
 
         scorer = _get_scorer()
         sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
-        do_security_full = (security_depth == "full") or (include_security and not quick)
+        do_security_full = _resolve_security_depth(security_depth, include_security, quick)
 
         raw_results = await asyncio.gather(
             *[
@@ -402,11 +426,7 @@ async def tapps_validate_changed(
         _compute_impact_analysis(paths, settings.project_root) if include_impact and paths else None
     )
 
-    summary = format_batch_summary(results)
-    if quick:
-        summary = f"[Quick mode - ruff only] {summary}"
-    if capped:
-        summary += f" ({extra_count} additional files not validated - cap {MAX_BATCH_FILES})"
+    summary = _build_validation_summary(results, quick, capped, extra_count)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_changed", start, gate_passed=all_passed)

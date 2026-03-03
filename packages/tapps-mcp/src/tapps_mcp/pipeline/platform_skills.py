@@ -170,8 +170,8 @@ provide the full tool reference from this skill.
 |------|----------------|
 | **tapps_session_start** | **FIRST call in every session** - returns server info only |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security |
-| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files |
-| **tapps_checklist** | **Before declaring work complete** - reports which tools were called and missing |
+| **tapps_validate_changed** | **Before multi-file complete** - score + gate on changed files |
+| **tapps_checklist** | **Before declaring complete** - reports which tools were called |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
 ## Scoring & quality
@@ -214,6 +214,43 @@ provide the full tool reference from this skill.
 | **tapps_set_engagement_level** | Change enforcement intensity (high/medium/low) |
 
 Use `tapps_server_info` for the latest recommended workflow string.
+""",
+    "tapps-init": """\
+---
+name: tapps-init
+description: >-
+  Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
+  platform rules, hooks, agents, skills, and MCP config.
+allowed-tools: mcp__tapps-mcp__tapps_init, mcp__tapps-mcp__tapps_doctor
+argument-hint: "[project-root]"
+---
+
+Bootstrap TappsMCP in a new or existing project:
+
+1. Call `mcp__tapps-mcp__tapps_init` to run the full bootstrap pipeline
+2. Review the created files (AGENTS.md, TECH_STACK.md, platform rules, hooks)
+3. If any issues are reported, call `mcp__tapps-mcp__tapps_doctor` to diagnose
+4. Verify that `.claude/settings.json` has MCP tool auto-approval rules
+5. Confirm the project is ready for the TappsMCP quality workflow
+""",
+    "tapps-engagement": """\
+---
+name: tapps-engagement
+description: >-
+  Change the TappsMCP enforcement intensity (high, medium, or low).
+  Controls which quality tools are mandatory vs optional.
+allowed-tools: mcp__tapps-mcp__tapps_set_engagement_level
+argument-hint: "[high|medium|low]"
+disable-model-invocation: true
+---
+
+Set the TappsMCP LLM engagement level:
+
+1. Call `mcp__tapps-mcp__tapps_set_engagement_level` with the desired level
+2. **high** - All quality tools are mandatory; checklist enforces strict compliance
+3. **medium** - Balanced enforcement; core tools required, advanced tools recommended
+4. **low** - Optional guidance; quality tools are suggestions, not requirements
+5. Confirm the level was saved to `.tapps-mcp.yaml`
 """,
 }
 
@@ -365,6 +402,43 @@ Essential: tapps_session_start (first), tapps_quick_check (after edits),
 tapps_validate_changed (before complete), tapps_checklist (before complete).
 For the full table, see the skill content. Call tapps_server_info for workflow.
 """,
+    "tapps-init": """\
+---
+name: tapps-init
+description: >-
+  Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
+  platform rules, hooks, agents, skills, and MCP config.
+mcp_tools:
+  - tapps_init
+  - tapps_doctor
+---
+
+Bootstrap TappsMCP in a new or existing project:
+
+1. Call `tapps_init` to run the full bootstrap pipeline
+2. Review the created files (AGENTS.md, TECH_STACK.md, platform rules, hooks)
+3. If any issues are reported, call `tapps_doctor` to diagnose
+4. Verify that MCP config has tool auto-approval rules
+5. Confirm the project is ready for the TappsMCP quality workflow
+""",
+    "tapps-engagement": """\
+---
+name: tapps-engagement
+description: >-
+  Change the TappsMCP enforcement intensity (high, medium, or low).
+  Controls which quality tools are mandatory vs optional.
+mcp_tools:
+  - tapps_set_engagement_level
+---
+
+Set the TappsMCP LLM engagement level:
+
+1. Call `tapps_set_engagement_level` with the desired level
+2. **high** - All quality tools are mandatory; checklist enforces strict compliance
+3. **medium** - Balanced enforcement; core tools required, advanced tools recommended
+4. **low** - Optional guidance; quality tools are suggestions, not requirements
+5. Confirm the level was saved to `.tapps-mcp.yaml`
+""",
 }
 
 
@@ -377,7 +451,7 @@ def generate_skills(
 ) -> dict[str, Any]:
     """Generate SKILL.md files for the given platform.
 
-    Creates 7 skill directories with ``SKILL.md`` in
+    Creates 10 skill directories with ``SKILL.md`` in
     ``.claude/skills/`` or ``.cursor/skills/`` depending on the platform.
     Existing files are skipped to preserve user customizations unless
     *overwrite* is ``True`` (used by the upgrade path to refresh

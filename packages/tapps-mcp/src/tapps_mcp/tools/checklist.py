@@ -14,7 +14,7 @@ import contextlib
 import json
 import threading
 import time
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -223,6 +223,58 @@ class ChecklistResult(BaseModel):
     total_calls: int = Field(default=0, description="Total tool calls this session.")
 
 
+# ---------------------------------------------------------------------------
+# Checklist helpers (extracted for CC reduction)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_task_tool_map(
+    task_type: str,
+    engagement_level: str | None,
+) -> dict[str, Any]:
+    """Resolve the task-specific tool map for the given engagement level."""
+    if engagement_level is None:
+        from tapps_core.config.settings import load_settings
+
+        engagement_level = load_settings().llm_engagement_level
+    if engagement_level not in _ENGAGEMENT_TOOL_MAP:
+        engagement_level = "medium"
+    task_maps = _ENGAGEMENT_TOOL_MAP[engagement_level]
+    tool_map = task_maps.get(task_type, task_maps["review"])
+    if not isinstance(tool_map, dict):
+        tool_map = task_maps["review"]
+    return tool_map
+
+
+def _get_tool_lists(
+    tool_map: dict[str, Any],
+) -> tuple[list[str], list[str], list[str]]:
+    """Extract and validate required/recommended/optional lists from a tool map."""
+    required = tool_map.get("required", [])
+    recommended = tool_map.get("recommended", [])
+    optional = tool_map.get("optional", [])
+    if not isinstance(required, list):
+        required = []
+    if not isinstance(recommended, list):
+        recommended = []
+    if not isinstance(optional, list):
+        optional = []
+    return required, recommended, optional
+
+
+def _compute_effective_tools(called: set[str]) -> set[str]:
+    """Expand called tools with composite tool coverage."""
+    effective = set(called)
+    if "tapps_quick_check" in called or "tapps_validate_changed" in called:
+        effective.update({"tapps_score_file", "tapps_quality_gate", "tapps_security_scan"})
+    return effective
+
+
+def _build_hints(tools: list[str]) -> list[ChecklistHint]:
+    """Build hint objects for missing tools."""
+    return [ChecklistHint(tool=t, reason=TOOL_REASONS.get(t, f"Call {t}.")) for t in tools]
+
+
 class CallTracker:
     """Server-side call log for the current session.
 
@@ -317,40 +369,17 @@ class CallTracker:
         When *engagement_level* is None, it is read from
         ``load_settings().llm_engagement_level`` (high/medium/low).
         """
-        if engagement_level is None:
-            from tapps_core.config.settings import load_settings
+        tool_map = _resolve_task_tool_map(task_type, engagement_level)
+        required, recommended, optional = _get_tool_lists(tool_map)
 
-            engagement_level = load_settings().llm_engagement_level
-        if engagement_level not in _ENGAGEMENT_TOOL_MAP:
-            engagement_level = "medium"
-        task_maps = _ENGAGEMENT_TOOL_MAP[engagement_level]
-        tool_map = task_maps.get(task_type, task_maps["review"])
-        if not isinstance(tool_map, dict):
-            tool_map = task_maps["review"]
         with cls._lock:
             called = {c.tool_name for c in cls._calls}
             call_count = len(cls._calls)
-        required = tool_map.get("required", [])
-        recommended = tool_map.get("recommended", [])
-        optional = tool_map.get("optional", [])
-        if not isinstance(required, list):
-            required = []
-        if not isinstance(recommended, list):
-            recommended = []
-        if not isinstance(optional, list):
-            optional = []
 
-        # Composite tools satisfy individual requirements
-        effective = set(called)
-        if "tapps_quick_check" in called or "tapps_validate_changed" in called:
-            effective.update({"tapps_score_file", "tapps_quality_gate", "tapps_security_scan"})
-
+        effective = _compute_effective_tools(called)
         missing_required = [t for t in required if t not in effective]
         missing_recommended = [t for t in recommended if t not in effective]
         missing_optional = [t for t in optional if t not in effective]
-
-        def hints(tools: list[str]) -> list[ChecklistHint]:
-            return [ChecklistHint(tool=t, reason=TOOL_REASONS.get(t, f"Call {t}.")) for t in tools]
 
         return ChecklistResult(
             task_type=task_type,
@@ -358,9 +387,9 @@ class CallTracker:
             missing_required=missing_required,
             missing_recommended=missing_recommended,
             missing_optional=missing_optional,
-            missing_required_hints=hints(missing_required),
-            missing_recommended_hints=hints(missing_recommended),
-            missing_optional_hints=hints(missing_optional),
+            missing_required_hints=_build_hints(missing_required),
+            missing_recommended_hints=_build_hints(missing_recommended),
+            missing_optional_hints=_build_hints(missing_optional),
             complete=len(missing_required) == 0,
             total_calls=call_count,
         )

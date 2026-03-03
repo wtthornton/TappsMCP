@@ -10,8 +10,8 @@ Discover --> Research --> Develop --> Validate --> Verify --> DONE
 |---|-------|---------|-------|
 | 1 | **Discover** | Understand server capabilities, project context, and recall memory | `tapps_server_info`, `tapps_project_profile`, `tapps_memory` |
 | 2 | **Research** | Look up library docs and consult domain experts | `tapps_lookup_docs`, `tapps_consult_expert`, `tapps_list_experts` |
-| 3 | **Develop** | Write code with quick feedback loops | `tapps_score_file` (quick=True) |
-| 4 | **Validate** | Full scoring, quality gate, and security scan | `tapps_score_file`, `tapps_quality_gate`, `tapps_security_scan` |
+| 3 | **Develop** | Write code with quick feedback loops | `tapps_quick_check`, `tapps_score_file` (quick=True) |
+| 4 | **Validate** | Full scoring, quality gate, and security scan | `tapps_score_file`, `tapps_quality_gate`, `tapps_security_scan`, `tapps_quick_check`, `tapps_validate_changed` |
 | 5 | **Verify** | Final checklist, save learnings to memory | `tapps_checklist`, `tapps_memory` |
 
 ## Stage Flow Rules

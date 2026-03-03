@@ -398,6 +398,27 @@ def _build_quick_check_data(
         "quick_categories": quick_categories,
     }
 
+    _add_optional_quick_check_fields(
+        data, score_result, sec_result, gate_result,
+        complexity_hint, fixes_applied, fix,
+    )
+    suggestions = _build_quick_check_suggestions(score_result, complexity_hint)
+    if suggestions:
+        data["suggestions"] = suggestions
+
+    return data, suggestions
+
+
+def _add_optional_quick_check_fields(
+    data: dict[str, Any],
+    score_result: ScoreResult,
+    sec_result: SecurityScanResult,
+    gate_result: GateResult,
+    complexity_hint: dict[str, Any] | None,
+    fixes_applied: int,
+    fix: bool,
+) -> None:
+    """Add conditional fields to quick_check data dict in-place."""
     if fix:
         data["fixes_applied"] = fixes_applied
     if complexity_hint:
@@ -412,16 +433,19 @@ def _build_quick_check_data(
             limit=10,
         )
 
+
+def _build_quick_check_suggestions(
+    score_result: ScoreResult,
+    complexity_hint: dict[str, Any] | None,
+) -> list[str]:
+    """Collect suggestions from score categories and complexity hint."""
     suggestions: list[str] = []
     for cat in score_result.categories.values():
         suggestions.extend(cat.suggestions)
     if complexity_hint:
         cc = complexity_hint["max_cc_estimate"]
         suggestions.append(f"Max function CC~{cc}. Consider splitting complex functions.")
-    if suggestions:
-        data["suggestions"] = suggestions
-
-    return data, suggestions
+    return suggestions
 
 
 def _attach_uncached_libraries_hint(

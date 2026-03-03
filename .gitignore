@@ -60,3 +60,6 @@ nul
 
 # UV
 .python-version
+
+# Local experiments
+/tools/

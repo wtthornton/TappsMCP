@@ -6,6 +6,7 @@ Understand the TappsMCP server capabilities and the project's tech stack before 
 
 ## Allowed Tools
 
+- `tapps_session_start` - Initialize the session (server info, checkers, configuration, memory status).
 - `tapps_server_info` - Discover server version, available tools, installed checkers, and configuration.
 - `tapps_project_profile` - Detect project type, tech stack, CI, Docker, test frameworks, and get quality recommendations.
 
@@ -17,7 +18,7 @@ Understand the TappsMCP server capabilities and the project's tech stack before 
 
 ## Steps
 
-1. Call `tapps_server_info()` to get the list of available tools and installed checkers.
+1. Call `tapps_session_start()` to initialize the session and get server info.
 2. Call `tapps_project_profile()` to detect the tech stack and get tailored recommendations.
 3. Note which checkers are installed (ruff, mypy, bandit, radon) - this affects scoring accuracy.
 4. Review quality recommendations from the project profile.

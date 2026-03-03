@@ -40,6 +40,44 @@ class SecurityScanResult(BaseModel):
     bandit_available: bool = Field(default=True)
 
 
+def _run_bandit_scan(
+    file_path: str,
+    *,
+    cwd: str | None,
+    timeout: int,
+) -> tuple[list[SecurityIssue], bool]:
+    """Run bandit if available, returning (issues, bandit_available)."""
+    available = _is_bandit_available()
+    if not available:
+        logger.info("bandit_not_available", hint="pip install bandit")
+        return [], False
+    return run_bandit_check(file_path, cwd=cwd, timeout=timeout), True
+
+
+def _run_secret_scan(file_path: str, *, scan_secrets: bool) -> list[SecretFinding]:
+    """Run secret scanning if enabled."""
+    if not scan_secrets:
+        return []
+    scanner = SecretScanner()
+    return scanner.scan_file(file_path).findings
+
+
+def _aggregate_severity_counts(
+    bandit_issues: list[SecurityIssue],
+    secret_findings: list[SecretFinding],
+) -> tuple[int, int, int, int]:
+    """Count (critical, high, medium, low) severities across all findings."""
+    all_severities = [i.severity for i in bandit_issues] + [
+        f.severity for f in secret_findings
+    ]
+    return (
+        sum(1 for s in all_severities if s == "critical"),
+        sum(1 for s in all_severities if s == "high"),
+        sum(1 for s in all_severities if s == "medium"),
+        sum(1 for s in all_severities if s == "low"),
+    )
+
+
 def run_security_scan(
     file_path: str,
     *,
@@ -62,27 +100,13 @@ def run_security_scan(
     Returns:
         Unified ``SecurityScanResult``.
     """
-    bandit_issues: list[SecurityIssue] = []
-    bandit_available = _is_bandit_available()
-
-    if bandit_available:
-        bandit_issues = run_bandit_check(file_path, cwd=cwd, timeout=timeout)
-    else:
-        logger.info("bandit_not_available", hint="pip install bandit")
-
-    secret_findings: list[SecretFinding] = []
-    if scan_secrets:
-        scanner = SecretScanner()
-        secret_findings = scanner.scan_file(file_path).findings
-
-    # Aggregate counts
-    all_severities: list[str] = [i.severity for i in bandit_issues] + [
-        f.severity for f in secret_findings
-    ]
-    critical = sum(1 for s in all_severities if s == "critical")
-    high = sum(1 for s in all_severities if s == "high")
-    medium = sum(1 for s in all_severities if s == "medium")
-    low = sum(1 for s in all_severities if s == "low")
+    bandit_issues, bandit_available = _run_bandit_scan(
+        file_path, cwd=cwd, timeout=timeout
+    )
+    secret_findings = _run_secret_scan(file_path, scan_secrets=scan_secrets)
+    critical, high, medium, low = _aggregate_severity_counts(
+        bandit_issues, secret_findings
+    )
 
     return SecurityScanResult(
         bandit_issues=bandit_issues,

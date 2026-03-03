@@ -7,6 +7,7 @@ Final verification that all required quality steps were completed. The checklist
 ## Allowed Tools
 
 - `tapps_checklist` - Reports which tools were called and which required/recommended steps are missing for this task type.
+- `tapps_memory` - Save key learnings and decisions for cross-session persistence.
 
 ## Constraints
 
@@ -23,6 +24,7 @@ Final verification that all required quality steps were completed. The checklist
    - **Recommended** steps missing: complete if time allows, or note as accepted risk.
    - **Optional** steps missing: safe to skip.
 4. If you completed additional steps, re-run the checklist to confirm.
+5. Save key learnings to `tapps_memory(action="save", ...)` for cross-session persistence.
 
 ## Task Type Guide
 

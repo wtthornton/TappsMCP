@@ -1,7 +1,9 @@
-<!-- tapps-agents-version: 0.4.5 -->
+<!-- tapps-agents-version: 0.7.0 -->
 # TappsMCP - instructions for AI assistants
 
-When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor, VS Code Copilot, Claude Desktop, etc.), you have access to tools that provide **deterministic code quality checks, doc lookup, and domain expert advice**. TappsMCP is a quality toolset designed to help your project and LLM produce the best possible code - use it to avoid hallucinated APIs, missed quality steps, and inconsistent output.
+When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
+
+**File paths:** Use paths relative to project root (e.g. `src/main.py`). Absolute host paths also work when `TAPPS_MCP_HOST_PROJECT_ROOT` is set.
 
 ---
 
@@ -112,16 +114,27 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 ## Recommended workflow
 
 1. **Session start:** Call `tapps_session_start` (server info only). Call `tapps_project_profile` when you need project context (tech stack, type, recommendations). Optionally call `tapps_list_experts` if you may need experts.
-2. **Check project memory:** Call `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")` to recall past decisions and project context from previous sessions.
+2. **Check project memory:** Consider calling `tapps_memory(action="search", query="...")` to recall past decisions and project context.
 3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
-4. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
-5. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
-6. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
-7. **Before declaring work complete:**
+3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
+4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
+5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
+6. **Before declaring work complete:**
    - Call `tapps_validate_changed()` to score + gate + security scan all changed files.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-8. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).
+7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).
+
+### Review Pipeline (multi-file)
+
+For reviewing and fixing multiple files in parallel, use the `/tapps-review-pipeline` skill:
+
+1. It detects changed Python files and spawns `tapps-review-fixer` agents (one per file or batch)
+2. Each agent scores the file, fixes issues, and runs the quality gate
+3. Results are merged and validated with `tapps_validate_changed`
+4. A summary table shows before/after scores, gate status, and fixes applied
+
+You can also invoke the `tapps-review-fixer` agent directly on individual files for combined review+fix in a single pass.
 
 ---
 
@@ -145,13 +158,15 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 
 ### Hooks (auto-generated)
 
-**Claude Code** (`.claude/hooks/`): 7 hook scripts that enforce quality automatically:
+**Claude Code** (`.claude/hooks/`): 9 hook scripts that enforce quality automatically:
 - **SessionStart** - Injects TappsMCP awareness on session start and after compaction
 - **PostToolUse (Edit/Write)** - Reminds you to run `tapps_quick_check` after Python edits
 - **Stop** - Reminds you to run `tapps_validate_changed` before session end (non-blocking)
 - **TaskCompleted** - Reminds you to validate before marking task complete (non-blocking)
 - **PreCompact** - Backs up scoring context before context window compaction
 - **SubagentStart** - Injects TappsMCP awareness into spawned subagents
+- **SubagentStop** - Captures subagent quality context on exit
+- **MemoryCapture** - Persists session quality data to memory on session stop
 
 **Cursor** (`.cursor/hooks/`): 3 hook scripts:
 - **beforeMCPExecution** - Logs MCP tool invocations for observability
@@ -160,14 +175,15 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 
 ### Subagents (auto-generated)
 
-Three agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
+Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 - **tapps-reviewer** (sonnet) - Reviews code quality and runs security scans after edits
 - **tapps-researcher** (haiku) - Looks up documentation and consults domain experts
 - **tapps-validator** (sonnet) - Runs pre-completion validation on all changed files
+- **tapps-review-fixer** (sonnet) - Combined review, fix, and validate in a single pass per file
 
 ### Skills (auto-generated)
 
-Seven SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
+Ten SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
 - **tapps-score** - Score a Python file across 7 quality categories
 - **tapps-gate** - Run a quality gate check and report pass/fail
 - **tapps-validate** - Validate all changed files before declaring work complete
@@ -175,6 +191,9 @@ Seven SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
 - **tapps-research** - Research a technical question using domain experts and docs
 - **tapps-security** - Run a comprehensive security audit with vulnerability scanning
 - **tapps-memory** - Manage shared project memory for cross-session knowledge
+- **tapps-tool-reference** - Full tool reference with per-tool guidance
+- **tapps-init** - Bootstrap TappsMCP in a project (AGENTS.md, rules, hooks, skills)
+- **tapps-engagement** - Change enforcement intensity (high/medium/low)
 
 ### Agent Teams (opt-in, Claude Code only)
 
@@ -234,5 +253,32 @@ The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard 
 2. Verify the TappsMCP server is running: `tapps-mcp doctor`
 3. Check that your permission mode is not `dontAsk` (which auto-denies unlisted tools)
 4. As a last resort, use `tapps_quick_check` on individual files instead of `tapps_validate_changed`
+## Essential tools (always-on workflow)
 
-**If `tapps_validate_changed` is too slow or times out:** The tool **defaults to quick mode** (ruff-only, under ~10s). If you explicitly pass `quick: false` for full validation and it times out, increase the MCP request timeout for the TappsMCP server (e.g. to 300000 ms / 5 minutes) in your IDE or client config. The server sends progress notifications every few seconds when the client supports them.
+| Tool | When to use |
+|------|--------------|
+| **tapps_session_start** | **FIRST call in every session** - server info only |
+| **tapps_quick_check** | **After editing any Python file** - quick score + gate + security |
+| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files |
+| **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
+| **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
+
+**For full tool reference** (28 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+
+---
+
+## Memory systems
+
+Your project may have two complementary memory systems. Use the right one for each type of knowledge:
+
+- **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Session learnings, user preferences, build commands, IDE settings, debugging insights. Auto-managed by Claude Code across sessions.
+- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge. Structured with tier classification (architectural/pattern/context), confidence scoring, decay, contradiction detection, and cross-session persistence.
+
+**When to use which:**
+- Build commands, IDE preferences, personal workflow notes --> auto memory
+- Architecture decisions, quality patterns, cross-agent knowledge --> `tapps_memory`
+
+Use `tapps_memory` for architecture decisions and quality patterns.
+
+---
+

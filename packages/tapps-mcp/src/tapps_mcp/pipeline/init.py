@@ -504,6 +504,50 @@ def _warm_caches(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         }
 
 
+def _extract_pip_package(hint: str) -> str | None:
+    """Extract package name from a 'pip install X' hint, or None if not allowed."""
+    if not hint or not hint.startswith("pip install "):
+        return None
+    pkg = hint.replace("pip install ", "").strip()
+    if pkg not in _ALLOWED_CHECKER_PACKAGES:
+        return None
+    return pkg
+
+
+def _install_missing_checkers(
+    install_hints: list[str],
+    project_root: Path,
+) -> None:
+    """Attempt to pip-install allowed missing checker packages."""
+    import contextlib
+    import subprocess
+    import sys
+
+    for hint in install_hints:
+        pkg = _extract_pip_package(hint)
+        if pkg is not None:
+            with contextlib.suppress(subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", pkg],
+                    capture_output=True,
+                    timeout=60,
+                    check=False,
+                    cwd=project_root,
+                )
+
+
+def _build_verification_result(installed: list[Any]) -> dict[str, Any]:
+    """Build verification result dict from tool detection output."""
+    missing = [t for t in installed if not t.available]
+    return {
+        "ok": len(missing) == 0,
+        "missing_checkers": [t.name for t in missing],
+        "installed": [t.name for t in installed if t.available],
+        "install_hints": [t.install_hint for t in missing if t.install_hint],
+        "checker_install_attempted": False,
+    }
+
+
 def _run_server_verification(
     project_root: Path,
     *,
@@ -513,46 +557,19 @@ def _run_server_verification(
     from tapps_mcp.tools.tool_detection import detect_installed_tools
 
     installed = detect_installed_tools()
-    missing = [t for t in installed if not t.available]
-    missing_names = [t.name for t in missing]
-    install_hints = [t.install_hint for t in missing if t.install_hint]
+    result = _build_verification_result(installed)
 
-    result: dict[str, Any] = {
-        "ok": len(missing) == 0,
-        "missing_checkers": missing_names,
-        "installed": [t.name for t in installed if t.available],
-        "install_hints": install_hints,
-        "checker_install_attempted": False,
-    }
-
-    if install_missing and missing:
+    if install_missing and result["missing_checkers"]:
         result["checker_install_attempted"] = True
-        import contextlib
-        import subprocess
-        import sys
-
-        for hint in install_hints:
-            if hint and hint.startswith("pip install "):
-                pkg = hint.replace("pip install ", "").strip()
-                if pkg not in _ALLOWED_CHECKER_PACKAGES:
-                    continue
-                with contextlib.suppress(subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                    subprocess.run(
-                        [sys.executable, "-m", "pip", "install", pkg],
-                        capture_output=True,
-                        timeout=60,
-                        check=False,
-                        cwd=project_root,
-                    )
+        _install_missing_checkers(result["install_hints"], project_root)
 
         # Reset cache so re-detection actually probes for newly installed tools
         from tapps_mcp.tools.tool_detection import _reset_tools_cache
 
         _reset_tools_cache()
         installed_after = detect_installed_tools()
-        result["ok"] = all(t.available for t in installed_after)
-        result["installed"] = [t.name for t in installed_after if t.available]
-        result["missing_checkers"] = [t.name for t in installed_after if not t.available]
+        result.update(_build_verification_result(installed_after))
+        result["checker_install_attempted"] = True
 
     return result
 

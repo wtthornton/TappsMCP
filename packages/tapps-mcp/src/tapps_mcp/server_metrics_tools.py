@@ -439,6 +439,152 @@ def _adjust_scoring_weights(helpful: bool) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# tapps_research helpers
+# ---------------------------------------------------------------------------
+
+
+def _infer_library_for_research(
+    library: str,
+    file_context: str,
+    suggested_library: str | None,
+) -> str:
+    """Infer the library name for doc lookup.
+
+    Tries: file_context imports -> tech stack -> suggested_library -> "python".
+    """
+    if not library and file_context:
+        try:
+            from tapps_mcp.knowledge.import_analyzer import extract_external_imports
+            from tapps_mcp.server import _validate_file_path
+
+            resolved_ctx = _validate_file_path(file_context)
+            settings = load_settings()
+            external = extract_external_imports(resolved_ctx, settings.project_root)
+            if external:
+                return external[0]
+        except Exception:
+            pass
+
+    if not library and not suggested_library:
+        try:
+            from tapps_mcp.server_helpers import get_session_context
+
+            session_ctx = get_session_context()
+            profile = session_ctx.get("project_profile") or {}
+            tech_stack = profile.get("tech_stack", {})
+            libs: list[str] = tech_stack.get(
+                "context7_priority", []
+            ) or tech_stack.get("libraries", [])
+            if libs:
+                return libs[0]
+        except Exception:
+            pass
+        return "python"
+
+    return library
+
+
+async def _fetch_docs_for_research(
+    lookup_library: str,
+    lookup_topic: str,
+) -> tuple[str | None, str | None, str | None, str | None, str | None]:
+    """Fetch documentation, returning (content, source, library, topic, error)."""
+    try:
+        from tapps_mcp.knowledge.cache import KBCache
+        from tapps_mcp.knowledge.lookup import LookupEngine
+
+        settings = load_settings()
+        cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+        engine = LookupEngine(cache, api_key=settings.context7_api_key)
+        try:
+            lr = await engine.lookup(
+                library=lookup_library,
+                topic=lookup_topic,
+                mode="code",
+            )
+        finally:
+            await engine.close()
+
+        if lr.success and lr.content:
+            max_chars = settings.expert_fallback_max_chars
+            return lr.content[:max_chars], lr.source, lookup_library, lookup_topic, None
+        return None, None, None, None, "Docs lookup returned no content."
+    except Exception as exc:
+        return None, None, None, None, str(exc)
+
+
+def _append_docs_to_answer(
+    answer: str,
+    docs_content: str | None,
+    docs_library: str | None,
+    docs_topic: str | None,
+    docs_source: str | None,
+) -> str:
+    """Append documentation reference to the expert answer."""
+    if not docs_content:
+        return answer
+    return (
+        f"{answer}\n\n---\n\n"
+        f"### Documentation reference (auto-attached)\n\n"
+        f"Library: `{docs_library}` | Topic: `{docs_topic}` "
+        f"| Source: {docs_source}\n\n"
+        f"{docs_content}"
+    )
+
+
+def _inject_research_memory(question: str, answer: str) -> tuple[str, int]:
+    """Inject relevant memories into the answer. Returns (augmented_answer, count)."""
+    try:
+        from tapps_core.memory.injection import append_memory_to_answer, inject_memories
+        from tapps_mcp.server_helpers import _get_memory_store
+
+        settings = load_settings()
+        store = _get_memory_store()
+        mem_result = inject_memories(question, store, settings.llm_engagement_level)
+        return append_memory_to_answer(answer, mem_result), mem_result.get("memory_injected", 0)
+    except Exception:
+        import structlog as _sl
+
+        _sl.get_logger(__name__).debug(
+            "memory_injection_failed: tapps_research", exc_info=True
+        )
+        return answer, 0
+
+
+def _attach_research_structured_output(
+    resp: dict[str, Any],
+    result: Any,
+    answer: str,
+    docs_content: str | None,
+    docs_library: str | None,
+    docs_topic: str | None,
+    file_context: str,
+) -> None:
+    """Attach structured output to research response in-place."""
+    try:
+        from tapps_mcp.common.output_schemas import ResearchOutput
+
+        structured = ResearchOutput(
+            domain=result.domain,
+            expert_name=result.expert_name,
+            answer=answer,
+            confidence=round(result.confidence, 4),
+            sources=result.sources,
+            docs_supplemented=docs_content is not None,
+            docs_library=docs_library,
+            docs_topic=docs_topic,
+            file_context=file_context or None,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        import structlog as _structlog
+
+        _structlog.get_logger(__name__).debug(
+            "structured_output_failed: tapps_research", exc_info=True
+        )
+
+
 async def tapps_research(
     question: str,
     domain: str = "",
@@ -474,7 +620,6 @@ async def tapps_research(
     start = time.perf_counter_ns()
     _record_call("tapps_research")
 
-    # Validate and sanitize inputs
     question = _sanitize_param(question, max_len=5000)
     file_context = _sanitize_param(file_context, max_len=500)
     if not question:
@@ -488,106 +633,21 @@ async def tapps_research(
         from tapps_mcp.experts.engine import consult_expert
 
         result = await asyncio.to_thread(
-            consult_expert,
-            question=question,
-            domain=domain or None,
+            consult_expert, question=question, domain=domain or None,
         )
 
-        docs_content: str | None = None
-        docs_source: str | None = None
-        docs_library: str | None = None
-        docs_topic: str | None = None
-        docs_error: str | None = None
-
-        # Infer library from file_context imports when not provided
-        if not library and file_context:
-            try:
-                from tapps_mcp.knowledge.import_analyzer import extract_external_imports
-                from tapps_mcp.server import _validate_file_path
-
-                resolved_ctx = _validate_file_path(file_context)
-                settings = load_settings()
-                external = extract_external_imports(resolved_ctx, settings.project_root)
-                if external:
-                    library = external[0]
-            except Exception:
-                pass  # Best-effort; file_context is optional
-
-        # Infer library from tech stack when still empty
-        if not library and not result.suggested_library:
-            try:
-                from tapps_mcp.server_helpers import get_session_context
-
-                session_ctx = get_session_context()
-                profile = session_ctx.get("project_profile") or {}
-                tech_stack = profile.get("tech_stack", {})
-                libs: list[str] = tech_stack.get(
-                    "context7_priority", []
-                ) or tech_stack.get("libraries", [])
-                library = libs[0] if libs else "python"
-            except Exception:
-                library = "python"
-
-        # Always fetch docs to supplement expert answer
+        library = _infer_library_for_research(library, file_context, result.suggested_library)
         lookup_library = library or result.suggested_library or "python"
         lookup_topic = topic or result.suggested_topic or "overview"
 
-        try:
-            from tapps_mcp.knowledge.cache import KBCache
-            from tapps_mcp.knowledge.lookup import LookupEngine
+        docs_content, docs_source, docs_library, docs_topic, docs_error = (
+            await _fetch_docs_for_research(lookup_library, lookup_topic)
+        )
 
-            settings = load_settings()
-            cache = KBCache(settings.project_root / ".tapps-mcp-cache")
-            engine = LookupEngine(cache, api_key=settings.context7_api_key)
-            try:
-                lr = await engine.lookup(
-                    library=lookup_library,
-                    topic=lookup_topic,
-                    mode="code",
-                )
-            finally:
-                await engine.close()
-
-            if lr.success and lr.content:
-                max_chars = settings.expert_fallback_max_chars
-                docs_content = lr.content[:max_chars]
-                docs_source = lr.source
-                docs_library = lookup_library
-                docs_topic = lookup_topic
-            else:
-                docs_error = "Docs lookup returned no content."
-        except Exception as exc:
-            docs_error = str(exc)
-
-        answer = result.answer
-        if docs_content:
-            answer = (
-                f"{answer}\n\n---\n\n"
-                f"### Documentation reference (auto-attached)\n\n"
-                f"Library: `{docs_library}` | Topic: `{docs_topic}` "
-                f"| Source: {docs_source}\n\n"
-                f"{docs_content}"
-            )
-
-        # Memory injection (Epic 25)
-        memory_injected = 0
-        try:
-            from tapps_core.memory.injection import append_memory_to_answer, inject_memories
-            from tapps_mcp.server_helpers import _get_memory_store
-
-            settings = load_settings()
-            store = _get_memory_store()
-            mem_result = inject_memories(
-                question, store, settings.llm_engagement_level
-            )
-            answer = append_memory_to_answer(answer, mem_result)
-            memory_injected = mem_result.get("memory_injected", 0)
-        except Exception:
-            import structlog as _sl
-
-            _sl.get_logger(__name__).debug(
-                "memory_injection_failed: tapps_research", exc_info=True
-            )
+        answer = _append_docs_to_answer(
+            result.answer, docs_content, docs_library, docs_topic, docs_source,
+        )
+        answer, memory_injected = _inject_research_memory(question, answer)
 
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_research", start)
@@ -618,29 +678,9 @@ async def tapps_research(
             },
         )
 
-        # Attach structured output
-        try:
-            from tapps_mcp.common.output_schemas import ResearchOutput
-
-            structured = ResearchOutput(
-                domain=result.domain,
-                expert_name=result.expert_name,
-                answer=answer,
-                confidence=round(result.confidence, 4),
-                sources=result.sources,
-                docs_supplemented=docs_content is not None,
-                docs_library=docs_library,
-                docs_topic=docs_topic,
-                file_context=file_context or None,
-            )
-            resp["structuredContent"] = structured.to_structured_content()
-        except Exception:
-            import structlog as _structlog
-
-            _structlog.get_logger(__name__).debug(
-                "structured_output_failed: tapps_research", exc_info=True
-            )
-
+        _attach_research_structured_output(
+            resp, result, answer, docs_content, docs_library, docs_topic, file_context,
+        )
         return _with_nudges("tapps_research", resp)
 
     except Exception:

@@ -11,5 +11,5 @@ try {
 if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
     exit 0
 }
-Write-Host "Reminder: Run tapps_validate_changed before ending the session." -ForegroundColor Yellow
+Write-Host "Reminder: Run tapps_validate_changed and tapps_checklist before ending the session." -ForegroundColor Yellow
 exit 0
