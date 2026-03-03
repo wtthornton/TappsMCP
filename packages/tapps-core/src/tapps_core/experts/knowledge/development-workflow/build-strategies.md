@@ -143,10 +143,10 @@ echo "Installing dependencies..."
 pip install -r requirements.txt
 
 echo "Running linting..."
-flake8 .
+ruff check .
 
 echo "Running type checking..."
-mypy .
+mypy --strict .
 
 echo "Running tests..."
 pytest --cov
@@ -183,7 +183,7 @@ echo "Build complete!"
 ```yaml
 strategy:
   matrix:
-    python-version: [3.9, 3.10, 3.11]
+    python-version: [3.12, 3.13]
     os: [ubuntu-latest, windows-latest, macos-latest]
 ```
 

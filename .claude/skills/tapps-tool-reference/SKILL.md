@@ -51,6 +51,14 @@ provide the full tool reference from this skill.
 | **tapps_dependency_scan** | Check for CVEs before releases |
 | **tapps_dependency_graph** | Understand module dependencies, circular imports |
 
+## Metrics & reporting
+| Tool | When to use it |
+|------|----------------|
+| **tapps_report** | Generate quality reports across multiple Python files |
+| **tapps_dashboard** | Generate metrics dashboard for TappsMCP performance trends |
+| **tapps_stats** | View tool usage statistics and call counts |
+| **tapps_feedback** | Provide feedback on tool effectiveness for adaptive learning |
+
 ## Pipeline & init
 | Tool | When to use it |
 |------|----------------|

@@ -121,8 +121,8 @@ Automation reduces manual work, improves consistency, and enables faster deliver
 ```bash
 #!/bin/sh
 # Pre-commit hook
-flake8 .
-mypy .
+ruff check .
+mypy --strict .
 pytest --quick
 ```
 

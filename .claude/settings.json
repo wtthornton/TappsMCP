@@ -36,6 +36,15 @@
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-post-edit.ps1"
           }
         ]
+      },
+      {
+        "matcher": "mcp__tapps-mcp__tapps_validate_changed|mcp__tapps-mcp__tapps_report",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-stop.ps1"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -44,6 +53,14 @@
           {
             "type": "command",
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-stop.ps1"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-memory-capture.ps1"
           }
         ]
       }

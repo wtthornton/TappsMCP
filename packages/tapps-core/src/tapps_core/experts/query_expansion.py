@@ -129,6 +129,30 @@ SYNONYMS: dict[str, str] = {
     "anonymization": "anonymize",
     "pseudonymization": "pseudonymize",
     "data breach": "breach notification",
+    # Benchmark & evaluation
+    "benchmarking": "benchmark",
+    "agentbench": "benchmark",
+    "evaluation": "benchmark",
+    "eval": "benchmark",
+    "ablation": "benchmark",
+    # Template & platform
+    "template optimization": "template",
+    "templates": "template",
+    "platform generation": "platform",
+    "platform rules": "platform",
+    "skill generation": "platform",
+    "hook generation": "hook",
+    "hooks": "hook",
+    # Adaptive & feedback
+    "adaptive feedback": "adaptive",
+    "adaptive learning": "adaptive",
+    "weight adjustment": "adaptive",
+    "reinforcement": "reinforce",
+    "reinforcing": "reinforce",
+    # Progress & sidecar
+    "sidecar": "progress",
+    "progress file": "progress",
+    "ctx.info": "progress",
 }
 
 

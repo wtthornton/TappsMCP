@@ -131,7 +131,7 @@ src/tapps_mcp/
 │               hot_rank.py, retrieval_eval.py,
 │               knowledge_freshness.py, knowledge_validator.py,
 │               knowledge_ingestion.py
-│               knowledge/ (139 markdown files across 17 domains)
+│               knowledge/ (145 markdown files across 17 domains)
 ├── adaptive/   models.py, protocols.py, persistence.py,
 │               scoring_engine.py, scoring_wrapper.py,
 │               voting_engine.py, weight_distributor.py
@@ -147,7 +147,10 @@ src/tapps_mcp/
 ├── prompts/    prompt_loader.py,
 │               overview.md, discover.md, research.md, develop.md,
 │               validate.md, verify.md, handoff_template.md,
-│               runlog_template.md, platform_claude.md, platform_cursor.md
+│               runlog_template.md, platform_claude.md, platform_cursor.md,
+│               agents_template_{high,medium,low}.md,
+│               platform_claude_{high,medium,low}.md,
+│               platform_cursor_{high,medium,low}.md
 ├── project/    models.py, ast_parser.py, tech_stack.py,
 │               type_detector.py, profiler.py, session_notes.py,
 │               impact_analyzer.py, report.py, import_graph.py,
@@ -229,7 +232,7 @@ All file I/O goes through `security/path_validator.py`, which sandboxes operatio
 
 ### Expert system
 
-17 domain experts in `experts/` with 139 curated knowledge markdown files under `experts/knowledge/`. The `experts/engine.py` uses keyword-based RAG (or optional vector RAG with faiss), with core logic split into helpers (`_detect_domain`, `_retrieve_knowledge`, `_format_consultation_response`, `_apply_freshness_warnings`). When `adaptive.enabled` is True, the `AdaptiveDomainDetector` routes queries based on learned feedback outcomes (with 0.4 confidence threshold), falling back to the static `DomainDetector`. Query expansion via `experts/query_expansion.py` (~60 synonym pairs) improves domain detection recall. Knowledge freshness warnings are included when retrieved chunks are >365 days old. All retrieved content passes through `security/content_safety.py` for prompt injection filtering (formerly in `knowledge/rag_safety.py`, which now delegates to the security module).
+17 domain experts in `experts/` with 145 curated knowledge markdown files under `experts/knowledge/`. The `experts/engine.py` uses keyword-based RAG (or optional vector RAG with faiss), with core logic split into helpers (`_detect_domain`, `_retrieve_knowledge`, `_format_consultation_response`, `_apply_freshness_warnings`). When `adaptive.enabled` is True, the `AdaptiveDomainDetector` routes queries based on learned feedback outcomes (with 0.4 confidence threshold), falling back to the static `DomainDetector`. Query expansion via `experts/query_expansion.py` (~80 synonym pairs) improves domain detection recall. Knowledge freshness warnings are included when retrieved chunks are >365 days old. All retrieved content passes through `security/content_safety.py` for prompt injection filtering (formerly in `knowledge/rag_safety.py`, which now delegates to the security module).
 
 ### Memory subsystem
 

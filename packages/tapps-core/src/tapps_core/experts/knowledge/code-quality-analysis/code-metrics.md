@@ -107,7 +107,7 @@ Measures how frequently code changes.
 - **radon**: Complexity metrics
 - **coverage.py**: Test coverage
 - **vulture**: Dead code detection
-- **pylint**: Code quality scoring
+- **ruff**: Linting and code quality (replaces pylint, flake8)
 
 ### JavaScript/TypeScript
 - **complexity-report**: Cyclomatic complexity

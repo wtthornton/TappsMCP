@@ -147,7 +147,7 @@ if __name__ == "__main__":
 | 2025-06-18 | Jun 2025 | Structured tool outputs, OAuth, elicitation, `MCP-Protocol-Version` header |
 | 2025-11-25 | Nov 2025 | Tasks primitive (experimental), OpenID Connect, icons metadata, extension framework |
 
-As of December 2025, MCP governance was donated to the **Agentic AI Foundation (AAIF)** under the Linux Foundation.
+In December 2025, MCP governance was donated to the **Agentic AI Foundation (AAIF)** under the Linux Foundation.
 
 ## MCP Clients (2026)
 
@@ -212,6 +212,174 @@ Annotations help clients understand tool behaviour (read-only vs side-effect, op
 3. **Synchronous I/O**: Blocking the event loop degrades server responsiveness
 4. **Unbounded output**: Returning megabytes of data overwhelms the LLM's context
 5. **Side effects in resources**: Resources should be read-only; use tools for mutations
+
+## MCP Context Progress Notifications
+
+### Overview
+
+Long-running MCP tools can report progress to the client via `ctx.info()`
+and `ctx.report_progress()`. This provides real-time feedback during
+operations that may take several seconds (validation, scanning, reporting).
+
+### ctx.info() for Status Messages
+
+Use `ctx.info()` to send human-readable status updates:
+
+```python
+@mcp.tool()
+async def validate_changed(
+    file_paths: str = "",
+    ctx: Context | None = None,
+) -> str:
+    """Validate changed files against quality gate."""
+    if ctx:
+        await ctx.info("Detecting changed files...")
+
+    files = detect_changed_files(file_paths)
+
+    for i, f in enumerate(files):
+        if ctx:
+            await ctx.info(f"Scoring {f.name} ({i+1}/{len(files)})...")
+        await score_file(f)
+
+    if ctx:
+        await ctx.info("Validation complete.")
+    return format_results(files)
+```
+
+### ctx.report_progress() for Numeric Progress
+
+Use `ctx.report_progress()` for operations with known step counts:
+
+```python
+if ctx:
+    await ctx.report_progress(current=i + 1, total=len(files))
+```
+
+### Defensive ctx Access Pattern
+
+The `ctx` parameter may be `None` (when called programmatically) or may
+lack `info`/`report_progress` methods (older SDK versions). Use a
+defensive pattern:
+
+```python
+async def emit_ctx_info(ctx: object | None, message: str) -> None:
+    """Safely emit a ctx.info() notification.
+
+    Handles: ctx is None, ctx has no info attribute,
+    ctx.info() raises an exception.
+    """
+    if ctx is None:
+        return
+    info_fn = getattr(ctx, "info", None)
+    if info_fn is None:
+        return
+    try:
+        await info_fn(message)
+    except Exception:
+        pass  # suppress - progress is non-critical
+```
+
+This shared helper (`emit_ctx_info` in `server_helpers.py`) is used across
+all tools that support progress notifications, ensuring consistent and
+safe handling.
+
+### Sidecar Progress Files
+
+For redundant progress delivery, tools write JSON sidecar files that
+Claude Code hooks can read:
+
+```python
+import json
+from pathlib import Path
+
+def write_sidecar_progress(
+    project_root: Path,
+    filename: str,
+    data: dict,
+) -> None:
+    """Write a progress sidecar file for hook consumption."""
+    sidecar_dir = project_root / ".tapps-mcp"
+    sidecar_dir.mkdir(parents=True, exist_ok=True)
+    sidecar_path = sidecar_dir / filename
+    sidecar_path.write_text(
+        json.dumps(data, indent=2),
+        encoding="utf-8",
+    )
+```
+
+Two sidecar files are used:
+
+| File | Written By | Contents |
+|---|---|---|
+| `.tapps-mcp/.validation-progress.json` | `tapps_validate_changed` | Per-file scoring status, overall progress |
+| `.tapps-mcp/.report-progress.json` | `tapps_report` | Report generation progress, file count |
+
+### Hook-Based Redundant Delivery
+
+Claude Code hooks read sidecar files to display progress even when
+`ctx.info()` messages are not surfaced in the UI:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "tapps_validate_changed",
+        "command": "bash .claude/hooks/post-validate.sh"
+      },
+      {
+        "matcher": "tapps_report",
+        "command": "bash .claude/hooks/post-report.sh"
+      }
+    ],
+    "Stop": [
+      {
+        "command": "bash .claude/hooks/stop-progress-summary.sh"
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "command": "bash .claude/hooks/task-completed-summary.sh"
+      }
+    ]
+  }
+}
+```
+
+The hook script reads the sidecar and outputs a summary:
+
+```bash
+#!/usr/bin/env bash
+PROGRESS=".tapps-mcp/.validation-progress.json"
+if [ -f "$PROGRESS" ]; then
+    cat "$PROGRESS"
+    rm -f "$PROGRESS"  # clean up after reading
+fi
+```
+
+### Tools with ctx Support
+
+The following tools emit progress notifications via `ctx.info()`:
+
+| Tool | Progress Type | Notes |
+|---|---|---|
+| `tapps_validate_changed` | Per-file scoring progress | Also writes sidecar |
+| `tapps_report` | Report generation steps | Also writes sidecar |
+| `tapps_init` | Pipeline initialization steps | Multi-phase setup |
+| `tapps_upgrade` | File upgrade progress | Async operation |
+| `tapps_dependency_scan` | Dependency audit progress | External tool call |
+| `tapps_dead_code` | File scanning progress | Per-file or project-wide |
+| `tapps_dependency_graph` | Graph analysis steps | Cycle detection, coupling |
+
+### Best Practices
+
+1. **Always use the defensive helper** (`emit_ctx_info`) rather than calling `ctx.info()` directly
+2. **Include counts** in messages: "Scoring file 3/10..." is better than "Scoring file..."
+3. **Keep messages short** - they appear in status bars or log panels
+4. **Write sidecars atomically** - write to a temp file then rename
+5. **Clean up sidecars** after reading to avoid stale data on next run
+6. **Never block on ctx failures** - progress is informational, not critical
 
 ## References
 

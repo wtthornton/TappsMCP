@@ -1,8 +1,8 @@
 ---
 name: tapps-reviewer
 description: >-
-  Use proactively to review code quality, run security scans, and enforce
-  quality gates after editing Python files.
+  Use proactively to review code quality and enforce quality gates
+  after editing Python files.
 tools: Read, Glob, Grep
 model: sonnet
 maxTurns: 20
