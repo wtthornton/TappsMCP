@@ -10,14 +10,21 @@ registered on the ``mcp`` instance via :func:`register`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import dataclasses
+import json as _json
 import time
+from datetime import datetime, timezone
+from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from mcp.server.fastmcp import Context  # noqa: TC002 - MCP SDK needs runtime access
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
 from tapps_mcp.server_helpers import (
+    emit_ctx_info,
     ensure_session_initialized,
     error_response,
     success_response,
@@ -294,6 +301,71 @@ async def tapps_impact_analysis(
 
 
 # ---------------------------------------------------------------------------
+# Report progress sidecar (Story 40.1)
+# ---------------------------------------------------------------------------
+
+_REPORT_PROGRESS_FILE = ".tapps-mcp/.report-progress.json"
+
+
+@dataclasses.dataclass
+class _ReportProgressTracker:
+    """Shared progress state for tapps_report sidecar file."""
+
+    total: int = 0
+    completed: int = 0
+    last_file: str = ""
+    _sidecar_path: _Path | None = dataclasses.field(default=None, repr=False)
+    _results: list[dict[str, Any]] = dataclasses.field(default_factory=list, repr=False)
+    _started_at: str = dataclasses.field(default="", repr=False)
+
+    def init_sidecar(self, project_root: _Path) -> None:
+        sidecar_dir = project_root / ".tapps-mcp"
+        try:
+            sidecar_dir.mkdir(parents=True, exist_ok=True)
+            self._sidecar_path = sidecar_dir / ".report-progress.json"
+            self._started_at = datetime.now(tz=timezone.utc).isoformat()
+            self._write_sidecar({})
+        except Exception:
+            self._sidecar_path = None
+
+    def record_file_result(self, file_path: str, result: dict[str, Any]) -> None:
+        self._results.append({
+            "file": file_path,
+            "score": result.get("overall_score", 0),
+        })
+        self._write_sidecar({})
+
+    def finalize(self, summary: str, elapsed_ms: int) -> None:
+        self._write_sidecar({
+            "status": "completed",
+            "summary": summary,
+            "elapsed_ms": elapsed_ms,
+        })
+
+    def finalize_error(self, error: str) -> None:
+        self._write_sidecar({"status": "error", "error": error})
+
+    def _write_sidecar(self, extra: dict[str, Any]) -> None:
+        if self._sidecar_path is None:
+            return
+        data: dict[str, Any] = {
+            "status": extra.get("status", "running"),
+            "total": self.total,
+            "completed": self.completed,
+            "last_file": self.last_file,
+            "started_at": self._started_at,
+            "results": list(self._results),
+        }
+        data.update(extra)
+        try:
+            self._sidecar_path.write_text(
+                _json.dumps(data, indent=2), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # tapps_report
 # ---------------------------------------------------------------------------
 
@@ -302,6 +374,7 @@ async def tapps_report(
     file_path: str = "",
     report_format: str = "json",
     max_files: int = 20,
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Generate a quality report combining scoring and gate results.
 
@@ -331,8 +404,6 @@ async def tapps_report(
         score_results.append(result)
         gate_results.append(evaluate_gate(result, preset=settings.quality_preset))
     else:
-        from pathlib import Path as _Path
-
         from tapps_core.common.utils import should_skip_path
 
         # should_skip_path excludes .venv*, node_modules, dist,
@@ -340,20 +411,62 @@ async def tapps_report(
         py_files = sorted(_Path(settings.project_root).rglob("*.py"))
         py_files = [f for f in py_files if not should_skip_path(f)][: max(1, max_files)]
 
+        tracker = _ReportProgressTracker(total=len(py_files))
+        tracker.init_sidecar(settings.project_root)
+
         async def _score_one(pf: _Path) -> tuple[Any, Any] | None:
             try:
                 res = await scorer.score_file(pf)
-                return res, evaluate_gate(res, preset=settings.quality_preset)
+                gate = evaluate_gate(res, preset=settings.quality_preset)
+                tracker.completed += 1
+                tracker.last_file = pf.name
+                score_val = getattr(res, "overall_score", 0)
+                tracker.record_file_result(str(pf), {"overall_score": score_val})
+                await emit_ctx_info(ctx, f"Scored {pf.name}: {score_val}/100")
+                return res, gate
             except (ValueError, OSError, RuntimeError) as e:
                 logger.warning("report_file_skip", file=str(pf), error=str(e))
                 return None
 
-        tasks = [_score_one(pf) for pf in py_files]
-        outcomes = await asyncio.gather(*tasks, return_exceptions=False)
-        for out in outcomes:
-            if out is not None:
-                score_results.append(out[0])
-                gate_results.append(out[1])
+        # Heartbeat task for project-wide progress reporting
+        _stop_event = asyncio.Event()
+        _heartbeat_task: asyncio.Task[None] | None = None
+        report_fn = getattr(ctx, "report_progress", None) if ctx else None
+        if callable(report_fn):
+            async def _report_heartbeat() -> None:
+                while not _stop_event.is_set():
+                    with contextlib.suppress(Exception):
+                        await report_fn(
+                            progress=tracker.completed,
+                            total=tracker.total,
+                            message=f"Scored {tracker.completed}/{tracker.total} files ({tracker.last_file or 'starting...'})",
+                        )
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await asyncio.wait_for(_stop_event.wait(), timeout=5.0)
+
+            _heartbeat_task = asyncio.create_task(_report_heartbeat())
+
+        try:
+            tasks = [_score_one(pf) for pf in py_files]
+            outcomes = await asyncio.gather(*tasks, return_exceptions=False)
+            for out in outcomes:
+                if out is not None:
+                    score_results.append(out[0])
+                    gate_results.append(out[1])
+
+            elapsed_ms_inner = (time.perf_counter_ns() - start) // 1_000_000
+            tracker.finalize(
+                f"{len(score_results)} files scored", elapsed_ms_inner
+            )
+        except Exception as exc:
+            tracker.finalize_error(str(exc))
+            raise
+        finally:
+            _stop_event.set()
+            if _heartbeat_task is not None:
+                _heartbeat_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await _heartbeat_task
 
     report_data = generate_report(score_results, gate_results, report_format=report_format)
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -371,6 +484,7 @@ async def tapps_dead_code(
     file_path: str = "",
     min_confidence: int = 80,
     scope: str = "file",
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Scan a Python file for dead code (unused functions, classes, imports, variables).
 
@@ -432,6 +546,8 @@ async def tapps_dead_code(
         else:
             file_list = collect_changed_python_files(project_root)
 
+        await emit_ctx_info(ctx, f"Scanning {len(file_list)} files for dead code...")
+
         if not file_list:
             elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
             _record_execution("tapps_dead_code", start)
@@ -477,6 +593,9 @@ async def tapps_dead_code(
             entry["file_path"] = f.file_path
         by_type.setdefault(f.finding_type, []).append(entry)
 
+    if scope != "file":
+        await emit_ctx_info(ctx, f"Dead code scan complete: {len(findings)} items in {files_scanned} file(s)")
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_dead_code", start, file_path=display_path)
 
@@ -509,7 +628,10 @@ async def tapps_dead_code(
 # ---------------------------------------------------------------------------
 
 
-async def tapps_dependency_scan(project_root: str = "") -> dict[str, Any]:
+async def tapps_dependency_scan(
+    project_root: str = "",
+    ctx: Context[Any, Any, Any] | None = None,
+) -> dict[str, Any]:
     """Scan project dependencies for known vulnerabilities using pip-audit.
 
     Args:
@@ -543,12 +665,40 @@ async def tapps_dependency_scan(project_root: str = "") -> dict[str, Any]:
 
     root = project_root if project_root else str(settings.project_root)
 
-    result = await run_pip_audit_async(
-        project_root=root,
-        source=settings.dependency_scan_source,
-        severity_threshold=settings.dependency_scan_severity_threshold,
-        ignore_ids=settings.dependency_scan_ignore_ids or None,
-    )
+    # Heartbeat task for dependency scan progress
+    _stop_event = asyncio.Event()
+    _heartbeat_task: asyncio.Task[None] | None = None
+    report_fn = getattr(ctx, "report_progress", None) if ctx else None
+    if callable(report_fn):
+        _scan_start = time.monotonic()
+
+        async def _scan_heartbeat() -> None:
+            while not _stop_event.is_set():
+                elapsed = int(time.monotonic() - _scan_start)
+                with contextlib.suppress(Exception):
+                    await report_fn(
+                        progress=elapsed,
+                        total=0,
+                        message=f"Scanning dependencies... ({elapsed}s elapsed)",
+                    )
+                with contextlib.suppress(asyncio.CancelledError):
+                    await asyncio.wait_for(_stop_event.wait(), timeout=5.0)
+
+        _heartbeat_task = asyncio.create_task(_scan_heartbeat())
+
+    try:
+        result = await run_pip_audit_async(
+            project_root=root,
+            source=settings.dependency_scan_source,
+            severity_threshold=settings.dependency_scan_severity_threshold,
+            ignore_ids=settings.dependency_scan_ignore_ids or None,
+        )
+    finally:
+        _stop_event.set()
+        if _heartbeat_task is not None:
+            _heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await _heartbeat_task
 
     # Populate session cache so scorer.py applies dependency penalties
     if not result.error:
@@ -581,6 +731,11 @@ async def tapps_dependency_scan(project_root: str = "") -> dict[str, Any]:
         parts = [f"{count} {sev}" for sev, count in sorted(sev_counts.items())]
         summary += f" ({', '.join(parts)})"
 
+    await emit_ctx_info(
+        ctx,
+        f"Scan complete: {len(result.findings)} vulnerabilities in {result.scanned_packages} packages",
+    )
+
     data: dict[str, Any] = {
         "scanned_packages": result.scanned_packages,
         "vulnerable_packages": result.vulnerable_packages,
@@ -606,6 +761,7 @@ async def tapps_dependency_graph(
     project_root: str = "",
     detect_cycles: bool = True,
     include_coupling: bool = True,
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Analyze import dependencies: detect circular imports and measure coupling.
 
@@ -691,7 +847,21 @@ async def tapps_dependency_graph(
         }
         return result
 
+    await emit_ctx_info(ctx, "Building import graph...")
     data = await asyncio.to_thread(_build_graph_sync)
+
+    if detect_cycles:
+        await emit_ctx_info(
+            ctx,
+            f"Cycle detection complete: {data.get('cycles', {}).get('total', 0)} cycles found",
+        )
+    if include_coupling:
+        await emit_ctx_info(
+            ctx,
+            f"Coupling analysis complete: {data.get('coupling', {}).get('hub_count', 0)} hubs found",
+        )
+    total_modules = data.get("total_modules", 0)
+    await emit_ctx_info(ctx, f"Analysis complete: {total_modules} modules analyzed")
 
     # Cross-reference with cached vulnerability findings when available
     external_imports = data.pop("_external_imports", {})
