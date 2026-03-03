@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -83,6 +84,31 @@ def _reset_memory_store_cache() -> None:
     """Reset the cached :class:`MemoryStore` singleton (for testing)."""
     global _memory_store
     _memory_store = None
+
+
+# ---------------------------------------------------------------------------
+# MCP Context notification helpers
+# ---------------------------------------------------------------------------
+
+
+async def emit_ctx_info(
+    ctx: Any,
+    message: str,
+) -> None:
+    """Send a ``ctx.info()`` log notification (best-effort, never raises).
+
+    Follows the defensive access pattern:
+    1. ``ctx is None`` — no-op (tool called without context).
+    2. ``getattr`` check — graceful on older MCP SDK versions.
+    3. ``contextlib.suppress`` — network/protocol errors never crash the tool.
+    """
+    if ctx is None:
+        return
+    info_fn = getattr(ctx, "info", None)
+    if not callable(info_fn):
+        return
+    with contextlib.suppress(Exception):
+        await info_fn(message)
 
 
 def error_response(tool_name: str, code: str, message: str) -> dict[str, Any]:

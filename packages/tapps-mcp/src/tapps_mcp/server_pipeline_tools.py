@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
+import json as _json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -17,7 +19,7 @@ from mcp.server.fastmcp import Context  # noqa: TC002 - MCP SDK needs runtime ac
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
-from tapps_mcp.server_helpers import error_response, success_response
+from tapps_mcp.server_helpers import emit_ctx_info, error_response, success_response
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -63,6 +65,77 @@ _ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT = ToolAnnotations(
 
 
 _PROGRESS_HEARTBEAT_INTERVAL = 5  # seconds between progress notifications
+
+
+_VALIDATION_PROGRESS_FILE = ".tapps-mcp/.validation-progress.json"
+
+
+@dataclasses.dataclass
+class _ProgressTracker:
+    """Shared progress state for validate_changed heartbeat and sidecar file."""
+
+    total: int = 0
+    completed: int = 0
+    last_file: str = ""
+    _sidecar_path: Path | None = dataclasses.field(default=None, repr=False)
+    _results: list[dict[str, Any]] = dataclasses.field(
+        default_factory=list, repr=False
+    )
+    _started_at: str = dataclasses.field(default="", repr=False)
+
+    def init_sidecar(self, project_root: Path) -> None:
+        """Create sidecar progress file with initial 'running' status."""
+        self._sidecar_path = project_root / _VALIDATION_PROGRESS_FILE
+        self._started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self._write_sidecar({"status": "running"})
+
+    def record_file_result(self, file_path: str, result: dict[str, Any]) -> None:
+        """Record a completed file result and update the sidecar."""
+        self._results.append({
+            "file": file_path,
+            "score": result.get("overall_score", 0.0),
+            "gate_passed": result.get("gate_passed", False),
+        })
+        self._write_sidecar({"status": "running"})
+
+    def finalize(
+        self,
+        all_passed: bool,
+        summary: str,
+        elapsed_ms: int,
+    ) -> None:
+        """Write final sidecar state with completed status."""
+        self._write_sidecar({
+            "status": "completed",
+            "all_gates_passed": all_passed,
+            "summary": summary,
+            "elapsed_ms": elapsed_ms,
+        })
+
+    def finalize_error(self, error: str) -> None:
+        """Write error status to sidecar."""
+        self._write_sidecar({"status": "error", "error": error})
+
+    def _write_sidecar(self, extra: dict[str, Any]) -> None:
+        """Write the sidecar progress file (best-effort, never raises)."""
+        if self._sidecar_path is None:
+            return
+        try:
+            data = {
+                "started_at": self._started_at,
+                "total": self.total,
+                "completed": self.completed,
+                "last_file": self.last_file,
+                "results": self._results,
+                **extra,
+            }
+            self._sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+            self._sidecar_path.write_text(
+                _json.dumps(data, indent=2), encoding="utf-8"
+            )
+        except Exception:
+            _logger.debug("sidecar_write_failed", exc_info=True)
+
 
 # Marker file for stop hook: if present and recent, hook skips "run validate" reminder.
 _VALIDATE_OK_MARKER = ".tapps-mcp/sessions/last_validate_ok"
@@ -136,6 +209,7 @@ async def _validate_progress_heartbeat(
     total_files: int,
     start_ns: int,
     stop_event: asyncio.Event,
+    tracker: _ProgressTracker | None = None,
 ) -> None:
     """Send progress notifications every _PROGRESS_HEARTBEAT_INTERVAL seconds.
     Stops when stop_event is set. No-op if ctx has no report_progress.
@@ -148,13 +222,21 @@ async def _validate_progress_heartbeat(
             await asyncio.wait_for(stop_event.wait(), timeout=_PROGRESS_HEARTBEAT_INTERVAL)
         if stop_event.is_set():
             return
-        elapsed_sec = (time.perf_counter_ns() - start_ns) / 1_000_000_000.0
         with contextlib.suppress(Exception):
-            await report(
-                progress=elapsed_sec,
-                total=None,
-                message=f"Validating {total_files} files... (in progress)",
-            )
+            if tracker is not None:
+                done = tracker.completed
+                last = tracker.last_file
+                msg = f"Validated {done}/{tracker.total} files"
+                if last:
+                    msg += f" ({last})"
+                await report(progress=done, total=tracker.total, message=msg)
+            else:
+                elapsed_sec = (time.perf_counter_ns() - start_ns) / 1_000_000_000.0
+                await report(
+                    progress=elapsed_sec,
+                    total=None,
+                    message=f"Validating {total_files} files... (in progress)",
+                )
 
 
 def _discover_changed_files(
@@ -191,6 +273,8 @@ async def _validate_single_file(
     quick: bool,
     do_security_full: bool,
     sem: asyncio.Semaphore,
+    tracker: _ProgressTracker | None = None,
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Score and optionally security-scan a single file under concurrency limit."""
     from tapps_mcp.gates.evaluator import evaluate_gate
@@ -227,7 +311,24 @@ async def _validate_single_file(
                 file_result["security_issues"] = 0
         except Exception as exc:
             file_result["errors"] = [str(exc)]
+        if tracker is not None:
+            tracker.completed += 1
+            tracker.last_file = path.name
+            tracker.record_file_result(str(path), file_result)
+        await _emit_file_info(ctx, path, file_result)
         return file_result
+
+
+async def _emit_file_info(
+    ctx: Context[Any, Any, Any] | None,
+    path: Path,
+    result: dict[str, Any],
+) -> None:
+    """Send a ctx.info() log notification for the completed file (best-effort)."""
+    score = result.get("overall_score", "?")
+    passed = result.get("gate_passed", False)
+    status = "PASSED" if passed else "FAILED"
+    await emit_ctx_info(ctx, f"Validated {path.name}: {score}/100, gate {status}")
 
 
 def _compute_impact_analysis(
@@ -393,8 +494,12 @@ async def tapps_validate_changed(
     paths = paths[:MAX_BATCH_FILES]
     total_files = len(paths)
 
+    tracker = _ProgressTracker(total=total_files)
+    tracker.init_sidecar(settings.project_root)
     stop_progress = asyncio.Event()
-    progress_task = _start_progress_reporting(ctx, total_files, start, stop_progress)
+    progress_task = _start_progress_reporting(
+        ctx, total_files, start, stop_progress, tracker
+    )
 
     try:
         await ensure_session_initialized()
@@ -406,11 +511,16 @@ async def tapps_validate_changed(
 
         raw_results = await asyncio.gather(
             *[
-                _validate_single_file(p, scorer, preset, quick, do_security_full, sem)
+                _validate_single_file(
+                    p, scorer, preset, quick, do_security_full, sem, tracker, ctx
+                )
                 for p in paths
             ],
             return_exceptions=True,
         )
+    except Exception as exc:
+        tracker.finalize_error(str(exc))
+        raise
     finally:
         if progress_task is not None:
             stop_progress.set()
@@ -430,6 +540,7 @@ async def tapps_validate_changed(
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_changed", start, gate_passed=all_passed)
+    tracker.finalize(all_passed, summary, elapsed_ms)
     if all_passed:
         _write_validate_ok_marker(settings.project_root)
 
@@ -484,6 +595,7 @@ def _start_progress_reporting(
     total_files: int,
     start: int,
     stop_event: asyncio.Event,
+    tracker: _ProgressTracker | None = None,
 ) -> asyncio.Task[None] | None:
     """Start the progress heartbeat task if context supports it."""
     if ctx is None or total_files <= 0:
@@ -492,11 +604,13 @@ def _start_progress_reporting(
     if callable(report):
         with contextlib.suppress(Exception):
             # Fire initial progress via background task (store ref to prevent GC)
-            init_task = asyncio.create_task(_report_initial_progress(report, total_files))
+            init_task = asyncio.create_task(
+                _report_initial_progress(report, total_files)
+            )
             _background_tasks.add(init_task)
             init_task.add_done_callback(_background_tasks.discard)
     return asyncio.create_task(
-        _validate_progress_heartbeat(ctx, total_files, start, stop_event),
+        _validate_progress_heartbeat(ctx, total_files, start, stop_event, tracker),
     )
 
 
@@ -507,8 +621,8 @@ async def _report_initial_progress(
     """Send the initial progress=0 notification."""
     with contextlib.suppress(Exception):
         await report(
-            progress=0.0,
-            total=None,
+            progress=0,
+            total=total_files,
             message=f"Validating {total_files} files...",
         )
 
