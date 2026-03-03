@@ -436,6 +436,25 @@ async def docs_project_scan(
         "recommendations": recommendations,
     }
 
+    # Optional TappsMCP enrichment
+    try:
+        from docs_mcp.integrations.tapps import TappsIntegration
+
+        integration = TappsIntegration(root)
+        if integration.is_available:
+            profile = integration.load_project_profile()
+            if profile:
+                data["tapps_enrichment"] = {
+                    "available": True,
+                    "project_type": profile.project_type,
+                    "tech_stack": profile.tech_stack,
+                    "has_ci": profile.has_ci,
+                    "test_frameworks": profile.test_frameworks,
+                    "package_managers": profile.package_managers,
+                }
+    except Exception:  # noqa: S110 — TappsMCP enrichment is optional
+        pass
+
     return success_response("docs_project_scan", elapsed_ms, data)
 
 

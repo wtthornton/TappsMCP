@@ -59,6 +59,29 @@ async def docs_check_drift(
 
     data: dict[str, Any] = report.model_dump()
 
+    # Optional TappsMCP enrichment
+    try:
+        from docs_mcp.integrations.tapps import (
+            _SCORE_THRESHOLD_MEDIUM,
+            TappsIntegration,
+        )
+
+        integration = TappsIntegration(root)
+        if integration.is_available:
+            enrichment = integration.load_enrichment()
+            if enrichment.quality_scores:
+                data["tapps_enrichment"] = {
+                    "available": True,
+                    "scored_files": len(enrichment.quality_scores),
+                    "low_quality_files": [
+                        s.file_path
+                        for s in enrichment.quality_scores
+                        if s.overall_score < _SCORE_THRESHOLD_MEDIUM
+                    ],
+                }
+    except Exception:  # noqa: S110 — TappsMCP enrichment is optional
+        pass
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     return success_response("docs_check_drift", elapsed_ms, data)
 

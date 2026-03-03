@@ -16,6 +16,9 @@ logger = structlog.get_logger(__name__)
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates" / "readme"
 
+_SCORE_THRESHOLD_HIGH = 80
+_SCORE_THRESHOLD_MEDIUM = 60
+
 
 class ReadmeSection(BaseModel):
     """A single section of a generated README."""
@@ -120,8 +123,18 @@ class ReadmeGenerator:
 
         return "\n".join(lines)
 
-    def _generate_badges(self, metadata: ProjectMetadata) -> str:
-        """Generate shield.io badges for the project."""
+    def _generate_badges(
+        self,
+        metadata: ProjectMetadata,
+        *,
+        tapps_score: float | None = None,
+    ) -> str:
+        """Generate shield.io badges for the project.
+
+        Args:
+            metadata: Project metadata for version/license/python badges.
+            tapps_score: Optional TappsMCP quality score (0-100) for badge.
+        """
         badges: list[str] = []
 
         if metadata.python_requires:
@@ -142,6 +155,17 @@ class ReadmeGenerator:
             encoded_version = urllib.parse.quote(metadata.version, safe="")
             badges.append(
                 f"![Version](https://img.shields.io/badge/version-{encoded_version}-blue)"
+            )
+
+        if tapps_score is not None:
+            color = (
+                "brightgreen" if tapps_score >= _SCORE_THRESHOLD_HIGH
+                else "yellow" if tapps_score >= _SCORE_THRESHOLD_MEDIUM
+                else "red"
+            )
+            badges.append(
+                f"![Quality](https://img.shields.io/badge/quality-"
+                f"{tapps_score:.0f}%25-{color})"
             )
 
         return "  ".join(badges)
