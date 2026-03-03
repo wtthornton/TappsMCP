@@ -127,6 +127,30 @@ Epic 35 (Expert Adaptive Integration)    ← depends on Epic 3, Epic 5, Epic 7
 
 **Note:** Epic 7 can start partially after Epic 1 (execution metrics, tool call tracking, basic dashboard) and grow incrementally as Epic 3 and Epic 5 deliver expert metrics and adaptive learning data. Stories 7.1, 7.4, 7.5, 7.6, 7.7 can begin after Epic 1. Stories 7.3 requires Epic 3. Story 7.2 benefits from Epic 5.
 
+---
+
+## DocsMCP Epics
+
+DocsMCP is the documentation MCP server that complements TappsMCP's code quality tools. See the [DocsMCP PRD](../DOCSMCP_PRD.md) for full details and the [Epic Prioritization](../EPIC_PRIORITIZATION.md) for priority ranking.
+
+**Status:** 18/18 MCP tools implemented, 42 source files, 965 tests passing.
+
+| Epic | Name | Status |
+|------|------|--------|
+| 0 | Foundation & Security | **Complete** -- `docs_session_start`, `docs_project_scan`, `docs_config` |
+| 1 | Code Extraction Engine | **Complete** -- `docs_module_map`, `docs_api_surface` |
+| 2 | Git Analysis Engine | **Complete** -- `docs_git_summary` |
+| 3 | README Generation | **Complete** -- `docs_generate_readme` |
+| 4 | API Documentation Generation | **Complete** -- `docs_generate_api` |
+| 5 | Changelog & Release Notes | **Complete** -- `docs_generate_changelog`, `docs_generate_release_notes` |
+| 6 | Diagram Generation | **Complete** -- `docs_generate_diagram` |
+| 7 | Documentation Validation | **Complete** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness` |
+| 8 | ADR & Guides | **Complete** -- `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing` |
+| 9 | Project Scan & Workflow | **Complete** — resources (docs://status, config, coverage), prompts (docs_workflow_overview, docs_workflow). docs://templates and AGENTS.md generation deferred (see [DOCSMCP_OPEN_EPICS_RESEARCH.md](../DOCSMCP_OPEN_EPICS_RESEARCH.md)). |
+| 10 | Distribution & CLI | Open — PyPI for docs-mcp required for standalone install; Docker publish, npm wrapper, CI generator optional/deferred |
+| 11 | TappsMCP Integration | **Complete** -- Quality data enrichment in project_scan/drift/readme |
+| 12 | Multi-Language Support | Open (post-MVP) — tree-sitter for TypeScript/Go/Rust/Java; Python-only sufficient for MVP |
+
 ## Parallelization Opportunities
 
 With 2 developers:

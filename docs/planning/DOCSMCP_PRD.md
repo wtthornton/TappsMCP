@@ -1,9 +1,9 @@
 # DocsMCP - Product Requirements Document
 
-**Version:** 1.0.0-draft
-**Date:** 2026-02-28
+**Version:** 1.0.0
+**Date:** 2026-03-02
 **Author:** TappsMCP Team
-**Status:** Draft
+**Status:** Active (18/18 tools implemented, Epics 0-9 and 11 complete, 965 tests passing). Epic 9 closed per DOCSMCP_OPEN_EPICS_RESEARCH.md; Epic 10 (PyPI required) and Epic 12 (post-MVP) open.
 
 ---
 
@@ -958,25 +958,25 @@ Output compatible with:
 | 8.4 | Contributing guide generator | 4h |
 | 8.5 | `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing` MCP tools | 4h |
 
-### Epic 9: Project Scan & Workflow (~1 week)
+### Epic 9: Project Scan & Workflow (~1 week) — **Complete**
 
-| Story | Description | LOE |
-|---|---|---|
-| 9.1 | `docs_project_scan` comprehensive documentation audit | 6h |
-| 9.2 | MCP resources (status, config, templates, coverage) | 4h |
-| 9.3 | MCP prompts (workflow overview, task-specific workflows) | 4h |
-| 9.4 | Configuration management (`docs_config` tool) | 3h |
-| 9.5 | AGENTS.md generation for consuming projects | 3h |
+| Story | Description | LOE | Status |
+|-------|-------------|-----|--------|
+| 9.1 | `docs_project_scan` comprehensive documentation audit | 6h | Done |
+| 9.2 | MCP resources (status, config, coverage) | 4h | Done. docs://templates deferred (see [DOCSMCP_OPEN_EPICS_RESEARCH.md](DOCSMCP_OPEN_EPICS_RESEARCH.md)). |
+| 9.3 | MCP prompts (workflow overview, task-specific workflows) | 4h | Done |
+| 9.4 | Configuration management (`docs_config` tool) | 3h | Done |
+| 9.5 | AGENTS.md generation for consuming projects | 3h | **Deferred** (low ROI; optional) |
 
-### Epic 10: Distribution & CLI (~1 week)
+### Epic 10: Distribution & CLI (~1 week) — **Open**
 
-| Story | Description | LOE |
-|---|---|---|
-| 10.1 | PyPI packaging and publishing | 3h |
-| 10.2 | CLI commands (`docsmcp serve`, `generate`, `check`, `doctor`) | 6h |
-| 10.3 | Docker image | 3h |
-| 10.4 | npm wrapper package (for Node-ecosystem users) | 3h |
-| 10.5 | CI workflow generator for documentation checks | 4h |
+| Story | Description | LOE | Status |
+|-------|-------------|-----|--------|
+| 10.1 | PyPI packaging and publishing for docs-mcp | 3h | **Required** (for standalone install per INSTALLATION.md) |
+| 10.2 | CLI commands (`docsmcp serve`, `doctor`, `scan`, `version`; `generate` stub) | 6h | Done. Full `generate`/`check` optional. |
+| 10.3 | Docker image | 3h | Done (Dockerfile exists). Publish to registry optional. |
+| 10.4 | npm wrapper package (for Node-ecosystem users) | 3h | **Deferred** (PyPI/pipx sufficient for Python tool; see [DOCSMCP_OPEN_EPICS_RESEARCH.md](DOCSMCP_OPEN_EPICS_RESEARCH.md)) |
+| 10.5 | CI workflow generator for documentation checks | 4h | Optional (improves adoption; not required for MVP) |
 
 ### Epic 11: TappsMCP Integration (~1 week)
 
@@ -988,15 +988,17 @@ Output compatible with:
 | 11.4 | Quality badge generation from TappsMCP scores | 2h |
 | 11.5 | Drift detection in TappsMCP checklist integration | 3h |
 
-### Epic 12: Multi-Language Support (~2 weeks, post-MVP)
+### Epic 12: Multi-Language Support (~2 weeks) — **Open (post-MVP)**
 
-| Story | Description | LOE |
-|---|---|---|
-| 12.1 | tree-sitter integration for multi-language AST | 8h |
-| 12.2 | TypeScript extractor | 6h |
-| 12.3 | Go extractor | 6h |
-| 12.4 | Rust extractor | 6h |
-| 12.5 | Java extractor | 6h |
+Python-only is sufficient for MVP. This epic is deferred until after distribution.
+
+| Story | Description | LOE | Status |
+|-------|-------------|-----|--------|
+| 12.1 | tree-sitter integration for multi-language AST | 8h | Post-MVP |
+| 12.2 | TypeScript extractor | 6h | Post-MVP |
+| 12.3 | Go extractor | 6h | Post-MVP |
+| 12.4 | Rust extractor | 6h | Post-MVP |
+| 12.5 | Java extractor | 6h | Post-MVP |
 
 ### Total Estimated LOE
 

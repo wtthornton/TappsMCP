@@ -20,11 +20,11 @@ jobs:
       - name: Verify tag matches package version
         run: |
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-          PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('packages/tapps-mcp/pyproject.toml','rb'))['project']['version'])")
           echo "Git tag version: $TAG_VERSION"
-          echo "Package version: $PKG_VERSION"
+          echo "Package version (tapps-mcp): $PKG_VERSION"
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag version ($TAG_VERSION) does not match pyproject.toml version ($PKG_VERSION)"
+            echo "::error::Tag version ($TAG_VERSION) does not match packages/tapps-mcp/pyproject.toml version ($PKG_VERSION)"
             exit 1
           fi
 
@@ -54,14 +54,18 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist
+          path: dist/
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install project and PyInstaller
+      - name: Install PyInstaller and built wheels
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install -e .
+          pip install dist/*.whl
       - name: Build tapps-mcp.exe
         run: |
           python -m PyInstaller --onefile -n tapps-mcp --console scripts/run_tapps_mcp.py

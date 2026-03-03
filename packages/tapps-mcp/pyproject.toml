@@ -4,9 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tapps-mcp"
-version = "0.6.0"
+version = "0.7.0"
 description = "MCP server providing deterministic code quality tools for AI coding assistants"
-readme = "../../README.md"
+readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 authors = [
