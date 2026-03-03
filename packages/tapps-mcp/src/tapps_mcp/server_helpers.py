@@ -7,9 +7,32 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from mcp.server.fastmcp import Context
+
     from tapps_core.knowledge.lookup import LookupEngine as _LookupEngineType
     from tapps_core.memory.store import MemoryStore as _MemoryStoreType
     from tapps_mcp.scoring.scorer import CodeScorer as _CodeScorerType
+
+
+# ---------------------------------------------------------------------------
+# MCP Context progress helper
+# ---------------------------------------------------------------------------
+
+
+async def emit_ctx_info(ctx: Context[Any, Any, Any] | None, message: str) -> None:
+    """Emit a ``ctx.info`` notification if *ctx* is available.
+
+    Defensive: null-checks *ctx*, uses ``getattr`` for ``info``, and
+    suppresses all exceptions so callers never fail due to notification
+    issues.
+    """
+    if ctx is None:
+        return
+    info_fn = getattr(ctx, "info", None)
+    if info_fn is None:
+        return
+    with contextlib.suppress(Exception):
+        await info_fn(message)
 
 # ---------------------------------------------------------------------------
 # CodeScorer singleton — avoids re-instantiating on every tool call.

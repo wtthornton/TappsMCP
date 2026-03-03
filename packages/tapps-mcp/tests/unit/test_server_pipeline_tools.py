@@ -196,9 +196,10 @@ class TestTappsUpgrade:
     def setup_method(self) -> None:
         CallTracker.reset()
 
+    @pytest.mark.asyncio
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
     @patch("tapps_mcp.pipeline.upgrade.upgrade_pipeline")
-    def test_dry_run_returns_success(
+    async def test_dry_run_returns_success(
         self, mock_upgrade: MagicMock, mock_settings: MagicMock, tmp_path: Path
     ) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_upgrade
@@ -206,49 +207,52 @@ class TestTappsUpgrade:
         mock_settings.return_value = MagicMock(project_root=tmp_path)
         mock_upgrade.return_value = {"success": True, "dry_run": True, "changes": []}
 
-        result = tapps_upgrade(dry_run=True)
+        result = await tapps_upgrade(dry_run=True)
         assert result["success"] is True
         mock_upgrade.assert_called_once()
 
+    @pytest.mark.asyncio
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
     @patch("tapps_mcp.pipeline.upgrade.upgrade_pipeline")
-    def test_records_call(
+    async def test_records_call(
         self, mock_upgrade: MagicMock, mock_settings: MagicMock, tmp_path: Path
     ) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_upgrade
 
         mock_settings.return_value = MagicMock(project_root=tmp_path)
-        mock_upgrade.return_value = {"success": True}
+        mock_upgrade.return_value = {"success": True, "components": {}, "errors": []}
 
         CallTracker.reset()
-        tapps_upgrade()
+        await tapps_upgrade()
         assert "tapps_upgrade" in CallTracker.get_called_tools()
 
+    @pytest.mark.asyncio
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
     @patch("tapps_mcp.pipeline.upgrade.upgrade_pipeline")
-    def test_force_flag_passed(
+    async def test_force_flag_passed(
         self, mock_upgrade: MagicMock, mock_settings: MagicMock, tmp_path: Path
     ) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_upgrade
 
         mock_settings.return_value = MagicMock(project_root=tmp_path)
-        mock_upgrade.return_value = {"success": True}
+        mock_upgrade.return_value = {"success": True, "components": {}, "errors": []}
 
-        tapps_upgrade(force=True)
+        await tapps_upgrade(force=True)
         call_kwargs = mock_upgrade.call_args[1]
         assert call_kwargs["force"] is True
 
+    @pytest.mark.asyncio
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
     @patch("tapps_mcp.pipeline.upgrade.upgrade_pipeline")
-    def test_platform_passed(
+    async def test_platform_passed(
         self, mock_upgrade: MagicMock, mock_settings: MagicMock, tmp_path: Path
     ) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_upgrade
 
         mock_settings.return_value = MagicMock(project_root=tmp_path)
-        mock_upgrade.return_value = {"success": True}
+        mock_upgrade.return_value = {"success": True, "components": {}, "errors": []}
 
-        tapps_upgrade(platform="cursor")
+        await tapps_upgrade(platform="cursor")
         call_kwargs = mock_upgrade.call_args[1]
         assert call_kwargs["platform"] == "cursor"
 

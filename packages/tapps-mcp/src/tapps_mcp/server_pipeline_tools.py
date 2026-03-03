@@ -1073,6 +1073,10 @@ async def tapps_init(
         llm_engagement_level=llm_engagement_level,
     )
 
+    # Emit ctx.info for each created file (Pattern 1: progress notifications)
+    for filename in result.get("created", []):
+        await emit_ctx_info(ctx, f"Created {filename}")
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
         "tapps_init",
@@ -1090,10 +1094,11 @@ async def tapps_init(
     return _with_nudges("tapps_init", resp)
 
 
-def tapps_upgrade(
+async def tapps_upgrade(
     platform: str = "",
     force: bool = False,
     dry_run: bool = False,
+    ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Upgrade all TappsMCP-generated files after a version update.
 
@@ -1120,12 +1125,36 @@ def tapps_upgrade(
     _record_call("tapps_upgrade")
 
     settings = load_settings()
+
+    if not dry_run:
+        await emit_ctx_info(ctx, "Creating backup...")
+
     result = upgrade_pipeline(
         settings.project_root,
         platform=platform,
         force=force,
         dry_run=dry_run,
     )
+
+    # Emit ctx.info for upgraded components (skip in dry_run mode)
+    if not dry_run:
+        components = result.get("components", {})
+        agents_md = components.get("agents_md", {})
+        if isinstance(agents_md, dict):
+            action = agents_md.get("action", "")
+            if action in ("created", "merged", "updated"):
+                await emit_ctx_info(ctx, f"Updated AGENTS.md ({action})")
+        for plat_result in components.get("platforms", []):
+            host = plat_result.get("host", "unknown")
+            for comp_name, comp_val in plat_result.get("components", {}).items():
+                if isinstance(comp_val, str) and comp_val in ("created", "updated", "regenerated"):
+                    await emit_ctx_info(ctx, f"Updated {host}/{comp_name}")
+                elif isinstance(comp_val, dict) and comp_val.get("action") in (
+                    "created",
+                    "updated",
+                    "regenerated",
+                ):
+                    await emit_ctx_info(ctx, f"Updated {host}/{comp_name}")
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
