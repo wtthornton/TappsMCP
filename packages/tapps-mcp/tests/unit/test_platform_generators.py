@@ -84,12 +84,12 @@ class TestHookTemplates:
     """Verify hook template dicts have expected keys and content."""
 
     def test_claude_sh_scripts_count(self) -> None:
-        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) + 1 post-validate
-        assert len(_CLAUDE_HOOK_SCRIPTS) == 13
+        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) + 1 post-validate + 1 post-report
+        assert len(_CLAUDE_HOOK_SCRIPTS) == 14
 
     def test_claude_ps1_scripts_count(self) -> None:
-        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) + 1 post-validate
-        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 13
+        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) + 1 post-validate + 1 post-report
+        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 14
 
     def test_cursor_sh_scripts_count(self) -> None:
         assert len(_CURSOR_HOOK_SCRIPTS) == 2

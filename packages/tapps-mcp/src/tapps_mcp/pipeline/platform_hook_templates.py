@@ -83,6 +83,23 @@ except Exception:
     exit 0
   fi
 fi
+# Check report sidecar
+REPORT_PROGRESS="$PROJECT_DIR/.tapps-mcp/.report-progress.json"
+if [ -f "$REPORT_PROGRESS" ]; then
+  REPORT_SUMMARY=$("$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$REPORT_PROGRESS'))
+    if d.get('status')=='completed':
+        results=d.get('results',[])
+        if results:
+            avg=sum(r.get('score',0) for r in results)/len(results)
+            print(f'Last report: {len(results)} files, avg {avg:.1f}/100')
+except Exception:
+    pass
+" 2>/dev/null)
+  [ -n "$REPORT_SUMMARY" ] && echo "$REPORT_SUMMARY"
+fi
 echo "Reminder: Run tapps_validate_changed before ending the session." >&2
 exit 0
 """,
@@ -111,6 +128,23 @@ except Exception:
     echo "$SUMMARY" >&2
     exit 0
   fi
+fi
+# Check report sidecar
+REPORT_PROGRESS="$PROJECT_DIR/.tapps-mcp/.report-progress.json"
+if [ -f "$REPORT_PROGRESS" ]; then
+  REPORT_SUMMARY=$("$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$REPORT_PROGRESS'))
+    if d.get('status')=='completed':
+        results=d.get('results',[])
+        if results:
+            avg=sum(r.get('score',0) for r in results)/len(results)
+            print(f'Last report: {len(results)} files, avg {avg:.1f}/100')
+except Exception:
+    pass
+" 2>/dev/null)
+  [ -n "$REPORT_SUMMARY" ] && echo "$REPORT_SUMMARY"
 fi
 MSG="Reminder: run tapps_validate_changed to confirm quality."
 echo "$MSG" >&2
@@ -151,6 +185,41 @@ except Exception:
   if [ -n "$SUMMARY" ]; then
     echo "$SUMMARY"
   fi
+fi
+exit 0
+""",
+    "tapps-post-report.sh": """\
+#!/usr/bin/env bash
+# TappsMCP PostToolUse hook (tapps_report)
+# Reads the report sidecar progress file and echoes a summary.
+INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+PROGRESS="$PROJECT_DIR/.tapps-mcp/.report-progress.json"
+if [ -f "$PROGRESS" ]; then
+  PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+  SUMMARY=$("$PYBIN" -c "
+import json,sys
+try:
+    d=json.load(open('$PROGRESS'))
+    status=d.get('status','unknown')
+    if status=='completed':
+        total=d.get('total',0)
+        results=d.get('results',[])
+        if results:
+            avg=sum(r.get('score',0) for r in results)/len(results)
+            print(f'[TappsMCP] Report: {total} files scored, avg {avg:.1f}/100')
+        else:
+            print(f'[TappsMCP] Report: {total} files scored')
+    elif status=='error':
+        print(f'[TappsMCP] Report error: {d.get(\"error\",\"unknown\")}')
+    elif status=='running':
+        done=d.get('completed',0)
+        total=d.get('total',0)
+        print(f'[TappsMCP] Report in progress: {done}/{total} files')
+except Exception:
+    pass
+" 2>/dev/null)
+  [ -n "$SUMMARY" ] && echo "$SUMMARY"
 fi
 exit 0
 """,
@@ -380,6 +449,20 @@ if (Test-Path $progress) {
         }
     } catch {}
 }
+# Check report sidecar
+$reportProgress = "$projDir/.tapps-mcp/.report-progress.json"
+if (Test-Path $reportProgress) {
+    try {
+        $rd = Get-Content $reportProgress -Raw | ConvertFrom-Json
+        if ($rd.status -eq "completed") {
+            $results = @($rd.results)
+            if ($results.Count -gt 0) {
+                $avg = [math]::Round(($results | Measure-Object -Property score -Average).Average, 1)
+                Write-Output "Last report: $($results.Count) files, avg $avg/100"
+            }
+        }
+    } catch {}
+}
 Write-Host "Reminder: Run tapps_validate_changed before ending the session." -ForegroundColor Yellow
 exit 0
 """,
@@ -401,6 +484,20 @@ if (Test-Path $progress) {
             $gp = if ($d.all_gates_passed) { "all passed" } else { "$failed failed" }
             Write-Host "Last validation: $total files, $gp" -ForegroundColor Cyan
             exit 0
+        }
+    } catch {}
+}
+# Check report sidecar
+$reportProgress = "$projDir/.tapps-mcp/.report-progress.json"
+if (Test-Path $reportProgress) {
+    try {
+        $rd = Get-Content $reportProgress -Raw | ConvertFrom-Json
+        if ($rd.status -eq "completed") {
+            $results = @($rd.results)
+            if ($results.Count -gt 0) {
+                $avg = [math]::Round(($results | Measure-Object -Property score -Average).Average, 1)
+                Write-Output "Last report: $($results.Count) files, avg $avg/100"
+            }
         }
     } catch {}
 }
@@ -428,6 +525,34 @@ if (Test-Path $progress) {
             Write-Output "[TappsMCP] Validation error: $($d.error)"
         } elseif ($d.status -eq "running") {
             Write-Output "[TappsMCP] Validation in progress: $($d.completed)/$($d.total) files"
+        }
+    } catch {}
+}
+exit 0
+""",
+    "tapps-post-report.ps1": """\
+# TappsMCP PostToolUse hook (tapps_report)
+# Reads the report sidecar progress file and echoes a summary.
+$rawInput = @($input) -join "`n"
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) { $projDir = "." }
+$progress = "$projDir/.tapps-mcp/.report-progress.json"
+if (Test-Path $progress) {
+    try {
+        $d = Get-Content $progress -Raw | ConvertFrom-Json
+        if ($d.status -eq "completed") {
+            $total = $d.total
+            $results = @($d.results)
+            if ($results.Count -gt 0) {
+                $avg = [math]::Round(($results | Measure-Object -Property score -Average).Average, 1)
+                Write-Output "[TappsMCP] Report: $total files scored, avg $avg/100"
+            } else {
+                Write-Output "[TappsMCP] Report: $total files scored"
+            }
+        } elseif ($d.status -eq "error") {
+            Write-Output "[TappsMCP] Report error: $($d.error)"
+        } elseif ($d.status -eq "running") {
+            Write-Output "[TappsMCP] Report in progress: $($d.completed)/$($d.total) files"
         }
     } catch {}
 }
@@ -613,6 +738,19 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
                 },
             ],
         },
+        {
+            "matcher": "mcp__tapps-mcp__tapps_report",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-post-report.ps1"
+                    ),
+                    "timeout": 10,
+                },
+            ],
+        },
     ],
     "Stop": [
         {
@@ -738,6 +876,12 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
                     "command": ".claude/hooks/tapps-post-validate.sh",
                     "timeout": 10,
                 },
+            ],
+        },
+        {
+            "matcher": "mcp__tapps-mcp__tapps_report",
+            "hooks": [
+                {"type": "command", "command": ".claude/hooks/tapps-post-report.sh", "timeout": 10},
             ],
         },
     ],
@@ -1004,6 +1148,23 @@ except Exception:
     pass
 " 2>/dev/null
   fi
+  # Check report sidecar
+  REPORT_PROGRESS="$PROJECT_DIR/.tapps-mcp/.report-progress.json"
+  if [ -f "$REPORT_PROGRESS" ]; then
+    REPORT_SUMMARY=$("$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$REPORT_PROGRESS'))
+    if d.get('status')=='completed':
+        results=d.get('results',[])
+        if results:
+            avg=sum(r.get('score',0) for r in results)/len(results)
+            print(f'Last report: {len(results)} files, avg {avg:.1f}/100')
+except Exception:
+    pass
+" 2>/dev/null)
+    [ -n "$REPORT_SUMMARY" ] && echo "$REPORT_SUMMARY"
+  fi
   exit 0
 fi
 echo "BLOCKED: tapps_validate_changed has not been run." >&2
@@ -1040,6 +1201,23 @@ try:
 except Exception:
     pass
 " 2>/dev/null
+  fi
+  # Check report sidecar
+  REPORT_PROGRESS="$PROJECT_DIR/.tapps-mcp/.report-progress.json"
+  if [ -f "$REPORT_PROGRESS" ]; then
+    REPORT_SUMMARY=$("$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$REPORT_PROGRESS'))
+    if d.get('status')=='completed':
+        results=d.get('results',[])
+        if results:
+            avg=sum(r.get('score',0) for r in results)/len(results)
+            print(f'Last report: {len(results)} files, avg {avg:.1f}/100')
+except Exception:
+    pass
+" 2>/dev/null)
+    [ -n "$REPORT_SUMMARY" ] && echo "$REPORT_SUMMARY"
   fi
   exit 0
 fi
@@ -1092,6 +1270,20 @@ if (Test-Path $marker) {
             }
         } catch {}
     }
+    # Check report sidecar
+    $reportProgress = "$projDir/.tapps-mcp/.report-progress.json"
+    if (Test-Path $reportProgress) {
+        try {
+            $rd = Get-Content $reportProgress -Raw | ConvertFrom-Json
+            if ($rd.status -eq "completed") {
+                $results = @($rd.results)
+                if ($results.Count -gt 0) {
+                    $avg = [math]::Round(($results | Measure-Object -Property score -Average).Average, 1)
+                    Write-Output "Last report: $($results.Count) files, avg $avg/100"
+                }
+            }
+        } catch {}
+    }
     exit 0
 }
 Write-Host "BLOCKED: tapps_validate_changed has not been run." -ForegroundColor Red
@@ -1127,6 +1319,20 @@ if (Test-Path $marker) {
                 $failed = $total - $passed
                 $gp = if ($d.all_gates_passed) { "all passed" } else { "$failed failed" }
                 Write-Output "Last validation: $total files, $gp"
+            }
+        } catch {}
+    }
+    # Check report sidecar
+    $reportProgress = "$projDir/.tapps-mcp/.report-progress.json"
+    if (Test-Path $reportProgress) {
+        try {
+            $rd = Get-Content $reportProgress -Raw | ConvertFrom-Json
+            if ($rd.status -eq "completed") {
+                $results = @($rd.results)
+                if ($results.Count -gt 0) {
+                    $avg = [math]::Round(($results | Measure-Object -Property score -Average).Average, 1)
+                    Write-Output "Last report: $($results.Count) files, avg $avg/100"
+                }
             }
         } catch {}
     }

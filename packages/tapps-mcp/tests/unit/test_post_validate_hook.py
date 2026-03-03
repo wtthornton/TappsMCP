@@ -167,3 +167,96 @@ class TestTaskCompletedHookSidecarAware:
     def test_blocking_task_completed_ps_shows_failed_files(self) -> None:
         script = CLAUDE_HOOK_SCRIPTS_BLOCKING_PS["tapps-task-completed.ps1"]
         assert "FAILED" in script
+
+
+# ---------------------------------------------------------------------------
+# PostToolUse report hook template tests (Story 40.2)
+# ---------------------------------------------------------------------------
+
+
+class TestPostReportHookTemplate:
+    """Verify the tapps-post-report hook script content."""
+
+    def test_bash_script_exists(self) -> None:
+        assert "tapps-post-report.sh" in CLAUDE_HOOK_SCRIPTS
+
+    def test_bash_script_reads_report_progress(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS["tapps-post-report.sh"]
+        assert ".report-progress.json" in script
+
+    def test_bash_script_handles_completed(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS["tapps-post-report.sh"]
+        assert "completed" in script
+
+    def test_ps_script_exists(self) -> None:
+        assert "tapps-post-report.ps1" in CLAUDE_HOOK_SCRIPTS_PS
+
+    def test_config_has_report_matcher(self) -> None:
+        post_tool_entries = CLAUDE_HOOKS_CONFIG["PostToolUse"]
+        matchers = [e.get("matcher", "") for e in post_tool_entries]
+        assert "mcp__tapps-mcp__tapps_report" in matchers
+
+    def test_config_timeout(self) -> None:
+        post_tool_entries = CLAUDE_HOOKS_CONFIG["PostToolUse"]
+        for entry in post_tool_entries:
+            if entry.get("matcher") == "mcp__tapps-mcp__tapps_report":
+                hook = entry["hooks"][0]
+                assert hook.get("timeout") == 10
+                break
+        else:
+            raise AssertionError("tapps_report matcher not found")  # noqa: TRY003
+
+    def test_config_ps_has_report_matcher(self) -> None:
+        post_tool_entries = CLAUDE_HOOKS_CONFIG_PS["PostToolUse"]
+        matchers = [e.get("matcher", "") for e in post_tool_entries]
+        assert "mcp__tapps-mcp__tapps_report" in matchers
+
+
+# ---------------------------------------------------------------------------
+# Stop hook report sidecar tests (Story 40.3)
+# ---------------------------------------------------------------------------
+
+
+class TestStopHookReportSidecar:
+    """Verify Stop hooks read report sidecar."""
+
+    def test_medium_stop_reads_report_progress(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS["tapps-stop.sh"]
+        assert ".report-progress.json" in script
+
+    def test_medium_stop_ps_reads_report_progress(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS_PS["tapps-stop.ps1"]
+        assert ".report-progress.json" in script
+
+    def test_blocking_stop_reads_report_progress(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-stop.sh"]
+        assert ".report-progress.json" in script
+
+    def test_blocking_stop_ps_reads_report_progress(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS_BLOCKING_PS["tapps-stop.ps1"]
+        assert ".report-progress.json" in script
+
+
+# ---------------------------------------------------------------------------
+# TaskCompleted hook report sidecar tests (Story 40.3)
+# ---------------------------------------------------------------------------
+
+
+class TestTaskCompletedHookReportSidecar:
+    """Verify TaskCompleted hooks read report sidecar."""
+
+    def test_medium_task_completed_reads_report(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS["tapps-task-completed.sh"]
+        assert ".report-progress.json" in script
+
+    def test_medium_task_completed_ps_reads_report(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS_PS["tapps-task-completed.ps1"]
+        assert ".report-progress.json" in script
+
+    def test_blocking_task_completed_reads_report(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-task-completed.sh"]
+        assert ".report-progress.json" in script
+
+    def test_blocking_task_completed_ps_reads_report(self) -> None:
+        script = CLAUDE_HOOK_SCRIPTS_BLOCKING_PS["tapps-task-completed.ps1"]
+        assert ".report-progress.json" in script
