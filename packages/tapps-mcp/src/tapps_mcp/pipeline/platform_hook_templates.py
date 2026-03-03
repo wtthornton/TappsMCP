@@ -55,6 +55,7 @@ exit 0
 #!/usr/bin/env bash
 # TappsMCP Stop hook
 # Reminds to run tapps_validate_changed but does NOT block.
+# Reads sidecar progress file for richer context when available.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 INPUT=$(cat)
 PY="import sys,json; d=json.load(sys.stdin); print(d.get('stop_hook_active','false'))"
@@ -63,6 +64,25 @@ ACTIVE=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
 if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
   exit 0
 fi
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
+if [ -f "$PROGRESS" ]; then
+  SUMMARY=$("$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$PROGRESS'))
+    if d.get('status')=='completed':
+        t=d.get('total',0);p=sum(1 for r in d.get('results',[]) if r.get('gate_passed'))
+        f=t-p;gp='all passed' if d.get('all_gates_passed') else f'{f} failed'
+        print(f'Last validation: {t} files, {gp}')
+except Exception:
+    pass
+" 2>/dev/null)
+  if [ -n "$SUMMARY" ]; then
+    echo "$SUMMARY" >&2
+    exit 0
+  fi
+fi
 echo "Reminder: Run tapps_validate_changed before ending the session." >&2
 exit 0
 """,
@@ -70,9 +90,68 @@ exit 0
 #!/usr/bin/env bash
 # TappsMCP TaskCompleted hook
 # Reminds to run quality checks but does NOT block.
+# Reads sidecar progress file for richer context when available.
 INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+if [ -f "$PROGRESS" ]; then
+  SUMMARY=$("$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$PROGRESS'))
+    if d.get('status')=='completed':
+        t=d.get('total',0);p=sum(1 for r in d.get('results',[]) if r.get('gate_passed'))
+        f=t-p;gp='all passed' if d.get('all_gates_passed') else f'{f} failed'
+        print(f'Last validation: {t} files, {gp}')
+except Exception:
+    pass
+" 2>/dev/null)
+  if [ -n "$SUMMARY" ]; then
+    echo "$SUMMARY" >&2
+    exit 0
+  fi
+fi
 MSG="Reminder: run tapps_validate_changed to confirm quality."
 echo "$MSG" >&2
+exit 0
+""",
+    "tapps-post-validate.sh": """\
+#!/usr/bin/env bash
+# TappsMCP PostToolUse hook (tapps_validate_changed)
+# Reads the sidecar progress file and echoes a summary to the transcript.
+# This provides a second delivery path for validation results.
+INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
+if [ -f "$PROGRESS" ]; then
+  PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+  SUMMARY=$("$PYBIN" -c "
+import json,sys
+try:
+    d=json.load(open('$PROGRESS'))
+    status=d.get('status','unknown')
+    if status=='completed':
+        total=d.get('total',0)
+        passed=sum(1 for r in d.get('results',[]) if r.get('gate_passed'))
+        failed=total-passed
+        ms=d.get('elapsed_ms',0)
+        sec=ms/1000.0
+        gp='ALL PASSED' if d.get('all_gates_passed') else f'{failed} FAILED'
+        print(f'[TappsMCP] Validation: {total} files, {gp} ({sec:.1f}s)')
+    elif status=='error':
+        print(f'[TappsMCP] Validation error: {d.get(\"error\",\"unknown\")}')
+    elif status=='running':
+        done=d.get('completed',0)
+        total=d.get('total',0)
+        print(f'[TappsMCP] Validation in progress: {done}/{total} files')
+except Exception:
+    pass
+" 2>/dev/null)
+  if [ -n "$SUMMARY" ]; then
+    echo "$SUMMARY"
+  fi
+fi
 exit 0
 """,
     "tapps-pre-compact.sh": """\
@@ -273,6 +352,7 @@ exit 0
     "tapps-stop.ps1": """\
 # TappsMCP Stop hook
 # Reminds to run tapps_validate_changed but does NOT block.
+# Reads sidecar progress file for richer context when available.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 $rawInput = @($input) -join "`n"
 try {
@@ -284,14 +364,73 @@ try {
 if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
     exit 0
 }
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) { $projDir = "." }
+$progress = "$projDir/.tapps-mcp/.validation-progress.json"
+if (Test-Path $progress) {
+    try {
+        $d = Get-Content $progress -Raw | ConvertFrom-Json
+        if ($d.status -eq "completed") {
+            $total = $d.total
+            $passed = @($d.results | Where-Object { $_.gate_passed -eq $true }).Count
+            $failed = $total - $passed
+            $gp = if ($d.all_gates_passed) { "all passed" } else { "$failed failed" }
+            Write-Host "Last validation: $total files, $gp" -ForegroundColor Cyan
+            exit 0
+        }
+    } catch {}
+}
 Write-Host "Reminder: Run tapps_validate_changed before ending the session." -ForegroundColor Yellow
 exit 0
 """,
     "tapps-task-completed.ps1": """\
 # TappsMCP TaskCompleted hook
 # Reminds to run quality checks but does NOT block.
+# Reads sidecar progress file for richer context when available.
 $null = $input | Out-Null
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) { $projDir = "." }
+$progress = "$projDir/.tapps-mcp/.validation-progress.json"
+if (Test-Path $progress) {
+    try {
+        $d = Get-Content $progress -Raw | ConvertFrom-Json
+        if ($d.status -eq "completed") {
+            $total = $d.total
+            $passed = @($d.results | Where-Object { $_.gate_passed -eq $true }).Count
+            $failed = $total - $passed
+            $gp = if ($d.all_gates_passed) { "all passed" } else { "$failed failed" }
+            Write-Host "Last validation: $total files, $gp" -ForegroundColor Cyan
+            exit 0
+        }
+    } catch {}
+}
 Write-Host "Reminder: run tapps_validate_changed to confirm quality." -ForegroundColor Yellow
+exit 0
+""",
+    "tapps-post-validate.ps1": """\
+# TappsMCP PostToolUse hook (tapps_validate_changed)
+# Reads the sidecar progress file and echoes a summary to the transcript.
+$rawInput = @($input) -join "`n"
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) { $projDir = "." }
+$progress = "$projDir/.tapps-mcp/.validation-progress.json"
+if (Test-Path $progress) {
+    try {
+        $d = Get-Content $progress -Raw | ConvertFrom-Json
+        if ($d.status -eq "completed") {
+            $total = $d.total
+            $passed = @($d.results | Where-Object { $_.gate_passed -eq $true }).Count
+            $failed = $total - $passed
+            $sec = [math]::Round($d.elapsed_ms / 1000.0, 1)
+            $gp = if ($d.all_gates_passed) { "ALL PASSED" } else { "$failed FAILED" }
+            Write-Output "[TappsMCP] Validation: $total files, $gp ($($sec)s)"
+        } elseif ($d.status -eq "error") {
+            Write-Output "[TappsMCP] Validation error: $($d.error)"
+        } elseif ($d.status -eq "running") {
+            Write-Output "[TappsMCP] Validation in progress: $($d.completed)/$($d.total) files"
+        }
+    } catch {}
+}
 exit 0
 """,
     "tapps-pre-compact.ps1": """\
@@ -461,6 +600,19 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
                 },
             ],
         },
+        {
+            "matcher": "mcp__tapps-mcp__tapps_validate_changed",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-post-validate.ps1"
+                    ),
+                    "timeout": 10,
+                },
+            ],
+        },
     ],
     "Stop": [
         {
@@ -576,6 +728,16 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
             "matcher": "Edit|Write",
             "hooks": [
                 {"type": "command", "command": ".claude/hooks/tapps-post-edit.sh"},
+            ],
+        },
+        {
+            "matcher": "mcp__tapps-mcp__tapps_validate_changed",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-post-validate.sh",
+                    "timeout": 10,
+                },
             ],
         },
     ],
@@ -804,15 +966,17 @@ DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
 CLAUDE_HOOK_SCRIPTS_BLOCKING: dict[str, str] = {
     "tapps-task-completed.sh": """\
 #!/usr/bin/env bash
-# TappsMCP TaskCompleted hook (HIGH engagement — BLOCKING)
+# TappsMCP TaskCompleted hook (HIGH engagement - BLOCKING)
 # Blocks task completion if validation has not been run.
+# Reads sidecar for richer context in systemMessage.
 INPUT=$(cat)
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 MARKER="$PROJECT_DIR/.tapps-mcp/.validation-marker"
+PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 if [ -f "$MARKER" ]; then
-  PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
   AGE=$("$PYBIN" -c "
-import time,sys
+import time
 try:
     t=float(open('$MARKER').read().strip())
     print(int(time.time()-t))
@@ -823,6 +987,23 @@ except Exception:
     echo "BLOCKED: Validation marker is stale (>1h). Run tapps_validate_changed." >&2
     exit 2
   fi
+  # Marker is fresh — emit sidecar summary if available
+  if [ -f "$PROGRESS" ]; then
+    "$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$PROGRESS'))
+    if d.get('status')=='completed':
+        t=d.get('total',0);p=sum(1 for r in d.get('results',[]) if r.get('gate_passed'))
+        f=t-p;gp='all passed' if d.get('all_gates_passed') else f'{f} failed'
+        print(f'Last validation: {t} files, {gp}')
+        for r in d.get('results',[]):
+            if not r.get('gate_passed'):
+                print(f'  FAILED: {r[\"file\"]} ({r.get(\"score\",\"?\")}/100)')
+except Exception:
+    pass
+" 2>/dev/null
+  fi
   exit 0
 fi
 echo "BLOCKED: tapps_validate_changed has not been run." >&2
@@ -831,8 +1012,9 @@ exit 2
 """,
     "tapps-stop.sh": """\
 #!/usr/bin/env bash
-# TappsMCP Stop hook (HIGH engagement — BLOCKING on first invocation)
+# TappsMCP Stop hook (HIGH engagement - BLOCKING on first invocation)
 # Blocks if no quality validation was run this session.
+# Reads sidecar for richer context when validation was run.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 INPUT=$(cat)
 PY="import sys,json; d=json.load(sys.stdin); print(d.get('stop_hook_active','false'))"
@@ -843,7 +1025,22 @@ if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
 fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 MARKER="$PROJECT_DIR/.tapps-mcp/.validation-marker"
+PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
 if [ -f "$MARKER" ]; then
+  # Emit sidecar summary if available
+  if [ -f "$PROGRESS" ]; then
+    "$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$PROGRESS'))
+    if d.get('status')=='completed':
+        t=d.get('total',0);p=sum(1 for r in d.get('results',[]) if r.get('gate_passed'))
+        f=t-p;gp='all passed' if d.get('all_gates_passed') else f'{f} failed'
+        print(f'Last validation: {t} files, {gp}')
+except Exception:
+    pass
+" 2>/dev/null
+  fi
   exit 0
 fi
 echo "BLOCKED: No quality validation was run this session." >&2
@@ -856,10 +1053,12 @@ CLAUDE_HOOK_SCRIPTS_BLOCKING_PS: dict[str, str] = {
     "tapps-task-completed.ps1": """\
 # TappsMCP TaskCompleted hook (HIGH engagement - BLOCKING)
 # Blocks task completion if validation has not been run.
+# Reads sidecar for richer context in systemMessage.
 $null = $input | Out-Null
 $projDir = $env:CLAUDE_PROJECT_DIR
 if (-not $projDir) { $projDir = "." }
 $marker = "$projDir/.tapps-mcp/.validation-marker"
+$progress = "$projDir/.tapps-mcp/.validation-progress.json"
 if (Test-Path $marker) {
     $content = Get-Content $marker -Raw
     try {
@@ -876,6 +1075,23 @@ if (Test-Path $marker) {
         Write-Host $m -ForegroundColor Red
         exit 2
     }
+    if (Test-Path $progress) {
+        try {
+            $d = Get-Content $progress -Raw | ConvertFrom-Json
+            if ($d.status -eq "completed") {
+                $total = $d.total
+                $passed = @($d.results | Where-Object { $_.gate_passed -eq $true }).Count
+                $failed = $total - $passed
+                $gp = if ($d.all_gates_passed) { "all passed" } else { "$failed failed" }
+                Write-Output "Last validation: $total files, $gp"
+                foreach ($r in $d.results) {
+                    if (-not $r.gate_passed) {
+                        Write-Output "  FAILED: $($r.file) ($($r.score)/100)"
+                    }
+                }
+            }
+        } catch {}
+    }
     exit 0
 }
 Write-Host "BLOCKED: tapps_validate_changed has not been run." -ForegroundColor Red
@@ -885,6 +1101,7 @@ exit 2
     "tapps-stop.ps1": """\
 # TappsMCP Stop hook (HIGH engagement - BLOCKING on first invocation)
 # Blocks if no quality validation was run this session.
+# Reads sidecar for richer context when validation was run.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 $rawInput = @($input) -join "`n"
 try {
@@ -899,7 +1116,20 @@ if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
 $projDir = $env:CLAUDE_PROJECT_DIR
 if (-not $projDir) { $projDir = "." }
 $marker = "$projDir/.tapps-mcp/.validation-marker"
+$progress = "$projDir/.tapps-mcp/.validation-progress.json"
 if (Test-Path $marker) {
+    if (Test-Path $progress) {
+        try {
+            $d = Get-Content $progress -Raw | ConvertFrom-Json
+            if ($d.status -eq "completed") {
+                $total = $d.total
+                $passed = @($d.results | Where-Object { $_.gate_passed -eq $true }).Count
+                $failed = $total - $passed
+                $gp = if ($d.all_gates_passed) { "all passed" } else { "$failed failed" }
+                Write-Output "Last validation: $total files, $gp"
+            }
+        } catch {}
+    }
     exit 0
 }
 Write-Host "BLOCKED: No quality validation was run this session." -ForegroundColor Red
