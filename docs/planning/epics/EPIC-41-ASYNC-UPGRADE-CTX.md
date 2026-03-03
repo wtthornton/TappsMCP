@@ -1,6 +1,6 @@
 # Epic 41: Async Upgrade Conversion & Remaining ctx Adoption
 
-**Status:** Open
+**Status:** Complete
 **Priority:** P3 — Low (quality-of-life improvements; deferred candidates from Epic 39)
 **Estimated LOE:** ~1 week (1 developer)
 **Dependencies:** Epic 39 (MCP Context Progress Adoption — shared helper in Story 39.5)

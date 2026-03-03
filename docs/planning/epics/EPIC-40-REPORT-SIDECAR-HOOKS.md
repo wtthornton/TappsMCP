@@ -1,6 +1,6 @@
 # Epic 40: Report Sidecar Progress & Hook Integration
 
-**Status:** Open
+**Status:** Complete
 **Priority:** P3 — Low (UX enhancement; supplements Epic 39)
 **Estimated LOE:** ~0.5-1 week (1 developer)
 **Dependencies:** Epic 39 (MCP Context Progress Adoption — specifically Story 39.1)

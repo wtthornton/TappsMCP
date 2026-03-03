@@ -1,6 +1,6 @@
 # Epic 39: MCP Context Progress Adoption
 
-**Status:** Open
+**Status:** Complete
 **Priority:** P2 — Medium (improves UX for long-running tools; no functional change)
 **Estimated LOE:** ~1-1.5 weeks (1 developer)
 **Dependencies:** None (builds on patterns established in `tapps_validate_changed`)

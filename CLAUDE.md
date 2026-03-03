@@ -95,7 +95,7 @@ The MCP server is split across seven tool files plus a shared helpers module and
 - **`server_memory_tools.py`** — `tapps_memory` (save, get, list, delete, search, reinforce, gc actions)
 - **`server_analysis_tools.py`** — `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`
 - **`server_resources.py`** — MCP resources (knowledge, config) and prompts (pipeline, workflow)
-- **`server_helpers.py`** — Shared utilities: response builders, singleton caches (`_get_scorer()`, `_get_settings()`, `_get_memory_store()`)
+- **`server_helpers.py`** — Shared utilities: `emit_ctx_info()` (defensive ctx notification helper), response builders, singleton caches (`_get_scorer()`, `_get_settings()`, `_get_memory_store()`)
 
 ### Module map (tapps-mcp)
 
@@ -238,6 +238,10 @@ All file I/O goes through `security/path_validator.py`, which sandboxes operatio
 ### Platform generation
 
 Platform artifact generation is split across modules in `pipeline/`: `platform_generators.py` (facade re-exporting from split modules), `platform_hooks.py` (Claude Code hook generation), `platform_rules.py` (Cursor rules, Copilot instructions, BugBot config), `platform_skills.py` (Claude Code skills with 2026 `allowed-tools:` spec), `platform_subagents.py` (Claude Code subagents with `mcpServers`, `maxTurns`, role-appropriate `permissionMode`), `platform_bundles.py` (bundled generation including path-scoped quality rules), `platform_hook_templates.py` (hook script templates including memory capture Stop hooks). `pipeline/agents_md.py` handles AGENTS.md smart-merge (preserving custom sections while updating tool definitions). `pipeline/init.py` also generates `.claude/settings.json` permission rules (`mcp__tapps-mcp__*` auto-approval). When MCP elicitation is supported and no existing config is present, `tapps_init` runs an interactive 5-question wizard (`common/elicitation.py`) that collects quality preset, engagement level, agent teams, skill tier, and prompt hooks preferences before generating files.
+
+### MCP Context progress notifications (Epics 39-41)
+
+Long-running tools use MCP `ctx.info()` and `ctx.report_progress()` to provide real-time feedback. The shared `emit_ctx_info()` helper in `server_helpers.py` implements the defensive access pattern (null check, getattr, suppress). Tools with ctx support: `tapps_validate_changed`, `tapps_report`, `tapps_init`, `tapps_dependency_scan`, `tapps_dead_code`, `tapps_dependency_graph`, `tapps_upgrade`. Two tools also write sidecar progress files (`.tapps-mcp/.validation-progress.json` and `.tapps-mcp/.report-progress.json`) that Claude Code hooks read for redundant feedback delivery. See [CTX_PATTERN_REFERENCE.md](docs/CTX_PATTERN_REFERENCE.md) for implementation patterns.
 
 ### Distribution and packaging
 

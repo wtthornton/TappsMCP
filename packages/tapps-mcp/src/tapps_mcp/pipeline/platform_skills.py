@@ -65,6 +65,24 @@ Validate all changed files using TappsMCP:
 4. Confirm explicitly when all changed files pass before declaring work done
 5. If any files fail, do NOT mark the task as complete
 """,
+    "tapps-report": """\
+---
+name: tapps-report
+description: >-
+  Generate a quality report across Python files in the project.
+  Scores multiple files and presents an aggregate summary.
+allowed-tools: mcp__tapps-mcp__tapps_report
+argument-hint: "[file-path or empty for project-wide]"
+---
+
+Generate a quality report using TappsMCP:
+
+1. Call `mcp__tapps-mcp__tapps_report` with an optional file path
+2. If no file path, a project-wide report scores up to 20 files
+3. Present results in a table: file | score | pass/fail | top issue
+4. Highlight any files scoring below the quality gate threshold
+5. Suggest priority fixes for the lowest-scoring files
+""",
     "tapps-review-pipeline": """\
 ---
 name: tapps-review-pipeline
@@ -304,6 +322,24 @@ Validate all changed files using TappsMCP:
 4. Confirm explicitly when all changed files pass before declaring work done
 5. If any files fail, do NOT mark the task as complete
 """,
+    "tapps-report": """\
+---
+name: tapps-report
+description: >-
+  Generate a quality report across Python files in the project.
+  Scores multiple files and presents an aggregate summary.
+mcp_tools:
+  - tapps_report
+---
+
+Generate a quality report using TappsMCP:
+
+1. Call `tapps_report` with an optional file path
+2. If no file path, a project-wide report scores up to 20 files
+3. Present results in a table: file | score | pass/fail | top issue
+4. Highlight any files scoring below the quality gate threshold
+5. Suggest priority fixes for the lowest-scoring files
+""",
     "tapps-review-pipeline": """\
 ---
 name: tapps-review-pipeline
@@ -451,7 +487,7 @@ def generate_skills(
 ) -> dict[str, Any]:
     """Generate SKILL.md files for the given platform.
 
-    Creates 10 skill directories with ``SKILL.md`` in
+    Creates 11 skill directories with ``SKILL.md`` in
     ``.claude/skills/`` or ``.cursor/skills/`` depending on the platform.
     Existing files are skipped to preserve user customizations unless
     *overwrite* is ``True`` (used by the upgrade path to refresh

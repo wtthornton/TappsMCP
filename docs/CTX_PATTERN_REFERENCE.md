@@ -59,7 +59,8 @@ async def _emit_status(
 **When to use:** Any tool that processes multiple items sequentially or concurrently
 where the user benefits from seeing per-item status.
 
-**Current adopter:** `tapps_validate_changed`
+**Current adopters:** `tapps_validate_changed`, `tapps_report`, `tapps_dead_code`,
+`tapps_dependency_scan`, `tapps_dependency_graph`, `tapps_init`, `tapps_upgrade`
 
 ```python
 async def _emit_file_info(
@@ -85,16 +86,16 @@ async def _emit_file_info(
 - Message format: `"{verb} {item}: {key_metric}, {status}"`
 - Keep messages short (< 100 chars) — clients may truncate
 
-### Candidate tools for adoption
+### Adopted tools (Epics 39-41)
 
-| Tool | Items Processed | Suggested `ctx.info()` Message |
+| Tool | Items Processed | `ctx.info()` Message |
 |------|----------------|-------------------------------|
 | `tapps_report` | Multiple files scored | `"Scored {name}: {score}/100"` |
-| `tapps_dead_code` (scope=project) | Multiple files scanned | `"Scanned {name}: {count} dead items"` |
-| `tapps_dependency_scan` | Multiple packages audited | `"Checked {pkg}: {vuln_count} vulnerabilities"` |
-| `tapps_dependency_graph` | Import graph built | `"Analyzed {name}: {import_count} imports"` |
+| `tapps_dead_code` (scope=project) | Multiple files scanned | `"Scanning {count} files for dead code..."` |
+| `tapps_dependency_scan` | Packages audited | `"Scanning dependencies for vulnerabilities..."` |
+| `tapps_dependency_graph` | Import graph phases | `"Building import graph..."`, `"Detecting circular imports..."` |
 | `tapps_init` | Multiple files generated | `"Created {filename}"` |
-| `tapps_upgrade` | Multiple files refreshed | `"Updated {filename}"` |
+| `tapps_upgrade` | Multiple files refreshed | `"Updated {component}"` |
 
 ---
 
@@ -103,7 +104,8 @@ async def _emit_file_info(
 **When to use:** Long-running tools (> 5 seconds) where the client can show a progress
 bar or spinner with counts.
 
-**Current adopter:** `tapps_validate_changed`
+**Current adopters:** `tapps_validate_changed`, `tapps_report`, `tapps_init`,
+`tapps_dependency_scan`
 
 ```python
 @dataclasses.dataclass
@@ -139,13 +141,13 @@ async def _heartbeat(
 - Store task reference in a `set()` to prevent garbage collection
 - Thread-safe note: asyncio coroutines on same event loop — no locks needed
 
-### Candidate tools for adoption
+### Adopted tools (Epics 39-41)
 
 | Tool | Duration | Progress Type |
 |------|----------|---------------|
-| `tapps_init` (warm_cache) | 10-35s | `"Warming {i}/{total} libraries"` |
+| `tapps_init` (warm_cache) | 10-35s | Heartbeat during cache/RAG warming |
 | `tapps_report` (project-wide) | 10-60s | `"Scored {i}/{total} files"` |
-| `tapps_dependency_scan` | 5-30s | `"Auditing {i}/{total} packages"` |
+| `tapps_dependency_scan` | 5-30s | Heartbeat during pip-audit execution |
 
 ---
 
@@ -154,9 +156,11 @@ async def _heartbeat(
 **When to use:** Tools where the MCP response may not reach the LLM (context
 compaction, client timeout, stdio buffering) and a secondary delivery path is needed.
 
-**Current adopter:** `tapps_validate_changed`
+**Current adopters:** `tapps_validate_changed`, `tapps_report`
 
-**File location:** `{project_root}/.tapps-mcp/.validation-progress.json`
+**File locations:**
+- `{project_root}/.tapps-mcp/.validation-progress.json` (tapps_validate_changed)
+- `{project_root}/.tapps-mcp/.report-progress.json` (tapps_report)
 
 ```json
 {
@@ -188,13 +192,14 @@ compaction, client timeout, stdio buffering) and a secondary delivery path is ne
 
 ### Hook integration
 
-The sidecar file enables three Claude Code hooks to provide redundant feedback:
+The sidecar files enable Claude Code hooks to provide redundant feedback:
 
 | Hook Event | Script | Behavior |
 |------------|--------|----------|
-| **PostToolUse** | `tapps-post-validate.{sh,ps1}` | Reads sidecar after `tapps_validate_changed` completes; echoes summary to LLM transcript |
-| **Stop** | `tapps-stop.{sh,ps1}` | Reads sidecar before session ends; includes last validation result in reminder |
-| **TaskCompleted** | `tapps-task-completed.{sh,ps1}` | Reads sidecar when LLM declares task done; blocking variant lists failed files |
+| **PostToolUse** | `tapps-post-validate.{sh,ps1}` | Reads validation sidecar after `tapps_validate_changed` completes; echoes summary to LLM transcript |
+| **PostToolUse** | `tapps-post-report.{sh,ps1}` | Reads report sidecar after `tapps_report` completes; echoes summary to LLM transcript |
+| **Stop** | `tapps-stop.{sh,ps1}` | Reads both sidecars before session ends; includes results in reminder |
+| **TaskCompleted** | `tapps-task-completed.{sh,ps1}` | Reads both sidecars when LLM declares task done; blocking variant lists failures |
 
 **Why three paths?**
 1. **MCP tool response** — primary path, but can be lost to context compaction
@@ -236,21 +241,20 @@ async def _resolve_preset(
 
 | Tool | `ctx.info` | `ctx.report_progress` | Sidecar File | `ctx.elicit` |
 |------|-----------|----------------------|-------------|-------------|
-| tapps_validate_changed | YES | YES | YES | - |
+| tapps_validate_changed | YES | YES | YES (.validation-progress.json) | - |
+| tapps_report | YES | YES | YES (.report-progress.json) | - |
+| tapps_init | YES | YES | - | YES |
+| tapps_dependency_scan | YES | YES | - | - |
+| tapps_dead_code | YES | - | - | - |
+| tapps_dependency_graph | YES | - | - | - |
+| tapps_upgrade | YES | - | - | - |
 | tapps_quality_gate | - | - | - | YES |
-| tapps_init | - | - | - | YES |
 | tapps_score_file | - | - | - | - |
 | tapps_quick_check | - | - | - | - |
 | tapps_security_scan | - | - | - | - |
-| tapps_report | - | - | - | - |
-| tapps_dead_code | - | - | - | - |
-| tapps_dependency_scan | - | - | - | - |
-| tapps_dependency_graph | - | - | - | - |
 | tapps_lookup_docs | - | - | - | - |
 | tapps_consult_expert | - | - | - | - |
 | tapps_research | - | - | - | - |
-| tapps_init | - | - | - | YES |
-| tapps_upgrade | - | - | - | - |
 | tapps_session_start | - | - | - | - |
 | tapps_doctor | - | - | - | - |
 | tapps_dashboard | - | - | - | - |
@@ -268,28 +272,24 @@ async def _resolve_preset(
 
 ---
 
-## Priority Adoption Recommendations
+## Adoption History
 
-### Tier 1 — High Value (long-running, multi-item tools)
+### Completed (Epics 39-41)
 
-1. **`tapps_report`** (project-wide scoring) — Add `ctx.info` per file + heartbeat
-2. **`tapps_init`** (with cache warming) — Add `ctx.info` per file created + heartbeat
-3. **`tapps_dependency_scan`** — Add `ctx.info` per package checked
+All high-value and medium-value tools have been adopted:
 
-### Tier 2 — Medium Value (moderate duration)
+1. **`tapps_report`** — ctx.info per file + heartbeat + sidecar (Epic 39.1 + 40.1)
+2. **`tapps_init`** — ctx.info per file created + heartbeat (Epic 39.2)
+3. **`tapps_dependency_scan`** — ctx.info + heartbeat (Epic 39.3)
+4. **`tapps_dead_code`** — ctx.info for project/changed scope (Epic 39.4)
+5. **`tapps_upgrade`** — ctx.info per component (Epic 41.1, async conversion)
+6. **`tapps_dependency_graph`** — phase-based ctx.info (Epic 41.2)
 
-4. **`tapps_upgrade`** — Add `ctx.info` per file updated
-5. **`tapps_dead_code`** (scope=project) — Add `ctx.info` per file scanned
-6. **`tapps_dependency_graph`** — Add `ctx.info` for cycle detection status
+### Not adopted (fast tools, single-item — not recommended)
 
-### Tier 3 — Low Value (fast tools, single-item)
-
-7. **`tapps_score_file`** — Single file, typically < 2s. `ctx.info` optional.
-8. **`tapps_quick_check`** — Single file, typically < 1s. Not needed.
-9. **`tapps_security_scan`** — Single file. Not needed.
-
-### Not recommended
-
+- `tapps_score_file` — Single file, typically < 2s. `ctx.info` optional.
+- `tapps_quick_check` — Single file, typically < 1s. Not needed.
+- `tapps_security_scan` — Single file. Not needed.
 - `tapps_session_start`, `tapps_server_info`, `tapps_project_profile` — instantaneous
 - `tapps_stats`, `tapps_feedback`, `tapps_memory` — fast lookups
 - `tapps_session_notes`, `tapps_checklist` — pure computation
