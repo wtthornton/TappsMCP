@@ -186,6 +186,7 @@ def bootstrap_pipeline(
         return state.finalize()
     _detect_profile(cfg, state)
     _detect_docker_environment(state)
+    _detect_docsmcp(state)
     _create_templates(cfg, state)
     if not cfg.dry_run:
         _setup_platform(cfg, state)
@@ -193,7 +194,9 @@ def bootstrap_pipeline(
         # if the .claude/ directory already exists (user is in Claude Code).
         if cfg.platform != "claude" and (state.project_root / ".claude").is_dir():
             settings_action = _bootstrap_claude_settings(
-                state.project_root, engagement_level=cfg.llm_engagement_level
+                state.project_root,
+                engagement_level=cfg.llm_engagement_level,
+                docsmcp_detected=state.result.get("docsmcp_detected", False),
             )
             state.result["claude_settings"] = {"action": settings_action}
             if settings_action == "created":
@@ -384,6 +387,56 @@ def _detect_docker_environment(state: _BootstrapState) -> None:
         state.result["docker_companions"] = companions
 
 
+def _detect_docsmcp(state: _BootstrapState) -> bool:
+    """Detect whether DocsMCP is available (importable or in project deps).
+
+    Checks:
+    1. Whether ``docs_mcp`` is importable in the current environment.
+    2. Whether ``docs-mcp`` appears in any ``pyproject.toml`` or
+       ``requirements*.txt`` in the project root.
+
+    Stores the result in ``state.result["docsmcp_detected"]``.
+    """
+    # Check importability
+    try:
+        import importlib
+
+        importlib.import_module("docs_mcp")
+        state.result["docsmcp_detected"] = True
+        return True
+    except ImportError:
+        pass
+
+    # Check project dependencies
+    from pathlib import Path as _Path
+
+    root = _Path(state.project_root)
+
+    # Check pyproject.toml
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            content = pyproject.read_text(encoding="utf-8")
+            if "docs-mcp" in content or "docs_mcp" in content:
+                state.result["docsmcp_detected"] = True
+                return True
+        except OSError:
+            pass
+
+    # Check requirements files
+    for req_file in root.glob("requirements*.txt"):
+        try:
+            content = req_file.read_text(encoding="utf-8")
+            if "docs-mcp" in content or "docs_mcp" in content:
+                state.result["docsmcp_detected"] = True
+                return True
+        except OSError:
+            pass
+
+    state.result["docsmcp_detected"] = False
+    return False
+
+
 def _verify_server(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     """Run server verification and optional checker install.
 
@@ -490,7 +543,9 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         if platform_action == "created":
             state.created.append("CLAUDE.md")
         settings_action = _bootstrap_claude_settings(
-            state.project_root, engagement_level=engagement
+            state.project_root,
+            engagement_level=engagement,
+            docsmcp_detected=state.result.get("docsmcp_detected", False),
         )
         state.result["claude_settings"] = {"action": settings_action}
         if settings_action == "created":
@@ -943,6 +998,12 @@ def _replace_tapps_section(existing: str, new_tapps_content: str) -> str:
 # fallback (issue #3107), wildcard is the official syntax from v2.0.70+.
 _CLAUDE_PERMISSION_ENTRIES = ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
 
+# DocsMCP permission entries — added when DocsMCP is detected.
+_DOCSMCP_PERMISSION_ENTRIES = ["mcp__docs-mcp", "mcp__docs-mcp__*"]
+
+# TappsPlatform (combined server) permission entries — added when DocsMCP is detected.
+_PLATFORM_PERMISSION_ENTRIES = ["mcp__tapps-platform", "mcp__tapps-platform__*"]
+
 # Extra permissions granted at high engagement level so the LLM can
 # auto-run quality checkers without user confirmation.
 _CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS = [
@@ -955,6 +1016,8 @@ def generate_permission_settings(
     project_root: Path,
     engagement_level: str = "medium",
     existing_settings: dict[str, Any] | None = None,
+    *,
+    docsmcp_detected: bool = False,
 ) -> dict[str, Any]:
     """Generate ``.claude/settings.json`` content with permission rules.
 
@@ -970,6 +1033,7 @@ def generate_permission_settings(
         engagement_level: ``"high"``, ``"medium"`` (default), or ``"low"``.
         existing_settings: Parsed contents of an existing ``settings.json``.
             ``None`` starts from an empty dict.
+        docsmcp_detected: When True, include DocsMCP permission entries.
 
     Returns:
         The merged settings dict ready to be serialised to JSON.
@@ -981,6 +1045,9 @@ def generate_permission_settings(
     allow_list: list[str] = permissions.setdefault("allow", [])
 
     desired: list[str] = list(_CLAUDE_PERMISSION_ENTRIES)
+    if docsmcp_detected:
+        desired.extend(_DOCSMCP_PERMISSION_ENTRIES)
+        desired.extend(_PLATFORM_PERMISSION_ENTRIES)
     if engagement_level == "high":
         desired.extend(_CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS)
 
@@ -994,6 +1061,8 @@ def generate_permission_settings(
 def _bootstrap_claude_settings(
     project_root: Path,
     engagement_level: str = "medium",
+    *,
+    docsmcp_detected: bool = False,
 ) -> str:
     """Create or update ``.claude/settings.json`` with permission entries.
 
@@ -1007,6 +1076,8 @@ def _bootstrap_claude_settings(
     At ``high`` engagement, also adds ``Bash(uv run ruff *)`` and
     ``Bash(uv run mypy *)`` so the LLM can auto-run quality checkers.
 
+    When *docsmcp_detected* is True, also adds DocsMCP permission entries.
+
     Returns ``'created'``, ``'updated'``, or ``'skipped'``.
     """
     import json
@@ -1017,7 +1088,11 @@ def _bootstrap_claude_settings(
 
     if not settings_file.exists():
         settings_dir.mkdir(parents=True, exist_ok=True)
-        config = generate_permission_settings(project_root, engagement_level=engagement_level)
+        config = generate_permission_settings(
+            project_root,
+            engagement_level=engagement_level,
+            docsmcp_detected=docsmcp_detected,
+        )
         settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
         return "created"
 
@@ -1032,6 +1107,7 @@ def _bootstrap_claude_settings(
         project_root,
         engagement_level=engagement_level,
         existing_settings=existing,
+        docsmcp_detected=docsmcp_detected,
     )
 
     if merged == existing:

@@ -1,16 +1,16 @@
 # Epic Prioritization & Story Ranking
 
-**Date:** 2026-03-02
-**Scope:** TappsMCP complete; DocsMCP build-out remaining
+**Date:** 2026-03-04
+**Scope:** TappsMCP + Platform complete; DocsMCP multi-language post-MVP
 **Method:** Prioritized by value delivery, dependency readiness, risk reduction, and effort efficiency
 
 ---
 
 ## Executive Summary
 
-All TappsMCP core epics (0-37) and promotion tiers (P0-P4) are **COMPLETE**, delivering 28 MCP tools, 5100+ tests, and a comprehensive code quality pipeline.
+All TappsMCP core epics (0-46), promotion tiers (P0-P4), and Platform Epics (12-13) are **COMPLETE**, delivering 48 combined tools (29 TappsMCP + 19 DocsMCP), 5,995+ tests, and a comprehensive code quality + documentation pipeline.
 
-DocsMCP has reached near-complete status: **18/18 MCP tools implemented**, 42 source files, and **965 tests passing**. Epics 0-9 and 11 are **COMPLETE** (Epic 9 closed per [DOCSMCP_OPEN_EPICS_RESEARCH.md](DOCSMCP_OPEN_EPICS_RESEARCH.md): resources and prompts implemented; docs://templates and AGENTS.md generation deferred). Only **2 epics remain open**: Epic 10 (Distribution & CLI — PyPI required; Docker/npm/CI optional) and Epic 12 (Multi-Language Support, post-MVP). Remaining required work: ~1 week for docs-mcp PyPI publish.
+Platform Epics 12-13 deliver the **FastMCP Composition Layer** (combined TappsPlatform server with `tapps-platform` CLI, 25 integration tests for namespace collision and singleton verification) and **Distribution & Publishing** (PyPI for all 3 packages, combined Dockerfile, npm wrappers, version coordination, AGENTS.md DocsMCP awareness). Only **1 epic remains open**: DocsMCP Epic 12 (Multi-Language Support, post-MVP).
 
 ---
 
@@ -110,8 +110,14 @@ All MVP and post-MVP epics through Tier 7 have been implemented:
 
 | Epic | Focus | LOE | Notes |
 |------|-------|-----|-------|
-| 10 | Distribution & CLI | ~1 week | **Required:** PyPI for docs-mcp. Optional: Docker publish, CLI `check`, CI workflow generator. Deferred: npm wrapper. |
-| 12 | Multi-Language Support | ~2 weeks (post-MVP) | tree-sitter for TypeScript, Go, Rust, Java; Python-only sufficient for MVP. |
+| DocsMCP 12 | Multi-Language Support | ~2 weeks (post-MVP) | tree-sitter for TypeScript, Go, Rust, Java; Python-only sufficient for MVP. |
+
+### Recently Completed (Platform Critical Path)
+
+| Epic | Focus | Completed | Deliverables |
+|------|-------|-----------|-------------|
+| Platform 12 | FastMCP Composition Layer | 2026-03-04 | `tapps_mcp.platform` package, `tapps-platform` CLI, 25 integration tests, composition guide |
+| Platform 13 | Distribution & Publishing | 2026-03-04 | PyPI for 3 packages, combined Dockerfile, npm wrappers, version coordination, AGENTS.md templates |
 
 ---
 
@@ -136,16 +142,16 @@ Epic 8 (ADR & Guides)              <- COMPLETE
 Epic 9 (Project Scan & Workflow)   <- COMPLETE (resources, prompts; templates/AGENTS.md deferred)
 Epic 11 (TappsMCP Integration)     <- COMPLETE
 
-Epic 10 (Distribution)            <- OPEN (PyPI required; Docker/npm/CI optional)
+Epic 10 (Distribution)            <- COMPLETE (PyPI publish workflow)
 Epic 12 (Multi-Language)           <- OPEN, post-MVP (depends on Epic 1)
+
+Platform Epic 12 (Composition)    <- COMPLETE (combined server, CLI, 25 tests)
+Platform Epic 13 (Publishing)     <- COMPLETE (PyPI 3 packages, Docker, npm, versions)
 ```
 
-### Critical Path (Remaining)
+### Critical Path
 
-```
-Epic 10 (PyPI for docs-mcp) = ~1 week required
-Epic 12 (2w) = post-MVP, independent
-```
+All critical path epics are **COMPLETE**. Only DocsMCP Epic 12 (Multi-Language) remains as optional post-MVP work.
 
 ### Remaining LOE
 

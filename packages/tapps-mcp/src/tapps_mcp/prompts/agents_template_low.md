@@ -182,6 +182,24 @@ On unsupported clients, tools fall back to default behavior silently.
 
 ---
 
+## DocsMCP - documentation tools (companion server)
+
+When the **DocsMCP** MCP server is also configured, consider using its tools for documentation tasks.
+
+| Tool | When to use |
+|------|--------------|
+| **docs_project_scan** | Audit documentation state |
+| **docs_generate_readme** | Generate or update README |
+| **docs_generate_changelog** | Generate CHANGELOG from git history |
+| **docs_check_drift** | Detect code changes not reflected in docs |
+| **docs_check_completeness** | Score documentation completeness |
+
+DocsMCP is a separate MCP server. Install via `pip install docs-mcp` or `npx docs-mcp serve`.
+
+**Combined server (TappsPlatform):** For clients supporting 47+ tools (Claude Code, GitHub Copilot), run both as one via `tapps-platform serve`. Cursor users should use standalone servers (40-tool limit).
+
+---
+
 ## Troubleshooting: MCP tool permissions
 
 If TappsMCP tools are being rejected or prompting for approval on every call:

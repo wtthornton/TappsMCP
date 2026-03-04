@@ -191,6 +191,27 @@ On unsupported clients, tools fall back to default behavior silently.
 
 ---
 
+## DocsMCP - documentation tools (companion server)
+
+When the **DocsMCP** MCP server is also configured, you have access to documentation generation and validation tools. Use them alongside TappsMCP quality tools for a complete development workflow.
+
+| Tool | When to use |
+|------|--------------|
+| **docs_project_scan** | Audit documentation state for a project |
+| **docs_generate_readme** | Generate or update README with smart merge |
+| **docs_generate_changelog** | Generate CHANGELOG from git history |
+| **docs_generate_api** | Generate API reference docs |
+| **docs_generate_adr** | Create Architecture Decision Records |
+| **docs_check_drift** | Detect code changes not reflected in docs |
+| **docs_check_completeness** | Score documentation completeness |
+| **docs_check_freshness** | Check documentation staleness |
+
+DocsMCP is a separate MCP server. Install via `pip install docs-mcp` or `npx docs-mcp serve`. See [DocsMCP docs](https://github.com/tapps-mcp/tapps-mcp/tree/master/packages/docs-mcp) for setup.
+
+**Combined server (TappsPlatform):** For clients that support 47+ tools (Claude Code, GitHub Copilot), you can run both servers as one via `tapps-platform serve`. This shares singletons (memory, knowledge cache, settings) and reduces overhead. Note: Cursor has a 40-tool limit, so use standalone servers there. See [COMPOSITION_GUIDE.md](docs/COMPOSITION_GUIDE.md) for configuration details.
+
+---
+
 ## Troubleshooting: MCP tool permissions
 
 If TappsMCP tools are being rejected or prompting for approval on every call:

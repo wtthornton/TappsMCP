@@ -44,8 +44,10 @@
 | [Epic 42](EPIC-42-TAPPS-MEMORY-2026-ENHANCEMENTS.md) | tapps_memory 2026 Enhancements | P1 | ~1.5-2 weeks | Epic 23, 24, 25, 34 | **Complete** — 4 stories, 21 new tests, 42 total |
 | [Epic 46](EPIC-46-DOCKER-MCP-DISTRIBUTION.md) | Docker MCP Toolkit Distribution | P1 | ~3-4 weeks | Epic 6, Epic 37 | **Complete** — 8 stories, 79 new tests |
 | DocsMCP Epic 10 | Distribution & CLI (PyPI publish) | P1 | ~1 week | DocsMCP Epic 0 | **Complete** — reduced scope (PyPI publish workflow) |
+| Platform Epic 12 | FastMCP Composition Layer | P2 | ~3-4 days | Epic 6, DocsMCP | **Complete** — combined server, platform CLI, 25 integration tests |
+| Platform Epic 13 | Distribution & Publishing | P2 | ~3-4 days | Platform Epic 12 | **Complete** — PyPI workflow (all 3 packages), combined Dockerfile, npm wrappers, version coordination, AGENTS.md DocsMCP awareness |
 
-**Total LOE:** ~58-74 weeks — Epics 0-46 complete (P0-P4), DocsMCP Epics 0-9, 11 complete. 5,970+ tests passing.
+**Total LOE:** ~59-75 weeks — Epics 0-46 + Platform Epics 12-13 complete (P0-P4), DocsMCP Epics 0-11 complete. 5,995+ tests passing.
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
