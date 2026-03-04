@@ -84,7 +84,7 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
       - name: Upload Trivy scan results as artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-scan-results

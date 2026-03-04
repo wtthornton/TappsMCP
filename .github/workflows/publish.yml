@@ -54,7 +54,7 @@ jobs:
         run: |
           ls -la dist/
           python -m zipfile -l dist/*.whl | head -20
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.package.name }}
           path: dist/
@@ -84,7 +84,7 @@ jobs:
         run: |
           python -m PyInstaller --onefile -n tapps-mcp --console scripts/run_tapps_mcp.py
       - name: Upload exe artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: exe
           path: dist/tapps-mcp.exe
