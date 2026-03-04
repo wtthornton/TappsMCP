@@ -35,6 +35,10 @@ from mcp.types import ToolAnnotations
 from tapps_core.common.logging import setup_logging
 from tapps_core.config.settings import load_settings
 from tapps_mcp import __version__
+from tapps_mcp.common.developer_workflow import (
+    DAILY_STEPS,
+    RECOMMENDED_WORKFLOW_TEXT,
+)
 from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
 from tapps_mcp.tools.tool_detection import (
     detect_installed_tools,
@@ -202,21 +206,8 @@ def _build_server_info_data(
         "available_tools": available_tools,
         "installed_checkers": [t.model_dump() for t in installed],
         "diagnostics": diagnostics.model_dump(),
-        "recommended_workflow": (
-            "FIRST: Call tapps_session_start() to initialize. "
-            "BEFORE using any library: Call tapps_lookup_docs(). "
-            "AFTER editing Python files: "
-            "Call tapps_score_file(quick=True) or tapps_quick_check(). "
-            "BEFORE declaring done: Call tapps_validate_changed() or tapps_quality_gate(). "
-            "FINAL step: Call tapps_checklist()."
-        ),
-        "quick_start": [
-            "1. FIRST: Call tapps_session_start() to initialize the session",
-            "2. BEFORE using any library API: Call tapps_lookup_docs(library='<name>')",
-            "3. DURING edits: Call tapps_quick_check(file_path='<path>') after each change",
-            "4. BEFORE declaring done: Call tapps_validate_changed() - all gates MUST pass",
-            "5. FINAL step: Call tapps_checklist(task_type='<type>') to verify completeness",
-        ],
+        "recommended_workflow": RECOMMENDED_WORKFLOW_TEXT,
+        "quick_start": list(DAILY_STEPS),
         "critical_rules": [
             "BLOCKING: tapps_quality_gate MUST pass before work is complete",
             "BLOCKING: tapps_lookup_docs MUST be called before using external library APIs",

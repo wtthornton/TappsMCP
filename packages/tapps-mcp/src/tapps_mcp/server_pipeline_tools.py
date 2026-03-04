@@ -19,6 +19,7 @@ from mcp.server.fastmcp import Context  # noqa: TC002 - MCP SDK needs runtime ac
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
+from tapps_mcp.common.developer_workflow import get_developer_workflow_dict
 from tapps_mcp.server_helpers import emit_ctx_info, error_response, success_response
 
 if TYPE_CHECKING:
@@ -1100,6 +1101,9 @@ async def tapps_init(
             "See docs/MCP_COMPOSITION.md for guidance on adding GitHub, "
             "YouTube, Sentry, and other MCPs alongside TappsMCP."
         )
+    result["developer_workflow"] = get_developer_workflow_dict(
+        setup_done=not result["errors"],
+    )
     resp = success_response("tapps_init", elapsed_ms, result)
     resp["success"] = not result["errors"]
     return _with_nudges("tapps_init", resp)

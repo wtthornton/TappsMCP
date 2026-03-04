@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-03-03
+
+### Added
+
+- **Developer workflow (Setup / Update / Daily)** — Single reference for onboarding: `common/developer_workflow.py` with `DAILY_STEPS`, `SETUP_STEPS`, `UPDATE_STEP`, and `WHEN_TO_USE`. `tapps_session_start` uses shared `quick_start` and `recommended_workflow`. `tapps_init` response now includes `developer_workflow` (setup_done, daily_steps, update_step, when_to_use). `tapps_init` generates `docs/TAPPS_WORKFLOW.md` with Setup (once), Update (after upgrading TappsMCP), Daily (5-step), and when-to-use-other-tools.
+
+### Changed
+
+- **Session start / init** — `quick_start` and `recommended_workflow` are sourced from `developer_workflow` for a single source of truth.
+
 ## [0.7.2] - 2026-03-03
 
 ### Added

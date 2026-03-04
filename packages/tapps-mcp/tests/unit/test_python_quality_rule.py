@@ -176,6 +176,10 @@ class TestInitIntegration:
         assert rule_result["action"] == "created"
         target = tmp_path / ".claude" / "rules" / "python-quality.md"
         assert target.exists()
+        # Setup/Update/Daily workflow doc is always created when not dry_run
+        assert "workflow_doc" in result
+        assert result["workflow_doc"]["action"] in ("created", "updated")
+        assert (tmp_path / "docs" / "TAPPS_WORKFLOW.md").exists()
 
 
 # ---------------------------------------------------------------------------

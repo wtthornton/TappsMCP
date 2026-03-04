@@ -288,6 +288,15 @@ def _create_templates(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     else:
         state.result["tech_stack_md"] = {"action": "skipped", "reason": "disabled"}
 
+    # docs/TAPPS_WORKFLOW.md (Setup / Update / Daily reference)
+    if not state.dry_run:
+        from tapps_mcp.common.developer_workflow import render_workflow_md
+
+        action = state.safe_write_or_overwrite(
+            "docs/TAPPS_WORKFLOW.md", render_workflow_md()
+        )
+        state.result["workflow_doc"] = {"action": action}
+
 
 def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     """Create or update AGENTS.md."""

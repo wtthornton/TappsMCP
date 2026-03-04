@@ -58,6 +58,7 @@ a = Analysis(
         "tapps_mcp.common.output_schemas",
         "tapps_mcp.common.elicitation",
         "tapps_mcp.common.constants",
+        "tapps_mcp.common.developer_workflow",
         "tapps_mcp.common.pipeline_models",
         "tapps_mcp.common.utils",
         "tapps_mcp.config",

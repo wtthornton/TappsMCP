@@ -337,6 +337,15 @@ class TestTappsInit:
 
         result = await tapps_init(dry_run=True)
         assert result["success"] is True
+        # developer_workflow is always included for easy onboarding reference
+        data = result["data"]
+        assert "developer_workflow" in data
+        wf = data["developer_workflow"]
+        assert "daily_steps" in wf
+        assert "update_step" in wf
+        assert "when_to_use" in wf
+        assert len(wf["daily_steps"]) == 5
+        assert "tapps_upgrade" in wf["update_step"]
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
