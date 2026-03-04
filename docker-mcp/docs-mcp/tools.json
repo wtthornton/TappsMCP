@@ -1,0 +1,23 @@
+{
+  "_note": "Auto-generated placeholder. Run: uv run python scripts/generate-tools-json.py",
+  "tools": [
+    {"name": "docs_session_start", "description": "Initialize DocsMCP session"},
+    {"name": "docs_project_scan", "description": "Comprehensive project documentation audit"},
+    {"name": "docs_config", "description": "DocsMCP configuration management"},
+    {"name": "docs_module_map", "description": "Generate module dependency map"},
+    {"name": "docs_api_surface", "description": "Extract public API surface"},
+    {"name": "docs_git_summary", "description": "Git history analysis and summary"},
+    {"name": "docs_generate_readme", "description": "Generate or update README.md"},
+    {"name": "docs_generate_api", "description": "Generate API documentation"},
+    {"name": "docs_generate_changelog", "description": "Generate changelog from git history"},
+    {"name": "docs_generate_release_notes", "description": "Generate release notes"},
+    {"name": "docs_generate_diagram", "description": "Generate architecture diagrams"},
+    {"name": "docs_generate_adr", "description": "Generate architecture decision record"},
+    {"name": "docs_generate_onboarding", "description": "Generate onboarding guide"},
+    {"name": "docs_generate_contributing", "description": "Generate contributing guide"},
+    {"name": "docs_check_drift", "description": "Detect documentation drift"},
+    {"name": "docs_check_completeness", "description": "Validate documentation completeness"},
+    {"name": "docs_check_links", "description": "Check for broken documentation links"},
+    {"name": "docs_check_freshness", "description": "Measure documentation currency"}
+  ]
+}

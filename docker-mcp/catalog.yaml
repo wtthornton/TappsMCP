@@ -1,0 +1,22 @@
+# Self-hosted Docker MCP catalog for TappsMCP/DocsMCP
+# Use for pre-catalog-approval or enterprise deployments:
+#   docker mcp catalog import --file docker-mcp/catalog.yaml
+servers:
+  tapps-mcp:
+    name: tapps-mcp
+    description: "Code quality MCP server (28 tools)"
+    image: ghcr.io/tapps-mcp/tapps-mcp:latest
+    transport: stdio
+    environment:
+      - name: TAPPS_MCP_PROJECT_ROOT
+        value: /workspace
+        mount: true
+  docs-mcp:
+    name: docs-mcp
+    description: "Documentation MCP server (18 tools)"
+    image: ghcr.io/tapps-mcp/docs-mcp:latest
+    transport: stdio
+    environment:
+      - name: TAPPS_MCP_PROJECT_ROOT
+        value: /workspace
+        mount: true

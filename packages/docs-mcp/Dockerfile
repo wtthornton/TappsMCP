@@ -1,6 +1,10 @@
-# DocsMCP - multi-stage Docker build
-# Stage 1: Builder - install dependencies and build wheel
-# Stage 2: Production - slim image with pre-installed server
+# DocsMCP — multi-stage Docker build (monorepo-aware)
+# Stage 1: Builder — build tapps-core + docs-mcp wheels
+# Stage 2: Production — slim image with pre-installed server
+#
+# Build from repo root:  docker build -f packages/docs-mcp/Dockerfile -t docs-mcp .
+# Run:    docker run -v $(pwd):/workspace docs-mcp
+# HTTP:   docker run -p 8000:8000 -v $(pwd):/workspace docs-mcp docsmcp serve --transport http --host 0.0.0.0 --port 8000
 
 # ---- Builder ----
 FROM python:3.12-slim AS builder
@@ -10,12 +14,15 @@ WORKDIR /build
 # Install build deps
 RUN pip install --no-cache-dir hatchling==1.28.0
 
-# Copy project files
-COPY pyproject.toml README.md ./
-COPY src ./src
+# Build tapps-core wheel first (dependency)
+COPY packages/tapps-core/pyproject.toml packages/tapps-core/README.md packages/tapps-core/
+COPY packages/tapps-core/src packages/tapps-core/src
+RUN pip wheel --no-deps --wheel-dir /wheels packages/tapps-core/
 
-# Build wheel
-RUN pip wheel --no-deps --wheel-dir /wheels .
+# Build docs-mcp wheel
+COPY packages/docs-mcp/pyproject.toml packages/docs-mcp/README.md packages/docs-mcp/
+COPY packages/docs-mcp/src packages/docs-mcp/src
+RUN pip wheel --no-deps --wheel-dir /wheels packages/docs-mcp/
 
 # ---- Production ----
 FROM python:3.12-slim
@@ -25,16 +32,17 @@ LABEL org.opencontainers.image.description="MCP server for documentation generat
 LABEL org.opencontainers.image.source="https://github.com/tapps-mcp/tapps-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="TappsMCP"
+LABEL org.opencontainers.image.version="0.1.0"
 
 WORKDIR /app
 
-# Install system deps
+# Install system deps (git required for git history analysis)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git curl \
+    && apt-get install -y --no-install-recommends git \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -rf /var/lib/apt/lists/*
 
-# Install app from wheel built in builder stage
+# Install tapps-core + docs-mcp from wheels built in builder stage
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
 
@@ -48,12 +56,6 @@ USER docsmcp
 ENV TAPPS_MCP_PROJECT_ROOT=/workspace
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8000
-
-HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=5s \
-    CMD curl -sf http://127.0.0.1:8000/ || exit 1
-
 # Default: stdio transport for MCP client integration
-# Override with: docker run ... docsmcp serve --transport http --host 0.0.0.0 --port 8000
-ENTRYPOINT ["python", "-m", "docs_mcp"]
-CMD ["serve"]
+# HTTP: docker run -p 8000:8000 ... docsmcp serve --transport http --host 0.0.0.0 --port 8000
+CMD ["docsmcp", "serve"]

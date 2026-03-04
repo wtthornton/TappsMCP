@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 import structlog
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = structlog.get_logger(__name__)
@@ -116,6 +116,32 @@ class MemorySettings(BaseSettings):
         description="Inject relevant memories into expert consultations (Epic 25).",
     )
     decay: MemoryDecaySettings = Field(default_factory=MemoryDecaySettings)
+
+
+class DockerSettings(BaseModel):
+    """Docker MCP distribution settings."""
+
+    enabled: bool = Field(default=False, description="Enable Docker MCP transport.")
+    transport: str = Field(
+        default="auto",
+        description="MCP transport mode: 'auto', 'docker', 'exe', or 'uv'.",
+    )
+    profile: str = Field(
+        default="tapps-standard",
+        description="Docker MCP Toolkit profile name.",
+    )
+    image: str = Field(
+        default="ghcr.io/tapps-mcp/tapps-mcp:latest",
+        description="Docker image for TappsMCP server.",
+    )
+    docs_image: str = Field(
+        default="ghcr.io/tapps-mcp/docs-mcp:latest",
+        description="Docker image for DocsMCP server.",
+    )
+    companions: list[str] = Field(
+        default_factory=lambda: ["context7"],
+        description="Companion MCP servers to recommend.",
+    )
 
 
 class TappsMCPSettings(BaseSettings):
@@ -259,6 +285,9 @@ class TappsMCPSettings(BaseSettings):
         ge=200,
         description="Maximum number of characters merged from Context7 fallback content.",
     )
+
+    # Docker MCP distribution (Epic 46)
+    docker: DockerSettings = Field(default_factory=DockerSettings)
 
 
 # Settings cache - only the no-arg (default) case is cached.

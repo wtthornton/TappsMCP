@@ -1,0 +1,8 @@
+name: tapps-full
+description: "Full developer workflow: quality, docs, library lookup, GitHub, filesystem"
+servers:
+  - catalog://tapps-mcp
+  - catalog://docs-mcp
+  - catalog://context7
+  - catalog://github
+  - catalog://filesystem

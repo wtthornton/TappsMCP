@@ -42,8 +42,10 @@
 | [Epic 36](EPIC-36-HOOK-PLATFORM-EXPANSION.md) | Hook & Platform Generation Expansion | P1 | ~2-2.5 weeks | Epic 33, Epic 8, Epic 18 | **Complete** |
 | [Epic 37](EPIC-37-PIPELINE-ONBOARDING-DISTRIBUTION.md) | Pipeline Onboarding & Distribution | P1 | ~2.5-3 weeks | Epic 33, Epic 36, Epic 6, Epic 8 | **Complete** |
 | [Epic 42](EPIC-42-TAPPS-MEMORY-2026-ENHANCEMENTS.md) | tapps_memory 2026 Enhancements | P1 | ~1.5-2 weeks | Epic 23, 24, 25, 34 | **Complete** — 4 stories, 21 new tests, 42 total |
+| [Epic 46](EPIC-46-DOCKER-MCP-DISTRIBUTION.md) | Docker MCP Toolkit Distribution | P1 | ~3-4 weeks | Epic 6, Epic 37 | **Complete** — 8 stories, 79 new tests |
+| DocsMCP Epic 10 | Distribution & CLI (PyPI publish) | P1 | ~1 week | DocsMCP Epic 0 | **Complete** — reduced scope (PyPI publish workflow) |
 
-**Total LOE:** ~55-70 weeks — Epics 0-37, 42 complete (P0-P4). 5,100+ tests passing.
+**Total LOE:** ~58-74 weeks — Epics 0-46 complete (P0-P4), DocsMCP Epics 0-9, 11 complete. 5,970+ tests passing.
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -119,6 +121,12 @@ Epic 42 (tapps_memory 2026 Enhancements)  ← depends on Epic 23, 24, 25, 34
 Epic 35 (Expert Adaptive Integration)    ← depends on Epic 3, Epic 5, Epic 7
   Adaptive domain detector wiring, synonym expansion, knowledge freshness
 
+--- Docker MCP Distribution ---
+
+Epic 46 (Docker MCP Toolkit Distribution)  ← depends on Epic 6, Epic 37
+  Docker MCP Catalog publishing, custom catalogs, gateway config in tapps_init
+  Dockerfiles, server.yaml, tools.json, GHCR CI, expert knowledge updates
+
 ```
 
 **Note:** Epics 30-32 form a "Self-Improvement & Benchmarking" wave. Epic 30 provides infrastructure. Epics 31 and 32 can run in parallel after Epic 30 completes.
@@ -151,7 +159,7 @@ DocsMCP is the documentation MCP server that complements TappsMCP's code quality
 | 7 | Documentation Validation | **Complete** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness` |
 | 8 | ADR & Guides | **Complete** -- `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing` |
 | 9 | Project Scan & Workflow | **Complete** — resources (docs://status, config, coverage), prompts (docs_workflow_overview, docs_workflow). docs://templates and AGENTS.md generation deferred (see [DOCSMCP_OPEN_EPICS_RESEARCH.md](../DOCSMCP_OPEN_EPICS_RESEARCH.md)). |
-| 10 | Distribution & CLI | Open — PyPI for docs-mcp required for standalone install; Docker publish, npm wrapper, CI generator optional/deferred |
+| 10 | Distribution & CLI | **Complete** (reduced scope) — PyPI publish workflow for docs-mcp added to CI; Docker publish via Epic 46; npm wrapper, CI generator deferred |
 | 11 | TappsMCP Integration | **Complete** -- Quality data enrichment in project_scan/drift/readme |
 | 12 | Multi-Language Support | Open (post-MVP) — tree-sitter for TypeScript/Go/Rust/Java; Python-only sufficient for MVP |
 

@@ -10,7 +10,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-5%2C100%2B_passing-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-5%2C900%2B_passing-brightgreen.svg)](#development)
 [![Tools](https://img.shields.io/badge/MCP_tools-28-blue.svg)](#tools-reference)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
@@ -27,7 +27,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 |---|---|---|---|
 | **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics) | 0 (library) |
 | **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 28 |
-| **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 3 (MVP) |
+| **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 18 |
 
 ### Key highlights
 
@@ -38,7 +38,8 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 - **Unified feature flags** — optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** — auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** — `tapps_init` sets up quality infrastructure in any project with one call
-- **5,100+ tests** across 3 packages with strict mypy and ruff enforcement
+- **Docker MCP Toolkit** — publish to Docker MCP Catalog with curated companion profiles
+- **5,900+ tests** across 3 packages with strict mypy and ruff enforcement
 - **Benchmark infrastructure** — AGENTBench evaluation, template optimization, tool effectiveness measurement
 
 ---
@@ -137,10 +138,33 @@ Choose one of the following. After installing, see [Quick start](#quick-start) t
 
 | Method | Requirements | Use when |
 |--------|--------------|----------|
+| **Docker MCP Toolkit** | Docker Desktop | Zero-dependency, cross-platform install with companion profiles. **Recommended.** |
 | **PyPI** | Python 3.12+, pip | You want a global or venv install and will run from any project. |
 | **npx** | Node.js 18+ | You prefer not to touch Python; runs on demand. |
 | **From source** | Python 3.12+, [uv](https://docs.astral.sh/uv/) or pip | You are developing TappsMCP or want the latest code. |
 | **Docker** | Docker, Docker Compose | You want HTTP transport or to run in a container. |
+
+### Install with Docker MCP Toolkit (recommended)
+
+Zero dependencies — no Python install needed. Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) with MCP Toolkit.
+
+```bash
+# Single server
+docker mcp catalog install tapps-mcp
+
+# Curated profile (TappsMCP + DocsMCP + Context7 docs)
+docker mcp profile import tapps-standard
+```
+
+Three profiles available:
+
+| Profile | Servers | Use Case |
+|---------|---------|----------|
+| `tapps-minimal` | tapps-mcp | Code quality only |
+| `tapps-standard` | tapps-mcp, docs-mcp, context7 | Quality + docs + library lookup |
+| `tapps-full` | tapps-mcp, docs-mcp, context7, github, filesystem | Full developer workflow |
+
+See [docker-mcp/README.md](docker-mcp/README.md) for self-hosted catalogs and profile sharing.
 
 ### Install from PyPI
 
@@ -785,7 +809,19 @@ This adds `faiss-cpu`, `sentence-transformers`, and `numpy`. When not installed,
 
 ## Docker
 
-Run TappsMCP as a local MCP server in a container (Streamable HTTP on port 8000):
+### Docker MCP Toolkit (recommended)
+
+The easiest way to run TappsMCP in Docker. See [Install with Docker MCP Toolkit](#install-with-docker-mcp-toolkit-recommended) above.
+
+```bash
+docker mcp profile import tapps-standard
+```
+
+`tapps_init` auto-detects Docker MCP Toolkit and generates gateway-based client configs. `tapps_doctor` validates the full Docker stack (daemon, toolkit, images, gateway, companions).
+
+### Docker Compose (HTTP transport)
+
+Run TappsMCP as a local HTTP MCP server:
 
 ```bash
 docker compose up --build -d
@@ -800,6 +836,21 @@ Verification:
 docker compose ps
 docker compose logs --tail 20
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/
+```
+
+### Docker images (GHCR)
+
+Pre-built multi-arch images are published on every release:
+
+```bash
+docker pull ghcr.io/tapps-mcp/tapps-mcp:latest
+docker pull ghcr.io/tapps-mcp/docs-mcp:latest
+
+# Run TappsMCP (stdio, mount current dir)
+docker run -v $(pwd):/workspace ghcr.io/tapps-mcp/tapps-mcp:latest
+
+# Run with HTTP transport
+docker run -p 8000:8000 -v $(pwd):/workspace ghcr.io/tapps-mcp/tapps-mcp:latest tapps-mcp serve --transport http --host 0.0.0.0 --port 8000
 ```
 
 ---

@@ -195,6 +195,71 @@ resource "aws_ecs_service" "app" {
 - **GitHub Actions**: GitHub-integrated
 - **CircleCI**: Cloud CI/CD
 
+## MCP Server Distribution Channels
+
+MCP servers have unique distribution needs: they must be discoverable by AI clients,
+configurable without manual JSON editing, and runnable without installing language
+runtimes. The following channels address these needs:
+
+### Docker MCP Toolkit (Recommended for End Users)
+
+The Docker MCP Toolkit provides zero-dependency distribution via Docker Desktop:
+
+- **MCP Catalog**: 300+ verified server images, browsable in Docker Desktop UI
+- **MCP Gateway**: stdio proxy managing container lifecycle -- one config entry per profile
+- **Profiles**: Named server collections (e.g., "tapps-platform" bundles tapps-mcp + docs-mcp)
+- **Dynamic MCP**: Agents discover and add servers mid-conversation
+
+Client configuration (single gateway entry):
+
+```json
+{
+  "mcpServers": {
+    "tapps-platform": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--profile", "tapps-platform"]
+    }
+  }
+}
+```
+
+Publish to catalog via PR to `docker/mcp-registry`. Images are signed with SBOM.
+
+### PyPI (Standard Python)
+
+```bash
+pip install tapps-mcp
+# or
+uv add tapps-mcp
+```
+
+Requires Python 3.12+. Best for developers already in a Python environment.
+
+### PyInstaller Executables
+
+Pre-built `.exe` files for Windows. No Python needed. Best for air-gapped or
+offline environments. Rebuilt manually per release.
+
+### Profile-Based vs Single-Server Deployment
+
+| Approach | Config Entries | Use Case | Maintenance |
+|----------|---------------|----------|-------------|
+| **Profile-based** (gateway) | 1 entry per profile | Teams, multi-server setups | Update profile, all clients inherit |
+| **Single-server** (direct) | 1 entry per server | Solo dev, minimal setup | Update each client config separately |
+
+Profile-based deployment is recommended when using two or more MCP servers.
+The gateway manages container lifecycle, routing, and secrets centrally.
+Single-server deployment is simpler for one-off use but does not scale well
+when adding companions like Context7 or GitHub MCP.
+
+### Transport Selection
+
+| Channel | Transport | Multi-Client | Auto-Update |
+|---------|-----------|-------------|-------------|
+| Docker MCP | stdio (via gateway) | Yes (via gateway) | Yes (image tags) |
+| PyPI | stdio (direct) | No | Manual pip upgrade |
+| Exe | stdio (direct) | No | Manual rebuild |
+
 ## Anti-Patterns
 
 1. **Big Bang Deployments**: Deploy everything at once

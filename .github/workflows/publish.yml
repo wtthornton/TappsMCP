@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Verify tag matches package version
+      - name: Verify tag matches tapps-mcp version
         run: |
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
           PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('packages/tapps-mcp/pyproject.toml','rb'))['project']['version'])")
@@ -31,6 +31,15 @@ jobs:
   build:
     needs: validate
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          - name: tapps-core
+            path: packages/tapps-core
+          - name: tapps-mcp
+            path: packages/tapps-mcp
+          - name: docs-mcp
+            path: packages/docs-mcp
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
@@ -39,14 +48,15 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: uv build
+      - name: Build ${{ matrix.package.name }}
+        run: uv build --package ${{ matrix.package.name }}
       - name: Verify build artifacts
         run: |
           ls -la dist/
           python -m zipfile -l dist/*.whl | head -20
       - uses: actions/upload-artifact@v6
         with:
-          name: dist
+          name: dist-${{ matrix.package.name }}
           path: dist/
 
   build-exe:
@@ -56,7 +66,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v6
         with:
-          name: dist
+          name: dist-tapps-core
+          path: dist/
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist-tapps-mcp
           path: dist/
       - uses: actions/setup-python@v6
         with:
@@ -85,17 +99,29 @@ jobs:
     steps:
       - uses: actions/download-artifact@v6
         with:
-          name: dist
+          name: dist-tapps-core
+          path: dist/
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist-tapps-mcp
+          path: dist/
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist-docs-mcp
           path: dist/
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install dist/*.whl
+      - name: Install all packages
+        run: pip install dist/*.whl
         shell: bash
-      - run: tapps-mcp --version
-      - run: tapps-mcp --help
+      - name: Verify tapps-mcp
+        run: tapps-mcp --version
+      - name: Verify docs-mcp
+        run: docsmcp --version
 
-  publish-testpypi:
+  # Publish tapps-core first (dependency of tapps-mcp and docs-mcp)
+  publish-core-testpypi:
     needs: test-install
     runs-on: ubuntu-latest
     environment: testpypi
@@ -104,14 +130,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v6
         with:
-          name: dist
+          name: dist-tapps-core
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
 
-  publish-pypi:
-    needs: publish-testpypi
+  publish-core-pypi:
+    needs: publish-core-testpypi
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -119,12 +145,69 @@ jobs:
     steps:
       - uses: actions/download-artifact@v6
         with:
-          name: dist
+          name: dist-tapps-core
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # Publish tapps-mcp and docs-mcp after tapps-core is on PyPI
+  publish-tapps-mcp-testpypi:
+    needs: publish-core-pypi
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist-tapps-mcp
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-tapps-mcp-pypi:
+    needs: publish-tapps-mcp-testpypi
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist-tapps-mcp
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-docs-mcp-testpypi:
+    needs: publish-core-pypi
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist-docs-mcp
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-docs-mcp-pypi:
+    needs: publish-docs-mcp-testpypi
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist-docs-mcp
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    needs: [publish-pypi, build-exe]
+    needs: [publish-tapps-mcp-pypi, publish-docs-mcp-pypi, build-exe]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -132,7 +215,15 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v6
         with:
-          name: dist
+          name: dist-tapps-core
+          path: dist/
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist-tapps-mcp
+          path: dist/
+      - uses: actions/download-artifact@v6
+        with:
+          name: dist-docs-mcp
           path: dist/
       - uses: actions/download-artifact@v6
         with:

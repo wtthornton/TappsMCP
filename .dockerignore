@@ -27,6 +27,11 @@ htmlcov
 .coverage
 coverage.xml
 *.cover
+dist
+
+# TappsMCP state and cache
+.tapps-mcp
+.tapps-mcp-cache
 
 # Tests and dev (keep for optional run in image; exclude to shrink image)
 # tests/

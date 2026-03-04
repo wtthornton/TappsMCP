@@ -254,6 +254,10 @@ Long-running tools use MCP `ctx.info()` and `ctx.report_progress()` to provide r
 
 `distribution/plugin_builder.py` provides the `PluginBuilder` class for generating Claude Code marketplace plugin directories (manifest, namespaced skills, agents, hooks.json, MCP config, rules, settings). `distribution/rollback.py` provides `BackupManager` for creating timestamped backups before upgrades (stored in `.tapps-mcp/backups/{timestamp}/` with `manifest.json`), listing backups, restoring from any backup, and auto-cleaning old backups (keeping the 5 most recent). `tapps_upgrade` automatically creates a backup before overwriting files.
 
+### Docker MCP Toolkit distribution (Epic 46)
+
+Docker MCP Catalog artifacts live under `docker-mcp/` at the repo root: `server.yaml` + `tools.json` + `readme.md` for both tapps-mcp and docs-mcp, three curated companion profiles (`tapps-minimal`, `tapps-standard`, `tapps-full`), and a self-hosted `catalog.yaml` for pre-approval/enterprise use. `DockerSettings` in `tapps_core/config/settings.py` stores Docker transport config (`enabled`, `transport`, `profile`, `image`, `companions`). `pipeline/init.py` has `_detect_docker()` (async subprocess probing) and `_recommend_companions()` for Docker-aware bootstrapping. `setup_generator.py` has `_build_docker_server_entry()` and Docker-aware merge logic (`_is_docker_entry()`). `doctor.py` has 5 Docker health checks (daemon, toolkit, images, companions, MCP config). `elicitation.py` adds conditional Docker transport and profile wizard questions. `.github/workflows/docker-publish.yml` builds multi-arch images, signs with cosign, and generates SBOMs on release tags.
+
 ### Quality gate evaluation
 
 `gates/evaluator.py` checks 6 category scores + overall against thresholds. Failures are sorted by scoring weight (security 0.27 > maintainability 0.24 > complexity 0.18 > test coverage 0.13 > performance 0.08 > structure/devex 0.05). A security floor of 50 enforces that files with critical security issues always fail the gate regardless of overall score.

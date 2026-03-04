@@ -58,6 +58,24 @@ def _detect_command_path() -> str:
     return "tapps-mcp"
 
 
+def _build_docker_server_entry(settings: Any) -> dict[str, Any]:
+    """Build MCP client config entry for Docker gateway transport.
+
+    Uses the Docker MCP Toolkit ``docker mcp gateway run`` command with the
+    configured profile name from ``settings.docker.profile``.
+
+    Args:
+        settings: ``TappsMCPSettings`` instance with a ``docker`` field.
+
+    Returns:
+        Server entry dict with ``command`` and ``args``.
+    """
+    return {
+        "command": "docker",
+        "args": ["mcp", "gateway", "run", "--profile", settings.docker.profile],
+    }
+
+
 def _build_server_entry(host: str) -> dict[str, Any]:
     """Build the tapps-mcp server config entry for the given host.
 
@@ -220,12 +238,26 @@ def _merge_config(
     if upgrade_mode:
         old_entry = merged[servers_key].get("tapps-mcp")
         if isinstance(old_entry, dict) and "command" in old_entry:
-            # Preserve command and args from existing config
-            new_entry["command"] = old_entry["command"]
-            if "args" in old_entry:
-                new_entry["args"] = old_entry["args"]
+            if _is_docker_entry(old_entry):
+                # Docker gateway: preserve command and args entirely,
+                # only update env and instructions fields.
+                new_entry["command"] = old_entry["command"]
+                new_entry["args"] = old_entry.get("args", [])
+                log.info("merge_config_docker_preserved", host=host)
+            else:
+                # Non-Docker (exe/uv): preserve command and args
+                new_entry["command"] = old_entry["command"]
+                if "args" in old_entry:
+                    new_entry["args"] = old_entry["args"]
 
     merged[servers_key]["tapps-mcp"] = new_entry
+
+    # Preserve Docker gateway entry if it already exists (Epic 46).
+    if upgrade_mode:
+        old_docker = merged[servers_key].get("tapps-mcp-docker")
+        if isinstance(old_docker, dict):
+            merged[servers_key]["tapps-mcp-docker"] = old_docker
+
     return merged
 
 
@@ -366,15 +398,25 @@ def _check_config(host: str, project_root: Path, scope: str = "user") -> bool:
     return True
 
 
+def _is_docker_entry(entry: dict[str, Any]) -> bool:
+    """Return ``True`` if *entry* is a Docker gateway MCP config.
+
+    Docker gateway entries use ``"command": "docker"`` with args like
+    ``["mcp", "gateway", "run", "--profile", "<name>"]``.
+    """
+    return isinstance(entry, dict) and entry.get("command") == "docker"
+
+
 def _is_valid_tapps_command(command: str) -> bool:
     """Return ``True`` if *command* looks like a valid tapps-mcp command.
 
     Accepts:
     - ``"tapps-mcp"`` (bare name, on PATH)
+    - ``"docker"`` (Docker MCP gateway transport)
     - Any absolute or relative path whose filename is ``tapps-mcp`` or
       ``tapps-mcp.exe`` (PyInstaller / standalone binary).
     """
-    if command == "tapps-mcp":
+    if command in ("tapps-mcp", "docker"):
         return True
     # Check if the filename portion matches
     name = Path(command).name.lower()

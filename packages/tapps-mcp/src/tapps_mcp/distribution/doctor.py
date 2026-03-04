@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 from pathlib import Path
@@ -379,6 +380,205 @@ def check_quality_tools() -> list[CheckResult]:
 
 
 # ---------------------------------------------------------------------------
+# Docker health checks (Epic 46.7)
+# ---------------------------------------------------------------------------
+
+
+async def _run_docker_command(*args: str) -> tuple[int, str, str]:
+    """Run a Docker CLI command and return (returncode, stdout, stderr)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=15)
+        return (
+            proc.returncode or 0,
+            stdout_bytes.decode("utf-8", errors="replace").strip(),
+            stderr_bytes.decode("utf-8", errors="replace").strip(),
+        )
+    except FileNotFoundError:
+        return (1, "", "docker not found on PATH")
+    except asyncio.TimeoutError:
+        return (1, "", "docker command timed out")
+    except OSError as exc:
+        return (1, "", str(exc))
+
+
+async def check_docker_daemon() -> CheckResult:
+    """Verify Docker daemon is running and accessible."""
+    rc, stdout, stderr = await _run_docker_command("info", "--format", "{{.ServerVersion}}")
+    if rc == 0 and stdout:
+        return CheckResult(
+            "Docker daemon",
+            True,
+            f"Docker daemon running (server {stdout})",
+        )
+    detail = stderr or "Docker daemon not reachable"
+    return CheckResult(
+        "Docker daemon",
+        False,
+        "Docker daemon not running or not installed",
+        detail,
+    )
+
+
+async def check_docker_mcp_toolkit() -> CheckResult:
+    """Verify Docker MCP Toolkit plugin is installed."""
+    rc, stdout, stderr = await _run_docker_command("mcp", "version")
+    if rc == 0 and stdout:
+        return CheckResult(
+            "Docker MCP Toolkit",
+            True,
+            f"Docker MCP Toolkit installed ({stdout.splitlines()[0]})",
+        )
+    return CheckResult(
+        "Docker MCP Toolkit",
+        False,
+        "Docker MCP Toolkit not installed",
+        "Install: https://github.com/docker/mcp-toolkit",
+    )
+
+
+async def check_docker_images(image: str, docs_image: str) -> CheckResult:
+    """Verify tapps-mcp and docs-mcp images exist locally."""
+    missing: list[str] = []
+    for img in (image, docs_image):
+        rc, _stdout, _stderr = await _run_docker_command("image", "inspect", img)
+        if rc != 0:
+            missing.append(img)
+
+    if not missing:
+        return CheckResult(
+            "Docker images",
+            True,
+            f"Images present: {image}, {docs_image}",
+        )
+    suggestions = ", ".join(f"docker pull {m}" for m in missing)
+    return CheckResult(
+        "Docker images",
+        False,
+        f"Missing image(s): {', '.join(missing)}",
+        f"Pull with: {suggestions}",
+    )
+
+
+async def check_docker_companions(companions: list[str]) -> CheckResult:
+    """Verify recommended companion MCP servers are available as images."""
+    if not companions:
+        return CheckResult(
+            "Docker companions",
+            True,
+            "No companion servers configured",
+        )
+    missing: list[str] = []
+    found: list[str] = []
+    for name in companions:
+        rc, _stdout, _stderr = await _run_docker_command("image", "inspect", name)
+        if rc == 0:
+            found.append(name)
+        else:
+            missing.append(name)
+
+    if not missing:
+        return CheckResult(
+            "Docker companions",
+            True,
+            f"All companion images present: {', '.join(found)}",
+        )
+    return CheckResult(
+        "Docker companions",
+        False,
+        f"Missing companion image(s): {', '.join(missing)}",
+        f"Pull with: {', '.join(f'docker pull {m}' for m in missing)}",
+    )
+
+
+def check_docker_mcp_config(project_root: Path, profile: str) -> CheckResult:
+    """Verify MCP client config references Docker gateway when docker is enabled."""
+    candidates = [
+        project_root / ".mcp.json",
+        project_root / ".claude.json",
+    ]
+    for config_path in candidates:
+        if not config_path.exists():
+            continue
+        try:
+            raw = config_path.read_text(encoding="utf-8")
+            data: dict[str, Any] = json.loads(raw) if raw.strip() else {}
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        servers = data.get("mcpServers", {})
+        entry = servers.get("tapps-mcp") if isinstance(servers, dict) else None
+        if not isinstance(entry, dict):
+            continue
+
+        command = entry.get("command", "")
+        if command == "docker":
+            args = entry.get("args", [])
+            args_str = " ".join(str(a) for a in args) if isinstance(args, list) else ""
+            if profile in args_str:
+                return CheckResult(
+                    "Docker MCP config",
+                    True,
+                    f"Config in {config_path.name} uses Docker with profile '{profile}'",
+                )
+            return CheckResult(
+                "Docker MCP config",
+                False,
+                f"Config in {config_path.name} uses Docker but profile '{profile}' not found in args",
+                f"Expected args to reference profile '{profile}'",
+            )
+
+    return CheckResult(
+        "Docker MCP config",
+        False,
+        "No MCP config references Docker transport for tapps-mcp",
+        "Update .mcp.json to use command: 'docker' with MCP Toolkit args",
+    )
+
+
+async def _collect_docker_checks(
+    project_root: Path,
+    image: str,
+    docs_image: str,
+    companions: list[str],
+    profile: str,
+) -> list[CheckResult]:
+    """Collect all Docker-related diagnostic checks."""
+    results: list[CheckResult] = []
+
+    daemon_result = await check_docker_daemon()
+    results.append(daemon_result)
+
+    if not daemon_result.ok:
+        # Skip remaining checks if daemon is not available
+        return results
+
+    toolkit_result = await check_docker_mcp_toolkit()
+    results.append(toolkit_result)
+
+    images_result = await check_docker_images(image, docs_image)
+    results.append(images_result)
+
+    companions_result = await check_docker_companions(companions)
+    results.append(companions_result)
+
+    config_result = check_docker_mcp_config(project_root, profile)
+    results.append(config_result)
+
+    return results
+
+
+def _is_docker_available() -> bool:
+    """Return True if Docker CLI is on PATH."""
+    return shutil.which("docker") is not None
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -419,6 +619,39 @@ def _read_engagement_level(project_root: Path) -> str | None:
     return None
 
 
+def _collect_docker_checks_sync(root: Path) -> list[CheckResult]:
+    """Collect Docker checks, running async checks in a new event loop if needed."""
+    from tapps_core.config.settings import load_settings
+
+    settings = load_settings()
+    docker_enabled = settings.docker.enabled
+    docker_on_path = _is_docker_available()
+
+    if not docker_enabled and not docker_on_path:
+        return []
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # Already in an async context -- cannot use asyncio.run().
+        # Return a placeholder; callers in async context should use
+        # _collect_docker_checks directly.
+        return []
+
+    return asyncio.run(
+        _collect_docker_checks(
+            project_root=root,
+            image=settings.docker.image,
+            docs_image=settings.docker.docs_image,
+            companions=settings.docker.companions,
+            profile=settings.docker.profile,
+        )
+    )
+
+
 def run_doctor_structured(*, project_root: str = ".") -> dict[str, Any]:
     """Run all diagnostic checks and return structured results.
 
@@ -429,6 +662,9 @@ def run_doctor_structured(*, project_root: str = ".") -> dict[str, Any]:
     log.info("doctor_structured", project_root=str(root))
 
     checks = _collect_checks(root)
+
+    # Docker checks (Epic 46.7)
+    docker_checks = _collect_docker_checks_sync(root)
 
     results: list[dict[str, str | bool]] = []
     pass_count = 0
@@ -447,12 +683,40 @@ def run_doctor_structured(*, project_root: str = ".") -> dict[str, Any]:
         else:
             fail_count += 1
 
+    # Docker section
+    docker_results: list[dict[str, str | bool]] = []
+    docker_pass = 0
+    docker_fail = 0
+    for check in docker_checks:
+        entry_d: dict[str, str | bool] = {
+            "name": check.name,
+            "ok": check.ok,
+            "message": check.message,
+        }
+        if check.detail:
+            entry_d["detail"] = check.detail
+        docker_results.append(entry_d)
+        if check.ok:
+            docker_pass += 1
+            pass_count += 1
+        else:
+            docker_fail += 1
+            fail_count += 1
+
     out: dict[str, Any] = {
         "checks": results,
         "pass_count": pass_count,
         "fail_count": fail_count,
         "all_passed": fail_count == 0,
     }
+
+    if docker_results:
+        out["docker_checks"] = {
+            "checks": docker_results,
+            "pass_count": docker_pass,
+            "fail_count": docker_fail,
+        }
+
     # Report engagement level when configured (Epic 18.8)
     engagement = _read_engagement_level(root)
     if engagement is not None:
@@ -486,6 +750,22 @@ def run_doctor(*, project_root: str = ".") -> bool:
             if check.detail:
                 click.echo(f"        {check.detail}")
             fail_count += 1
+
+    # Docker checks (Epic 46.7)
+    docker_checks = _collect_docker_checks_sync(root)
+    if docker_checks:
+        click.echo("")
+        click.echo(click.style("--- Docker Health ---", bold=True))
+        click.echo("")
+        for check in docker_checks:
+            if check.ok:
+                click.echo(click.style(f"  PASS  {check.name}: {check.message}", fg="green"))
+                pass_count += 1
+            else:
+                click.echo(click.style(f"  FAIL  {check.name}: {check.message}", fg="red"))
+                if check.detail:
+                    click.echo(f"        {check.detail}")
+                fail_count += 1
 
     engagement = _read_engagement_level(root)
     if engagement is not None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -184,6 +185,7 @@ def bootstrap_pipeline(
     if cfg.verify_only:
         return state.finalize()
     _detect_profile(cfg, state)
+    _detect_docker_environment(state)
     _create_templates(cfg, state)
     if not cfg.dry_run:
         _setup_platform(cfg, state)
@@ -235,6 +237,73 @@ def bootstrap_pipeline(
     return state.finalize()
 
 
+async def _detect_docker() -> dict[str, Any]:
+    """Detect Docker Desktop and MCP Toolkit availability."""
+    import shutil
+
+    result: dict[str, Any] = {
+        "docker_available": False,
+        "docker_mcp_available": False,
+        "docker_version": None,
+        "installed_servers": [],
+    }
+
+    # Check docker CLI
+    if not shutil.which("docker"):
+        return result
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "info",
+            "--format",
+            "{{.ServerVersion}}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        if proc.returncode == 0 and stdout:
+            result["docker_available"] = True
+            result["docker_version"] = stdout.decode().strip()
+    except (asyncio.TimeoutError, OSError):
+        return result
+
+    # Check docker mcp subcommand
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "mcp",
+            "version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        if proc.returncode == 0:
+            result["docker_mcp_available"] = True
+    except (asyncio.TimeoutError, OSError):
+        pass
+
+    return result
+
+
+def _recommend_companions(
+    docker_result: dict[str, Any],
+    companions: list[str],
+) -> dict[str, Any]:
+    """Recommend missing companion MCP servers."""
+    installed = set(docker_result.get("installed_servers", []))
+    recommended = set(companions)
+    missing = recommended - installed
+    return {
+        "installed": sorted(installed & recommended),
+        "missing": sorted(missing),
+        "install_commands": [
+            f"docker mcp profile server add tapps-standard --server catalog://{s}"
+            for s in sorted(missing)
+        ],
+    }
+
+
 def _load_business_experts(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     """Load and optionally scaffold business experts from experts.yaml."""
     experts_yaml = state.project_root / ".tapps-mcp" / "experts.yaml"
@@ -282,6 +351,37 @@ def _load_business_experts(cfg: BootstrapConfig, state: _BootstrapState) -> None
             summary["scaffold_error"] = str(exc)
 
     state.result["business_experts"] = summary
+
+
+def _detect_docker_environment(state: _BootstrapState) -> None:
+    """Detect Docker and MCP Toolkit, store results in state."""
+    try:
+        docker_result = asyncio.run(_detect_docker())
+    except RuntimeError:
+        # Already in an event loop — skip Docker detection.
+        docker_result = {
+            "docker_available": False,
+            "docker_mcp_available": False,
+            "docker_version": None,
+            "installed_servers": [],
+        }
+    except Exception:
+        docker_result = {
+            "docker_available": False,
+            "docker_mcp_available": False,
+            "docker_version": None,
+            "installed_servers": [],
+        }
+
+    state.result["docker"] = docker_result
+
+    # Recommend companions when Docker MCP is available.
+    if docker_result.get("docker_mcp_available"):
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings()
+        companions = _recommend_companions(docker_result, settings.docker.companions)
+        state.result["docker_companions"] = companions
 
 
 def _verify_server(cfg: BootstrapConfig, state: _BootstrapState) -> None:

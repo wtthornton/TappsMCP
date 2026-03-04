@@ -1,0 +1,116 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write  # cosign keyless signing
+
+env:
+  TAPPS_IMAGE: ghcr.io/tapps-mcp/tapps-mcp
+  DOCS_IMAGE: ghcr.io/tapps-mcp/docs-mcp
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: tapps-mcp
+            dockerfile: Dockerfile
+            image_env: TAPPS_IMAGE
+            expected_tools: 28
+          - name: docs-mcp
+            dockerfile: packages/docs-mcp/Dockerfile
+            image_env: DOCS_IMAGE
+            expected_tools: 18
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU for multi-arch
+        uses: docker/setup-qemu-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "major_minor=${TAG%.*}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.name == 'tapps-mcp' && env.TAPPS_IMAGE || env.DOCS_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image with cosign (keyless)
+        env:
+          DIGEST: ${{ steps.meta.outputs.digest }}
+          IMAGE: ${{ matrix.name == 'tapps-mcp' && env.TAPPS_IMAGE || env.DOCS_IMAGE }}
+        run: |
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: Generate SBOM
+        run: |
+          docker run --rm \
+            anchore/syft:latest \
+            ${{ matrix.name == 'tapps-mcp' && env.TAPPS_IMAGE || env.DOCS_IMAGE }}:latest \
+            -o spdx-json > sbom-${{ matrix.name }}.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v6
+        with:
+          name: sbom-${{ matrix.name }}
+          path: sbom-${{ matrix.name }}.json
+
+  smoke-test:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: tapps-mcp
+            image_env: TAPPS_IMAGE
+            version_cmd: "tapps-mcp --version"
+          - name: docs-mcp
+            image_env: DOCS_IMAGE
+            version_cmd: "docsmcp --version"
+    steps:
+      - name: Pull and verify image
+        run: |
+          IMAGE="${{ matrix.name == 'tapps-mcp' && env.TAPPS_IMAGE || env.DOCS_IMAGE }}:latest"
+          docker pull "$IMAGE"
+          docker run --rm "$IMAGE" ${{ matrix.version_cmd }}

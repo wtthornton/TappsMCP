@@ -1,0 +1,4 @@
+name: tapps-minimal
+description: "TappsMCP code quality tools only"
+servers:
+  - catalog://tapps-mcp

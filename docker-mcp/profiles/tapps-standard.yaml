@@ -1,0 +1,6 @@
+name: tapps-standard
+description: "TappsMCP + DocsMCP + Context7 library docs"
+servers:
+  - catalog://tapps-mcp
+  - catalog://docs-mcp
+  - catalog://context7
