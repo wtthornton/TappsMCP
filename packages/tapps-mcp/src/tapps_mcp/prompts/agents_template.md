@@ -37,7 +37,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | Tool | When to use it |
 |------|----------------|
 | **tapps_session_start** | **FIRST call in every session** - returns server info (version, checkers, configuration) only. Call **tapps_project_profile** when you need project context. |
-| **tapps_server_info** | At **session start** - discover version, available tools, and installed checkers. Response includes a short `recommended_workflow` string. |
+| **tapps_server_info** | Lightweight discovery: version, tools, checkers. Prefer **tapps_session_start** as FIRST call (adds memory status, auto-GC, session capture). Use tapps_server_info only when you need discovery without session init. |
 | **tapps_score_file** | When **editing or reviewing** a Python file. Use `quick=True` during edit-lint-fix loops; use full (default) **before declaring work complete**. |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
 | **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
@@ -48,7 +48,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file -> `domain="testing-strategies"`). |
 | **tapps_research** | When you need **combined expert + docs** in one call - consults the domain expert, then auto-supplements with Context7 documentation when RAG is empty or confidence is low. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
 | **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
-| **tapps_project_profile** | When you need **project context** - detects project type, tech stack, CI/Docker/tests, and recommendations. Session start does not include profile; call this on demand. |
+| **tapps_project_profile** | Call **on demand** when you need project context. Returns project type, tech stack, CI/Docker/tests, recommendations. Session start does NOT include profile—call this when you need those details. |
 | **tapps_memory** | **At session start** - search or list past decisions with `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")`. **Before session end** - save learnings with `tapps_memory(action="save", key="...", value="...", tier="...", tags=[...])`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |
 | **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. Use `action="promote"` to promote a session note to persistent cross-session memory. |
 | **tapps_impact_analysis** | Before **modifying a file's public API** - shows what depends on it and what could break. |
@@ -87,6 +87,19 @@ You only see these tools when the host has started the TappsMCP server and attac
 
 ---
 
+## Tool contract (what each tool returns / when security runs)
+
+Use this when writing project-specific tool priority docs or integrating TappsMCP.
+
+| Contract | Detail |
+|----------|--------|
+| **tapps_session_start** | Returns server info (version, checkers, config) only. Does **not** include project profile. Response includes `project_profile: null` and `recommended_next`; call **tapps_project_profile** when you need tech stack, type, or recommendations. |
+| **tapps_validate_changed** | Default `quick=true`: runs **score + quality gate** on each changed file; **security scan is not run**. To include security: pass `quick=false` or `security_depth='full'`. |
+| **tapps_quick_check** | Single tool; **no `quick` parameter**. Always runs quick score + gate + basic security in one call. For per-file "quick" scoring with a `quick` flag, use **tapps_score_file(file_path, quick=True)** instead. |
+| **tapps_research** | Single call for expert + docs. Use instead of **tapps_consult_expert** + **tapps_lookup_docs** when you need both domain guidance and library documentation. |
+
+---
+
 ## Domain hints for tapps_consult_expert
 
 Pass the `domain` parameter when the context clearly implies a domain. This improves routing accuracy and avoids auto-detection mistakes.
@@ -115,10 +128,10 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 5. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 6. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 7. **Before declaring work complete:**
-   - Call `tapps_validate_changed()` to score + gate + security scan all changed files.
+   - Call `tapps_validate_changed()` to score + gate on all changed files (default quick mode). Pass `security_depth='full'` or `quick=false` to include security scan.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-8. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).
+8. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For expert + docs in one call**, use `tapps_research(question, ...)` instead of calling `tapps_consult_expert` and `tapps_lookup_docs` separately. For library-specific domain questions, `tapps_research` returns both expert guidance and documentation.
 
 ### Review Pipeline (multi-file)
 

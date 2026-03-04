@@ -38,6 +38,8 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 
 **Lighter tapps_init options** (for timeout-prone MCP clients): Use `dry_run: true` to preview (~2-5s); use `verify_only: true` for a quick server/checker check (~1-3s); or set `warm_cache_from_tech_stack: false` and `warm_expert_rag_from_tech_stack: false` for a faster init without cache warming.
 
+**Tool contract:** Session start returns server info only (no project profile—call tapps_project_profile when needed). tapps_validate_changed default = score + gate only; use `security_depth='full'` or `quick=false` for security. tapps_quick_check has no `quick` parameter (use tapps_score_file(quick=True) for that).
+
 ---
 
 ## Domain hints for tapps_consult_expert
@@ -68,10 +70,10 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 6. **Before declaring work complete:**
-   - Call `tapps_validate_changed()` to score + gate + security scan all changed files.
+   - Call `tapps_validate_changed()` to score + gate on changed files (pass `security_depth='full'` or `quick=false` for security).
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).
+7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For expert + docs in one call**, use `tapps_research(question, ...)` instead of consult_expert + lookup_docs.
 
 ### Review Pipeline (multi-file)
 

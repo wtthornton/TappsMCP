@@ -39,7 +39,7 @@ class ToolCallRecord(BaseModel):
 TOOL_REASONS: dict[str, str] = {
     "tapps_server_info": "Call at session start to discover server version and installed checkers.",
     "tapps_session_start": (
-        "Call as the FIRST action in every session (combines server_info + project_profile)."
+        "Call as the FIRST action in every session (server info only; call tapps_project_profile when you need project context)."
     ),
     "tapps_score_file": (
         "Score the file for quality; use quick=True during edits, full before done."
@@ -55,12 +55,15 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_consult_expert": (
         "Ask a domain expert when making security, testing, or architecture decisions."
     ),
+    "tapps_research": (
+        "Expert + docs in one call. Use instead of consult_expert + lookup_docs when you need both domain guidance and library documentation."
+    ),
     "tapps_list_experts": "List available expert domains before consulting one.",
     "tapps_checklist": (
         "Call before declaring work complete to verify no required steps were skipped."
     ),
     "tapps_validate_changed": (
-        "Batch-validate all changed Python files (score + gate + security) before declaring done."
+        "Batch-validate all changed Python files (score + gate; security when quick=False or security_depth='full') before declaring done."
     ),
     "tapps_quick_check": (
         "Quick score + gate + security in one call. Minimum check after editing any Python file."

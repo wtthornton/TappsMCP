@@ -55,6 +55,9 @@ async def tapps_memory(
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
+    Side effects: save/delete/reinforce/gc write to SQLite at .tapps-mcp/memory/.
+    get/list/search are read-only.
+
     Memories are typed by tier (architectural, pattern, context), carry
     confidence scores and metadata, and persist in SQLite. Use this tool
     to save decisions, patterns, and context that should survive across

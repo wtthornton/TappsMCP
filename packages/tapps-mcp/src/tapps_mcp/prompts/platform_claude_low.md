@@ -8,7 +8,7 @@ Consider these steps when they fit your task.
 
 ### Session Start
 
-Consider calling `tapps_session_start()` at session start for server capabilities and project tech stack.
+Consider calling `tapps_session_start()` at session start for server info. Call `tapps_project_profile()` when you need project context (tech stack, type).
 
 ### Before Using Any Library API
 

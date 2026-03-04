@@ -67,7 +67,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 4. **Before modifying a file's API:** Consider `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Consider `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after Python file edits.
 6. **Before declaring work complete:** Consider calling `tapps_validate_changed()` and `tapps_checklist(task_type=...)` to verify quality. Use `tapps_report(format="markdown")` if the user wants a summary.
-7. **When in doubt:** Consider `tapps_consult_expert` for domain questions and `tapps_validate_config` for Docker/infra files.
+7. **When in doubt:** Consider `tapps_consult_expert` or `tapps_research` (expert + docs in one call) for domain questions and `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
 

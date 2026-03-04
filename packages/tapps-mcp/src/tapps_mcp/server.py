@@ -335,9 +335,12 @@ def _with_nudges(
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_server_info() -> dict[str, Any]:
-    """REQUIRED at session start. Discovers server version, available tools,
-    installed checkers (ruff, mypy, bandit, radon), and configuration.
-    Skipping means subsequent tools lack context and recommendations are generic.
+    """Discovers server version, available tools, installed checkers (ruff, mypy,
+    bandit, radon), and configuration. Side effects: none (read-only).
+
+    Prefer tapps_session_start as the FIRST call—it returns the same info plus
+    memory status, auto-GC, and session capture. Use tapps_server_info only when
+    you need lightweight discovery without session initialization.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_server_info")
@@ -774,7 +777,7 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
-    """REQUIRED for domain-specific decisions. Routes to one of 16 built-in
+    """REQUIRED for domain-specific decisions. Routes to one of 17 built-in
     experts and returns RAG-backed guidance with confidence scores.
 
     Available domains (omit domain to auto-detect from question):
@@ -891,7 +894,7 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_list_experts() -> dict[str, Any]:
-    """Returns the 16 built-in experts with domain, description, and knowledge-base status.
+    """Returns the 17 built-in experts with domain, description, and knowledge-base status.
 
     Not required before calling tapps_consult_expert - that tool's description
     lists all domains and auto-detects from the question when domain is omitted.
@@ -1025,8 +1028,11 @@ async def tapps_checklist(
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
-    """REQUIRED at session start. Detects the project's tech stack, type, CI,
-    Docker, test frameworks, and package managers.
+    """Call when you need project context. Detects tech stack, type, CI, Docker,
+    test frameworks, and package managers. Session start does NOT include profile;
+    call this on demand when you need project-specific recommendations.
+
+    Returns: project_type, tech_stack, has_ci, has_docker, has_tests, recommendations.
 
     Args:
         project_root: Project root path (default: server's configured root).

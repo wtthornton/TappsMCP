@@ -454,16 +454,19 @@ async def tapps_validate_changed(
     include_impact: bool = True,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """REQUIRED before declaring work complete on multi-file changes.
+    """REQUIRED before declaring multi-file work complete.
     Detects changed Python files (via git diff) or accepts an explicit
-    comma-separated list. Runs score + quality gate (+ optional security) on each
-    file. Skipping means quality issues in changed files go undetected.
+    comma-separated list. Runs score + quality gate on each file; security
+    scan only when quick=False or security_depth='full' (default quick=True
+    does not run security). Skipping means quality issues in changed files
+    go undetected.
 
     If this tool is unavailable or rejected, use tapps_quick_check on
     individual changed files as a fallback.
 
     Default is quick=True (ruff-only, typically under 10s). Pass quick=False
     for full validation (ruff, mypy, bandit, radon, vulture per file, 1-5+ min).
+    To include security scan in default quick mode, pass security_depth='full'.
 
     Args:
         file_paths: Comma-separated file paths (empty = auto-detect via git diff).
@@ -888,6 +891,10 @@ async def tapps_session_start(
         "session_capture": session_capture_result,
         "project_profile": None,
         "project_profile_hint": _project_profile_hint,
+        "recommended_next": (
+            "Call tapps_project_profile when you need project context "
+            "(tech stack, type, recommendations). Session start does not include profile."
+        ),
     }
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
@@ -950,6 +957,10 @@ async def tapps_init(
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
+
+    Side effects: Writes files (AGENTS.md, TECH_STACK.md, platform rules, hooks,
+    agents, skills). May create .tapps-mcp.yaml on first run. Optionally warms
+    caches. Call once per project.
 
     Verifies server info and optionally installs missing checkers (ruff, mypy,
     bandit, radon). Creates handoff, runlog, AGENTS.md, and TECH_STACK.md.
@@ -1102,6 +1113,10 @@ async def tapps_upgrade(
 ) -> dict[str, Any]:
     """Upgrade all TappsMCP-generated files after a version update.
 
+    Side effects: Overwrites AGENTS.md, platform rules, hooks, agents, skills.
+    Creates a timestamped backup first (.tapps-mcp/backups/). Use dry_run=True
+    to preview without writing.
+
     Validates and refreshes AGENTS.md, platform rules, hooks, agents,
     skills, and settings. Preserves custom command paths in MCP configs
     (e.g. PyInstaller exe paths are never overwritten).
@@ -1169,6 +1184,9 @@ async def tapps_upgrade(
 
 def tapps_set_engagement_level(level: str) -> dict[str, Any]:
     """Set the LLM engagement level (high / medium / low) for the project.
+
+    Side effects: Writes ``llm_engagement_level`` to ``.tapps-mcp.yaml``. Run
+    tapps_init(overwrite_agents_md=True) afterward to regenerate AGENTS.md.
 
     Writes or updates ``llm_engagement_level`` in the project's ``.tapps-mcp.yaml``.
     Use when the user asks to change enforcement intensity (e.g. \"set tappsmcp to high\"

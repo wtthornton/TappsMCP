@@ -34,9 +34,9 @@ if (-not (Test-Path $VenvPython)) {
 & $VenvPython -m pip install (Get-ChildItem dist -Filter "tapps_core*.whl" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName --quiet
 & $VenvPython -m pip install (Get-ChildItem dist -Filter "tapps_mcp*.whl" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName --quiet
 
-# 3) Build exe (same entry as CI)
+# 3) Build exe using spec (bundles prompts + data files; CLI-only build omits them)
 Write-Host "Running PyInstaller..."
-& $VenvPython -m PyInstaller --onefile -n tapps-mcp --console scripts/run_tapps_mcp.py --clean
+& $VenvPython -m PyInstaller tapps_mcp.spec --clean
 
 $Exe = "dist\tapps-mcp.exe"
 if (-not (Test-Path $Exe)) {

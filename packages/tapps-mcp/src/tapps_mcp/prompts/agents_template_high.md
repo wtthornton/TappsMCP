@@ -72,7 +72,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
    - You MUST call `tapps_validate_changed()` to batch-validate all changed files.
    - You MUST call `tapps_checklist(task_type=...)` as the FINAL step. If `complete` is false, call the missing required tools. NEVER declare work complete without running the checklist.
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **Domain decisions (REQUIRED):** You MUST call `tapps_consult_expert` for domain-specific decisions. Use `tapps_validate_config` for Docker/infra files.
+7. **Domain decisions (REQUIRED):** You MUST call `tapps_consult_expert` or `tapps_research` for domain-specific decisions. Use `tapps_research` when you need expert + docs in one call. Use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
 

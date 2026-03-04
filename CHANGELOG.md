@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-03-03
+
+### Added
+
+- **Tool contract** — New "Tool contract" section in AGENTS.md templates (full and medium) stating: session start returns server info only (no project profile); `tapps_validate_changed` default = score + gate only (security when `quick=false` or `security_depth='full'`); `tapps_quick_check` has no `quick` parameter; `tapps_research` for expert + docs in one call.
+- **recommended_next** — `tapps_session_start` response now includes `recommended_next` so clients that only read JSON know to call `tapps_project_profile` when project context is needed.
+- **tapps_research** in checklist — `TOOL_REASONS` and workflow text now mention `tapps_research` as the single-call option for expert + docs (instead of consult_expert + lookup_docs).
+
+### Changed
+
+- **Tool docstrings** — Clarified `tapps_project_profile` (on-demand, not "required at session start"); `tapps_server_info` (prefer session_start); expert count 16→17; side-effect notes for `tapps_init`, `tapps_upgrade`, `tapps_set_engagement_level`, `tapps_memory`.
+- **tapps_validate_changed** docstring — Explicitly states default quick mode runs score + gate only; security runs when `quick=false` or `security_depth='full'`.
+- **Checklist TOOL_REASONS** — Corrected `tapps_session_start` (server info only; call project_profile when needed) and `tapps_validate_changed` (score + gate; security when quick=false or security_depth='full').
+- **Platform rules** — Session Start sections (Cursor/Claude high/medium/low) no longer claim session start "detects project tech stack"; project context comes from `tapps_project_profile`.
+- **AGENTS templates** — Workflow steps for validate_changed now say "score + gate" with optional security via params; "When in doubt" recommends `tapps_research` for expert + docs.
+
+## [0.7.1] - 2026-03-03
+
+### Fixed
+
+- **PyInstaller exe** — Build now includes all prompt templates (agents_template_*.md, platform_*_*.md) and tapps_core prompts. Previously, `build-exe.ps1` used CLI-only PyInstaller args, producing an exe with `datas=[]`; templates were missing and `tapps-mcp upgrade` failed with "No such file or directory". Now uses `tapps_mcp.spec` with monorepo paths for full data bundling.
+
+### Changed
+
+- **build-exe.ps1** — Uses `PyInstaller tapps_mcp.spec` instead of CLI args so prompts and data files are bundled.
+- **tapps_mcp.spec** — Updated for monorepo paths (`packages/tapps-mcp`, `packages/tapps-core`) and entry point `scripts/run_tapps_mcp.py`.
+
 ### Removed (Epic 29: Doc Provider Simplification)
 
 - **Epic 29**: Removed `deepcon_api_key` and `docfork_api_key`. Doc lookup now uses Context7 + LlmsTxt only. Users with those keys set will have them ignored (no runtime error).

@@ -10,8 +10,8 @@ These are BLOCKING REQUIREMENTS, not suggestions. Skipping any step risks shippi
 ### Session Start (REQUIRED)
 
 You MUST call `tapps_session_start()` as the FIRST action in every session.
-This discovers server capabilities and detects the project's tech stack.
-Skipping this means all subsequent tools lack project context.
+This returns server info (version, checkers, config) only. Call `tapps_project_profile()` when you need project context (tech stack, type, recommendations).
+Skipping session start means you lack server capabilities and workflow guidance.
 
 ### Before Using Any Library API (BLOCKING)
 

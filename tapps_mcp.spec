@@ -10,23 +10,32 @@ from PyInstaller.building.build_main import Analysis
 
 block_cipher = None
 
-# Source package directory
-pkg_src = Path("src/tapps_mcp")
+# Source package directories (monorepo)
+pkg_tapps_mcp = Path("packages/tapps-mcp/src/tapps_mcp")
+pkg_tapps_mcp_parent = Path("packages/tapps-mcp/src")
+pkg_tapps_core = Path("packages/tapps-core/src/tapps_core")
+pkg_tapps_core_parent = Path("packages/tapps-core/src")
 
 # Collect ALL data files (knowledge .md, prompts .md, config .yaml, py.typed)
 datas = []
 
-for root, dirs, files in os.walk(str(pkg_src)):
+for root, dirs, files in os.walk(str(pkg_tapps_mcp)):
     for f in files:
         if f.endswith((".md", ".yaml", ".yml", ".typed")):
             full = os.path.join(root, f)
-            # Target: relative path from src/ so it lands at tapps_mcp/...
-            rel_dir = os.path.relpath(root, "src")
+            rel_dir = os.path.relpath(root, str(pkg_tapps_mcp_parent))
+            datas.append((full, rel_dir))
+
+for root, dirs, files in os.walk(str(pkg_tapps_core)):
+    for f in files:
+        if f.endswith((".md", ".yaml", ".yml", ".typed")):
+            full = os.path.join(root, f)
+            rel_dir = os.path.relpath(root, str(pkg_tapps_core_parent))
             datas.append((full, rel_dir))
 
 a = Analysis(
-    ["src/tapps_mcp/cli.py"],
-    pathex=["src"],
+    ["scripts/run_tapps_mcp.py"],
+    pathex=[],
     binaries=[],
     datas=datas,
     hiddenimports=[

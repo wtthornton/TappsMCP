@@ -10,7 +10,7 @@ You should follow these steps to avoid broken, insecure, or hallucinated code.
 ### Session Start
 
 You should call `tapps_session_start()` as the first action in every session.
-This discovers server capabilities and detects the project's tech stack.
+This returns server info (version, checkers, config). Call `tapps_project_profile()` on demand when you need project context (tech stack, type, recommendations).
 
 ### Before Using Any Library API
 
