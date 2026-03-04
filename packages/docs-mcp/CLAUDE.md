@@ -21,7 +21,7 @@ packages/docs-mcp/
 │   ├── server_helpers.py      # Response builders, settings singleton
 │   ├── server_analysis.py     # docs_module_map, docs_api_surface
 │   ├── server_git_tools.py    # docs_git_summary
-│   ├── server_gen_tools.py    # docs_generate_readme, _changelog, _release_notes, _api, _adr, _onboarding, _contributing, _diagram
+│   ├── server_gen_tools.py    # docs_generate_readme, _changelog, _release_notes, _api, _adr, _onboarding, _contributing, _diagram, _prd
 │   ├── server_val_tools.py    # docs_check_drift, _completeness, _links, _freshness
 │   ├── config/
 │   │   ├── settings.py        # DocsMCPSettings (Pydantic), load_docs_settings()
@@ -46,6 +46,7 @@ packages/docs-mcp/
 │   │   ├── api_docs.py        # API reference docs (markdown/mkdocs/sphinx_rst)
 │   │   ├── adr.py             # Architecture Decision Records (MADR/Nygard)
 │   │   ├── guides.py          # Onboarding + contributing guides
+│   │   ├── specs.py           # Product Requirements Documents (PRD)
 │   │   └── diagrams.py        # Mermaid/PlantUML diagrams (4 types)
 │   ├── validators/            # Documentation quality checks
 │   │   ├── drift.py           # Code-vs-docs drift detection
@@ -118,7 +119,7 @@ The MCP server is split across five tool files sharing the same `mcp` FastMCP in
 - **`server.py`** -- Creates `FastMCP("DocsMCP")` and registers `docs_session_start`, `docs_project_scan`, `docs_config`. Imports the other four modules at the bottom.
 - **`server_analysis.py`** -- `docs_module_map`, `docs_api_surface`
 - **`server_git_tools.py`** -- `docs_git_summary`
-- **`server_gen_tools.py`** -- `docs_generate_readme`, `docs_generate_changelog`, `docs_generate_release_notes`, `docs_generate_api`, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing`, `docs_generate_diagram`
+- **`server_gen_tools.py`** -- `docs_generate_readme`, `docs_generate_changelog`, `docs_generate_release_notes`, `docs_generate_api`, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing`, `docs_generate_prd`, `docs_generate_diagram`
 - **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`
 - **`server_helpers.py`** -- Response builders (`error_response`, `success_response`), settings singleton (`_get_settings`)
 
@@ -144,7 +145,7 @@ To add a new MCP tool:
 4. Use `error_response()` and `success_response()` for return values
 5. Add tests in `packages/docs-mcp/tests/unit/`
 
-## The 18 MCP tools
+## The 19 MCP tools
 
 | Category | Tool | Description |
 |---|---|---|
@@ -161,6 +162,7 @@ To add a new MCP tool:
 | Generation | `docs_generate_adr` | Architecture Decision Records (MADR/Nygard) |
 | Generation | `docs_generate_onboarding` | Getting-started guide |
 | Generation | `docs_generate_contributing` | CONTRIBUTING.md |
+| Generation | `docs_generate_prd` | Product Requirements Document (standard/comprehensive, auto-populate, SmartMerger) |
 | Generation | `docs_generate_diagram` | Mermaid/PlantUML diagrams (dependency/class/module/ER) |
 | Validation | `docs_check_drift` | Detect code changes not reflected in docs |
 | Validation | `docs_check_completeness` | Score documentation completeness (0-100) |

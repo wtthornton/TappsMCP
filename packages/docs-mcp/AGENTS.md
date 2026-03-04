@@ -38,6 +38,7 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_generate_adr** | Create auto-numbered Architecture Decision Records (MADR/Nygard) |
 | **docs_generate_onboarding** | Generate getting-started / onboarding guide |
 | **docs_generate_contributing** | Generate CONTRIBUTING.md with dev setup and PR workflow |
+| **docs_generate_prd** | Generate Product Requirements Documents (standard/comprehensive, auto-populate, SmartMerger) |
 | **docs_generate_diagram** | Generate Mermaid/PlantUML diagrams (dependency/class/module/ER) |
 | **docs_check_drift** | Detect documentation drift -- code changes not reflected in docs |
 | **docs_check_completeness** | Check documentation completeness across multiple categories |
@@ -63,6 +64,7 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_generate_adr** | When **recording an architecture decision**. Auto-numbers by scanning existing ADRs. |
 | **docs_generate_onboarding** | When a project **needs a getting-started guide** for new developers. |
 | **docs_generate_contributing** | When a project **needs contribution guidelines**. |
+| **docs_generate_prd** | When planning a **new feature or product** -- generates structured PRD with phased requirements and Gherkin acceptance criteria. |
 | **docs_generate_diagram** | When you need a **visual overview** of dependencies, class hierarchies, module structure, or data models. |
 | **docs_check_drift** | After **code changes** -- detects public API names missing from documentation. |
 | **docs_check_completeness** | During **documentation review** -- scores completeness across critical docs, API docs, guides, ADRs. |
@@ -97,6 +99,7 @@ Generate or update documentation based on analysis:
 - `docs_generate_adr` -- record architecture decisions
 - `docs_generate_onboarding` -- developer onboarding guide
 - `docs_generate_contributing` -- contribution guidelines
+- `docs_generate_prd` -- product requirements documents
 - `docs_generate_diagram` -- visual diagrams
 
 ### 4. Validate (validation tools)

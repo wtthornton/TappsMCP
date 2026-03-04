@@ -688,6 +688,177 @@ async def docs_generate_contributing(
     return success_response("docs_generate_contributing", elapsed_ms, data)
 
 
+@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
+async def docs_generate_prd(
+    title: str,
+    problem: str = "",
+    personas: str = "",
+    phases: str = "",
+    constraints: str = "",
+    non_goals: str = "",
+    style: str = "standard",
+    auto_populate: bool = False,
+    existing_content: str = "",
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate a Product Requirements Document (PRD) with phased requirements.
+
+    Creates a structured PRD with Executive Summary, Problem Statement, User
+    Personas, Solution Overview, Phased Requirements, Acceptance Criteria
+    (Gherkin), Technical Constraints, and Non-Goals.
+
+    The ``comprehensive`` style adds a Boundary System ("Always do" /
+    "Ask first" / "Never do") and Architecture Overview section.
+
+    When ``auto_populate=True``, enriches sections from project analyzers
+    (module map, tech stack, quality scores, git history).
+
+    When ``existing_content`` is provided, uses SmartMerger to preserve
+    hand-edited sections (identified by ``<!-- docsmcp:start:section -->``
+    markers).
+
+    Args:
+        title: Title for the PRD (e.g. "User Authentication System").
+        problem: Problem statement text.
+        personas: Comma-separated list of user personas.
+        phases: JSON array of phase objects with keys: name, description,
+            requirements. Example: [{"name": "MVP", "requirements": ["Login"]}]
+        constraints: Comma-separated list of technical constraints.
+        non_goals: Comma-separated list of non-goals / out-of-scope items.
+        style: PRD style - "standard" or "comprehensive".
+        auto_populate: Enrich from project analyzers (ModuleMap, Metadata, etc).
+        existing_content: Existing PRD markdown to merge with (preserves edits).
+        output_path: File path to write the PRD (relative to project root).
+            When empty, returns the content without writing a file.
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_generate_prd")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_prd",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.generators.specs import PRDConfig, PRDGenerator, PRDPhase
+
+    # Parse comma-separated lists
+    persona_list = [p.strip() for p in personas.split(",") if p.strip()] if personas else []
+    constraint_list = (
+        [c.strip() for c in constraints.split(",") if c.strip()] if constraints else []
+    )
+    non_goal_list = [n.strip() for n in non_goals.split(",") if n.strip()] if non_goals else []
+
+    # Parse phases JSON
+    phase_list: list[PRDPhase] = []
+    if phases:
+        try:
+            phase_list = PRDGenerator.parse_phases_json(phases)
+        except ValueError as exc:
+            return error_response(
+                "docs_generate_prd",
+                "INVALID_PHASES",
+                str(exc),
+            )
+
+    config = PRDConfig(
+        title=title,
+        problem=problem,
+        personas=persona_list,
+        phases=phase_list,
+        constraints=constraint_list,
+        non_goals=non_goal_list,
+        style=style,
+        existing_content=existing_content,
+    )
+
+    generator = PRDGenerator()
+
+    try:
+        content = generator.generate(
+            config,
+            project_root=root if auto_populate else None,
+            auto_populate=auto_populate,
+        )
+    except Exception as exc:
+        return error_response(
+            "docs_generate_prd",
+            "GENERATION_ERROR",
+            f"Failed to generate PRD: {exc}",
+        )
+
+    # SmartMerger integration when existing content is provided
+    merge_stats: dict[str, Any] = {}
+    if existing_content.strip():
+        from docs_mcp.generators.smart_merge import SmartMerger
+
+        try:
+            merger = SmartMerger()
+            result = merger.merge(existing_content, content)
+            content = result.content
+            merge_stats = {
+                "merged": True,
+                "sections_preserved": result.sections_preserved,
+                "sections_updated": result.sections_updated,
+                "sections_added": result.sections_added,
+            }
+        except Exception as exc:
+            return error_response(
+                "docs_generate_prd",
+                "MERGE_ERROR",
+                f"Failed to merge with existing content: {exc}",
+            )
+    else:
+        merge_stats = {"merged": False}
+
+    # Optionally write to file
+    written_path = ""
+    if output_path:
+        try:
+            from tapps_core.security.path_validator import PathValidator
+
+            validator = PathValidator(root)
+            write_path = validator.validate_write_path(output_path)
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(content, encoding="utf-8")
+            written_path = str(write_path.relative_to(root)).replace("\\", "/")
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            return error_response(
+                "docs_generate_prd",
+                "WRITE_ERROR",
+                f"Failed to write PRD: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "title": title,
+        "style": style,
+        "auto_populated": auto_populate,
+        "content_length": len(content),
+        "content": content,
+        **merge_stats,
+    }
+    if written_path:
+        data["written_to"] = written_path
+
+    return success_response(
+        "docs_generate_prd",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Review the generated PRD and fill in placeholder sections.",
+            "Human-written sections (without docsmcp markers) will be preserved on re-generation.",
+        ],
+    )
+
+
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_generate_diagram(
     diagram_type: str = "dependency",
