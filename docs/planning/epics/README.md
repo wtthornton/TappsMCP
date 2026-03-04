@@ -41,8 +41,9 @@
 | [Epic 35](EPIC-35-EXPERT-ADAPTIVE-INTEGRATION.md) | Expert System Adaptive Integration | P1 | ~1.5-2 weeks | Epic 3, Epic 5, Epic 7 | **Complete** — all 4 stories, 72 tests |
 | [Epic 36](EPIC-36-HOOK-PLATFORM-EXPANSION.md) | Hook & Platform Generation Expansion | P1 | ~2-2.5 weeks | Epic 33, Epic 8, Epic 18 | **Complete** |
 | [Epic 37](EPIC-37-PIPELINE-ONBOARDING-DISTRIBUTION.md) | Pipeline Onboarding & Distribution | P1 | ~2.5-3 weeks | Epic 33, Epic 36, Epic 6, Epic 8 | **Complete** |
+| [Epic 42](EPIC-42-TAPPS-MEMORY-2026-ENHANCEMENTS.md) | tapps_memory 2026 Enhancements | P1 | ~1.5-2 weeks | Epic 23, 24, 25, 34 | **Complete** — 4 stories, 21 new tests, 42 total |
 
-**Total LOE:** ~55-70 weeks — **All epics complete** (Epics 0-37, P0-P4). 5,100+ tests passing.
+**Total LOE:** ~55-70 weeks — Epics 0-37, 42 complete (P0-P4). 5,100+ tests passing.
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -111,6 +112,9 @@ Epic 33 (Platform Artifact Correctness) ← depends on Epic 8, Epic 12
 
 Epic 34 (Memory Retrieval Upgrade)       ← depends on Epic 23, Epic 24, Epic 25
   BM25 scoring, reinforcement endpoint, auto-capture hook, auto-GC
+
+Epic 42 (tapps_memory 2026 Enhancements)  ← depends on Epic 23, 24, 25, 34
+  Ranked search in MCP tool, wire contradictions/reseed/import/export, curated responses, quality gate fix
 
 Epic 35 (Expert Adaptive Integration)    ← depends on Epic 3, Epic 5, Epic 7
   Adaptive domain detector wiring, synonym expansion, knowledge freshness

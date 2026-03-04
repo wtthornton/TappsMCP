@@ -81,7 +81,8 @@ class TestTappsMemoryTool:
         await tapps_memory(action="save", key="k2", value="v2")
         result = await tapps_memory(action="list")
         assert result["success"] is True
-        assert result["data"]["count"] == 2
+        assert result["data"]["total_count"] == 2
+        assert result["data"]["returned_count"] == 2
 
     async def test_delete_action(self, mock_store: MagicMock) -> None:
         await tapps_memory(action="save", key="k1", value="v1")
@@ -93,7 +94,8 @@ class TestTappsMemoryTool:
         await tapps_memory(action="save", key="arch-decision", value="Use SQLite for storage")
         result = await tapps_memory(action="search", query="SQLite")
         assert result["success"] is True
-        assert result["data"]["count"] >= 1
+        # Ranked search returns results with scores
+        assert result["data"]["returned_count"] >= 1
 
     async def test_search_missing_query_and_tags(self, mock_store: MagicMock) -> None:
         result = await tapps_memory(action="search")

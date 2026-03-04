@@ -2144,7 +2144,7 @@ provides-extras = ["vector"]
 
 [[package]]
 name = "tapps-mcp"
-version = "0.7.0"
+version = "0.7.3"
 source = { editable = "packages/tapps-mcp" }
 dependencies = [
     { name = "anyio" },

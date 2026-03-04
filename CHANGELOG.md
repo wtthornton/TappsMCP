@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-03-03
+
+### Added
+
+- **Epic 42: tapps_memory 2026 Enhancements** — 4 new actions (`contradictions`, `reseed`, `import`, `export`) wired into MCP tool from existing tapps-core infrastructure. Ranked BM25 search (`ranked=True` default) returns composite scores, effective_confidence, and stale flags per result. Outcome-oriented responses with `total_count`/`returned_count`, configurable `limit`, and summary truncation past threshold to avoid context-window bloat. Dispatch refactored from `**kwargs`/`globals()` to typed `_Params` dataclass + direct function reference table. `_VALID_ACTIONS` now has all 11 entries matching AGENTS.md. 21 new tests.
+
+### Changed
+
+- **server_memory_tools.py** — Dispatch pattern replaced with typed `_Params` frozen dataclass and direct `_DISPATCH` dict (eliminates all ANN401 lint issues). List response keys changed from `count` to `total_count`/`returned_count`. Search defaults to ranked BM25 mode.
+
 ## [0.7.3] - 2026-03-03
 
 ### Added
