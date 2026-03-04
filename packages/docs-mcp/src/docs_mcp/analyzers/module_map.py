@@ -1,17 +1,32 @@
-"""Module structure analyzer that builds a hierarchical map of a Python project."""
+"""Module structure analyzer that builds a hierarchical map of a project.
+
+Supports Python (AST-based) and multi-language files (TypeScript, Go,
+Rust, Java) when tree-sitter is installed.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import structlog
 
 from docs_mcp.analyzers.models import ModuleMap, ModuleNode
 from docs_mcp.extractors.models import ModuleInfo
-from docs_mcp.extractors.python import PythonExtractor
+
+if TYPE_CHECKING:
+    from docs_mcp.extractors.base import Extractor
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+
+# Source file extensions handled by extractors (Python always, others via tree-sitter).
+_SOURCE_EXTENSIONS: frozenset[str] = frozenset({
+    ".py", ".pyi",       # Python (AST)
+    ".ts", ".tsx",       # TypeScript (tree-sitter)
+    ".go",               # Go (tree-sitter)
+    ".rs",               # Rust (tree-sitter)
+    ".java",             # Java (tree-sitter)
+})
 
 
 class ModuleMapAnalyzer:
@@ -36,8 +51,8 @@ class ModuleMapAnalyzer:
 
     SKIP_SUFFIXES: ClassVar[frozenset[str]] = frozenset({".egg-info"})
 
-    def __init__(self, extractor: PythonExtractor | None = None) -> None:
-        self._extractor = extractor or PythonExtractor()
+    def __init__(self, extractor: Extractor | None = None) -> None:
+        self._extractor = extractor
 
     def analyze(
         self,
@@ -171,22 +186,22 @@ class ModuleMapAnalyzer:
         nodes: list[ModuleNode] = []
 
         # Separate files and subdirectories
-        py_files: list[Path] = []
+        source_files: list[Path] = []
         subdirs: list[Path] = []
 
         for entry in entries:
-            if entry.is_file() and entry.suffix == ".py":
-                py_files.append(entry)
+            if entry.is_file() and entry.suffix in _SOURCE_EXTENSIONS:
+                source_files.append(entry)
             elif entry.is_dir() and not self._should_skip_dir(entry):
                 subdirs.append(entry)
 
-        # Process .py files (non-__init__)
-        for py_file in py_files:
-            if py_file.name == "__init__.py":
+        # Process source files (skip __init__.py — handled as package marker)
+        for src_file in source_files:
+            if src_file.name == "__init__.py":
                 continue
-            if not include_private and py_file.stem.startswith("_"):
+            if not include_private and src_file.stem.startswith("_"):
                 continue
-            node = self._build_file_node(py_file, project_root)
+            node = self._build_file_node(src_file, project_root)
             if node is not None:
                 nodes.append(node)
 
@@ -224,14 +239,23 @@ class ModuleMapAnalyzer:
     # Node building
     # ------------------------------------------------------------------
 
+    def _get_extractor(self, file_path: Path) -> Extractor:
+        """Return the extractor for *file_path*, falling back to dispatcher."""
+        if self._extractor is not None:
+            return self._extractor
+        from docs_mcp.extractors.dispatcher import get_extractor
+
+        return get_extractor(file_path)
+
     def _build_file_node(
         self,
         file_path: Path,
         project_root: Path,
     ) -> ModuleNode | None:
-        """Build a ModuleNode for a single .py file."""
+        """Build a ModuleNode for a source file (.py, .ts, .go, .rs, .java)."""
         try:
-            info = self._extractor.extract(file_path, project_root=project_root)
+            extractor = self._get_extractor(file_path)
+            info = extractor.extract(file_path, project_root=project_root)
         except Exception:
             logger.warning("extract_error", path=str(file_path))
             return None
@@ -269,7 +293,8 @@ class ModuleMapAnalyzer:
         """Build a ModuleNode for a package directory (has __init__.py)."""
         init_file = directory / "__init__.py"
         try:
-            info = self._extractor.extract(init_file, project_root=project_root)
+            extractor = self._get_extractor(init_file)
+            info = extractor.extract(init_file, project_root=project_root)
         except Exception:
             logger.warning("extract_error", path=str(init_file))
             info = ModuleInfo(path=self._relative_path(init_file, project_root))

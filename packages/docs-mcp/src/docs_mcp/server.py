@@ -205,6 +205,43 @@ def _scan_doc_files(project_root: Path) -> list[dict[str, Any]]:
     return docs
 
 
+# Source file extensions for language composition analysis.
+_SOURCE_EXTENSIONS: dict[str, str] = {
+    ".py": "Python",
+    ".pyi": "Python",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript",
+    ".go": "Go",
+    ".rs": "Rust",
+    ".java": "Java",
+    ".js": "JavaScript",
+    ".jsx": "JavaScript",
+    ".rb": "Ruby",
+    ".cpp": "C++",
+    ".c": "C",
+    ".cs": "C#",
+    ".swift": "Swift",
+    ".kt": "Kotlin",
+}
+
+
+def _count_source_files(project_root: Path) -> dict[str, int]:
+    """Count source files by language under *project_root*."""
+    counts: dict[str, int] = {}
+    if not project_root.is_dir():
+        return counts
+
+    for dirpath, dirnames, filenames in os.walk(project_root):
+        dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
+        for fname in filenames:
+            suffix = Path(fname).suffix.lower()
+            lang = _SOURCE_EXTENSIONS.get(suffix)
+            if lang:
+                counts[lang] = counts.get(lang, 0) + 1
+
+    return dict(sorted(counts.items(), key=lambda kv: kv[1], reverse=True))
+
+
 def _detect_project_name(project_root: Path) -> str:
     """Best-effort project name detection from pyproject.toml or directory name."""
     pyproject = project_root / "pyproject.toml"
@@ -435,6 +472,11 @@ async def docs_project_scan(
         "critical_docs": critical_docs,
         "recommendations": recommendations,
     }
+
+    # Language composition — count source files by extension.
+    lang_counts = _count_source_files(root)
+    if lang_counts:
+        data["language_composition"] = lang_counts
 
     # Optional TappsMCP enrichment
     try:

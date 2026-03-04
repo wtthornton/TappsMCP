@@ -21,10 +21,12 @@ async def docs_module_map(
     source_dirs: str = "",
     project_root: str = "",
 ) -> dict[str, Any]:
-    """Build a hierarchical module map of a Python project.
+    """Build a hierarchical module map of a project.
 
     Walks the source directory tree and extracts module/package structure,
-    public API counts, docstrings, and entry points using AST parsing.
+    public API counts, docstrings, and entry points. Supports Python (.py)
+    via AST parsing, plus TypeScript, Go, Rust, and Java via tree-sitter
+    when installed.
 
     Args:
         depth: Maximum directory depth to traverse (default: 10).
@@ -97,14 +99,15 @@ async def docs_api_surface(
     depth: str = "public",
     project_root: str = "",
 ) -> dict[str, Any]:
-    """Analyze the public API surface of a Python module.
+    """Analyze the public API surface of a source file.
 
-    Parses the file using AST, identifies public functions, classes, and
-    constants, calculates documentation coverage, and reports which public
-    names are missing docstrings.
+    Supports Python (.py), TypeScript (.ts/.tsx), Go (.go), Rust (.rs),
+    and Java (.java). Identifies public functions, classes, and constants,
+    calculates documentation coverage, and reports which public names are
+    missing docstrings.
 
     Args:
-        source_path: Path to a Python file (absolute or relative to project root).
+        source_path: Path to a source file (absolute or relative to project root).
         include_types: Whether to detect type alias definitions.
         depth: Visibility depth — ``"public"``, ``"protected"``, or ``"all"``.
         project_root: Override project root path (default: configured root).

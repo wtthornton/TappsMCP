@@ -1,4 +1,4 @@
-"""Public API surface detector for Python modules."""
+"""Public API surface detector for source modules (Python + multi-language)."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from docs_mcp.extractors.docstring_parser import parse_docstring
-from docs_mcp.extractors.python import PythonExtractor
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from docs_mcp.extractors.base import Extractor
     from docs_mcp.extractors.models import ClassInfo, ConstantInfo, FunctionInfo, ModuleInfo
 
 
@@ -72,10 +72,23 @@ _RELATIVE_IMPORT_RE = re.compile(r"^from\s+\.[\w.]*\s+import\s+(.+)$")
 
 
 class APISurfaceAnalyzer:
-    """Detects public API surface of Python modules."""
+    """Detects public API surface of source modules.
 
-    def __init__(self, extractor: PythonExtractor | None = None) -> None:
-        self._extractor = extractor or PythonExtractor()
+    Supports Python (AST-based), TypeScript, Go, Rust, and Java
+    (tree-sitter-based, when installed). Uses the dispatcher to
+    auto-select the best extractor for each file.
+    """
+
+    def __init__(self, extractor: Extractor | None = None) -> None:
+        self._extractor = extractor
+
+    def _get_extractor(self, file_path: Path) -> Extractor:
+        """Return the extractor for *file_path*, falling back to dispatcher."""
+        if self._extractor is not None:
+            return self._extractor
+        from docs_mcp.extractors.dispatcher import get_extractor
+
+        return get_extractor(file_path)
 
     def analyze(
         self,
@@ -85,10 +98,14 @@ class APISurfaceAnalyzer:
         depth: str = "public",
         include_types: bool = True,
     ) -> APISurface:
-        """Analyze the public API surface of a Python file.
+        """Analyze the public API surface of a source file.
+
+        Supports Python (.py), TypeScript (.ts/.tsx), Go (.go), Rust (.rs),
+        and Java (.java). The appropriate extractor is selected automatically
+        via the dispatcher when no explicit extractor was provided.
 
         Args:
-            file_path: Path to the Python file.
+            file_path: Path to the source file.
             project_root: Optional project root for relative paths.
             depth: Visibility depth - "public", "protected", or "all".
             include_types: Whether to include type alias detection.
@@ -99,7 +116,8 @@ class APISurfaceAnalyzer:
         if not file_path.exists():
             return APISurface(source_path=str(file_path))
 
-        module_info = self._extractor.extract(file_path, project_root=project_root)
+        extractor = self._get_extractor(file_path)
+        module_info = extractor.extract(file_path, project_root=project_root)
         all_exports = module_info.all_exports
 
         # Build API surface components
