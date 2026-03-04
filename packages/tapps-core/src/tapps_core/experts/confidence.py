@@ -31,8 +31,13 @@ def compute_confidence(factors: ConfidenceFactors, domain: str) -> float:
     Returns:
         Confidence score clamped to ``[0.0, 1.0]``.
     """
-    # Technical domains get full relevance; unknown domains get 0.7.
-    domain_relevance = 1.0 if ExpertRegistry.is_technical_domain(domain) else 0.7
+    # Three-tier relevance: technical (1.0), business (0.9), unknown (0.7).
+    if ExpertRegistry.is_technical_domain(domain):
+        domain_relevance = 1.0
+    elif ExpertRegistry.is_business_domain(domain):
+        domain_relevance = 0.9  # Known business domain
+    else:
+        domain_relevance = 0.7  # Truly unknown domain
     factors.domain_relevance = domain_relevance
 
     score = (

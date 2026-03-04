@@ -7,7 +7,8 @@ from tapps_core.experts.confidence import (
     compute_confidence,
     compute_rag_quality,
 )
-from tapps_core.experts.models import ConfidenceFactors
+from tapps_core.experts.models import ConfidenceFactors, ExpertConfig
+from tapps_core.experts.registry import ExpertRegistry
 
 
 class TestComputeConfidence:
@@ -42,6 +43,56 @@ class TestComputeConfidence:
         factors = ConfidenceFactors(rag_quality=1.0, chunk_coverage=1.0, domain_relevance=1.0)
         score = compute_confidence(factors, "security")
         assert score <= 1.0
+
+    def test_business_domain_gets_0_9_relevance(self) -> None:
+        ExpertRegistry.register_business_experts(
+            [
+                ExpertConfig(
+                    expert_id="expert-test-biz",
+                    expert_name="Test Biz",
+                    primary_domain="test-biz-domain",
+                    is_builtin=False,
+                ),
+            ]
+        )
+        factors = ConfidenceFactors(rag_quality=1.0, chunk_coverage=1.0)
+        score = compute_confidence(factors, "test-biz-domain")
+        assert factors.domain_relevance == 0.9
+        # 1.0*0.4 + 0.9*0.3 + 1.0*0.3 = 0.4 + 0.27 + 0.3 = 0.97
+        assert 0.96 <= score <= 0.98
+
+    def test_unknown_domain_still_gets_0_7(self) -> None:
+        """Truly unknown domain (neither technical nor business) still gets 0.7."""
+        factors = ConfidenceFactors(rag_quality=1.0, chunk_coverage=1.0)
+        score = compute_confidence(factors, "completely-unknown-domain")
+        assert factors.domain_relevance == 0.7
+        # 1.0*0.4 + 0.7*0.3 + 1.0*0.3 = 0.91
+        assert 0.90 <= score <= 0.92
+
+    def test_technical_domain_unchanged(self) -> None:
+        """Technical domains still get 1.0 relevance after the three-tier change."""
+        factors = ConfidenceFactors(rag_quality=1.0, chunk_coverage=1.0)
+        score = compute_confidence(factors, "security")
+        assert factors.domain_relevance == 1.0
+        assert score == 1.0
+
+    def test_business_domain_end_to_end(self) -> None:
+        """End-to-end: business domain with partial RAG quality."""
+        ExpertRegistry.register_business_experts(
+            [
+                ExpertConfig(
+                    expert_id="expert-e2e-biz",
+                    expert_name="E2E Biz",
+                    primary_domain="e2e-biz-domain",
+                    is_builtin=False,
+                ),
+            ]
+        )
+        factors = ConfidenceFactors(rag_quality=0.5, chunk_coverage=0.5)
+        score = compute_confidence(factors, "e2e-biz-domain")
+        assert factors.domain_relevance == 0.9
+        # 0.5*0.4 + 0.9*0.3 + 0.5*0.3 = 0.2 + 0.27 + 0.15 = 0.62
+        assert 0.61 <= score <= 0.63
 
 
 class TestComputeRagQuality:

@@ -3,11 +3,14 @@
 Maps tech stack (languages, frameworks, libraries, domains) to relevant
 expert domains and pre-builds VectorKnowledgeBase indices so the first
 tapps_consult_expert call for those domains is fast.
+
+Also supports warming business expert RAG indices from project-local
+knowledge directories.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -181,3 +184,81 @@ def warm_expert_rag_indices(
         "failed_domains": failed_domains,
         "skipped": None if warmed > 0 else "faiss_unavailable_or_error",
     }
+
+
+def warm_business_expert_rag_indices(
+    project_root: Path,
+    *,
+    max_domains: int = 10,
+) -> dict[str, Any]:
+    """Pre-build VectorKnowledgeBase indices for registered business experts.
+
+    Iterates over business experts from :class:`ExpertRegistry` and builds
+    FAISS indices for those with ``rag_enabled=True`` and existing knowledge
+    directories containing ``.md`` files.
+
+    When FAISS is not installed, skips silently (graceful degradation).
+
+    Args:
+        project_root: Project root directory (knowledge lives under
+            ``{project_root}/.tapps-mcp/knowledge/``).
+        max_domains: Maximum number of business domains to warm.
+
+    Returns:
+        Summary dict with ``warmed``, ``skipped``, and ``errors`` lists.
+    """
+    from tapps_core.experts.business_knowledge import get_business_knowledge_path
+    from tapps_core.experts.registry import ExpertRegistry
+    from tapps_core.experts.vector_rag import VectorKnowledgeBase
+
+    business_experts = ExpertRegistry.get_business_experts()
+    if not business_experts:
+        return {"warmed": [], "skipped": [], "errors": []}
+
+    warmed: list[str] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+
+    for expert in business_experts[:max_domains]:
+        domain = expert.primary_domain
+
+        if not expert.rag_enabled:
+            skipped.append(domain)
+            logger.debug("business_rag_warm_skip", domain=domain, reason="rag_disabled")
+            continue
+
+        knowledge_path = get_business_knowledge_path(project_root, expert)
+        if not knowledge_path.exists():
+            skipped.append(domain)
+            logger.debug("business_rag_warm_skip", domain=domain, reason="no_knowledge_dir")
+            continue
+
+        md_files = list(knowledge_path.glob("*.md"))
+        if not md_files:
+            skipped.append(domain)
+            logger.debug("business_rag_warm_skip", domain=domain, reason="no_md_files")
+            continue
+
+        try:
+            vkb = VectorKnowledgeBase(
+                knowledge_path,
+                domain=domain,
+            )
+            # Trigger index build/load
+            vkb.search("overview patterns best practices", max_results=1)
+
+            if vkb.backend_type == "vector":
+                warmed.append(domain)
+                logger.debug("business_rag_warm_domain", domain=domain)
+            else:
+                skipped.append(domain)
+                logger.debug(
+                    "business_rag_warm_skip",
+                    domain=domain,
+                    reason="faiss_unavailable",
+                )
+        except (OSError, RuntimeError, ValueError, ImportError) as e:
+            errors.append(domain)
+            logger.debug("business_rag_warm_failed", domain=domain, error=str(e))
+
+    return {"warmed": warmed, "skipped": skipped, "errors": errors}

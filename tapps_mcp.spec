@@ -48,6 +48,7 @@ a = Analysis(
         "tapps_mcp.server_metrics_tools",
         "tapps_mcp.server_memory_tools",
         "tapps_mcp.server_analysis_tools",
+        "tapps_mcp.server_expert_tools",
         "tapps_mcp.server_resources",
         "tapps_mcp.diagnostics",
         "tapps_mcp.common",

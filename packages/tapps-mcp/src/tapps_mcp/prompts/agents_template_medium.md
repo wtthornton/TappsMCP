@@ -16,7 +16,7 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (28 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+**For full tool reference** (29 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 
@@ -58,6 +58,10 @@ Pass the `domain` parameter when the context clearly implies a domain. This impr
 | Architecture decisions, patterns | `software-architecture` |
 
 When in doubt, omit `domain` to let auto-detection from the question text choose.
+
+### Business experts
+
+Projects can define custom business-domain experts in `.tapps-mcp/experts.yaml`. Use `tapps_manage_experts(action="list")` to see them. Pass business domain names to `tapps_consult_expert(domain="...")` like built-in domains.
 
 ---
 
@@ -113,7 +117,7 @@ Your project may have two complementary memory systems. Use the right one for ea
 - Build commands, IDE preferences, personal workflow notes --> auto memory
 - Architecture decisions, quality patterns, cross-agent knowledge --> `tapps_memory`
 
-Use `tapps_memory` for architecture decisions and quality patterns.
+RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 ---
 

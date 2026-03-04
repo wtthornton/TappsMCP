@@ -1,9 +1,13 @@
-"""Built-in expert registry — 17-domain expert catalogue.
+"""Built-in expert registry — 17-domain expert catalogue + business experts.
 
 Each expert is an immutable ``ExpertConfig`` entry with a primary domain,
 knowledge-directory override (where it differs from the domain slug), and
 a short description.  The registry is the single source of truth for which
 experts ship with TappsMCP.
+
+Business experts can be registered at runtime via
+:meth:`ExpertRegistry.register_business_experts`.  Built-in experts always
+take precedence in merged lookups.
 """
 
 from __future__ import annotations
@@ -15,11 +19,16 @@ from tapps_core.experts.models import ExpertConfig
 
 
 class ExpertRegistry:
-    """Registry of built-in domain experts.
+    """Registry of built-in domain experts and optional business experts.
 
-    All 17 technical-domain experts are defined here.  The registry is
-    read-only at runtime — experts cannot be added or removed.
+    All 17 technical-domain experts are defined here.  Business experts
+    can be registered at runtime via :meth:`register_business_experts`.
+    Built-in experts always take priority in merged lookups.
     """
+
+    # Business expert storage (populated at runtime)
+    _business_experts: ClassVar[list[ExpertConfig]] = []
+    _business_domains: ClassVar[set[str]] = set()
 
     TECHNICAL_DOMAINS: ClassVar[set[str]] = {
         "security",
@@ -190,3 +199,71 @@ class ExpertRegistry:
     def get_knowledge_base_path(cls) -> Path:
         """Return the path to the bundled knowledge-base directory."""
         return Path(__file__).parent / "knowledge"
+
+    # ------------------------------------------------------------------
+    # Business expert management
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def register_business_experts(cls, experts: list[ExpertConfig]) -> None:
+        """Register business experts, validating no ID collisions.
+
+        Raises ``ValueError`` if any expert ID collides with a built-in
+        expert or if there are duplicate IDs within the provided list.
+        """
+        builtin_ids = {e.expert_id for e in cls.BUILTIN_EXPERTS}
+        seen_ids: set[str] = set()
+
+        for expert in experts:
+            if expert.expert_id in builtin_ids:
+                msg = (
+                    f"Business expert ID '{expert.expert_id}' collides "
+                    f"with a built-in expert"
+                )
+                raise ValueError(msg)
+            if expert.expert_id in seen_ids:
+                msg = (
+                    f"Duplicate business expert ID '{expert.expert_id}'"
+                )
+                raise ValueError(msg)
+            seen_ids.add(expert.expert_id)
+
+        cls._business_experts = list(experts)
+        cls._business_domains = {e.primary_domain for e in experts}
+
+    @classmethod
+    def clear_business_experts(cls) -> None:
+        """Reset business expert state (for testing and re-loading)."""
+        cls._business_experts = []
+        cls._business_domains = set()
+
+    @classmethod
+    def get_all_experts_merged(cls) -> list[ExpertConfig]:
+        """Return all experts: built-in first, then business."""
+        return list(cls.BUILTIN_EXPERTS) + list(cls._business_experts)
+
+    @classmethod
+    def get_expert_for_domain_merged(cls, domain: str) -> ExpertConfig | None:
+        """Look up expert by domain, checking built-in first then business."""
+        builtin = cls.get_expert_for_domain(domain)
+        if builtin is not None:
+            return builtin
+        for expert in cls._business_experts:
+            if expert.primary_domain == domain:
+                return expert
+        return None
+
+    @classmethod
+    def get_business_experts(cls) -> list[ExpertConfig]:
+        """Return a copy of registered business experts."""
+        return list(cls._business_experts)
+
+    @classmethod
+    def get_business_domains(cls) -> set[str]:
+        """Return the set of registered business domain slugs."""
+        return set(cls._business_domains)
+
+    @classmethod
+    def is_business_domain(cls, domain: str) -> bool:
+        """Return ``True`` if *domain* is a registered business domain."""
+        return domain in cls._business_domains

@@ -16,7 +16,7 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (28 tools), invoke the **tapps-tool-reference** skill when asked about tools.
+**For full tool reference** (29 tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
 ---
 
@@ -55,7 +55,7 @@ Pass the `domain` parameter when the context clearly implies a domain. This impr
 | Code quality, linting, type hints | `code-quality-analysis` |
 | Architecture decisions, patterns | `software-architecture` |
 
-When in doubt, omit `domain` to let auto-detection from the question text choose.
+When in doubt, omit `domain` to let auto-detection from the question text choose. Projects may also define custom business-domain experts via `.tapps-mcp/experts.yaml` — use `tapps_manage_experts` to manage them.
 
 ---
 
@@ -107,7 +107,7 @@ Your project may have two complementary memory systems. Use the right one for ea
 - Build commands, IDE preferences, personal workflow notes --> auto memory
 - Architecture decisions, quality patterns, cross-agent knowledge --> `tapps_memory`
 
-Consider using `tapps_memory` for important architecture decisions.
+OPTIONAL: Consider using `tapps_memory` for important architecture decisions.
 
 ---
 

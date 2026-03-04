@@ -78,7 +78,7 @@ uv run tapps-mcp benchmark tools calibrate # checklist calibration
 ### Package dependency graph
 
 ```
-tapps-core (library)  <──  tapps-mcp (28 tools)
+tapps-core (library)  <──  tapps-mcp (29 tools)
                       <──  docs-mcp  (3 tools)
 ```
 
@@ -86,7 +86,7 @@ Shared infrastructure (config, security, logging, knowledge, memory, experts, me
 
 ### Server module split (tapps-mcp)
 
-The MCP server is split across seven tool files plus a shared helpers module and a resources module. All share the same `mcp` FastMCP instance created in `server.py`:
+The MCP server is split across eight tool files plus a shared helpers module and a resources module. All share the same `mcp` FastMCP instance created in `server.py`:
 
 - **`server.py`** — Creates the `FastMCP("TappsMCP")` instance and 8 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`). Imports the other seven modules which register their tools/resources on the shared `mcp` object.
 - **`server_scoring_tools.py`** — `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
@@ -94,6 +94,7 @@ The MCP server is split across seven tool files plus a shared helpers module and
 - **`server_metrics_tools.py`** — `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`
 - **`server_memory_tools.py`** — `tapps_memory` (11 actions: save, get, list, delete, search, reinforce, gc, contradictions, reseed, import, export)
 - **`server_analysis_tools.py`** — `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`
+- **`server_expert_tools.py`** — `tapps_manage_experts` (5 actions: list, add, remove, scaffold, validate)
 - **`server_resources.py`** — MCP resources (knowledge, config) and prompts (pipeline, workflow)
 - **`server_helpers.py`** — Shared utilities: `emit_ctx_info()` (defensive ctx notification helper), response builders, singleton caches (`_get_scorer()`, `_get_settings()`, `_get_memory_store()`)
 
@@ -103,7 +104,8 @@ The MCP server is split across seven tool files plus a shared helpers module and
 src/tapps_mcp/
 ├── __init__.py, cli.py, diagnostics.py, server.py, server_helpers.py, py.typed
 ├── server_scoring_tools.py, server_pipeline_tools.py, server_metrics_tools.py
-├── server_memory_tools.py, server_analysis_tools.py, server_resources.py
+├── server_memory_tools.py, server_analysis_tools.py, server_expert_tools.py
+├── server_resources.py
 ├── common/     constants.py, elicitation.py, exceptions.py, logging.py,
 │               models.py, nudges.py, output_schemas.py, pipeline_models.py,
 │               utils.py
@@ -130,7 +132,9 @@ src/tapps_mcp/
 │               vector_rag.py, rag_warming.py, confidence.py, engine.py,
 │               hot_rank.py, retrieval_eval.py,
 │               knowledge_freshness.py, knowledge_validator.py,
-│               knowledge_ingestion.py
+│               knowledge_ingestion.py,
+│               business_config.py, business_knowledge.py,
+│               business_loader.py, business_templates.py
 │               knowledge/ (145 markdown files across 17 domains)
 ├── adaptive/   models.py, protocols.py, persistence.py,
 │               scoring_engine.py, scoring_wrapper.py,

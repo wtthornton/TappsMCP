@@ -225,6 +225,18 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Business experts (Epic 43)
+    business_experts_enabled: bool = Field(
+        default=True,
+        description="Enable loading business experts from .tapps-mcp/experts.yaml.",
+    )
+    business_experts_max: int = Field(
+        default=20,
+        ge=0,
+        le=50,
+        description="Maximum number of business experts to load.",
+    )
+
     # Memory subsystem (Epic 23-25)
     memory: MemorySettings = Field(default_factory=MemorySettings)
 

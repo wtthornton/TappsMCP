@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-03-04
+
+### Added
+
+- **Epic 43: Business Expert Foundation** — YAML configuration schema (`BusinessExpertEntry`, `BusinessExpertsConfig`) for defining custom business-domain experts in `.tapps-mcp/experts.yaml`. Knowledge directory validation and scaffolding (`business_knowledge.py`). `ExpertRegistry` extended with merged access methods (`get_all_experts_merged`, `get_expert_for_domain_merged`, `is_business_domain`). Auto-loading integration via `business_loader.py` in `tapps_session_start`. Settings: `business_experts_enabled`, `business_experts_max`.
+- **Epic 44: Business Expert Consultation** — Domain detection merged scoring (`detect_from_question_merged`) routes queries to both built-in and business experts using shared `_score_keywords` helper with word-boundary regex and multi-word bonus weighting. Three-tier confidence scoring (technical=1.0, business=0.9, unknown=0.7). Engine routing updated to use merged methods. Knowledge path resolution (`_resolve_knowledge_path`) supports both bundled and project-local knowledge directories. RAG warming extended for business expert knowledge. `tapps_consult_expert` response includes `is_builtin` and `expert_type` fields.
+- **Epic 45: Business Expert Lifecycle** — New `tapps_manage_experts` MCP tool (29th tool) with 5 actions: list, add, remove, scaffold, validate. Atomic YAML writes via temp file + rename. `tapps_init` integration with `scaffold_experts` parameter. Business expert starter templates (`business_templates.py`). `tapps_checklist` updated with `tapps_manage_experts` entry.
+- 108 new tests in tapps-core (1,377 total), 50+ new tests in tapps-mcp
+
+### Fixed
+
+- Pre-existing template test failures: added `RECOMMENDED:` marker to medium AGENTS.md template and `OPTIONAL:` marker to low template for engagement-level differentiation
+
+### Changed
+
+- `tapps_consult_expert` docstring updated to mention business experts
+- `tapps_list_experts` returns both built-in and business experts via `get_all_experts_merged`
+- `tapps_research` uses merged domain detection for business expert routing
+- AGENTS.md templates updated with business expert documentation and tool count 28→29
+
 ## [0.7.4] - 2026-03-03
 
 ### Added

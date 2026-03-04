@@ -81,6 +81,9 @@ TOOL_REASONS: dict[str, str] = {
         "When the user requests to change enforcement intensity"
         " (e.g. 'set tappsmcp to high' or 'make checks optional')."
     ),
+    "tapps_manage_experts": (
+        "Manage business experts: list, add, remove, scaffold knowledge dirs, validate."
+    ),
 }
 
 

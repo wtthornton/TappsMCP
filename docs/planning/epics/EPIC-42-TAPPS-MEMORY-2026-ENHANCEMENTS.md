@@ -181,6 +181,7 @@ packages/tapps-mcp/src/tapps_mcp/
 
 ## References
 
+- **[EPIC-42-MEMORY-DESIGN-REVIEW.md](EPIC-42-MEMORY-DESIGN-REVIEW.md)** — Runbook for score, gate, validate_changed, security, dead-code, and tests on memory modules; use for DoD evidence (Story 42.4).
 - [MCP Best Practices (outcome-oriented, no dumps)](https://www.philschmid.de/mcp-best-practices)
 - [Powering RAG and Agent Memory with MCP](https://www.getknit.dev/blog/powering-rag-and-agent-memory-with-mcp)
 - [Memory MCP Server (playbooks)](https://playbooks.com/mcp/modelcontextprotocol/servers/memory)

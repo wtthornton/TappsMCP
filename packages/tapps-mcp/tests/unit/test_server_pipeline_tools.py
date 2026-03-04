@@ -1074,6 +1074,7 @@ class TestMaybeAutoGC:
         mock_settings.memory.gc_enabled = True
         mock_settings.memory.max_memories = 500
         mock_settings.memory.gc_auto_threshold = 0.8
+        mock_settings.business_experts_enabled = False
 
         with (
             patch(

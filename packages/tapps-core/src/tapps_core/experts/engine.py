@@ -284,13 +284,13 @@ def _resolve_domain(
                 confidence=detected[0].confidence if detected else 0,
             )
         else:
-            mappings = DomainDetector.detect_from_question(question)
+            mappings = DomainDetector.detect_from_question_merged(question)
             resolved_domain = mappings[0].domain if mappings else "software-architecture"
             detected = mappings[:3]
 
-    expert = ExpertRegistry.get_expert_for_domain(resolved_domain)
+    expert = ExpertRegistry.get_expert_for_domain_merged(resolved_domain)
     if expert is None:
-        expert = ExpertRegistry.get_expert_for_domain("software-architecture")
+        expert = ExpertRegistry.get_expert_for_domain_merged("software-architecture")
         if expert is None:
             msg = f"No expert found for domain: {resolved_domain}"
             raise ValueError(msg)
@@ -303,6 +303,29 @@ def _resolve_domain(
     )
 
 
+def _resolve_knowledge_path(expert: ExpertConfig) -> Path:
+    """Determine the knowledge base path for an expert.
+
+    Built-in experts use the bundled knowledge directory.  Business experts
+    use ``{project_root}/.tapps-mcp/knowledge/<domain>/``.
+    """
+    knowledge_dir_name = expert.knowledge_dir or sanitize_domain_for_path(expert.primary_domain)
+
+    if expert.is_builtin:
+        return ExpertRegistry.get_knowledge_base_path() / knowledge_dir_name
+
+    try:
+        from tapps_core.experts.business_knowledge import get_business_knowledge_path
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings()
+        return get_business_knowledge_path(settings.project_root, expert)
+    except Exception as exc:
+        logger.debug("business_knowledge_path_fallback", reason=str(exc))
+        # Fallback to bundled path (will likely be empty, handled downstream).
+        return ExpertRegistry.get_knowledge_base_path() / knowledge_dir_name
+
+
 def _retrieve_knowledge(
     question: str,
     resolved_domain: str,
@@ -311,8 +334,17 @@ def _retrieve_knowledge(
     max_context_length: int,
 ) -> _KnowledgeResult:
     """Load the knowledge base and search for relevant chunks."""
-    knowledge_dir_name = expert.knowledge_dir or sanitize_domain_for_path(expert.primary_domain)
-    knowledge_path = ExpertRegistry.get_knowledge_base_path() / knowledge_dir_name
+    knowledge_path = _resolve_knowledge_path(expert)
+
+    # Handle missing knowledge directory for business experts gracefully.
+    if not expert.is_builtin and not knowledge_path.exists():
+        logger.info(
+            "business_knowledge_dir_missing",
+            domain=resolved_domain,
+            path=str(knowledge_path),
+        )
+        return _KnowledgeResult(chunks=[], context="", sources=[])
+
     index_dir = None
     try:
         from tapps_core.config.settings import load_settings
@@ -567,11 +599,7 @@ def consult_expert(
     )
 
     # Freshness check: detect stale knowledge sources.
-    knowledge_dir_name = (
-        resolved.expert.knowledge_dir
-        or sanitize_domain_for_path(resolved.expert.primary_domain)
-    )
-    kb_path = ExpertRegistry.get_knowledge_base_path() / knowledge_dir_name
+    kb_path = _resolve_knowledge_path(resolved.expert)
     freshness = _check_freshness(knowledge, kb_path)
 
     conf = _compute_confidence(question, knowledge, resolved.domain)
@@ -616,11 +644,9 @@ def consult_expert(
 def list_experts() -> list[ExpertInfo]:
     """Return info for every registered expert, including knowledge-file counts."""
     results: list[ExpertInfo] = []
-    base_path = ExpertRegistry.get_knowledge_base_path()
 
-    for expert in ExpertRegistry.get_all_experts():
-        dir_name = expert.knowledge_dir or sanitize_domain_for_path(expert.primary_domain)
-        kb_path = base_path / dir_name
+    for expert in ExpertRegistry.get_all_experts_merged():
+        kb_path = _resolve_knowledge_path(expert)
         file_count = len(list(kb_path.rglob("*.md"))) if kb_path.exists() else 0
 
         results.append(
@@ -631,6 +657,8 @@ def list_experts() -> list[ExpertInfo]:
                 description=expert.description,
                 rag_enabled=expert.rag_enabled,
                 knowledge_files=file_count,
+                is_builtin=expert.is_builtin,
+                keywords=expert.keywords,
             )
         )
     return results

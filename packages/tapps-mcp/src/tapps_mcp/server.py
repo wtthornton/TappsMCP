@@ -8,6 +8,7 @@ Tool handlers are split across modules for maintainability:
   - ``server_pipeline_tools``: tapps_validate_changed, tapps_session_start, tapps_init
   - ``server_metrics_tools``: tapps_dashboard, tapps_stats, tapps_feedback, tapps_research
   - ``server_memory_tools``: tapps_memory
+  - ``server_expert_tools``: tapps_manage_experts
   - ``server_analysis_tools``: tapps_session_notes, tapps_impact_analysis, tapps_report,
     tapps_dead_code, tapps_dependency_scan, tapps_dependency_graph
   - ``server_resources``: MCP resources and prompts
@@ -768,8 +769,9 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
-    """REQUIRED for domain-specific decisions. Routes to one of 17 built-in
-    experts and returns RAG-backed guidance with confidence scores.
+    """REQUIRED for domain-specific decisions. Routes to one of 17+ built-in
+    experts or user-defined business experts and returns RAG-backed guidance
+    with confidence scores.
 
     Available domains (omit domain to auto-detect from question):
       security, performance-optimization, testing-strategies,
@@ -827,6 +829,12 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_consult_expert", start)
 
+    # Determine expert type from registry
+    from tapps_core.experts.registry import ExpertRegistry
+
+    _is_builtin = ExpertRegistry.is_technical_domain(result.domain)
+    _expert_type = "builtin" if _is_builtin else "business"
+
     resp = success_response(
         "tapps_consult_expert",
         elapsed_ms,
@@ -855,6 +863,8 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "oldest_chunk_age_days": result.oldest_chunk_age_days,
             "freshness_caveat": result.freshness_caveat,
             "memory_injected": memory_injected,
+            "is_builtin": _is_builtin,
+            "expert_type": _expert_type,
         },
     )
 
@@ -885,7 +895,7 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_list_experts() -> dict[str, Any]:
-    """Returns the 17 built-in experts with domain, description, and knowledge-base status.
+    """Returns built-in and business experts with domain, description, and knowledge-base status.
 
     Not required before calling tapps_consult_expert - that tool's description
     lists all domains and auto-detects from the question when domain is omitted.
@@ -897,6 +907,10 @@ def tapps_list_experts() -> dict[str, Any]:
     from tapps_core.experts.engine import list_experts
 
     experts = list_experts()
+
+    builtin_count = sum(1 for e in experts if e.is_builtin)
+    business_count = sum(1 for e in experts if not e.is_builtin)
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_list_experts", start)
 
@@ -905,6 +919,8 @@ def tapps_list_experts() -> dict[str, Any]:
         elapsed_ms,
         {
             "expert_count": len(experts),
+            "builtin_count": builtin_count,
+            "business_count": business_count,
             "experts": [e.model_dump() for e in experts],
         },
     )
@@ -1110,6 +1126,7 @@ def _register_tool_modules() -> None:
     """
     from tapps_mcp import (
         server_analysis_tools,
+        server_expert_tools,
         server_memory_tools,
         server_metrics_tools,
         server_pipeline_tools,
@@ -1121,6 +1138,7 @@ def _register_tool_modules() -> None:
     server_pipeline_tools.register(mcp)
     server_metrics_tools.register(mcp)
     server_memory_tools.register(mcp)
+    server_expert_tools.register(mcp)
     server_analysis_tools.register(mcp)
     server_resources.register(mcp)
 
@@ -1146,6 +1164,7 @@ _scoring = sys.modules["tapps_mcp.server_scoring_tools"]
 _pipeline = sys.modules["tapps_mcp.server_pipeline_tools"]
 _metrics = sys.modules["tapps_mcp.server_metrics_tools"]
 _memory = sys.modules["tapps_mcp.server_memory_tools"]
+_experts = sys.modules["tapps_mcp.server_expert_tools"]
 _analysis = sys.modules["tapps_mcp.server_analysis_tools"]
 
 tapps_score_file = _scoring.tapps_score_file
@@ -1159,6 +1178,7 @@ tapps_stats = _metrics.tapps_stats
 tapps_feedback = _metrics.tapps_feedback
 tapps_research = _metrics.tapps_research
 tapps_memory = _memory.tapps_memory
+tapps_manage_experts = _experts.tapps_manage_experts
 tapps_session_notes = _analysis.tapps_session_notes
 tapps_impact_analysis = _analysis.tapps_impact_analysis
 tapps_report = _analysis.tapps_report

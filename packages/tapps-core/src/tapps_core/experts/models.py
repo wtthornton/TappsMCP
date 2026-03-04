@@ -19,6 +19,14 @@ class ExpertConfig(BaseModel):
         default=None,
         description="Override knowledge directory name (default: derived from domain).",
     )
+    is_builtin: bool = Field(
+        default=True,
+        description="Whether this is a built-in technical expert.",
+    )
+    keywords: list[str] = Field(
+        default_factory=list,
+        description="Custom keywords for domain detection routing.",
+    )
 
 
 class KnowledgeChunk(BaseModel):
@@ -144,3 +152,11 @@ class ExpertInfo(BaseModel):
     description: str = Field(default="", description="Short description.")
     rag_enabled: bool = Field(default=True, description="Whether RAG is active.")
     knowledge_files: int = Field(default=0, description="Number of knowledge files loaded.")
+    is_builtin: bool = Field(
+        default=True,
+        description="Whether this is a built-in expert.",
+    )
+    keywords: list[str] = Field(
+        default_factory=list,
+        description="Custom domain detection keywords.",
+    )

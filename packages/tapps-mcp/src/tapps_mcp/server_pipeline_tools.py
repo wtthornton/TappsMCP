@@ -875,6 +875,25 @@ async def tapps_session_start(
     except Exception:
         _logger.debug("memory_status_check_failed", exc_info=True)
 
+    # Business experts (Epic 43) — load from .tapps-mcp/experts.yaml
+    business_experts_result: dict[str, Any] | None = None
+    try:
+        be_settings = load_settings()
+        if be_settings.business_experts_enabled:
+            from tapps_core.experts.business_loader import load_and_register_business_experts
+
+            be_result = load_and_register_business_experts(be_settings.project_root)
+            if be_result.loaded > 0 or be_result.errors:
+                business_experts_result = {
+                    "loaded": be_result.loaded,
+                    "expert_ids": be_result.expert_ids,
+                    "errors": be_result.errors,
+                    "warnings": be_result.warnings,
+                    "knowledge_status": be_result.knowledge_status,
+                }
+    except Exception:
+        _logger.debug("business_experts_load_failed", exc_info=True)
+
     _project_profile_hint = (
         "Call tapps_project_profile when you need project context"
         " (tech stack, type, CI/Docker/tests)."
@@ -890,6 +909,7 @@ async def tapps_session_start(
         "memory_status": memory_status,
         "memory_gc": memory_gc_result,
         "session_capture": session_capture_result,
+        "business_experts": business_experts_result,
         "project_profile": None,
         "project_profile_hint": _project_profile_hint,
         "recommended_next": (
@@ -955,6 +975,7 @@ async def tapps_init(
     dry_run: bool = False,
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
+    scaffold_experts: bool = False,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
@@ -1012,6 +1033,9 @@ async def tapps_init(
             Use for quick connectivity/checker checks without creating files.
         llm_engagement_level: When set, use this level (high/medium/low) for
             AGENTS.md and platform rules. When ``None``, use config/settings.
+        scaffold_experts: When ``True`` and ``.tapps-mcp/experts.yaml`` exists,
+            scaffold missing knowledge directories for business experts
+            (creates README.md and overview.md starter files).
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
@@ -1083,6 +1107,7 @@ async def tapps_init(
         dry_run=dry_run,
         verify_only=verify_only,
         llm_engagement_level=llm_engagement_level,
+        scaffold_experts=scaffold_experts,
     )
 
     # Emit ctx.info for each created file (Pattern 1: progress notifications)

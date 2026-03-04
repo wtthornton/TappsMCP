@@ -17,7 +17,7 @@ When the **TappsMCP** MCP server is configured, you **MUST** use its tools for c
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 | **tapps_memory** | **REQUIRED at session start** - search past decisions. Save learnings before session end. |
 
-**For full tool reference** (28 tools), invoke the **tapps-tool-reference** skill when asked about tools.
+**For full tool reference** (29 tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
 ---
 
@@ -57,6 +57,10 @@ Pass the `domain` parameter when the context clearly implies a domain. This impr
 | Architecture decisions, patterns | `software-architecture` |
 
 When in doubt, omit `domain` to let auto-detection from the question text choose.
+
+### Business experts
+
+Projects can define custom business-domain experts via `.tapps-mcp/experts.yaml`. When configured, these domains are available alongside the 17 built-in technical domains. Use `tapps_manage_experts(action="list")` to see registered business experts and their domains. Pass a business domain name to `tapps_consult_expert(domain="home-automation")` the same way you would a built-in domain.
 
 ---
 

@@ -363,6 +363,53 @@ DOMAIN_KEYWORDS: dict[str, list[str]] = {
 }
 
 
+def _score_keywords(
+    question_clean: str,
+    domain: str,
+    keywords: list[str],
+    expert_name: str,
+) -> DomainMapping | None:
+    """Score *question_clean* against *keywords* for a single domain.
+
+    Uses word-boundary regex matching with multi-word keyword bonus weighting.
+    Shared by both :meth:`DomainDetector.detect_from_question` and
+    :meth:`DomainDetector.detect_from_question_merged`.
+
+    Args:
+        question_clean: Lowered, punctuation-stripped question text.
+        domain: The domain slug to score against.
+        keywords: Keyword list for the domain.
+        expert_name: Human-readable expert name for the reasoning field.
+
+    Returns:
+        A :class:`DomainMapping` if at least one keyword matched, else ``None``.
+    """
+    hits: list[str] = []
+    hit_weight = 0.0
+    for kw in keywords:
+        # Use word-boundary matching to avoid substring false positives
+        # (e.g. "ci" matching inside "injection").
+        pattern = r"\b" + re.escape(kw.lower()) + r"\b"
+        if re.search(pattern, question_clean):
+            hits.append(kw)
+            # Multi-word keywords are stronger signals.
+            word_count = len(kw.split())
+            hit_weight += 1.0 + (word_count - 1) * 0.5
+    if not hits:
+        return None
+
+    # Confidence based on weighted hit count, normalised.
+    _min_divisor = 3
+    confidence = min(1.0, hit_weight / _min_divisor)
+
+    return DomainMapping(
+        domain=domain,
+        confidence=round(confidence, 3),
+        signals=[f"keyword:{kw}" for kw in hits],
+        reasoning=f"Matched {len(hits)} keyword(s) for {expert_name}.",
+    )
+
+
 class DomainDetector:
     """Detects the best expert domain for a question or project."""
 
@@ -393,7 +440,7 @@ class DomainDetector:
 
     @classmethod
     def detect_from_question(cls, question: str) -> list[DomainMapping]:
-        """Score *question* against all domains and return ranked results.
+        """Score *question* against all built-in domains and return ranked results.
 
         Args:
             question: The user's question text.
@@ -411,36 +458,60 @@ class DomainDetector:
         results: list[DomainMapping] = []
 
         for domain, keywords in DOMAIN_KEYWORDS.items():
-            hits: list[str] = []
-            hit_weight = 0.0
-            for kw in keywords:
-                # Use word-boundary matching to avoid substring false positives
-                # (e.g. "ci" matching inside "injection").
-                pattern = r"\b" + re.escape(kw) + r"\b"
-                if re.search(pattern, question_clean):
-                    hits.append(kw)
-                    # Multi-word keywords are stronger signals.
-                    word_count = len(kw.split())
-                    hit_weight += 1.0 + (word_count - 1) * 0.5
-            if not hits:
-                continue
-
-            # Confidence based on weighted hit count, normalised.
-            _min_divisor = 3
-            confidence = min(1.0, hit_weight / _min_divisor)
-
             expert = ExpertRegistry.get_expert_for_domain(domain)
             expert_name = expert.expert_name if expert else domain
+            mapping = _score_keywords(question_clean, domain, keywords, expert_name)
+            if mapping is not None:
+                results.append(mapping)
 
-            results.append(
-                DomainMapping(
-                    domain=domain,
-                    confidence=round(confidence, 3),
-                    signals=[f"keyword:{kw}" for kw in hits],
-                    reasoning=f"Matched {len(hits)} keyword(s) for {expert_name}.",
-                )
+        results.sort(key=lambda m: m.confidence, reverse=True)
+        return results
+
+    # ------------------------------------------------------------------
+    # Merged detection (built-in + business experts)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def detect_from_question_merged(cls, question: str) -> list[DomainMapping]:
+        """Score *question* against built-in AND business domains.
+
+        Calls :meth:`detect_from_question` for built-in domains, then scores
+        against keywords from registered business experts.  All results are
+        merged and re-sorted by confidence (descending).
+
+        Args:
+            question: The user's question text.
+
+        Returns:
+            List of :class:`DomainMapping` sorted by confidence (descending).
+            Only domains with a positive score are included.
+        """
+        # Start with built-in domain results.
+        results = cls.detect_from_question(question)
+
+        # Score business expert keywords.
+        business_experts = ExpertRegistry.get_business_experts()
+        if not business_experts:
+            return results
+
+        # Prepare question text the same way as detect_from_question.
+        question_expanded = expand_query(question)
+        question_lower = question_expanded.lower()
+        question_clean = re.sub(r"[^\w\s-]", " ", question_lower)
+
+        for expert in business_experts:
+            if not expert.keywords:
+                continue
+            mapping = _score_keywords(
+                question_clean,
+                expert.primary_domain,
+                expert.keywords,
+                expert.expert_name,
             )
+            if mapping is not None:
+                results.append(mapping)
 
+        # Re-sort merged results by confidence.
         results.sort(key=lambda m: m.confidence, reverse=True)
         return results
 

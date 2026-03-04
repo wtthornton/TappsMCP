@@ -607,6 +607,7 @@ async def tapps_research(
       documentation-knowledge-management, ai-frameworks, agent-learning,
       observability-monitoring, api-design-integration, cloud-infrastructure,
       database-data-management
+      plus any user-defined business domains
 
     Args:
         question: The technical question to research (natural language).

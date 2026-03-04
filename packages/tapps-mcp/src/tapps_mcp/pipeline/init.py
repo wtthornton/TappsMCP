@@ -53,6 +53,7 @@ class BootstrapConfig:
     dry_run: bool = False
     verify_only: bool = False
     llm_engagement_level: str = "medium"
+    scaffold_experts: bool = False
 
 
 @dataclass
@@ -131,6 +132,7 @@ def bootstrap_pipeline(
     dry_run: bool = False,
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
+    scaffold_experts: bool = False,
 ) -> dict[str, Any]:
     """Create pipeline template files in the project.
 
@@ -174,6 +176,7 @@ def bootstrap_pipeline(
             dry_run=dry_run,
             verify_only=verify_only,
             llm_engagement_level=level or "medium",
+            scaffold_experts=scaffold_experts,
         )
     state = _BootstrapState(project_root=project_root.resolve(), dry_run=dry_run)
 
@@ -227,7 +230,58 @@ def bootstrap_pipeline(
             "domains": [],
         }
 
+    _load_business_experts(cfg, state)
+
     return state.finalize()
+
+
+def _load_business_experts(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Load and optionally scaffold business experts from experts.yaml."""
+    experts_yaml = state.project_root / ".tapps-mcp" / "experts.yaml"
+    if not experts_yaml.exists():
+        return
+
+    try:
+        from tapps_core.experts.business_loader import load_and_register_business_experts
+
+        load_result = load_and_register_business_experts(state.project_root)
+    except Exception as exc:
+        state.errors.append(f"Business expert loading failed: {exc}")
+        state.result["business_experts"] = {"error": str(exc)}
+        return
+
+    summary: dict[str, Any] = {
+        "loaded": load_result.loaded,
+        "expert_ids": load_result.expert_ids,
+        "knowledge_status": load_result.knowledge_status,
+    }
+    if load_result.errors:
+        summary["errors"] = load_result.errors
+        state.errors.extend(load_result.errors)
+    if load_result.warnings:
+        summary["warnings"] = load_result.warnings
+
+    # Scaffold missing knowledge directories when requested.
+    if cfg.scaffold_experts and not cfg.dry_run and load_result.loaded > 0:
+        from tapps_core.experts.business_config import load_business_experts
+        from tapps_core.experts.business_knowledge import scaffold_knowledge_directory
+
+        try:
+            experts = load_business_experts(state.project_root)
+            scaffolded: list[str] = []
+            for expert in experts:
+                knowledge_status = load_result.knowledge_status.get(
+                    expert.primary_domain, "missing"
+                )
+                if knowledge_status in ("missing", "empty"):
+                    scaffold_knowledge_directory(state.project_root, expert)
+                    scaffolded.append(expert.primary_domain)
+            summary["scaffolded"] = scaffolded
+        except Exception as exc:
+            state.errors.append(f"Business expert scaffolding failed: {exc}")
+            summary["scaffold_error"] = str(exc)
+
+    state.result["business_experts"] = summary
 
 
 def _verify_server(cfg: BootstrapConfig, state: _BootstrapState) -> None:
