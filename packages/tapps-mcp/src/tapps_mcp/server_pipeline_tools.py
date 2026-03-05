@@ -976,6 +976,7 @@ async def tapps_init(
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
     scaffold_experts: bool = False,
+    mcp_config: bool = False,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
@@ -1036,6 +1037,8 @@ async def tapps_init(
         scaffold_experts: When ``True`` and ``.tapps-mcp/experts.yaml`` exists,
             scaffold missing knowledge directories for business experts
             (creates README.md and overview.md starter files).
+        mcp_config: When ``True``, write project-scoped MCP server config after
+            bootstrap completes. Always uses ``scope="project"`` (never user).
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
@@ -1109,6 +1112,26 @@ async def tapps_init(
         llm_engagement_level=llm_engagement_level,
         scaffold_experts=scaffold_experts,
     )
+
+    # Optional: write project-scoped MCP config (Epic 47.2)
+    if mcp_config and not dry_run:
+        from tapps_mcp.distribution.setup_generator import _generate_config
+
+        mcp_host = "claude-code"
+        if platform == "cursor":
+            mcp_host = "cursor"
+        elif platform == "vscode":
+            mcp_host = "vscode"
+
+        config_ok = _generate_config(
+            mcp_host,
+            settings.project_root,
+            force=True,
+            scope="project",
+        )
+        if config_ok:
+            result["mcp_config_written"] = True
+            result["mcp_config_scope"] = "project"
 
     # Emit ctx.info for each created file (Pattern 1: progress notifications)
     for filename in result.get("created", []):

@@ -20,6 +20,7 @@ from tapps_mcp.distribution.doctor import (
     check_cursor_rules,
     check_hooks,
     check_json_config,
+    check_scope_recommendation,
     check_stale_exe_backups,
     check_vscode_config,
     run_doctor,
@@ -596,3 +597,60 @@ class TestCheckStaleExeBackups:
         ):
             result = check_stale_exe_backups()
         assert result.ok is False
+
+
+# ---------------------------------------------------------------------------
+# Story 47.4: Scope recommendation check
+# ---------------------------------------------------------------------------
+
+
+class TestCheckScopeRecommendation:
+    """Tests for check_scope_recommendation (Epic 47.4)."""
+
+    def test_no_user_config_passes(self, tmp_path):
+        """No ~/.claude.json means no warning."""
+        result = check_scope_recommendation(tmp_path, home=tmp_path)
+        assert result.ok is True
+        assert "No user-scoped config" in result.message
+
+    def test_user_config_without_tapps_passes(self, tmp_path):
+        """~/.claude.json exists but has no tapps-mcp entry."""
+        user_config = tmp_path / ".claude.json"
+        user_config.write_text('{"mcpServers": {}}', encoding="utf-8")
+        result = check_scope_recommendation(tmp_path, home=tmp_path)
+        assert result.ok is True
+
+    def test_user_config_with_tapps_warns(self, tmp_path):
+        """~/.claude.json has tapps-mcp entry -- should warn."""
+        user_config = tmp_path / ".claude.json"
+        user_config.write_text(
+            json.dumps({"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}),
+            encoding="utf-8",
+        )
+        result = check_scope_recommendation(tmp_path, home=tmp_path)
+        assert result.ok is False
+        assert "user scope" in result.message
+        assert "tapps-mcp init --scope project" in result.detail
+
+    def test_both_scopes_warns_differently(self, tmp_path):
+        """Both user and project config exist -- specific warning."""
+        user_config = tmp_path / ".claude.json"
+        user_config.write_text(
+            json.dumps({"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}),
+            encoding="utf-8",
+        )
+        project_config = tmp_path / ".mcp.json"
+        project_config.write_text(
+            json.dumps({"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}),
+            encoding="utf-8",
+        )
+        result = check_scope_recommendation(tmp_path, home=tmp_path)
+        assert result.ok is False
+        assert "both" in result.message.lower()
+
+    def test_invalid_json_passes(self, tmp_path):
+        """Malformed ~/.claude.json is treated as non-issue."""
+        user_config = tmp_path / ".claude.json"
+        user_config.write_text("not json!", encoding="utf-8")
+        result = check_scope_recommendation(tmp_path, home=tmp_path)
+        assert result.ok is True

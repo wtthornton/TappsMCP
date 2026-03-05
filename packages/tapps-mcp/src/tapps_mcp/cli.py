@@ -69,8 +69,8 @@ def serve(transport: str, host: str, port: int) -> None:
 @click.option(
     "--scope",
     type=click.Choice(["user", "project"]),
-    default="user",
-    help="Config scope: 'user' (~/.claude.json) or 'project' (.mcp.json in project root).",
+    default="project",
+    help="Config scope: 'project' (.mcp.json in project root, default) or 'user' (~/.claude.json).",
 )
 @click.option(
     "--rules/--no-rules",
@@ -142,7 +142,13 @@ def init(
     is_flag=True,
     help="Show what would be updated without making changes.",
 )
-def upgrade(mcp_host: str, project_root: str, force: bool, dry_run: bool) -> None:
+@click.option(
+    "--scope",
+    type=click.Choice(["user", "project"]),
+    default="project",
+    help="Config scope: 'project' (.mcp.json in project root, default) or 'user' (~/.claude.json).",
+)
+def upgrade(mcp_host: str, project_root: str, force: bool, dry_run: bool, scope: str) -> None:
     """Validate and update all TappsMCP-generated files after a version upgrade.
 
     Checks AGENTS.md, platform rules, hooks, agents, skills, and settings
@@ -155,6 +161,7 @@ def upgrade(mcp_host: str, project_root: str, force: bool, dry_run: bool) -> Non
         project_root=project_root,
         force=force,
         dry_run=dry_run,
+        scope=scope,
     )
     if not success:
         raise SystemExit(1)

@@ -15,12 +15,13 @@ WORKDIR /build
 RUN pip install --no-cache-dir hatchling==1.28.0
 
 # Build tapps-core wheel first (dependency)
-COPY packages/tapps-core/pyproject.toml packages/tapps-core/README.md packages/tapps-core/
+COPY packages/tapps-core/pyproject.toml packages/tapps-core/
 COPY packages/tapps-core/src packages/tapps-core/src
 RUN pip wheel --no-deps --wheel-dir /wheels packages/tapps-core/
 
-# Build docs-mcp wheel
-COPY packages/docs-mcp/pyproject.toml packages/docs-mcp/README.md packages/docs-mcp/
+# Build docs-mcp wheel (readme is docs/README.md per pyproject.toml)
+COPY packages/docs-mcp/pyproject.toml packages/docs-mcp/
+COPY packages/docs-mcp/docs packages/docs-mcp/docs
 COPY packages/docs-mcp/src packages/docs-mcp/src
 RUN pip wheel --no-deps --wheel-dir /wheels packages/docs-mcp/
 

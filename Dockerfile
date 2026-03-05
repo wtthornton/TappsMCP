@@ -15,7 +15,7 @@ WORKDIR /build
 RUN pip install --no-cache-dir hatchling==1.28.0
 
 # Build tapps-core wheel first (dependency)
-COPY packages/tapps-core/pyproject.toml packages/tapps-core/README.md packages/tapps-core/
+COPY packages/tapps-core/pyproject.toml packages/tapps-core/
 COPY packages/tapps-core/src packages/tapps-core/src
 RUN pip wheel --no-deps --wheel-dir /wheels packages/tapps-core/
 

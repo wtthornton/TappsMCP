@@ -37,7 +37,8 @@ docker mcp gateway run --profile tapps-standard
 ### Install from self-hosted catalog (pre-approval or enterprise)
 
 ```bash
-docker mcp catalog import --file docker-mcp/catalog.yaml
+# From repo root; you will be prompted for a catalog name (e.g. tappsmcp-local)
+docker mcp catalog import docker-mcp/catalog.yaml
 ```
 
 ## Profiles

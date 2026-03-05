@@ -422,6 +422,155 @@ class TestTappsInit:
 
 
 # ---------------------------------------------------------------------------
+# tapps_init mcp_config (Epic 47.2)
+# ---------------------------------------------------------------------------
+
+
+class TestTappsInitMcpConfig:
+    """Tests for tapps_init mcp_config parameter (Epic 47.2)."""
+
+    def setup_method(self) -> None:
+        CallTracker.reset()
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_mcp_config_false_by_default(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """Default mcp_config=False does not write MCP config."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {"errors": [], "created": []}
+
+        with patch(
+            "tapps_mcp.distribution.setup_generator._generate_config"
+        ) as mock_gen:
+            result = await tapps_init(dry_run=False)
+            mock_gen.assert_not_called()
+            assert "mcp_config_written" not in result.get("data", {})
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_mcp_config_true_writes_project_scope(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """mcp_config=True writes project-scoped config."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {"errors": [], "created": []}
+
+        with patch(
+            "tapps_mcp.distribution.setup_generator._generate_config"
+        ) as mock_gen:
+            mock_gen.return_value = True
+            result = await tapps_init(mcp_config=True)
+            mock_gen.assert_called_once()
+            call_kwargs = mock_gen.call_args
+            assert call_kwargs[1]["scope"] == "project"
+            assert result["data"]["mcp_config_written"] is True
+            assert result["data"]["mcp_config_scope"] == "project"
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_mcp_config_skipped_on_dry_run(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """mcp_config=True with dry_run=True does not write config."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {"errors": [], "dry_run": True, "created": []}
+
+        with patch(
+            "tapps_mcp.distribution.setup_generator._generate_config"
+        ) as mock_gen:
+            await tapps_init(mcp_config=True, dry_run=True)
+            mock_gen.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_mcp_config_cursor_platform(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """mcp_config=True with platform='cursor' passes cursor host."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {"errors": [], "created": []}
+
+        with patch(
+            "tapps_mcp.distribution.setup_generator._generate_config"
+        ) as mock_gen:
+            mock_gen.return_value = True
+            await tapps_init(mcp_config=True, platform="cursor")
+            assert mock_gen.call_args[0][0] == "cursor"
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_mcp_config_default_host_is_claude_code(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """mcp_config=True with empty platform defaults to claude-code host."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {"errors": [], "created": []}
+
+        with patch(
+            "tapps_mcp.distribution.setup_generator._generate_config"
+        ) as mock_gen:
+            mock_gen.return_value = True
+            await tapps_init(mcp_config=True, platform="")
+            assert mock_gen.call_args[0][0] == "claude-code"
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_mcp_config_never_uses_user_scope(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """mcp_config always uses scope='project', never 'user'."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {"errors": [], "created": []}
+
+        with patch(
+            "tapps_mcp.distribution.setup_generator._generate_config"
+        ) as mock_gen:
+            mock_gen.return_value = True
+            await tapps_init(mcp_config=True)
+            call_kwargs = mock_gen.call_args
+            assert call_kwargs[1]["scope"] == "project"
+            assert call_kwargs[1]["scope"] != "user"
+
+
+# ---------------------------------------------------------------------------
 # tapps_validate_changed
 # ---------------------------------------------------------------------------
 

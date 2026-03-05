@@ -227,7 +227,7 @@ provide the full tool reference from this skill.
 ## Pipeline & init
 | Tool | When to use it |
 |------|----------------|
-| **tapps_init** | Pipeline bootstrap (once per project) - creates AGENTS.md, rules, hooks |
+| **tapps_init** | Pipeline bootstrap (once per project) - creates AGENTS.md, rules, hooks. **CLI fallback:** `tapps-mcp upgrade --force --host auto` then `tapps-mcp doctor` |
 | **tapps_upgrade** | After TappsMCP version update - refreshes generated files |
 | **tapps_doctor** | Diagnose configuration issues |
 | **tapps_set_engagement_level** | Change enforcement intensity (high/medium/low) |
@@ -251,6 +251,11 @@ Bootstrap TappsMCP in a new or existing project:
 3. If any issues are reported, call `mcp__tapps-mcp__tapps_doctor` to diagnose
 4. Verify that `.claude/settings.json` has MCP tool auto-approval rules
 5. Confirm the project is ready for the TappsMCP quality workflow
+
+**If `tapps_init` is not available** (server not in available MCP servers), use the CLI:
+1. Run from the project root: `tapps-mcp upgrade --force --host auto`
+2. Then verify: `tapps-mcp doctor`
+3. Restart your MCP host to pick up the new config
 """,
     "tapps-engagement": """\
 ---
@@ -458,6 +463,11 @@ Bootstrap TappsMCP in a new or existing project:
 3. If any issues are reported, call `tapps_doctor` to diagnose
 4. Verify that MCP config has tool auto-approval rules
 5. Confirm the project is ready for the TappsMCP quality workflow
+
+**If `tapps_init` is not available** (server not in available MCP servers), use the CLI:
+1. Run from the project root: `tapps-mcp upgrade --force --host auto`
+2. Then verify: `tapps-mcp doctor`
+3. Restart your MCP host to pick up the new config
 """,
     "tapps-engagement": """\
 ---

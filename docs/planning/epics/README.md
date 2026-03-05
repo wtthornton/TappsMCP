@@ -43,6 +43,9 @@
 | [Epic 37](EPIC-37-PIPELINE-ONBOARDING-DISTRIBUTION.md) | Pipeline Onboarding & Distribution | P1 | ~2.5-3 weeks | Epic 33, Epic 36, Epic 6, Epic 8 | **Complete** |
 | [Epic 42](EPIC-42-TAPPS-MEMORY-2026-ENHANCEMENTS.md) | tapps_memory 2026 Enhancements | P1 | ~1.5-2 weeks | Epic 23, 24, 25, 34 | **Complete** — 4 stories, 21 new tests, 42 total |
 | [Epic 46](EPIC-46-DOCKER-MCP-DISTRIBUTION.md) | Docker MCP Toolkit Distribution | P1 | ~3-4 weeks | Epic 6, Epic 37 | **Complete** — 8 stories, 79 new tests |
+| [Epic 47](EPIC-47-WORKSPACE-SCOPED-INIT.md) | Workspace-Scoped Init | P1 | ~1-1.5 weeks | None | **Complete** |
+| [Epic 48](EPIC-48-MCP-HOST-VISIBILITY-AGENT-FALLBACKS.md) | MCP Host Visibility & Agent Fallbacks | P1 | ~1 week | None | **Complete** — 2 stories, docs + template content |
+| [Epic 49](EPIC-49-DOCTOR-ROBUSTNESS-QUICK-MODE.md) | Doctor Robustness & Quick Mode | P2 | ~1-1.5 weeks | None | Open |
 | DocsMCP Epic 10 | Distribution & CLI (PyPI publish) | P1 | ~1 week | DocsMCP Epic 0 | **Complete** — reduced scope (PyPI publish workflow) |
 | Platform Epic 12 | FastMCP Composition Layer | P2 | ~3-4 days | Epic 6, DocsMCP | **Complete** — combined server, platform CLI, 25 integration tests |
 | Platform Epic 13 | Distribution & Publishing | P2 | ~3-4 days | Platform Epic 12 | **Complete** — PyPI workflow (all 3 packages), combined Dockerfile, npm wrappers, version coordination, AGENTS.md DocsMCP awareness |
@@ -128,6 +131,14 @@ Epic 35 (Expert Adaptive Integration)    ← depends on Epic 3, Epic 5, Epic 7
 Epic 46 (Docker MCP Toolkit Distribution)  ← depends on Epic 6, Epic 37
   Docker MCP Catalog publishing, custom catalogs, gateway config in tapps_init
   Dockerfiles, server.yaml, tools.json, GHCR CI, expert knowledge updates
+
+--- Consuming-Project Feedback (Epics 48-49) ---
+
+Epic 48 (MCP Host Visibility & Agent Fallbacks)  ← no deps (docs + content)
+  OpenClawAgents feedback: document MCP server visibility, CLI fallback in tapps-init skill
+
+Epic 49 (Doctor Robustness & Quick Mode)  ← no deps
+  OpenClawAgents feedback: mypy version timeout, doctor duration docs, doctor --quick mode
 
 ```
 

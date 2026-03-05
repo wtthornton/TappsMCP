@@ -321,6 +321,70 @@ def check_hooks(project_root: Path) -> CheckResult:
     )
 
 
+def check_scope_recommendation(project_root: Path, home: Path | None = None) -> CheckResult:
+    """Warn when tapps-mcp is configured in user scope (~/.claude.json).
+
+    Project-scoped config (.mcp.json in project root) is recommended so
+    that TappsMCP is enabled only for this workspace and doesn't affect
+    other projects.
+
+    Args:
+        project_root: The project root directory.
+        home: Override for home directory (for testing).
+
+    Returns:
+        A :class:`CheckResult` with a warning if user-scoped config is found.
+    """
+    base = home or Path.home()
+    user_config = base / ".claude.json"
+
+    if not user_config.exists():
+        return CheckResult(
+            "Config scope",
+            True,
+            "No user-scoped config found (good)",
+        )
+
+    # Check if it actually has a tapps-mcp entry
+    try:
+        raw = user_config.read_text(encoding="utf-8")
+        data = json.loads(raw) if raw.strip() else {}
+    except (json.JSONDecodeError, OSError):
+        return CheckResult(
+            "Config scope",
+            True,
+            "User config exists but could not be parsed (skipping scope check)",
+        )
+
+    servers = data.get("mcpServers", {})
+    if not isinstance(servers, dict) or "tapps-mcp" not in servers:
+        return CheckResult(
+            "Config scope",
+            True,
+            "No tapps-mcp entry in user-scoped config",
+        )
+
+    # tapps-mcp is in ~/.claude.json — warn
+    project_config = project_root / ".mcp.json"
+    if project_config.exists():
+        return CheckResult(
+            "Config scope",
+            False,
+            "tapps-mcp configured in both ~/.claude.json (user) and .mcp.json (project)",
+            "Consider removing the entry from ~/.claude.json to avoid "
+            "global side effects. Project-scoped .mcp.json is sufficient.",
+        )
+
+    return CheckResult(
+        "Config scope",
+        False,
+        "tapps-mcp is configured in ~/.claude.json (user scope)",
+        "Recommend: tapps-mcp init --scope project (writes .mcp.json in "
+        "project root instead of ~/.claude.json). Then remove the tapps-mcp "
+        "entry from ~/.claude.json.",
+    )
+
+
 def check_stale_exe_backups() -> CheckResult:
     """Check for stale ``.old`` exe backups next to the running binary.
 
@@ -591,6 +655,7 @@ def _collect_checks(root: Path) -> list[CheckResult]:
     checks.append(check_claude_code_project(root))
     checks.append(check_cursor_config(root))
     checks.append(check_vscode_config(root))
+    checks.append(check_scope_recommendation(root))
     checks.append(check_claude_md(root))
     checks.append(check_cursor_rules(root))
     checks.append(check_agents_md(root))

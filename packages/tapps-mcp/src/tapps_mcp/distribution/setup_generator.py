@@ -160,14 +160,14 @@ def _get_vscode_settings_dir() -> Path | None:
 # ---------------------------------------------------------------------------
 
 
-def _get_config_path(host: str, project_root: Path, scope: str = "user") -> Path:
+def _get_config_path(host: str, project_root: Path, scope: str = "project") -> Path:
     """Return the config file path for a given host and scope.
 
     Args:
         host: One of ``"claude-code"``, ``"cursor"``, ``"vscode"``.
         project_root: The project root directory.
-        scope: ``"user"`` for user-level config, ``"project"`` for
-            project-level ``.mcp.json``. Only affects ``claude-code``.
+        scope: ``"project"`` for project-level ``.mcp.json`` (default), or
+            ``"user"`` for user-level config. Only affects ``claude-code``.
 
     Returns:
         The ``Path`` to the config file that should be written.
@@ -271,7 +271,7 @@ def _generate_config(
     project_root: Path,
     *,
     force: bool = False,
-    scope: str = "user",
+    scope: str = "project",
     dry_run: bool = False,
     upgrade_mode: bool = False,
 ) -> bool:
@@ -282,7 +282,7 @@ def _generate_config(
         project_root: Project root directory.
         force: If ``True``, overwrite any existing ``tapps-mcp`` entry without
             prompting. Intended for non-interactive use (CI, scripts).
-        scope: ``"user"`` or ``"project"``. Only affects ``claude-code``.
+        scope: ``"project"`` (default) or ``"user"``. Only affects ``claude-code``.
 
     Returns:
         ``True`` if configuration was successfully written, ``False`` if the
@@ -373,13 +373,13 @@ def _print_next_steps(host: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _check_config(host: str, project_root: Path, scope: str = "user") -> bool:
+def _check_config(host: str, project_root: Path, scope: str = "project") -> bool:
     """Verify that the tapps-mcp entry exists and looks valid.
 
     Args:
         host: Target host name.
         project_root: Project root directory.
-        scope: ``"user"`` or ``"project"``. Only affects ``claude-code``.
+        scope: ``"project"`` (default) or ``"user"``. Only affects ``claude-code``.
 
     Returns:
         ``True`` if configuration looks valid, ``False`` otherwise.
@@ -462,7 +462,7 @@ def _configure_multiple_hosts(
     *,
     check: bool = False,
     force: bool = False,
-    scope: str = "user",
+    scope: str = "project",
     rules: bool = True,
     dry_run: bool = False,
 ) -> bool:
@@ -631,7 +631,7 @@ def run_init(
     project_root: str = ".",
     check: bool = False,
     force: bool = False,
-    scope: str = "user",
+    scope: str = "project",
     rules: bool = True,
     dry_run: bool = False,
     engagement_level: str | None = None,
@@ -645,8 +645,8 @@ def run_init(
         project_root: Project root directory as a string path.
         check: If ``True``, verify existing configuration instead of generating.
         force: If ``True``, skip overwrite confirmation prompts.
-        scope: ``"user"`` for user-scope config or ``"project"`` for project-scope
-            ``.mcp.json``. Only affects ``claude-code`` host.
+        scope: ``"project"`` for project-scope ``.mcp.json`` (default) or
+            ``"user"`` for user-scope config. Only affects ``claude-code`` host.
         rules: If ``True``, also generate platform rule files (CLAUDE.md or
             .cursor/rules/tapps-pipeline.md) alongside MCP config.
         dry_run: If ``True``, show what would be written without making changes.
@@ -779,6 +779,7 @@ def run_upgrade(
     project_root: str = ".",
     force: bool = False,
     dry_run: bool = False,
+    scope: str = "project",
 ) -> bool:
     """Validate and update all TappsMCP-generated files.
 
@@ -791,6 +792,7 @@ def run_upgrade(
         project_root: Project root directory as a string path.
         force: If ``True``, overwrite all generated files without prompting.
         dry_run: If ``True``, show what would be updated without making changes.
+        scope: ``"project"`` (default) or ``"user"``. Only affects ``claude-code``.
     """
     from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 
@@ -801,6 +803,7 @@ def run_upgrade(
         project_root=str(root),
         force=force,
         dry_run=dry_run,
+        scope=scope,
     )
 
     # Map CLI host names to pipeline platform names

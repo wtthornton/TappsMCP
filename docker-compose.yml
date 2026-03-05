@@ -1,6 +1,7 @@
 # TappsMCP -- local Docker MCP server (Streamable HTTP on port 8000)
 # Usage: docker compose up --build -d
 # Connect: MCP client to http://localhost:8000/mcp (Streamable HTTP)
+# Image default is stdio; this override runs HTTP for local dev.
 
 services:
   tapps-mcp:
@@ -11,6 +12,7 @@ services:
       dockerfile: Dockerfile
     image: tappsmcp:local
     container_name: tappsmcp-mcp
+    command: ["tapps-mcp", "serve", "--transport", "http", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
     environment:

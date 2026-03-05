@@ -200,6 +200,23 @@ DocsMCP is a separate MCP server. Install via `pip install docs-mcp` or `npx doc
 
 ---
 
+## Troubleshooting: MCP server not available
+
+TappsMCP tools (`tapps_session_start`, `tapps_init`, `tapps_quick_check`, etc.) are only callable when the tapps-mcp server is **listed as an available MCP server** in your host (Claude Code, Cursor, or VS Code). If the server is configured in MCP config files but not visible to the agent, tool calls will fail.
+
+**How to verify the server is available:**
+- **Claude Code:** Run `/mcp` to list connected servers, or check `.claude.json` / `.mcp.json`
+- **Cursor:** Open Settings > MCP and confirm tapps-mcp is listed and enabled
+- **VS Code:** Check `.vscode/mcp.json` and the MCP panel in the sidebar
+
+**If the server is not available (CLI fallback):**
+1. From the project root, run: `tapps-mcp upgrade --force --host auto`
+2. Then verify: `tapps-mcp doctor`
+3. Restart your MCP host (Claude Code / Cursor / VS Code) to pick up the new config
+4. If tools are still unavailable, use CLI commands directly: `tapps-mcp init`, `tapps-mcp doctor`
+
+---
+
 ## Troubleshooting: MCP tool permissions
 
 If TappsMCP tools are being rejected or prompting for approval on every call:

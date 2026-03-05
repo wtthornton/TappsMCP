@@ -119,6 +119,21 @@ class WizardOtherMcps(BaseModel):
     )
 
 
+class WizardConfigScope(BaseModel):
+    """Schema for wizard config scope selection (Epic 47)."""
+
+    scope: str = Field(
+        description="Config scope",
+        json_schema_extra={
+            "enum": ["project", "user"],
+            "enumNames": [
+                "Project scope — .mcp.json in project root (recommended)",
+                "User scope — ~/.claude.json (global, affects all projects)",
+            ],
+        },
+    )
+
+
 class WizardDockerTransport(BaseModel):
     """Schema for wizard Docker MCP transport selection (Epic 46)."""
 
@@ -212,6 +227,7 @@ class WizardResult:
         "agent_teams",
         "companion_profile",
         "completed",
+        "config_scope",
         "docker_transport",
         "engagement_level",
         "prompt_hooks",
@@ -222,6 +238,7 @@ class WizardResult:
     def __init__(self) -> None:
         self.quality_preset: str = "standard"
         self.engagement_level: str = "medium"
+        self.config_scope: str = "project"
         self.agent_teams: bool = False
         self.skill_tier: str = "full"
         self.prompt_hooks: bool = False
@@ -235,6 +252,7 @@ async def run_init_wizard(  # type: ignore[type-arg]
     ctx: Context,
     *,
     docker_available: bool = False,
+    claude_code_detected: bool = True,
 ) -> WizardResult:
     """Run the interactive wizard via MCP elicitation.
 
@@ -268,6 +286,20 @@ async def run_init_wizard(  # type: ignore[type-arg]
             result.engagement_level = r2.data.level
         elif r2.action == "decline":
             return result
+
+        # 2b. Config scope (only for Claude Code — Epic 47)
+        if claude_code_detected:
+            r_scope = await ctx.elicit(
+                message=(
+                    "Where should TappsMCP config be stored? "
+                    "Project scope keeps config in this repo only."
+                ),
+                schema=WizardConfigScope,
+            )
+            if r_scope.action == "accept" and r_scope.data is not None:
+                result.config_scope = r_scope.data.scope
+            elif r_scope.action == "decline":
+                return result
 
         # 3. Agent teams
         r3 = await ctx.elicit(

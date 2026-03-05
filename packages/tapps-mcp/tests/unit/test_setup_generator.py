@@ -134,7 +134,7 @@ class TestGetConfigPath:
 
     def test_claude_code_path(self, tmp_path):
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            path = _get_config_path("claude-code", tmp_path / "project")
+            path = _get_config_path("claude-code", tmp_path / "project", scope="user")
         assert path == tmp_path / ".claude.json"
 
     def test_cursor_path(self, tmp_path):
@@ -153,11 +153,11 @@ class TestGetConfigPath:
         path = _get_config_path("claude-code", project, scope="project")
         assert path == project / ".mcp.json"
 
-    def test_claude_code_user_scope_is_default(self, tmp_path):
-        """Default scope is user, returning ~/.claude.json."""
-        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            path = _get_config_path("claude-code", tmp_path / "project")
-        assert path == tmp_path / ".claude.json"
+    def test_claude_code_project_scope_is_default(self, tmp_path):
+        """Default scope is project, returning .mcp.json in project root."""
+        project = tmp_path / "project"
+        path = _get_config_path("claude-code", project)
+        assert path == project / ".mcp.json"
 
     def test_cursor_scope_ignored(self, tmp_path):
         """Cursor always uses project-local path regardless of scope."""
@@ -268,7 +268,7 @@ class TestGenerateConfig:
 
     def test_generates_claude_code_config(self, tmp_path):
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            _generate_config("claude-code", tmp_path / "project")
+            _generate_config("claude-code", tmp_path / "project", scope="user")
         config_path = tmp_path / ".claude.json"
         assert config_path.exists()
         data = json.loads(config_path.read_text(encoding="utf-8"))
@@ -441,7 +441,7 @@ class TestCheckConfig:
         config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp", "args": ["serve"]}}}
         (tmp_path / ".claude.json").write_text(json.dumps(config), encoding="utf-8")
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            assert _check_config("claude-code", tmp_path / "project") is True
+            assert _check_config("claude-code", tmp_path / "project", scope="user") is True
 
     def test_check_claude_code_project_scope(self, tmp_path):
         """Project-scope check looks at .mcp.json."""
@@ -475,7 +475,7 @@ class TestRunInit:
     def test_auto_configures_detected_host(self, tmp_path):
         (tmp_path / ".claude").mkdir()
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            run_init(mcp_host="auto", project_root=str(tmp_path), rules=False)
+            run_init(mcp_host="auto", project_root=str(tmp_path), rules=False, scope="user")
         assert (tmp_path / ".claude.json").exists()
 
     def test_auto_configures_all_detected_hosts(self, tmp_path):
@@ -486,7 +486,13 @@ class TestRunInit:
             patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path),
             patch("tapps_mcp.distribution.setup_generator.sys.platform", "win32"),
         ):
-            run_init(mcp_host="auto", project_root=str(tmp_path), force=True, rules=False)
+            run_init(
+                mcp_host="auto",
+                project_root=str(tmp_path),
+                force=True,
+                rules=False,
+                scope="user",
+            )
         assert (tmp_path / ".claude.json").exists()
         assert (tmp_path / ".cursor" / "mcp.json").exists()
 
@@ -767,7 +773,7 @@ class TestServerInstructions:
     def test_claude_code_has_instructions(self, tmp_path):
         """Claude Code config includes instructions field."""
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            _generate_config("claude-code", tmp_path / "project")
+            _generate_config("claude-code", tmp_path / "project", scope="user")
         data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
         entry = data["mcpServers"]["tapps-mcp"]
         assert "instructions" in entry
@@ -777,7 +783,7 @@ class TestServerInstructions:
     def test_instructions_mentions_quality(self, tmp_path):
         """Instructions string mentions key capabilities for Tool Search matching."""
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            _generate_config("claude-code", tmp_path / "project")
+            _generate_config("claude-code", tmp_path / "project", scope="user")
         data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
         instructions = data["mcpServers"]["tapps-mcp"]["instructions"]
         assert "quality" in instructions.lower()
@@ -805,7 +811,7 @@ class TestServerInstructions:
         existing = {"mcpServers": {"other": {"command": "other"}}}
         config_path.write_text(json.dumps(existing), encoding="utf-8")
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            _generate_config("claude-code", tmp_path / "project", force=True)
+            _generate_config("claude-code", tmp_path / "project", force=True, scope="user")
         data = json.loads(config_path.read_text(encoding="utf-8"))
         assert "instructions" in data["mcpServers"]["tapps-mcp"]
         assert "other" in data["mcpServers"]
@@ -822,7 +828,7 @@ class TestEnvInConfig:
     def test_claude_code_has_env(self, tmp_path):
         """Claude Code config uses '.' (CWD == project root)."""
         with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
-            _generate_config("claude-code", tmp_path / "project")
+            _generate_config("claude-code", tmp_path / "project", scope="user")
         data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
         entry = data["mcpServers"]["tapps-mcp"]
         assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "."
@@ -965,3 +971,80 @@ class TestCliUpgrade:
             )
         assert result.exit_code == 0
         assert "AGENTS.md" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Story 47.1: Default scope is "project"
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultScopeProject:
+    """Tests for Epic 47.1 - default scope changed to 'project'."""
+
+    def test_get_config_path_default_is_project(self, tmp_path):
+        """Default scope for _get_config_path is 'project'."""
+        path = _get_config_path("claude-code", tmp_path)
+        assert path == tmp_path / ".mcp.json"
+
+    def test_get_config_path_user_scope(self, tmp_path):
+        """Explicit scope='user' still returns ~/.claude.json."""
+        path = _get_config_path("claude-code", tmp_path, scope="user")
+        assert path.name == ".claude.json"
+
+    def test_run_init_default_scope_writes_project_config(self, tmp_path):
+        """run_init without explicit scope writes .mcp.json (not ~/.claude.json)."""
+        with patch(
+            "tapps_mcp.distribution.setup_generator._detect_command_path",
+            return_value="tapps-mcp",
+        ):
+            ok = run_init(
+                mcp_host="claude-code",
+                project_root=str(tmp_path),
+                force=True,
+                rules=False,
+            )
+        assert ok
+        assert (tmp_path / ".mcp.json").exists()
+
+    def test_cli_init_default_scope_is_project(self):
+        """CLI init command default scope is 'project'."""
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", "--help"])
+        assert result.exit_code == 0
+        # Help text should show project as default
+        assert "project" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# Story 47.5: Upgrade command has --scope flag
+# ---------------------------------------------------------------------------
+
+
+class TestUpgradeScope:
+    """Tests for Epic 47.5 - upgrade command scope support."""
+
+    def test_cli_upgrade_has_scope_option(self):
+        """CLI upgrade command has --scope flag."""
+        runner = CliRunner()
+        result = runner.invoke(main, ["upgrade", "--help"])
+        assert result.exit_code == 0
+        assert "--scope" in result.output
+
+    def test_run_upgrade_accepts_scope(self, tmp_path):
+        """run_upgrade accepts scope parameter without error."""
+        with patch(
+            "tapps_mcp.pipeline.upgrade.upgrade_pipeline",
+            return_value={
+                "success": True,
+                "version": "0.8.0",
+                "components": {},
+                "errors": [],
+            },
+        ):
+            ok = run_upgrade(
+                mcp_host="claude-code",
+                project_root=str(tmp_path),
+                dry_run=True,
+                scope="project",
+            )
+        assert ok

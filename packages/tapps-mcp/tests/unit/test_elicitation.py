@@ -13,8 +13,11 @@ import pytest
 from tapps_mcp.common.elicitation import (
     InitConfirmation,
     PresetElicitation,
+    WizardConfigScope,
+    WizardResult,
     elicit_init_confirmation,
     elicit_preset,
+    run_init_wizard,
 )
 
 
@@ -156,3 +159,72 @@ class TestElicitInitConfirmation:
         await elicit_init_confirmation(ctx, "/my/project")
         call_args = ctx.elicit.call_args
         assert "/my/project" in call_args.kwargs["message"]
+
+
+# ---------------------------------------------------------------------------
+# Story 47.3: Wizard scope question
+# ---------------------------------------------------------------------------
+
+
+class TestWizardConfigScope:
+    """Tests for WizardConfigScope schema (Epic 47.3)."""
+
+    def test_valid_project_scope(self):
+        model = WizardConfigScope(scope="project")
+        assert model.scope == "project"
+
+    def test_valid_user_scope(self):
+        model = WizardConfigScope(scope="user")
+        assert model.scope == "user"
+
+    def test_schema_has_enum(self):
+        schema = WizardConfigScope.model_json_schema()
+        assert "scope" in schema["properties"]
+
+
+class TestWizardResultScope:
+    """Tests for WizardResult config_scope field (Epic 47.3)."""
+
+    def test_default_scope_is_project(self):
+        result = WizardResult()
+        assert result.config_scope == "project"
+
+    def test_scope_in_slots(self):
+        assert "config_scope" in WizardResult.__slots__
+
+
+class TestWizardScopeQuestion:
+    """Tests for scope question in run_init_wizard (Epic 47.3)."""
+
+    @pytest.mark.asyncio
+    async def test_scope_question_asked_when_claude_detected(self):
+        """Wizard asks scope question when claude_code_detected=True."""
+        ctx = MagicMock()
+        mock_result = MagicMock()
+        mock_result.action = "accept"
+        mock_result.data = MagicMock()
+        mock_result.data.preset = "standard"
+        mock_result.data.level = "medium"
+        mock_result.data.scope = "project"
+        mock_result.data.enabled = False
+        mock_result.data.tier = "core"
+        ctx.elicit = AsyncMock(return_value=mock_result)
+
+        result = await run_init_wizard(ctx, claude_code_detected=True)
+        assert result.config_scope == "project"
+
+    @pytest.mark.asyncio
+    async def test_scope_defaults_project_when_not_claude(self):
+        """Wizard defaults to project scope when claude_code_detected=False."""
+        ctx = MagicMock()
+        mock_result = MagicMock()
+        mock_result.action = "accept"
+        mock_result.data = MagicMock()
+        mock_result.data.preset = "standard"
+        mock_result.data.level = "medium"
+        mock_result.data.enabled = False
+        mock_result.data.tier = "core"
+        ctx.elicit = AsyncMock(return_value=mock_result)
+
+        result = await run_init_wizard(ctx, claude_code_detected=False)
+        assert result.config_scope == "project"

@@ -209,6 +209,10 @@ Several features exist as both a CLI command (`cli.py` via Click) and an MCP too
 - `tapps-mcp build-plugin` (CLI-only) → `distribution/plugin_builder.py` — generates a Claude Code plugin directory
 - `tapps-mcp rollback` (CLI-only) → `distribution/rollback.py` — restores from pre-upgrade backups
 
+### Config scope (Epic 47)
+
+Both `tapps-mcp init` and `tapps-mcp upgrade` accept a `--scope` flag (`"project"` or `"user"`). **Default is `"project"`**, which writes MCP config to `.mcp.json` in the project root instead of `~/.claude.json`. This ensures TappsMCP is enabled only for the current workspace. The scope only affects Claude Code config — Cursor and VS Code always write to project-local paths. The `tapps_init` MCP tool has an optional `mcp_config: bool = False` parameter that, when True, writes project-scoped MCP config (never user-scope). The `doctor` command warns when tapps-mcp is configured in user-scope `~/.claude.json`.
+
 ### Engagement-level template variants (Epic 18)
 
 AGENTS.md and platform rules (Cursor/Claude) have three variants per engagement level: **high**, **medium**, **low**. Templates live under `packages/tapps-mcp/src/tapps_mcp/prompts/` as `agents_template_high.md`, `agents_template_medium.md`, `agents_template_low.md`, and `platform_{cursor|claude}_{high|medium|low}.md`. The loader selects by `load_settings().llm_engagement_level` (or the `engagement_level` argument when provided). Checklist `TASK_TOOL_MAP_HIGH` / `TASK_TOOL_MAP_MEDIUM` / `TASK_TOOL_MAP_LOW` vary required vs recommended tools by level.
