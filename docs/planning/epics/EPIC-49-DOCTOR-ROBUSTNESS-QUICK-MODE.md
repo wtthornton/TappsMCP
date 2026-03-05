@@ -1,6 +1,6 @@
 # Epic 49: Doctor Robustness & Quick Mode
 
-**Status:** Open
+**Status:** Complete
 **Priority:** P2
 **Estimated LOE:** ~1–1.5 weeks
 **Dependencies:** None

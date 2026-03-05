@@ -42,6 +42,9 @@ _TOOL_SPECS: list[dict[str, str]] = [
     },
 ]
 
+# Per-tool timeout overrides for version checks (seconds).
+# mypy can be slow on first run in cold environments.
+_TOOL_TIMEOUTS: dict[str, int] = {"mypy": 20}
 
 # Process-lifetime cache for tool detection results.
 _cached_tools: list[InstalledTool] | None = None
@@ -79,7 +82,7 @@ def detect_installed_tools() -> list[InstalledTool]:
         if available:
             result = run_command(
                 [name, spec["version_flag"]],
-                timeout=10,
+                timeout=_TOOL_TIMEOUTS.get(name, 10),
             )
             if result.success:
                 # Most tools print version on stdout or stderr
@@ -109,7 +112,7 @@ async def _check_tool_async(spec: dict[str, str]) -> InstalledTool:
     if available:
         result = await run_command_async(
             [name, spec["version_flag"]],
-            timeout=10,
+            timeout=_TOOL_TIMEOUTS.get(name, 10),
         )
         if result.success:
             raw = (result.stdout or result.stderr).strip()

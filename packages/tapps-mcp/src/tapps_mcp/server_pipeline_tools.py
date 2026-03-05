@@ -1319,6 +1319,7 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
 
 def tapps_doctor(
     project_root: str = "",
+    quick: bool = False,
 ) -> dict[str, Any]:
     """Diagnose TappsMCP configuration and connectivity.
 
@@ -1330,6 +1331,7 @@ def tapps_doctor(
 
     Args:
         project_root: Project root path (default: server's configured root).
+        quick: When True, skip tool version checks for faster results.
     """
     from tapps_mcp.distribution.doctor import run_doctor_structured
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
@@ -1340,7 +1342,7 @@ def tapps_doctor(
     settings = load_settings()
     root = project_root or str(settings.project_root)
 
-    result = run_doctor_structured(project_root=root)
+    result = run_doctor_structured(project_root=root, quick=quick)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_doctor", start)

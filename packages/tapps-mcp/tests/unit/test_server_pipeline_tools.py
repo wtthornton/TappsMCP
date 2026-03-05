@@ -305,7 +305,23 @@ class TestTappsDoctor:
         mock_doctor.return_value = {"checks": [], "passed": True}
 
         tapps_doctor(project_root="/custom/root")
-        mock_doctor.assert_called_once_with(project_root="/custom/root")
+        mock_doctor.assert_called_once_with(project_root="/custom/root", quick=False)
+
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.distribution.doctor.run_doctor_structured")
+    def test_quick_mode(
+        self, mock_doctor: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        from tapps_mcp.server_pipeline_tools import tapps_doctor
+
+        mock_settings.return_value = MagicMock(project_root=tmp_path)
+        mock_doctor.return_value = {"checks": [], "passed": True, "quick_mode": True}
+
+        result = tapps_doctor(quick=True)
+        assert result["success"] is True
+        mock_doctor.assert_called_once_with(
+            project_root=str(tmp_path), quick=True
+        )
 
 
 # ---------------------------------------------------------------------------

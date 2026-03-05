@@ -647,8 +647,13 @@ def _is_docker_available() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _collect_checks(root: Path) -> list[CheckResult]:
-    """Collect all diagnostic checks for the given project root."""
+def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
+    """Collect all diagnostic checks for the given project root.
+
+    Args:
+        root: Project root directory.
+        quick: When True, skip quality tool version checks for faster results.
+    """
     checks: list[CheckResult] = []
     checks.append(check_binary_on_path())
     checks.append(check_claude_code_user())
@@ -662,7 +667,15 @@ def _collect_checks(root: Path) -> list[CheckResult]:
     checks.append(check_claude_settings(root))
     checks.append(check_hooks(root))
     checks.append(check_stale_exe_backups())
-    checks.extend(check_quality_tools())
+    if quick:
+        checks.append(CheckResult(
+            "Quality tools",
+            True,
+            "Skipped (quick mode)",
+            "Run without --quick for full tool version checks",
+        ))
+    else:
+        checks.extend(check_quality_tools())
     return checks
 
 
@@ -717,16 +730,22 @@ def _collect_docker_checks_sync(root: Path) -> list[CheckResult]:
     )
 
 
-def run_doctor_structured(*, project_root: str = ".") -> dict[str, Any]:
+def run_doctor_structured(
+    *, project_root: str = ".", quick: bool = False
+) -> dict[str, Any]:
     """Run all diagnostic checks and return structured results.
 
     Returns a dict with ``checks``, ``pass_count``, ``fail_count``,
-    and ``all_passed`` for programmatic consumption (MCP tool).
+    ``all_passed``, and ``quick_mode`` for programmatic consumption (MCP tool).
+
+    Args:
+        project_root: Project root path.
+        quick: When True, skip quality tool version checks.
     """
     root = Path(project_root).resolve()
     log.info("doctor_structured", project_root=str(root))
 
-    checks = _collect_checks(root)
+    checks = _collect_checks(root, quick=quick)
 
     # Docker checks (Epic 46.7)
     docker_checks = _collect_docker_checks_sync(root)
@@ -773,6 +792,7 @@ def run_doctor_structured(*, project_root: str = ".") -> dict[str, Any]:
         "pass_count": pass_count,
         "fail_count": fail_count,
         "all_passed": fail_count == 0,
+        "quick_mode": quick,
     }
 
     if docker_results:
@@ -789,19 +809,25 @@ def run_doctor_structured(*, project_root: str = ".") -> dict[str, Any]:
     return out
 
 
-def run_doctor(*, project_root: str = ".") -> bool:
+def run_doctor(*, project_root: str = ".", quick: bool = False) -> bool:
     """Run all diagnostic checks and print a summary.
 
     Returns ``True`` if all checks pass, ``False`` otherwise.
+
+    Args:
+        project_root: Project root path.
+        quick: When True, skip quality tool version checks.
     """
     root = Path(project_root).resolve()
     log.info("doctor_command", project_root=str(root))
 
-    checks = _collect_checks(root)
+    checks = _collect_checks(root, quick=quick)
 
     # Print report
     click.echo("")
     click.echo(click.style("=== TappsMCP Doctor Report ===", bold=True))
+    if quick:
+        click.echo(click.style("  (Quick mode — tool version checks skipped)", fg="cyan"))
     click.echo("")
 
     pass_count = 0

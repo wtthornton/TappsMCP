@@ -173,11 +173,17 @@ def upgrade(mcp_host: str, project_root: str, force: bool, dry_run: bool, scope:
     default=".",
     help="Project root directory.",
 )
-def doctor(project_root: str) -> None:
+@click.option(
+    "--quick",
+    is_flag=True,
+    default=False,
+    help="Quick mode: skip tool version checks for faster results.",
+)
+def doctor(project_root: str, quick: bool) -> None:
     """Diagnose TappsMCP configuration and connectivity."""
     from tapps_mcp.distribution.doctor import run_doctor
 
-    success = run_doctor(project_root=project_root)
+    success = run_doctor(project_root=project_root, quick=quick)
     if not success:
         raise SystemExit(1)
 

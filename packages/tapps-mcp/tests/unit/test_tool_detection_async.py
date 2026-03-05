@@ -8,6 +8,7 @@ import pytest
 
 from tapps_mcp.tools.subprocess_utils import CommandResult
 from tapps_mcp.tools.tool_detection import (
+    _TOOL_TIMEOUTS,
     _reset_tools_cache,
     detect_installed_tools,
     detect_installed_tools_async,
@@ -20,6 +21,39 @@ def _clear_cache() -> None:  # type: ignore[misc]
     _reset_tools_cache()
     yield  # type: ignore[misc]
     _reset_tools_cache()
+
+
+class TestToolTimeouts:
+    """Tests for per-tool timeout configuration."""
+
+    def test_mypy_has_elevated_timeout(self) -> None:
+        """Mypy should have a higher timeout for cold-environment runs."""
+        assert _TOOL_TIMEOUTS.get("mypy") == 20
+
+    def test_default_timeout_for_other_tools(self) -> None:
+        """Tools without an override use the default 10s timeout."""
+        for name in ("ruff", "bandit", "radon", "vulture", "pip-audit"):
+            assert name not in _TOOL_TIMEOUTS
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.tool_detection.run_command_async")
+    @patch("tapps_mcp.tools.tool_detection.shutil.which", return_value="/usr/bin/mypy")
+    async def test_mypy_uses_elevated_timeout(
+        self, mock_which: object, mock_run: AsyncMock
+    ) -> None:
+        """Async detection passes the elevated timeout for mypy."""
+        mock_run.return_value = CommandResult(
+            returncode=0,
+            stdout="mypy 1.14.0",
+            stderr="",
+            command=["mypy", "--version"],
+        )
+        await detect_installed_tools_async()
+        # Find the call for mypy
+        mypy_call = next(
+            c for c in mock_run.call_args_list if c[0][0][0] == "mypy"
+        )
+        assert mypy_call[1]["timeout"] == 20
 
 
 class TestDetectInstalledToolsAsync:

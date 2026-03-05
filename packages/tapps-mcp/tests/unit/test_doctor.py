@@ -9,6 +9,7 @@ from click.testing import CliRunner
 from tapps_mcp.cli import main
 from tapps_mcp.distribution.doctor import (
     CheckResult,
+    _collect_checks,
     _read_engagement_level,
     check_agents_md,
     check_binary_on_path,
@@ -24,6 +25,7 @@ from tapps_mcp.distribution.doctor import (
     check_stale_exe_backups,
     check_vscode_config,
     run_doctor,
+    run_doctor_structured,
 )
 
 # ---------------------------------------------------------------------------
@@ -654,3 +656,82 @@ class TestCheckScopeRecommendation:
         user_config.write_text("not json!", encoding="utf-8")
         result = check_scope_recommendation(tmp_path, home=tmp_path)
         assert result.ok is True
+
+
+# ---------------------------------------------------------------------------
+# Doctor Quick Mode (Epic 49.3)
+# ---------------------------------------------------------------------------
+
+
+class TestDoctorQuickMode:
+    """Tests for doctor quick mode (Epic 49.3)."""
+
+    def test_collect_checks_quick_skips_quality_tools(self, tmp_path):
+        """Quick mode skips quality tool checks."""
+        checks = _collect_checks(tmp_path, quick=True)
+        names = [c.name for c in checks]
+        # Should NOT contain individual tool names (prefixed with "Tool:")
+        assert not any("Tool:" in n for n in names)
+        # Should contain the skip placeholder
+        assert "Quality tools" in names
+        # The skip entry should pass and mention quick mode
+        skip_check = [c for c in checks if c.name == "Quality tools"][0]
+        assert skip_check.ok is True
+        assert "quick mode" in skip_check.message.lower()
+
+    def test_collect_checks_full_includes_quality_tools(self, tmp_path):
+        """Full mode (default) includes quality tool checks."""
+        with patch(
+            "tapps_mcp.tools.tool_detection.detect_installed_tools", return_value=[]
+        ):
+            checks = _collect_checks(tmp_path, quick=False)
+        names = [c.name for c in checks]
+        # Should NOT contain the skip placeholder
+        assert "Quality tools" not in names
+
+    def test_run_doctor_structured_quick(self, tmp_path):
+        """run_doctor_structured with quick=True includes quick_mode flag."""
+        with patch(
+            "tapps_mcp.distribution.doctor._collect_checks"
+        ) as mock_collect, patch(
+            "tapps_mcp.distribution.doctor._collect_docker_checks_sync",
+            return_value=[],
+        ):
+            mock_collect.return_value = [CheckResult("test", True, "ok")]
+            result = run_doctor_structured(
+                project_root=str(tmp_path), quick=True
+            )
+        assert result["quick_mode"] is True
+        mock_collect.assert_called_once_with(tmp_path.resolve(), quick=True)
+
+    def test_run_doctor_structured_default_not_quick(self, tmp_path):
+        """run_doctor_structured defaults to quick_mode=False."""
+        with patch(
+            "tapps_mcp.distribution.doctor._collect_checks"
+        ) as mock_collect, patch(
+            "tapps_mcp.distribution.doctor._collect_docker_checks_sync",
+            return_value=[],
+        ):
+            mock_collect.return_value = [CheckResult("test", True, "ok")]
+            result = run_doctor_structured(project_root=str(tmp_path))
+        assert result["quick_mode"] is False
+
+    def test_cli_doctor_quick_flag(self):
+        """CLI doctor --quick flag works."""
+        runner = CliRunner()
+        with patch(
+            "tapps_mcp.distribution.doctor.run_doctor", return_value=True
+        ) as mock_run:
+            result = runner.invoke(main, ["doctor", "--quick"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(project_root=".", quick=True)
+
+    def test_cli_doctor_without_quick(self):
+        """CLI doctor without --quick defaults to quick=False."""
+        runner = CliRunner()
+        with patch(
+            "tapps_mcp.distribution.doctor.run_doctor", return_value=True
+        ) as mock_run:
+            result = runner.invoke(main, ["doctor"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(project_root=".", quick=False)

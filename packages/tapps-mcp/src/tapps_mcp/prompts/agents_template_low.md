@@ -241,3 +241,14 @@ The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard 
 2. Verify the TappsMCP server is running: `tapps-mcp doctor`
 3. Check that your permission mode is not `dontAsk` (which auto-denies unlisted tools)
 4. As a last resort, use `tapps_quick_check` on individual files instead of `tapps_validate_changed`
+
+---
+
+## Troubleshooting: Doctor timeout
+
+`tapps-mcp doctor` runs version checks on all quality tools (ruff, mypy, bandit, radon, vulture, pip-audit) and may take **30-60+ seconds**, especially on first run or in cold environments where mypy is slow to start.
+
+**If doctor times out or takes too long:**
+- Use `tapps-mcp doctor --quick` to skip tool version checks (completes in a few seconds)
+- Run doctor in the background if your agent or IDE has a short CLI timeout
+- The MCP tool `tapps_doctor(quick=True)` provides the same quick mode
