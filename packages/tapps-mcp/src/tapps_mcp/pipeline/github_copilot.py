@@ -41,7 +41,7 @@ run security scans, and enforce quality gates.
 1. For each changed Python file, run `tapps_quick_check` first
 2. If the quick check flags issues, run `tapps_score_file` for detailed scoring
 3. Run `tapps_security_scan` on files touching auth, config, secrets, or user input
-4. Before completing your review, run `tapps_validate_changed` for a final pass
+4. Before completing your review, run `tapps_validate_changed` with explicit `file_paths` for a final pass. Default is quick mode; only use `quick=false` as a last resort.
 5. Report findings as PR review comments with severity and fix suggestions
 
 ## Standards
@@ -185,7 +185,7 @@ the pipeline below.
 - Fix issues before moving to the next file
 
 ### Stage 4: Validate
-- Run `tapps_validate_changed` before declaring work complete
+- Run `tapps_validate_changed` with explicit `file_paths` before declaring work complete (default is quick mode; `quick=false` is a last resort)
 - Run `tapps_security_scan` on security-sensitive files
 - Ensure overall score >= 70 and no HIGH security findings
 

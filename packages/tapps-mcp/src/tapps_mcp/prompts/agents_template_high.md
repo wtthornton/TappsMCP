@@ -12,7 +12,7 @@ When the **TappsMCP** MCP server is configured, you **MUST** use its tools for c
 |------|--------------|
 | **tapps_session_start** | **FIRST call in every session** - server info only |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + security |
-| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files |
+| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files. **Always pass explicit `file_paths`** (comma-separated). Default is quick mode; only use `quick=false` as a last resort. |
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 | **tapps_memory** | **REQUIRED at session start** - search past decisions. Save learnings before session end. |
@@ -73,7 +73,7 @@ Projects can define custom business-domain experts via `.tapps-mcp/experts.yaml`
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits (REQUIRED):** You MUST call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each Python file edit.
 6. **Before declaring work complete (BLOCKING):**
-   - You MUST call `tapps_validate_changed()` to batch-validate all changed files.
+   - You MUST call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. Never call without `file_paths` — auto-detect scans all git-changed files and can be very slow.
    - You MUST call `tapps_checklist(task_type=...)` as the FINAL step. If `complete` is false, call the missing required tools. NEVER declare work complete without running the checklist.
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
 7. **Domain decisions (REQUIRED):** You MUST call `tapps_consult_expert` or `tapps_research` for domain-specific decisions. Use `tapps_research` when you need expert + docs in one call. Use `tapps_validate_config` for Docker/infra files.

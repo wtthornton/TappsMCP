@@ -46,7 +46,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
 | **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
 | **tapps_quality_gate** | **Before declaring work complete** - ensures the file passes the configured quality preset. Gate failures are sorted by category weight (highest-impact first). A security floor of 50/100 is enforced regardless of overall score. Do not consider work done until this passes (or the user accepts the risk). |
-| **tapps_validate_changed** | **Before declaring multi-file work complete** - auto-detects changed files via git diff and runs score + gate on each. **Default is quick mode** (ruff-only, under ~10s). Includes impact analysis by default (`include_impact=True`). Pass `quick: false` for full validation (mypy, bandit, radon, vulture, 1–5+ min). Sends progress notifications when the client supports them. |
+| **tapps_validate_changed** | **Before declaring multi-file work complete** - runs score + gate on specified files. **Always pass explicit `file_paths`** (comma-separated) to scope validation to files you actually changed — do NOT rely on auto-detect, which scans all git-changed files and can be very slow in large repos. **Default is quick mode** (ruff-only, under ~10s). Only use `quick=false` as a **last resort** (pre-release, security audit) — it runs mypy, bandit, radon, vulture and takes 1–5+ min per file. |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library - use the returned docs to avoid hallucinated APIs. |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
 | **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file -> `domain="testing-strategies"`). |
@@ -120,7 +120,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 6. **Before declaring work complete:**
-   - Call `tapps_validate_changed()` to score + gate + security scan all changed files.
+   - Call `tapps_validate_changed(file_paths="src/foo.py,src/bar.py")` with explicit paths to the files you changed. Always scope to your changed files — never call without `file_paths` in large repos.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
 7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For library-specific domain questions**, pair `tapps_consult_expert` with `tapps_lookup_docs` to get expert guidance backed by current documentation (the expert response will suggest the right library/topic to look up).

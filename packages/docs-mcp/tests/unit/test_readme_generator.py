@@ -273,3 +273,122 @@ class TestFullGeneration:
         gen = ReadmeGenerator(style="minimal")
         result = gen.generate(empty)
         assert "# cool-tool" in result
+
+
+# ---------------------------------------------------------------------------
+# Epic 16 — Smart Description Fallback
+# ---------------------------------------------------------------------------
+
+
+class TestSmartDescription:
+    """Test _smart_description fallback chain."""
+
+    def test_uses_metadata_description_first(self, tmp_path: Path) -> None:
+        """Metadata description takes priority over all fallbacks."""
+        metadata = ProjectMetadata(
+            name="myproj",
+            description="From pyproject.toml",
+            source_file="pyproject.toml",
+        )
+        gen = ReadmeGenerator(style="minimal")
+        result = gen.generate(tmp_path, metadata=metadata)
+        assert "From pyproject.toml" in result
+
+    def test_falls_back_to_readme_first_paragraph(self, tmp_path: Path) -> None:
+        """When no metadata description, reads existing README."""
+        (tmp_path / "README.md").write_text(
+            "# My Project\n\nThis is the first paragraph of the readme.\n\nSecond para.\n",
+            encoding="utf-8",
+        )
+        metadata = ProjectMetadata(name="myproj", source_file="pyproject.toml")
+        gen = ReadmeGenerator(style="minimal")
+        result = gen.generate(tmp_path, metadata=metadata)
+        assert "first paragraph of the readme" in result
+
+    def test_falls_back_to_init_docstring(self, tmp_path: Path) -> None:
+        """When no README, reads __init__.py docstring."""
+        pkg_dir = tmp_path / "src" / "myproj"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "__init__.py").write_text(
+            '"""My project does amazing things."""\n',
+            encoding="utf-8",
+        )
+        metadata = ProjectMetadata(name="myproj", source_file="pyproject.toml")
+        gen = ReadmeGenerator(style="minimal")
+        result = gen.generate(tmp_path, metadata=metadata)
+        assert "amazing things" in result
+
+    def test_generic_fallback_when_nothing_found(self, tmp_path: Path) -> None:
+        """Falls back to generic description."""
+        metadata = ProjectMetadata(name="myproj", source_file="pyproject.toml")
+        gen = ReadmeGenerator(style="minimal")
+        result = gen.generate(tmp_path, metadata=metadata)
+        assert "A myproj project." in result
+
+
+# ---------------------------------------------------------------------------
+# Epic 16 — Pluralization Fix
+# ---------------------------------------------------------------------------
+
+
+class TestPluralizationFix:
+    """Test that API count uses correct singular/plural form."""
+
+    def test_single_api_uses_singular(self, tmp_path: Path) -> None:
+        """1 public API, not 1 public APIs."""
+        from docs_mcp.generators.readme import ReadmeGenerator
+
+        gen = ReadmeGenerator(style="standard")
+        # Create a project with exactly 1 public function
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "tiny"\n',
+            encoding="utf-8",
+        )
+        src = tmp_path / "tiny.py"
+        src.write_text(
+            'def only_one():\n    """The only public API."""\n    pass\n',
+            encoding="utf-8",
+        )
+        result = gen.generate(tmp_path)
+        # Should not contain "1 public APIs"
+        assert "1 public APIs" not in result
+
+
+# ---------------------------------------------------------------------------
+# Epic 16 — Framework Detection
+# ---------------------------------------------------------------------------
+
+
+class TestFrameworkDetection:
+    """Test _detect_frameworks from import scanning."""
+
+    def test_detects_click(self, tmp_path: Path) -> None:
+        src = tmp_path / "cli.py"
+        src.write_text("import click\n\n@click.command()\ndef main(): pass\n", encoding="utf-8")
+
+        gen = ReadmeGenerator(style="standard")
+        features = gen._detect_frameworks(tmp_path)
+        assert any("Click" in f for f in features)
+
+    def test_detects_fastapi(self, tmp_path: Path) -> None:
+        src = tmp_path / "app.py"
+        src.write_text("from fastapi import FastAPI\napp = FastAPI()\n", encoding="utf-8")
+
+        gen = ReadmeGenerator(style="standard")
+        features = gen._detect_frameworks(tmp_path)
+        assert any("FastAPI" in f for f in features)
+
+    def test_skips_venv(self, tmp_path: Path) -> None:
+        """Files in .venv should be ignored."""
+        venv = tmp_path / ".venv" / "lib" / "site.py"
+        venv.parent.mkdir(parents=True)
+        venv.write_text("import flask\n", encoding="utf-8")
+
+        gen = ReadmeGenerator(style="standard")
+        features = gen._detect_frameworks(tmp_path)
+        assert not any("Flask" in f for f in features)
+
+    def test_empty_project_returns_nothing(self, tmp_path: Path) -> None:
+        gen = ReadmeGenerator(style="standard")
+        features = gen._detect_frameworks(tmp_path)
+        assert features == []

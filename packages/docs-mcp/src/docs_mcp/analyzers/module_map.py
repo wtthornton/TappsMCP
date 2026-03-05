@@ -46,6 +46,7 @@ class ModuleMapAnalyzer:
             "dist",
             "build",
             ".eggs",
+            "site-packages",
         }
     )
 

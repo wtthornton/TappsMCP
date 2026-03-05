@@ -12,7 +12,7 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 |------|--------------|
 | **tapps_session_start** | **FIRST call in every session** - server info only |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + security |
-| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files |
+| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files. **Always pass explicit `file_paths`** (comma-separated). Default is quick mode; only use `quick=false` as a last resort. |
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
@@ -74,7 +74,7 @@ Projects can define custom business-domain experts in `.tapps-mcp/experts.yaml`.
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 6. **Before declaring work complete:**
-   - Call `tapps_validate_changed()` to score + gate on changed files (pass `security_depth='full'` or `quick=false` for security).
+   - Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to score + gate changed files. Never call without `file_paths` in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
 7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For expert + docs in one call**, use `tapps_research(question, ...)` instead of consult_expert + lookup_docs.

@@ -24,7 +24,7 @@ This runs scoring + quality gate + security scan in a single call.
 
 ### Before Declaring Work Complete
 
-For multi-file changes: You should call `tapps_validate_changed()` to batch-validate all changed files.
+For multi-file changes: You should call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Always pass `file_paths`** — auto-detect scans all git-changed files and can be very slow. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
 Run the quality gate before considering work done.
 You should call `tapps_checklist(task_type)` as the final step to verify no required tools were skipped.
 

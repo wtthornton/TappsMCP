@@ -57,13 +57,14 @@ allowed-tools: mcp__tapps-mcp__tapps_validate_changed
 disable-model-invocation: true
 ---
 
-Validate all changed files using TappsMCP:
+Validate changed files using TappsMCP:
 
-1. Call `mcp__tapps-mcp__tapps_validate_changed` to get the list of changed files and their scores
-2. Display each file with its score and pass/fail status
-3. If any file fails, list it with the top issue preventing it from passing
-4. Confirm explicitly when all changed files pass before declaring work done
-5. If any files fail, do NOT mark the task as complete
+1. Identify the Python files you changed in this session (from git status or your edit history)
+2. Call `mcp__tapps-mcp__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to only those files. **Never call without `file_paths`** - auto-detect scans all git-changed files and can be very slow in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
+3. Display each file with its score and pass/fail status
+4. If any file fails, list it with the top issue preventing it from passing
+5. Confirm explicitly when all changed files pass before declaring work done
+6. If any files fail, do NOT mark the task as complete
 """,
     "tapps-report": """\
 ---
@@ -103,7 +104,7 @@ Run a parallel review-fix-validate pipeline on changed Python files:
    - Pass the file path and instructions to score, fix, and gate the file
 4. Wait for all agents to complete and collect their results
 5. Merge any worktree changes back (review diffs before accepting)
-6. Call `mcp__tapps-mcp__tapps_validate_changed` to verify all files pass
+6. Call `mcp__tapps-mcp__tapps_validate_changed` with explicit `file_paths` to verify all files pass
 7. Call `mcp__tapps-mcp__tapps_checklist(task_type="review")` for final verification
 8. Present a summary table: file | before score | after score | gate | fixes applied
 """,
@@ -188,7 +189,7 @@ provide the full tool reference from this skill.
 |------|----------------|
 | **tapps_session_start** | **FIRST call in every session** - returns server info only |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security |
-| **tapps_validate_changed** | **Before multi-file complete** - score + gate on changed files |
+| **tapps_validate_changed** | **Before multi-file complete** - score + gate on changed files. Always pass explicit `file_paths`. Default is quick; `quick=false` is a last resort. |
 | **tapps_checklist** | **Before declaring complete** - reports which tools were called |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
@@ -314,13 +315,14 @@ mcp_tools:
   - tapps_validate_changed
 ---
 
-Validate all changed files using TappsMCP:
+Validate changed files using TappsMCP:
 
-1. Call `tapps_validate_changed` to get the list of changed files and their scores
-2. Display each file with its score and pass/fail status
-3. If any file fails, list it with the top issue preventing it from passing
-4. Confirm explicitly when all changed files pass before declaring work done
-5. If any files fail, do NOT mark the task as complete
+1. Identify the Python files you changed in this session (from git status or your edit history)
+2. Call `tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to only those files. **Never call without `file_paths`** - auto-detect scans all git-changed files and can be very slow in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
+3. Display each file with its score and pass/fail status
+4. If any file fails, list it with the top issue preventing it from passing
+5. Confirm explicitly when all changed files pass before declaring work done
+6. If any files fail, do NOT mark the task as complete
 """,
     "tapps-report": """\
 ---
@@ -360,7 +362,7 @@ Run a parallel review-fix-validate pipeline on changed Python files:
    - Pass the file path and instructions to score, fix, and gate the file
 4. Wait for all agents to complete and collect their results
 5. Review and merge any changes
-6. Call `tapps_validate_changed` to verify all files pass
+6. Call `tapps_validate_changed` with explicit `file_paths` to verify all files pass
 7. Call `tapps_checklist(task_type="review")` for final verification
 8. Present a summary table: file | before score | after score | gate | fixes applied
 """,
@@ -435,7 +437,7 @@ mcp_tools:
 
 When the user asks about TappsMCP tools, provide the full tool reference.
 Essential: tapps_session_start (first), tapps_quick_check (after edits),
-tapps_validate_changed (before complete), tapps_checklist (before complete).
+tapps_validate_changed (before complete, always pass file_paths), tapps_checklist (before complete).
 For the full table, see the skill content. Call tapps_server_info for workflow.
 """,
     "tapps-init": """\

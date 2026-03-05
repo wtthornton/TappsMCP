@@ -10,7 +10,7 @@ Use `tapps_research(question)` before using unfamiliar library APIs.
 
 Run `tapps_security_scan(file_path)` on security-sensitive changes.
 
-Call `tapps_validate_changed()` before declaring work complete.
+Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths before declaring work complete. Always pass `file_paths` — never rely on auto-detect in large repos. Default is quick mode; only use `quick=false` as a last resort.
 
 ## Quality Scoring (7 Categories, 0-100 each)
 

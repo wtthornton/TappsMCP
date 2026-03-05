@@ -10,13 +10,10 @@ from pydantic import BaseModel
 
 logger = structlog.get_logger(__name__)
 
-# Directories to skip when scanning.
-_SKIP_DIRS: frozenset[str] = frozenset({
-    ".git", ".hg", ".svn", "__pycache__", "node_modules",
-    ".venv", "venv", ".env", ".tox", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", "dist", "build",
-    ".eggs",
-})
+# Directories to skip when scanning (extends shared constants).
+from docs_mcp.constants import SKIP_DIRS as _BASE_SKIP_DIRS
+
+_SKIP_DIRS: frozenset[str] = _BASE_SKIP_DIRS | frozenset({".hg", ".svn", ".env"})
 
 
 class CompletenessCategory(BaseModel):

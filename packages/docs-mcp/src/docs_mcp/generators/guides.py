@@ -97,12 +97,16 @@ class OnboardingGuideGenerator:
             sections.extend(structure)
             sections.append("")
 
-        # Key Concepts
+        # Key Concepts (auto-generated from API surface)
         sections.append("## Key Concepts")
         sections.append("")
-        sections.append(
-            "<!-- Add key concepts and domain terminology here -->"
-        )
+        key_concepts = self._key_concepts(project_root)
+        if key_concepts:
+            sections.extend(key_concepts)
+        else:
+            sections.append(
+                "<!-- Add key concepts and domain terminology here -->"
+            )
         sections.append("")
 
         # Running the Project
@@ -252,6 +256,67 @@ class OnboardingGuideGenerator:
             return []
 
     @staticmethod
+    def _key_concepts(project_root: Path) -> list[str]:
+        """Extract key concepts from primary classes and their docstrings.
+
+        Scans the project's Python files for public classes and returns
+        a bullet list of class names with their summary docstrings.
+
+        Args:
+            project_root: Root directory of the project.
+
+        Returns:
+            List of markdown lines, or empty list if analysis fails.
+        """
+        try:
+            from docs_mcp.analyzers.api_surface import APISurfaceAnalyzer
+            from docs_mcp.constants import SKIP_DIRS
+
+            analyzer = APISurfaceAnalyzer()
+            all_classes: list[tuple[str, str]] = []
+
+            count = 0
+            for py_file in sorted(project_root.rglob("*.py")):
+                skip = False
+                try:
+                    rel = py_file.relative_to(project_root)
+                    for part in rel.parts:
+                        if part in SKIP_DIRS:
+                            skip = True
+                            break
+                except ValueError:
+                    skip = True
+                if skip:
+                    continue
+
+                count += 1
+                if count > 30:  # noqa: PLR2004
+                    break
+
+                try:
+                    result = analyzer.analyze(py_file, project_root=project_root)
+                    for cls in result.classes:
+                        doc = cls.docstring_summary or ""
+                        all_classes.append((cls.name, doc))
+                except Exception:  # noqa: S112
+                    continue
+
+            if not all_classes:
+                return []
+
+            lines: list[str] = []
+            for name, doc in all_classes[:10]:
+                if doc:
+                    lines.append(f"- **{name}** - {doc}")
+                else:
+                    lines.append(f"- **{name}**")
+
+            return lines
+        except Exception:
+            logger.debug("key_concepts_extraction_failed")
+            return []
+
+    @staticmethod
     def _running(
         metadata: ProjectMetadata,
         source: str,
@@ -373,6 +438,27 @@ class OnboardingGuideGenerator:
         return lines
 
 
+def _detect_tool_config(project_root: Path) -> set[str]:
+    """Detect tools configured in pyproject.toml ``[tool.*]`` sections.
+
+    Returns a set of tool names found (e.g. ``{"ruff", "mypy", "pytest"}``).
+    """
+    import tomllib
+
+    pyproject = project_root / "pyproject.toml"
+    if not pyproject.exists():
+        return set()
+
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        tool_section = data.get("tool", {})
+        if isinstance(tool_section, dict):
+            return set(tool_section.keys())
+    except Exception:
+        pass
+    return set()
+
+
 class ContributingGuideGenerator:
     """Generates a CONTRIBUTING.md guide for a project.
 
@@ -480,7 +566,9 @@ class ContributingGuideGenerator:
         # Coding Standards
         sections.append("## Coding Standards")
         sections.append("")
-        sections.extend(self._coding_standards(all_deps, source))
+        sections.extend(
+            self._coding_standards(all_deps, source, project_root)
+        )
         sections.append("")
 
         # Testing
@@ -548,20 +636,33 @@ class ContributingGuideGenerator:
         return lines
 
     @staticmethod
-    def _coding_standards(all_deps: str, source: str) -> list[str]:
+    def _coding_standards(
+        all_deps: str,
+        source: str,
+        project_root: Path | None = None,
+    ) -> list[str]:
         """Generate coding standards section lines.
+
+        Detects linter/formatter config from dependencies and
+        ``pyproject.toml`` tool sections.
 
         Args:
             all_deps: Lowercase concatenation of all dependency names.
             source: Lowercase source file name.
+            project_root: Root directory for config file detection.
 
         Returns:
             List of markdown lines.
         """
         lines: list[str] = []
 
+        # Also check pyproject.toml [tool.*] sections for linter config
+        tool_config: set[str] = set()
+        if project_root is not None:
+            tool_config = _detect_tool_config(project_root)
+
         if source == "pyproject.toml" or not source:
-            if "ruff" in all_deps:
+            if "ruff" in all_deps or "ruff" in tool_config:
                 lines.append("This project uses [ruff](https://docs.astral.sh/ruff/) "
                              "for linting and formatting:")
                 lines.append("")
@@ -586,7 +687,7 @@ class ContributingGuideGenerator:
             else:
                 lines.append("Please ensure your code follows the project's style conventions.")
 
-            if "mypy" in all_deps:
+            if "mypy" in all_deps or "mypy" in tool_config:
                 lines.append("")
                 lines.append("Type checking is enforced with mypy:")
                 lines.append("")
@@ -667,6 +768,24 @@ class ContributingGuideGenerator:
         lines.append("```")
         lines.append("")
         lines.append("When adding new features, please include appropriate tests.")
+
+        # Reference CI workflows if present
+        if project_root is not None:
+            ci_dir = project_root / ".github" / "workflows"
+            if ci_dir.is_dir():
+                try:
+                    workflows = sorted(ci_dir.glob("*.yml")) + sorted(
+                        ci_dir.glob("*.yaml")
+                    )
+                    if workflows:
+                        names = [w.stem for w in workflows[:3]]
+                        lines.append("")
+                        lines.append(
+                            "CI runs automatically on pull requests "
+                            f"(workflows: {', '.join(names)})."
+                        )
+                except Exception:
+                    pass
 
         return lines
 

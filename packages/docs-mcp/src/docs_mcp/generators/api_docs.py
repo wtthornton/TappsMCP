@@ -29,18 +29,34 @@ _SKIP_DIRS: frozenset[str] = frozenset(
         ".venv",
         "venv",
         "node_modules",
+        ".tox",
         ".mypy_cache",
         ".pytest_cache",
         ".ruff_cache",
         "dist",
         "build",
         ".eggs",
+        "site-packages",
     }
 )
 
 _MAX_DIR_FILES = 50
-_MAX_EXAMPLES = 2
+_MAX_EXAMPLES = 5
 _MAX_SNIPPET_LINES = 20
+
+# Logger constant patterns to filter from API docs.
+_LOGGER_PATTERNS: frozenset[str] = frozenset({
+    "logger",
+    "log",
+    "LOG",
+    "LOGGER",
+})
+
+# Noise constant name patterns (exact matches) to filter.
+_NOISE_CONSTANTS: frozenset[str] = frozenset({
+    "__all__",
+    "__version__",
+})
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -64,6 +80,7 @@ class APIDocFunction(BaseModel):
     description: str = ""
     params: list[APIDocParam] = []
     returns: str = ""
+    return_type: str = ""
     raises: list[str] = []
     examples: list[str] = []
     decorators: list[str] = []
@@ -96,6 +113,11 @@ class APIDocModule(BaseModel):
     classes: list[APIDocClass] = []
     constants: list[APIDocParam] = []
     coverage: float = 0.0
+    is_reexport: bool = False
+    total_public: int = 0
+    documented_count: int = 0
+    missing_returns: int = 0
+    missing_examples: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +156,7 @@ class APIDocGenerator:
         output_format: str = "markdown",
         depth: str = "public",
         include_examples: bool = True,
+        include_private: bool = False,
     ) -> str:
         """Generate API reference documentation for a file or directory.
 
@@ -146,6 +169,8 @@ class APIDocGenerator:
                 prefix except __init__), ``"protected"`` (include single
                 underscore), or ``"all"`` (everything).
             include_examples: Whether to search tests for usage examples.
+            include_private: When True, include private (``_prefix``)
+                functions that have docstrings even in ``"public"`` depth.
 
         Returns:
             The rendered API documentation as a string, or empty string
@@ -172,6 +197,7 @@ class APIDocGenerator:
                 output_format=output_format,
                 depth=depth,
                 include_examples=include_examples,
+                include_private=include_private,
             )
 
         if source_path.is_file() and source_path.suffix == ".py":
@@ -181,6 +207,7 @@ class APIDocGenerator:
                 output_format=output_format,
                 depth=depth,
                 include_examples=include_examples,
+                include_private=include_private,
             )
 
         logger.warning("unsupported_source", path=str(source_path))
@@ -198,6 +225,7 @@ class APIDocGenerator:
         output_format: str,
         depth: str,
         include_examples: bool,
+        include_private: bool = False,
     ) -> str:
         """Generate docs for all .py files in a directory (recursively)."""
         py_files = self._collect_py_files(dir_path)
@@ -212,6 +240,7 @@ class APIDocGenerator:
                 output_format=output_format,
                 depth=depth,
                 include_examples=include_examples,
+                include_private=include_private,
             )
             if result:
                 parts.append(result)
@@ -253,6 +282,7 @@ class APIDocGenerator:
         output_format: str,
         depth: str,
         include_examples: bool,
+        include_private: bool = False,
     ) -> str:
         """Generate docs for a single .py file."""
         try:
@@ -261,6 +291,7 @@ class APIDocGenerator:
                 depth,
                 include_examples,
                 project_root,
+                include_private=include_private,
             )
         except Exception:
             logger.debug(
@@ -286,6 +317,8 @@ class APIDocGenerator:
         depth: str,
         include_examples: bool,
         project_root: Path,
+        *,
+        include_private: bool = False,
     ) -> APIDocModule:
         """Extract structured module information using PythonExtractor.
 
@@ -294,6 +327,8 @@ class APIDocGenerator:
             depth: Visibility depth filter.
             include_examples: Whether to search for usage examples.
             project_root: Project root for relative path computation.
+            include_private: When True, include private functions with
+                docstrings even in ``"public"`` depth.
 
         Returns:
             An ``APIDocModule`` populated from the source file.
@@ -322,7 +357,9 @@ class APIDocGenerator:
         # --- Functions ---
         functions: list[APIDocFunction] = []
         for func_info in module_info.functions:
-            if not self._should_include(func_info.name, depth):
+            if not self._should_include_symbol(
+                func_info.name, depth, include_private, func_info.docstring,
+            ):
                 continue
             total_items += 1
             parsed = parse_docstring(func_info.docstring or "")
@@ -347,9 +384,10 @@ class APIDocGenerator:
                 APIDocFunction(
                     name=func_info.name,
                     signature=func_info.signature,
-                    description=parsed.summary,
+                    description=_full_description(parsed),
                     params=params,
                     returns=returns_text,
+                    return_type=func_info.return_annotation or "",
                     raises=raises_list,
                     examples=examples,
                     decorators=decorators,
@@ -377,6 +415,7 @@ class APIDocGenerator:
                 include_examples,
                 project_root,
                 parse_docstring,
+                include_private=include_private,
             )
             total_items += m_total
             documented_items += m_documented
@@ -399,7 +438,7 @@ class APIDocGenerator:
                 APIDocClass(
                     name=class_info.name,
                     bases=class_info.bases,
-                    description=parsed_cls.summary,
+                    description=_full_description(parsed_cls),
                     methods=methods,
                     class_variables=class_vars,
                     decorators=decorators_cls,
@@ -407,10 +446,12 @@ class APIDocGenerator:
                 )
             )
 
-        # --- Constants ---
+        # --- Constants (with noise filtering) ---
         constants: list[APIDocParam] = []
         for const_info in module_info.constants:
             if not self._should_include(const_info.name, depth):
+                continue
+            if _is_noise_constant(const_info.name, const_info.value):
                 continue
             total_items += 1
             # Constants don't have docstrings, but if annotated, count it
@@ -426,6 +467,15 @@ class APIDocGenerator:
 
         coverage = (documented_items / total_items * 100.0) if total_items > 0 else 0.0
 
+        # Detect re-export modules (__init__.py with no original definitions)
+        is_reexport = _is_reexport_module(file_path, module_info)
+
+        # Quality metrics
+        missing_returns = sum(
+            1 for f in functions if not f.returns and not f.return_type
+        )
+        missing_examples = sum(1 for f in functions if not f.examples)
+
         return APIDocModule(
             name=module_name,
             source_path=module_info.path,
@@ -434,6 +484,11 @@ class APIDocGenerator:
             classes=classes,
             constants=constants,
             coverage=round(coverage, 1),
+            is_reexport=is_reexport,
+            total_public=total_items,
+            documented_count=documented_items,
+            missing_returns=missing_returns,
+            missing_examples=missing_examples,
         )
 
     def _extract_class_methods(
@@ -443,6 +498,8 @@ class APIDocGenerator:
         include_examples: bool,
         project_root: Path,
         parse_docstring_fn: object,
+        *,
+        include_private: bool = False,
     ) -> tuple[list[APIDocFunction], int, int]:
         """Extract methods from a ClassInfo into APIDocFunction list.
 
@@ -458,7 +515,9 @@ class APIDocGenerator:
         methods: list[APIDocFunction] = []
 
         for method_info in class_info.methods:
-            if not self._should_include(method_info.name, depth):
+            if not self._should_include_symbol(
+                method_info.name, depth, include_private, method_info.docstring,
+            ):
                 continue
             total += 1
             parsed_method = parse_docstring_fn(method_info.docstring or "")
@@ -486,9 +545,10 @@ class APIDocGenerator:
                 APIDocFunction(
                     name=method_info.name,
                     signature=method_info.signature,
-                    description=parsed_method.summary,
+                    description=_full_description(parsed_method),
                     params=m_params,
                     returns=m_returns,
+                    return_type=method_info.return_annotation or "",
                     raises=m_raises,
                     examples=m_examples,
                     decorators=m_decorators,
@@ -520,6 +580,40 @@ class APIDocGenerator:
             return not (name.startswith("__") and name.endswith("__") and name != "__init__")
         # depth == "public"
         return not (name.startswith("_") and name != "__init__")
+
+    @staticmethod
+    def _should_include_symbol(
+        name: str,
+        depth: str,
+        include_private: bool,
+        docstring: str | None,
+    ) -> bool:
+        """Determine whether a symbol should be included.
+
+        Extends ``_should_include`` with ``include_private`` support:
+        when enabled, private functions (single ``_`` prefix) with
+        docstrings are included even in ``"public"`` depth.
+
+        Args:
+            name: The symbol name.
+            depth: ``"public"``, ``"protected"``, or ``"all"``.
+            include_private: Whether to include documented privates.
+            docstring: The symbol's docstring (used for private check).
+
+        Returns:
+            True if the symbol should be included.
+        """
+        if depth == "all":
+            return True
+        if depth == "protected":
+            return not (name.startswith("__") and name.endswith("__") and name != "__init__")
+        # depth == "public"
+        if not name.startswith("_") or name == "__init__":
+            return True
+        # Private symbol — include if include_private and has docstring
+        if include_private and docstring:
+            return True
+        return False
 
     @staticmethod
     def _convert_params(
@@ -568,46 +662,35 @@ class APIDocGenerator:
         func_name: str,
         project_root: Path,
     ) -> list[str]:
-        """Search test files for usage examples of a function.
+        """Search test files and source docstrings for usage examples.
+
+        Looks for:
+        - Test functions named ``test_*<func_name>*``
+        - Test functions whose body references ``func_name``
+        - Doctest ``>>>`` patterns referencing ``func_name``
 
         Args:
             func_name: The function name to search for.
             project_root: Project root to locate test directories.
 
         Returns:
-            Up to ``_MAX_EXAMPLES`` code snippets from matching test functions.
+            Up to ``_MAX_EXAMPLES`` code snippets from matching sources.
         """
         try:
-            tests_dir = project_root / "tests"
-            if not tests_dir.is_dir():
-                return []
-
             examples: list[str] = []
-            test_pattern = re.compile(
-                r"^(test_.*\.py|.*_test\.py)$",
-            )
 
-            for test_file in sorted(tests_dir.rglob("*.py")):
-                if not test_pattern.match(test_file.name):
+            # Search test directories
+            for test_dir_name in ("tests", "test"):
+                tests_dir = project_root / test_dir_name
+                if not tests_dir.is_dir():
                     continue
-                try:
-                    content = test_file.read_text(encoding="utf-8")
-                except Exception:  # noqa: S112
-                    continue
-
-                if func_name not in content:
-                    continue
-
-                snippet = self._extract_test_snippet(
-                    content,
-                    func_name,
+                self._find_test_examples(
+                    tests_dir, func_name, examples,
                 )
-                if snippet:
-                    examples.append(snippet)
-                    if len(examples) >= _MAX_EXAMPLES:
-                        break
+                if len(examples) >= _MAX_EXAMPLES:
+                    break
 
-            return examples
+            return examples[:_MAX_EXAMPLES]
         except Exception:
             logger.debug(
                 "example_search_failed",
@@ -615,6 +698,41 @@ class APIDocGenerator:
                 exc_info=True,
             )
             return []
+
+    def _find_test_examples(
+        self,
+        tests_dir: Path,
+        func_name: str,
+        examples: list[str],
+    ) -> None:
+        """Collect test examples from a test directory into *examples*."""
+        test_pattern = re.compile(
+            r"^(test_.*\.py|.*_test\.py)$",
+        )
+
+        for test_file in sorted(tests_dir.rglob("*.py")):
+            if len(examples) >= _MAX_EXAMPLES:
+                return
+            if not test_pattern.match(test_file.name):
+                continue
+            try:
+                content = test_file.read_text(encoding="utf-8")
+            except Exception:  # noqa: S112
+                continue
+
+            if func_name not in content:
+                continue
+
+            # Try test function snippets
+            snippet = self._extract_test_snippet(content, func_name)
+            if snippet:
+                examples.append(snippet)
+
+            # Try doctest patterns (>>> func_name(...))
+            if len(examples) < _MAX_EXAMPLES:
+                doctest_snippet = _extract_doctest(content, func_name)
+                if doctest_snippet:
+                    examples.append(doctest_snippet)
 
     @staticmethod
     def _extract_test_snippet(content: str, func_name: str) -> str:
@@ -753,10 +871,33 @@ class APIDocGenerator:
                 lines.append(f"| `{const.name}` | `{c_type}` | `{c_val}` |")
             lines.append("")
 
-        # Coverage footer
+        # Re-export notice
+        if module.is_reexport:
+            lines.append("> **Note:** This module re-exports symbols from "
+                         "other modules. See source modules for full documentation.")
+            lines.append("")
+
+        # Quality footer
         lines.append("---")
         lines.append("")
         lines.append(f"*Documentation coverage: {module.coverage}%*")
+        if module.missing_returns > 0 or module.missing_examples > 0:
+            quality_notes: list[str] = []
+            if module.missing_returns:
+                label = "function" if module.missing_returns == 1 else "functions"
+                quality_notes.append(
+                    f"{module.missing_returns} {label} missing return docs"
+                )
+            if module.missing_examples:
+                label = "function" if module.missing_examples == 1 else "functions"
+                quality_notes.append(
+                    f"{module.missing_examples} {label} missing examples"
+                )
+            lines.append(f"*Quality: {", ".join(quality_notes)}*")
+        lines.append("")
+        lines.append(
+            f"*Auto-generated by DocsMCP on {_generation_date()}*"
+        )
         lines.append("")
 
         return "\n".join(lines)
@@ -875,8 +1016,13 @@ class APIDocGenerator:
             lines.append("")
 
         # Returns
-        if func.returns:
-            lines.append(f"**Returns:** {func.returns}")
+        if func.returns or func.return_type:
+            ret_parts: list[str] = []
+            if func.return_type:
+                ret_parts.append(f"`{func.return_type}`")
+            if func.returns:
+                ret_parts.append(func.returns)
+            lines.append(f"**Returns:** {' - '.join(ret_parts)}")
             lines.append("")
 
         # Raises
@@ -1022,6 +1168,67 @@ class APIDocGenerator:
 # ---------------------------------------------------------------------------
 
 
+def _is_reexport_module(file_path: Path, module_info: object) -> bool:
+    """Detect whether a module is a pure re-export (no original definitions).
+
+    A re-export module is typically an ``__init__.py`` that only imports
+    and re-exports symbols from submodules.
+    """
+    from docs_mcp.extractors.models import ModuleInfo
+
+    if not isinstance(module_info, ModuleInfo):
+        return False
+    if file_path.name != "__init__.py":
+        return False
+    # A re-export module has no original functions or classes of its own
+    # but may have constants like __all__
+    has_original = len(module_info.functions) > 0 or len(module_info.classes) > 0
+    return not has_original
+
+
+def _generation_date() -> str:
+    """Return the current date as an ISO string for freshness hints."""
+    import datetime
+
+    return datetime.date.today().isoformat()
+
+
+def _full_description(parsed: object) -> str:
+    """Build a full description from summary + body of a ParsedDocstring.
+
+    Returns the summary line followed by the extended description (if any),
+    separated by a blank line.
+    """
+    from docs_mcp.extractors.docstring_parser import ParsedDocstring
+
+    if not isinstance(parsed, ParsedDocstring):
+        return ""
+    parts: list[str] = []
+    if parsed.summary:
+        parts.append(parsed.summary)
+    if parsed.description:
+        parts.append(parsed.description)
+    return "\n\n".join(parts)
+
+
+def _is_noise_constant(name: str, value: str | None) -> bool:
+    """Return True if a constant is noise and should be filtered.
+
+    Filters logger instances (``logger = structlog.get_logger()``) and
+    well-known noise constants (``__all__``, ``__version__``).
+    """
+    if name in _NOISE_CONSTANTS:
+        return True
+    # Check for logger patterns (case-insensitive name match)
+    name_lower = name.lower()
+    if name_lower in _LOGGER_PATTERNS:
+        return True
+    # Check value for common logger factory calls
+    if value and ("get_logger" in value or "getLogger" in value):
+        return True
+    return False
+
+
 def _format_returns(parsed: object) -> str:
     """Format the returns section from a ParsedDocstring."""
     from docs_mcp.extractors.docstring_parser import ParsedDocstring
@@ -1093,9 +1300,13 @@ def _render_function_rst(
         if p.type:
             lines.append(f"{inner}:type {p.name}: {p.type}")
 
-    if func.returns:
-        # Split returns into type and description if possible
-        if " - " in func.returns:
+    if func.returns or func.return_type:
+        # Use return_type annotation if available, otherwise parse from returns text
+        if func.return_type:
+            lines.append(f"{inner}:rtype: {func.return_type}")
+            if func.returns:
+                lines.append(f"{inner}:returns: {func.returns}")
+        elif " - " in func.returns:
             rtype, rdesc = func.returns.split(" - ", 1)
             lines.append(f"{inner}:returns: {rdesc}")
             lines.append(f"{inner}:rtype: {rtype}")
@@ -1111,6 +1322,48 @@ def _render_function_rst(
 
     lines.append("")
     return lines
+
+
+def _extract_doctest(content: str, func_name: str) -> str:
+    """Extract a doctest block referencing *func_name* from *content*.
+
+    Looks for ``>>> func_name(`` patterns and collects the full
+    doctest block (``>>>`` and ``...`` continuation lines plus
+    expected output lines).
+
+    Returns:
+        The doctest block as a string, or empty string.
+    """
+    pattern = re.compile(
+        r"^(\s*>>>.*" + re.escape(func_name) + r"\s*\()",
+        re.MULTILINE,
+    )
+    match = pattern.search(content)
+    if not match:
+        return ""
+
+    lines = content[match.start():].split("\n")
+    block: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith(">>>") or stripped.startswith("..."):
+            block.append(line)
+        elif block and stripped:
+            # Output line following a doctest
+            block.append(line)
+        elif block:
+            break
+
+    if not block:
+        return ""
+
+    # Dedent the block
+    result = "\n".join(block)
+    if len(result.split("\n")) > _MAX_SNIPPET_LINES:
+        result_lines = result.split("\n")[:_MAX_SNIPPET_LINES]
+        result_lines.append("...")
+        result = "\n".join(result_lines)
+    return result
 
 
 def _find_function_end(content: str, body_start: int) -> int:

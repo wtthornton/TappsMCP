@@ -12,7 +12,7 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 |------|--------------|
 | **tapps_session_start** | **FIRST call in every session** - server info only |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + security |
-| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files |
+| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files. **Pass explicit `file_paths`** when possible. Default is quick mode; only use `quick=false` as a last resort. |
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
@@ -66,7 +66,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
 3. **Before using a library:** Consider calling `tapps_lookup_docs(library=...)` to avoid hallucinated APIs.
 4. **Before modifying a file's API:** Consider `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Consider `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after Python file edits.
-6. **Before declaring work complete:** Consider calling `tapps_validate_changed()` and `tapps_checklist(task_type=...)` to verify quality. Use `tapps_report(format="markdown")` if the user wants a summary.
+6. **Before declaring work complete:** Consider calling `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths and `tapps_checklist(task_type=...)` to verify quality. Default is quick mode; only use `quick=false` as a last resort. Use `tapps_report(format="markdown")` if the user wants a summary.
 7. **When in doubt:** Consider `tapps_consult_expert` or `tapps_research` (expert + docs in one call) for domain questions and `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)

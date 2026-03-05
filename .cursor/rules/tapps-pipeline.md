@@ -34,7 +34,7 @@ Skipping this means quality issues and vulnerabilities go undetected.
 
 ### Before Declaring Work Complete (BLOCKING)
 
-For multi-file changes: You MUST call `tapps_validate_changed()` to batch-validate all changed files.
+For multi-file changes: You MUST call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Never call without `file_paths`** — auto-detect scans all git-changed files and can be very slow in large repos. Default is quick mode (ruff-only, ~10s); only use `quick=false` as a **last resort** (pre-release, security audit — 1-5+ min per file).
 The quality gate MUST pass. Work is NOT done until the gate passes or the user explicitly accepts the risk.
 You MUST call `tapps_checklist(task_type)` as the FINAL step to verify no required tools were skipped.
 NEVER declare work complete without running the checklist.

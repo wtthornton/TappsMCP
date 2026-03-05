@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, ClassVar
 import structlog
 from pydantic import BaseModel
 
+from docs_mcp.constants import SKIP_DIRS
+
 if TYPE_CHECKING:
     from docs_mcp.analyzers.dependency import ImportGraph
     from docs_mcp.analyzers.models import ModuleMap, ModuleNode
@@ -26,6 +28,8 @@ _MAX_DEPENDENCY_NODES = 50
 _MAX_CLASS_NODES = 30
 # Maximum number of files to scan when extracting classes project-wide.
 _MAX_SCAN_FILES = 30
+# Minimum classes/modules before a quality warning is emitted.
+_MIN_RESULTS_THRESHOLD = 3
 
 # Mapping from Python type annotation substrings to ER-diagram type names.
 _PYTHON_TYPE_TO_ER: dict[str, str] = {
@@ -34,6 +38,9 @@ _PYTHON_TYPE_TO_ER: dict[str, str] = {
     "float": "float",
     "bool": "boolean",
 }
+
+# Suffixes that indicate non-source directories.
+_SKIP_SUFFIXES: frozenset[str] = frozenset({".egg-info"})
 
 
 class DiagramResult(BaseModel):
@@ -44,6 +51,9 @@ class DiagramResult(BaseModel):
     content: str
     node_count: int = 0
     edge_count: int = 0
+    degraded: bool = False
+    scanned_dirs: list[str] = []
+    skipped_count: int = 0
 
 
 class DiagramGenerator:
@@ -62,22 +72,6 @@ class DiagramGenerator:
         }
     )
     VALID_FORMATS: ClassVar[frozenset[str]] = frozenset({"mermaid", "plantuml"})
-
-    _SKIP_DIRS: ClassVar[frozenset[str]] = frozenset(
-        {
-            ".git",
-            "__pycache__",
-            ".venv",
-            "venv",
-            "node_modules",
-            ".mypy_cache",
-            ".pytest_cache",
-            ".ruff_cache",
-            "dist",
-            "build",
-            ".eggs",
-        }
-    )
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -138,6 +132,40 @@ class DiagramGenerator:
         }
 
         return dispatch[diagram_type]()
+
+    # ------------------------------------------------------------------
+    # Source directory resolution
+    # ------------------------------------------------------------------
+
+    def _resolve_source_dirs(self, project_root: Path) -> list[Path]:
+        """Auto-detect source directories for the project.
+
+        Checks for ``src/`` layout with package subdirectories first,
+        then falls back to ``project_root`` itself.
+        """
+        src_dir = project_root / "src"
+        if src_dir.is_dir():
+            packages = [
+                d
+                for d in src_dir.iterdir()
+                if d.is_dir()
+                and not self._should_skip_dir(d)
+                and (d / "__init__.py").exists()
+            ]
+            if packages:
+                return packages
+            return [src_dir]
+        return [project_root]
+
+    @staticmethod
+    def _should_skip_dir(directory: Path) -> bool:
+        """Check if a directory should be skipped during traversal."""
+        name = directory.name
+        if name in SKIP_DIRS:
+            return True
+        if name.startswith("."):
+            return True
+        return any(name.endswith(suffix) for suffix in _SKIP_SUFFIXES)
 
     # ------------------------------------------------------------------
     # ID sanitisation
@@ -393,7 +421,7 @@ class DiagramGenerator:
     ) -> DiagramResult:
         """Generate a class hierarchy diagram."""
         try:
-            classes = self._collect_classes(project_root, scope)
+            classes, scanned_dirs, skipped = self._collect_classes(project_root, scope)
         except Exception:
             logger.warning("class_collection_failed", path=str(project_root))
             return DiagramResult(
@@ -402,11 +430,23 @@ class DiagramGenerator:
                 content="",
             )
 
+        degraded = scope == "project" and len(classes) < _MIN_RESULTS_THRESHOLD
+        if degraded:
+            logger.warning(
+                "diagram_possibly_degraded",
+                diagram_type="class_hierarchy",
+                class_count=len(classes),
+                scanned_dirs=scanned_dirs,
+            )
+
         if not classes:
             return DiagramResult(
                 diagram_type="class_hierarchy",
                 format=output_format,
                 content="",
+                degraded=degraded,
+                scanned_dirs=scanned_dirs,
+                skipped_count=skipped,
             )
 
         try:
@@ -428,13 +468,16 @@ class DiagramGenerator:
             content=content,
             node_count=nodes,
             edge_count=edges,
+            degraded=degraded,
+            scanned_dirs=scanned_dirs,
+            skipped_count=skipped,
         )
 
     def _collect_classes(
         self,
         project_root: Path,
         scope: str,
-    ) -> list[tuple[str, ClassInfo]]:
+    ) -> tuple[list[tuple[str, ClassInfo]], list[str], int]:
         """Collect ClassInfo objects from the project.
 
         Args:
@@ -442,7 +485,7 @@ class DiagramGenerator:
             scope: ``"project"`` for all files, or a file path.
 
         Returns:
-            List of ``(module_name, ClassInfo)`` tuples.
+            Tuple of (classes, scanned_dir_names, skipped_file_count).
         """
         from docs_mcp.extractors.python import PythonExtractor
 
@@ -458,26 +501,33 @@ class DiagramGenerator:
                 module_name = file_path.stem
                 for cls in info.classes:
                     classes.append((module_name, cls))
-            return classes
+            return classes, [str(file_path)], 0
 
-        # Project-wide scan.
+        # Resolve source directories instead of scanning entire project_root.
+        source_dirs = self._resolve_source_dirs(project_root)
+        scanned_dir_names = [str(d.relative_to(project_root)) for d in source_dirs]
+
         file_count = 0
-        for py_file in sorted(project_root.rglob("*.py")):
-            if self._should_skip_path(py_file):
-                continue
-            if file_count >= _MAX_SCAN_FILES:
-                break
-            file_count += 1
-            info = extractor.extract(py_file, project_root=project_root)
-            module_name = py_file.stem
-            for cls in info.classes:
-                classes.append((module_name, cls))
+        skipped_count = 0
+        for src_dir in source_dirs:
+            for py_file in sorted(src_dir.rglob("*.py")):
+                if self._should_skip_path(py_file):
+                    skipped_count += 1
+                    continue
+                if file_count >= _MAX_SCAN_FILES:
+                    break
+                file_count += 1
+                info = extractor.extract(py_file, project_root=project_root)
+                module_name = py_file.stem
+                for cls in info.classes:
+                    classes.append((module_name, cls))
 
-        return classes
+        return classes, scanned_dir_names, skipped_count
 
-    def _should_skip_path(self, path: Path) -> bool:
-        """Return True if any path component is in ``_SKIP_DIRS``."""
-        return any(part in self._SKIP_DIRS for part in path.parts)
+    @staticmethod
+    def _should_skip_path(path: Path) -> bool:
+        """Return True if any path component is in ``SKIP_DIRS``."""
+        return any(part in SKIP_DIRS for part in path.parts)
 
     def _classes_to_mermaid(
         self,
@@ -759,7 +809,7 @@ class DiagramGenerator:
     ) -> DiagramResult:
         """Generate an entity-relationship diagram from model classes."""
         try:
-            classes = self._collect_classes(project_root, scope)
+            classes, scanned_dirs, skipped = self._collect_classes(project_root, scope)
         except Exception:
             logger.warning("er_class_collection_failed", path=str(project_root))
             return DiagramResult(
@@ -772,7 +822,11 @@ class DiagramGenerator:
 
         if not models:
             return DiagramResult(
-                diagram_type="er_diagram", format=output_format, content=""
+                diagram_type="er_diagram",
+                format=output_format,
+                content="",
+                scanned_dirs=scanned_dirs,
+                skipped_count=skipped,
             )
 
         try:
@@ -792,6 +846,8 @@ class DiagramGenerator:
             content=content,
             node_count=nodes,
             edge_count=edges,
+            scanned_dirs=scanned_dirs,
+            skipped_count=skipped,
         )
 
     def _is_model_class(self, cls: ClassInfo) -> bool:

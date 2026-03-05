@@ -1,130 +1,138 @@
 # Contributing to TappsMCP
 
-Thank you for considering contributing to TappsMCP! This document provides guidelines and instructions for contributing to this quality toolset for AI coding assistants.
+Thank you for your interest in contributing to TappsMCP! This guide covers everything you need to get started.
+
+## Prerequisites
+
+- **Python 3.12+**
+- **[uv](https://docs.astral.sh/uv/)** package manager (recommended)
+- **Git**
 
 ## Development Setup
 
-### Prerequisites
-
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
-
-### Getting Started
-
 ```bash
+# Clone the repository
 git clone https://github.com/tapps-mcp/tapps-mcp.git
-cd tapps-mcp
+cd TappMCP
+
+# Install all packages (uv workspace)
 uv sync --all-packages
+
+# Verify setup
+uv run tapps-mcp doctor
 ```
 
-### Running Tests
+## Repository Structure
 
-This is a **uv workspace monorepo** — run tests per package to avoid conftest collisions:
+This is a **uv workspace monorepo** with three packages:
+
+| Package | Path | Purpose |
+|---|---|---|
+| **tapps-core** | `packages/tapps-core/` | Shared infrastructure library |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (28 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (19 tools) |
+
+## Running Tests
+
+Run tests per-package to avoid conftest collisions:
 
 ```bash
-# Run tests per package (4,800+ tests total)
-uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1,269 tests)
-uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (3,420 tests)
-uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (107 tests)
+# All tests per package
+uv run pytest packages/tapps-core/tests/ -v      # ~1,269 tests
+uv run pytest packages/tapps-mcp/tests/ -v        # ~3,420 tests
+uv run pytest packages/docs-mcp/tests/ -v         # ~107 tests
 
-# With coverage (80% minimum required)
-uv run pytest packages/tapps-mcp/tests/ --cov=tapps_mcp --cov-report=term-missing
-
-# Specific test file
+# Single test file
 uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v
+
+# Single test by name
+uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -k "test_score_empty_file" -v
+
+# Skip slow subprocess-heavy tests
+uv run pytest packages/tapps-mcp/tests/ -m "not slow" -v
 ```
 
-### Linting and Type Checking
+## Code Quality
+
+### Linting & Formatting
 
 ```bash
-# Lint
 uv run ruff check packages/*/src/
 uv run ruff format --check packages/*/src/
+```
 
-# Type check (strict mode)
+### Type Checking
+
+```bash
 uv run mypy --strict packages/tapps-mcp/src/tapps_mcp/
 uv run mypy --strict packages/tapps-core/src/tapps_core/
 ```
 
-### Verify Setup
+### Self-Hosted Quality Pipeline
 
-```bash
-# Diagnose configuration
-tapps-mcp doctor
+When TappsMCP's own MCP server is available, use it on this codebase:
 
-# Start server locally to test
-uv run tapps-mcp serve
-```
+1. Call `tapps_session_start` first
+2. Use `tapps_quick_check` after editing Python files
+3. Use `tapps_validate_changed` before declaring work complete
+4. Call `tapps_checklist(task_type="feature")` as the final step
 
-## How to Contribute
+## Code Conventions
 
-### Reporting Issues
-
-- Use [GitHub Issues](https://github.com/tapps-mcp/tapps-mcp/issues)
-- Include Python version, OS, and steps to reproduce
-
-### Pull Requests
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Make your changes
-4. Run tests and linting (`uv run pytest tests/ -v && uv run ruff check src/ && uv run mypy --strict src/tapps_mcp/`)
-5. Commit with a descriptive message
-6. Push and open a PR
-
-### Code Style
-
-- Follow existing patterns in the codebase
-- `from __future__ import annotations` at top of every file
-- Type annotations everywhere (`mypy --strict`)
-- Use `structlog` for logging (not `print()` or `logging`)
-- Use `pathlib.Path` for file paths
-- Pydantic v2 models for data structures
-- `ruff` for linting and formatting (line length: 100)
-- Async/await for tool handlers and external I/O
+- **Python 3.12+** with `from __future__ import annotations` at the top of every file
+- **Type annotations everywhere** -- `mypy --strict` must pass
+- **`structlog`** for logging -- never `print()` or `logging` directly
+- **`pathlib.Path`** for all file paths
+- **Pydantic v2** models for configuration and data structures
+- **`ruff`** for linting and formatting (line length: 100)
+- **Async/await** for all tool handlers and external I/O
 - All file operations through the path validator (`security/path_validator.py`)
 
-### Adding a New Tool
+## Adding a New MCP Tool
 
-1. Add the tool handler in the appropriate `server_*.py` file (or `server.py` for core tools)
-2. Use `@mcp.tool()` decorator with clear docstring (lead with "When to use")
-3. Add `_record_call("tool_name")` at the start of the handler
-4. Register the tool in the checklist task map (`packages/tapps-mcp/src/tapps_mcp/tools/checklist.py`)
+1. Add the handler in the appropriate `server_*.py` file using `@mcp.tool()`
+2. Call `_record_call("tool_name")` at the top of the handler (for checklist tracking)
+3. Register the tool in the checklist task map (`tools/checklist.py`)
+4. Add to `AGENTS.md` and `README.md` tools reference
 5. Add tests in `packages/tapps-mcp/tests/unit/` and optionally `tests/integration/`
-6. Update `AGENTS.md` with the new tool's "When to use" entry
-7. Update `README.md` tools reference table
 
-### Adding Knowledge Files
+## Submitting Changes
 
-Expert knowledge files live in `packages/tapps-core/src/tapps_core/experts/knowledge/{domain}/`. To add a new topic:
+1. Create a feature branch from `master`:
 
-1. Create a markdown file in the appropriate domain directory
-2. Follow the existing format (title, sections, code examples)
-3. The file is automatically picked up by the expert system
-4. Delete any existing RAG index for that domain to trigger a rebuild
+   ```bash
+   git checkout -b feature/my-feature
+   ```
 
-### Adding Validators
+2. Make your changes and ensure tests pass:
 
-Config validators live in `packages/tapps-mcp/src/tapps_mcp/validators/`. To add a new validator:
+   ```bash
+   uv run pytest packages/<affected-package>/tests/ -v
+   uv run ruff check packages/<affected-package>/src/
+   uv run mypy --strict packages/<affected-package>/src/<package_name>/
+   ```
 
-1. Create a new module in `validators/`
-2. Implement a validation function following the pattern in `base.py`
-3. Register it in the auto-detection logic in `base.py`
-4. Add tests in `packages/tapps-mcp/tests/unit/`
+3. Commit with a descriptive message (conventional commits preferred):
 
-## Project Context
+   ```bash
+   git commit -m "feat: add my new feature"
+   ```
 
-TappsMCP is a **toolset for other projects** — changes should consider how consuming projects will be affected. Key integration points:
+4. Push and open a Pull Request against `master`
 
-- `tapps_init` bootstraps TappsMCP in consuming projects (creates AGENTS.md, TECH_STACK.md, platform rules)
-- `tapps-mcp init` generates MCP host configuration for Claude Code, Cursor, or VS Code
-- `tapps-mcp doctor` diagnoses configuration and connectivity issues
-- AGENTS.md is the primary AI-facing documentation consumed by other projects
+## Known Gotchas
 
-## Architecture
+- **mypy + `@mcp.tool()`**: The mcp SDK decorator is untyped. `pyproject.toml` has `disallow_untyped_decorators = false` for `tapps_mcp.server`.
+- **Pydantic + `TYPE_CHECKING`**: Models using forward refs must import at runtime, not under `TYPE_CHECKING`. Use `# noqa: TC001`.
+- **Windows testing**: Use `python -c "import time; time.sleep(N)"` for timeout tests.
+- **Patching lazy imports**: Some imports happen inside tool handlers from `tapps_core`. Patch at source modules, not re-export wrappers.
 
-See [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) for the full architecture document and [CLAUDE.md](CLAUDE.md) for AI assistant instructions when working on this codebase.
+## Reporting Issues
 
-## License
+When reporting issues, please include:
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+- A clear and descriptive title
+- Steps to reproduce the problem
+- Expected behavior vs actual behavior
+- Your environment (OS, Python version, MCP client)
+- Relevant tool output or error messages

@@ -20,7 +20,7 @@ Consider calling `tapps_quick_check(file_path)` after editing Python files.
 
 ### Before Declaring Work Complete
 
-Consider calling `tapps_validate_changed()` for multi-file changes and `tapps_checklist(task_type)` to verify steps.
+Consider calling `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths for multi-file changes and `tapps_checklist(task_type)` to verify steps. Default is quick mode; only use `quick=false` as a last resort.
 
 ### Domain Decisions
 

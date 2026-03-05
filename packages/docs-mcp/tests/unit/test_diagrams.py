@@ -1002,3 +1002,190 @@ class TestDiagramMCPTool:
         assert result["data"]["diagram_type"] == "class_hierarchy"
         assert result["data"]["node_count"] >= 1
         assert len(result["data"]["content"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# Source directory resolution (Epic 14)
+# ---------------------------------------------------------------------------
+
+
+class TestSourceDirResolution:
+    """_resolve_source_dirs auto-detects src/ layout and monorepo structure."""
+
+    def test_src_layout_detected(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """A project with src/<pkg>/ scans only the package dir."""
+        root = tmp_path / "project"
+        root.mkdir()
+        pkg = root / "src" / "mypkg"
+        pkg.mkdir(parents=True)
+        (pkg / "__init__.py").write_text("")
+        _write_py(pkg, "core.py", CLASS_HIERARCHY_CODE)
+
+        # Also put a decoy file at root level that should NOT be scanned
+        _write_py(root, "setup.py", "class SetupDecoy:\n    pass\n")
+
+        result = generator.generate(root, diagram_type="class_hierarchy")
+        assert "Animal" in result.content
+        assert "SetupDecoy" not in result.content
+
+    def test_flat_layout_fallback(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """Without src/, scans project root."""
+        root = tmp_path / "flat"
+        root.mkdir()
+        _write_py(root, "models.py", CLASS_HIERARCHY_CODE)
+
+        result = generator.generate(root, diagram_type="class_hierarchy")
+        assert "Animal" in result.content
+        assert result.node_count >= 3
+
+    def test_monorepo_src_with_multiple_packages(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """A monorepo with src/<pkg_a>/ and src/<pkg_b>/ scans both."""
+        root = tmp_path / "mono"
+        root.mkdir()
+        pkg_a = root / "src" / "alpha"
+        pkg_a.mkdir(parents=True)
+        (pkg_a / "__init__.py").write_text("")
+        _write_py(pkg_a, "a.py", "class AlphaClass:\n    pass\n")
+
+        pkg_b = root / "src" / "beta"
+        pkg_b.mkdir(parents=True)
+        (pkg_b / "__init__.py").write_text("")
+        _write_py(pkg_b, "b.py", "class BetaClass:\n    pass\n")
+
+        result = generator.generate(root, diagram_type="class_hierarchy")
+        assert "AlphaClass" in result.content
+        assert "BetaClass" in result.content
+
+    def test_venv_not_scanned(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """Files inside .venv/ are skipped."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        _write_py(root, "app.py", CLASS_HIERARCHY_CODE)
+
+        venv_pkg = root / ".venv" / "lib" / "somepackage"
+        venv_pkg.mkdir(parents=True)
+        _write_py(venv_pkg, "junk.py", "class VenvJunk:\n    pass\n")
+
+        result = generator.generate(root, diagram_type="class_hierarchy")
+        assert "Animal" in result.content
+        assert "VenvJunk" not in result.content
+
+    def test_site_packages_not_scanned(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """Files inside site-packages/ are skipped."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        _write_py(root, "app.py", CLASS_HIERARCHY_CODE)
+
+        sp = root / "site-packages" / "pip"
+        sp.mkdir(parents=True)
+        _write_py(sp, "internal.py", "class PipInternal:\n    pass\n")
+
+        result = generator.generate(root, diagram_type="class_hierarchy")
+        assert "Animal" in result.content
+        assert "PipInternal" not in result.content
+
+
+# ---------------------------------------------------------------------------
+# DiagramResult metadata (Epic 14)
+# ---------------------------------------------------------------------------
+
+
+class TestDiagramResultMetadata:
+    """DiagramResult includes degraded flag and scanned_dirs metadata."""
+
+    def test_scanned_dirs_populated(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """scanned_dirs lists the directories that were actually scanned."""
+        _write_py(tmp_path, "models.py", CLASS_HIERARCHY_CODE)
+        result = generator.generate(
+            tmp_path, diagram_type="class_hierarchy"
+        )
+        assert len(result.scanned_dirs) >= 1
+
+    def test_degraded_false_with_classes(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """degraded is False when enough classes are found."""
+        _write_py(tmp_path, "animals.py", CLASS_HIERARCHY_CODE)
+        result = generator.generate(
+            tmp_path, diagram_type="class_hierarchy"
+        )
+        # 3 classes (Animal, Dog, Puppy) meets the threshold
+        assert result.degraded is False
+
+    def test_degraded_true_with_few_classes(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """degraded is True when fewer than threshold classes found."""
+        _write_py(tmp_path, "tiny.py", "class Solo:\n    pass\n")
+        result = generator.generate(
+            tmp_path, diagram_type="class_hierarchy"
+        )
+        # Only 1 class, below _MIN_RESULTS_THRESHOLD (3)
+        assert result.degraded is True
+
+    def test_degraded_not_set_for_single_file_scope(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """degraded is not set when scope is a specific file."""
+        _write_py(tmp_path, "one.py", "class One:\n    pass\n")
+        result = generator.generate(
+            tmp_path,
+            diagram_type="class_hierarchy",
+            scope=str(tmp_path / "one.py"),
+        )
+        # Single-file scope should not trigger degraded
+        assert result.degraded is False
+
+    def test_er_diagram_has_scanned_dirs(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """ER diagrams also include scanned_dirs metadata."""
+        _write_py(tmp_path, "models.py", MODEL_CODE)
+        result = generator.generate(
+            tmp_path, diagram_type="er_diagram"
+        )
+        assert len(result.scanned_dirs) >= 1
+
+    def test_default_metadata_values(self) -> None:
+        """New DiagramResult fields have sensible defaults."""
+        r = DiagramResult(diagram_type="test", format="mermaid", content="")
+        assert r.degraded is False
+        assert r.scanned_dirs == []
+        assert r.skipped_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Shared constants (Epic 14)
+# ---------------------------------------------------------------------------
+
+
+class TestSharedConstants:
+    """SKIP_DIRS from constants module is used."""
+
+    def test_skip_dirs_includes_site_packages(self) -> None:
+        from docs_mcp.constants import SKIP_DIRS
+
+        assert "site-packages" in SKIP_DIRS
+
+    def test_skip_dirs_includes_venv(self) -> None:
+        from docs_mcp.constants import SKIP_DIRS
+
+        assert ".venv" in SKIP_DIRS
+        assert "venv" in SKIP_DIRS
+
+    def test_skip_dirs_includes_tox(self) -> None:
+        from docs_mcp.constants import SKIP_DIRS
+
+        assert ".tox" in SKIP_DIRS

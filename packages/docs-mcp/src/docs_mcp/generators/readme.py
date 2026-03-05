@@ -72,11 +72,13 @@ class ReadmeGenerator:
             metadata = extractor.extract(project_root)
 
         # Build template context
+        project_name = metadata.name or project_root.name
+        description = self._smart_description(
+            metadata, project_root, project_name,
+        )
         context: dict[str, str] = {
-            "name": metadata.name or project_root.name,
-            "description": metadata.description or (
-                f"A {metadata.name or project_root.name} project."
-            ),
+            "name": project_name,
+            "description": description,
         }
 
         # Sections common to all styles
@@ -100,6 +102,83 @@ class ReadmeGenerator:
 
         template = self._env.get_template(f"{self._style}.md.j2")
         return template.render(**context)
+
+    @staticmethod
+    def _smart_description(
+        metadata: ProjectMetadata,
+        project_root: Path,
+        project_name: str,
+    ) -> str:
+        """Derive a project description using multiple fallback sources.
+
+        Tries in order:
+        1. ``metadata.description`` (from pyproject.toml/package.json)
+        2. First paragraph of an existing README.md
+        3. Package ``__init__.py`` docstring
+        4. Generic fallback
+
+        Args:
+            metadata: Extracted project metadata.
+            project_root: Root directory of the project.
+            project_name: Display name for the project.
+
+        Returns:
+            A non-empty description string.
+        """
+        # 1. Metadata description (already extracted from config file)
+        if metadata.description:
+            return metadata.description
+
+        # 2. First paragraph of existing README
+        for readme_name in ("README.md", "README.rst", "README.txt", "README"):
+            readme_path = project_root / readme_name
+            if readme_path.exists():
+                try:
+                    text = readme_path.read_text(encoding="utf-8").strip()
+                    # Skip title lines (# heading or === underline)
+                    lines = text.split("\n")
+                    para_lines: list[str] = []
+                    past_title = False
+                    for line in lines:
+                        stripped = line.strip()
+                        if not past_title:
+                            if stripped.startswith("#") or stripped.startswith("="):
+                                continue
+                            if not stripped:
+                                continue
+                            past_title = True
+                        if past_title:
+                            if not stripped and para_lines:
+                                break
+                            if stripped:
+                                para_lines.append(stripped)
+                    if para_lines:
+                        return " ".join(para_lines)
+                except Exception:
+                    pass
+
+        # 3. Package __init__.py docstring
+        for init_candidate in (
+            project_root / "src" / project_name.replace("-", "_") / "__init__.py",
+            project_root / project_name.replace("-", "_") / "__init__.py",
+        ):
+            if init_candidate.exists():
+                try:
+                    content = init_candidate.read_text(encoding="utf-8")
+                    # Extract module docstring (triple-quoted first string)
+                    for quote in ('"""', "'''"):
+                        if quote in content:
+                            start = content.index(quote) + 3
+                            end = content.index(quote, start)
+                            docstring = content[start:end].strip()
+                            first_line = docstring.split("\n")[0].strip()
+                            if first_line:
+                                return first_line
+                except Exception:
+                    pass
+
+        # 4. Generic fallback
+        return f"A {project_name} project."
 
     def _generate_installation(self, metadata: ProjectMetadata) -> str:
         """Generate installation instructions based on detected package manager."""
@@ -171,7 +250,11 @@ class ReadmeGenerator:
         return "  ".join(badges)
 
     def _generate_features(self, project_root: Path) -> str:
-        """Generate a features section based on project structure analysis."""
+        """Generate a features section based on project structure analysis.
+
+        Uses API surface analysis and import detection rather than
+        simple directory existence checks.
+        """
         features: list[str] = []
 
         # Detect features from project structure
@@ -201,9 +284,12 @@ class ReadmeGenerator:
             analyzer = ModuleMapAnalyzer()
             result = analyzer.analyze(project_root, depth=2)
             if result.total_modules > 0:
+                api_label = (
+                    "public API" if result.public_api_count == 1 else "public APIs"
+                )
                 features.append(
                     f"- {result.total_modules} modules with "
-                    f"{result.public_api_count} public APIs"
+                    f"{result.public_api_count} {api_label}"
                 )
             if result.entry_points:
                 features.append(
@@ -212,7 +298,70 @@ class ReadmeGenerator:
         except Exception:
             logger.debug("features_analysis_failed")
 
+        # Detect framework usage from imports
+        features.extend(self._detect_frameworks(project_root))
+
         return "\n".join(features) if features else ""
+
+    @staticmethod
+    def _detect_frameworks(project_root: Path) -> list[str]:
+        """Detect framework usage by scanning imports in source files.
+
+        Returns:
+            List of feature bullet points for detected frameworks.
+        """
+        from docs_mcp.constants import SKIP_DIRS
+
+        framework_markers: dict[str, str] = {
+            "fastapi": "FastAPI web framework",
+            "flask": "Flask web framework",
+            "django": "Django web framework",
+            "fastmcp": "FastMCP server framework",
+            "click": "Click CLI framework",
+            "typer": "Typer CLI framework",
+            "pydantic": "Pydantic data validation",
+            "sqlalchemy": "SQLAlchemy ORM",
+            "pytest": "pytest testing framework",
+        }
+
+        detected: set[str] = set()
+        try:
+            # Scan a limited number of source files for imports
+            count = 0
+            for py_file in project_root.rglob("*.py"):
+                # Skip excluded directories
+                skip = False
+                try:
+                    rel = py_file.relative_to(project_root)
+                    for part in rel.parts:
+                        if part in SKIP_DIRS:
+                            skip = True
+                            break
+                except ValueError:
+                    skip = True
+                if skip:
+                    continue
+
+                count += 1
+                if count > 50:  # noqa: PLR2004
+                    break
+
+                try:
+                    content = py_file.read_text(encoding="utf-8")
+                except Exception:  # noqa: S112
+                    continue
+
+                for module, label in framework_markers.items():
+                    if module not in detected and (
+                        f"import {module}" in content
+                        or f"from {module}" in content
+                    ):
+                        detected.add(module)
+
+        except Exception:
+            pass
+
+        return [f"- {framework_markers[m]}" for m in sorted(detected)]
 
     def _generate_usage(self, metadata: ProjectMetadata) -> str:
         """Generate a basic usage section."""

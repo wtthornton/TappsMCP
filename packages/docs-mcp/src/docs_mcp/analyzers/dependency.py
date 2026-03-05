@@ -54,6 +54,7 @@ class ImportGraphBuilder:
             "dist",
             "build",
             ".eggs",
+            "site-packages",
         }
     )
 

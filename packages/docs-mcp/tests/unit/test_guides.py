@@ -667,3 +667,110 @@ class TestDocsGenerateContributing:
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
+
+
+# ---------------------------------------------------------------------------
+# Epic 16 — Key Concepts from API Surface
+# ---------------------------------------------------------------------------
+
+
+class TestKeyConceptsGeneration:
+    """Test auto-generated key concepts in onboarding guide."""
+
+    def test_key_concepts_with_classes(self, tmp_path: Path) -> None:
+        """Key concepts section shows class names + docstrings."""
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "concepts-test"\n',
+            encoding="utf-8",
+        )
+        src = tmp_path / "models.py"
+        src.write_text(
+            '"""Models module."""\n\n'
+            'class UserProfile:\n'
+            '    """Represents a user profile in the system."""\n'
+            '    pass\n\n'
+            'class Settings:\n'
+            '    """Application configuration settings."""\n'
+            '    pass\n',
+            encoding="utf-8",
+        )
+
+        gen = OnboardingGuideGenerator()
+        result = gen.generate(tmp_path)
+
+        assert "Key Concepts" in result
+        assert "UserProfile" in result
+        assert "Settings" in result
+
+    def test_key_concepts_falls_back_to_placeholder(self, tmp_path: Path) -> None:
+        """Falls back to placeholder when no classes found."""
+        gen = OnboardingGuideGenerator()
+        result = gen.generate(tmp_path)
+
+        assert "Key Concepts" in result
+        assert "<!-- Add key concepts" in result
+
+
+# ---------------------------------------------------------------------------
+# Epic 16 — Tool Config Detection
+# ---------------------------------------------------------------------------
+
+
+class TestToolConfigDetection:
+    """Test _detect_tool_config from pyproject.toml."""
+
+    def test_detects_ruff_from_tool_section(self, tmp_path: Path) -> None:
+        """Detects ruff when [tool.ruff] exists in pyproject.toml."""
+        from docs_mcp.generators.guides import _detect_tool_config
+
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "test"\n\n[tool.ruff]\nline-length = 100\n',
+            encoding="utf-8",
+        )
+        tools = _detect_tool_config(tmp_path)
+        assert "ruff" in tools
+
+    def test_detects_mypy_from_tool_section(self, tmp_path: Path) -> None:
+        """Detects mypy when [tool.mypy] exists."""
+        from docs_mcp.generators.guides import _detect_tool_config
+
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "test"\n\n[tool.mypy]\nstrict = true\n',
+            encoding="utf-8",
+        )
+        tools = _detect_tool_config(tmp_path)
+        assert "mypy" in tools
+
+    def test_empty_project_returns_empty(self, tmp_path: Path) -> None:
+        """No pyproject.toml returns empty set."""
+        from docs_mcp.generators.guides import _detect_tool_config
+
+        tools = _detect_tool_config(tmp_path)
+        assert tools == set()
+
+
+# ---------------------------------------------------------------------------
+# Epic 16 — CI Workflow References
+# ---------------------------------------------------------------------------
+
+
+class TestCIWorkflowReferences:
+    """Test CI workflow detection in contributing testing section."""
+
+    def test_mentions_ci_workflows(self, tmp_path: Path) -> None:
+        """Contributing guide mentions CI workflows when present."""
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "citest"\ndependencies = ["pytest"]\n',
+            encoding="utf-8",
+        )
+        ci_dir = tmp_path / ".github" / "workflows"
+        ci_dir.mkdir(parents=True)
+        (ci_dir / "ci.yml").write_text("name: CI\n", encoding="utf-8")
+        (ci_dir / "release.yml").write_text("name: Release\n", encoding="utf-8")
+
+        gen = ContributingGuideGenerator()
+        result = gen.generate(tmp_path)
+
+        assert "CI runs automatically" in result
+        assert "ci" in result
+        assert "release" in result
