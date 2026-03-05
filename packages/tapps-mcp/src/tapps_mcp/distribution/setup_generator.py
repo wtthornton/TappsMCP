@@ -765,6 +765,10 @@ def _format_upgrade_result(result: dict[str, Any], *, dry_run: bool = False) -> 
         )
     elif not errors:
         click.echo(click.style("Upgrade complete!", fg="green"))
+        click.echo(
+            "\nFor the full consumer requirements checklist, "
+            "see docs/TAPPS_MCP_REQUIREMENTS.md"
+        )
     else:
         for err in errors:
             click.echo(click.style(f"  Error: {err}", fg="red"))

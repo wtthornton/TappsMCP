@@ -1149,6 +1149,11 @@ async def tapps_init(
             "See docs/MCP_COMPOSITION.md for guidance on adding GitHub, "
             "YouTube, Sentry, and other MCPs alongside TappsMCP."
         )
+    result["consumer_requirements"] = (
+        "For a full checklist of what you need to use most tools "
+        "(server visibility, permissions, CLI fallback), "
+        "see docs/TAPPS_MCP_REQUIREMENTS.md"
+    )
     result["developer_workflow"] = get_developer_workflow_dict(
         setup_done=not result["errors"],
     )

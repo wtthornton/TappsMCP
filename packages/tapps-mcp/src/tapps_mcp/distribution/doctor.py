@@ -643,6 +643,101 @@ def _is_docker_available() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Consumer requirements mapping (Epic 50)
+# ---------------------------------------------------------------------------
+
+_NUM_REQUIREMENTS = 7
+
+# Check name -> requirement number mapping
+_REQ_CHECK_MAP: dict[int, list[str]] = {
+    2: [
+        "Claude Code (project) config",
+        "Claude Code (user) config",
+        "Cursor config",
+        "VS Code config",
+    ],
+    3: [".claude/settings.json"],
+    4: ["AGENTS.md", "Hooks", "CLAUDE.md rules", "Cursor rules"],
+    5: [
+        "Tool: ruff",
+        "Tool: mypy",
+        "Tool: bandit",
+        "Tool: radon",
+        "Quality tools",
+    ],
+    6: ["tapps-mcp binary"],
+}
+
+_REQ_NAMES: dict[int, str] = {
+    1: "Server available",
+    2: "MCP config",
+    3: "Tool permissions",
+    4: "Bootstrap (init)",
+    5: "Python scoring tools",
+    6: "CLI fallback",
+    7: "Verification table",
+}
+
+
+def _build_requirements_summary(
+    checks: list[CheckResult],
+) -> list[dict[str, Any]]:
+    """Map doctor check results to the 7 consumer requirements.
+
+    Returns a list of dicts with keys: requirement, name, status, checks.
+    """
+    check_by_name: dict[str, bool] = {c.name: c.ok for c in checks}
+
+    summary: list[dict[str, Any]] = []
+
+    for req_num in range(1, _NUM_REQUIREMENTS + 1):
+        name = _REQ_NAMES[req_num]
+
+        if req_num == 1:
+            summary.append({
+                "requirement": req_num,
+                "name": name,
+                "status": "verify_in_session",
+                "checks": [],
+            })
+            continue
+
+        if req_num == _NUM_REQUIREMENTS:
+            summary.append({
+                "requirement": req_num,
+                "name": name,
+                "status": "see_docs",
+                "checks": [],
+            })
+            continue
+
+        mapped_checks = _REQ_CHECK_MAP.get(req_num, [])
+        found_any = False
+        any_pass = False
+        for cname in mapped_checks:
+            if cname in check_by_name:
+                found_any = True
+                if check_by_name[cname]:
+                    any_pass = True
+
+        if not found_any:
+            status = "n/a"
+        elif any_pass:
+            status = "pass"
+        else:
+            status = "fail"
+
+        summary.append({
+            "requirement": req_num,
+            "name": name,
+            "status": status,
+            "checks": [c for c in mapped_checks if c in check_by_name],
+        })
+
+    return summary
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -802,6 +897,10 @@ def run_doctor_structured(
             "fail_count": docker_fail,
         }
 
+    # Consumer requirements summary (Epic 50)
+    all_checks = checks + docker_checks
+    out["requirements_summary"] = _build_requirements_summary(all_checks)
+
     # Report engagement level when configured (Epic 18.8)
     engagement = _read_engagement_level(root)
     if engagement is not None:
@@ -874,5 +973,24 @@ def run_doctor(*, project_root: str = ".", quick: bool = False) -> bool:
                 fg="yellow",
             )
         )
+
+    # Consumer requirements summary (Epic 50)
+    all_checks = checks + docker_checks
+    click.echo("")
+    click.echo(click.style("=== Consumer Requirements Summary ===", bold=True))
+    req_summary = _build_requirements_summary(all_checks)
+    for req in req_summary:
+        status = req["status"]
+        if status == "pass":
+            styled = click.style("PASS", fg="green")
+        elif status == "fail":
+            styled = click.style("FAIL", fg="red")
+        elif status == "n/a":
+            styled = click.style("N/A", fg="cyan")
+        else:
+            styled = click.style("INFO", fg="cyan")
+        click.echo(f"  {req['requirement']}. {req['name']:24s} {styled}")
+    click.echo("")
+    click.echo("For the full consumer requirements checklist, see docs/TAPPS_MCP_REQUIREMENTS.md")
 
     return fail_count == 0

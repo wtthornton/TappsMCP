@@ -68,3 +68,5 @@ provide the full tool reference from this skill.
 | **tapps_set_engagement_level** | Change enforcement intensity (high/medium/low) |
 
 Use `tapps_server_info` for the latest recommended workflow string.
+
+For first-time setup and troubleshooting (server visibility, permissions, CLI fallback), see docs/TAPPS_MCP_REQUIREMENTS.md

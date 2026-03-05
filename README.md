@@ -231,6 +231,12 @@ The server listens at **http://localhost:8000** (MCP at `/mcp`). See [Docker](#d
 
 ---
 
+## What you need
+
+TappsMCP requires an MCP config in your project, a connected MCP host, and (for scoring tools) Python. For the full checklist covering server visibility, permissions, bootstrap, and CLI fallback, see **[docs/TAPPS_MCP_REQUIREMENTS.md](docs/TAPPS_MCP_REQUIREMENTS.md)**. Run `tapps-mcp doctor` to verify your setup.
+
+---
+
 ## Quick start
 
 After [installing](#install), set up TappsMCP in your project and connect your AI client.

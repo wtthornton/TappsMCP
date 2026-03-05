@@ -231,6 +231,8 @@ On unsupported clients, tools fall back to default behavior silently.
 
 ## Troubleshooting: MCP server not available
 
+For the full consumer requirements checklist, see [docs/TAPPS_MCP_REQUIREMENTS.md](docs/TAPPS_MCP_REQUIREMENTS.md).
+
 TappsMCP tools (`tapps_session_start`, `tapps_init`, `tapps_quick_check`, etc.) are only callable when the tapps-mcp server is **listed as an available MCP server** in your host (Claude Code, Cursor, or VS Code). If the server is configured in MCP config files but not visible to the agent, tool calls will fail.
 
 **How to verify the server is available:**

@@ -383,5 +383,6 @@ def upgrade_pipeline(
         result["components"]["github_copilot"] = {"action": "would-regenerate"}
 
     result["success"] = len(result["errors"]) == 0
+    result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
 
     return result

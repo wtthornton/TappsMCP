@@ -15,6 +15,8 @@ Bootstrap TappsMCP in a new or existing project:
 4. Verify that `.claude/settings.json` has MCP tool auto-approval rules
 5. Confirm the project is ready for the TappsMCP quality workflow
 
+For the full consumer requirements checklist (server visibility, permissions, CLI fallback), see docs/TAPPS_MCP_REQUIREMENTS.md
+
 **If `tapps_init` is not available** (server not in available MCP servers), use the CLI:
 1. Run from the project root: `tapps-mcp upgrade --force --host auto`
 2. Then verify: `tapps-mcp doctor`
