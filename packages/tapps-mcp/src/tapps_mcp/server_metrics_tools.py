@@ -148,8 +148,15 @@ async def tapps_dashboard(
         return _with_nudges("tapps_dashboard", resp)
 
     from tapps_core.metrics.dashboard import DashboardGenerator
+    from tapps_mcp.server_helpers import _get_memory_store
 
-    dashboard = hub.get_dashboard_generator()
+    memory_store = None
+    try:
+        memory_store = _get_memory_store()
+    except Exception:
+        pass
+
+    dashboard = hub.get_dashboard_generator(memory_store=memory_store)
     since = DashboardGenerator._parse_time_range(time_range)
 
     if output_format == "json":

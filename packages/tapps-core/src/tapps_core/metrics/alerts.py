@@ -96,6 +96,13 @@ _DEFAULT_CONDITIONS: list[AlertCondition] = [
         condition="above",
         severity=AlertSeverity.CRITICAL,
     ),
+    AlertCondition(
+        name="memory_capacity_high",
+        metric_type="memory_capacity_pct",
+        threshold=0.80,
+        condition="above",
+        severity=AlertSeverity.WARNING,
+    ),
 ]
 
 

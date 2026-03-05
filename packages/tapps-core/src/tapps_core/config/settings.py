@@ -118,6 +118,17 @@ class MemorySettings(BaseSettings):
     decay: MemoryDecaySettings = Field(default_factory=MemoryDecaySettings)
 
 
+class DocSourceConfig(BaseModel):
+    """Custom documentation source for a specific library."""
+
+    url: str | None = Field(default=None, description="URL to fetch documentation from.")
+    file: str | None = Field(
+        default=None,
+        description="Local file path (relative to project root) containing documentation.",
+    )
+    format: str = Field(default="markdown", description="Content format: markdown or text.")
+
+
 class DockerSettings(BaseModel):
     """Docker MCP distribution settings."""
 
@@ -284,6 +295,23 @@ class TappsMCPSettings(BaseSettings):
         default=1200,
         ge=200,
         description="Maximum number of characters merged from Context7 fallback content.",
+    )
+
+    # Custom documentation sources (Epic 54)
+    doc_sources: dict[str, DocSourceConfig] = Field(
+        default_factory=dict,
+        description=(
+            "Custom documentation sources keyed by library name. "
+            "These take priority over Context7/LlmsTxt providers."
+        ),
+    )
+
+    # Tech stack RAG boost (Epic 54)
+    tech_stack_boost: float = Field(
+        default=1.2,
+        ge=1.0,
+        le=3.0,
+        description="Boost multiplier for RAG chunks matching the project tech stack domains.",
     )
 
     # Docker MCP distribution (Epic 46)

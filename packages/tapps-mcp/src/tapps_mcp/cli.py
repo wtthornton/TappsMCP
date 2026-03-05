@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
 import click
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from tapps_mcp import __version__
 
@@ -92,6 +96,12 @@ def serve(transport: str, host: str, port: int) -> None:
         "Writes to .tapps-mcp.yaml."
     ),
 )
+@click.option(
+    "--overwrite-tech-stack",
+    is_flag=True,
+    default=False,
+    help="Overwrite existing TECH_STACK.md with auto-detected content (default: preserve).",
+)
 def init(
     mcp_host: str,
     project_root: str,
@@ -101,6 +111,7 @@ def init(
     rules: bool,
     dry_run: bool,
     engagement_level: str | None,
+    overwrite_tech_stack: bool,
 ) -> None:
     """Generate MCP configuration for Claude Code, Cursor, or VS Code."""
     from tapps_mcp.distribution.setup_generator import run_init
@@ -337,6 +348,350 @@ def rollback(
     click.echo(f"{prefix} {len(restored)} file(s):")
     for f in restored:
         click.echo(f"  {f}")
+
+
+@main.command("show-config")
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root directory.",
+)
+def show_config(project_root: str) -> None:
+    """Dump the current effective TappsMCP configuration as YAML."""
+    from pathlib import Path
+
+    import yaml
+
+    from tapps_core.config.settings import load_settings
+
+    root = Path(project_root).resolve()
+    settings = load_settings(project_root=root)
+    data = settings.model_dump(mode="json")
+    # Redact secret values
+    if data.get("context7_api_key"):
+        data["context7_api_key"] = "***"
+    click.echo(yaml.dump(data, default_flow_style=False, sort_keys=False))
+
+
+def _get_project_root() -> "Path":
+    """Resolve project root from TAPPS_MCP_PROJECT_ROOT env var or cwd."""
+    from pathlib import Path
+
+    root = os.environ.get("TAPPS_MCP_PROJECT_ROOT", ".")
+    return Path(root).resolve()
+
+
+# ---------------------------------------------------------------------------
+# Memory CLI group (Story 53.1)
+# ---------------------------------------------------------------------------
+
+
+@main.group()
+def memory() -> None:
+    """Manage shared project memories (no MCP server required)."""
+
+
+@memory.command("list")
+@click.option("--tier", type=click.Choice(["architectural", "pattern", "context"]), default=None)
+@click.option("--scope", type=click.Choice(["project", "branch", "session"]), default=None)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
+    """List all memory entries with optional filters."""
+    import json
+
+    from tapps_core.memory.store import MemoryStore
+
+    store = MemoryStore(_get_project_root())
+    try:
+        entries = store.list_all(tier=tier, scope=scope)
+        if as_json:
+            click.echo(json.dumps([e.model_dump(mode="json") for e in entries], indent=2))
+            return
+        if not entries:
+            click.echo("No memories found.")
+            return
+        click.echo(f"{'Key':<30} {'Tier':<15} {'Scope':<10} {'Confidence':<12} Value")
+        click.echo("-" * 90)
+        for e in entries:
+            value_preview = e.value[:40].replace("\n", " ")
+            if len(e.value) > 40:
+                value_preview += "..."
+            click.echo(
+                f"{e.key:<30} {e.tier.value:<15} {e.scope.value:<10} "
+                f"{e.confidence:<12.2f} {value_preview}"
+            )
+    finally:
+        store.close()
+
+
+@memory.command("save")
+@click.option("--key", required=True, help="Memory key (lowercase slug).")
+@click.option("--value", required=True, help="Memory content.")
+@click.option(
+    "--tier",
+    type=click.Choice(["architectural", "pattern", "context"]),
+    default="pattern",
+)
+@click.option("--tags", default="", help="Comma-separated tags.")
+def memory_save(key: str, value: str, tier: str, tags: str) -> None:
+    """Save a memory entry."""
+    import json
+
+    from tapps_core.memory.store import MemoryStore
+
+    store = MemoryStore(_get_project_root())
+    try:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        result = store.save(key=key, value=value, tier=tier, tags=tag_list)
+        if isinstance(result, dict) and "error" in result:
+            click.echo(f"Error: {result['message']}", err=True)
+            raise SystemExit(1)
+        click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
+    finally:
+        store.close()
+
+
+@memory.command("get")
+@click.option("--key", required=True, help="Memory key to retrieve.")
+def memory_get(key: str) -> None:
+    """Retrieve a memory entry by key."""
+    import json
+
+    from tapps_core.memory.store import MemoryStore
+
+    store = MemoryStore(_get_project_root())
+    try:
+        entry = store.get(key)
+        if entry is None:
+            click.echo(f"Memory '{key}' not found.", err=True)
+            raise SystemExit(1)
+        click.echo(json.dumps(entry.model_dump(mode="json"), indent=2))
+    finally:
+        store.close()
+
+
+@memory.command("search")
+@click.option("--query", required=True, help="Search query.")
+@click.option("--limit", default=10, type=int, help="Max results.")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+def memory_search(query: str, limit: int, as_json: bool) -> None:
+    """Search memories by full-text query."""
+    import json
+
+    from tapps_core.memory.store import MemoryStore
+
+    store = MemoryStore(_get_project_root())
+    try:
+        results = store.search(query)[:limit]
+        if as_json:
+            click.echo(json.dumps([e.model_dump(mode="json") for e in results], indent=2))
+            return
+        if not results:
+            click.echo("No results found.")
+            return
+        click.echo(f"{'Key':<30} {'Tier':<15} {'Confidence':<12} Value")
+        click.echo("-" * 80)
+        for e in results:
+            value_preview = e.value[:40].replace("\n", " ")
+            if len(e.value) > 40:
+                value_preview += "..."
+            click.echo(
+                f"{e.key:<30} {e.tier.value:<15} {e.confidence:<12.2f} {value_preview}"
+            )
+    finally:
+        store.close()
+
+
+@memory.command("delete")
+@click.option("--key", required=True, help="Memory key to delete.")
+def memory_delete(key: str) -> None:
+    """Delete a memory entry."""
+    from tapps_core.memory.store import MemoryStore
+
+    store = MemoryStore(_get_project_root())
+    try:
+        deleted = store.delete(key)
+        if not deleted:
+            click.echo(f"Memory '{key}' not found.", err=True)
+            raise SystemExit(1)
+        click.echo(f"Deleted memory '{key}'.")
+    finally:
+        store.close()
+
+
+@memory.command("import-file")
+@click.option("--file", "file_path", required=True, type=click.Path(exists=True))
+@click.option("--overwrite", is_flag=True, help="Overwrite existing keys.")
+def memory_import(file_path: str, overwrite: bool) -> None:
+    """Import memories from a JSON file."""
+    from pathlib import Path
+
+    from tapps_core.memory.io import import_memories
+    from tapps_core.memory.store import MemoryStore
+    from tapps_core.security.path_validator import PathValidator
+
+    root = _get_project_root()
+    store = MemoryStore(root)
+    validator = PathValidator(root)
+    try:
+        result = import_memories(store, Path(file_path), validator, overwrite=overwrite)
+        click.echo(
+            f"Imported: {result['imported_count']}, "
+            f"Skipped: {result['skipped_count']}, "
+            f"Errors: {result['error_count']}"
+        )
+    finally:
+        store.close()
+
+
+@memory.command("export-file")
+@click.option(
+    "--file",
+    "file_path",
+    required=True,
+    type=click.Path(),
+    help="Output JSON file path.",
+)
+def memory_export(file_path: str) -> None:
+    """Export memories to a JSON file."""
+    from pathlib import Path
+
+    from tapps_core.memory.io import export_memories
+    from tapps_core.memory.store import MemoryStore
+    from tapps_core.security.path_validator import PathValidator
+
+    root = _get_project_root()
+    store = MemoryStore(root)
+    validator = PathValidator(root)
+    try:
+        result = export_memories(store, Path(file_path), validator)
+        click.echo(f"Exported {result['exported_count']} memories to {result['file_path']}")
+    finally:
+        store.close()
+
+
+# ---------------------------------------------------------------------------
+# Knowledge & Expert CLI commands (Stories 53.2-53.4)
+# ---------------------------------------------------------------------------
+
+
+@main.command("lookup-docs")
+@click.option("--library", required=True, help="Library name (fuzzy-matched).")
+@click.option("--topic", default="overview", help="Topic within the library.")
+@click.option("--mode", type=click.Choice(["code", "info"]), default="code")
+@click.option("--raw", is_flag=True, help="Show full untruncated output.")
+def lookup_docs_cmd(library: str, topic: str, mode: str, raw: bool) -> None:
+    """Look up library documentation (no MCP server required)."""
+    import asyncio
+
+    from tapps_core.config.settings import load_settings
+    from tapps_core.knowledge.cache import KBCache
+    from tapps_core.knowledge.lookup import LookupEngine
+
+    settings = load_settings()
+    cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+
+    async def _run() -> None:
+        engine = LookupEngine(cache, settings=settings)
+        try:
+            result = await engine.lookup(library=library, topic=topic, mode=mode)
+        finally:
+            await engine.close()
+
+        if not result.success:
+            click.echo(f"Error: {result.error}", err=True)
+            raise SystemExit(1)
+
+        content = result.content or ""
+        if not raw and len(content) > 2000:
+            content = content[:2000] + "\n\n... (truncated, use --raw for full output)"
+
+        click.echo(f"Library: {result.library} | Topic: {result.topic} | Source: {result.source}")
+        if result.warning:
+            click.echo(f"Warning: {result.warning}")
+        click.echo("---")
+        click.echo(content)
+
+    asyncio.run(_run())
+
+
+@main.command("research")
+@click.option("--question", required=True, help="Technical question to research.")
+@click.option("--domain", default=None, help="Expert domain override.")
+@click.option("--library", default=None, help="Library for docs supplement.")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+def research_cmd(question: str, domain: str | None, library: str | None, as_json: bool) -> None:
+    """Combined expert consultation + docs lookup (no MCP server required)."""
+    import asyncio
+    import json
+
+    from tapps_core.experts.engine import consult_expert
+
+    result = consult_expert(question=question, domain=domain)
+
+    # Optionally supplement with docs lookup
+    docs_content: str | None = None
+    if library:
+        from tapps_core.config.settings import load_settings
+        from tapps_core.knowledge.cache import KBCache
+        from tapps_core.knowledge.lookup import LookupEngine
+
+        settings = load_settings()
+        cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+
+        async def _lookup() -> str | None:
+            engine = LookupEngine(cache, settings=settings)
+            try:
+                lr = await engine.lookup(library=library, topic="overview", mode="code")
+            finally:
+                await engine.close()
+            return lr.content if lr.success else None
+
+        docs_content = asyncio.run(_lookup())
+
+    if as_json:
+        output = result.model_dump(mode="json")
+        if docs_content:
+            output["docs_supplement"] = docs_content[:2000]
+        click.echo(json.dumps(output, indent=2))
+        return
+
+    click.echo(f"Domain: {result.domain} | Expert: {result.expert_name}")
+    click.echo(f"Confidence: {result.confidence:.0%}")
+    click.echo(f"Sources: {', '.join(result.sources) if result.sources else 'none'}")
+    if result.recommendation:
+        click.echo(f"Recommendation: {result.recommendation}")
+    click.echo("---")
+    click.echo(result.answer)
+    if docs_content:
+        preview = docs_content[:1000]
+        click.echo("\n--- Documentation supplement ---")
+        click.echo(preview)
+
+
+@main.command("consult-expert")
+@click.option("--question", required=True, help="Technical question to ask.")
+@click.option("--domain", default=None, help="Expert domain override.")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+def consult_expert_cmd(question: str, domain: str | None, as_json: bool) -> None:
+    """Consult a domain expert (no MCP server required)."""
+    import json
+
+    from tapps_core.experts.engine import consult_expert
+
+    result = consult_expert(question=question, domain=domain)
+
+    if as_json:
+        click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
+        return
+
+    click.echo(f"Domain: {result.domain} | Expert: {result.expert_name}")
+    click.echo(f"Confidence: {result.confidence:.0%}")
+    click.echo(f"Sources: {', '.join(result.sources) if result.sources else 'none'}")
+    if result.recommendation:
+        click.echo(f"Recommendation: {result.recommendation}")
+    click.echo("---")
+    click.echo(result.answer)
 
 
 @main.command(name="replace-exe")

@@ -326,7 +326,7 @@ def _with_nudges(
 
 
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
-def tapps_server_info() -> dict[str, Any]:
+async def tapps_server_info() -> dict[str, Any]:
     """Discovers server version, available tools, installed checkers (ruff, mypy,
     bandit, radon), and configuration. Side effects: none (read-only).
 
@@ -338,12 +338,18 @@ def tapps_server_info() -> dict[str, Any]:
     _record_call("tapps_server_info")
 
     settings = load_settings()
-    installed = detect_installed_tools()
 
     from tapps_mcp.diagnostics import collect_diagnostics
 
     cache_dir = settings.project_root / ".tapps-mcp-cache"
-    diagnostics = collect_diagnostics(api_key=settings.context7_api_key, cache_dir=cache_dir)
+
+    # Run tool detection (parallel subprocesses) and diagnostics concurrently
+    installed, diagnostics = await asyncio.gather(
+        detect_installed_tools_async(),
+        asyncio.to_thread(
+            collect_diagnostics, api_key=settings.context7_api_key, cache_dir=cache_dir
+        ),
+    )
 
     available_tools = _get_available_tools()
 

@@ -7,6 +7,7 @@ registered on the ``mcp`` instance via :func:`register`.
 from __future__ import annotations
 
 import dataclasses
+import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -36,10 +37,12 @@ _ANNOTATIONS_MEMORY = ToolAnnotations(
 )
 
 _VALID_ACTIONS = {
-    "save", "get", "list", "delete", "search",
+    "save", "save_bulk", "get", "list", "delete", "search",
     "reinforce", "gc", "contradictions", "reseed",
     "import", "export",
 }
+
+_BULK_SAVE_MAX_ENTRIES = 50
 
 # Curated response limits
 _SEARCH_DEFAULT_LIMIT = 10
@@ -72,6 +75,7 @@ class _Params:
     include_summary: bool
     file_path: str
     overwrite: bool
+    entries: str
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +100,7 @@ async def tapps_memory(
     include_summary: bool = True,
     file_path: str = "",
     overwrite: bool = False,
+    entries: str = "",
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
@@ -108,8 +113,8 @@ async def tapps_memory(
     sessions and be available to all MCP-connected agents.
 
     Args:
-        action: One of "save", "get", "list", "delete", "search", "reinforce", "gc",
-            "contradictions", "reseed", "import", "export".
+        action: One of "save", "save_bulk", "get", "list", "delete", "search",
+            "reinforce", "gc", "contradictions", "reseed", "import", "export".
         key: Memory key (required for save/get/delete/reinforce). Lowercase slug.
         value: Memory content (required for save). Max 4096 chars.
         tier: "architectural", "pattern", or "context" (default: "pattern").
@@ -125,9 +130,13 @@ async def tapps_memory(
         include_summary: When True (default), list/search include one-line summaries.
         file_path: File path for import/export actions.
         overwrite: When True, import overwrites existing keys (default: False).
+        entries: JSON array of objects for save_bulk action. Each object must have
+            "key" and "value", and may optionally include "tier", "tags", "scope".
+            Maximum 50 entries per call.
 
     Actions:
         save: Store a new memory or update an existing one.
+        save_bulk: Save multiple memories in one call (requires entries parameter).
         get: Retrieve a memory by key.
         list: List all memories with optional filters.
         delete: Remove a memory by key.
@@ -167,7 +176,7 @@ async def tapps_memory(
         source_agent=source_agent, scope=scope, tag_list=tag_list,
         branch=branch, query=query, confidence=confidence,
         ranked=ranked, limit=limit, include_summary=include_summary,
-        file_path=file_path, overwrite=overwrite,
+        file_path=file_path, overwrite=overwrite, entries=entries,
     )
 
     try:
@@ -206,6 +215,91 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
     return {
         "action": "save",
         "entry": result.model_dump(),
+        "store_metadata": _store_metadata(store),
+    }
+
+
+def _handle_save_bulk(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Handle the save_bulk action — save multiple entries in one call."""
+    if not p.entries:
+        return {"error": "missing_entries", "message": "entries parameter is required for save_bulk."}
+
+    try:
+        parsed = json.loads(p.entries)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {
+            "error": "invalid_json",
+            "message": f"Failed to parse entries as JSON: {exc}",
+        }
+
+    if not isinstance(parsed, list):
+        return {"error": "invalid_format", "message": "entries must be a JSON array."}
+
+    if len(parsed) > _BULK_SAVE_MAX_ENTRIES:
+        return {
+            "error": "too_many_entries",
+            "message": (
+                f"Maximum {_BULK_SAVE_MAX_ENTRIES} entries per call, "
+                f"got {len(parsed)}."
+            ),
+        }
+
+    saved = 0
+    skipped = 0
+    errors: list[dict[str, str]] = []
+
+    for i, entry in enumerate(parsed):
+        if not isinstance(entry, dict):
+            errors.append({"index": str(i), "error": "Entry must be an object."})
+            skipped += 1
+            continue
+
+        e_key = entry.get("key", "")
+        e_value = entry.get("value", "")
+        if not e_key:
+            errors.append({"index": str(i), "error": "Missing required field 'key'."})
+            skipped += 1
+            continue
+        if not e_value:
+            errors.append({"index": str(i), "key": e_key, "error": "Missing required field 'value'."})
+            skipped += 1
+            continue
+
+        e_tier = entry.get("tier", p.tier)
+        e_scope = entry.get("scope", p.scope)
+        e_tags_raw = entry.get("tags", "")
+        e_tags = (
+            [t.strip() for t in e_tags_raw.split(",") if t.strip()]
+            if isinstance(e_tags_raw, str) and e_tags_raw
+            else (e_tags_raw if isinstance(e_tags_raw, list) else [])
+        )
+
+        try:
+            result = store.save(
+                key=e_key,
+                value=e_value,
+                tier=e_tier,
+                source=p.source,
+                source_agent=p.source_agent,
+                scope=e_scope,
+                tags=e_tags,
+                branch=p.branch or None,
+                confidence=p.confidence,
+            )
+            if isinstance(result, dict) and "error" in result:
+                errors.append({"key": e_key, "error": result.get("message", str(result))})
+                skipped += 1
+            else:
+                saved += 1
+        except Exception as exc:
+            errors.append({"key": e_key, "error": str(exc)})
+            skipped += 1
+
+    return {
+        "action": "save_bulk",
+        "saved": saved,
+        "skipped": skipped,
+        "errors": errors,
         "store_metadata": _store_metadata(store),
     }
 
@@ -459,6 +553,7 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
 
 _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "save": _handle_save,
+    "save_bulk": _handle_save_bulk,
     "get": _handle_get,
     "list": _handle_list,
     "delete": _handle_delete,

@@ -440,14 +440,14 @@ class TestCuratedResponses:
 
 @pytest.mark.asyncio()
 class TestValidActions:
-    """Verify all 11 actions are in _VALID_ACTIONS."""
+    """Verify all 12 actions are in _VALID_ACTIONS."""
 
-    async def test_all_11_actions_valid(self) -> None:
+    async def test_all_12_actions_valid(self) -> None:
         """All documented actions are accepted."""
         from tapps_mcp.server_memory_tools import _VALID_ACTIONS
 
         expected = {
-            "save", "get", "list", "delete", "search",
+            "save", "save_bulk", "get", "list", "delete", "search",
             "reinforce", "gc", "contradictions", "reseed",
             "import", "export",
         }

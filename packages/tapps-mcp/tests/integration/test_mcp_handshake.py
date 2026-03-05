@@ -10,9 +10,10 @@ from tapps_mcp.server import mcp, tapps_server_info
 
 @pytest.mark.integration
 class TestMCPHandshake:
-    def test_server_info_tool_returns_valid_response(self):
+    @pytest.mark.asyncio
+    async def test_server_info_tool_returns_valid_response(self):
         """Call tapps_server_info and verify the response structure."""
-        result = tapps_server_info()
+        result = await tapps_server_info()
 
         assert isinstance(result, dict)
         assert result["tool"] == "tapps_server_info"
@@ -40,9 +41,10 @@ class TestMCPHandshake:
         assert isinstance(data["recommended_workflow"], str)
         assert "tapps_quality_gate" in data["recommended_workflow"]
 
-    def test_server_info_reports_installed_checkers(self):
+    @pytest.mark.asyncio
+    async def test_server_info_reports_installed_checkers(self):
         """Verify the installed_checkers field has expected tool entries."""
-        result = tapps_server_info()
+        result = await tapps_server_info()
         checkers = result["data"]["installed_checkers"]
 
         tool_names = {c["name"] for c in checkers}

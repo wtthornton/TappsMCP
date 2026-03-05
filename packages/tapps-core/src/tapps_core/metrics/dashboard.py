@@ -15,6 +15,8 @@ import structlog
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from tapps_core.memory.store import MemoryStore
+
 from tapps_core.common.utils import utc_now
 from tapps_core.metrics.alerts import AlertManager
 from tapps_core.metrics.business_metrics import BusinessMetricsCollector
@@ -41,6 +43,7 @@ class DashboardGenerator:
         confidence_tracker: ConfidenceMetricsTracker | None = None,
         rag_tracker: RAGMetricsTracker | None = None,
         business_collector: BusinessMetricsCollector | None = None,
+        memory_store: MemoryStore | None = None,
     ) -> None:
         self._metrics_dir = metrics_dir
         self._dashboard_dir = metrics_dir.parent / "dashboard"
@@ -59,6 +62,7 @@ class DashboardGenerator:
             confidence_tracker=self._confidence,
             rag_tracker=self._rag,
         )
+        self._memory_store = memory_store
         self._alert_manager = AlertManager()
         self._visualizer = AnalyticsVisualizer()
 
@@ -94,6 +98,7 @@ class DashboardGenerator:
             "provider_stats",
             "quality_distribution",
             "coverage_metrics",
+            "memory_metrics",
             "alerts",
             "business_metrics",
             "recommendations",
@@ -110,6 +115,7 @@ class DashboardGenerator:
             "provider_stats": self._build_provider_stats,
             "quality_distribution": lambda: self._build_quality_distribution(since=since),
             "coverage_metrics": self._build_coverage_metrics,
+            "memory_metrics": self._build_memory_metrics,
             "alerts": self._build_alerts,
             "business_metrics": self._build_business_metrics,
             "recommendations": self._build_recommendations,
@@ -195,6 +201,24 @@ class DashboardGenerator:
             if unused:
                 lines.append(f"- Unused core tools: {', '.join(unused)}")
             lines.append("")
+
+        # Memory metrics
+        if "memory_metrics" in json_data:
+            mem = json_data["memory_metrics"]
+            if mem.get("available", False):
+                lines.append("## Memory Metrics")
+                lines.append(f"- Total entries: {mem.get('total_entries', 0)}")
+                by_tier = mem.get("by_tier", {})
+                if by_tier:
+                    lines.append(
+                        f"- By tier: architectural={by_tier.get('architectural', 0)}, "
+                        f"pattern={by_tier.get('pattern', 0)}, "
+                        f"context={by_tier.get('context', 0)}"
+                    )
+                lines.append(f"- Stale count: {mem.get('stale_count', 0)}")
+                lines.append(f"- Avg confidence: {mem.get('avg_confidence', 0):.4f}")
+                lines.append(f"- Capacity: {mem.get('capacity_pct', 0):.1f}%")
+                lines.append("")
 
         # Recommendations
         if "recommendations" in json_data:
@@ -420,6 +444,73 @@ class DashboardGenerator:
             "core_tools_unused": sorted(core_tools - all_tool_names),
         }
 
+    def _build_memory_metrics(self) -> dict[str, Any]:
+        """Build memory subsystem metrics from live MemoryStore data."""
+        if self._memory_store is None:
+            return {
+                "available": False,
+                "total_entries": 0,
+                "by_tier": {},
+                "by_scope": {},
+                "stale_count": 0,
+                "avg_confidence": 0.0,
+                "capacity_pct": 0.0,
+            }
+
+        try:
+            from tapps_core.config.settings import load_settings
+
+            snapshot = self._memory_store.snapshot()
+            entries = snapshot.entries
+
+            by_tier: dict[str, int] = {"architectural": 0, "pattern": 0, "context": 0}
+            by_scope: dict[str, int] = {"project": 0, "branch": 0, "session": 0}
+            confidences: list[float] = []
+            stale_count = 0
+
+            for entry in entries:
+                tier_val = entry.tier if isinstance(entry.tier, str) else entry.tier.value
+                by_tier[tier_val] = by_tier.get(tier_val, 0) + 1
+
+                scope_val = entry.scope if isinstance(entry.scope, str) else entry.scope.value
+                by_scope[scope_val] = by_scope.get(scope_val, 0) + 1
+
+                confidences.append(entry.confidence)
+
+                if entry.contradicted:
+                    stale_count += 1
+
+            avg_confidence = (
+                round(sum(confidences) / len(confidences), 4)
+                if confidences
+                else 0.0
+            )
+
+            settings = load_settings()
+            max_memories = settings.memory.max_memories
+            capacity_pct = round((snapshot.total_count / max_memories) * 100, 1)
+
+            return {
+                "available": True,
+                "total_entries": snapshot.total_count,
+                "by_tier": by_tier,
+                "by_scope": by_scope,
+                "stale_count": stale_count,
+                "avg_confidence": avg_confidence,
+                "capacity_pct": capacity_pct,
+            }
+        except Exception:
+            logger.debug("memory_metrics_build_failed", exc_info=True)
+            return {
+                "available": False,
+                "total_entries": 0,
+                "by_tier": {},
+                "by_scope": {},
+                "stale_count": 0,
+                "avg_confidence": 0.0,
+                "capacity_pct": 0.0,
+            }
+
     def _build_alerts(self) -> list[dict[str, Any]]:
         current_metrics = self._current_alert_metrics()
         alerts = self._alert_manager.check_alerts(current_metrics)
@@ -487,6 +578,19 @@ class DashboardGenerator:
         # Only alert on confidence when there are confidence records
         if conf_stats.total_records > 0:
             metrics["avg_confidence"] = conf_stats.avg_confidence
+
+        # Memory capacity alert
+        if self._memory_store is not None:
+            try:
+                from tapps_core.config.settings import load_settings as _load_settings
+
+                mem_count = self._memory_store.count()
+                mem_settings = _load_settings()
+                max_mem = mem_settings.memory.max_memories
+                if max_mem > 0:
+                    metrics["memory_capacity_pct"] = mem_count / max_mem
+            except Exception:
+                pass
 
         return metrics
 

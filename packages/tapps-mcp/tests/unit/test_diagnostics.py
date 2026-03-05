@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from pydantic import SecretStr
 
 from tapps_mcp.common.models import (
@@ -197,35 +198,39 @@ class TestServerInfoDiagnostics:
 
         CallTracker.reset()
 
-    def test_includes_diagnostics_key(self) -> None:
+    @pytest.mark.asyncio
+    async def test_includes_diagnostics_key(self) -> None:
         from tapps_mcp.server import tapps_server_info
 
-        result = tapps_server_info()
+        result = await tapps_server_info()
         assert "diagnostics" in result["data"]
 
-    def test_diagnostics_has_all_sections(self) -> None:
+    @pytest.mark.asyncio
+    async def test_diagnostics_has_all_sections(self) -> None:
         from tapps_mcp.server import tapps_server_info
 
-        result = tapps_server_info()
+        result = await tapps_server_info()
         diag = result["data"]["diagnostics"]
         assert "context7" in diag
         assert "cache" in diag
         assert "vector_rag" in diag
         assert "knowledge_base" in diag
 
-    def test_diagnostics_context7_reports_status(self) -> None:
+    @pytest.mark.asyncio
+    async def test_diagnostics_context7_reports_status(self) -> None:
         from tapps_mcp.server import tapps_server_info
 
-        result = tapps_server_info()
+        result = await tapps_server_info()
         ctx7 = result["data"]["diagnostics"]["context7"]
         assert "api_key_set" in ctx7
         assert "status" in ctx7
         assert ctx7["status"] in ("available", "no_key")
 
-    def test_diagnostics_knowledge_base_reports_domains(self) -> None:
+    @pytest.mark.asyncio
+    async def test_diagnostics_knowledge_base_reports_domains(self) -> None:
         from tapps_mcp.server import tapps_server_info
 
-        result = tapps_server_info()
+        result = await tapps_server_info()
         kb = result["data"]["diagnostics"]["knowledge_base"]
         assert kb["expected_domains"] == 17
         assert kb["total_files"] > 0

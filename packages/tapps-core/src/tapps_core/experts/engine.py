@@ -326,6 +326,65 @@ def _resolve_knowledge_path(expert: ExpertConfig) -> Path:
         return ExpertRegistry.get_knowledge_base_path() / knowledge_dir_name
 
 
+_cached_tech_stack_domains: set[str] | None = None
+
+
+def set_tech_stack_domains(domains: set[str]) -> None:
+    """Set the cached tech stack domains (called once during session start)."""
+    global _cached_tech_stack_domains  # noqa: PLW0603
+    _cached_tech_stack_domains = domains
+
+
+def _reset_tech_stack_domains_cache() -> None:
+    """Reset the cached tech stack domains (for testing)."""
+    global _cached_tech_stack_domains  # noqa: PLW0603
+    _cached_tech_stack_domains = None
+
+
+def _get_tech_stack_domains() -> set[str]:
+    """Get expert domains relevant to the current project's tech stack.
+
+    Returns the cached domains set, or an empty set if not yet populated.
+    Call ``set_tech_stack_domains()`` during session start to populate.
+    This avoids expensive file-system scanning on every expert consultation.
+    """
+    return _cached_tech_stack_domains or set()
+
+
+def _apply_tech_stack_boost(
+    chunks: list[Any],
+    resolved_domain: str,
+    boost: float,
+) -> list[Any]:
+    """Apply a score boost to chunks when their domain matches the project tech stack.
+
+    Args:
+        chunks: Retrieved knowledge chunks.
+        resolved_domain: The expert domain being consulted.
+        boost: Multiplier to apply (e.g. 1.2 = 20% boost).
+
+    Returns:
+        The same chunks with boosted scores (capped at 1.0).
+    """
+    if boost <= 1.0:
+        return chunks
+
+    tech_domains = _get_tech_stack_domains()
+    if not tech_domains or resolved_domain not in tech_domains:
+        return chunks
+
+    for chunk in chunks:
+        chunk.score = min(chunk.score * boost, 1.0)
+
+    logger.debug(
+        "tech_stack_boost_applied",
+        domain=resolved_domain,
+        boost=boost,
+        chunk_count=len(chunks),
+    )
+    return chunks
+
+
 def _retrieve_knowledge(
     question: str,
     resolved_domain: str,
@@ -346,12 +405,14 @@ def _retrieve_knowledge(
         return _KnowledgeResult(chunks=[], context="", sources=[])
 
     index_dir = None
+    tech_stack_boost = 1.2
     try:
         from tapps_core.config.settings import load_settings
 
         settings = load_settings()
         domain_slug = sanitize_domain_for_path(resolved_domain)
         index_dir = settings.project_root / ".tapps-mcp" / "rag_index" / domain_slug
+        tech_stack_boost = settings.tech_stack_boost
     except Exception as e:
         logger.debug("rag_index_dir_skip", reason=str(e))
 
@@ -362,6 +423,10 @@ def _retrieve_knowledge(
     )
 
     chunks = kb.search(question, max_results=max_chunks)
+
+    # Apply tech stack boost to chunk scores (Epic 54).
+    chunks = _apply_tech_stack_boost(chunks, resolved_domain, tech_stack_boost)
+
     context = kb.get_context(question, max_length=max_context_length) if chunks else ""
     sources = kb.get_sources(question, max_results=max_chunks)
     return _KnowledgeResult(chunks=chunks, context=context, sources=sources)

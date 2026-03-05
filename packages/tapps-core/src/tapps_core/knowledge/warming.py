@@ -53,7 +53,7 @@ async def warm_cache(
         Number of libraries successfully warmed.
     """
     if api_key is None:
-        logger.info("cache_warming_skipped", reason="no_api_key")
+        logger.warning("cache_warming_skipped", reason="no_api_key")
         return 0
 
     libs = libraries if libraries is not None else detect_libraries(project_root)

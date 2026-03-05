@@ -421,7 +421,7 @@ def check_quality_tools() -> list[CheckResult]:
     from tapps_mcp.tools.tool_detection import detect_installed_tools
 
     results: list[CheckResult] = []
-    tools = detect_installed_tools()
+    tools = detect_installed_tools(force_refresh=True)
     for tool in tools:
         if tool.available:
             results.append(

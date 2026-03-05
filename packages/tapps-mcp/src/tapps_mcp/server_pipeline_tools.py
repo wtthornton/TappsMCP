@@ -817,6 +817,7 @@ def _process_session_capture(
 
 async def tapps_session_start(
     project_root: str = "",
+    quick: bool = False,
 ) -> dict[str, Any]:
     """REQUIRED as the FIRST call in every session. Returns server info
     (version, checkers, configuration). Call :func:`tapps_project_profile`
@@ -824,16 +825,22 @@ async def tapps_session_start(
 
     Args:
         project_root: Unused; reserved for future use. Server uses configured root.
+        quick: When True, return minimal response using cached tool versions
+            (no subprocess calls, no diagnostics, no memory GC). Target: < 1s.
     """
     from tapps_mcp.server import (
         _record_call,
         _record_execution,
-        _server_info_async,
         _with_nudges,
     )
 
     start = time.perf_counter_ns()
     _record_call("tapps_session_start")
+
+    if quick:
+        return await _session_start_quick(start, _record_execution, _with_nudges)
+
+    from tapps_mcp.server import _server_info_async
 
     info = await _server_info_async()
 
@@ -853,11 +860,33 @@ async def tapps_session_start(
             if mem_store is not None:
                 snapshot = mem_store.snapshot()
                 contradicted_count = sum(1 for entry in snapshot.entries if entry.contradicted)
+
+                # Tier breakdown
+                by_tier: dict[str, int] = {"architectural": 0, "pattern": 0, "context": 0}
+                confidences: list[float] = []
+                for entry in snapshot.entries:
+                    tier_val = (
+                        entry.tier if isinstance(entry.tier, str) else entry.tier.value
+                    )
+                    by_tier[tier_val] = by_tier.get(tier_val, 0) + 1
+                    confidences.append(entry.confidence)
+
+                avg_conf = (
+                    round(sum(confidences) / len(confidences), 4)
+                    if confidences
+                    else 0.0
+                )
+                max_mem = settings.memory.max_memories
+                cap_pct = round((snapshot.total_count / max_mem) * 100, 1) if max_mem > 0 else 0.0
+
                 memory_status = {
                     "enabled": True,
                     "total": snapshot.total_count,
                     "stale": 0,
                     "contradicted": contradicted_count,
+                    "by_tier": by_tier,
+                    "avg_confidence": avg_conf,
+                    "capacity_pct": cap_pct,
                 }
 
                 # Auto-GC: run once per session when usage exceeds threshold
@@ -956,6 +985,81 @@ async def tapps_session_start(
     return _with_nudges("tapps_session_start", resp, {})
 
 
+async def _session_start_quick(
+    start_ns: int,
+    record_execution: Callable[..., None],
+    with_nudges: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    """Quick session start: cached tool versions, no diagnostics or memory GC.
+
+    Loads tool versions from disk cache (no subprocess calls). Skips
+    diagnostics, memory GC, contradiction checks, and business expert loading.
+    """
+    from tapps_mcp import __version__
+    from tapps_mcp.tools.tool_detection import detect_installed_tools
+
+    settings = load_settings()
+
+    # Load tools from cache only (disk cache -> memory cache, no subprocesses if cached)
+    installed = detect_installed_tools()
+
+    elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+    record_execution("tapps_session_start", start_ns)
+
+    data: dict[str, Any] = {
+        "server": {
+            "name": "TappsMCP",
+            "version": __version__,
+            "protocol_version": "2025-11-25",
+        },
+        "configuration": {
+            "project_root": str(settings.project_root),
+            "quality_preset": settings.quality_preset,
+            "log_level": settings.log_level,
+        },
+        "installed_checkers": [t.model_dump() for t in installed],
+        "quick": True,
+        "recommended_next": (
+            "Quick session started (diagnostics skipped). "
+            "Call tapps_session_start() without quick=True for full diagnostics."
+        ),
+    }
+
+    resp = success_response("tapps_session_start", elapsed_ms, data)
+
+    # Attach structured output
+    try:
+        from tapps_mcp.common.output_schemas import SessionStartOutput
+
+        checker_names = [t.name for t in installed if t.available]
+        structured = SessionStartOutput(
+            server_version=__version__,
+            project_root=str(settings.project_root),
+            project_type=None,
+            quality_preset=settings.quality_preset,
+            installed_checkers=checker_names,
+            has_ci=False,
+            has_docker=False,
+            has_tests=False,
+        )
+        resp["structuredContent"] = structured.to_structured_content()
+    except Exception:
+        _logger.debug("structured_output_failed: tapps_session_start_quick", exc_info=True)
+
+    from tapps_mcp.server_helpers import mark_session_initialized
+
+    mark_session_initialized(
+        {
+            "project_root": str(settings.project_root),
+            "quality_preset": settings.quality_preset,
+            "auto_initialized": False,
+            "project_profile": None,
+        }
+    )
+
+    return with_nudges("tapps_session_start", resp, {})
+
+
 async def tapps_init(
     create_handoff: bool = True,
     create_runlog: bool = True,
@@ -968,6 +1072,7 @@ async def tapps_init(
     warm_expert_rag_from_tech_stack: bool = True,
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
+    overwrite_tech_stack_md: bool = False,
     agent_teams: bool = False,
     memory_capture: bool = False,
     destructive_guard: bool | None = None,
@@ -1018,6 +1123,9 @@ async def tapps_init(
         overwrite_agents_md: When ``True``, replace AGENTS.md entirely with the latest
             template. When ``False`` (default), validate and smart-merge missing
             sections/tools.
+        overwrite_tech_stack_md: When ``True``, overwrite an existing TECH_STACK.md
+            with auto-detected content. When ``False`` (default), preserve any
+            existing TECH_STACK.md (user-curated content is never lost).
         agent_teams: When ``True`` and platform is ``"claude"``, generate Agent Teams
             hooks (TeammateIdle, TaskCompleted) for quality watchdog teammate.
         memory_capture: When ``True`` and platform is ``"claude"``, generate a Stop
@@ -1103,6 +1211,7 @@ async def tapps_init(
         warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
         overwrite_platform_rules=overwrite_platform_rules,
         overwrite_agents_md=overwrite_agents_md,
+        overwrite_tech_stack_md=overwrite_tech_stack_md,
         agent_teams=agent_teams,
         memory_capture=memory_capture,
         destructive_guard=dg,
@@ -1136,6 +1245,10 @@ async def tapps_init(
     # Emit ctx.info for each created file (Pattern 1: progress notifications)
     for filename in result.get("created", []):
         await emit_ctx_info(ctx, f"Created {filename}")
+
+    # Emit ctx.info for warnings (Story 51.3)
+    for warning in result.get("warnings", []):
+        await emit_ctx_info(ctx, f"Warning: {warning}")
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(

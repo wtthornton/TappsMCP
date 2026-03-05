@@ -49,7 +49,10 @@ class MetricsHub:
             rag_tracker=self.rag,
         )
 
-    def get_dashboard_generator(self) -> DashboardGenerator:
+    def get_dashboard_generator(
+        self,
+        memory_store: object | None = None,
+    ) -> DashboardGenerator:
         """Create a dashboard generator with all trackers."""
         return DashboardGenerator(
             self._metrics_dir,
@@ -59,6 +62,7 @@ class MetricsHub:
             confidence_tracker=self.confidence,
             rag_tracker=self.rag,
             business_collector=self.business,
+            memory_store=memory_store,  # type: ignore[arg-type]
         )
 
     @property

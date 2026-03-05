@@ -87,6 +87,7 @@ class LookupEngine:
         self._registry = registry or (
             _build_provider_registry(settings=settings) if settings else _build_provider_registry(api_key=api_key)
         )
+        self._settings = settings
         self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def close(self) -> None:
@@ -172,6 +173,11 @@ class LookupEngine:
                     cache_hit=True,
                     fuzzy_score=best.score,
                 )
+
+        # 2b. Custom doc sources (take priority over providers)
+        custom_result = await self._check_custom_doc_source(lib_clean, topic, start)
+        if custom_result is not None:
+            return custom_result
 
         # 3. API resolve + fetch — try provider chain first, then legacy Context7
         content: str | None = None
@@ -290,6 +296,116 @@ class LookupEngine:
             response_time_ms=round(elapsed, 1),
             cache_hit=False,
             warning=safety.warning,
+        )
+
+    async def _check_custom_doc_source(
+        self,
+        library: str,
+        topic: str,
+        start: float,
+    ) -> LookupResult | None:
+        """Check if a custom doc source is configured for the library.
+
+        Custom sources (local file or URL) take priority over Context7/LlmsTxt.
+        Returns a LookupResult if found, None otherwise.
+        """
+        if self._settings is None:
+            return None
+
+        doc_config = self._settings.doc_sources.get(library)
+        if doc_config is None:
+            return None
+
+        content: str | None = None
+        source_label = "custom_doc_source"
+
+        # Try local file first
+        if doc_config.file:
+            try:
+                from pathlib import Path
+
+                file_path = self._settings.project_root / Path(doc_config.file)
+                if file_path.exists() and file_path.is_file():
+                    content = file_path.read_text(encoding="utf-8")
+                    source_label = "custom_file"
+                    logger.debug(
+                        "custom_doc_source_file",
+                        library=library,
+                        path=str(file_path),
+                    )
+                else:
+                    logger.warning(
+                        "custom_doc_source_file_missing",
+                        library=library,
+                        path=str(file_path),
+                    )
+            except (OSError, ValueError) as exc:
+                logger.warning(
+                    "custom_doc_source_file_error",
+                    library=library,
+                    error=str(exc),
+                )
+
+        # Try URL if no file content
+        if content is None and doc_config.url:
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.get(doc_config.url)
+                    resp.raise_for_status()
+                    content = resp.text
+                    source_label = "custom_url"
+                    logger.debug(
+                        "custom_doc_source_url",
+                        library=library,
+                        url=doc_config.url,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "custom_doc_source_url_error",
+                    library=library,
+                    url=doc_config.url,
+                    error=str(exc),
+                )
+
+        if content is None:
+            return None
+
+        # RAG safety check
+        safety = check_content_safety(content)
+        if not safety.safe:
+            elapsed = (time.monotonic() - start) * 1000
+            return LookupResult(
+                success=False,
+                library=library,
+                topic=topic,
+                error=f"Custom doc content blocked by safety filter: {safety.warning}",
+                response_time_ms=round(elapsed, 1),
+            )
+
+        safe_content = safety.sanitised_content or content
+
+        # Cache the custom content
+        self._cache.put(
+            CacheEntry(
+                library=library,
+                topic=topic,
+                content=safe_content,
+                token_count=len(safe_content) // 4,
+                provider_source=source_label,
+            )
+        )
+
+        elapsed = (time.monotonic() - start) * 1000
+        return LookupResult(
+            success=True,
+            content=safe_content,
+            source=source_label,
+            library=library,
+            topic=topic,
+            response_time_ms=round(elapsed, 1),
+            cache_hit=False,
         )
 
     async def _resolve_and_fetch(

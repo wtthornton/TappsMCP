@@ -21,26 +21,30 @@ class TestTappsServerInfo:
     def setup_method(self):
         CallTracker.reset()
 
-    def test_returns_success(self):
-        result = tapps_server_info()
+    @pytest.mark.asyncio
+    async def test_returns_success(self):
+        result = await tapps_server_info()
         assert result["success"] is True
         assert result["tool"] == "tapps_server_info"
         assert "data" in result
         assert "server" in result["data"]
         assert result["data"]["server"]["name"] == "TappsMCP"
 
-    def test_includes_version(self):
-        result = tapps_server_info()
+    @pytest.mark.asyncio
+    async def test_includes_version(self):
+        result = await tapps_server_info()
         assert "version" in result["data"]["server"]
 
-    def test_includes_configuration(self):
-        result = tapps_server_info()
+    @pytest.mark.asyncio
+    async def test_includes_configuration(self):
+        result = await tapps_server_info()
         assert "configuration" in result["data"]
         assert "project_root" in result["data"]["configuration"]
 
-    def test_records_call(self):
+    @pytest.mark.asyncio
+    async def test_records_call(self):
         CallTracker.reset()
-        tapps_server_info()
+        await tapps_server_info()
         assert "tapps_server_info" in CallTracker.get_called_tools()
 
 

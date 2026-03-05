@@ -49,6 +49,7 @@ class BootstrapConfig:
     overwrite_agents_md: bool = False
     agent_teams: bool = False
     memory_capture: bool = False
+    overwrite_tech_stack_md: bool = False
     destructive_guard: bool = False
     minimal: bool = False
     dry_run: bool = False
@@ -66,6 +67,7 @@ class _BootstrapState:
     created: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     result: dict[str, Any] = field(default_factory=dict)
     profile: ProjectProfile | None = None
 
@@ -107,6 +109,7 @@ class _BootstrapState:
         self.result["created"] = self.created
         self.result["skipped"] = self.skipped
         self.result["errors"] = self.errors
+        self.result["warnings"] = self.warnings
         self.result["success"] = len(self.errors) == 0
         return self.result
 
@@ -126,6 +129,7 @@ def bootstrap_pipeline(
     warm_expert_rag_from_tech_stack: bool = True,
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
+    overwrite_tech_stack_md: bool = False,
     agent_teams: bool = False,
     memory_capture: bool = False,
     destructive_guard: bool = False,
@@ -170,6 +174,7 @@ def bootstrap_pipeline(
             warm_expert_rag_from_tech_stack=warm_expert_rag_from_tech_stack,
             overwrite_platform_rules=overwrite_platform_rules,
             overwrite_agents_md=overwrite_agents_md,
+            overwrite_tech_stack_md=overwrite_tech_stack_md,
             agent_teams=agent_teams,
             memory_capture=memory_capture,
             destructive_guard=destructive_guard,
@@ -486,9 +491,13 @@ def _create_templates(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
     # TECH_STACK.md
     if cfg.create_tech_stack_md and state.profile is not None:
-        content = _render_tech_stack_md(state.profile)
-        action = state.safe_write_or_overwrite("TECH_STACK.md", content)
-        state.result["tech_stack_md"] = {"action": action}
+        tech_stack_path = state.project_root / "TECH_STACK.md"
+        if tech_stack_path.exists() and not cfg.overwrite_tech_stack_md:
+            state.result["tech_stack_md"] = {"action": "preserved"}
+        else:
+            content = _render_tech_stack_md(state.profile)
+            action = state.safe_write_or_overwrite("TECH_STACK.md", content)
+            state.result["tech_stack_md"] = {"action": action}
     elif cfg.create_tech_stack_md:
         state.result["tech_stack_md"] = {"action": "skipped", "reason": "profile_failed"}
         state.errors.append("Could not create TECH_STACK.md: project profile detection failed")
@@ -694,6 +703,13 @@ def _warm_caches(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             state.profile.tech_stack.context7_priority,
         )
         state.result["cache_warming"] = cache_result
+        if cache_result.get("skipped") == "no_api_key":
+            warning = (
+                "Cache warming skipped: CONTEXT7_API_KEY not set. "
+                "Add it to your MCP server env config for documentation lookup."
+            )
+            cache_result["warning"] = warning
+            state.warnings.append(warning)
         if cache_result.get("error"):
             state.errors.append(f"Cache warming failed: {cache_result['error']}")
     else:

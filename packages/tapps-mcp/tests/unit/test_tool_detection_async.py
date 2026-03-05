@@ -17,9 +17,11 @@ from tapps_mcp.tools.tool_detection import (
 
 @pytest.fixture(autouse=True)
 def _clear_cache() -> None:  # type: ignore[misc]
-    """Reset tool cache before each test."""
+    """Reset tool cache before each test and disable disk cache."""
     _reset_tools_cache()
-    yield  # type: ignore[misc]
+    with patch("tapps_mcp.tools.tool_detection._read_disk_cache", return_value=None), \
+         patch("tapps_mcp.tools.tool_detection._write_disk_cache"):
+        yield  # type: ignore[misc]
     _reset_tools_cache()
 
 
