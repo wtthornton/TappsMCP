@@ -36,7 +36,7 @@ services:
       - homeiq-network
 
   db:
-    image: postgres:15
+    image: postgres:17
     environment:
       - POSTGRES_DB=users
       - POSTGRES_USER=user

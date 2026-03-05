@@ -11,7 +11,7 @@ Containerization packages applications with dependencies into portable, isolated
 **Multi-Stage Builds:**
 ```dockerfile
 # Stage 1: Build
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -19,7 +19,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Production
-FROM node:18-alpine
+FROM node:24-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
@@ -59,7 +59,7 @@ dist
 
 **Non-Root User:**
 ```dockerfile
-FROM node:18-alpine
+FROM node:24-alpine
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 USER nodejs

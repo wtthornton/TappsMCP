@@ -126,7 +126,7 @@ services:
         condition: service_healthy
   
   database:
-    image: postgres:15
+    image: postgres:17
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s

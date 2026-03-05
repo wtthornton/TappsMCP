@@ -2,7 +2,7 @@
 
 ## Overview
 
-InfluxDB is a time-series database optimized for high-write throughput and efficient querying of time-stamped data. This guide covers InfluxDB 2.x patterns, data modeling, and best practices for HomeIQ and similar IoT/home automation systems.
+InfluxDB is a time-series database optimized for high-write throughput and efficient querying of time-stamped data. This guide covers InfluxDB 3.x patterns, data modeling, and best practices for HomeIQ and similar IoT/home automation systems.
 
 ## Core Concepts
 
@@ -437,8 +437,7 @@ def influxdb_client():
 
 ## References
 
-- [InfluxDB Documentation](https://docs.influxdata.com/influxdb/v2.7/)
-- [Flux Language Guide](https://docs.influxdata.com/flux/v0.x/)
-- [InfluxDB Python Client](https://github.com/influxdata/influxdb-client-python)
-- [Time-Series Data Modeling](https://docs.influxdata.com/influxdb/v2.7/write-data/best-practices/)
+- [InfluxDB Documentation](https://docs.influxdata.com/influxdb3/)
+- [InfluxDB Python Client](https://github.com/InfluxCommunity/influxdb3-python)
+- [Time-Series Data Modeling](https://docs.influxdata.com/influxdb3/write-data/best-practices/)
 
