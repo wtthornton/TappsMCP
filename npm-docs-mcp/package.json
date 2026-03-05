@@ -1,11 +1,19 @@
 {
   "name": "docs-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for automated documentation generation, validation, and maintenance - npm wrapper for the Python docs-mcp package",
   "bin": {
     "docs-mcp": "./bin/docs-mcp.js"
   },
-  "keywords": ["mcp", "documentation", "docs", "readme", "changelog", "api-docs", "model-context-protocol"],
+  "keywords": [
+    "mcp",
+    "documentation",
+    "docs",
+    "readme",
+    "changelog",
+    "api-docs",
+    "model-context-protocol"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,6 +22,14 @@
   "engines": {
     "node": ">=18"
   },
-  "os": ["darwin", "linux", "win32"],
-  "files": ["bin/", "README.md", "LICENSE"]
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ]
 }

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-03-05
+
+### Added
+
+- **Comprehensive analysis tools API documentation** — Rewrote `docs/api/tapps-mcp-analysis_tools.md` from bare function signatures to full-featured documentation covering all 6 analysis tools: response structures, configuration options, severity levels, progress reporting (MCP context + sidecar files), vulnerability cross-referencing, degraded mode behavior, and session note promotion to memory.
+- **Epic 50 planning doc** — `docs/TAPPS_MCP_REQUIREMENTS.md` for next development phase.
+
+### Changed
+
+- **Doctor enhancements** — Expanded diagnostic checks in `distribution/doctor.py` for improved troubleshooting.
+- **Upgrade pipeline** — Updated `pipeline/upgrade.py` with additional validation.
+- **AGENTS.md templates** — Updated high/medium/low engagement templates with latest tool documentation.
+- Version bump: tapps-core 1.0.0 → 1.0.1, tapps-mcp 0.8.0 → 0.8.1, docs-mcp 0.1.0 → 0.1.1
+
 ## [0.8.0] - 2026-03-04
 
 ### Added

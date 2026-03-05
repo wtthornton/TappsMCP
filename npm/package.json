@@ -1,11 +1,18 @@
 {
   "name": "tapps-mcp",
-  "version": "0.1.0",
+  "version": "0.8.1",
   "description": "MCP server providing code quality tools - npm wrapper for the Python tapps-mcp package",
   "bin": {
     "tapps-mcp": "./bin/tapps-mcp.js"
   },
-  "keywords": ["mcp", "code-quality", "linting", "security", "scoring", "model-context-protocol"],
+  "keywords": [
+    "mcp",
+    "code-quality",
+    "linting",
+    "security",
+    "scoring",
+    "model-context-protocol"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,6 +21,14 @@
   "engines": {
     "node": ">=18"
   },
-  "os": ["darwin", "linux", "win32"],
-  "files": ["bin/", "README.md", "LICENSE"]
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ]
 }
