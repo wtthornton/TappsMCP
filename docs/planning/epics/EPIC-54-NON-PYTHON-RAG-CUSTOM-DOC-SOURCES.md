@@ -1,5 +1,6 @@
 # Epic 54: Non-Python RAG & Custom Documentation Sources
 
+**Status:** Complete
 **Priority:** P2 | **LOE:** ~1 week | **Source:** Consumer feedback v2 (ENH-5, ENH-8)
 
 ## Problem Statement

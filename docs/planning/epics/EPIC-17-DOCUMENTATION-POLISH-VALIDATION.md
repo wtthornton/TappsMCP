@@ -1,6 +1,6 @@
 # Epic 17: Documentation Polish & Validation
 
-**Status:** Open
+**Status:** Complete
 **Priority:** P2
 **Estimated LOE:** ~1 week
 **Dependencies:** Epics 14–16 (best applied after core generation improvements)

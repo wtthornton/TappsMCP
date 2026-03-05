@@ -1,6 +1,6 @@
 # Epic 14: Diagram Generation Quality
 
-**Status:** Open
+**Status:** Complete
 **Priority:** P1
 **Estimated LOE:** ~1–1.5 weeks
 **Dependencies:** DocsMCP Epic 6 (Diagram Generation)

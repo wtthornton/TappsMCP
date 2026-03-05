@@ -1,5 +1,6 @@
 # Epic 52: Session Startup Performance
 
+**Status:** Complete
 **Priority:** P2 | **LOE:** ~3-4 days | **Source:** Consumer feedback v2 (BUG-4)
 
 ## Problem Statement

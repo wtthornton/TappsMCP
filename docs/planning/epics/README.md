@@ -46,12 +46,17 @@
 | [Epic 47](EPIC-47-WORKSPACE-SCOPED-INIT.md) | Workspace-Scoped Init | P1 | ~1-1.5 weeks | None | **Complete** |
 | [Epic 48](EPIC-48-MCP-HOST-VISIBILITY-AGENT-FALLBACKS.md) | MCP Host Visibility & Agent Fallbacks | P1 | ~1 week | None | **Complete** — 2 stories, docs + template content |
 | [Epic 49](EPIC-49-DOCTOR-ROBUSTNESS-QUICK-MODE.md) | Doctor Robustness & Quick Mode | P2 | ~1-1.5 weeks | None | **Complete** — 3 stories, mypy timeout + quick mode + docs |
-| [Epic 50](EPIC-50-CONSUMER-REQUIREMENTS-VERIFICATION.md) | Consumer Requirements & Verification | P1 | ~1-1.5 weeks | Epic 48, Epic 49 | Open |
+| [Epic 50](EPIC-50-CONSUMER-REQUIREMENTS-VERIFICATION.md) | Consumer Requirements & Verification | P1 | ~1-1.5 weeks | Epic 48, Epic 49 | **Complete** |
+| [Epic 51](EPIC-51-CONFIG-UX-TECH-STACK-PRESERVATION.md) | Configuration UX & TECH_STACK Preservation | P1 | ~1 week | None | **Complete** |
+| [Epic 52](EPIC-52-SESSION-STARTUP-PERFORMANCE.md) | Session Startup Performance | P2 | ~3-4 days | None | **Complete** |
+| [Epic 53](EPIC-53-CLI-PARITY-MCP-TOOLS.md) | CLI Parity for MCP-Only Tools | P1 | ~1 week | None | **Complete** |
+| [Epic 54](EPIC-54-NON-PYTHON-RAG-CUSTOM-DOC-SOURCES.md) | Non-Python RAG & Custom Doc Sources | P2 | ~1 week | None | **Complete** |
+| [Epic 55](EPIC-55-MEMORY-DASHBOARD-ENHANCEMENTS.md) | Memory & Dashboard Enhancements | P3 | ~3-4 days | None | **Complete** |
 | DocsMCP Epic 10 | Distribution & CLI (PyPI publish) | P1 | ~1 week | DocsMCP Epic 0 | **Complete** — reduced scope (PyPI publish workflow) |
 | Platform Epic 12 | FastMCP Composition Layer | P2 | ~3-4 days | Epic 6, DocsMCP | **Complete** — combined server, platform CLI, 25 integration tests |
 | Platform Epic 13 | Distribution & Publishing | P2 | ~3-4 days | Platform Epic 12 | **Complete** — PyPI workflow (all 3 packages), combined Dockerfile, npm wrappers, version coordination, AGENTS.md DocsMCP awareness |
 
-**Total LOE:** ~59-75 weeks — Epics 0-46 + Platform Epics 12-13 complete (P0-P4), DocsMCP Epics 0-11 complete. 5,995+ tests passing.
+**Total LOE:** ~59-75 weeks — All TappsMCP Epics (0-55) + Platform Epics 12-13 complete (P0-P4), all DocsMCP Epics (0-17) complete. 5,995+ tests passing.
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 
@@ -162,7 +167,7 @@ Epic 50 (Consumer Requirements & Verification)  ← Epic 48, Epic 49
 
 DocsMCP is the documentation MCP server that complements TappsMCP's code quality tools. See the [DocsMCP PRD](../DOCSMCP_PRD.md) for full details and the [Epic Prioritization](../EPIC_PRIORITIZATION.md) for priority ranking.
 
-**Status:** 18/18 MCP tools implemented, 42 source files, 965 tests passing.
+**Status:** 19/19 MCP tools implemented, 43 source files, 1171+ tests passing. All epics (0-17) complete.
 
 | Epic | Name | Status |
 |------|------|--------|
@@ -178,7 +183,11 @@ DocsMCP is the documentation MCP server that complements TappsMCP's code quality
 | 9 | Project Scan & Workflow | **Complete** — resources (docs://status, config, coverage), prompts (docs_workflow_overview, docs_workflow). docs://templates and AGENTS.md generation deferred (see [DOCSMCP_OPEN_EPICS_RESEARCH.md](../DOCSMCP_OPEN_EPICS_RESEARCH.md)). |
 | 10 | Distribution & CLI | **Complete** (reduced scope) — PyPI publish workflow for docs-mcp added to CI; Docker publish via Epic 46; npm wrapper, CI generator deferred |
 | 11 | TappsMCP Integration | **Complete** -- Quality data enrichment in project_scan/drift/readme |
-| 12 | Multi-Language Support | Open (post-MVP) — tree-sitter for TypeScript/Go/Rust/Java; Python-only sufficient for MVP |
+| 12 | Multi-Language Support | **Complete** — tree-sitter extractors for TypeScript, Go, Rust, Java + dispatcher |
+| 14 | Diagram Generation Quality | **Complete** — source dir auto-detection, SKIP_DIRS, package-scoped diagrams |
+| 15 | API Reference Enhancement | **Complete** — full docstrings, return schemas, per-package splitting, noise filtering |
+| 16 | Intelligent Content Generation | **Complete** — smart description fallback, framework detection, key concepts |
+| 17 | Documentation Polish & Validation | **Complete** — re-export filtering, freshness hints, quality scores |
 
 ## Parallelization Opportunities
 

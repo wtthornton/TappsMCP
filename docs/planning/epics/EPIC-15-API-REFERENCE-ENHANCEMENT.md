@@ -1,6 +1,6 @@
 # Epic 15: API Reference Enhancement
 
-**Status:** Open
+**Status:** Complete
 **Priority:** P1
 **Estimated LOE:** ~2–2.5 weeks
 **Dependencies:** DocsMCP Epic 4 (API Documentation Generation)

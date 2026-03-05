@@ -1,5 +1,6 @@
 # Epic 53: CLI Parity for MCP-Only Tools
 
+**Status:** Complete
 **Priority:** P1 | **LOE:** ~1 week | **Source:** Consumer feedback v2 (ENH-2, ENH-3)
 
 ## Problem Statement
