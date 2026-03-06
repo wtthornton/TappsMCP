@@ -100,7 +100,7 @@ def _extract_repo(instance_id: str) -> str:
         slash_idx = instance_id.index("/")
         after_slash = instance_id[slash_idx + 1 :]
         last_hyphen = after_slash.rfind("-")
-        if last_hyphen > 0:
+        if last_hyphen >= 0:
             repo_part = after_slash[:last_hyphen]
             return f"{instance_id[:slash_idx]}/{repo_part}"
         return instance_id  # Already looks like owner/repo

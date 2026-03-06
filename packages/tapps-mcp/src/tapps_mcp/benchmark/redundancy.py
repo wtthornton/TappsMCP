@@ -161,7 +161,7 @@ def _cosine_similarity(vec_a: dict[str, float], vec_b: dict[str, float]) -> floa
 def _jaccard_similarity(set_a: set[str], set_b: set[str]) -> float:
     """Compute Jaccard similarity between two sets."""
     if not set_a and not set_b:
-        return 0.0
+        return 1.0
     intersection = set_a & set_b
     union = set_a | set_b
     return len(intersection) / len(union)

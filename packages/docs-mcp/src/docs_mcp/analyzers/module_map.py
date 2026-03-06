@@ -90,25 +90,12 @@ class ModuleMapAnalyzer:
 
         module_tree.sort(key=lambda n: n.name)
 
-        total_modules = 0
-        total_packages = 0
-        total_public_api = 0
-        entry_points: list[str] = []
-        self._aggregate(
-            module_tree,
-            entry_points=entry_points,
-            counts={"modules": 0, "packages": 0, "public_api": 0},
-        )
-        # Read aggregated counts back
+        entry_points_list: list[str] = []
         counts: dict[str, int] = {"modules": 0, "packages": 0, "public_api": 0}
-        self._aggregate(module_tree, entry_points=[], counts=counts)
+        self._aggregate(module_tree, entry_points=entry_points_list, counts=counts)
         total_modules = counts["modules"]
         total_packages = counts["packages"]
         total_public_api = counts["public_api"]
-
-        # Collect entry points
-        entry_points_list: list[str] = []
-        self._collect_entry_points(module_tree, entry_points_list)
 
         project_name = project_root.name
 

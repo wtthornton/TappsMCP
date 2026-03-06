@@ -49,7 +49,7 @@ class Context7Client:
         """Lazily create the httpx client."""
         if self._client is None or self._client.is_closed:
             headers: dict[str, str] = {
-                "User-Agent": "TappsMCP/0.1",
+                "User-Agent": "TappsMCP/0.8.3",
                 "Accept": "application/json",
             }
             if self._api_key is not None:
