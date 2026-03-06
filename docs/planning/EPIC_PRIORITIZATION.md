@@ -1,16 +1,20 @@
 # Epic Prioritization & Story Ranking
 
-**Date:** 2026-03-04
-**Scope:** TappsMCP + Platform complete; DocsMCP multi-language post-MVP
+**Date:** 2026-03-06
+**Scope:** TappsMCP + Platform + DocsMCP — ALL COMPLETE
 **Method:** Prioritized by value delivery, dependency readiness, risk reduction, and effort efficiency
 
 ---
 
 ## Executive Summary
 
-All TappsMCP core epics (0-46), promotion tiers (P0-P4), and Platform Epics (12-13) are **COMPLETE**, delivering 48 combined tools (29 TappsMCP + 19 DocsMCP), 5,995+ tests, and a comprehensive code quality + documentation pipeline.
+**All epics are COMPLETE.** TappsMCP (55 epics), DocsMCP (17 epics), Platform Epics (12-13), and promotion tiers (P0-P4) are all finished, delivering:
 
-Platform Epics 12-13 deliver the **FastMCP Composition Layer** (combined TappsPlatform server with `tapps-platform` CLI, 25 integration tests for namespace collision and singleton verification) and **Distribution & Publishing** (PyPI for all 3 packages, combined Dockerfile, npm wrappers, version coordination, AGENTS.md DocsMCP awareness). Only **1 epic remains open**: DocsMCP Epic 12 (Multi-Language Support, post-MVP).
+- **48 combined MCP tools** (29 TappsMCP + 19 DocsMCP)
+- **5,995+ tests passing**
+- **Comprehensive code quality + documentation pipeline**
+
+See [ROADMAP.md](ROADMAP.md) for future enhancement opportunities.
 
 ---
 
@@ -60,9 +64,9 @@ Platform Epics 12-13 deliver the **FastMCP Composition Layer** (combined TappsPl
 
 ---
 
-## DocsMCP: Status
+## DocsMCP: Status — ALL COMPLETE
 
-DocsMCP MVP and beyond is **nearly complete**. All 18 PRD tools are implemented across 42 source files with 965 tests passing. Epic 9 closed complete per research; **2 epics remain open** (10, 12).
+All 19 DocsMCP tools are implemented across 43 source files with 1,171+ tests passing.
 
 ### Epic Status Summary
 
@@ -77,17 +81,10 @@ DocsMCP MVP and beyond is **nearly complete**. All 18 PRD tools are implemented 
 | 6 | Diagram Generation | **Complete** | `docs_generate_diagram` | 41 |
 | 7 | Documentation Validation | **Complete** | `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness` | 68 |
 | 8 | ADR & Guides | **Complete** | `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing` | 65 |
-| 9 | Project Scan & Workflow | **Complete** | Resources (docs://status, config, coverage), prompts (docs_workflow_overview, docs_workflow). docs://templates and AGENTS.md gen deferred. | -- |
-| 10 | Distribution & CLI | **Open** | PyPI for docs-mcp (required); Docker publish, npm, CI gen optional/deferred | -- |
+| 9 | Project Scan & Workflow | **Complete** | Resources (docs://status, config, coverage), prompts (docs_workflow_overview, docs_workflow) | -- |
+| 10 | Distribution & CLI | **Complete** | PyPI publish workflow; Docker via Epic 46; npm/CI gen deferred | -- |
 | 11 | TappsMCP Integration | **Complete** | Enrichment in project_scan/drift/readme | 36 |
-| 12 | Multi-Language Support | **Open (post-MVP)** | tree-sitter extractors | -- |
-
-### Remaining Work
-
-| Tier | Epic | Priority | LOE | Rationale |
-|------|------|----------|-----|-----------|
-| **Tier 1: Required for standalone install** | Epic 10 (Distribution) | P1 | ~1 week | PyPI packaging and publish for docs-mcp (per INSTALLATION.md). Docker publish, CLI `check`, CI workflow generator optional; npm wrapper deferred. |
-| **Tier 2: Post-MVP** | Epic 12 (Multi-Language) | P3 | ~2 weeks | tree-sitter for TypeScript, Go, Rust, Java; Python-only sufficient for MVP. |
+| 12 | Multi-Language Support | **Complete** | tree-sitter extractors for TypeScript, Go, Rust, Java + dispatcher | -- |
 
 ---
 
@@ -105,12 +102,6 @@ All MVP and post-MVP epics through Tier 7 have been implemented:
   - **Epic 6 (Diagrams):** 4 diagram types (dependency, class, module, ER) x 2 formats (Mermaid, PlantUML), `docs_generate_diagram` tool.
   - **Epic 8 (ADR & Guides):** ADR templates, onboarding/contributing guide generators, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing` tools.
   - **Epic 11 (TappsMCP Integration):** Quality data enrichment in project_scan, drift detection, and README generation.
-
-### Remaining Open Epics
-
-| Epic | Focus | LOE | Notes |
-|------|-------|-----|-------|
-| DocsMCP 12 | Multi-Language Support | ~2 weeks (post-MVP) | tree-sitter for TypeScript, Go, Rust, Java; Python-only sufficient for MVP. |
 
 ### Recently Completed (Platform Critical Path)
 
@@ -143,7 +134,7 @@ Epic 9 (Project Scan & Workflow)   <- COMPLETE (resources, prompts; templates/AG
 Epic 11 (TappsMCP Integration)     <- COMPLETE
 
 Epic 10 (Distribution)            <- COMPLETE (PyPI publish workflow)
-Epic 12 (Multi-Language)           <- OPEN, post-MVP (depends on Epic 1)
+Epic 12 (Multi-Language)           <- COMPLETE (tree-sitter extractors)
 
 Platform Epic 12 (Composition)    <- COMPLETE (combined server, CLI, 25 tests)
 Platform Epic 13 (Publishing)     <- COMPLETE (PyPI 3 packages, Docker, npm, versions)
@@ -151,11 +142,7 @@ Platform Epic 13 (Publishing)     <- COMPLETE (PyPI 3 packages, Docker, npm, ver
 
 ### Critical Path
 
-All critical path epics are **COMPLETE**. Only DocsMCP Epic 12 (Multi-Language) remains as optional post-MVP work.
-
-### Remaining LOE
-
-With 1 developer: ~1 week for required work (Epic 10 PyPI). Optional: Docker publish, CLI check, CI generator. Epic 12 deferred to post-MVP.
+**All critical path epics are COMPLETE.** No remaining required work.
 
 ---
 
@@ -173,10 +160,9 @@ With 1 developer: ~1 week for required work (Epic 10 PyPI). Optional: Docker pub
 
 ## Recommendations
 
-1. **Epic 9 is complete.** Per [DOCSMCP_OPEN_EPICS_RESEARCH.md](DOCSMCP_OPEN_EPICS_RESEARCH.md), MCP resources (docs://status, config, coverage) and prompts (docs_workflow_overview, docs_workflow) are implemented. docs://templates and AGENTS.md generation are deferred (low ROI; host support for resources is inconsistent).
+All epics are complete. See [ROADMAP.md](ROADMAP.md) for future enhancement opportunities including:
 
-2. **Epic 10 (Distribution):** Add PyPI build and publish for the **docs-mcp** package so `pip install docs-mcp` / `uv add docs-mcp` (documented in INSTALLATION.md) works. Docker image exists; publishing to a registry and adding CLI `check` / CI workflow generator are optional. npm wrapper is deferred (Python distribution via PyPI/pipx is sufficient).
-
-3. **Epic 12 (Multi-Language)** remains post-MVP. Python-only is sufficient for launch.
-
-4. **DocsMCP is MVP-complete.** All 18 MCP tools are implemented with 965 tests. Remaining required work: PyPI for docs-mcp (~1 week). Optional: Docker publish, CLI check, CI generator.
+1. **Non-Python Language Scoring** — Extend TappsMCP's quality scoring to TypeScript, JavaScript, Go, Rust
+2. **Adaptive Business Domain Learning** — Extend `AdaptiveDomainDetector` to learn business expert routing
+3. **Memory Consolidation** — Auto-consolidate related memories to prevent context bloat
+4. **MCP Registry Submission** — List TappsMCP and DocsMCP in the official MCP server registry
