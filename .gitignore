@@ -63,3 +63,13 @@ nul
 
 # Local experiments
 /tools/
+
+# Playwright MCP test artifacts
+.playwright-mcp/
+
+# MCP registry fork (separate repo)
+mcp-registry/
+
+# Generated report screenshots
+arch-report*.png
+architecture-report*.png

@@ -62,6 +62,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -78,7 +79,7 @@ jobs:
 
       - name: Sign image with cosign (keyless)
         env:
-          DIGEST: ${{ steps.meta.outputs.digest }}
+          DIGEST: ${{ steps.build.outputs.digest }}
           IMAGE: ${{ matrix.name == 'tapps-mcp' && env.TAPPS_IMAGE || env.DOCS_IMAGE }}
         run: |
           cosign sign --yes "${IMAGE}@${DIGEST}"
