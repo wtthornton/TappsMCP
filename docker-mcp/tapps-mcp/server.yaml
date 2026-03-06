@@ -1,41 +1,23 @@
 name: tapps-mcp
-image: ghcr.io/tapps-mcp/tapps-mcp:latest
+image: ghcr.io/wtthornton/tapps-mcp
 type: server
 meta:
-  category: developer-tools
+  category: devops
   tags:
     - code-quality
     - python
-    - linting
     - security
     - mcp
-    - scoring
-    - quality-gate
 about:
-  title: "TappsMCP - Code Quality Tools"
+  title: "TappsMCP"
   description: >
     Deterministic code quality MCP server. Scores Python files across 7
-    categories (complexity, security, maintainability, test coverage,
-    performance, structure, developer experience), runs security scans,
-    enforces quality gates, looks up library docs via Context7, validates
-    configs, and consults 17 domain experts. 28 tools, zero LLM calls
-    in the tool chain — same input always produces same output.
-  icon: https://raw.githubusercontent.com/tapps-mcp/tapps-mcp/master/docs/icon.png
+    categories, runs security scans, enforces quality gates, looks up
+    library docs, and consults 17 domain experts. 28 tools, zero LLM
+    calls in the tool chain.
+  icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:
-  project: https://github.com/tapps-mcp/tapps-mcp
-  license: MIT
+  project: https://github.com/wtthornton/TappsMCP
+  commit: 782e6ddebb1f830565436885a25e17dd48993349
 config:
-  description: >
-    Mount your project directory to /workspace. Optionally set
-    CONTEXT7_API_KEY for documentation lookup via Context7.
-  environment:
-    - name: TAPPS_MCP_PROJECT_ROOT
-      value: /workspace
-      mount: true
-      description: "Project root directory (mounted from host)"
-  secrets:
-    - name: server.context7_api_key
-      env: CONTEXT7_API_KEY
-      example: "<your-context7-api-key>"
-      required: false
-      description: "Context7 API key for library documentation lookup"
+  description: "Mount your project directory to /workspace."

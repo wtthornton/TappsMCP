@@ -11,8 +11,8 @@ permissions:
   id-token: write  # cosign keyless signing
 
 env:
-  TAPPS_IMAGE: ghcr.io/tapps-mcp/tapps-mcp
-  DOCS_IMAGE: ghcr.io/tapps-mcp/docs-mcp
+  TAPPS_IMAGE: ghcr.io/wtthornton/tapps-mcp
+  DOCS_IMAGE: ghcr.io/wtthornton/docs-mcp
 
 jobs:
   build-and-push:

@@ -1,35 +1,23 @@
 name: docs-mcp
-image: ghcr.io/tapps-mcp/docs-mcp:latest
+image: ghcr.io/wtthornton/docs-mcp
 type: server
 meta:
-  category: developer-tools
+  category: devops
   tags:
     - documentation
     - docs
-    - readme
-    - changelog
-    - api-docs
+    - python
     - mcp
-    - code-analysis
 about:
-  title: "DocsMCP - Documentation Generation & Maintenance"
+  title: "DocsMCP"
   description: >
     Documentation MCP server for automated generation, validation, and
-    maintenance. Generates READMEs, API references, changelogs, release
-    notes, architecture decision records, onboarding guides, and diagrams.
-    Validates documentation drift, completeness, link integrity, and
-    freshness. 18 tools grounded in AST parsing, git history analysis,
-    and import graph traversal.
-  icon: https://raw.githubusercontent.com/tapps-mcp/tapps-mcp/master/docs/icon.png
+    maintenance. Generates READMEs, API references, changelogs, ADRs,
+    onboarding guides, and diagrams. 22 tools grounded in AST parsing
+    and git history analysis.
+  icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:
-  project: https://github.com/tapps-mcp/tapps-mcp
-  license: MIT
+  project: https://github.com/wtthornton/TappsMCP
+  commit: 782e6ddebb1f830565436885a25e17dd48993349
 config:
-  description: >
-    Mount your project directory to /workspace. Git must be available
-    in the container for history analysis features.
-  environment:
-    - name: TAPPS_MCP_PROJECT_ROOT
-      value: /workspace
-      mount: true
-      description: "Project root directory (mounted from host)"
+  description: "Mount your project directory to /workspace. Git required for history features."

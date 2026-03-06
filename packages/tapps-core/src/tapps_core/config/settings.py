@@ -142,11 +142,11 @@ class DockerSettings(BaseModel):
         description="Docker MCP Toolkit profile name.",
     )
     image: str = Field(
-        default="ghcr.io/tapps-mcp/tapps-mcp:latest",
+        default="ghcr.io/wtthornton/tapps-mcp:latest",
         description="Docker image for TappsMCP server.",
     )
     docs_image: str = Field(
-        default="ghcr.io/tapps-mcp/docs-mcp:latest",
+        default="ghcr.io/wtthornton/docs-mcp:latest",
         description="Docker image for DocsMCP server.",
     )
     companions: list[str] = Field(

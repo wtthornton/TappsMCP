@@ -153,8 +153,8 @@ Nested under `docker`.
 | `enabled` | bool | `false` | Enable Docker MCP transport. |
 | `transport` | string | `"auto"` | MCP transport mode: `auto`, `docker`, `exe`, or `uv`. |
 | `profile` | string | `"tapps-standard"` | Docker MCP Toolkit profile name. |
-| `image` | string | `"ghcr.io/tapps-mcp/tapps-mcp:latest"` | Docker image for TappsMCP. |
-| `docs_image` | string | `"ghcr.io/tapps-mcp/docs-mcp:latest"` | Docker image for DocsMCP. |
+| `image` | string | `"ghcr.io/wtthornton/tapps-mcp:latest"` | Docker image for TappsMCP. |
+| `docs_image` | string | `"ghcr.io/wtthornton/docs-mcp:latest"` | Docker image for DocsMCP. |
 | `companions` | list[string] | `["context7"]` | Companion MCP servers to recommend. |
 
 ## Example Configurations

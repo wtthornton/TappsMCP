@@ -22,11 +22,11 @@ class TestDockerSettingsDefaults:
 
     def test_default_image(self) -> None:
         ds = DockerSettings()
-        assert ds.image == "ghcr.io/tapps-mcp/tapps-mcp:latest"
+        assert ds.image == "ghcr.io/wtthornton/tapps-mcp:latest"
 
     def test_default_docs_image(self) -> None:
         ds = DockerSettings()
-        assert ds.docs_image == "ghcr.io/tapps-mcp/docs-mcp:latest"
+        assert ds.docs_image == "ghcr.io/wtthornton/docs-mcp:latest"
 
     def test_default_companions(self) -> None:
         ds = DockerSettings()

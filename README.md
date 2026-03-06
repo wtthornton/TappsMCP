@@ -27,7 +27,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 |---|---|---|---|
 | **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics) | 0 (library) |
 | **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 28 |
-| **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 18 |
+| **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 22 |
 
 ### Key highlights
 
@@ -849,15 +849,17 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/
 Pre-built multi-arch images are published on every release:
 
 ```bash
-docker pull ghcr.io/tapps-mcp/tapps-mcp:latest
-docker pull ghcr.io/tapps-mcp/docs-mcp:latest
+docker pull ghcr.io/wtthornton/tapps-mcp:latest
+docker pull ghcr.io/wtthornton/docs-mcp:latest
 
 # Run TappsMCP (stdio, mount current dir)
-docker run -v $(pwd):/workspace ghcr.io/tapps-mcp/tapps-mcp:latest
+docker run -v $(pwd):/workspace ghcr.io/wtthornton/tapps-mcp:latest
 
 # Run with HTTP transport
-docker run -p 8000:8000 -v $(pwd):/workspace ghcr.io/tapps-mcp/tapps-mcp:latest tapps-mcp serve --transport http --host 0.0.0.0 --port 8000
+docker run -p 8000:8000 -v $(pwd):/workspace ghcr.io/wtthornton/tapps-mcp:latest tapps-mcp serve --transport http --host 0.0.0.0 --port 8000
 ```
+
+See [docs/DOCKER_MCP_TOOLKIT.md](docs/DOCKER_MCP_TOOLKIT.md) for the full Docker MCP Toolkit submission plan.
 
 ---
 

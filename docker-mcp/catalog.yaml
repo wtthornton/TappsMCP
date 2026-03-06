@@ -5,7 +5,7 @@ servers:
   tapps-mcp:
     name: tapps-mcp
     description: "Code quality MCP server (28 tools)"
-    image: ghcr.io/tapps-mcp/tapps-mcp:latest
+    image: ghcr.io/wtthornton/tapps-mcp:latest
     transport: stdio
     environment:
       - name: TAPPS_MCP_PROJECT_ROOT
@@ -13,8 +13,8 @@ servers:
         mount: true
   docs-mcp:
     name: docs-mcp
-    description: "Documentation MCP server (18 tools)"
-    image: ghcr.io/tapps-mcp/docs-mcp:latest
+    description: "Documentation MCP server (22 tools)"
+    image: ghcr.io/wtthornton/docs-mcp:latest
     transport: stdio
     environment:
       - name: TAPPS_MCP_PROJECT_ROOT
