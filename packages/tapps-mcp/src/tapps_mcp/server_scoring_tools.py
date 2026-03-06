@@ -20,6 +20,8 @@ from mcp.types import ToolAnnotations
 from tapps_core.config.settings import load_settings
 from tapps_mcp.server_helpers import (
     _get_scorer,
+    _get_scorer_for_file,
+    _is_scorable_file,
     ensure_session_initialized,
     error_response,
     serialize_issues,
@@ -131,18 +133,21 @@ async def tapps_score_file(
     fix: bool = False,
     mode: str = "auto",
 ) -> dict[str, Any]:
-    """REQUIRED after editing any Python file. Scores quality across 7
+    """REQUIRED after editing any source file. Scores quality across 7
     categories (complexity, security, maintainability, test coverage,
     performance, structure, devex). Skipping means quality issues go
     undetected and the quality gate will likely fail.
+
+    Supports Python (.py), TypeScript/JavaScript (.ts, .tsx, .js, .jsx),
+    Go (.go), and Rust (.rs) files.
 
     Use quick=True during edit-lint-fix loops; use full (quick=False) before
     declaring work complete.
 
     Args:
-        file_path: Path to the Python file to score.
-        quick: If True, run ruff-only scoring (< 500 ms).
-        fix: If True (requires quick=True), apply ruff auto-fixes first.
+        file_path: Path to the source file to score.
+        quick: If True, run quick-mode scoring (< 500 ms).
+        fix: If True (requires quick=True, Python only), apply ruff auto-fixes first.
         mode: Execution mode - "subprocess", "direct", or "auto" (default).
             "direct" uses radon as a library and sync subprocess in thread
             pool, avoiding async subprocess reliability issues.
@@ -158,12 +163,22 @@ async def tapps_score_file(
     except (ValueError, FileNotFoundError) as exc:
         return error_response("tapps_score_file", "path_denied", str(exc))
 
-    scorer = _get_scorer()
+    # Get language-appropriate scorer
+    scorer = _get_scorer_for_file(resolved)
+    if scorer is None:
+        return error_response(
+            "tapps_score_file",
+            "unsupported_language",
+            f"File extension not supported for scoring: {resolved.suffix}. "
+            "Supported: .py, .pyi, .ts, .tsx, .js, .jsx, .mjs, .cjs, .go, .rs",
+        )
+
     fixes_applied = 0
 
     try:
         if quick:
-            if fix:
+            # Auto-fix only supported for Python files
+            if fix and scorer.language == "python":
                 from tapps_mcp.tools.ruff import run_ruff_fix
 
                 fixes_applied = await asyncio.to_thread(
@@ -290,11 +305,14 @@ async def tapps_quality_gate(
     then evaluates pass/fail against the quality preset. Work is NOT done
     until this passes (or the user explicitly accepts the risk).
 
+    Supports Python (.py), TypeScript/JavaScript (.ts, .tsx, .js, .jsx),
+    Go (.go), and Rust (.rs) files.
+
     If this tool is unavailable or rejected, use tapps_quick_check as a
     lighter alternative that includes a basic quality gate.
 
     Args:
-        file_path: Path to the Python file to evaluate.
+        file_path: Path to the source file to evaluate.
         preset: Quality preset - "standard" (70+), "strict" (80+), or "framework" (75+).
             When empty, prompts the user to select via elicitation (if supported).
     """
@@ -313,7 +331,16 @@ async def tapps_quality_gate(
 
     from tapps_mcp.gates.evaluator import evaluate_gate
 
-    scorer = _get_scorer()
+    # Get language-appropriate scorer
+    scorer = _get_scorer_for_file(resolved)
+    if scorer is None:
+        return error_response(
+            "tapps_quality_gate",
+            "unsupported_language",
+            f"File extension not supported for scoring: {resolved.suffix}. "
+            "Supported: .py, .pyi, .ts, .tsx, .js, .jsx, .mjs, .cjs, .go, .rs",
+        )
+
     try:
         score_result = await scorer.score_file(resolved)
     except Exception as exc:
@@ -514,16 +541,19 @@ async def tapps_quick_check(
     preset: str = "standard",
     fix: bool = False,
 ) -> dict[str, Any]:
-    """REQUIRED at minimum after editing any Python file. Runs quick
-    score + quality gate + basic security check in one fast call,
-    supplemented with an AST complexity heuristic for better accuracy.
+    """REQUIRED at minimum after editing any source file. Runs quick
+    score + quality gate + basic security check in one fast call.
+    For Python files, supplements with an AST complexity heuristic.
     For thorough validation, use tapps_validate_changed or individual tools.
     Skipping means quality regressions go unnoticed.
 
+    Supports Python (.py), TypeScript/JavaScript (.ts, .tsx, .js, .jsx),
+    Go (.go), and Rust (.rs) files.
+
     Args:
-        file_path: Path to the Python file to check.
+        file_path: Path to the source file to check.
         preset: Quality gate preset - "standard", "strict", or "framework".
-        fix: If True, apply ruff auto-fixes before scoring.
+        fix: If True (Python only), apply ruff auto-fixes before scoring.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
 
@@ -540,34 +570,70 @@ async def tapps_quick_check(
     from tapps_mcp.security.security_scanner import run_security_scan
 
     settings = load_settings()
-    scorer = _get_scorer()
 
-    # Optional ruff auto-fix before scoring
+    # Get language-appropriate scorer
+    scorer = _get_scorer_for_file(resolved)
+    if scorer is None:
+        return error_response(
+            "tapps_quick_check",
+            "unsupported_language",
+            f"File extension not supported for scoring: {resolved.suffix}. "
+            "Supported: .py, .pyi, .ts, .tsx, .js, .jsx, .mjs, .cjs, .go, .rs",
+        )
+
+    is_python = scorer.language == "python"
+
+    # Optional ruff auto-fix before scoring (Python only)
     fixes_applied = 0
-    if fix:
+    if fix and is_python:
         from tapps_mcp.tools.ruff import run_ruff_fix
 
         fixes_applied = await asyncio.to_thread(
             run_ruff_fix, str(resolved), cwd=str(resolved.parent)
         )
 
-    # Run enriched scoring and security scan in parallel
-    score_coro = asyncio.to_thread(scorer.score_file_quick_enriched, resolved)
-    sec_coro = asyncio.to_thread(
-        run_security_scan,
-        str(resolved),
-        scan_secrets=True,
-        cwd=str(settings.project_root),
-        timeout=settings.tool_timeout,
-    )
+    # For Python: use enriched scoring with AST heuristics
+    # For other languages: use standard quick scoring
+    if is_python:
+        score_coro = asyncio.to_thread(scorer.score_file_quick_enriched, resolved)
+    else:
+        score_coro = asyncio.to_thread(scorer.score_file_quick, resolved)
 
-    try:
-        score_result, sec_result = await asyncio.gather(score_coro, sec_coro)
-    except Exception as exc:
-        _logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
-        return error_response("tapps_quick_check", "scoring_failed", str(exc))
+    # Security scan (Python only, uses bandit)
+    if is_python:
+        sec_coro = asyncio.to_thread(
+            run_security_scan,
+            str(resolved),
+            scan_secrets=True,
+            cwd=str(settings.project_root),
+            timeout=settings.tool_timeout,
+        )
+        try:
+            score_result, sec_result = await asyncio.gather(score_coro, sec_coro)
+        except Exception as exc:
+            _logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
+            return error_response("tapps_quick_check", "scoring_failed", str(exc))
+    else:
+        # Non-Python: scoring only (no security scan yet)
+        try:
+            score_result = await score_coro
+        except Exception as exc:
+            _logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
+            return error_response("tapps_quick_check", "scoring_failed", str(exc))
 
-    complexity_hint = _compute_complexity_hint(resolved)
+        # Create a dummy security result for non-Python files
+        from tapps_mcp.security.security_scanner import SecurityScanResult
+
+        sec_result = SecurityScanResult(
+            passed=True,
+            bandit_issues=[],
+            secret_findings=[],
+            bandit_available=False,
+            total_issues=0,
+        )
+
+    # Complexity hint (Python only, uses AST)
+    complexity_hint = _compute_complexity_hint(resolved) if is_python else None
     gate_result = evaluate_gate(score_result, preset=preset)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

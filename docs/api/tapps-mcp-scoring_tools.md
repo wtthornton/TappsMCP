@@ -2,6 +2,8 @@
 
 Scoring and quality-gate tool handlers for TappsMCP.
 
+**Supported Languages:** Python (full), TypeScript/JavaScript, Go, Rust (stub). Language is auto-detected from file extension. See `scoring/language_detector.py` for routing logic.
+
 Functions are defined at module level (importable for tests) and
 registered on the ``mcp`` instance via :func:[`register`](#register).
 

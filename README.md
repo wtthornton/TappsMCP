@@ -11,7 +11,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/tests-5%2C900%2B_passing-brightgreen.svg)](#development)
-[![Tools](https://img.shields.io/badge/MCP_tools-28-blue.svg)](#tools-reference)
+[![Tools](https://img.shields.io/badge/MCP_tools-29-blue.svg)](#tools-reference)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
@@ -26,13 +26,13 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 | Package | PyPI Name | Purpose | Tools |
 |---|---|---|---|
 | **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics) | 0 (library) |
-| **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 28 |
+| **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 29 |
 | **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 22 |
 
 ### Key highlights
 
-- **28 deterministic MCP tools** — no LLM calls in the tool chain; same input always produces same output
-- **7-category code scoring** — complexity, security, maintainability, test coverage, performance, structure, developer experience
+- **29 deterministic MCP tools** — no LLM calls in the tool chain; same input always produces same output
+- **Multi-language code scoring** — Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **17 domain experts** with 139 curated knowledge files and RAG-backed answers
 - **Persistent shared memory** — project decisions survive across sessions (SQLite + BM25 retrieval)
 - **Unified feature flags** — optional dependency detection (faiss, numpy, radon) with graceful degradation
@@ -77,13 +77,13 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 
 ## Features
 
-TappsMCP exposes **28 MCP tools** plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
+TappsMCP exposes **29 MCP tools** plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
 
 ### Code quality & scoring
 
 | Feature | Description |
 |--------|-------------|
-| **Code scoring** | 0–100 score across 7 categories: complexity, security, maintainability, test coverage, performance, structure, developer experience. Quick mode (ruff-only) or full (ruff, mypy, bandit, radon). |
+| **Code scoring** | 0–100 score across 7 categories: complexity, security, maintainability, test coverage, performance, structure, developer experience. Python uses ruff, mypy, bandit, radon. TypeScript/JavaScript, Go, Rust use tree-sitter AST analysis (optional dependency, falls back to regex). See [Supported Languages](#supported-languages). |
 | **Quality gates** | Pass/fail against configurable presets: **standard**, **strict**, **framework**. |
 | **Structured outputs** | Machine-parseable JSON (`structuredContent`) for 6 tools: `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`, `tapps_security_scan`, `tapps_validate_changed`, `tapps_validate_config`. |
 | **Dead code detection** | Vulture-based unused functions, classes, imports, variables with confidence scoring; integrated into maintainability/structure. |
@@ -129,6 +129,40 @@ TappsMCP exposes **28 MCP tools** plus workflow prompts. All tools are **determi
 | **Cursor marketplace** | Publishable plugin with marketplace.json, deep link, skills, agents, hooks. |
 | **Agent SDK examples** | Python and TypeScript examples (quality check, CI pipeline, subagent registration). |
 | **MCP elicitation** | Interactive preset in `tapps_quality_gate`, init confirmation in `tapps_init` where supported. |
+
+---
+
+## Supported languages
+
+TappsMCP scoring tools detect language from file extension and route to the appropriate scorer:
+
+| Language | Extensions | Status | Tooling |
+|----------|------------|--------|---------|
+| **Python** | `.py`, `.pyi` | ✅ Full | ruff, mypy, bandit, radon, vulture |
+| **TypeScript** | `.ts`, `.tsx` | ✅ Full | tree-sitter (optional), regex fallback |
+| **JavaScript** | `.js`, `.jsx`, `.mjs`, `.cjs` | ✅ Full | Routes to TypeScript scorer |
+| **Go** | `.go` | ✅ Full | tree-sitter (optional), regex fallback |
+| **Rust** | `.rs` | ✅ Full | tree-sitter (optional), regex fallback |
+
+**How it works:**
+- Language is auto-detected from file extension (case-insensitive)
+- `get_scorer(file_path)` returns the appropriate scorer instance
+- Unsupported extensions return `None` with a clear message
+- JavaScript files route to the TypeScript scorer (shared implementation)
+
+**Tree-sitter dependencies (optional):** For best results with non-Python languages, install tree-sitter:
+
+```bash
+uv sync --extra treesitter
+# or: pip install tree-sitter tree-sitter-typescript tree-sitter-go tree-sitter-rust
+```
+
+When tree-sitter is not installed, scorers fall back to regex-based analysis with `degraded: true`.
+
+**Language-specific patterns detected:**
+- **TypeScript/JS:** Nested callbacks, `any` usage, type assertions, test functions, JSDoc comments
+- **Go:** `unsafe.Pointer`, defer-in-loop, exported naming (MixedCaps), error handling, doc comments
+- **Rust:** `unsafe` blocks, `.unwrap()` abuse, `#[test]` attributes, `///` doc comments, `snake_case` naming
 
 ---
 

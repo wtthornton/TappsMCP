@@ -13,7 +13,7 @@ This is a **uv workspace monorepo** with three packages:
 | Package | Path | Purpose |
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, memory, experts, metrics, adaptive) |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (28 tools, 31 actions) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (29 tools, 31 actions) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (22 tools) |
 
 tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
@@ -112,8 +112,10 @@ src/tapps_mcp/
 ├── config/     settings.py, default.yaml
 ├── security/   path_validator.py, io_guardrails.py, governance.py, api_keys.py,
 │               secret_scanner.py, security_scanner.py, content_safety.py
-├── scoring/    models.py, constants.py, scorer.py, dead_code.py,
-│               dependency_security.py
+├── scoring/    models.py, constants.py, scorer_base.py, scorer.py,
+│               scorer_typescript.py, scorer_go.py, scorer_rust.py,
+│               language_detector.py, dead_code.py, dependency_security.py,
+│               suggestions.py
 ├── gates/      models.py, evaluator.py
 ├── tools/      subprocess_utils.py, subprocess_runner.py, tool_detection.py,
 │               ruff.py, ruff_direct.py, mypy.py, bandit.py,
@@ -232,7 +234,17 @@ The **knowledge cache** (`KBCache` in `tapps_core/knowledge/cache.py`) supports 
 
 ### Scoring pipeline
 
-`scoring/scorer.py` orchestrates the 7-category scoring engine. In full mode, `tools/parallel.py` runs ruff, mypy, bandit, and radon concurrently via `asyncio.gather`. Quick mode runs ruff only. When external tools are missing, AST-based fallbacks in `scoring/scorer.py` produce degraded results. The `tools/` directory has one module per external checker (ruff, mypy, bandit, radon, vulture, pip-audit) plus `ruff_direct.py` and `radon_direct.py` for library-mode execution.
+**Multi-language architecture (Epic 56):** `scoring/scorer_base.py` defines the abstract `ScorerBase` class that all language scorers inherit from. It specifies the common interface: `language`, `supported_categories`, `file_extensions` properties, plus `score_file()` and `score_file_quick()` methods. `scoring/language_detector.py` provides `detect_language(file_path)` and `get_scorer(file_path)` for automatic language detection and scorer routing based on file extension.
+
+**Language scorers:**
+- `scorer.py` — `CodeScorer` for Python (full implementation with ruff, mypy, bandit, radon)
+- `scorer_typescript.py` — `TypeScriptScorer` for .ts/.tsx/.js/.jsx/.mjs/.cjs (tree-sitter with regex fallback)
+- `scorer_go.py` — `GoScorer` for .go files (tree-sitter with regex fallback)
+- `scorer_rust.py` — `RustScorer` for .rs files (tree-sitter with regex fallback)
+
+**Python scoring:** `CodeScorer` orchestrates the 7-category scoring engine. In full mode, `tools/parallel.py` runs ruff, mypy, bandit, and radon concurrently via `asyncio.gather`. Quick mode runs ruff only. When external tools are missing, AST-based fallbacks produce degraded results. The `tools/` directory has one module per external checker (ruff, mypy, bandit, radon, vulture, pip-audit) plus `ruff_direct.py` and `radon_direct.py` for library-mode execution.
+
+**Non-Python scoring:** TypeScript, Go, and Rust scorers use tree-sitter for AST-based analysis when the optional `tree-sitter` dependencies are installed (`uv sync --extra treesitter`). Each scorer implements all 7 scoring categories with language-specific patterns: nested callbacks and `any` usage for TypeScript, `unsafe.Pointer` and defer-in-loop for Go, unsafe blocks and `.unwrap()` abuse for Rust. When tree-sitter is unavailable, scorers fall back to regex-based analysis with `degraded=True`. The `ScoreResult` model includes a `language` field for response identification.
 
 ### Security model
 

@@ -955,17 +955,25 @@ class TestValidateSingleFile:
         mock_gate = _make_mock_gate(passed=True)
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file_quick = MagicMock(return_value=mock_score)
 
-        with patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate):
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_scorer_for_file",
+                return_value=scorer_mock,
+            ),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+        ):
             result = await _validate_single_file(
-                f, scorer_mock, "standard", quick=True,
+                f, "standard", quick=True,
                 do_security_full=False, sem=asyncio.Semaphore(1),
             )
 
         assert result["overall_score"] == 92.0
         assert result["gate_passed"] is True
         assert result["security_passed"] is True
+        assert result["language"] == "python"
 
     @pytest.mark.asyncio
     async def test_full_mode_score(self, tmp_path: Path) -> None:
@@ -978,15 +986,23 @@ class TestValidateSingleFile:
         mock_gate = _make_mock_gate(passed=True)
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file = AsyncMock(return_value=mock_score)
 
-        with patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate):
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_scorer_for_file",
+                return_value=scorer_mock,
+            ),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+        ):
             result = await _validate_single_file(
-                f, scorer_mock, "standard", quick=False,
+                f, "standard", quick=False,
                 do_security_full=False, sem=asyncio.Semaphore(1),
             )
 
         assert result["overall_score"] == 88.0
+        assert result["language"] == "python"
 
     @pytest.mark.asyncio
     async def test_scoring_exception(self, tmp_path: Path) -> None:
@@ -996,12 +1012,17 @@ class TestValidateSingleFile:
         f.write_text("x = 1\n", encoding="utf-8")
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file_quick = MagicMock(side_effect=RuntimeError("boom"))
 
-        result = await _validate_single_file(
-            f, scorer_mock, "standard", quick=True,
-            do_security_full=False, sem=asyncio.Semaphore(1),
-        )
+        with patch(
+            "tapps_mcp.server_helpers._get_scorer_for_file",
+            return_value=scorer_mock,
+        ):
+            result = await _validate_single_file(
+                f, "standard", quick=True,
+                do_security_full=False, sem=asyncio.Semaphore(1),
+            )
 
         assert "errors" in result
         assert "boom" in result["errors"][0]
@@ -1017,16 +1038,43 @@ class TestValidateSingleFile:
         mock_gate = _make_mock_gate(passed=False)
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file_quick = MagicMock(return_value=mock_score)
 
-        with patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate):
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_scorer_for_file",
+                return_value=scorer_mock,
+            ),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+        ):
             result = await _validate_single_file(
-                f, scorer_mock, "standard", quick=True,
+                f, "standard", quick=True,
                 do_security_full=False, sem=asyncio.Semaphore(1),
             )
 
         assert result["gate_passed"] is False
         assert "gate_failures" in result
+
+    @pytest.mark.asyncio
+    async def test_unsupported_language(self, tmp_path: Path) -> None:
+        """Test that unsupported file types return an error."""
+        from tapps_mcp.server_pipeline_tools import _validate_single_file
+
+        f = tmp_path / "test.txt"
+        f.write_text("hello", encoding="utf-8")
+
+        with patch(
+            "tapps_mcp.server_helpers._get_scorer_for_file",
+            return_value=None,
+        ):
+            result = await _validate_single_file(
+                f, "standard", quick=True,
+                do_security_full=False, sem=asyncio.Semaphore(1),
+            )
+
+        assert "errors" in result
+        assert "Unsupported file type" in result["errors"][0]
 
 
 class TestComputeImpactAnalysis:

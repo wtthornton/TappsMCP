@@ -69,6 +69,33 @@ def detect_changed_python_files(
     Returns:
         Sorted, deduplicated list of changed .py file paths.
     """
+    return detect_changed_scorable_files(project_root, base_ref, extensions={".py", ".pyi"})
+
+
+def detect_changed_scorable_files(
+    project_root: Path,
+    base_ref: str = "HEAD",
+    extensions: set[str] | None = None,
+) -> list[Path]:
+    """Detect changed files that can be scored using git diff.
+
+    Runs unstaged and staged git diffs in parallel for minimal latency.
+    Deduplicates and returns sorted paths that exist and have scorable extensions.
+
+    Args:
+        project_root: The git repository root.
+        base_ref: Git ref to diff against (default: HEAD).
+        extensions: Set of file extensions to include. If None, uses all
+            supported extensions (.py, .pyi, .ts, .tsx, .js, .jsx, .mjs, .cjs, .go, .rs).
+
+    Returns:
+        Sorted, deduplicated list of changed scorable file paths.
+    """
+    if extensions is None:
+        from tapps_mcp.scoring.language_detector import get_supported_extensions
+
+        extensions = set(get_supported_extensions())
+
     files: set[str] = set()
     with ThreadPoolExecutor(max_workers=2) as executor:
         fut_unstaged = executor.submit(_git_diff_names, project_root, base_ref)
@@ -82,16 +109,22 @@ def detect_changed_python_files(
         except (FuturesTimeoutError, OSError):
             logger.warning("git_diff_staged_failed")
 
-    py_files: list[Path] = []
+    scorable_files: list[Path] = []
     for raw_name in sorted(files):
         cleaned = raw_name.strip()
-        if not cleaned or not cleaned.endswith(".py"):
+        if not cleaned:
+            continue
+        # Check if the file extension is in the allowed set
+        from pathlib import Path as _Path
+
+        p = _Path(cleaned)
+        if p.suffix.lower() not in extensions:
             continue
         path = project_root / cleaned
         if path.exists():
-            py_files.append(path)
+            scorable_files.append(path)
 
-    return py_files
+    return scorable_files
 
 
 def format_batch_summary(results: list[dict[str, Any]]) -> str:

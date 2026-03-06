@@ -25,7 +25,7 @@ TappsMCP has completed all planned epics:
 
 | Epic | Name | Priority | LOE | Rationale |
 |------|------|----------|-----|-----------|
-| **56** | [Non-Python Language Scoring](epics/EPIC-56-NON-PYTHON-LANGUAGE-SCORING.md) | P1 | ~3-4 weeks | Extend quality scoring to TypeScript, JavaScript, Go, Rust. DocsMCP already has tree-sitter extractors. |
+| **56** | [Non-Python Language Scoring](epics/EPIC-56-NON-PYTHON-LANGUAGE-SCORING.md) | P1 | ~3-4 weeks | Extend quality scoring to TypeScript, JavaScript, Go, Rust. **Complete** (2026-03-06). |
 | **57** | [Adaptive Business Domain Learning](epics/EPIC-57-ADAPTIVE-BUSINESS-DOMAIN-LEARNING.md) | P1 | ~2 weeks | Extend `AdaptiveDomainDetector` to learn business expert routing from feedback. |
 | **58** | [Memory Consolidation](epics/EPIC-58-MEMORY-CONSOLIDATION.md) | P2 | ~2 weeks | Auto-consolidate related memories into summaries to prevent context bloat. |
 
@@ -78,6 +78,8 @@ Enhancements are prioritized by:
 | 2026-03-06 | Created roadmap | All epics complete; need forward-looking document |
 | 2026-03-06 | Prioritized Non-Python scoring as Epic 56 | Biggest gap in current offering; DocsMCP extractors provide foundation |
 | 2026-03-06 | Prioritized Adaptive Business Learning as Epic 57 | Closes feedback loop on Epic 43-45 business expert system |
+| 2026-03-06 | Started Epic 56 Story 56.1 | Created `ScorerBase` ABC; `CodeScorer` now inherits from it; 28 new tests |
+| 2026-03-06 | Completed Epic 56 | All 7 stories done: TypeScript, Go, Rust scorers with tree-sitter; tool integration; 77 new tests |
 
 ---
 

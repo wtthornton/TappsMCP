@@ -61,6 +61,12 @@ vector = [
 pip-audit = [
     "pip-audit>=2.7.0",
 ]
+treesitter = [
+    "tree-sitter>=0.24.0,<1",
+    "tree-sitter-typescript>=0.23.2,<1",
+    "tree-sitter-go>=0.23.4,<1",
+    "tree-sitter-rust>=0.23.2,<1",
+]
 
 [project.scripts]
 tapps-mcp = "tapps_mcp.cli:main"

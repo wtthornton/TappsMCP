@@ -419,7 +419,7 @@ wheels = [
 
 [[package]]
 name = "docs-mcp"
-version = "0.1.5"
+version = "1.0.0"
 source = { editable = "packages/docs-mcp" }
 dependencies = [
     { name = "click" },
@@ -2127,7 +2127,7 @@ wheels = [
 
 [[package]]
 name = "tapps-core"
-version = "1.0.4"
+version = "1.0.5"
 source = { editable = "packages/tapps-core" }
 dependencies = [
     { name = "httpx" },
@@ -2159,7 +2159,7 @@ provides-extras = ["vector"]
 
 [[package]]
 name = "tapps-mcp"
-version = "0.8.5"
+version = "1.0.0"
 source = { editable = "packages/tapps-mcp" }
 dependencies = [
     { name = "anyio" },
@@ -2194,6 +2194,12 @@ rag = [
     { name = "numpy" },
     { name = "sentence-transformers" },
 ]
+treesitter = [
+    { name = "tree-sitter" },
+    { name = "tree-sitter-go" },
+    { name = "tree-sitter-rust" },
+    { name = "tree-sitter-typescript" },
+]
 vector = [
     { name = "faiss-cpu" },
     { name = "numpy" },
@@ -2227,9 +2233,13 @@ requires-dist = [
     { name = "sentence-transformers", marker = "extra == 'vector'", specifier = ">=5.2.3,<6" },
     { name = "structlog", specifier = ">=25.5.0,<26" },
     { name = "tapps-core", editable = "packages/tapps-core" },
+    { name = "tree-sitter", marker = "extra == 'treesitter'", specifier = ">=0.24.0,<1" },
+    { name = "tree-sitter-go", marker = "extra == 'treesitter'", specifier = ">=0.23.4,<1" },
+    { name = "tree-sitter-rust", marker = "extra == 'treesitter'", specifier = ">=0.23.2,<1" },
+    { name = "tree-sitter-typescript", marker = "extra == 'treesitter'", specifier = ">=0.23.2,<1" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
 ]
-provides-extras = ["dev", "rag", "vector", "pip-audit"]
+provides-extras = ["dev", "rag", "vector", "pip-audit", "treesitter"]
 
 [[package]]
 name = "threadpoolctl"

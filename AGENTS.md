@@ -9,9 +9,9 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 
 ## What TappsMCP is
 
-TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 28 tools for:
+TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 29 tools for:
 
-- **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
+- **Scoring** code files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex) — supports **Python**, **TypeScript/JavaScript**, **Go**, and **Rust** with tree-sitter analysis (optional dependency for non-Python, falls back to regex)
 - **Security scanning** (Bandit + secret detection with redacted context)
 - **Quality gates** (pass/fail against configurable presets: standard, strict, framework)
 - **Dead code detection** (Vulture-based unused function/class/import/variable detection with confidence scoring)
@@ -42,8 +42,8 @@ You only see these tools when the host has started the TappsMCP server and attac
 |------|----------------|
 | **tapps_session_start** | **FIRST call in every session** - returns server info (version, checkers, configuration) only. Call **tapps_project_profile** when you need project context. |
 | **tapps_server_info** | At **session start** - discover version, available tools, and installed checkers. Response includes a short `recommended_workflow` string. |
-| **tapps_score_file** | When **editing or reviewing** a Python file. Use `quick=True` during edit-lint-fix loops; use full (default) **before declaring work complete**. |
-| **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
+| **tapps_score_file** | When **editing or reviewing** a code file. Supports Python, TypeScript/JavaScript, Go, Rust. Use `quick=True` during edit-lint-fix loops; use full (default) **before declaring work complete**. |
+| **tapps_quick_check** | **After editing any supported file** - quick score + gate + basic security in one fast call. Supports Python (.py), TypeScript (.ts/.tsx), JavaScript (.js/.jsx), Go (.go), Rust (.rs). |
 | **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
 | **tapps_quality_gate** | **Before declaring work complete** - ensures the file passes the configured quality preset. Gate failures are sorted by category weight (highest-impact first). A security floor of 50/100 is enforced regardless of overall score. Do not consider work done until this passes (or the user accepts the risk). |
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - runs score + gate on specified files. **Always pass explicit `file_paths`** (comma-separated) to scope validation to files you actually changed — do NOT rely on auto-detect, which scans all git-changed files and can be very slow in large repos. **Default is quick mode** (ruff-only, under ~10s). Only use `quick=false` as a **last resort** (pre-release, security audit) — it runs mypy, bandit, radon, vulture and takes 1–5+ min per file. |
@@ -108,6 +108,24 @@ Pass the `domain` parameter when the context clearly implies a domain. This impr
 | Architecture decisions, patterns | `software-architecture` |
 
 When in doubt, omit `domain` to let auto-detection from the question text choose.
+
+---
+
+## Supported languages
+
+TappsMCP scoring tools support multiple programming languages:
+
+| Language | Extensions | Scoring Status | Notes |
+|----------|------------|----------------|-------|
+| **Python** | `.py`, `.pyi` | ✅ Full | ruff, mypy, bandit, radon, vulture |
+| **TypeScript** | `.ts`, `.tsx` | ⚠️ Stub | Returns neutral scores; full scoring coming in Story 56.3 |
+| **JavaScript** | `.js`, `.jsx`, `.mjs`, `.cjs` | ⚠️ Stub | Routes to TypeScript scorer |
+| **Go** | `.go` | ⚠️ Stub | Returns neutral scores; full scoring coming in Story 56.4 |
+| **Rust** | `.rs` | ⚠️ Stub | Returns neutral scores; full scoring coming in Story 56.5 |
+
+**Stub behavior:** Non-Python files return `degraded: true` with a neutral score (50/100) and a message indicating full support is coming. The language is auto-detected from the file extension.
+
+**Language detection:** Use any scoring tool (`tapps_score_file`, `tapps_quick_check`, `tapps_quality_gate`) with any supported file extension. The correct scorer is selected automatically. Unsupported file types return a clear "unsupported language" message.
 
 ---
 
@@ -289,12 +307,12 @@ The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard 
 | Tool | When to use |
 |------|--------------|
 | **tapps_session_start** | **FIRST call in every session** - server info only |
-| **tapps_quick_check** | **After editing any Python file** - quick score + gate + security |
+| **tapps_quick_check** | **After editing any supported file** - quick score + gate + security (Python, TypeScript, Go, Rust) |
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files |
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (28 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+**For full tool reference** (29 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 

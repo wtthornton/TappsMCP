@@ -50,6 +50,7 @@ class ScoreResult(BaseModel):
         description="Per-category scores (complexity, security, etc.)."
     )
     overall_score: float = Field(ge=0.0, le=100.0, description="Weighted overall score (0-100).")
+    language: str = Field(default="python", description="Language of the scored file.")
     lint_issues: list[LintIssue] = Field(default_factory=list, description="Ruff diagnostics.")
     type_issues: list[TypeIssue] = Field(default_factory=list, description="mypy diagnostics.")
     security_issues: list[SecurityIssue] = Field(

@@ -245,31 +245,37 @@ def _discover_changed_files(
     base_ref: str,
     project_root: Path,
 ) -> list[Path]:
-    """Resolve the list of Python files to validate.
+    """Resolve the list of scorable files to validate.
 
     When *file_paths* is non-empty, parse the comma-separated list and
-    validate each path.  Otherwise, auto-detect changed ``.py`` files
+    validate each path. Otherwise, auto-detect changed scorable files
     via ``git diff``.
+
+    Supports: Python (.py, .pyi), TypeScript/JavaScript (.ts, .tsx, .js, .jsx, .mjs, .cjs),
+    Go (.go), and Rust (.rs) files.
     """
     from tapps_mcp.server import _validate_file_path
-    from tapps_mcp.tools.batch_validator import detect_changed_python_files
+    from tapps_mcp.server_helpers import _is_scorable_file
+    from tapps_mcp.tools.batch_validator import detect_changed_scorable_files
 
     paths: list[Path] = []
     if file_paths.strip():
         for raw_fp in file_paths.split(","):
             cleaned_fp = raw_fp.strip()
-            if not cleaned_fp or not cleaned_fp.endswith(".py"):
+            if not cleaned_fp:
+                continue
+            # Check if the file has a scorable extension
+            if not _is_scorable_file(cleaned_fp):
                 continue
             with contextlib.suppress(ValueError, FileNotFoundError):
                 paths.append(_validate_file_path(cleaned_fp))
     else:
-        paths = detect_changed_python_files(project_root, base_ref)
+        paths = detect_changed_scorable_files(project_root, base_ref)
     return paths
 
 
 async def _validate_single_file(
     path: Path,
-    scorer: CodeScorer,
     preset: str,
     quick: bool,
     do_security_full: bool,
@@ -277,12 +283,28 @@ async def _validate_single_file(
     tracker: _ProgressTracker | None = None,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Score and optionally security-scan a single file under concurrency limit."""
+    """Score and optionally security-scan a single file under concurrency limit.
+
+    Supports multi-language files by using the appropriate scorer based on file extension:
+    - Python (.py, .pyi) -> CodeScorer
+    - TypeScript/JavaScript (.ts, .tsx, .js, .jsx, .mjs, .cjs) -> TypeScriptScorer
+    - Go (.go) -> GoScorer
+    - Rust (.rs) -> RustScorer
+    """
     from tapps_mcp.gates.evaluator import evaluate_gate
+    from tapps_mcp.server_helpers import _get_scorer_for_file
 
     async with sem:
         file_result: dict[str, Any] = {"file_path": str(path)}
         try:
+            # Get the appropriate scorer for this file's language
+            scorer = _get_scorer_for_file(path)
+            if scorer is None:
+                file_result["errors"] = [f"Unsupported file type: {path.suffix}"]
+                return file_result
+
+            file_result["language"] = scorer.language
+
             if quick:
                 score = await asyncio.to_thread(scorer.score_file_quick, path)
             else:
@@ -294,7 +316,9 @@ async def _validate_single_file(
             if gate.failures:
                 file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
 
-            if do_security_full:
+            # Security scanning - currently Python-only (bandit-based)
+            is_python = scorer.language == "python"
+            if do_security_full and is_python:
                 from tapps_mcp.security.secret_scanner import SecretScanner
 
                 secret_result = SecretScanner().scan_file(str(path))
@@ -307,7 +331,11 @@ async def _validate_single_file(
                     bandit_crit_high + secret_result.high_severity
                 ) == 0
                 file_result["security_issues"] = bandit_count + secret_count
-            elif quick:
+            elif is_python and quick:
+                file_result["security_passed"] = True
+                file_result["security_issues"] = 0
+            else:
+                # Non-Python files: no security scanning yet (future: eslint-plugin-security, gosec, etc.)
                 file_result["security_passed"] = True
                 file_result["security_issues"] = 0
         except Exception as exc:
@@ -439,7 +467,7 @@ def _build_validation_summary(
 
     summary = format_batch_summary(results)
     if quick:
-        summary = f"[Quick mode - ruff only] {summary}"
+        summary = f"[Quick mode] {summary}"
     if capped:
         summary += f" ({extra_count} additional files not validated - cap {MAX_BATCH_FILES})"
     return summary
@@ -456,11 +484,17 @@ async def tapps_validate_changed(
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """REQUIRED before declaring multi-file work complete.
-    Detects changed Python files (via git diff) or accepts an explicit
+    Detects changed scorable files (via git diff) or accepts an explicit
     comma-separated list. Runs score + quality gate on each file; security
-    scan only when quick=False or security_depth='full' (default quick=True
-    does not run security). Skipping means quality issues in changed files
-    go undetected.
+    scan only for Python files when quick=False or security_depth='full'
+    (default quick=True does not run security). Skipping means quality
+    issues in changed files go undetected.
+
+    Supports multi-language scoring:
+    - Python (.py, .pyi)
+    - TypeScript/JavaScript (.ts, .tsx, .js, .jsx, .mjs, .cjs)
+    - Go (.go)
+    - Rust (.rs)
 
     If this tool is unavailable or rejected, use tapps_quick_check on
     individual changed files as a fallback.
@@ -481,7 +515,7 @@ async def tapps_validate_changed(
         ctx: Optional MCP context (injected by host); used for progress notifications.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
-    from tapps_mcp.server_helpers import _get_scorer, ensure_session_initialized
+    from tapps_mcp.server_helpers import ensure_session_initialized
     from tapps_mcp.tools.batch_validator import MAX_BATCH_FILES, format_batch_summary
 
     start = time.perf_counter_ns()
@@ -509,14 +543,13 @@ async def tapps_validate_changed(
         await ensure_session_initialized()
         _maybe_warm_dependency_cache(settings, quick)
 
-        scorer = _get_scorer()
         sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
         do_security_full = _resolve_security_depth(security_depth, include_security, quick)
 
         raw_results = await asyncio.gather(
             *[
                 _validate_single_file(
-                    p, scorer, preset, quick, do_security_full, sem, tracker, ctx
+                    p, preset, quick, do_security_full, sem, tracker, ctx
                 )
                 for p in paths
             ],

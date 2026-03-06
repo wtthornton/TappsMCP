@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from tapps_core.knowledge.lookup import LookupEngine as _LookupEngineType
     from tapps_core.memory.store import MemoryStore as _MemoryStoreType
     from tapps_mcp.scoring.scorer import CodeScorer as _CodeScorerType
+    from tapps_mcp.scoring.scorer_base import ScorerBase as _ScorerBaseType
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +57,36 @@ def _reset_scorer_cache() -> None:
     """Reset the cached :class:`CodeScorer` singleton (for testing)."""
     global _scorer
     _scorer = None
+
+
+def _get_scorer_for_file(file_path: Path | str) -> _ScorerBaseType | None:
+    """Return the appropriate scorer for a file based on its extension.
+
+    Uses the language detector to route to the correct scorer:
+    - Python (.py, .pyi) -> CodeScorer
+    - TypeScript/JavaScript (.ts, .tsx, .js, .jsx, .mjs, .cjs) -> TypeScriptScorer
+    - Go (.go) -> GoScorer
+    - Rust (.rs) -> RustScorer
+
+    Returns None if the file's language is not supported for scoring.
+    """
+    from tapps_mcp.scoring.language_detector import get_scorer
+
+    return get_scorer(file_path)
+
+
+def _is_scorable_file(file_path: Path | str) -> bool:
+    """Check if a file can be scored (has a supported language extension)."""
+    from tapps_mcp.scoring.language_detector import detect_language
+
+    return detect_language(file_path) is not None
+
+
+def _get_supported_extensions() -> frozenset[str]:
+    """Return the set of all file extensions that can be scored."""
+    from tapps_mcp.scoring.language_detector import get_supported_extensions
+
+    return get_supported_extensions()
 
 
 # ---------------------------------------------------------------------------

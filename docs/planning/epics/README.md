@@ -64,7 +64,7 @@ See [ROADMAP.md](../ROADMAP.md) for full roadmap. Key proposed enhancements:
 
 | Epic | Name | Priority | LOE | Dependencies | Status |
 |---|---|---|---|---|---|
-| [Epic 56](EPIC-56-NON-PYTHON-LANGUAGE-SCORING.md) | Non-Python Language Scoring | P1 | ~3-4 weeks | DocsMCP Epic 12 | **Proposed** |
+| [Epic 56](EPIC-56-NON-PYTHON-LANGUAGE-SCORING.md) | Non-Python Language Scoring | P1 | ~3-4 weeks | DocsMCP Epic 12 | **In Progress** (56.1-56.2 complete) |
 | [Epic 57](EPIC-57-ADAPTIVE-BUSINESS-DOMAIN-LEARNING.md) | Adaptive Business Domain Learning | P1 | ~2 weeks | Epic 43-45 | **Proposed** |
 | [Epic 58](EPIC-58-MEMORY-CONSOLIDATION.md) | Memory Consolidation | P2 | ~2 weeks | Epic 23-25, 34 | **Proposed** |
 

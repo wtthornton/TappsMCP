@@ -12,13 +12,16 @@ inverted (10 - score) because lower complexity is better.
 from __future__ import annotations
 
 import ast
-import asyncio
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import structlog
 
-from tapps_core.config.settings import ScoringWeights, TappsMCPSettings, load_settings
+from tapps_core.config.settings import ScoringWeights, TappsMCPSettings
+
+if TYPE_CHECKING:
+    from tapps_mcp.tools.pip_audit import VulnerabilityFinding
+    from tapps_mcp.tools.vulture import DeadCodeFinding
 from tapps_mcp.scoring.constants import (
     DEEP_NESTING_THRESHOLD,
     INSECURE_PATTERN_PENALTY,
@@ -30,6 +33,7 @@ from tapps_mcp.scoring.constants import (
     clamp_overall,
 )
 from tapps_mcp.scoring.models import CategoryScore, ScoreResult
+from tapps_mcp.scoring.scorer_base import STANDARD_CATEGORIES, ScorerBase
 from tapps_mcp.tools.bandit import calculate_security_score
 from tapps_mcp.tools.mypy import calculate_type_score
 from tapps_mcp.tools.parallel import ParallelResults, run_all_tools
@@ -49,16 +53,39 @@ _INSECURE_PATTERNS: list[str] = [
 ]
 
 
-class CodeScorer:
-    """Score Python files across 7 quality categories."""
+class CodeScorer(ScorerBase):
+    """Score Python files across 7 quality categories.
+
+    This is the concrete implementation of ``ScorerBase`` for Python files.
+    It uses ruff for linting, mypy for type checking, bandit for security,
+    and radon for complexity/maintainability analysis.
+    """
 
     def __init__(
         self,
         settings: TappsMCPSettings | None = None,
         weights: ScoringWeights | None = None,
     ) -> None:
-        self._settings = settings or load_settings()
-        self._weights = weights or self._settings.scoring_weights
+        super().__init__(settings, weights)
+
+    # ------------------------------------------------------------------
+    # ScorerBase abstract property implementations
+    # ------------------------------------------------------------------
+
+    @property
+    def language(self) -> str:
+        """Return 'python' as the language identifier."""
+        return "python"
+
+    @property
+    def supported_categories(self) -> list[str]:
+        """Return all 7 standard scoring categories."""
+        return STANDARD_CATEGORIES.copy()
+
+    @property
+    def file_extensions(self) -> frozenset[str]:
+        """Return Python file extensions."""
+        return frozenset({".py", ".pyi"})
 
     # ------------------------------------------------------------------
     # Public API
@@ -236,10 +263,6 @@ class CodeScorer:
             tool_errors=parallel.tool_errors,
         )
 
-    def score_file_sync(self, file_path: Path) -> ScoreResult:
-        """Synchronous wrapper around the async ``score_file``."""
-        return asyncio.run(self.score_file(file_path))
-
     # ------------------------------------------------------------------
     # Internal: category computation
     # ------------------------------------------------------------------
@@ -324,7 +347,7 @@ class CodeScorer:
 
     def _apply_dependency_penalty(
         self, score: float, details: dict[str, object]
-    ) -> tuple[float, list]:
+    ) -> tuple[float, list[VulnerabilityFinding]]:
         """Apply dependency vulnerability penalty if enabled.
 
         Returns (adjusted_score, findings_list).
@@ -384,7 +407,7 @@ class CodeScorer:
     def _apply_dead_code_penalty(
         score: float,
         details: dict[str, object],
-        dead_code: list,
+        dead_code: list[DeadCodeFinding],
     ) -> tuple[float, float, list[str]]:
         """Apply dead code penalties, returning (adjusted_score, struct_penalty, suggestions)."""
         from tapps_mcp.scoring.dead_code import (
@@ -473,21 +496,6 @@ class CodeScorer:
             weight=0.0,
             details={"issue_count": len(parallel.type_issues)},
         )
-
-    def _calculate_overall(self, categories: dict[str, CategoryScore]) -> float:
-        """Weighted overall score (0-100).
-
-        ``complexity`` is inverted: (10 - complexity_score) * weight.
-        """
-        total = 0.0
-        for cat in categories.values():
-            if cat.weight <= 0:
-                continue
-            if cat.name == "complexity":
-                total += (10.0 - cat.score) * cat.weight
-            else:
-                total += cat.score * cat.weight
-        return clamp_overall(total * 10.0)
 
     # ------------------------------------------------------------------
     # Fallback heuristics (when external tools are unavailable)
@@ -652,15 +660,6 @@ class CodeScorer:
                 _check_expensive_comp(node, seen)
         penalty = sum(PERFORMANCE_PENALTY_MAP.get(i, 0.5) for i in seen)
         return clamp_individual(10.0 - penalty), sorted(seen)
-
-    def _error_result(self, path: str) -> ScoreResult:
-        return ScoreResult(
-            file_path=path,
-            categories={},
-            overall_score=0.0,
-            degraded=True,
-            missing_tools=[],
-        )
 
 
 # ------------------------------------------------------------------
