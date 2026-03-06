@@ -2,7 +2,8 @@
 
 Registers generation tools on the shared ``mcp`` FastMCP instance from
 ``server.py``: README, changelog, release notes, API docs, ADR,
-onboarding/contributing guides, and diagrams.
+onboarding/contributing guides, diagrams, architecture reports, epics,
+and user stories.
 """
 
 from __future__ import annotations
@@ -939,3 +940,486 @@ async def docs_generate_diagram(
     }
 
     return success_response("docs_generate_diagram", elapsed_ms, data)
+
+
+@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
+async def docs_generate_architecture(
+    title: str = "",
+    subtitle: str = "",
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate a comprehensive, self-contained HTML architecture report.
+
+    Produces a visually rich document with embedded SVG diagrams, detailed
+    component descriptions, dependency flow visualizations, and API surface
+    summary. The output is a single HTML file with no external dependencies.
+
+    Sections included:
+    - Project purpose and executive summary with key metrics
+    - High-level architecture diagram (SVG with gradient-styled component boxes)
+    - Component deep-dive with per-package descriptions and module listings
+    - Dependency flow diagram (SVG with curved arrows showing import relationships)
+    - Public API surface (classes, methods, docstrings)
+    - Technology stack (runtime and development dependencies)
+
+    Args:
+        title: Custom report title (default: project name from metadata).
+        subtitle: Custom subtitle / tagline (default: project description).
+        output_path: File path to write the HTML report to. If empty, content
+            is returned in the response without writing to disk.
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_generate_architecture")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_architecture",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.generators.architecture import ArchitectureGenerator
+
+    generator = ArchitectureGenerator()
+    try:
+        result = generator.generate(
+            root,
+            title=title,
+            subtitle=subtitle,
+        )
+    except Exception as exc:
+        return error_response(
+            "docs_generate_architecture",
+            "GENERATION_ERROR",
+            f"Failed to generate architecture report: {exc}",
+        )
+
+    if not result.content:
+        return error_response(
+            "docs_generate_architecture",
+            "NO_CONTENT",
+            "No content generated for architecture report.",
+        )
+
+    # Optionally write to disk
+    written_path = ""
+    if output_path:
+        try:
+            out = Path(output_path)
+            if not out.is_absolute():
+                out = root / out
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(result.content, encoding="utf-8")
+            written_path = str(out)
+        except Exception as exc:
+            return error_response(
+                "docs_generate_architecture",
+                "WRITE_ERROR",
+                f"Failed to write architecture report: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "format": result.format,
+        "package_count": result.package_count,
+        "module_count": result.module_count,
+        "edge_count": result.edge_count,
+        "class_count": result.class_count,
+        "content": result.content,
+    }
+    if written_path:
+        data["written_to"] = written_path
+
+    return success_response(
+        "docs_generate_architecture",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Open the HTML file in a browser for the full visual experience",
+            "Use docs_generate_diagram for additional specific diagram types",
+        ],
+    )
+
+
+@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
+async def docs_generate_epic(
+    title: str,
+    number: int = 0,
+    goal: str = "",
+    motivation: str = "",
+    status: str = "Proposed",
+    priority: str = "",
+    estimated_loe: str = "",
+    dependencies: str = "",
+    blocks: str = "",
+    acceptance_criteria: str = "",
+    stories: str = "",
+    technical_notes: str = "",
+    risks: str = "",
+    non_goals: str = "",
+    style: str = "standard",
+    auto_populate: bool = False,
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate an Epic planning document with stories and acceptance criteria.
+
+    Creates a structured epic document following agile best practices with
+    metadata block, goal, motivation, acceptance criteria (checkbox list),
+    numbered story stubs, technical notes, and out-of-scope items.
+
+    The ``comprehensive`` style adds implementation order, risk assessment
+    table, files affected table, and performance targets placeholder.
+
+    When ``auto_populate=True``, enriches sections from project analyzers
+    (module map, tech stack, git history).
+
+    Args:
+        title: Epic title (e.g. "User Authentication System").
+        number: Epic number for story numbering (e.g. 23 gives stories 23.1, 23.2).
+        goal: One-paragraph description of what the epic achieves.
+        motivation: Why this work matters.
+        status: Epic status - "Proposed", "In Progress", "Complete",
+            "Blocked", or "Cancelled".
+        priority: Priority label (e.g. "P0 - Critical", "P1 - High").
+        estimated_loe: Level of effort estimate (e.g. "~2-3 weeks (1 developer)").
+        dependencies: Comma-separated list of dependencies (e.g. "Epic 0, Epic 4").
+        blocks: Comma-separated list of epics this blocks.
+        acceptance_criteria: Comma-separated list of acceptance criteria.
+        stories: JSON array of story objects with keys: title, points, description.
+            Example: [{"title": "Data Models", "points": 3}]
+        technical_notes: Comma-separated list of technical notes.
+        risks: Comma-separated list of risks (comprehensive style only).
+        non_goals: Comma-separated list of out-of-scope items.
+        style: Epic style - "standard" or "comprehensive".
+        auto_populate: Enrich from project analyzers (ModuleMap, Metadata, etc).
+        output_path: File path to write the epic (relative to project root).
+            When empty, returns the content without writing a file.
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_generate_epic")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_epic",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.generators.epics import EpicConfig, EpicGenerator, EpicStoryStub
+
+    # Parse comma-separated lists
+    dep_list = [d.strip() for d in dependencies.split(",") if d.strip()] if dependencies else []
+    blocks_list = [b.strip() for b in blocks.split(",") if b.strip()] if blocks else []
+    ac_list = (
+        [a.strip() for a in acceptance_criteria.split(",") if a.strip()]
+        if acceptance_criteria
+        else []
+    )
+    notes_list = (
+        [n.strip() for n in technical_notes.split(",") if n.strip()]
+        if technical_notes
+        else []
+    )
+    risks_list = [r.strip() for r in risks.split(",") if r.strip()] if risks else []
+    ng_list = [n.strip() for n in non_goals.split(",") if n.strip()] if non_goals else []
+
+    # Parse stories JSON
+    story_list: list[EpicStoryStub] = []
+    if stories:
+        try:
+            story_list = EpicGenerator.parse_stories_json(stories)
+        except ValueError as exc:
+            return error_response(
+                "docs_generate_epic",
+                "INVALID_STORIES",
+                str(exc),
+            )
+
+    config = EpicConfig(
+        title=title,
+        number=number,
+        goal=goal,
+        motivation=motivation,
+        status=status,
+        priority=priority,
+        estimated_loe=estimated_loe,
+        dependencies=dep_list,
+        blocks=blocks_list,
+        acceptance_criteria=ac_list,
+        stories=story_list,
+        technical_notes=notes_list,
+        risks=risks_list,
+        non_goals=ng_list,
+        style=style,
+    )
+
+    generator = EpicGenerator()
+
+    try:
+        content = generator.generate(
+            config,
+            project_root=root if auto_populate else None,
+            auto_populate=auto_populate,
+        )
+    except Exception as exc:
+        return error_response(
+            "docs_generate_epic",
+            "GENERATION_ERROR",
+            f"Failed to generate epic: {exc}",
+        )
+
+    # Optionally write to file
+    written_path = ""
+    if output_path:
+        try:
+            from tapps_core.security.path_validator import PathValidator
+
+            validator = PathValidator(root)
+            write_path = validator.validate_write_path(output_path)
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(content, encoding="utf-8")
+            written_path = str(write_path.relative_to(root)).replace("\\", "/")
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            return error_response(
+                "docs_generate_epic",
+                "WRITE_ERROR",
+                f"Failed to write epic: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "title": title,
+        "number": number,
+        "style": style,
+        "story_count": len(story_list),
+        "auto_populated": auto_populate,
+        "content_length": len(content),
+        "content": content,
+    }
+    if written_path:
+        data["written_to"] = written_path
+
+    return success_response(
+        "docs_generate_epic",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Review the generated epic and fill in placeholder sections.",
+            "Use docs_generate_story to expand individual story stubs into full documents.",
+            "Human-written sections (without docsmcp markers) will be preserved on re-generation.",
+        ],
+    )
+
+
+@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
+async def docs_generate_story(
+    title: str,
+    epic_number: int = 0,
+    story_number: int = 0,
+    role: str = "",
+    want: str = "",
+    so_that: str = "",
+    description: str = "",
+    points: int = 0,
+    size: str = "",
+    tasks: str = "",
+    acceptance_criteria: str = "",
+    test_cases: str = "",
+    dependencies: str = "",
+    files: str = "",
+    technical_notes: str = "",
+    criteria_format: str = "checkbox",
+    style: str = "standard",
+    auto_populate: bool = False,
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate a User Story document with acceptance criteria and task breakdown.
+
+    Creates a structured user story with "As a / I want / So that" statement,
+    sizing, task checklist, acceptance criteria, and definition of done.
+
+    The ``comprehensive`` style adds test cases, technical notes, dependencies,
+    and an INVEST checklist.
+
+    Acceptance criteria support two formats:
+    - ``checkbox``: Checkbox list (default, best for technical stories)
+    - ``gherkin``: Given/When/Then Gherkin format (best for user-facing behavior)
+
+    When ``auto_populate=True``, enriches sections from project analyzers.
+
+    Args:
+        title: Story title (e.g. "Add login form validation").
+        epic_number: Parent epic number (e.g. 23 for story numbering as 23.1).
+        story_number: Story number within the epic (e.g. 1 for 23.1).
+        role: User role for the story statement (e.g. "developer").
+        want: Desired capability (e.g. "to validate login credentials").
+        so_that: Benefit/reason (e.g. "invalid logins are rejected").
+        description: Detailed description of the story.
+        points: Story points estimate.
+        size: T-shirt size - "S", "M", "L", or "XL".
+        tasks: JSON array of task objects with keys: description, file_path.
+            Example: [{"description": "Create model", "file_path": "src/models.py"}]
+        acceptance_criteria: Comma-separated list of acceptance criteria.
+        test_cases: Comma-separated list of test cases (comprehensive style only).
+        dependencies: Comma-separated list of dependencies.
+        files: Comma-separated list of affected file paths.
+        technical_notes: Comma-separated list of technical notes.
+        criteria_format: Acceptance criteria format - "checkbox" or "gherkin".
+        style: Story style - "standard" or "comprehensive".
+        auto_populate: Enrich from project analyzers (ModuleMap, Metadata).
+        output_path: File path to write the story (relative to project root).
+            When empty, returns the content without writing a file.
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_generate_story")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_story",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    import json as json_mod
+
+    from docs_mcp.generators.stories import StoryConfig, StoryGenerator, StoryTask
+
+    # Parse comma-separated lists
+    ac_list = (
+        [a.strip() for a in acceptance_criteria.split(",") if a.strip()]
+        if acceptance_criteria
+        else []
+    )
+    tc_list = (
+        [t.strip() for t in test_cases.split(",") if t.strip()] if test_cases else []
+    )
+    dep_list = [d.strip() for d in dependencies.split(",") if d.strip()] if dependencies else []
+    file_list = [f.strip() for f in files.split(",") if f.strip()] if files else []
+    notes_list = (
+        [n.strip() for n in technical_notes.split(",") if n.strip()]
+        if technical_notes
+        else []
+    )
+
+    # Parse tasks JSON
+    task_list: list[StoryTask] = []
+    if tasks:
+        try:
+            raw = json_mod.loads(tasks)
+            if not isinstance(raw, list):
+                return error_response(
+                    "docs_generate_story",
+                    "INVALID_TASKS",
+                    "Tasks JSON must be a list of objects",
+                )
+            for item in raw:
+                if isinstance(item, dict):
+                    task_list.append(
+                        StoryTask(
+                            description=str(item.get("description", "")),
+                            file_path=str(item.get("file_path", "")),
+                        )
+                    )
+        except json_mod.JSONDecodeError as exc:
+            return error_response(
+                "docs_generate_story",
+                "INVALID_TASKS",
+                f"Invalid JSON for tasks: {exc}",
+            )
+
+    config = StoryConfig(
+        title=title,
+        epic_number=epic_number,
+        story_number=story_number,
+        role=role,
+        want=want,
+        so_that=so_that,
+        description=description,
+        points=points,
+        size=size,
+        tasks=task_list,
+        acceptance_criteria=ac_list,
+        test_cases=tc_list,
+        dependencies=dep_list,
+        files=file_list,
+        technical_notes=notes_list,
+        criteria_format=criteria_format,
+        style=style,
+    )
+
+    generator = StoryGenerator()
+
+    try:
+        content = generator.generate(
+            config,
+            project_root=root if auto_populate else None,
+            auto_populate=auto_populate,
+        )
+    except Exception as exc:
+        return error_response(
+            "docs_generate_story",
+            "GENERATION_ERROR",
+            f"Failed to generate story: {exc}",
+        )
+
+    # Optionally write to file
+    written_path = ""
+    if output_path:
+        try:
+            from tapps_core.security.path_validator import PathValidator
+
+            validator = PathValidator(root)
+            write_path = validator.validate_write_path(output_path)
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(content, encoding="utf-8")
+            written_path = str(write_path.relative_to(root)).replace("\\", "/")
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            return error_response(
+                "docs_generate_story",
+                "WRITE_ERROR",
+                f"Failed to write story: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "title": title,
+        "epic_number": epic_number,
+        "story_number": story_number,
+        "style": style,
+        "criteria_format": criteria_format,
+        "task_count": len(task_list),
+        "auto_populated": auto_populate,
+        "content_length": len(content),
+        "content": content,
+    }
+    if written_path:
+        data["written_to"] = written_path
+
+    return success_response(
+        "docs_generate_story",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Review the generated story and fill in placeholder sections.",
+            "Use docs_generate_epic to create the parent epic if not yet created.",
+            "Human-written sections (without docsmcp markers) will be preserved on re-generation.",
+        ],
+    )

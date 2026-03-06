@@ -48,6 +48,7 @@ a = Analysis(
         "docs_mcp.server_git_tools",
         "docs_mcp.server_val_tools",
         "docs_mcp.server_resources",
+        "docs_mcp.constants",
         # config
         "docs_mcp.config",
         "docs_mcp.config.settings",
@@ -79,6 +80,10 @@ a = Analysis(
         "docs_mcp.generators.readme",
         "docs_mcp.generators.release_notes",
         "docs_mcp.generators.smart_merge",
+        "docs_mcp.generators.architecture",
+        "docs_mcp.generators.specs",
+        "docs_mcp.generators.epics",
+        "docs_mcp.generators.stories",
         # validators
         "docs_mcp.validators",
         "docs_mcp.validators.completeness",
@@ -97,6 +102,14 @@ a = Analysis(
         "tapps_core.config.feature_flags",
         "tapps_core.security",
         "tapps_core.security.path_validator",
+        "tapps_core.experts",
+        "tapps_core.experts.engine",
+        "tapps_core.experts.models",
+        "tapps_core.experts.registry",
+        "tapps_core.experts.domain_detector",
+        "tapps_core.experts.rag",
+        "tapps_core.experts.confidence",
+        "tapps_core.experts.domain_utils",
         # Third-party hidden imports
         "click",
         "pydantic",

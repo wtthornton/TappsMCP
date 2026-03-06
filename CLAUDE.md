@@ -14,7 +14,7 @@ This is a **uv workspace monorepo** with three packages:
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, memory, experts, metrics, adaptive) |
 | **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (28 tools, 31 actions) |
-| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (19 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (22 tools) |
 
 tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
 
@@ -79,7 +79,7 @@ uv run tapps-mcp benchmark tools calibrate # checklist calibration
 
 ```
 tapps-core (library)  <──  tapps-mcp (29 tools)
-                      <──  docs-mcp  (19 tools)
+                      <──  docs-mcp  (22 tools)
 ```
 
 Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics, adaptive) lives in `tapps-core`. Both MCP servers depend on it. Server files in tapps-mcp import from `tapps_core` directly for extracted packages.
