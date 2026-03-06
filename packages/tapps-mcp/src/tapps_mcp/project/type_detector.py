@@ -185,6 +185,51 @@ def _has_service_mesh(root: Path) -> bool:
     return _exists_any(root, ["istio", "linkerd", "consul"])
 
 
+def _has_heavy_docs(root: Path) -> bool:
+    """Return True if the project has a significant number of documentation files."""
+    import os
+
+    md_count = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames
+            if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")
+        ]
+        for f in filenames:
+            if f.lower().endswith((".md", ".rst")):
+                md_count += 1
+                if md_count >= 10:
+                    return True
+    return md_count >= 10
+
+
+def _has_docs_dir(root: Path) -> bool:
+    """Return True if a docs/ directory with content exists."""
+    docs_dir = root / "docs"
+    if not docs_dir.is_dir():
+        return False
+    return any(docs_dir.glob("**/*.md")) or any(docs_dir.glob("**/*.rst"))
+
+
+def _has_few_source_files(root: Path) -> bool:
+    """Return True if project has very few source code files (< 5)."""
+    import os
+
+    code_count = 0
+    code_exts = {".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".cs"}
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames
+            if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")
+        ]
+        for f in filenames:
+            if any(f.endswith(ext) for ext in code_exts):
+                code_count += 1
+                if code_count >= 5:
+                    return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Archetype definitions
 # ---------------------------------------------------------------------------
@@ -244,6 +289,18 @@ _PROJECT_TYPES: dict[str, dict[str, Any]] = {
             (
                 "microservice_structure",
                 lambda r: _has_service_boundaries(r) and _has_container_orchestration(r),
+            ),
+        ],
+        "weights": [0.3, 0.3, 0.2, 0.2],
+    },
+    "documentation": {
+        "indicators": [
+            ("has_heavy_docs", _has_heavy_docs),
+            ("has_docs_dir", _has_docs_dir),
+            ("has_few_source_files", _has_few_source_files),
+            (
+                "docs_focused",
+                lambda r: _has_heavy_docs(r) and _has_few_source_files(r),
             ),
         ],
         "weights": [0.3, 0.3, 0.2, 0.2],

@@ -142,9 +142,23 @@ def check_vscode_config(project_root: Path) -> CheckResult:
 
 
 def check_claude_md(project_root: Path) -> CheckResult:
-    """Check if CLAUDE.md exists and contains TAPPS reference."""
+    """Check if CLAUDE.md exists and contains TAPPS reference.
+
+    When Cursor rules are present (``.cursor/rules/tapps-pipeline.md``),
+    a missing CLAUDE.md reference is reported as a soft pass rather than a
+    failure, since the project may target Cursor rather than Claude Code.
+    """
+    cursor_rules_present = (
+        project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+    ).exists()
     claude_md = project_root / "CLAUDE.md"
     if not claude_md.exists():
+        if cursor_rules_present:
+            return CheckResult(
+                "CLAUDE.md rules",
+                True,
+                "CLAUDE.md not found (Cursor rules present instead)",
+            )
         return CheckResult(
             "CLAUDE.md rules",
             False,
@@ -154,6 +168,12 @@ def check_claude_md(project_root: Path) -> CheckResult:
     content = claude_md.read_text(encoding="utf-8")
     if "TAPPS" in content:
         return CheckResult("CLAUDE.md rules", True, "CLAUDE.md contains TAPPS pipeline rules")
+    if cursor_rules_present:
+        return CheckResult(
+            "CLAUDE.md rules",
+            True,
+            "CLAUDE.md exists without TAPPS reference (Cursor rules present)",
+        )
     return CheckResult(
         "CLAUDE.md rules",
         False,

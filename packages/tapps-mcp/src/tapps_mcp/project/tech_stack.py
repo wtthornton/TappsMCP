@@ -46,6 +46,11 @@ _LANGUAGE_EXTENSIONS: dict[str, str] = {
     ".sh": "shell",
     ".bash": "shell",
     ".sql": "sql",
+    ".md": "markdown",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".json": "json",
+    ".toml": "toml",
 }
 
 _FRAMEWORK_PATTERNS: dict[str, str] = {

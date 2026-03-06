@@ -23,7 +23,7 @@ _SKIP_DIRS: frozenset[str] = frozenset({
     ".git", ".hg", ".svn", "__pycache__", "node_modules",
     ".venv", "venv", ".env", ".tox", ".mypy_cache",
     ".pytest_cache", ".ruff_cache", "dist", "build",
-    ".eggs",
+    ".eggs", ".tapps-mcp",
 })
 
 

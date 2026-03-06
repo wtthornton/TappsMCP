@@ -78,8 +78,30 @@ def _find_python_files(project_root: Path) -> list[Path]:
     return py_files
 
 
+def _find_in_subdirs(project_root: Path, filename: str) -> str | None:
+    """Search for a file in immediate child directories (monorepo support).
+
+    Returns the relative path (e.g. ``subdir/README.md``) if found.
+    """
+    target_lower = filename.lower()
+    try:
+        for entry in project_root.iterdir():
+            if not entry.is_dir() or entry.name.startswith("."):
+                continue
+            for child in entry.iterdir():
+                if child.is_file() and child.name.lower() == target_lower:
+                    return str(child.relative_to(project_root)).replace("\\", "/")
+    except OSError:
+        pass
+    return None
+
+
 def _check_essential_docs(project_root: Path) -> CompletenessCategory:
-    """Check for essential documentation files (README.md, LICENSE)."""
+    """Check for essential documentation files (README.md, LICENSE).
+
+    Also checks immediate subdirectories so that monorepo or
+    subdirectory-organized projects are not incorrectly flagged.
+    """
     essential = ["README.md", "LICENSE"]
     present: list[str] = []
     missing: list[str] = []
@@ -89,7 +111,12 @@ def _check_essential_docs(project_root: Path) -> CompletenessCategory:
         if found:
             present.append(found)
         else:
-            missing.append(doc)
+            # Check subdirectories for monorepo layouts
+            subdir_found = _find_in_subdirs(project_root, doc)
+            if subdir_found:
+                present.append(subdir_found)
+            else:
+                missing.append(doc)
 
     score = len(present) / len(essential) if essential else 0.0
 

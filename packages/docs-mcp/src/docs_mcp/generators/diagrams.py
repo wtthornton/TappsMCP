@@ -509,12 +509,16 @@ class DiagramGenerator:
 
         file_count = 0
         skipped_count = 0
+        scan_done = False
         for src_dir in source_dirs:
+            if scan_done:
+                break
             for py_file in sorted(src_dir.rglob("*.py")):
                 if self._should_skip_path(py_file):
                     skipped_count += 1
                     continue
                 if file_count >= _MAX_SCAN_FILES:
+                    scan_done = True
                     break
                 file_count += 1
                 info = extractor.extract(py_file, project_root=project_root)

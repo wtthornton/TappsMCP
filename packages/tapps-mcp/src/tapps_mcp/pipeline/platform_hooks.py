@@ -432,7 +432,7 @@ def generate_cursor_hooks(
     hooks_added = 0
     for event, entries in hooks_config.items():
         if event not in existing_hooks:
-            existing_hooks[event] = entries
+            existing_hooks[event] = list(entries)
             hooks_added += 1
 
     # Replace wrong-platform tapps commands in existing events

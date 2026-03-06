@@ -128,6 +128,17 @@ def detect_project_profile(project_root: Path) -> ProjectProfile:
         project_root / "docker-compose.yml"
     ).exists()
 
+    # Add "documentation" domain for docs-heavy projects
+    _source_langs = {"python", "javascript", "typescript", "go", "java", "rust"}
+    if ptype == "documentation" or (
+        "markdown" in tech_stack.languages
+        and not any(lang in tech_stack.languages for lang in _source_langs)
+    ):
+        if "documentation" not in tech_stack.domains:
+            tech_stack = tech_stack.model_copy(
+                update={"domains": sorted([*tech_stack.domains, "documentation"])}
+            )
+
     profile = ProjectProfile(
         tech_stack=tech_stack,
         project_type=ptype,

@@ -10,9 +10,15 @@ On unsupported clients the helpers degrade gracefully — they return
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import asyncio
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
+
+# Timeout for elicitation calls.  Non-interactive clients that don't support
+# the ``elicitation/create`` method will never respond, so we cap the wait
+# to avoid blocking the server indefinitely.
+_ELICITATION_TIMEOUT_SEC = 30
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import Context
@@ -171,16 +177,47 @@ class WizardCompanionProfile(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _client_supports_elicitation(ctx: Context) -> bool:  # type: ignore[type-arg]
+    """Return ``True`` if the connected MCP client advertises elicitation.
+
+    Falls back to ``True`` (optimistic) if capabilities cannot be inspected
+    so that supported clients aren't accidentally excluded.
+    """
+    try:
+        session = getattr(ctx, "session", None)
+        if session is None:
+            return True
+        caps = getattr(session, "client_capabilities", None) or getattr(
+            session, "_client_capabilities", None
+        )
+        if caps is None:
+            return True
+        # The MCP spec uses ``elicitation`` as a capability key.
+        if hasattr(caps, "elicitation"):
+            return caps.elicitation is not None
+        # Dict-style fallback
+        if isinstance(caps, dict):
+            return caps.get("elicitation") is not None
+        return True
+    except Exception:
+        return True
+
+
 async def elicit_preset(ctx: Context) -> str | None:  # type: ignore[type-arg]
     """Ask the user to select a quality gate preset via elicitation.
 
     Returns the selected preset string (e.g. ``"staging"``) if the user
     accepted, or ``None`` if declined, cancelled, or unsupported.
     """
+    if not _client_supports_elicitation(ctx):
+        return None
     try:
-        result = await ctx.elicit(
-            message="Which quality gate preset should be applied?",
-            schema=PresetElicitation,
+        result = await asyncio.wait_for(
+            ctx.elicit(
+                message="Which quality gate preset should be applied?",
+                schema=PresetElicitation,
+            ),
+            timeout=_ELICITATION_TIMEOUT_SEC,
         )
         if result.action == "accept" and result.data is not None:
             return result.data.preset
@@ -196,16 +233,21 @@ async def elicit_init_confirmation(
     """Ask the user to confirm tapps_init before writing files.
 
     Returns ``True`` if confirmed, ``False`` if explicitly declined,
-    or ``None`` if unsupported/cancelled.
+    or ``None`` if unsupported/cancelled/timed out.
     """
+    if not _client_supports_elicitation(ctx):
+        return None
     try:
-        result = await ctx.elicit(
-            message=(
-                f"TappsMCP will write configuration files to {project_root}. "
-                "This includes .claude/settings.json, .mcp.json, CLAUDE.md, "
-                "and AGENTS.md. Proceed?"
+        result = await asyncio.wait_for(
+            ctx.elicit(
+                message=(
+                    f"TappsMCP will write configuration files to {project_root}. "
+                    "This includes .claude/settings.json, .mcp.json, CLAUDE.md, "
+                    "and AGENTS.md. Proceed?"
+                ),
+                schema=InitConfirmation,
             ),
-            schema=InitConfirmation,
+            timeout=_ELICITATION_TIMEOUT_SEC,
         )
         if result.action == "accept" and result.data is not None:
             return result.data.confirm
@@ -266,11 +308,22 @@ async def run_init_wizard(  # type: ignore[type-arg]
             companion profile questions.
     """
     result = WizardResult()
+    if not _client_supports_elicitation(ctx):
+        return result
+
+    _t = _ELICITATION_TIMEOUT_SEC
+
+    async def _ask(message: str, schema: type) -> Any:  # type: ignore[type-arg]
+        return await asyncio.wait_for(
+            ctx.elicit(message=message, schema=schema),
+            timeout=_t,
+        )
+
     try:
         # 1. Quality preset
-        r1 = await ctx.elicit(
-            message="Which quality standard should TappsMCP enforce?",
-            schema=WizardQualityPreset,
+        r1 = await _ask(
+            "Which quality standard should TappsMCP enforce?",
+            WizardQualityPreset,
         )
         if r1.action == "accept" and r1.data is not None:
             result.quality_preset = r1.data.preset
@@ -278,23 +331,21 @@ async def run_init_wizard(  # type: ignore[type-arg]
             return result
 
         # 2. Engagement level
-        r2 = await ctx.elicit(
-            message="How actively should TappsMCP guide the coding agent?",
-            schema=WizardEngagementLevel,
+        r2 = await _ask(
+            "How actively should TappsMCP guide the coding agent?",
+            WizardEngagementLevel,
         )
         if r2.action == "accept" and r2.data is not None:
             result.engagement_level = r2.data.level
         elif r2.action == "decline":
             return result
 
-        # 2b. Config scope (only for Claude Code — Epic 47)
+        # 2b. Config scope (only for Claude Code - Epic 47)
         if claude_code_detected:
-            r_scope = await ctx.elicit(
-                message=(
-                    "Where should TappsMCP config be stored? "
-                    "Project scope keeps config in this repo only."
-                ),
-                schema=WizardConfigScope,
+            r_scope = await _ask(
+                "Where should TappsMCP config be stored? "
+                "Project scope keeps config in this repo only.",
+                WizardConfigScope,
             )
             if r_scope.action == "accept" and r_scope.data is not None:
                 result.config_scope = r_scope.data.scope
@@ -302,67 +353,58 @@ async def run_init_wizard(  # type: ignore[type-arg]
                 return result
 
         # 3. Agent teams
-        r3 = await ctx.elicit(
-            message=(
-                "Will you use Claude Code Agent Teams for parallel work? "
-                "(Generates TeammateIdle and TaskCompleted hooks)"
-            ),
-            schema=WizardAgentTeams,
+        r3 = await _ask(
+            "Will you use Claude Code Agent Teams for parallel work? "
+            "(Generates TeammateIdle and TaskCompleted hooks)",
+            WizardAgentTeams,
         )
         if r3.action == "accept" and r3.data is not None:
             result.agent_teams = r3.data.enabled
 
         # 4. Skill tier
-        r4 = await ctx.elicit(
-            message="Which TappsMCP skills should be installed?",
-            schema=WizardSkillTier,
+        r4 = await _ask(
+            "Which TappsMCP skills should be installed?",
+            WizardSkillTier,
         )
         if r4.action == "accept" and r4.data is not None:
             result.skill_tier = r4.data.tier
 
         # 5. Prompt hooks
-        r5 = await ctx.elicit(
-            message=(
-                "Enable AI-powered quality judgment? "
-                "(Uses Haiku, ~$0.001/check)"
-            ),
-            schema=WizardPromptHooks,
+        r5 = await _ask(
+            "Enable AI-powered quality judgment? (Uses Haiku, ~$0.001/check)",
+            WizardPromptHooks,
         )
         if r5.action == "accept" and r5.data is not None:
             result.prompt_hooks = r5.data.enabled
 
-        # 6. Docker transport (conditional — Epic 46)
+        # 6. Docker transport (conditional - Epic 46)
         if docker_available:
-            r_docker = await ctx.elicit(
-                message=(
-                    "Docker MCP Toolkit detected. "
-                    "How should TappsMCP be delivered to MCP clients?"
-                ),
-                schema=WizardDockerTransport,
+            r_docker = await _ask(
+                "Docker MCP Toolkit detected. "
+                "How should TappsMCP be delivered to MCP clients?",
+                WizardDockerTransport,
             )
             if r_docker.action == "accept" and r_docker.data is not None:
                 result.docker_transport = r_docker.data.transport
 
-            # 7. Companion profile (conditional — Epic 46)
-            r_companion = await ctx.elicit(
-                message="Which companion MCP servers should be included in the profile?",
-                schema=WizardCompanionProfile,
+            # 7. Companion profile (conditional - Epic 46)
+            r_companion = await _ask(
+                "Which companion MCP servers should be included in the profile?",
+                WizardCompanionProfile,
             )
             if r_companion.action == "accept" and r_companion.data is not None:
                 result.companion_profile = r_companion.data.profile
 
         # 8. Other MCPs
-        r6 = await ctx.elicit(
-            message=(
-                "Get guidance on adding other MCPs (GitHub, YouTube, Sentry) "
-                "alongside TappsMCP? See docs/MCP_COMPOSITION.md for details."
-            ),
-            schema=WizardOtherMcps,
+        r6 = await _ask(
+            "Get guidance on adding other MCPs (GitHub, YouTube, Sentry) "
+            "alongside TappsMCP? See docs/MCP_COMPOSITION.md for details.",
+            WizardOtherMcps,
         )
         if r6.action == "accept" and r6.data is not None:
             result.add_other_mcps = r6.data.enabled
 
         result.completed = True
-    except Exception:  # noqa: S110 — graceful degradation for unsupported clients
+    except Exception:  # noqa: S110 - graceful degradation for unsupported clients
         pass
     return result

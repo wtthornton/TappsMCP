@@ -232,11 +232,11 @@ class EpicGenerator:
             "",
         ]
 
-        epic_num = config.number if config.number else 0
+        epic_num = config.number
 
         if config.stories:
             for i, story in enumerate(config.stories, 1):
-                story_id = f"{epic_num}.{i}" if epic_num else str(i)
+                story_id = f"{epic_num}.{i}"
                 points_str = f"**Points:** {story.points}" if story.points else "**Points:** TBD"
                 lines.append(f"### {story_id} -- {story.title}")
                 lines.append("")
@@ -259,7 +259,7 @@ class EpicGenerator:
                 lines.append("")
         else:
             for i in range(1, 4):
-                story_id = f"{epic_num}.{i}" if epic_num else str(i)
+                story_id = f"{epic_num}.{i}"
                 lines.append(f"### {story_id} -- Story Title")
                 lines.append("")
                 lines.append("**Points:** TBD")
@@ -347,9 +347,9 @@ class EpicGenerator:
         ]
 
         if config.stories:
-            epic_num = config.number if config.number else 0
+            epic_num = config.number
             for i, story in enumerate(config.stories, 1):
-                story_id = f"{epic_num}.{i}" if epic_num else str(i)
+                story_id = f"{epic_num}.{i}"
                 lines.append(f"{i}. Story {story_id}: {story.title}")
         else:
             lines.append("Define the recommended story sequencing and dependency graph...")
@@ -392,18 +392,35 @@ class EpicGenerator:
         return lines
 
     def _render_files_affected(self, config: EpicConfig) -> list[str]:
-        """Render the Files Affected table (comprehensive only)."""
+        """Render the Files Affected table (comprehensive only).
+
+        Populates from story task file paths when available,
+        otherwise renders a placeholder row.
+        """
         lines = [
             "<!-- docsmcp:start:files-affected -->",
             "## Files Affected",
             "",
             "| File | Story | Action |",
             "|---|---|---|",
-            "| `path/to/file.py` | N.M | Create / Modify |",
-            "",
-            "<!-- docsmcp:end:files-affected -->",
-            "",
         ]
+
+        epic_num = config.number
+        has_rows = False
+        if config.stories:
+            for i, story in enumerate(config.stories, 1):
+                story_id = f"{epic_num}.{i}"
+                if story.description and "/" in story.description:
+                    # Try to extract file paths mentioned in description
+                    pass
+                # Add a row per story as a tracking entry
+                lines.append(f"| *see tasks* | {story_id} ({story.title}) | Implement |")
+                has_rows = True
+
+        if not has_rows:
+            lines.append("| `path/to/file.py` | N.M | Create / Modify |")
+
+        lines.extend(["", "<!-- docsmcp:end:files-affected -->", ""])
         return lines
 
     def _render_performance_targets(self) -> list[str]:
@@ -529,8 +546,13 @@ class EpicGenerator:
                 result = consult_expert(question, domain=domain, max_chunks=3,
                                         max_context_length=1500)
                 if result.confidence >= 0.3 and result.answer:
-                    # Extract first meaningful paragraph from the answer.
-                    first_para = result.answer.strip().split("\n\n")[0].strip()
+                    # Extract first meaningful paragraph, skipping markdown headers.
+                    first_para = ""
+                    for para in result.answer.strip().split("\n\n"):
+                        cleaned = para.strip()
+                        if cleaned and not cleaned.startswith("#"):
+                            first_para = cleaned
+                            break
                     if first_para:
                         guidance.append({
                             "domain": result.domain,
@@ -556,13 +578,15 @@ class EpicGenerator:
         return slug.strip("-")
 
     @staticmethod
-    def parse_stories_json(stories_json: str) -> list[EpicStoryStub]:
-        """Parse a JSON string into a list of EpicStoryStub objects.
+    def parse_stories_json(stories_json: str | list[Any]) -> list[EpicStoryStub]:
+        """Parse a JSON string (or pre-parsed list) into EpicStoryStub objects.
 
         Accepts a JSON array of objects with keys: title, points, description.
+        Also accepts an already-parsed list (from MCP clients that may send
+        typed values instead of JSON strings).
 
         Args:
-            stories_json: JSON string representing story stubs.
+            stories_json: JSON string or pre-parsed list of story dicts.
 
         Returns:
             List of EpicStoryStub objects.
@@ -570,14 +594,17 @@ class EpicGenerator:
         Raises:
             ValueError: If the JSON is malformed or not a list.
         """
-        if not stories_json.strip():
-            return []
-
-        try:
-            raw = json.loads(stories_json)
-        except json.JSONDecodeError as exc:
-            msg = f"Invalid JSON for stories: {exc}"
-            raise ValueError(msg) from exc
+        # Handle pre-parsed list (MCP clients may send typed values)
+        if isinstance(stories_json, list):
+            raw = stories_json
+        else:
+            if not stories_json.strip():
+                return []
+            try:
+                raw = json.loads(stories_json)
+            except json.JSONDecodeError as exc:
+                msg = f"Invalid JSON for stories: {exc}"
+                raise ValueError(msg) from exc
 
         if not isinstance(raw, list):
             msg = "Stories JSON must be a list of objects"

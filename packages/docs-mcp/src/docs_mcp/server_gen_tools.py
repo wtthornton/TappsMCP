@@ -1318,11 +1318,11 @@ async def docs_generate_story(
         else []
     )
 
-    # Parse tasks JSON
+    # Parse tasks JSON (or pre-parsed list from MCP clients)
     task_list: list[StoryTask] = []
     if tasks:
         try:
-            raw = json_mod.loads(tasks)
+            raw: Any = tasks if isinstance(tasks, list) else json_mod.loads(tasks)
             if not isinstance(raw, list):
                 return error_response(
                     "docs_generate_story",

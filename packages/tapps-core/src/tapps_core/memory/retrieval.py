@@ -75,6 +75,7 @@ class MemoryRetriever:
         self._bm25 = BM25Scorer()
         self._bm25_entries: list[MemoryEntry] = []
         self._bm25_corpus_size: int = 0
+        self._bm25_fingerprint: int = 0
 
     def search(
         self,
@@ -165,14 +166,21 @@ class MemoryRetriever:
         """Convert a memory entry to a BM25-indexable document string."""
         return f"{entry.key} {entry.value} {' '.join(entry.tags)}"
 
+    @staticmethod
+    def _corpus_fingerprint(entries: list[MemoryEntry]) -> int:
+        """Compute a fingerprint that changes when any entry is added, removed, or updated."""
+        return hash(tuple((e.key, e.updated_at.isoformat() if e.updated_at else "") for e in entries))
+
     def _ensure_bm25_index(self, entries: list[MemoryEntry]) -> None:
         """Build or rebuild the BM25 index when the corpus changes."""
-        if len(entries) == self._bm25_corpus_size:
+        fingerprint = self._corpus_fingerprint(entries)
+        if len(entries) == self._bm25_corpus_size and fingerprint == self._bm25_fingerprint:
             return
         documents = [self._entry_to_document(e) for e in entries]
         self._bm25.build_index(documents)
         self._bm25_entries = list(entries)
         self._bm25_corpus_size = len(entries)
+        self._bm25_fingerprint = fingerprint
         logger.debug("bm25_index_rebuilt", corpus_size=self._bm25_corpus_size)
 
     # -----------------------------------------------------------------------

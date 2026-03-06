@@ -130,11 +130,9 @@ class StoryGenerator:
 
     def _render_title(self, config: StoryConfig) -> list[str]:
         """Render the title with story numbering."""
-        if config.epic_number and config.story_number:
+        if config.story_number:
             story_id = f"{config.epic_number}.{config.story_number}"
             return [f"# Story {story_id} -- {config.title}", ""]
-        if config.story_number:
-            return [f"# Story {config.story_number} -- {config.title}", ""]
         return [f"# {config.title}", ""]
 
     def _render_user_story_statement(self, config: StoryConfig) -> list[str]:
@@ -511,7 +509,13 @@ class StoryGenerator:
                 result = consult_expert(question, domain=domain, max_chunks=3,
                                         max_context_length=1500)
                 if result.confidence >= 0.3 and result.answer:
-                    first_para = result.answer.strip().split("\n\n")[0].strip()
+                    # Skip markdown headers to get actual advice content.
+                    first_para = ""
+                    for para in result.answer.strip().split("\n\n"):
+                        cleaned = para.strip()
+                        if cleaned and not cleaned.startswith("#"):
+                            first_para = cleaned
+                            break
                     if first_para:
                         guidance.append({
                             "domain": result.domain,

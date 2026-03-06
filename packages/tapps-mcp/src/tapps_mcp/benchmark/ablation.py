@@ -213,11 +213,10 @@ class AblationRunner:
         # Run ablation for each section
         results: list[AblationResult] = []
         for section_name in config.sections:
-            _remove_section(config.base_template, section_name)
+            ablated_template = _remove_section(config.base_template, section_name)
 
             # Evaluate with ablated template
-            # The evaluator uses the same instances; the template difference
-            # is captured via the context_mode behavior
+            # TODO: pass ablated_template to evaluator when template injection is wired up
             ablated_results = await evaluator.evaluate_batch(
                 instances,
                 config.benchmark_config.context_mode,
@@ -244,6 +243,7 @@ class AblationRunner:
             logger.debug(
                 "ablation_section_result",
                 section=section_name,
+                ablated_template_len=len(ablated_template),
                 rate=round(ablated_rate, 4),
                 delta=round(delta_vs_full, 4),
                 recommendation=result.recommendation,
