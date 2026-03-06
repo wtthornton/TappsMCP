@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-03-06
+
+### Highlights
+
+**TappsMCP reaches v1.0.0** — All 55 TappsMCP epics, 17 DocsMCP epics, and Platform epics complete. Production-ready release with:
+
+- **48 MCP tools** (29 TappsMCP + 19 DocsMCP)
+- **5,995+ tests passing**
+- **Comprehensive code quality + documentation pipeline**
+
+### Added
+
+- **ROADMAP.md** — Forward-looking document consolidating future enhancement opportunities
+- **Proposed Epics 56-58** — Non-Python Language Scoring, Adaptive Business Domain Learning, Memory Consolidation
+- **Architecture Report Generator** (`docs_generate_architecture`) — Self-contained HTML report with embedded SVG diagrams
+
+### Changed
+
+- **EPIC_PRIORITIZATION.md** — Updated to reflect all epics complete
+- **epics/README.md** — Added "Proposed Future Epics" section
+- Version bump: tapps-core 1.0.4 → 1.0.5, tapps-mcp 0.8.5 → 1.0.0, docs-mcp 0.1.5 → 1.0.0
+
+### Fixed
+
+- **docker-publish.yml** — Use build step digest instead of meta step for cosign signing
+- **MCP registry commit pins** — Updated to latest commit (a435701)
+
 ## [0.8.5] - 2026-03-05
 
 ### Fixed
