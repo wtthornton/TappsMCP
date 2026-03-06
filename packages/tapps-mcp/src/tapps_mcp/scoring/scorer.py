@@ -503,14 +503,35 @@ class CodeScorer:
 
     @staticmethod
     def _ast_complexity(code: str) -> float:
-        """Fallback complexity from AST cyclomatic complexity."""
+        """Fallback complexity from AST cyclomatic complexity.
+
+        Computes per-function CC and uses the maximum, matching radon's
+        approach.  Falls back to module-level CC when no functions exist.
+        Returns 5.0 (neutral) when the code cannot be parsed.
+        """
         tree = CodeScorer._parse_ast_safe(code)
         if tree is None:
-            return 10.0
-        max_cc = 1
+            return 5.0
+
+        # Count CC per function and use the maximum (like radon).
+        func_ccs: list[int] = []
         for node in ast.walk(tree):
-            if isinstance(node, (ast.If, ast.For, ast.While, ast.ExceptHandler)):
-                max_cc += 1
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                cc = 1
+                for child in ast.walk(node):
+                    if isinstance(child, (ast.If, ast.For, ast.While, ast.ExceptHandler)):
+                        cc += 1
+                func_ccs.append(cc)
+
+        if func_ccs:
+            max_cc = max(func_ccs)
+        else:
+            # No functions: count module-level branches
+            max_cc = 1
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.If, ast.For, ast.While, ast.ExceptHandler)):
+                    max_cc += 1
+
         return clamp_individual(max_cc / 5.0)
 
     @staticmethod

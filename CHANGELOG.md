@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-03-05
+
+### Fixed
+
+- **AST complexity scoring** — `_ast_complexity` now computes per-function cyclomatic complexity (max) instead of cumulative global count; returns neutral 5.0 for unparseable files instead of 10.0 which incorrectly rewarded broken code.
+- **Jaccard similarity for empty sets** — Both `context_injector.py` and `redundancy.py` now return 1.0 (identical) for two empty sets instead of 0.0.
+- **TF-IDF IDF formula** — `_build_idf` in `redundancy.py` uses smoothed IDF (`log((N+1)/(count+1)) + 1.0`) to avoid producing 0.0 for single-document collections.
+- **R-squared clamping** — `trends.py` clamps R-squared to `max(0.0, ...)` to prevent negative values when linear fit is poor.
+- **Memory retrieval type error** — `retrieval.py` no longer calls `.isoformat()` on `updated_at` which is already a `str`.
+- **Quality aggregator worst files** — `quality_aggregator.py` guard changed from `> 3` to `> 1` so small projects (1-3 files) still get worst-file analysis.
+- **Branch name parsing** — `contradictions.py` uses `removeprefix("* ")` instead of `lstrip("* ")` which could mangle branch names starting with `*` or space characters.
+- **Failure analyzer keyword matching** — `failure_analyzer.py` uses word-boundary regex instead of substring matching to prevent false-positive classifications (e.g., "key" matching "keyboard").
+- **Completeness validator subdirectory scanning** — `completeness.py` uses `rglob("*")` instead of `iterdir()` to find docs in subdirectories like `docs/guides/`.
+- **Drift detector UTC timestamps** — `drift.py` uses `gmtime` instead of `localtime` for consistent UTC ISO timestamps.
+
+### Changed
+
+- Version bump: tapps-core 1.0.3 → 1.0.4, tapps-mcp 0.8.4 → 0.8.5, docs-mcp 0.1.4 → 0.1.5.
+
+## [0.8.4] - 2026-03-05
+
+### Changed
+
+- Version bump: tapps-core 1.0.2 → 1.0.3, tapps-mcp 0.8.3 → 0.8.4, docs-mcp 0.1.3 → 0.1.4.
+- Documentation and release prep; exe build and local deploy for both MCPs.
+
 ## [0.8.1] - 2026-03-05
 
 ### Added

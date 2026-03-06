@@ -73,7 +73,7 @@ class QualityAggregator:
         # Best/worst files
         sorted_files = sorted(files, key=lambda f: f.overall_score, reverse=True)
         best = [f.file_path for f in sorted_files[:3]]
-        worst = [f.file_path for f in sorted_files[-3:]] if len(sorted_files) > 3 else []
+        worst = [f.file_path for f in sorted_files[-3:]] if len(sorted_files) > 1 else []
 
         # Score distribution buckets
         distribution: dict[str, int] = {

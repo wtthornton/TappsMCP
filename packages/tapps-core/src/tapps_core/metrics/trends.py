@@ -90,7 +90,7 @@ def calculate_trend(
     y_pred = [slope * x + (y_mean - slope * x_mean) for x in x_vals]
     ss_res = sum((y - yp) ** 2 for y, yp in zip(values, y_pred, strict=True))
     ss_tot = sum((y - y_mean) ** 2 for y in values)
-    r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 1.0
+    r_squared = max(0.0, 1.0 - (ss_res / ss_tot)) if ss_tot > 0 else 1.0
 
     # Determine direction
     if abs(slope) < slope_threshold or r_squared < _R_SQUARED_THRESHOLD:

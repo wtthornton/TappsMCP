@@ -464,10 +464,10 @@ class TestRedundancyAnalyzerV2TFIDF:
         assert sim < 0.3
 
     def test_jaccard_empty_sets(self) -> None:
-        """Jaccard similarity of empty sets is 0.0."""
+        """Jaccard similarity of empty sets is 1.0 (identical documents)."""
         from tapps_mcp.benchmark.redundancy import _jaccard_similarity
 
-        assert _jaccard_similarity(set(), set()) == 0.0
+        assert _jaccard_similarity(set(), set()) == 1.0
 
 
 class TestRedundancyTemplateReduction:

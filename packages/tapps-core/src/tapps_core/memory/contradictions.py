@@ -231,7 +231,7 @@ class ContradictionDetector:
                 timeout=5,
                 check=False,
             )
-            branches = [b.strip().lstrip("* ") for b in result.stdout.strip().splitlines()]
+            branches = [b.strip().removeprefix("* ").strip() for b in result.stdout.strip().splitlines()]
             if entry.branch not in branches:
                 return Contradiction(
                     memory_key=entry.key,

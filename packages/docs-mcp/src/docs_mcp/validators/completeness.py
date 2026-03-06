@@ -271,9 +271,9 @@ def _check_project_docs(project_root: Path) -> CompletenessCategory:
     missing: list[str] = []
 
     if docs_dir.is_dir():
-        # Check if docs/ has any content files
+        # Check if docs/ has any content files (including subdirectories)
         doc_extensions = {".md", ".rst", ".txt", ".html"}
-        for entry in docs_dir.iterdir():
+        for entry in docs_dir.rglob("*"):
             if entry.is_file() and entry.suffix.lower() in doc_extensions:
                 present.append(str(entry.relative_to(project_root)).replace("\\", "/"))
 

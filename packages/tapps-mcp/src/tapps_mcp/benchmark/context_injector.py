@@ -53,10 +53,10 @@ def _tokenize(text: str) -> set[str]:
 def _jaccard_similarity(set_a: set[str], set_b: set[str]) -> float:
     """Compute the Jaccard similarity index between two sets.
 
-    Returns 0.0 when both sets are empty (no overlap by definition).
+    Returns 1.0 when both sets are empty (identical empty documents).
     """
     if not set_a and not set_b:
-        return 0.0
+        return 1.0
     intersection = set_a & set_b
     union = set_a | set_b
     return len(intersection) / len(union)

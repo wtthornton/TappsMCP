@@ -131,7 +131,9 @@ def _build_idf(documents: list[list[str]]) -> dict[str, float]:
         for token in unique_tokens:
             df[token] += 1
 
-    return {term: math.log(n_docs / count) if count > 0 else 0.0 for term, count in df.items()}
+    return {
+        term: math.log((n_docs + 1) / (count + 1)) + 1.0 for term, count in df.items()
+    }
 
 
 def _tfidf_vector(tf: dict[str, float], idf: dict[str, float]) -> dict[str, float]:

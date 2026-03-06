@@ -152,7 +152,7 @@ def f(x):
 
     def test_syntax_error(self):
         score = CodeScorer._ast_complexity("def f(:\n")
-        assert score == 10.0
+        assert score == 5.0  # neutral score for unparseable files
 
 
 class TestHeuristicSecurity:

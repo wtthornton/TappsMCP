@@ -70,7 +70,8 @@ class TestHelpers:
         ts = 1709290800.0  # 2024-03-01 in some timezone
         result = _iso_from_mtime(ts)
         assert "T" in result
-        assert len(result) == 19  # YYYY-MM-DDTHH:MM:SS
+        assert len(result) == 20  # YYYY-MM-DDTHH:MM:SSZ
+        assert result.endswith("Z")
 
     def test_find_python_files(self, tmp_path: Path) -> None:
         (tmp_path / "main.py").write_text("x = 1", encoding="utf-8")

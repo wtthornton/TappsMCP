@@ -169,7 +169,7 @@ class MemoryRetriever:
     @staticmethod
     def _corpus_fingerprint(entries: list[MemoryEntry]) -> int:
         """Compute a fingerprint that changes when any entry is added, removed, or updated."""
-        return hash(tuple((e.key, e.updated_at.isoformat() if e.updated_at else "") for e in entries))
+        return hash(tuple((e.key, e.updated_at if e.updated_at else "") for e in entries))
 
     def _ensure_bm25_index(self, entries: list[MemoryEntry]) -> None:
         """Build or rebuild the BM25 index when the corpus changes."""

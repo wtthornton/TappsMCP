@@ -7,6 +7,7 @@ and generates template improvement suggestions.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
@@ -119,15 +120,16 @@ def _extract_repo(instance_id: str) -> str:
 def _classify_error(error: str | None) -> str:
     """Classify an error message into a pattern type.
 
-    Scans the error string for known keywords and returns the first
-    match. Falls back to ``"unknown"`` when no keyword matches.
+    Scans the error string for known keywords using word-boundary
+    matching and returns the first match. Falls back to ``"unknown"``
+    when no keyword matches.
     """
     if not error:
         return "no_error_message"
 
     lower_error = error.lower()
     for keyword in _ERROR_KEYWORDS:
-        if keyword in lower_error:
+        if re.search(rf"\b{re.escape(keyword)}", lower_error):
             return keyword
 
     return "unknown"

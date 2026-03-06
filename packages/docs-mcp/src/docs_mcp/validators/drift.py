@@ -51,10 +51,10 @@ def _should_skip_dir(dirname: str) -> bool:
 
 
 def _iso_from_mtime(mtime: float) -> str:
-    """Convert a file modification time to an ISO date string."""
+    """Convert a file modification time to an ISO date string (UTC)."""
     import time
 
-    return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(mtime))
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(mtime))
 
 
 def _find_python_files(project_root: Path) -> list[Path]:

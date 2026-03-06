@@ -42,7 +42,7 @@ class TestTokenize:
         assert _jaccard_similarity({"a", "b"}, {"c", "d"}) == 0.0
 
     def test_jaccard_empty_sets(self) -> None:
-        assert _jaccard_similarity(set(), set()) == 0.0
+        assert _jaccard_similarity(set(), set()) == 1.0
 
     def test_jaccard_partial_overlap(self) -> None:
         # {a, b, c} & {b, c, d} = {b, c} => 2/4 = 0.5
