@@ -127,7 +127,7 @@ class FreshnessChecker:
             age_days = max(0, int(age_seconds / 86400))
 
             iso_date = time.strftime(
-                "%Y-%m-%dT%H:%M:%S", time.localtime(mtime),
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(mtime),
             )
             freshness_label = _classify_freshness(age_days)
 

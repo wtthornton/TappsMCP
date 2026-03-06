@@ -193,8 +193,8 @@ def _scan_doc_files(project_root: Path) -> list[dict[str, Any]]:
                     "path": str(rel_path).replace("\\", "/"),
                     "size_bytes": stat.st_size,
                     "last_modified": time.strftime(
-                        "%Y-%m-%dT%H:%M:%S",
-                        time.localtime(stat.st_mtime),
+                        "%Y-%m-%dT%H:%M:%SZ",
+                        time.gmtime(stat.st_mtime),
                     ),
                     "format": _detect_doc_format(fpath),
                     "category": _categorize_doc(fpath, project_root),

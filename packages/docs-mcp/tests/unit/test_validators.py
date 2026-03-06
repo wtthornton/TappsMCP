@@ -482,7 +482,8 @@ class TestFreshnessCheckerFreshDocs:
         report = FreshnessChecker().check(tmp_path)
         iso = report.items[0].last_modified
         assert "T" in iso
-        assert len(iso) == 19  # YYYY-MM-DDTHH:MM:SS
+        assert len(iso) == 20  # YYYY-MM-DDTHH:MM:SSZ
+        assert iso.endswith("Z")
 
 
 class TestFreshnessCheckerStaleDocs:

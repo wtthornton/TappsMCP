@@ -130,9 +130,11 @@ class StoryGenerator:
 
     def _render_title(self, config: StoryConfig) -> list[str]:
         """Render the title with story numbering."""
-        if config.story_number:
+        if config.epic_number and config.story_number:
             story_id = f"{config.epic_number}.{config.story_number}"
             return [f"# Story {story_id} -- {config.title}", ""]
+        if config.story_number:
+            return [f"# Story {config.story_number} -- {config.title}", ""]
         return [f"# {config.title}", ""]
 
     def _render_user_story_statement(self, config: StoryConfig) -> list[str]:

@@ -644,9 +644,9 @@ class CodeScorer:
             return 0.0, []
         seen: set[str] = set()
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 _check_function_size(node, seen)
-            if isinstance(node, ast.For):
+            if isinstance(node, (ast.For, ast.AsyncFor)):
                 _check_nested_for(node, seen)
             if isinstance(node, ast.ListComp):
                 _check_expensive_comp(node, seen)
@@ -682,7 +682,7 @@ from tapps_mcp.scoring.suggestions import (
 _SCORE_LOW = 5
 
 
-def _check_function_size(node: ast.FunctionDef, seen: set[str]) -> None:
+def _check_function_size(node: ast.FunctionDef | ast.AsyncFunctionDef, seen: set[str]) -> None:
     """Flag oversized functions and deeply nested control flow."""
     func_lines = (
         node.end_lineno - node.lineno
@@ -714,10 +714,10 @@ def _classify_threshold(
         seen.add(moderate_label)
 
 
-def _check_nested_for(node: ast.For, seen: set[str]) -> None:
-    """Flag nested for-loops."""
+def _check_nested_for(node: ast.For | ast.AsyncFor, seen: set[str]) -> None:
+    """Flag nested for-loops (sync or async)."""
     for child in ast.walk(node):
-        if isinstance(child, ast.For) and child is not node:
+        if isinstance(child, (ast.For, ast.AsyncFor)) and child is not node:
             seen.add("nested_loops")
             break
 

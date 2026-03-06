@@ -49,14 +49,14 @@ class TestCLICommands:
         runner = CliRunner()
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.0" in result.output
+        assert "0.1.5" in result.output
 
     def test_version_command(self) -> None:
         runner = CliRunner()
         result = runner.invoke(cli, ["version"])
         assert result.exit_code == 0
         assert "docsmcp" in result.output.lower()
-        assert "0.1.0" in result.output
+        assert "0.1.5" in result.output
 
     def test_help(self) -> None:
         runner = CliRunner()
