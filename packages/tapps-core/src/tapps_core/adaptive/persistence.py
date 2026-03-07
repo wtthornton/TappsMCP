@@ -3,6 +3,9 @@
 Provides JSONL-backed :class:`FileOutcomeTracker` and
 :class:`FilePerformanceTracker` that satisfy the protocol interfaces
 defined in :mod:`tapps_core.adaptive.protocols`.
+
+Also provides :class:`DomainWeightStore` for persisting learned domain
+routing weights (Epic 57).
 """
 
 from __future__ import annotations
@@ -13,11 +16,20 @@ import os
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 
-from tapps_core.adaptive.models import CodeOutcome, ExpertPerformance, _utc_now_iso
+from tapps_core.adaptive.models import (
+    CodeOutcome,
+    DomainWeightEntry,
+    DomainWeightsSnapshot,
+    ExpertPerformance,
+    _utc_now_iso,
+)
+
+if TYPE_CHECKING:
+    pass
 
 logger = structlog.get_logger(__name__)
 
@@ -267,3 +279,417 @@ def save_json_atomic(data: dict[str, Any] | list[Any], target: Path) -> None:
         with contextlib.suppress(OSError):
             Path(tmp_path).unlink()
         raise
+
+
+def _save_yaml_atomic(data: dict[str, Any], target: Path) -> None:
+    """Write *data* to *target* as YAML atomically via a temporary file."""
+    try:
+        import yaml
+    except ImportError:
+        logger.warning("yaml_not_available", msg="Falling back to JSON format")
+        save_json_atomic(data, target.with_suffix(".json"))
+        return
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(target.parent),
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            yaml.safe_dump(data, fh, default_flow_style=False, allow_unicode=True)
+        Path(tmp_path).replace(target)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            Path(tmp_path).unlink()
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Domain weight persistence (Epic 57)
+# ---------------------------------------------------------------------------
+
+DomainType = Literal["technical", "business"]
+
+# Default weight for domains without feedback history.
+_DEFAULT_DOMAIN_WEIGHT = 1.0
+
+# Minimum weight to prevent domains from being completely ignored.
+_MIN_DOMAIN_WEIGHT = 0.1
+
+# Maximum weight to prevent single domain from dominating.
+_MAX_DOMAIN_WEIGHT = 3.0
+
+
+class DomainWeightStore:
+    """YAML file-backed domain routing weight store.
+
+    Stores learned domain routing weights separately for technical (built-in)
+    and business (project-specific) domains. Weights are persisted to
+    ``{project_root}/.tapps-mcp/adaptive/domain_weights.yaml``.
+
+    Usage::
+
+        store = DomainWeightStore(project_root)
+
+        # Save or update a weight
+        store.save_weight("security", 1.2, samples=45, domain_type="technical")
+
+        # Load all weights
+        snapshot = store.load_weights()
+
+        # Get a specific weight
+        entry = store.get_weight("security", domain_type="technical")
+
+        # Update from feedback
+        store.update_from_feedback("security", helpful=True, domain_type="technical")
+    """
+
+    def __init__(self, project_root: Path) -> None:
+        """Initialize the store with a project root directory.
+
+        Args:
+            project_root: Root directory of the project. Weights are stored
+                in ``.tapps-mcp/adaptive/domain_weights.yaml`` within this dir.
+        """
+        self._store_dir = project_root / ".tapps-mcp" / "adaptive"
+        self._file = self._store_dir / "domain_weights.yaml"
+        self._json_fallback = self._store_dir / "domain_weights.json"
+
+    # -- Public API ---------------------------------------------------------
+
+    def save_weight(
+        self,
+        domain: str,
+        weight: float,
+        *,
+        samples: int = 0,
+        positive_count: int = 0,
+        negative_count: int = 0,
+        domain_type: DomainType = "technical",
+    ) -> None:
+        """Save or update a domain weight entry.
+
+        Args:
+            domain: Domain identifier (e.g., "security", "acme-billing").
+            weight: Learned routing weight (clamped to [0.1, 3.0]).
+            samples: Total number of feedback samples.
+            positive_count: Number of positive feedback samples.
+            negative_count: Number of negative feedback samples.
+            domain_type: Whether this is a "technical" or "business" domain.
+        """
+        snapshot = self.load_weights()
+        entry = DomainWeightEntry(
+            domain=domain,
+            weight=max(_MIN_DOMAIN_WEIGHT, min(_MAX_DOMAIN_WEIGHT, weight)),
+            samples=samples,
+            positive_count=positive_count,
+            negative_count=negative_count,
+            last_updated=_utc_now_iso(),
+        )
+
+        if domain_type == "technical":
+            snapshot.technical[domain] = entry
+        else:
+            snapshot.business[domain] = entry
+
+        snapshot.timestamp = _utc_now_iso()
+        self._persist(snapshot)
+
+    def load_weights(self) -> DomainWeightsSnapshot:
+        """Load all domain weights from disk.
+
+        Returns an empty snapshot if the file doesn't exist (graceful degradation).
+
+        Returns:
+            A :class:`DomainWeightsSnapshot` with technical and business weights.
+        """
+        # Try YAML first, then JSON fallback
+        if self._file.exists():
+            return self._load_yaml()
+        if self._json_fallback.exists():
+            return self._load_json_fallback()
+
+        # No existing file - return empty snapshot
+        return DomainWeightsSnapshot()
+
+    def get_weight(
+        self,
+        domain: str,
+        *,
+        domain_type: DomainType = "technical",
+    ) -> DomainWeightEntry | None:
+        """Get the weight entry for a specific domain.
+
+        Args:
+            domain: Domain identifier to look up.
+            domain_type: Whether to look in "technical" or "business" weights.
+
+        Returns:
+            The :class:`DomainWeightEntry` if found, else ``None``.
+        """
+        snapshot = self.load_weights()
+        weights = snapshot.technical if domain_type == "technical" else snapshot.business
+        return weights.get(domain)
+
+    def get_weight_value(
+        self,
+        domain: str,
+        *,
+        domain_type: DomainType = "technical",
+    ) -> float:
+        """Get the numeric weight for a domain, defaulting to 1.0 if not found.
+
+        Args:
+            domain: Domain identifier to look up.
+            domain_type: Whether to look in "technical" or "business" weights.
+
+        Returns:
+            The weight value, or 1.0 if the domain has no stored weight.
+        """
+        entry = self.get_weight(domain, domain_type=domain_type)
+        return entry.weight if entry else _DEFAULT_DOMAIN_WEIGHT
+
+    def update_from_feedback(
+        self,
+        domain: str,
+        *,
+        helpful: bool,
+        domain_type: DomainType = "technical",
+        learning_rate: float = 0.1,
+    ) -> DomainWeightEntry:
+        """Update a domain's weight based on feedback.
+
+        Positive feedback increases weight; negative decreases it.
+        Uses exponential smoothing with the given learning rate.
+
+        Args:
+            domain: Domain identifier to update.
+            helpful: Whether the feedback was positive (True) or negative (False).
+            domain_type: Whether this is a "technical" or "business" domain.
+            learning_rate: How much to adjust the weight (0.0-1.0).
+
+        Returns:
+            The updated :class:`DomainWeightEntry`.
+        """
+        snapshot = self.load_weights()
+        weights = snapshot.technical if domain_type == "technical" else snapshot.business
+
+        # Get existing entry or create new one
+        entry = weights.get(domain)
+        if entry is None:
+            entry = DomainWeightEntry(domain=domain)
+
+        # Update counts
+        new_samples = entry.samples + 1
+        new_positive = entry.positive_count + (1 if helpful else 0)
+        new_negative = entry.negative_count + (0 if helpful else 1)
+
+        # Calculate new weight using exponential smoothing
+        adjustment = learning_rate if helpful else -learning_rate
+        new_weight = entry.weight * (1.0 + adjustment)
+        new_weight = max(_MIN_DOMAIN_WEIGHT, min(_MAX_DOMAIN_WEIGHT, new_weight))
+
+        # Save updated entry
+        self.save_weight(
+            domain,
+            new_weight,
+            samples=new_samples,
+            positive_count=new_positive,
+            negative_count=new_negative,
+            domain_type=domain_type,
+        )
+
+        # Return the updated entry
+        return DomainWeightEntry(
+            domain=domain,
+            weight=new_weight,
+            samples=new_samples,
+            positive_count=new_positive,
+            negative_count=new_negative,
+            last_updated=_utc_now_iso(),
+        )
+
+    def load_technical_weights(self) -> dict[str, DomainWeightEntry]:
+        """Load only technical domain weights.
+
+        Returns:
+            Dictionary mapping domain names to weight entries.
+        """
+        return dict(self.load_weights().technical)
+
+    def load_business_weights(self) -> dict[str, DomainWeightEntry]:
+        """Load only business domain weights.
+
+        Returns:
+            Dictionary mapping domain names to weight entries.
+        """
+        return dict(self.load_weights().business)
+
+    def delete_weight(
+        self,
+        domain: str,
+        *,
+        domain_type: DomainType = "technical",
+    ) -> bool:
+        """Remove a domain's weight entry.
+
+        Args:
+            domain: Domain identifier to remove.
+            domain_type: Whether to remove from "technical" or "business" weights.
+
+        Returns:
+            True if the entry was removed, False if it didn't exist.
+        """
+        snapshot = self.load_weights()
+        weights = snapshot.technical if domain_type == "technical" else snapshot.business
+
+        if domain not in weights:
+            return False
+
+        del weights[domain]
+        snapshot.timestamp = _utc_now_iso()
+        self._persist(snapshot)
+        return True
+
+    def clear_weights(self, *, domain_type: DomainType | None = None) -> None:
+        """Clear stored weights.
+
+        Args:
+            domain_type: If specified, clear only that type. If None, clear all.
+        """
+        snapshot = self.load_weights()
+
+        if domain_type is None:
+            snapshot.technical = {}
+            snapshot.business = {}
+        elif domain_type == "technical":
+            snapshot.technical = {}
+        else:
+            snapshot.business = {}
+
+        snapshot.timestamp = _utc_now_iso()
+        self._persist(snapshot)
+
+    def get_statistics(self) -> dict[str, Any]:
+        """Return aggregate statistics over stored weights.
+
+        Returns:
+            Dictionary with counts, averages, and top domains by weight.
+        """
+        snapshot = self.load_weights()
+
+        tech_entries = list(snapshot.technical.values())
+        biz_entries = list(snapshot.business.values())
+        all_entries = tech_entries + biz_entries
+
+        if not all_entries:
+            return {
+                "total_domains": 0,
+                "technical_count": 0,
+                "business_count": 0,
+                "total_samples": 0,
+                "avg_weight": _DEFAULT_DOMAIN_WEIGHT,
+                "top_technical": [],
+                "top_business": [],
+            }
+
+        total_samples = sum(e.samples for e in all_entries)
+        avg_weight = sum(e.weight for e in all_entries) / len(all_entries)
+
+        # Top 5 by weight in each category
+        top_tech = sorted(tech_entries, key=lambda e: e.weight, reverse=True)[:5]
+        top_biz = sorted(biz_entries, key=lambda e: e.weight, reverse=True)[:5]
+
+        return {
+            "total_domains": len(all_entries),
+            "technical_count": len(tech_entries),
+            "business_count": len(biz_entries),
+            "total_samples": total_samples,
+            "avg_weight": round(avg_weight, 4),
+            "top_technical": [{"domain": e.domain, "weight": e.weight} for e in top_tech],
+            "top_business": [{"domain": e.domain, "weight": e.weight} for e in top_biz],
+        }
+
+    # -- Private helpers ----------------------------------------------------
+
+    def _persist(self, snapshot: DomainWeightsSnapshot) -> None:
+        """Persist snapshot to disk (YAML preferred, JSON fallback)."""
+        data = snapshot.model_dump(mode="json")
+        # Convert DomainWeightEntry dicts for cleaner YAML
+        for section in ("technical", "business"):
+            if section in data:
+                data[section] = {
+                    k: {
+                        "weight": v["weight"],
+                        "samples": v["samples"],
+                        "positive_count": v["positive_count"],
+                        "negative_count": v["negative_count"],
+                        "last_updated": v["last_updated"],
+                    }
+                    for k, v in data[section].items()
+                }
+        try:
+            _save_yaml_atomic(data, self._file)
+        except OSError:
+            logger.warning("domain_weights_save_failed", file=str(self._file), exc_info=True)
+
+    def _load_yaml(self) -> DomainWeightsSnapshot:
+        """Load weights from YAML file."""
+        try:
+            import yaml
+
+            text = self._file.read_text(encoding="utf-8")
+            data = yaml.safe_load(text) or {}
+        except ImportError:
+            logger.warning("yaml_not_available", msg="Cannot load YAML weights")
+            return DomainWeightsSnapshot()
+        except (OSError, yaml.YAMLError) as e:
+            logger.warning("domain_weights_load_failed", file=str(self._file), error=str(e))
+            return DomainWeightsSnapshot()
+
+        return self._parse_snapshot(data)
+
+    def _load_json_fallback(self) -> DomainWeightsSnapshot:
+        """Load weights from JSON fallback file."""
+        try:
+            text = self._json_fallback.read_text(encoding="utf-8")
+            data = json.loads(text)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(
+                "domain_weights_load_failed", file=str(self._json_fallback), error=str(e)
+            )
+            return DomainWeightsSnapshot()
+
+        return self._parse_snapshot(data)
+
+    def _parse_snapshot(self, data: dict[str, Any]) -> DomainWeightsSnapshot:
+        """Parse raw dict into a DomainWeightsSnapshot with migration support."""
+        # Handle schema migrations
+        version = data.get("version", 1)
+        if version < 1:
+            logger.warning("domain_weights_unknown_version", version=version)
+
+        # Parse technical weights
+        technical: dict[str, DomainWeightEntry] = {}
+        for domain, entry_data in data.get("technical", {}).items():
+            if isinstance(entry_data, dict):
+                technical[domain] = DomainWeightEntry(domain=domain, **entry_data)
+            else:
+                # Legacy: just a weight value
+                technical[domain] = DomainWeightEntry(domain=domain, weight=float(entry_data))
+
+        # Parse business weights
+        business: dict[str, DomainWeightEntry] = {}
+        for domain, entry_data in data.get("business", {}).items():
+            if isinstance(entry_data, dict):
+                business[domain] = DomainWeightEntry(domain=domain, **entry_data)
+            else:
+                business[domain] = DomainWeightEntry(domain=domain, weight=float(entry_data))
+
+        return DomainWeightsSnapshot(
+            technical=technical,
+            business=business,
+            timestamp=data.get("timestamp", _utc_now_iso()),
+            version=version,
+        )

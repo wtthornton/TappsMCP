@@ -29,21 +29,31 @@ if TYPE_CHECKING:
 
     from tapps_core.config.settings import TappsMCPSettings
     from tapps_core.memory.store import MemoryStore
-    from tapps_mcp.scoring.scorer import CodeScorer
 
 _logger = structlog.get_logger(__name__)
 
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
 _VALIDATE_CONCURRENCY = 10
 
-# Track whether auto-GC has already run this session.
+# Track whether auto-GC and consolidation have already run this session.
 # Uses a mutable container to avoid PLW0603 ``global`` statements.
-_session_state: dict[str, bool] = {"gc_done": False}
+_session_state: dict[str, bool] = {"gc_done": False, "consolidation_done": False}
 
 
 def _reset_session_gc_flag() -> None:
     """Reset the auto-GC flag (for testing)."""
     _session_state["gc_done"] = False
+
+
+def _reset_session_consolidation_flag() -> None:
+    """Reset the consolidation scan flag (for testing)."""
+    _session_state["consolidation_done"] = False
+
+
+def _reset_session_state() -> None:
+    """Reset all session state flags (for testing)."""
+    _session_state["gc_done"] = False
+    _session_state["consolidation_done"] = False
 
 
 # Prevent garbage collection of fire-and-forget background tasks.
@@ -516,7 +526,7 @@ async def tapps_validate_changed(
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
     from tapps_mcp.server_helpers import ensure_session_initialized
-    from tapps_mcp.tools.batch_validator import MAX_BATCH_FILES, format_batch_summary
+    from tapps_mcp.tools.batch_validator import MAX_BATCH_FILES
 
     start = time.perf_counter_ns()
     _record_call("tapps_validate_changed")
@@ -789,6 +799,63 @@ def _maybe_auto_gc(
         return {"ran": False, "error": "auto-gc failed"}
 
 
+def _maybe_consolidation_scan(
+    store: MemoryStore,
+    settings: TappsMCPSettings,
+) -> dict[str, Any] | None:
+    """Run periodic memory consolidation scan if enabled and due.
+
+    Returns a summary dict when scan ran, or ``None`` if skipped.
+    Only runs once per session (guarded by ``_session_state["consolidation_done"]``).
+
+    Epic 58, Story 58.3: Periodic consolidation scan at session start.
+    """
+    # Early exit: already ran this session or settings not configured
+    if _session_state.get("consolidation_done", False):
+        return None
+
+    mem_settings = getattr(settings, "memory", None)
+    consolidation_settings = (
+        getattr(mem_settings, "consolidation", None) if mem_settings else None
+    )
+    scan_enabled = getattr(consolidation_settings, "scan_on_session_start", True)
+    if not consolidation_settings or not scan_enabled:
+        return None
+
+    _session_state["consolidation_done"] = True
+
+    try:
+        from tapps_core.memory.auto_consolidation import run_periodic_consolidation_scan
+
+        result = run_periodic_consolidation_scan(
+            store,
+            settings.project_root,
+            threshold=consolidation_settings.threshold,
+            min_group_size=consolidation_settings.min_entries,
+            scan_interval_days=consolidation_settings.scan_interval_days,
+        )
+
+        if result.scanned:
+            _logger.info(
+                "session_consolidation_scan_completed",
+                groups_found=result.groups_found,
+                entries_consolidated=result.entries_consolidated,
+            )
+            return result.to_dict()
+
+        if result.skipped_reason:
+            _logger.debug(
+                "session_consolidation_scan_skipped",
+                reason=result.skipped_reason,
+            )
+            return {"skipped": True, "reason": result.skipped_reason}
+
+        return None
+    except Exception:
+        _logger.debug("session_consolidation_scan_failed", exc_info=True)
+        return {"ran": False, "error": "consolidation scan failed"}
+
+
 def _process_session_capture(
     project_root: Path,
     store: MemoryStore,
@@ -883,6 +950,7 @@ async def tapps_session_start(
     # Memory status (lazy, non-blocking)
     memory_status: dict[str, Any] = {"enabled": False}
     memory_gc_result: dict[str, Any] | None = None
+    memory_consolidation_result: dict[str, Any] | None = None
     session_capture_result: dict[str, Any] | None = None
     try:
         settings = load_settings()
@@ -929,6 +997,12 @@ async def tapps_session_start(
                     settings,
                 )
 
+                # Periodic consolidation scan (Epic 58, Story 58.3)
+                memory_consolidation_result = _maybe_consolidation_scan(
+                    mem_store,
+                    settings,
+                )
+
                 # Process session capture from previous Stop hook (Epic 34.5)
                 session_capture_result = _process_session_capture(
                     settings.project_root,
@@ -970,6 +1044,7 @@ async def tapps_session_start(
         "pipeline": info["data"]["pipeline"],
         "memory_status": memory_status,
         "memory_gc": memory_gc_result,
+        "memory_consolidation": memory_consolidation_result,
         "session_capture": session_capture_result,
         "business_experts": business_experts_result,
         "project_profile": None,

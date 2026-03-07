@@ -92,6 +92,37 @@ class MemoryDecaySettings(BaseSettings):
     )
 
 
+class MemoryConsolidationSettings(BaseSettings):
+    """Settings for memory consolidation (Epic 58)."""
+
+    model_config = SettingsConfigDict(env_prefix="TAPPS_MCP_MEMORY_CONSOLIDATION_")
+
+    auto_consolidate: bool = Field(
+        default=True,
+        description="Enable automatic consolidation of similar memories on save.",
+    )
+    threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold for consolidation (0.0-1.0).",
+    )
+    min_entries: int = Field(
+        default=3,
+        ge=2,
+        description="Minimum entries required to trigger consolidation.",
+    )
+    scan_interval_days: int = Field(
+        default=7,
+        ge=1,
+        description="Days between periodic consolidation scans at session start.",
+    )
+    scan_on_session_start: bool = Field(
+        default=True,
+        description="Run periodic consolidation scan at session start.",
+    )
+
+
 class MemorySettings(BaseSettings):
     """Settings for the shared memory subsystem."""
 
@@ -116,6 +147,9 @@ class MemorySettings(BaseSettings):
         description="Inject relevant memories into expert consultations (Epic 25).",
     )
     decay: MemoryDecaySettings = Field(default_factory=MemoryDecaySettings)
+    consolidation: MemoryConsolidationSettings = Field(
+        default_factory=MemoryConsolidationSettings
+    )
 
 
 class DocSourceConfig(BaseModel):

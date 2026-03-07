@@ -3,15 +3,21 @@
 Detects domain suggestions from prompts, code patterns, and consultation
 gaps.  Complements the existing :class:`DomainDetector` with adaptive
 capabilities based on usage history.
+
+Epic 57: Extends support to business domains with learned weight-based routing.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import structlog
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from tapps_core.adaptive.persistence import DomainWeightStore
 
 logger = structlog.get_logger(__name__)
 
@@ -34,12 +40,20 @@ _MIN_CODE_CONFIDENCE = 0.4
 _LOW_CONFIDENCE_THRESHOLD = 0.6
 _RECURRING_PATTERN_MIN_COUNT = 3
 
+# Confidence threshold for adaptive routing to activate (Epic 57).
+# Below this threshold, the detector falls back to static routing.
+_ADAPTIVE_CONFIDENCE_THRESHOLD = 0.4
+
 
 class AdaptiveDomainDetector:
     """Detects domains from prompts, code, and consultation history.
 
     This detector supplements the existing static :class:`DomainDetector`
     with adaptive, usage-pattern-based detection.
+
+    Epic 57: Also provides :meth:`detect` which uses learned weights from
+    feedback to route questions to the best domain (both technical and
+    business domains supported).
     """
 
     DOMAIN_KEYWORDS: ClassVar[dict[str, list[str]]] = {
@@ -95,8 +109,203 @@ class AdaptiveDomainDetector:
         ],
     }
 
-    def __init__(self, project_root: str | None = None) -> None:
-        self._project_root = project_root
+    def __init__(self, project_root: str | Path | None = None) -> None:
+        """Initialize the detector.
+
+        Args:
+            project_root: Project root directory. Required for weight-based
+                routing via :meth:`detect`. Can be a string or Path.
+        """
+        if project_root is not None:
+            self._project_root: Path | None = Path(project_root)
+        else:
+            self._project_root = None
+        self._weight_store: DomainWeightStore | None = None
+
+    def _get_weight_store(self) -> DomainWeightStore | None:
+        """Lazily initialize and return the weight store."""
+        if self._weight_store is not None:
+            return self._weight_store
+        if self._project_root is None:
+            return None
+        from tapps_core.adaptive.persistence import DomainWeightStore
+
+        self._weight_store = DomainWeightStore(self._project_root)
+        return self._weight_store
+
+    # ------------------------------------------------------------------
+    # Weight-based routing (Epic 57)
+    # ------------------------------------------------------------------
+
+    def detect(
+        self,
+        question: str,
+        *,
+        include_business: bool = True,
+    ) -> tuple[str, float]:
+        """Detect the best domain for a question using learned weights.
+
+        Uses :class:`DomainDetector` for base keyword matching, then applies
+        learned weights from :class:`DomainWeightStore` to adjust confidence
+        scores. Returns the domain with the highest weighted confidence.
+
+        Args:
+            question: The user's question text.
+            include_business: If True, include business (project-specific)
+                domains in addition to technical (built-in) domains.
+
+        Returns:
+            A tuple of (domain, confidence). Returns ("unknown", 0.0) if
+            no domain matches above the threshold.
+
+        Note:
+            Falls back to static routing if:
+            - No project_root was provided (can't load weights)
+            - No matching domains found
+            - All confidences are below the threshold
+        """
+        from tapps_core.experts.domain_detector import DomainDetector
+        from tapps_core.experts.registry import ExpertRegistry
+
+        # Get base detection results from static detector.
+        if include_business:
+            results = DomainDetector.detect_from_question_merged(question)
+        else:
+            results = DomainDetector.detect_from_question(question)
+
+        if not results:
+            return ("unknown", 0.0)
+
+        # Get business domains for categorization.
+        business_domains = ExpertRegistry.get_business_domains()
+
+        # Apply learned weights to adjust confidence.
+        weighted_results: list[tuple[str, float, float]] = []  # (domain, raw_conf, weighted_conf)
+        weight_store = self._get_weight_store()
+
+        for mapping in results:
+            domain = mapping.domain
+            raw_confidence = mapping.confidence
+
+            # Determine if this is a business or technical domain.
+            is_business = domain in business_domains
+            domain_type: Literal["technical", "business"] = (
+                "business" if is_business else "technical"
+            )
+
+            # Get learned weight (defaults to 1.0 if not found).
+            if weight_store is not None:
+                weight = weight_store.get_weight_value(domain, domain_type=domain_type)
+            else:
+                weight = 1.0
+
+            # Apply weight to confidence (multiplicative).
+            weighted_confidence = min(1.0, raw_confidence * weight)
+            weighted_results.append((domain, raw_confidence, weighted_confidence))
+
+        # Sort by weighted confidence (descending).
+        weighted_results.sort(key=lambda x: x[2], reverse=True)
+
+        # Return the best match if above threshold.
+        best_domain, _raw_conf, best_confidence = weighted_results[0]
+        if best_confidence >= _ADAPTIVE_CONFIDENCE_THRESHOLD:
+            logger.debug(
+                "adaptive_domain_detected",
+                domain=best_domain,
+                confidence=round(best_confidence, 4),
+                raw_confidence=round(_raw_conf, 4),
+            )
+            return (best_domain, round(best_confidence, 4))
+
+        # Fall back to unknown if below threshold.
+        logger.debug(
+            "adaptive_domain_below_threshold",
+            best_domain=best_domain,
+            confidence=round(best_confidence, 4),
+            threshold=_ADAPTIVE_CONFIDENCE_THRESHOLD,
+        )
+        return ("unknown", 0.0)
+
+    def detect_with_details(
+        self,
+        question: str,
+        *,
+        include_business: bool = True,
+    ) -> dict[str, Any]:
+        """Detect domain with full details including weight adjustments.
+
+        Like :meth:`detect`, but returns a detailed dictionary with:
+        - domain: The selected domain
+        - confidence: Final weighted confidence
+        - raw_confidence: Original confidence before weighting
+        - weight_applied: The learned weight that was applied
+        - domain_type: "technical" or "business"
+        - all_candidates: List of all considered domains with scores
+
+        Args:
+            question: The user's question text.
+            include_business: If True, include business domains.
+
+        Returns:
+            Dictionary with detection details.
+        """
+        from tapps_core.experts.domain_detector import DomainDetector
+        from tapps_core.experts.registry import ExpertRegistry
+
+        # Get base detection results.
+        if include_business:
+            results = DomainDetector.detect_from_question_merged(question)
+        else:
+            results = DomainDetector.detect_from_question(question)
+
+        if not results:
+            return {
+                "domain": "unknown",
+                "confidence": 0.0,
+                "raw_confidence": 0.0,
+                "weight_applied": 1.0,
+                "domain_type": "unknown",
+                "all_candidates": [],
+            }
+
+        business_domains = ExpertRegistry.get_business_domains()
+        weight_store = self._get_weight_store()
+
+        candidates: list[dict[str, Any]] = []
+        for mapping in results:
+            domain = mapping.domain
+            raw_confidence = mapping.confidence
+            is_business = domain in business_domains
+            domain_type: Literal["technical", "business"] = (
+                "business" if is_business else "technical"
+            )
+
+            if weight_store is not None:
+                weight = weight_store.get_weight_value(domain, domain_type=domain_type)
+            else:
+                weight = 1.0
+
+            weighted_confidence = min(1.0, raw_confidence * weight)
+            candidates.append({
+                "domain": domain,
+                "confidence": round(weighted_confidence, 4),
+                "raw_confidence": round(raw_confidence, 4),
+                "weight_applied": round(weight, 4),
+                "domain_type": domain_type,
+            })
+
+        # Sort by weighted confidence.
+        candidates.sort(key=lambda x: x["confidence"], reverse=True)
+
+        best = candidates[0]
+        return {
+            "domain": best["domain"],
+            "confidence": best["confidence"],
+            "raw_confidence": best["raw_confidence"],
+            "weight_applied": best["weight_applied"],
+            "domain_type": best["domain_type"],
+            "all_candidates": candidates,
+        }
 
     async def detect_domains(
         self,

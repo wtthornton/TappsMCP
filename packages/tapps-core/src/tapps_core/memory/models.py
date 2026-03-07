@@ -195,3 +195,42 @@ class MemorySnapshot(BaseModel):
     exported_at: str = Field(
         default_factory=_utc_now_iso, description="ISO-8601 UTC export time."
     )
+
+
+# ---------------------------------------------------------------------------
+# Consolidation models (Epic 58)
+# ---------------------------------------------------------------------------
+
+
+class ConsolidationReason(StrEnum):
+    """Why entries were consolidated."""
+
+    similarity = "similarity"  # Jaccard + TF-IDF similarity above threshold
+    same_topic = "same_topic"  # Same tier + overlapping tags
+    supersession = "supersession"  # Newer entry references older entry
+    manual = "manual"  # User-triggered consolidation
+
+
+class ConsolidatedEntry(MemoryEntry):
+    """A memory entry that consolidates multiple source entries.
+
+    Inherits all MemoryEntry fields and adds provenance tracking.
+    Source entries are marked as `consolidated: true` but retained.
+    """
+
+    source_ids: list[str] = Field(
+        default_factory=list,
+        description="Keys of entries that were consolidated into this one.",
+    )
+    consolidated_at: str = Field(
+        default_factory=_utc_now_iso,
+        description="ISO-8601 UTC timestamp when consolidation occurred.",
+    )
+    consolidation_reason: ConsolidationReason = Field(
+        default=ConsolidationReason.similarity,
+        description="Why the entries were consolidated.",
+    )
+    is_consolidated: bool = Field(
+        default=True,
+        description="Always True for ConsolidatedEntry.",
+    )

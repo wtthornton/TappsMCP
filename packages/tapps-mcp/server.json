@@ -1,0 +1,86 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.wtthornton/tapps-mcp",
+  "title": "TappsMCP",
+  "description": "MCP server providing deterministic code quality tools for AI coding assistants. Includes code scoring (0-100 across 7 categories), quality gates, security scanning, dead code detection, dependency vulnerability scanning, domain expert consultation, documentation lookup, and shared memory for cross-session knowledge.",
+  "repository": {
+    "url": "https://github.com/wtthornton/TappsMCP",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "tapps-mcp",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "TAPPS_MCP_PROJECT_ROOT",
+          "description": "Project root directory for file operations (defaults to current working directory)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "CONTEXT7_API_KEY",
+          "description": "API key for Context7 documentation lookup (optional, enables enhanced doc lookup)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "TAPPS_MCP_QUALITY_PRESET",
+          "description": "Quality gate preset: standard, strict, or framework (default: standard)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "TAPPS_MCP_ADAPTIVE_ENABLED",
+          "description": "Enable adaptive learning from feedback (default: false)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {"name": "tapps_session_start", "description": "Initialize session, return server info and configuration"},
+    {"name": "tapps_server_info", "description": "Discover version, available tools, and installed checkers"},
+    {"name": "tapps_score_file", "description": "Score a code file across 7 quality categories (0-100)"},
+    {"name": "tapps_quick_check", "description": "Fast score + gate + security check after file edits"},
+    {"name": "tapps_quality_gate", "description": "Check if a file passes quality thresholds"},
+    {"name": "tapps_validate_changed", "description": "Batch validate multiple changed files"},
+    {"name": "tapps_security_scan", "description": "Run security analysis with Bandit and secret detection"},
+    {"name": "tapps_dead_code", "description": "Detect unused functions, classes, imports, and variables"},
+    {"name": "tapps_dependency_scan", "description": "Scan dependencies for known CVEs"},
+    {"name": "tapps_dependency_graph", "description": "Build import graph and detect circular dependencies"},
+    {"name": "tapps_lookup_docs", "description": "Look up library documentation via Context7 or LlmsTxt"},
+    {"name": "tapps_validate_config", "description": "Validate Dockerfile, docker-compose, or infra config"},
+    {"name": "tapps_consult_expert", "description": "Consult a domain expert with RAG-backed answers"},
+    {"name": "tapps_research", "description": "Combined expert consultation + documentation lookup"},
+    {"name": "tapps_list_experts", "description": "List available expert domains"},
+    {"name": "tapps_manage_experts", "description": "Add, remove, or scaffold business experts"},
+    {"name": "tapps_project_profile", "description": "Detect project type, tech stack, and recommendations"},
+    {"name": "tapps_impact_analysis", "description": "Analyze what depends on a file before API changes"},
+    {"name": "tapps_report", "description": "Generate quality report (JSON, Markdown, or HTML)"},
+    {"name": "tapps_memory", "description": "Shared memory for cross-session knowledge persistence"},
+    {"name": "tapps_session_notes", "description": "Save and recall session-local notes"},
+    {"name": "tapps_checklist", "description": "Track which tools were called, report missing steps"},
+    {"name": "tapps_dashboard", "description": "Review TappsMCP performance metrics"},
+    {"name": "tapps_stats", "description": "Usage statistics with recommendations"},
+    {"name": "tapps_feedback", "description": "Report whether tool output was helpful"},
+    {"name": "tapps_init", "description": "Bootstrap TappsMCP in a project"},
+    {"name": "tapps_upgrade", "description": "Upgrade generated files after version update"},
+    {"name": "tapps_doctor", "description": "Diagnose configuration issues"},
+    {"name": "tapps_set_engagement_level", "description": "Set AI prompting intensity (high/medium/low)"}
+  ],
+  "prompts": [
+    {"name": "tapps_pipeline", "description": "Recommended tool call order for different task types"},
+    {"name": "tapps_workflow", "description": "Task-specific workflow guidance"}
+  ]
+}

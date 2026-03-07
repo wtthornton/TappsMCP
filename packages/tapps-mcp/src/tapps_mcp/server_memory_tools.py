@@ -39,7 +39,7 @@ _ANNOTATIONS_MEMORY = ToolAnnotations(
 _VALID_ACTIONS = {
     "save", "save_bulk", "get", "list", "delete", "search",
     "reinforce", "gc", "contradictions", "reseed",
-    "import", "export",
+    "import", "export", "consolidate", "unconsolidate",
 }
 
 _BULK_SAVE_MAX_ENTRIES = 50
@@ -76,6 +76,11 @@ class _Params:
     file_path: str
     overwrite: bool
     entries: str
+    # Consolidation parameters (Epic 58, Story 58.4)
+    entry_ids: list[str]
+    dry_run: bool
+    # Retrieval deduplication (Epic 58, Story 58.5)
+    include_sources: bool
 
 
 # ---------------------------------------------------------------------------
@@ -101,11 +106,14 @@ async def tapps_memory(
     file_path: str = "",
     overwrite: bool = False,
     entries: str = "",
+    entry_ids: str = "",
+    dry_run: bool = False,
+    include_sources: bool = False,
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
-    Side effects: save/delete/reinforce/gc write to SQLite at .tapps-mcp/memory/.
-    get/list/search are read-only.
+    Side effects: save/delete/reinforce/gc/consolidate write to SQLite at
+    .tapps-mcp/memory/. get/list/search are read-only.
 
     Memories are typed by tier (architectural, pattern, context), carry
     confidence scores and metadata, and persist in SQLite. Use this tool
@@ -114,7 +122,8 @@ async def tapps_memory(
 
     Args:
         action: One of "save", "save_bulk", "get", "list", "delete", "search",
-            "reinforce", "gc", "contradictions", "reseed", "import", "export".
+            "reinforce", "gc", "contradictions", "reseed", "import", "export",
+            "consolidate", "unconsolidate".
         key: Memory key (required for save/get/delete/reinforce). Lowercase slug.
         value: Memory content (required for save). Max 4096 chars.
         tier: "architectural", "pattern", or "context" (default: "pattern").
@@ -123,7 +132,7 @@ async def tapps_memory(
         scope: "project", "branch", or "session" (default: "project").
         tags: Comma-separated tags for categorization (optional).
         branch: Git branch name (required when scope="branch").
-        query: Search query (for search action).
+        query: Search query (for search and consolidate actions).
         confidence: Override default confidence 0.0-1.0 (optional, -1 for default).
         ranked: When True (default), search returns BM25-ranked results with scores.
         limit: Max results for search/list (0 = use defaults: 10 for search, 50 for list).
@@ -133,6 +142,13 @@ async def tapps_memory(
         entries: JSON array of objects for save_bulk action. Each object must have
             "key" and "value", and may optionally include "tier", "tags", "scope".
             Maximum 50 entries per call.
+        entry_ids: Comma-separated entry keys for consolidate action. If provided,
+            consolidates these specific entries. If not provided, uses query to find
+            similar entries.
+        dry_run: When True, preview consolidation without making changes (default: False).
+        include_sources: When True, search/list includes source entries of consolidated
+            memories (default: False). By default, entries that were consolidated into
+            other entries are filtered out to avoid duplicates. (Epic 58, Story 58.5)
 
     Actions:
         save: Store a new memory or update an existing one.
@@ -147,6 +163,11 @@ async def tapps_memory(
         reseed: Re-seed memory from project profile (only updates auto-seeded entries).
         import: Import memories from a JSON file (requires file_path).
         export: Export memories to a JSON file (optional file_path, tier, scope filters).
+        consolidate: Merge related entries into a consolidated entry with provenance.
+            Use entry_ids for explicit keys or query to find similar entries.
+            Use dry_run=True to preview. (Epic 58, Story 58.4)
+        unconsolidate: Undo a consolidation. Restores source entries and removes the
+            consolidated entry. Requires key of the consolidated entry. (Epic 58, Story 58.6)
     """
     await ensure_session_initialized()
     _record_call("tapps_memory")
@@ -170,6 +191,7 @@ async def tapps_memory(
         )
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    entry_id_list = [e.strip() for e in entry_ids.split(",") if e.strip()] if entry_ids else []
 
     params = _Params(
         key=key, value=value, tier=tier, source=source,
@@ -177,6 +199,7 @@ async def tapps_memory(
         branch=branch, query=query, confidence=confidence,
         ranked=ranked, limit=limit, include_summary=include_summary,
         file_path=file_path, overwrite=overwrite, entries=entries,
+        entry_ids=entry_id_list, dry_run=dry_run, include_sources=include_sources,
     )
 
     try:
@@ -319,12 +342,19 @@ def _handle_get(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "store_metadata": _store_metadata(store),
         }
 
-    return {
+    result: dict[str, Any] = {
         "action": "get",
         "found": True,
         "entry": entry.model_dump(),
         "store_metadata": _store_metadata(store),
     }
+
+    # Provenance: include source entries for consolidated entries (Epic 58.6)
+    provenance = _get_provenance(store, entry)
+    if provenance:
+        result["provenance"] = provenance
+
+    return result
 
 
 def _handle_list(store: MemoryStore, p: _Params) -> dict[str, Any]:
@@ -334,6 +364,10 @@ def _handle_list(store: MemoryStore, p: _Params) -> dict[str, Any]:
         scope=p.scope if p.scope != "project" else None,
         tags=p.tag_list or None,
     )
+
+    # Filter source entries of consolidated memories (Epic 58.5)
+    if not p.include_sources:
+        entries = _filter_consolidated_sources(entries)
 
     effective_limit = p.limit if p.limit > 0 else _LIST_DEFAULT_LIMIT
     total_count = len(entries)
@@ -375,7 +409,9 @@ def _handle_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
     effective_limit = p.limit if p.limit > 0 else _SEARCH_DEFAULT_LIMIT
 
     if p.ranked and p.query:
-        return _ranked_search(store, p.query, effective_limit, p.include_summary)
+        return _ranked_search(
+            store, p.query, effective_limit, p.include_summary, p.include_sources,
+        )
 
     # Unranked (legacy FTS5-only) search
     results = store.search(
@@ -384,6 +420,10 @@ def _handle_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
         tier=p.tier if p.tier != "pattern" else None,
         scope=p.scope if p.scope != "project" else None,
     )
+
+    # Filter source entries of consolidated memories (Epic 58.5)
+    if not p.include_sources:
+        results = _filter_consolidated_sources(results)
 
     truncated = results[:effective_limit]
     result_entries = _build_entry_list(truncated, p.include_summary)
@@ -547,6 +587,282 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
     return {"action": "export", **result, "store_metadata": _store_metadata(store)}
 
 
+def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Handle the consolidate action (Epic 58, Story 58.4).
+
+    Consolidates related memory entries into a single entry with provenance.
+    Supports explicit entry_ids or query-based discovery of similar entries.
+    """
+    from tapps_core.memory.consolidation import (
+        consolidate,
+        detect_consolidation_reason,
+    )
+    from tapps_core.memory.similarity import find_consolidation_groups
+
+    # Determine entries to consolidate
+    if p.entry_ids:
+        # Explicit entry IDs provided
+        entries_to_consolidate = _get_entries_by_ids(store, p.entry_ids)
+        if isinstance(entries_to_consolidate, dict):
+            return entries_to_consolidate  # Error response
+        discovery_method = "explicit"
+    elif p.query:
+        # Query-based discovery
+        entries_to_consolidate = _find_entries_by_query(store, p.query, p.limit)
+        if isinstance(entries_to_consolidate, dict):
+            return entries_to_consolidate  # Error response
+        discovery_method = "query"
+    else:
+        # Auto-discover consolidation groups
+        all_entries = store.list_all()
+        active_entries = [
+            e for e in all_entries
+            if not getattr(e, "is_consolidated", False) and not e.contradicted
+        ]
+
+        if len(active_entries) < 2:  # noqa: PLR2004
+            return {
+                "action": "consolidate",
+                "consolidated": False,
+                "reason": "not_enough_entries",
+                "message": "Need at least 2 active entries to consolidate.",
+                "store_metadata": _store_metadata(store),
+            }
+
+        # Find the first consolidation group
+        groups = find_consolidation_groups(active_entries, min_group_size=2)
+        if not groups:
+            return {
+                "action": "consolidate",
+                "consolidated": False,
+                "reason": "no_similar_entries",
+                "message": "No similar entries found to consolidate.",
+                "store_metadata": _store_metadata(store),
+            }
+
+        # Use the first group
+        entry_by_key = {e.key: e for e in active_entries}
+        entries_to_consolidate = [entry_by_key[k] for k in groups[0] if k in entry_by_key]
+        discovery_method = "auto"
+
+    if len(entries_to_consolidate) < 2:  # noqa: PLR2004
+        return {
+            "action": "consolidate",
+            "consolidated": False,
+            "reason": "not_enough_entries",
+            "message": "Need at least 2 entries to consolidate.",
+            "store_metadata": _store_metadata(store),
+        }
+
+    # Detect consolidation reason
+    reason = detect_consolidation_reason(
+        entries_to_consolidate[0],
+        entries_to_consolidate[1:],
+    )
+
+    # Dry run - preview without making changes
+    if p.dry_run:
+        return {
+            "action": "consolidate",
+            "dry_run": True,
+            "would_consolidate": True,
+            "source_entries": [
+                {"key": e.key, "tier": e.tier.value if hasattr(e.tier, "value") else str(e.tier)}
+                for e in entries_to_consolidate
+            ],
+            "source_count": len(entries_to_consolidate),
+            "consolidation_reason": reason.value,
+            "discovery_method": discovery_method,
+            "preview_key": f"consolidated-preview-{len(entries_to_consolidate)}",
+            "store_metadata": _store_metadata(store),
+        }
+
+    # Perform consolidation
+    try:
+        consolidated = consolidate(entries_to_consolidate, reason=reason)
+    except ValueError as exc:
+        return {
+            "action": "consolidate",
+            "consolidated": False,
+            "reason": "consolidation_failed",
+            "message": str(exc),
+            "store_metadata": _store_metadata(store),
+        }
+
+    # Save consolidated entry
+    source_keys = [e.key for e in entries_to_consolidate]
+    c = consolidated  # Shorter alias for line length
+    tier_val = c.tier.value if hasattr(c.tier, "value") else str(c.tier)
+    source_val = c.source.value if hasattr(c.source, "value") else str(c.source)
+    scope_val = c.scope.value if hasattr(c.scope, "value") else str(c.scope)
+    store.save(
+        key=c.key,
+        value=c.value,
+        tier=tier_val,
+        source=source_val,
+        source_agent=c.source_agent,
+        scope=scope_val,
+        tags=c.tags,
+        confidence=c.confidence,
+        skip_consolidation=True,  # Avoid infinite recursion
+    )
+
+    # Mark source entries as consolidated (not deleted - retained for provenance)
+    for key in source_keys:
+        if key != consolidated.key:
+            store.update_fields(
+                key,
+                contradicted=True,
+                contradiction_reason=f"consolidated into {consolidated.key}",
+            )
+
+    return {
+        "action": "consolidate",
+        "consolidated": True,
+        "consolidated_key": consolidated.key,
+        "source_keys": source_keys,
+        "source_count": len(source_keys),
+        "consolidation_reason": reason.value,
+        "discovery_method": discovery_method,
+        "confidence": round(consolidated.confidence, 3),
+        "store_metadata": _store_metadata(store),
+    }
+
+
+def _handle_unconsolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Handle the unconsolidate action (Epic 58, Story 58.6).
+
+    Restores source entries that were consolidated into the given entry,
+    then removes the consolidated entry itself.
+    """
+    if not p.key:
+        return {"error": "missing_key", "message": "Key is required for unconsolidate."}
+
+    # Verify the target entry exists
+    target = store.get(p.key)
+    if target is None:
+        return {
+            "action": "unconsolidate",
+            "undone": False,
+            "reason": "entry_not_found",
+            "message": f"Entry '{p.key}' not found.",
+            "store_metadata": _store_metadata(store),
+        }
+
+    # Find source entries by scanning for contradiction_reason referencing this key
+    marker = f"consolidated into {p.key}"
+    all_entries = store.list_all()
+    source_entries = [
+        e for e in all_entries
+        if e.contradicted
+        and e.contradiction_reason
+        and marker in e.contradiction_reason
+    ]
+
+    if not source_entries:
+        return {
+            "action": "unconsolidate",
+            "undone": False,
+            "reason": "not_a_consolidated_entry",
+            "message": (
+                f"No source entries found for '{p.key}'. "
+                "This may not be a consolidated entry, or sources were deleted."
+            ),
+            "store_metadata": _store_metadata(store),
+        }
+
+    # Restore source entries (clear contradicted flag)
+    restored_keys: list[str] = []
+    for entry in source_entries:
+        updated = store.update_fields(
+            entry.key,
+            contradicted=False,
+            contradiction_reason=None,
+        )
+        if updated is not None:
+            restored_keys.append(entry.key)
+
+    # Delete the consolidated entry
+    deleted = store.delete(p.key)
+
+    return {
+        "action": "unconsolidate",
+        "undone": True,
+        "consolidated_key": p.key,
+        "consolidated_entry_deleted": deleted,
+        "restored_keys": restored_keys,
+        "restored_count": len(restored_keys),
+        "store_metadata": _store_metadata(store),
+    }
+
+
+def _get_entries_by_ids(
+    store: MemoryStore,
+    entry_ids: list[str],
+) -> list[MemoryEntry] | dict[str, Any]:
+    """Get entries by explicit IDs, returning error dict if any not found."""
+    entries: list[MemoryEntry] = []
+    not_found: list[str] = []
+
+    for key in entry_ids:
+        entry = store.get(key)
+        if entry is None:
+            not_found.append(key)
+        else:
+            entries.append(entry)
+
+    if not_found:
+        return {
+            "action": "consolidate",
+            "consolidated": False,
+            "reason": "entries_not_found",
+            "message": f"Entries not found: {', '.join(not_found)}",
+            "not_found": not_found,
+            "store_metadata": _store_metadata(store),
+        }
+
+    return entries
+
+
+def _find_entries_by_query(
+    store: MemoryStore,
+    query: str,
+    limit: int,
+) -> list[MemoryEntry] | dict[str, Any]:
+    """Find entries by query for consolidation."""
+    from tapps_core.memory.retrieval import MemoryRetriever
+    from tapps_core.memory.similarity import find_consolidation_groups
+
+    retriever = MemoryRetriever()
+    effective_limit = limit if limit > 0 else _SEARCH_DEFAULT_LIMIT
+
+    # Search for related entries
+    scored = retriever.search(query, store, limit=effective_limit)
+
+    if len(scored) < 2:  # noqa: PLR2004
+        return {
+            "action": "consolidate",
+            "consolidated": False,
+            "reason": "not_enough_results",
+            "message": f"Query returned {len(scored)} results, need at least 2.",
+            "query": query,
+            "store_metadata": _store_metadata(store),
+        }
+
+    # Get actual entries
+    entries = [sm.entry for sm in scored]
+
+    # Find consolidation groups within the search results
+    groups = find_consolidation_groups(entries, min_group_size=2)
+    if not groups:
+        # If no groups found, use all search results
+        return entries
+
+    # Return entries from the first (largest) group
+    entry_by_key = {e.key: e for e in entries}
+    return [entry_by_key[k] for k in groups[0] if k in entry_by_key]
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table — maps action names to handler functions
 # ---------------------------------------------------------------------------
@@ -564,6 +880,8 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "reseed": _handle_reseed,
     "import": _handle_import,
     "export": _handle_export,
+    "consolidate": _handle_consolidate,
+    "unconsolidate": _handle_unconsolidate,
 }
 
 
@@ -577,12 +895,13 @@ def _ranked_search(
     query: str,
     limit: int,
     include_summary: bool,
+    include_sources: bool = False,
 ) -> dict[str, Any]:
     """Execute ranked BM25 search via MemoryRetriever."""
     from tapps_core.memory.retrieval import MemoryRetriever
 
     retriever = MemoryRetriever()
-    scored = retriever.search(query, store, limit=limit)
+    scored = retriever.search(query, store, limit=limit, include_sources=include_sources)
 
     result_entries: list[dict[str, Any]] = []
     for i, sm in enumerate(scored):
@@ -606,6 +925,66 @@ def _ranked_search(
         "returned_count": len(result_entries),
         "query": query,
         "store_metadata": _store_metadata(store),
+    }
+
+
+# Marker text for consolidated source entries
+_CONSOLIDATED_MARKER = "consolidated into"
+
+
+def _filter_consolidated_sources(entries: list[MemoryEntry]) -> list[MemoryEntry]:
+    """Filter out source entries of consolidated memories (Epic 58.5).
+
+    Removes entries that were consolidated into other entries.
+    These are identified by contradiction_reason containing "consolidated into".
+
+    Args:
+        entries: List of memory entries.
+
+    Returns:
+        Filtered list without consolidated source entries.
+    """
+    return [e for e in entries if not _is_consolidated_source(e)]
+
+
+def _is_consolidated_source(entry: MemoryEntry) -> bool:
+    """Check if an entry is a source of a consolidated entry."""
+    if not entry.contradicted:
+        return False
+    reason = entry.contradiction_reason or ""
+    return _CONSOLIDATED_MARKER in reason.lower()
+
+
+def _get_provenance(store: MemoryStore, entry: MemoryEntry) -> dict[str, Any] | None:
+    """Build provenance info for a consolidated entry (Epic 58, Story 58.6).
+
+    Scans entries whose contradiction_reason references this entry's key.
+    Returns None if the entry is not a consolidated entry.
+    """
+    marker = f"consolidated into {entry.key}"
+    all_entries = store.list_all()
+    source_entries = [
+        e for e in all_entries
+        if e.contradicted
+        and e.contradiction_reason
+        and marker in e.contradiction_reason
+    ]
+
+    if not source_entries:
+        return None
+
+    return {
+        "is_consolidated": True,
+        "source_count": len(source_entries),
+        "source_keys": [e.key for e in source_entries],
+        "sources": [
+            {
+                "key": e.key,
+                "value": e.value,
+                "tier": e.tier.value if hasattr(e.tier, "value") else str(e.tier),
+            }
+            for e in source_entries
+        ],
     }
 
 

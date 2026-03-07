@@ -12,7 +12,7 @@ stripped of its ``ProjectProfile`` dependency.  It provides two capabilities:
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -475,6 +475,10 @@ class DomainDetector:
     def detect_from_question_merged(cls, question: str) -> list[DomainMapping]:
         """Score *question* against built-in AND business domains.
 
+        When ``adaptive.enabled`` is True in settings, applies learned domain
+        weights from feedback to adjust confidence scores (Epic 57). Falls back
+        to static keyword matching otherwise.
+
         Calls :meth:`detect_from_question` for built-in domains, then scores
         against keywords from registered business experts.  All results are
         merged and re-sorted by confidence (descending).
@@ -491,8 +495,6 @@ class DomainDetector:
 
         # Score business expert keywords.
         business_experts = ExpertRegistry.get_business_experts()
-        if not business_experts:
-            return results
 
         # Prepare question text the same way as detect_from_question.
         question_expanded = expand_query(question)
@@ -511,9 +513,89 @@ class DomainDetector:
             if mapping is not None:
                 results.append(mapping)
 
+        # Apply adaptive weights if enabled (Epic 57).
+        results = cls._apply_adaptive_weights(results)
+
         # Re-sort merged results by confidence.
         results.sort(key=lambda m: m.confidence, reverse=True)
         return results
+
+    @classmethod
+    def _apply_adaptive_weights(
+        cls,
+        results: list[DomainMapping],
+    ) -> list[DomainMapping]:
+        """Apply learned domain weights to adjust confidence scores.
+
+        When adaptive.enabled is True, multiplies each domain's confidence
+        by its learned weight from DomainWeightStore. Logs when adaptive
+        routing changes the top result.
+
+        Args:
+            results: Domain mappings with base confidence scores.
+
+        Returns:
+            Domain mappings with weight-adjusted confidence scores.
+        """
+        import structlog
+
+        from tapps_core.config.settings import load_settings
+
+        logger = structlog.get_logger(__name__)
+        settings = load_settings()
+
+        if not settings.adaptive.enabled:
+            return results
+
+        if not results:
+            return results
+
+        try:
+            from tapps_core.adaptive.persistence import DomainWeightStore
+
+            store = DomainWeightStore(settings.project_root)
+            business_domains = ExpertRegistry.get_business_domains()
+
+            # Track original top domain for logging.
+            original_top = results[0].domain if results else None
+
+            adjusted: list[DomainMapping] = []
+            for mapping in results:
+                domain = mapping.domain
+                is_business = domain in business_domains
+                domain_type: Literal["technical", "business"] = (
+                    "business" if is_business else "technical"
+                )
+
+                weight = store.get_weight_value(domain, domain_type=domain_type)
+                adjusted_confidence = min(1.0, mapping.confidence * weight)
+
+                # Create new mapping with adjusted confidence.
+                adjusted.append(
+                    DomainMapping(
+                        domain=mapping.domain,
+                        confidence=round(adjusted_confidence, 3),
+                        signals=mapping.signals + [f"weight:{weight:.2f}"],
+                        reasoning=mapping.reasoning,
+                    )
+                )
+
+            # Sort by adjusted confidence.
+            adjusted.sort(key=lambda m: m.confidence, reverse=True)
+
+            # Log if adaptive routing changed the top result.
+            if adjusted and adjusted[0].domain != original_top:
+                logger.debug(
+                    "adaptive_routing_override",
+                    original_top=original_top,
+                    new_top=adjusted[0].domain,
+                )
+
+            return adjusted
+
+        except Exception:
+            logger.debug("adaptive_weight_application_failed", exc_info=True)
+            return results
 
     # ------------------------------------------------------------------
     # Repo-signal detection (lightweight)

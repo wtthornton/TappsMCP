@@ -2,11 +2,13 @@
 
 Provides fast reads from an in-memory dict with write-through to SQLite.
 RAG safety checks on save prevent prompt injection in stored content.
+Auto-consolidation triggers on save when enabled (Epic 58).
 """
 
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -34,17 +36,34 @@ _MAX_ENTRIES = 500
 _RAG_BLOCK_THRESHOLD = 3
 
 
+@dataclass
+class ConsolidationConfig:
+    """Configuration for auto-consolidation on save."""
+
+    enabled: bool = False
+    threshold: float = 0.7
+    min_entries: int = 3
+
+
 class MemoryStore:
     """In-memory cache with SQLite write-through persistence.
 
     Thread-safe via ``threading.Lock``. Write-through: every mutation
     updates both the in-memory dict and SQLite synchronously.
+    Auto-consolidation triggers on save when enabled (Epic 58).
     """
 
-    def __init__(self, project_root: Path) -> None:
+    def __init__(
+        self,
+        project_root: Path,
+        *,
+        consolidation_config: ConsolidationConfig | None = None,
+    ) -> None:
         self._project_root = project_root
         self._persistence = MemoryPersistence(project_root)
         self._lock = threading.Lock()
+        self._consolidation_config = consolidation_config or ConsolidationConfig()
+        self._consolidation_in_progress = False
 
         # Cold-start: load all entries into memory
         self._entries: dict[str, MemoryEntry] = {}
@@ -55,7 +74,17 @@ class MemoryStore:
             "memory_store_initialized",
             project_root=str(project_root),
             entry_count=len(self._entries),
+            auto_consolidation=self._consolidation_config.enabled,
         )
+
+    @property
+    def project_root(self) -> Path:
+        """Return the project root path."""
+        return self._project_root
+
+    def set_consolidation_config(self, config: ConsolidationConfig) -> None:
+        """Update the consolidation configuration."""
+        self._consolidation_config = config
 
     # ------------------------------------------------------------------
     # CRUD operations
@@ -72,11 +101,25 @@ class MemoryStore:
         tags: list[str] | None = None,
         branch: str | None = None,
         confidence: float = -1.0,
+        *,
+        skip_consolidation: bool = False,
     ) -> MemoryEntry | dict[str, Any]:
         """Save or update a memory entry.
 
         Returns the saved ``MemoryEntry``, or an error dict if RAG safety
         blocks the content.
+
+        Args:
+            key: Unique identifier for the memory.
+            value: Memory content.
+            tier: Memory tier (architectural, pattern, context).
+            source: Source of the memory (human, agent, inferred, system).
+            source_agent: Identifier of the agent saving the memory.
+            scope: Visibility scope (project, branch, session).
+            tags: Tags for categorization.
+            branch: Git branch name (required when scope=branch).
+            confidence: Confidence score (-1.0 for auto from source).
+            skip_consolidation: If True, skip auto-consolidation check.
         """
         # RAG safety check on value
         safety = check_content_safety(value)
@@ -132,7 +175,48 @@ class MemoryStore:
             self._entries[key] = entry
 
         self._persistence.save(entry)
+
+        # Auto-consolidation check (Epic 58)
+        if (
+            self._consolidation_config.enabled
+            and not skip_consolidation
+            and not self._consolidation_in_progress
+        ):
+            self._maybe_consolidate(entry)
+
         return entry
+
+    def _maybe_consolidate(self, entry: MemoryEntry) -> None:
+        """Check if the saved entry should trigger consolidation.
+
+        Runs consolidation in a non-reentrant manner to prevent infinite
+        loops when consolidation saves new entries.
+        """
+        if self._consolidation_in_progress:
+            return
+
+        self._consolidation_in_progress = True
+        try:
+            from tapps_core.memory.auto_consolidation import check_consolidation_on_save
+
+            result = check_consolidation_on_save(
+                entry,
+                self,
+                threshold=self._consolidation_config.threshold,
+                min_entries=self._consolidation_config.min_entries,
+            )
+
+            if result.triggered:
+                logger.info(
+                    "auto_consolidation_on_save",
+                    entry_key=entry.key,
+                    consolidated_key=result.consolidated_entry.key if result.consolidated_entry else None,
+                    source_keys=result.source_keys,
+                )
+        except Exception:
+            logger.debug("auto_consolidation_check_failed", exc_info=True)
+        finally:
+            self._consolidation_in_progress = False
 
     def get(
         self,

@@ -128,10 +128,21 @@ def _get_memory_store() -> _MemoryStoreType:
     global _memory_store
     if _memory_store is None:
         from tapps_core.config.settings import load_settings
-        from tapps_core.memory.store import MemoryStore
+        from tapps_core.memory.store import ConsolidationConfig, MemoryStore
 
         settings = load_settings()
-        _memory_store = MemoryStore(settings.project_root)
+
+        # Configure auto-consolidation from settings (Epic 58)
+        consolidation_config = ConsolidationConfig(
+            enabled=settings.memory.consolidation.auto_consolidate,
+            threshold=settings.memory.consolidation.threshold,
+            min_entries=settings.memory.consolidation.min_entries,
+        )
+
+        _memory_store = MemoryStore(
+            settings.project_root,
+            consolidation_config=consolidation_config,
+        )
     return _memory_store
 
 

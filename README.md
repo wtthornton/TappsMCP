@@ -172,11 +172,21 @@ Choose one of the following. After installing, see [Quick start](#quick-start) t
 
 | Method | Requirements | Use when |
 |--------|--------------|----------|
+| **MCP Registry** | MCP-compatible client | One-click install from the official MCP server registry. |
 | **Docker MCP Toolkit** | Docker Desktop | Zero-dependency, cross-platform install with companion profiles. **Recommended.** |
 | **PyPI** | Python 3.12+, pip | You want a global or venv install and will run from any project. |
 | **npx** | Node.js 18+ | You prefer not to touch Python; runs on demand. |
 | **From source** | Python 3.12+, [uv](https://docs.astral.sh/uv/) or pip | You are developing TappsMCP or want the latest code. |
 | **Docker** | Docker, Docker Compose | You want HTTP transport or to run in a container. |
+
+### Install from MCP Registry
+
+The official [MCP Registry](https://registry.modelcontextprotocol.io) provides one-click installation for compatible clients:
+
+- **tapps-mcp**: [`io.github.wtthornton/tapps-mcp`](https://registry.modelcontextprotocol.io/servers/io.github.wtthornton/tapps-mcp) — Code quality tools
+- **docs-mcp**: [`io.github.wtthornton/docs-mcp`](https://registry.modelcontextprotocol.io/servers/io.github.wtthornton/docs-mcp) — Documentation tools
+
+Search for "tapps" or "docs-mcp" in your MCP client's server browser.
 
 ### Install with Docker MCP Toolkit (recommended)
 
@@ -512,7 +522,7 @@ Quick index:
 | **tapps_checklist** | See which tools were called this session and what is still missing. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure for context-aware analysis. |
 | **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. Promotable to shared memory. |
-| **tapps_memory** | Persistent shared memory: save, get, list, delete, search, reinforce, contradictions, gc, reseed, import, export. |
+| **tapps_memory** | Persistent shared memory: save, get, list, delete, search, reinforce, contradictions, gc, reseed, import, export, consolidate, unconsolidate. |
 | **tapps_impact_analysis** | Analyze the impact of changes on the codebase (imports, dependents). |
 | **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
 | **tapps_dashboard** | View metrics dashboard with execution stats, expert performance, and trends. |
@@ -651,7 +661,7 @@ Quick index:
 
 ### tapps_memory
 
-**What it does:** Persistent, project-scoped shared memory accessible to all MCP-connected agents. Memories are typed by tier (`architectural`, `pattern`, `context`), carry confidence scores (0.0-1.0 with source-based defaults), and persist across sessions in SQLite with WAL mode and FTS5 full-text search at `{project_root}/.tapps-mcp/memory/memory.db`. Supports 11 actions: **save** (with RAG safety filtering), **get** (with scope resolution: session > branch > project), **list** (filtered by tier/scope/tags), **delete**, **search** (FTS5 ranked retrieval with composite scoring), **reinforce** (reset decay clock, optional confidence boost), **contradictions** (detect memories that contradict current project state), **gc** (archive decayed memories), **reseed** (re-populate from project profile), **import** and **export** (JSON format with path validation). Time-based exponential decay with tier-specific half-lives (architectural: 180 days, pattern: 60 days, context: 14 days). Contradiction detection compares memories against `tapps_project_profile` for tech stack drift, missing files, and deleted branches. Relevant memories are auto-injected into `tapps_consult_expert` and `tapps_research` responses (configurable by engagement level). Max 500 memories per project with lowest-confidence eviction.
+**What it does:** Persistent, project-scoped shared memory accessible to all MCP-connected agents. Memories are typed by tier (`architectural`, `pattern`, `context`), carry confidence scores (0.0-1.0 with source-based defaults), and persist across sessions in SQLite with WAL mode and FTS5 full-text search at `{project_root}/.tapps-mcp/memory/memory.db`. Supports 13 actions: **save** (with RAG safety filtering), **get** (with scope resolution: session > branch > project; includes provenance for consolidated entries), **list** (filtered by tier/scope/tags), **delete**, **search** (FTS5 ranked retrieval with composite scoring), **reinforce** (reset decay clock, optional confidence boost), **contradictions** (detect memories that contradict current project state), **gc** (archive decayed memories), **reseed** (re-populate from project profile), **import** and **export** (JSON format with path validation), **consolidate** (merge related entries into a summary with provenance tracking; supports explicit entry_ids, query-based discovery, or auto-discovery; use dry_run=True to preview), and **unconsolidate** (undo a consolidation by restoring source entries and removing the consolidated entry). Search and list filter out source entries of consolidated memories by default (pass `include_sources=True` to show all). Time-based exponential decay with tier-specific half-lives (architectural: 180 days, pattern: 60 days, context: 14 days). Contradiction detection compares memories against `tapps_project_profile` for tech stack drift, missing files, and deleted branches. Relevant memories are auto-injected into `tapps_consult_expert` and `tapps_research` responses (configurable by engagement level). Max 500 memories per project with lowest-confidence eviction.
 
 **Why use it:** Agents start every session amnesiac about the project. Shared memory means the project remembers things, not the developer's tool. Save architectural decisions ("we use JWT with RS256"), patterns ("always mock the DB in unit tests"), and context ("current sprint focuses on auth"). Memories decay naturally so stale information loses trust. Contradiction detection catches drift (e.g., memory says "we use SQLAlchemy" after migrating to Prisma). Expert injection means `tapps_consult_expert` automatically includes relevant project memory in its response.
 

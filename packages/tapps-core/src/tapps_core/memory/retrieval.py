@@ -61,6 +61,27 @@ _W_FREQUENCY = 0.15
 
 _FREQUENCY_CAP = 20.0
 
+# Marker text for consolidated source entries
+_CONSOLIDATED_MARKER = "consolidated into"
+
+
+def _is_consolidated_source(entry: MemoryEntry) -> bool:
+    """Check if an entry is a source of a consolidated entry.
+
+    Source entries are marked with contradicted=True and a
+    contradiction_reason containing "consolidated into".
+
+    Args:
+        entry: The memory entry to check.
+
+    Returns:
+        True if this entry was consolidated into another entry.
+    """
+    if not entry.contradicted:
+        return False
+    reason = entry.contradiction_reason or ""
+    return _CONSOLIDATED_MARKER in reason.lower()
+
 
 # ---------------------------------------------------------------------------
 # MemoryRetriever
@@ -84,6 +105,7 @@ class MemoryRetriever:
         *,
         limit: int = _DEFAULT_RESULTS,
         include_contradicted: bool = False,
+        include_sources: bool = False,
         min_confidence: float = _MIN_CONFIDENCE_FLOOR,
     ) -> list[ScoredMemory]:
         """Search memories with ranked scoring.
@@ -97,6 +119,10 @@ class MemoryRetriever:
             store: Memory store to search.
             limit: Max results (default 10, max 50).
             include_contradicted: Include contradicted memories.
+            include_sources: Include source entries of consolidated memories
+                (Epic 58, Story 58.5). When False (default), entries that were
+                consolidated into other entries are filtered out. When True,
+                source entries are included alongside consolidated entries.
             min_confidence: Minimum confidence filter.
 
         Returns:
@@ -114,8 +140,13 @@ class MemoryRetriever:
         # Score and filter
         scored: list[ScoredMemory] = []
         for entry, relevance_raw in candidates:
-            # Filter contradicted
-            if entry.contradicted and not include_contradicted:
+            # Filter source entries of consolidated memories (Epic 58.5)
+            if not include_sources and _is_consolidated_source(entry):
+                continue
+
+            # Filter contradicted entries (sources already handled above)
+            is_included_source = include_sources and _is_consolidated_source(entry)
+            if entry.contradicted and not include_contradicted and not is_included_source:
                 continue
 
             # Calculate effective confidence

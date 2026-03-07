@@ -1,5 +1,7 @@
 # DocsMCP
 
+<!-- mcp-name: io.github.wtthornton/docs-mcp -->
+
 MCP server for automated documentation generation, validation, and maintenance.
 
 ## Overview

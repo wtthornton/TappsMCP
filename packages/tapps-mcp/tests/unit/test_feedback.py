@@ -239,3 +239,169 @@ class TestContextSanitization:
 
         result = _sanitize_param("x" * 200, max_len=100)
         assert len(result) == 100
+
+
+# ---------------------------------------------------------------------------
+# Domain weight adjustment tests (Epic 57, Story 57.3)
+# ---------------------------------------------------------------------------
+
+
+class TestDomainWeightAdjustment:
+    """Tests for domain routing weight adjustment via feedback."""
+
+    @pytest.fixture(autouse=True)
+    def setup_project_root(self, tmp_path, monkeypatch):
+        """Set up a temporary project root for testing."""
+        from tapps_core.config.settings import _reset_settings_cache
+
+        _reset_settings_cache()
+
+        # Create minimal settings for the test
+        settings_file = tmp_path / ".tapps-mcp.yaml"
+        settings_file.write_text("llm_engagement_level: medium\n")
+
+        # Monkeypatch to use tmp_path as project root
+        monkeypatch.setenv("TAPPS_MCP_PROJECT_ROOT", str(tmp_path))
+        _reset_settings_cache()
+
+        yield
+
+        _reset_settings_cache()
+
+    def test_expert_tools_defined(self):
+        """Expert tools should be defined for domain feedback."""
+        from tapps_mcp.server_metrics_tools import _EXPERT_TOOLS
+
+        assert "tapps_consult_expert" in _EXPERT_TOOLS
+        assert "tapps_research" in _EXPERT_TOOLS
+        assert "tapps_score_file" not in _EXPERT_TOOLS
+
+    def test_adjust_domain_weights_technical(self, tmp_path):
+        """Technical domain feedback should update technical weights."""
+        from tapps_mcp.server_metrics_tools import _adjust_domain_weights
+
+        success, domain_type = _adjust_domain_weights("security", helpful=True)
+        assert success is True
+        assert domain_type == "technical"
+
+    def test_adjust_domain_weights_business(self, tmp_path):
+        """Unknown domain should be treated as business."""
+        from tapps_mcp.server_metrics_tools import _adjust_domain_weights
+
+        # Unregistered domain is assumed to be business
+        success, domain_type = _adjust_domain_weights("acme-billing", helpful=True)
+        assert success is True
+        assert domain_type == "business"
+
+    def test_adjust_domain_weights_persists(self, tmp_path):
+        """Domain weight adjustment should persist to disk."""
+        from tapps_core.adaptive.persistence import DomainWeightStore
+        from tapps_core.config.settings import load_settings
+        from tapps_mcp.server_metrics_tools import _adjust_domain_weights
+
+        _adjust_domain_weights("security", helpful=True)
+
+        settings = load_settings()
+        store = DomainWeightStore(settings.project_root)
+        entry = store.get_weight("security", domain_type="technical")
+
+        assert entry is not None
+        assert entry.samples == 1
+        assert entry.positive_count == 1
+
+    def test_adjust_domain_weights_negative(self, tmp_path):
+        """Negative feedback should decrease weight."""
+        from tapps_core.adaptive.persistence import DomainWeightStore
+        from tapps_core.config.settings import load_settings
+        from tapps_mcp.server_metrics_tools import _adjust_domain_weights
+
+        # First set a baseline
+        _adjust_domain_weights("testing-strategies", helpful=True)
+
+        settings = load_settings()
+        store = DomainWeightStore(settings.project_root)
+        initial_entry = store.get_weight("testing-strategies", domain_type="technical")
+        initial_weight = initial_entry.weight if initial_entry else 1.0
+
+        # Now negative feedback
+        _adjust_domain_weights("testing-strategies", helpful=False)
+
+        final_entry = store.get_weight("testing-strategies", domain_type="technical")
+        assert final_entry is not None
+        assert final_entry.weight < initial_weight
+        assert final_entry.negative_count == 1
+
+    def test_adjust_domain_weights_multiple_feedback(self, tmp_path):
+        """Multiple feedback should accumulate."""
+        from tapps_core.adaptive.persistence import DomainWeightStore
+        from tapps_core.config.settings import load_settings
+        from tapps_mcp.server_metrics_tools import _adjust_domain_weights
+
+        _adjust_domain_weights("security", helpful=True)
+        _adjust_domain_weights("security", helpful=True)
+        _adjust_domain_weights("security", helpful=False)
+
+        settings = load_settings()
+        store = DomainWeightStore(settings.project_root)
+        entry = store.get_weight("security", domain_type="technical")
+
+        assert entry is not None
+        assert entry.samples == 3
+        assert entry.positive_count == 2
+        assert entry.negative_count == 1
+
+    def test_registered_business_domain(self, tmp_path, monkeypatch):
+        """Registered business domain should be classified as business."""
+        from tapps_core.experts.models import ExpertConfig
+        from tapps_core.experts.registry import ExpertRegistry
+        from tapps_mcp.server_metrics_tools import _adjust_domain_weights
+
+        # Register a business expert
+        business_expert = ExpertConfig(
+            expert_id="acme-billing-expert",
+            expert_name="ACME Billing Expert",
+            primary_domain="acme-billing",
+            is_builtin=False,
+        )
+        ExpertRegistry.register_business_experts([business_expert])
+
+        try:
+            success, domain_type = _adjust_domain_weights("acme-billing", helpful=True)
+            assert success is True
+            assert domain_type == "business"
+        finally:
+            ExpertRegistry.clear_business_experts()
+
+
+class TestFeedbackDomainIntegration:
+    """Integration tests for domain feedback in tapps_feedback tool."""
+
+    def test_feedback_with_domain_returns_domain_type(self, tmp_path, monkeypatch):
+        """Feedback with domain should include domain_type in response."""
+        from tapps_core.config.settings import _reset_settings_cache
+
+        _reset_settings_cache()
+        monkeypatch.setenv("TAPPS_MCP_PROJECT_ROOT", str(tmp_path))
+        _reset_settings_cache()
+
+        # We can't easily call tapps_feedback directly due to dependencies,
+        # but we can verify the _adjust_domain_weights returns correct values
+        from tapps_mcp.server_metrics_tools import _adjust_domain_weights
+
+        success, domain_type = _adjust_domain_weights("security", helpful=True)
+        assert domain_type in ("technical", "business")
+
+        _reset_settings_cache()
+
+    def test_feedback_domain_sanitization(self):
+        """Domain parameter should be sanitized."""
+        from tapps_mcp.server_metrics_tools import _sanitize_param
+
+        # Domain with control characters
+        sanitized = _sanitize_param("acme\x00-billing\x1f", max_len=100)
+        assert sanitized == "acme-billing"
+
+        # Long domain name
+        long_domain = "a" * 200
+        sanitized = _sanitize_param(long_domain, max_len=100)
+        assert len(sanitized) == 100

@@ -20,11 +20,7 @@ from tapps_mcp.scoring.language_detector import (
     is_language_supported,
 )
 from tapps_mcp.scoring.models import CategoryScore, ScoreResult
-from tapps_mcp.scoring.scorer import CodeScorer
 from tapps_mcp.scoring.scorer_base import STANDARD_CATEGORIES, ScorerBase
-from tapps_mcp.scoring.scorer_go import GoScorer
-from tapps_mcp.scoring.scorer_rust import RustScorer
-from tapps_mcp.scoring.scorer_typescript import TypeScriptScorer
 
 __all__ = [
     # Models
@@ -33,7 +29,7 @@ __all__ = [
     # Base class
     "ScorerBase",
     "STANDARD_CATEGORIES",
-    # Language scorers
+    # Language scorers (lazy-loaded to avoid circular imports with tools/)
     "CodeScorer",
     "TypeScriptScorer",
     "GoScorer",
@@ -47,3 +43,24 @@ __all__ = [
     "EXTENSION_TO_LANGUAGE",
     "SUPPORTED_LANGUAGES",
 ]
+
+# Lazy-load scorer classes to break circular import:
+# scoring/__init__ -> scorer.py -> tools/bandit.py -> scoring.models -> scoring/__init__
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "CodeScorer": ("tapps_mcp.scoring.scorer", "CodeScorer"),
+    "TypeScriptScorer": ("tapps_mcp.scoring.scorer_typescript", "TypeScriptScorer"),
+    "GoScorer": ("tapps_mcp.scoring.scorer_go", "GoScorer"),
+    "RustScorer": ("tapps_mcp.scoring.scorer_rust", "RustScorer"),
+}
+
+
+def __getattr__(name: str) -> object:
+    if name in _LAZY_IMPORTS:
+        module_path, attr = _LAZY_IMPORTS[name]
+        import importlib
+
+        mod = importlib.import_module(module_path)
+        val = getattr(mod, attr)
+        globals()[name] = val  # cache for subsequent access
+        return val
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.wtthornton/docs-mcp",
+  "title": "DocsMCP",
+  "description": "MCP server for automated documentation generation, validation, and maintenance. Generates READMEs, changelogs, API docs, ADRs, onboarding guides, and diagrams. Validates documentation drift, completeness, links, and freshness.",
+  "repository": {
+    "url": "https://github.com/wtthornton/TappsMCP",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "docs-mcp",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DOCS_MCP_PROJECT_ROOT",
+          "description": "Project root directory for file operations (defaults to current working directory)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "DOCS_MCP_OUTPUT_DIR",
+          "description": "Directory for generated documentation (default: docs)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "CONTEXT7_API_KEY",
+          "description": "API key for Context7 documentation enrichment (optional)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {"name": "docs_session_start", "description": "Project detection, doc inventory, recommendations"},
+    {"name": "docs_project_scan", "description": "Comprehensive documentation state audit with completeness scoring"},
+    {"name": "docs_config", "description": "View or update DocsMCP configuration"},
+    {"name": "docs_module_map", "description": "Build hierarchical Python module tree"},
+    {"name": "docs_api_surface", "description": "Analyze public API surface of a Python file"},
+    {"name": "docs_git_summary", "description": "Git history with conventional commit parsing"},
+    {"name": "docs_generate_readme", "description": "Generate README with smart merge (minimal/standard/comprehensive)"},
+    {"name": "docs_generate_changelog", "description": "Generate CHANGELOG from git tags and commits"},
+    {"name": "docs_generate_release_notes", "description": "Generate per-version release notes"},
+    {"name": "docs_generate_api", "description": "Generate API reference docs (markdown/mkdocs/sphinx_rst)"},
+    {"name": "docs_generate_adr", "description": "Create Architecture Decision Records (MADR/Nygard)"},
+    {"name": "docs_generate_onboarding", "description": "Generate getting-started guide"},
+    {"name": "docs_generate_contributing", "description": "Generate CONTRIBUTING.md"},
+    {"name": "docs_generate_prd", "description": "Generate Product Requirements Documents"},
+    {"name": "docs_generate_diagram", "description": "Generate Mermaid/PlantUML diagrams"},
+    {"name": "docs_generate_architecture", "description": "Generate self-contained HTML architecture report"},
+    {"name": "docs_generate_epic", "description": "Generate epic planning docs with expert enrichment"},
+    {"name": "docs_generate_story", "description": "Generate user story docs with expert enrichment"},
+    {"name": "docs_check_drift", "description": "Detect code changes not reflected in docs"},
+    {"name": "docs_check_completeness", "description": "Score documentation completeness (0-100)"},
+    {"name": "docs_check_links", "description": "Validate internal links in markdown files"},
+    {"name": "docs_check_freshness", "description": "Score documentation freshness"}
+  ]
+}

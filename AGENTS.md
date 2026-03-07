@@ -53,14 +53,14 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_research** | When you need **combined expert + docs** in one call - consults the domain expert, then supplements with Context7 (when key set) or LlmsTxt documentation. Pass `file_context` with the path to the file being edited to auto-infer library from imports. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
 | **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
 | **tapps_project_profile** | When you need **project context** - detects project type, tech stack, CI/Docker/tests, and recommendations. Session start does not include profile; call this on demand. |
-| **tapps_memory** | **At session start** - search or list past decisions with `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")`. **Before session end** - save learnings with `tapps_memory(action="save", key="...", value="...", tier="...", tags=[...])`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |
+| **tapps_memory** | **At session start** - search or list past decisions with `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")`. **Before session end** - save learnings with `tapps_memory(action="save", key="...", value="...", tier="...", tags=[...])`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export, consolidate, unconsolidate. **Consolidation:** use `action="consolidate"` (with `entry_ids` or `query`) to merge related memories; `action="unconsolidate"` to undo. Get on a consolidated entry shows provenance (source entries). By default, search/list hide source entries of consolidated memories (`include_sources=True` to show all). |
 | **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. Use `action="promote"` to promote a session note to persistent cross-session memory. |
 | **tapps_impact_analysis** | Before **modifying a file's public API** - shows what depends on it and what could break. |
 | **tapps_report** | After scoring/gating, when the user wants a **formatted quality summary** (Markdown, JSON, or HTML). |
 | **tapps_checklist** | **Before declaring work complete** - reports which tools were called and which are missing (with reasons). Fix missing required steps before saying done. Use `auto_run=True` to automatically run missing required validations. |
 | **tapps_dashboard** | When the user wants to **review how TappsMCP is performing** - scoring accuracy, gate pass rates, expert effectiveness, cache performance, quality trends, and alerts. Supports json, markdown, and html output. |
 | **tapps_stats** | When the user wants **usage statistics** - call counts, success rates, average durations, cache hit rates, and gate pass rates. Filterable by tool and time period. Response includes `recommendations` with actionable suggestions based on usage patterns. |
-| **tapps_feedback** | After receiving a tool result - report whether the output was **helpful or not**. This feedback improves adaptive scoring and expert weights over time. |
+| **tapps_feedback** | After receiving a tool result - report whether the output was **helpful or not**. This feedback improves adaptive scoring and expert weights over time. Pass `domain` parameter for expert tools to enable **adaptive domain routing** (learns which domains work best for your project). |
 | **tapps_dead_code** | When you want to **find unused code** - detects unused functions, classes, imports, and variables with confidence scoring. Use `scope` parameter: `"file"` (single file), `"project"` (all Python files), or `"changed"` (git diff only). Use during refactoring or code review. |
 | **tapps_dependency_scan** | When you want to **check for vulnerable dependencies** - scans pip packages for known CVEs using pip-audit. Use before releases or security reviews. |
 | **tapps_dependency_graph** | When you want to **understand module dependencies** - builds import graph, detects circular imports, and calculates coupling metrics. Use before refactoring or when investigating import errors. |
@@ -321,13 +321,36 @@ The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard 
 Your project may have two complementary memory systems. Use the right one for each type of knowledge:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Session learnings, user preferences, build commands, IDE settings, debugging insights. Auto-managed by Claude Code across sessions.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge. Structured with tier classification (architectural/pattern/context), confidence scoring, decay, contradiction detection, and cross-session persistence.
+- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge. Structured with tier classification (architectural/pattern/context), confidence scoring, decay, contradiction detection, consolidation, and cross-session persistence. Related memories can be auto-consolidated into summaries; use `unconsolidate` to undo.
 
 **When to use which:**
 - Build commands, IDE preferences, personal workflow notes --> auto memory
 - Architecture decisions, quality patterns, cross-agent knowledge --> `tapps_memory`
 
 Use `tapps_memory` for architecture decisions and quality patterns.
+
+---
+
+## Adaptive domain learning
+
+When `adaptive.enabled: true` is set in `.tapps-mcp.yaml`, TappsMCP learns which expert domains work best for your project:
+
+- **Automatic weight adjustment:** When you use `tapps_feedback` with the `domain` parameter after expert consultations, TappsMCP updates domain routing weights based on whether the advice was helpful.
+- **Business domain support:** Both built-in technical domains (security, testing, etc.) and custom business domains defined in `.tapps-mcp/experts.yaml` benefit from adaptive learning.
+- **Persistence:** Learned weights are stored in `.tapps-mcp/adaptive/domain_weights.yaml` with separate sections for `technical` and `business` domains.
+
+**Example workflow:**
+1. Call `tapps_consult_expert` or `tapps_research` for domain-specific guidance
+2. If the advice was helpful, call `tapps_feedback(tool_name="tapps_consult_expert", helpful=True, domain="security")`
+3. Over time, frequently-helpful domains get boosted in routing confidence
+
+**To enable adaptive learning:**
+```yaml
+# .tapps-mcp.yaml
+adaptive:
+  enabled: true
+  learning_rate: 0.1
+```
 
 ---
 

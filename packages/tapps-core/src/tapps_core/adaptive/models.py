@@ -172,3 +172,42 @@ class ExpertWeightsSnapshot(BaseModel):
     performance_summary: dict[str, Any] = Field(
         default_factory=dict, description="Summary of expert performance at snapshot time."
     )
+
+
+# ---------------------------------------------------------------------------
+# Domain routing weights (Epic 57)
+# ---------------------------------------------------------------------------
+
+
+class DomainWeightEntry(BaseModel):
+    """A single domain routing weight entry.
+
+    Tracks learned routing weight for a domain based on feedback.
+    Higher weights indicate the domain should be prioritized in routing.
+    """
+
+    domain: str = Field(description="Domain identifier (e.g., 'security', 'acme-billing').")
+    weight: float = Field(default=1.0, ge=0.0, description="Learned routing weight.")
+    samples: int = Field(default=0, ge=0, description="Number of feedback samples.")
+    positive_count: int = Field(default=0, ge=0, description="Positive feedback count.")
+    negative_count: int = Field(default=0, ge=0, description="Negative feedback count.")
+    last_updated: str = Field(default_factory=_utc_now_iso, description="ISO-8601 UTC timestamp.")
+
+
+class DomainWeightsSnapshot(BaseModel):
+    """Persisted snapshot of domain routing weights.
+
+    Separates technical (built-in) and business (project-specific) domain weights
+    to allow independent learning and persistence.
+    """
+
+    technical: dict[str, DomainWeightEntry] = Field(
+        default_factory=dict,
+        description="Weights for built-in technical domains.",
+    )
+    business: dict[str, DomainWeightEntry] = Field(
+        default_factory=dict,
+        description="Weights for project-specific business domains.",
+    )
+    timestamp: str = Field(default_factory=_utc_now_iso, description="ISO-8601 UTC timestamp.")
+    version: int = Field(default=1, ge=1, description="Schema version for migrations.")

@@ -326,6 +326,12 @@ _SCORING_TOOLS: frozenset[str] = frozenset({
     "tapps_quick_check",
 })
 
+# Expert tools whose feedback triggers domain weight adjustment (Epic 57).
+_EXPERT_TOOLS: frozenset[str] = frozenset({
+    "tapps_consult_expert",
+    "tapps_research",
+})
+
 _WEIGHT_DELTA = 0.02
 
 
@@ -333,16 +339,19 @@ def tapps_feedback(
     tool_name: str,
     helpful: bool,
     context: str | None = None,
+    domain: str | None = None,
 ) -> dict[str, Any]:
     """Report whether a tool's output was helpful.
 
     This feedback improves TappsMCP's adaptive scoring and expert weights
-    over time.
+    over time. For expert tools, also updates domain routing weights.
 
     Args:
         tool_name: Which tool to provide feedback on.
         helpful: Was the output helpful?
         context: Additional context about why it was or wasn't helpful.
+        domain: Domain for expert feedback (e.g., "security", "acme-billing").
+            When provided with expert tools, updates domain routing weights.
     """
     from tapps_mcp.server import _get_metrics_hub, _record_call, _record_execution, _with_nudges
 
@@ -358,8 +367,9 @@ def tapps_feedback(
             + ", ".join(sorted(_VALID_TOOL_NAMES)),
         )
 
-    # Sanitize context
+    # Sanitize context and domain
     sanitized_context = _sanitize_param(context or "", max_len=500)
+    sanitized_domain = _sanitize_param(domain or "", max_len=100) if domain else None
 
     from tapps_core.metrics.feedback import FeedbackTracker
 
@@ -382,25 +392,38 @@ def tapps_feedback(
     if not duplicate_skipped and tool_name in _SCORING_TOOLS:
         weight_adjusted = _adjust_scoring_weights(helpful)
 
+    # Domain weight adjustment for expert tools (Epic 57)
+    domain_weight_adjusted = False
+    domain_type: str | None = None
+    if not duplicate_skipped and sanitized_domain and tool_name in _EXPERT_TOOLS:
+        domain_weight_adjusted, domain_type = _adjust_domain_weights(
+            sanitized_domain, helpful
+        )
+
     stats = tracker.get_statistics(tool_name=tool_name)
     overall_stats = tracker.get_statistics()
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_feedback", start)
 
-    resp = success_response(
-        "tapps_feedback",
-        elapsed_ms,
-        {
-            "recorded": not duplicate_skipped,
-            "tool_name": tool_name,
-            "helpful": helpful,
-            "duplicate_skipped": duplicate_skipped,
-            "weight_adjusted": weight_adjusted,
-            "tool_stats": stats,
-            "overall_stats": overall_stats,
-        },
-    )
+    result_data: dict[str, Any] = {
+        "recorded": not duplicate_skipped,
+        "tool_name": tool_name,
+        "helpful": helpful,
+        "duplicate_skipped": duplicate_skipped,
+        "weight_adjusted": weight_adjusted,
+        "tool_stats": stats,
+        "overall_stats": overall_stats,
+    }
+
+    # Include domain feedback info when applicable (Epic 57)
+    if sanitized_domain:
+        result_data["domain"] = sanitized_domain
+        result_data["domain_weight_adjusted"] = domain_weight_adjusted
+        if domain_type:
+            result_data["domain_type"] = domain_type
+
+    resp = success_response("tapps_feedback", elapsed_ms, result_data)
     return _with_nudges("tapps_feedback", resp)
 
 
@@ -444,6 +467,71 @@ def _adjust_scoring_weights(helpful: bool) -> bool:
             "weight_adjustment_failed", exc_info=True
         )
         return False
+
+
+def _adjust_domain_weights(domain: str, helpful: bool) -> tuple[bool, str | None]:
+    """Update domain routing weights based on feedback (Epic 57).
+
+    Determines if the domain is technical or business, then updates
+    the appropriate weight in DomainWeightStore.
+
+    Args:
+        domain: The domain identifier to update.
+        helpful: Whether the feedback was positive.
+
+    Returns:
+        A tuple of (success, domain_type) where domain_type is
+        "technical", "business", or None if adjustment failed.
+    """
+    try:
+        from typing import Literal
+
+        from tapps_core.adaptive.persistence import DomainWeightStore
+        from tapps_core.config.settings import load_settings
+        from tapps_core.experts.registry import ExpertRegistry
+
+        settings = load_settings()
+        store = DomainWeightStore(settings.project_root)
+
+        # Determine if domain is technical or business
+        business_domains = ExpertRegistry.get_business_domains()
+        technical_domains = ExpertRegistry.TECHNICAL_DOMAINS
+
+        domain_type: Literal["technical", "business"]
+        if domain in business_domains:
+            domain_type = "business"
+        elif domain in technical_domains:
+            domain_type = "technical"
+        else:
+            # Unknown domain - assume business (custom/new)
+            domain_type = "business"
+
+        # Update the weight
+        store.update_from_feedback(
+            domain,
+            helpful=helpful,
+            domain_type=domain_type,
+            learning_rate=0.1,
+        )
+
+        import structlog as _structlog
+
+        _structlog.get_logger(__name__).debug(
+            "domain_weight_adjusted",
+            domain=domain,
+            domain_type=domain_type,
+            helpful=helpful,
+        )
+
+        return True, domain_type
+
+    except Exception:
+        import structlog as _structlog
+
+        _structlog.get_logger(__name__).debug(
+            "domain_weight_adjustment_failed", domain=domain, exc_info=True
+        )
+        return False, None
 
 
 # ---------------------------------------------------------------------------

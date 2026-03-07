@@ -26,14 +26,14 @@ TappsMCP has completed all planned epics:
 | Epic | Name | Priority | LOE | Rationale |
 |------|------|----------|-----|-----------|
 | **56** | [Non-Python Language Scoring](epics/EPIC-56-NON-PYTHON-LANGUAGE-SCORING.md) | P1 | ~3-4 weeks | Extend quality scoring to TypeScript, JavaScript, Go, Rust. **Complete** (2026-03-06). |
-| **57** | [Adaptive Business Domain Learning](epics/EPIC-57-ADAPTIVE-BUSINESS-DOMAIN-LEARNING.md) | P1 | ~2 weeks | Extend `AdaptiveDomainDetector` to learn business expert routing from feedback. |
-| **58** | [Memory Consolidation](epics/EPIC-58-MEMORY-CONSOLIDATION.md) | P2 | ~2 weeks | Auto-consolidate related memories into summaries to prevent context bloat. |
+| **57** | [Adaptive Business Domain Learning](epics/EPIC-57-ADAPTIVE-BUSINESS-DOMAIN-LEARNING.md) | P1 | ~2 weeks | Extend `AdaptiveDomainDetector` to learn business expert routing from feedback. **Complete** (2026-03-06). |
+| **58** | [Memory Consolidation](epics/EPIC-58-MEMORY-CONSOLIDATION.md) | P2 | ~2 weeks | Auto-consolidate related memories into summaries to prevent context bloat. **Complete** (2026-03-06). |
 
 ### Tier 2: Distribution & Adoption
 
 | Epic | Name | Priority | LOE | Rationale |
 |------|------|----------|-----|-----------|
-| **59** | MCP Registry Submission | P1 | ~1 week | List TappsMCP and DocsMCP in official MCP server registry for discoverability. |
+| **59** | [MCP Registry Submission](epics/EPIC-59-MCP-REGISTRY-SUBMISSION.md) | P1 | ~1 week | List TappsMCP and DocsMCP in official MCP server registry for discoverability. **Complete** (2026-03-06). |
 | **60** | Video & Tutorial Content | P2 | ~2 weeks | Demo videos, getting-started guides, use-case walkthroughs. |
 | **61** | VS Code Native Extension | P3 | ~4-6 weeks | Native VS Code extension beyond MCP for broader reach. |
 
@@ -80,6 +80,8 @@ Enhancements are prioritized by:
 | 2026-03-06 | Prioritized Adaptive Business Learning as Epic 57 | Closes feedback loop on Epic 43-45 business expert system |
 | 2026-03-06 | Started Epic 56 Story 56.1 | Created `ScorerBase` ABC; `CodeScorer` now inherits from it; 28 new tests |
 | 2026-03-06 | Completed Epic 56 | All 7 stories done: TypeScript, Go, Rust scorers with tree-sitter; tool integration; 77 new tests |
+| 2026-03-06 | Completed Epic 57 | All 5 stories done: domain weight storage, adaptive detector with business support, feedback integration, detector delegation, docs; 51 new tests |
+| 2026-03-06 | Completed Epic 59 | MCP Registry submission: server.json for both packages, GitHub Actions workflow, README mcp-name verification |
 
 ---
 

@@ -238,3 +238,58 @@ jobs:
             --title "${{ github.ref_name }}" \
             --generate-notes \
             dist/*
+
+  # Publish to MCP Registry after PyPI publishing completes
+  publish-mcp-registry:
+    needs: [publish-tapps-mcp-pypi, publish-docs-mcp-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for OIDC authentication
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          chmod +x mcp-publisher
+
+      - name: Authenticate to MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Update server.json versions from tag
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "Updating server.json files to version $VERSION"
+
+          # Update tapps-mcp server.json
+          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' \
+            packages/tapps-mcp/server.json > packages/tapps-mcp/server.json.tmp \
+            && mv packages/tapps-mcp/server.json.tmp packages/tapps-mcp/server.json
+
+          # Update docs-mcp server.json
+          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' \
+            packages/docs-mcp/server.json > packages/docs-mcp/server.json.tmp \
+            && mv packages/docs-mcp/server.json.tmp packages/docs-mcp/server.json
+
+          echo "tapps-mcp server.json:"
+          cat packages/tapps-mcp/server.json
+          echo ""
+          echo "docs-mcp server.json:"
+          cat packages/docs-mcp/server.json
+
+      - name: Publish tapps-mcp to MCP Registry
+        working-directory: packages/tapps-mcp
+        run: ../../mcp-publisher publish
+
+      - name: Publish docs-mcp to MCP Registry
+        working-directory: packages/docs-mcp
+        run: ../../mcp-publisher publish
+
+      - name: Verify MCP Registry listings
+        run: |
+          echo "Verifying tapps-mcp listing..."
+          curl -s "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.wtthornton/tapps-mcp" | jq .
+
+          echo "Verifying docs-mcp listing..."
+          curl -s "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.wtthornton/docs-mcp" | jq .

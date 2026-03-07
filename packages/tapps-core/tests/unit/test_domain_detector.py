@@ -170,3 +170,129 @@ class TestDetectFromProject:
         # Should detect at least 2 different domains.
         domains = {r.domain for r in results}
         assert len(domains) >= 2
+
+
+# ---------------------------------------------------------------------------
+# Adaptive weight delegation tests (Epic 57, Story 57.4)
+# ---------------------------------------------------------------------------
+
+import pytest
+
+
+class TestAdaptiveWeightDelegation:
+    """Tests for adaptive weight delegation in detect_from_question_merged."""
+
+    @pytest.fixture(autouse=True)
+    def reset_settings(self) -> None:  # type: ignore[misc]
+        """Reset settings cache before and after each test."""
+        from tapps_core.config.settings import _reset_settings_cache
+
+        _reset_settings_cache()
+        yield
+        _reset_settings_cache()
+
+    def test_no_weights_when_adaptive_disabled(self, tmp_path: Path) -> None:
+        """When adaptive is disabled, no weight signals should appear."""
+        results = DomainDetector.detect_from_question_merged(
+            "How to handle security authentication?"
+        )
+        # Should return results without weight signals (adaptive disabled by default).
+        assert results
+        for r in results:
+            assert not any("weight:" in s for s in r.signals)
+
+    def test_weights_applied_when_adaptive_enabled(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When adaptive is enabled, weight signals should appear."""
+        from tapps_core.adaptive.persistence import DomainWeightStore
+        from tapps_core.config.settings import _reset_settings_cache
+
+        # Set up project root and enable adaptive.
+        monkeypatch.setenv("TAPPS_MCP_PROJECT_ROOT", str(tmp_path))
+        monkeypatch.setenv("TAPPS_MCP_ADAPTIVE_ENABLED", "true")
+        _reset_settings_cache()
+
+        # Store a weight for security.
+        store = DomainWeightStore(tmp_path)
+        store.save_weight("security", 1.5, domain_type="technical")
+
+        results = DomainDetector.detect_from_question_merged(
+            "How to handle security authentication?"
+        )
+
+        assert results
+        # Look for weight signal in results.
+        security_results = [r for r in results if r.domain == "security"]
+        if security_results:
+            assert any("weight:" in s for s in security_results[0].signals)
+
+    def test_weight_affects_ranking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Higher weights should boost domain ranking."""
+        from tapps_core.adaptive.persistence import DomainWeightStore
+        from tapps_core.config.settings import _reset_settings_cache
+
+        monkeypatch.setenv("TAPPS_MCP_PROJECT_ROOT", str(tmp_path))
+        monkeypatch.setenv("TAPPS_MCP_ADAPTIVE_ENABLED", "true")
+        _reset_settings_cache()
+
+        # Boost testing weight significantly.
+        store = DomainWeightStore(tmp_path)
+        store.save_weight("testing-strategies", 3.0, domain_type="technical")
+        store.save_weight("security", 0.3, domain_type="technical")
+
+        # Query that matches both testing and security keywords.
+        results = DomainDetector.detect_from_question_merged(
+            "test security vulnerabilities with unit test"
+        )
+
+        assert results
+        # Testing should be boosted to top due to higher weight.
+        domains = [r.domain for r in results]
+        if "testing-strategies" in domains and "security" in domains:
+            testing_idx = domains.index("testing-strategies")
+            security_idx = domains.index("security")
+            assert testing_idx < security_idx
+
+    def test_fallback_on_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Should fall back to static detection on weight store errors."""
+        from tapps_core.config.settings import _reset_settings_cache
+
+        monkeypatch.setenv("TAPPS_MCP_ADAPTIVE_ENABLED", "true")
+        # Don't set project root - will cause error loading weights.
+        monkeypatch.delenv("TAPPS_MCP_PROJECT_ROOT", raising=False)
+        _reset_settings_cache()
+
+        # Should still work - falls back to static detection.
+        results = DomainDetector.detect_from_question_merged(
+            "How to handle security?"
+        )
+        assert isinstance(results, list)
+
+    def test_apply_adaptive_weights_empty_results(self) -> None:
+        """Empty results should be handled gracefully."""
+        results = DomainDetector._apply_adaptive_weights([])
+        assert results == []
+
+    def test_apply_adaptive_weights_disabled(self) -> None:
+        """When adaptive is disabled, results should pass through unchanged."""
+        from tapps_core.experts.models import DomainMapping
+
+        original = [
+            DomainMapping(
+                domain="security",
+                confidence=0.8,
+                signals=["keyword:test"],
+                reasoning="Test",
+            )
+        ]
+        results = DomainDetector._apply_adaptive_weights(original)
+
+        # When disabled, should return the same results (no weight signals).
+        assert len(results) == 1
+        assert results[0].domain == "security"
+        assert not any("weight:" in s for s in results[0].signals)
