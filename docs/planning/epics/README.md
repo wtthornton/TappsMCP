@@ -63,7 +63,13 @@
 | [Epic 63](EPIC-63-AUTO-EXPERT-GENERATOR.md) | Auto Expert Generator | P2 | ~1-2 weeks | Epic 43-45 | **Complete** — 49 tests, gap analysis, config generation, knowledge scaffolding |
 | [Epic 64](EPIC-64-CROSS-PROJECT-MEMORY-FEDERATION.md) | Cross-Project Memory Federation | P2 | ~2 weeks | Epic 23-25, 34, 42 | **Complete** — 56 tests, federated hub, publish/subscribe/search actions |
 
-**Total LOE:** ~65-85 weeks — All TappsMCP Epics (0-64) + Platform Epics 12-13 complete (P0-P4), all DocsMCP Epics (0-17) complete. 6,200+ tests passing.
+### Proposed Future Epics
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 62](EPIC-62-CONTEXT7-MEMORY-VALIDATION.md) | Context7-Assisted Memory Validation & Enrichment | P2 | ~3 weeks | Epic 2, 23-25, 34, 58 | **Complete** — 7 stories, validate memories against authoritative docs, 67 tests |
+
+**Total LOE:** ~65-85 weeks — All TappsMCP Epics (0-64) + Platform Epics 12-13 complete (P0-P4), all DocsMCP Epics (0-17) complete. 7,200+ tests passing.
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 

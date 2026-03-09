@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from tapps_mcp.server_helpers import (
     _get_memory_store,
+    _get_settings,
     ensure_session_initialized,
     error_response,
     success_response,
@@ -36,13 +37,19 @@ _ANNOTATIONS_MEMORY = ToolAnnotations(
     openWorldHint=False,
 )
 
+_VALUE_PREVIEW_LEN = 200
+
 _VALID_ACTIONS = {
     "save", "save_bulk", "get", "list", "delete", "search",
     "reinforce", "gc", "contradictions", "reseed",
     "import", "export", "consolidate", "unconsolidate",
     "federate_register", "federate_publish", "federate_subscribe",
     "federate_sync", "federate_search", "federate_status",
+    "validate",
 }
+
+# Async actions require special dispatch (doc lookups are async)
+_ASYNC_ACTIONS = {"validate"}
 
 _BULK_SAVE_MAX_ENTRIES = 50
 
@@ -88,6 +95,9 @@ class _Params:
     sources: list[str] = dataclasses.field(default_factory=list)
     min_confidence: float = 0.5
     include_hub: bool = True
+    # Validation parameters (Epic 62)
+    stale_only: bool = False
+    max_entries: int = 10
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +130,8 @@ async def tapps_memory(
     sources: str = "",
     min_confidence: float = 0.5,
     include_hub: bool = True,
+    stale_only: bool = False,
+    max_entries: int = 10,
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
@@ -188,6 +200,8 @@ async def tapps_memory(
         federate_sync: Pull subscribed memories from the hub into local store. (Epic 64)
         federate_search: Search across local and federated memories. Uses query param. (Epic 64)
         federate_status: Show federation hub status and registered projects. (Epic 64)
+        validate: Validate memories against authoritative documentation via Context7. (Epic 62)
+            Params: key (single), query (search), stale_only, dry_run, max_entries.
     """
     await ensure_session_initialized()
     _record_call("tapps_memory")
@@ -223,10 +237,14 @@ async def tapps_memory(
         entry_ids=entry_id_list, dry_run=dry_run, include_sources=include_sources,
         project_id=project_id, sources=source_list,
         min_confidence=min_confidence, include_hub=include_hub,
+        stale_only=stale_only, max_entries=max_entries,
     )
 
     try:
-        result_data = _DISPATCH[action](store, params)
+        if action in _ASYNC_ACTIONS:
+            result_data = await _ASYNC_DISPATCH[action](store, params)
+        else:
+            result_data = _DISPATCH[action](store, params)
     except Exception as exc:
         return error_response(
             "tapps_memory", "action_failed",
@@ -268,7 +286,10 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
 def _handle_save_bulk(store: MemoryStore, p: _Params) -> dict[str, Any]:
     """Handle the save_bulk action — save multiple entries in one call."""
     if not p.entries:
-        return {"error": "missing_entries", "message": "entries parameter is required for save_bulk."}
+        return {
+            "error": "missing_entries",
+            "message": "entries parameter is required for save_bulk.",
+        }
 
     try:
         parsed = json.loads(p.entries)
@@ -307,7 +328,10 @@ def _handle_save_bulk(store: MemoryStore, p: _Params) -> dict[str, Any]:
             skipped += 1
             continue
         if not e_value:
-            errors.append({"index": str(i), "key": e_key, "error": "Missing required field 'value'."})
+            errors.append({
+                "index": str(i), "key": e_key,
+                "error": "Missing required field 'value'.",
+            })
             skipped += 1
             continue
 
@@ -1000,7 +1024,10 @@ def _handle_federate_search(store: MemoryStore, params: _Params) -> dict[str, An
     from tapps_core.memory.federation import FederatedStore, federated_search
 
     if not params.query:
-        return {"error": "missing_query", "message": "query parameter required for federate_search."}
+        return {
+            "error": "missing_query",
+            "message": "query parameter required for federate_search.",
+        }
 
     settings = load_settings()
     pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
@@ -1027,7 +1054,10 @@ def _handle_federate_search(store: MemoryStore, params: _Params) -> dict[str, An
         "results": [
             {
                 "key": r.key,
-                "value": r.value[:200] + ("..." if len(r.value) > 200 else ""),
+                "value": (
+                    r.value[:_VALUE_PREVIEW_LEN]
+                    + ("..." if len(r.value) > _VALUE_PREVIEW_LEN else "")
+                ),
                 "source": r.source,
                 "project_id": r.project_id,
                 "confidence": round(r.confidence, 3),
@@ -1100,6 +1130,93 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "federate_sync": _handle_federate_sync,
     "federate_search": _handle_federate_search,
     "federate_status": _handle_federate_status,
+}
+
+
+# ---------------------------------------------------------------------------
+# Async action handlers (Epic 62 — doc validation requires async lookups)
+# ---------------------------------------------------------------------------
+
+
+async def _handle_validate(
+    store: MemoryStore, params: _Params
+) -> dict[str, Any]:
+    """Validate memory entries against authoritative documentation."""
+    from tapps_core.knowledge.lookup import LookupEngine
+    from tapps_core.memory.doc_validation import MemoryDocValidator
+
+    settings = _get_settings()
+    lookup = LookupEngine(settings=settings)
+    validator = MemoryDocValidator(lookup)
+
+    # Determine which entries to validate
+    if params.key:
+        entry = store.get(params.key)
+        if entry is None:
+            return {"action": "validate", "error": f"Key '{params.key}' not found"}
+        report = await validator.validate_batch([entry])
+    elif params.query:
+        entries = store.search(params.query)[:params.max_entries]
+        report = await validator.validate_batch(entries)
+    elif params.stale_only:
+        all_entries = list(store.list_all().values())
+        report = await validator.validate_stale(
+            all_entries,
+            confidence_threshold=params.min_confidence,
+            max_entries=params.max_entries,
+        )
+    else:
+        # Validate all (up to max_entries)
+        all_entries = list(store.list_all().values())[:params.max_entries]
+        report = await validator.validate_batch(all_entries)
+
+    # Apply results if not dry_run
+    apply_result = await validator.apply_results(
+        report, store, dry_run=params.dry_run,
+    )
+
+    # Format response
+    entry_summaries = []
+    for ev in report.entries:
+        summary: dict[str, Any] = {
+            "key": ev.entry_key,
+            "status": ev.overall_status.value,
+            "reason": ev.reason,
+        }
+        if ev.claims:
+            summary["claims"] = len(ev.claims)
+            summary["libraries"] = [c.library for c in ev.claims]
+        if ev.alignments:
+            best = max(ev.alignments, key=lambda a: a.similarity_score)
+            summary["best_similarity"] = best.similarity_score
+            if best.matched_snippet:
+                summary["matched_snippet"] = best.matched_snippet[:120]
+        if ev.confidence_adjustment != 0.0:
+            summary["confidence_delta"] = ev.confidence_adjustment
+        entry_summaries.append(summary)
+
+    return {
+        "action": "validate",
+        "report": {
+            "validated": report.validated,
+            "flagged": report.flagged,
+            "inconclusive": report.inconclusive,
+            "skipped": report.skipped,
+        },
+        "entries": entry_summaries,
+        "applied": not params.dry_run,
+        "apply_summary": {
+            "boosted": apply_result.boosted,
+            "penalised": apply_result.penalised,
+            "unchanged": apply_result.unchanged,
+            "tags_added": apply_result.tags_added,
+        },
+        "timing_ms": report.elapsed_ms,
+    }
+
+
+_ASYNC_DISPATCH: dict[str, Any] = {
+    "validate": _handle_validate,
 }
 
 

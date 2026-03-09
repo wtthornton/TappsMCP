@@ -37,7 +37,11 @@ _VALIDATE_CONCURRENCY = 10
 
 # Track whether auto-GC and consolidation have already run this session.
 # Uses a mutable container to avoid PLW0603 ``global`` statements.
-_session_state: dict[str, bool] = {"gc_done": False, "consolidation_done": False}
+_session_state: dict[str, bool] = {
+    "gc_done": False,
+    "consolidation_done": False,
+    "doc_validation_done": False,
+}
 
 
 def _reset_session_gc_flag() -> None:
@@ -48,6 +52,11 @@ def _reset_session_gc_flag() -> None:
 def _reset_session_consolidation_flag() -> None:
     """Reset the consolidation scan flag (for testing)."""
     _session_state["consolidation_done"] = False
+
+
+def _reset_session_doc_validation_flag() -> None:
+    """Reset the doc validation flag (for testing)."""
+    _session_state["doc_validation_done"] = False
 
 
 def _reset_session_state() -> None:
@@ -915,6 +924,79 @@ def _process_session_capture(
         return None
 
 
+async def _maybe_validate_memories(
+    store: MemoryStore,
+    settings: TappsMCPSettings,
+) -> dict[str, Any] | None:
+    """Validate stale memories against authoritative docs at session start.
+
+    Returns a summary dict when validation ran, or ``None`` if skipped.
+    Only runs once per session (guarded by ``_session_state["doc_validation_done"]``).
+
+    Epic 62, Story 62.6: Session-start validation pass.
+    """
+    if _session_state.get("doc_validation_done", False):
+        return None
+
+    mem_settings = getattr(settings, "memory", None)
+    doc_val = getattr(mem_settings, "doc_validation", None) if mem_settings else None
+    if (
+        doc_val is None
+        or not getattr(doc_val, "enabled", False)
+        or not getattr(doc_val, "validate_on_session_start", True)
+    ):
+        return None
+
+    _session_state["doc_validation_done"] = True
+
+    try:
+        from tapps_core.knowledge.lookup import LookupEngine
+        from tapps_core.memory.doc_validation import MemoryDocValidator
+
+        lookup = LookupEngine(settings=settings)
+        validator = MemoryDocValidator(lookup)
+
+        all_entries = list(store.list_all().values())
+        max_entries = getattr(doc_val, "max_entries_per_session", 5)
+        threshold = getattr(doc_val, "confidence_threshold", 0.5)
+        dry_run = getattr(doc_val, "dry_run", False)
+
+        report = await validator.validate_stale(
+            all_entries,
+            confidence_threshold=threshold,
+            max_entries=max_entries,
+        )
+
+        if not report.entries:
+            return {"ran": True, "validated": 0, "skipped": "no stale entries"}
+
+        apply_result = await validator.apply_results(
+            report, store, dry_run=dry_run,
+        )
+
+        _logger.info(
+            "session_doc_validation_completed",
+            validated=report.total_validated,
+            confirmed=report.confirmed,
+            contradicted=report.contradicted,
+            no_docs=report.no_docs,
+            dry_run=dry_run,
+        )
+
+        return {
+            "ran": True,
+            "validated": report.total_validated,
+            "confirmed": report.confirmed,
+            "contradicted": report.contradicted,
+            "no_docs": report.no_docs,
+            "adjustments": apply_result.get("adjustments", 0),
+            "dry_run": dry_run,
+        }
+    except Exception:
+        _logger.debug("session_doc_validation_failed", exc_info=True)
+        return {"ran": False, "error": "doc validation failed"}
+
+
 async def tapps_session_start(
     project_root: str = "",
     quick: bool = False,
@@ -951,6 +1033,7 @@ async def tapps_session_start(
     memory_status: dict[str, Any] = {"enabled": False}
     memory_gc_result: dict[str, Any] | None = None
     memory_consolidation_result: dict[str, Any] | None = None
+    memory_doc_validation_result: dict[str, Any] | None = None
     session_capture_result: dict[str, Any] | None = None
     try:
         settings = load_settings()
@@ -1003,6 +1086,12 @@ async def tapps_session_start(
                     settings,
                 )
 
+                # Doc validation of stale memories (Epic 62, Story 62.6)
+                memory_doc_validation_result = await _maybe_validate_memories(
+                    mem_store,
+                    settings,
+                )
+
                 # Process session capture from previous Stop hook (Epic 34.5)
                 session_capture_result = _process_session_capture(
                     settings.project_root,
@@ -1045,6 +1134,7 @@ async def tapps_session_start(
         "memory_status": memory_status,
         "memory_gc": memory_gc_result,
         "memory_consolidation": memory_consolidation_result,
+        "memory_doc_validation": memory_doc_validation_result,
         "session_capture": session_capture_result,
         "business_experts": business_experts_result,
         "project_profile": None,

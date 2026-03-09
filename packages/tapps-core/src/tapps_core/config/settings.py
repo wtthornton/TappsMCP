@@ -123,6 +123,35 @@ class MemoryConsolidationSettings(BaseSettings):
     )
 
 
+class MemoryDocValidationSettings(BaseModel):
+    """Settings for Context7-assisted memory validation (Epic 62)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable doc validation of stale memories at session start.",
+    )
+    validate_on_session_start: bool = Field(
+        default=True,
+        description="Run validation during tapps_session_start.",
+    )
+    max_entries_per_session: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Maximum memories to validate per session start.",
+    )
+    confidence_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Only validate entries with confidence below this threshold.",
+    )
+    dry_run: bool = Field(
+        default=False,
+        description="When True, report results without applying changes.",
+    )
+
+
 class MemorySettings(BaseSettings):
     """Settings for the shared memory subsystem."""
 
@@ -149,6 +178,9 @@ class MemorySettings(BaseSettings):
     decay: MemoryDecaySettings = Field(default_factory=MemoryDecaySettings)
     consolidation: MemoryConsolidationSettings = Field(
         default_factory=MemoryConsolidationSettings
+    )
+    doc_validation: MemoryDocValidationSettings = Field(
+        default_factory=MemoryDocValidationSettings
     )
 
 
