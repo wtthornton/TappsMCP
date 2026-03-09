@@ -33,7 +33,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 - **29 deterministic MCP tools** — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** — Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
-- **17 domain experts** with 139 curated knowledge files and RAG-backed answers
+- **17 domain experts** with 157 curated knowledge files and RAG-backed answers
 - **Persistent shared memory** — project decisions survive across sessions (SQLite + BM25 retrieval)
 - **Unified feature flags** — optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** — auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
@@ -89,7 +89,7 @@ TappsMCP exposes **29 MCP tools** plus workflow prompts. All tools are **determi
 | **Dead code detection** | Vulture-based unused functions, classes, imports, variables with confidence scoring; integrated into maintainability/structure. |
 | **Circular dependency detection** | AST import graph, cycle detection, coupling metrics (Ca/Ce/instability). |
 | **Session checklist** | Track which tools were called; required vs recommended by task type (feature, bugfix, refactor, security, review). **LLM engagement level** (high/medium/low) adjusts required tools and wording. |
-| **Adaptive learning** | Scoring weights and expert voting adapt from usage. Adaptive domain detection routes queries based on learned feedback when enabled. Query expansion with ~60 synonym pairs improves domain detection recall. |
+| **Adaptive learning** | Scoring weights and expert voting adapt from usage. Adaptive domain detection routes queries based on learned feedback when enabled. Query expansion with ~120 synonym pairs improves domain detection recall. |
 
 ### Security & dependencies
 
@@ -661,7 +661,7 @@ Quick index:
 
 ### tapps_memory
 
-**What it does:** Persistent, project-scoped shared memory accessible to all MCP-connected agents. Memories are typed by tier (`architectural`, `pattern`, `context`), carry confidence scores (0.0-1.0 with source-based defaults), and persist across sessions in SQLite with WAL mode and FTS5 full-text search at `{project_root}/.tapps-mcp/memory/memory.db`. Supports 13 actions: **save** (with RAG safety filtering), **get** (with scope resolution: session > branch > project; includes provenance for consolidated entries), **list** (filtered by tier/scope/tags), **delete**, **search** (FTS5 ranked retrieval with composite scoring), **reinforce** (reset decay clock, optional confidence boost), **contradictions** (detect memories that contradict current project state), **gc** (archive decayed memories), **reseed** (re-populate from project profile), **import** and **export** (JSON format with path validation), **consolidate** (merge related entries into a summary with provenance tracking; supports explicit entry_ids, query-based discovery, or auto-discovery; use dry_run=True to preview), and **unconsolidate** (undo a consolidation by restoring source entries and removing the consolidated entry). Search and list filter out source entries of consolidated memories by default (pass `include_sources=True` to show all). Time-based exponential decay with tier-specific half-lives (architectural: 180 days, pattern: 60 days, context: 14 days). Contradiction detection compares memories against `tapps_project_profile` for tech stack drift, missing files, and deleted branches. Relevant memories are auto-injected into `tapps_consult_expert` and `tapps_research` responses (configurable by engagement level). Max 500 memories per project with lowest-confidence eviction.
+**What it does:** Persistent, project-scoped shared memory accessible to all MCP-connected agents. Memories are typed by tier (`architectural`, `pattern`, `context`), carry confidence scores (0.0-1.0 with source-based defaults), and persist across sessions in SQLite with WAL mode and FTS5 full-text search at `{project_root}/.tapps-mcp/memory/memory.db`. Supports 20 actions: **save** (with RAG safety filtering), **get** (with scope resolution: session > branch > project; includes provenance for consolidated entries), **list** (filtered by tier/scope/tags), **delete**, **search** (FTS5 ranked retrieval with composite scoring), **reinforce** (reset decay clock, optional confidence boost), **contradictions** (detect memories that contradict current project state), **gc** (archive decayed memories), **reseed** (re-populate from project profile), **import** and **export** (JSON format with path validation), **consolidate** (merge related entries into a summary with provenance tracking; supports explicit entry_ids, query-based discovery, or auto-discovery; use dry_run=True to preview), **unconsolidate** (undo a consolidation by restoring source entries and removing the consolidated entry), **save_bulk** (batch-save multiple entries), **federate_register** (register project in federation hub), **federate_publish** (publish shared-scope entries to hub), **federate_subscribe** (subscribe to another project's memories), **federate_sync** (pull subscribed entries from hub), **federate_search** (search across federated projects with local boost), and **federate_status** (view federation config and sync state). Search and list filter out source entries of consolidated memories by default (pass `include_sources=True` to show all). Time-based exponential decay with tier-specific half-lives (architectural: 180 days, pattern: 60 days, context: 14 days). Contradiction detection compares memories against `tapps_project_profile` for tech stack drift, missing files, and deleted branches. Relevant memories are auto-injected into `tapps_consult_expert` and `tapps_research` responses (configurable by engagement level). Max 500 memories per project with lowest-confidence eviction.
 
 **Why use it:** Agents start every session amnesiac about the project. Shared memory means the project remembers things, not the developer's tool. Save architectural decisions ("we use JWT with RS256"), patterns ("always mock the DB in unit tests"), and context ("current sprint focuses on auth"). Memories decay naturally so stale information loses trust. Contradiction detection catches drift (e.g., memory says "we use SQLAlchemy" after migrating to Prisma). Expert injection means `tapps_consult_expert` automatically includes relevant project memory in its response.
 
@@ -1087,7 +1087,7 @@ DocsMCP is a companion MCP server for documentation generation, drift detection,
 docsmcp serve          # Start the DocsMCP MCP server
 docsmcp doctor         # Check configuration and dependencies
 docsmcp scan           # Run documentation inventory
-docsmcp generate       # Generate documentation (coming soon)
+docsmcp generate       # Generate documentation
 docsmcp version        # Print version
 ```
 
@@ -1109,7 +1109,7 @@ git_log_limit: 500
 
 ### Roadmap
 
-DocsMCP is in early development. Planned features include README generation, API documentation, changelog generation, Mermaid diagrams, drift detection, completeness validation, and multi-language support. See [docs/planning/DOCSMCP_PRD.md](docs/planning/DOCSMCP_PRD.md) for the full specification.
+DocsMCP is feature-complete with 22 MCP tools covering README generation, API documentation, changelog generation, release notes, ADRs, onboarding/contributing guides, PRD generation, Mermaid/PlantUML diagrams, drift detection, completeness validation, link checking, and freshness analysis. See [docs/planning/DOCSMCP_PRD.md](docs/planning/DOCSMCP_PRD.md) for the full specification.
 
 ---
 

@@ -11,11 +11,11 @@ TappsMCP has completed all planned epics:
 
 | Package | Epics | Tools | Tests |
 |---------|-------|-------|-------|
-| **tapps-mcp** | 55 epics (0-55) + P0-P4 promotions | 29 tools | 3,420+ |
-| **tapps-core** | Shared infrastructure | -- | 1,269+ |
-| **docs-mcp** | 17 epics (0-17) | 19 tools | 1,171+ |
+| **tapps-mcp** | Epics 0-55, 56-59, 63-64 + P0-P4 promotions | 29 tools | 4,200+ |
+| **tapps-core** | Shared infrastructure | -- | 1,700+ |
+| **docs-mcp** | Epics 0-12 (13 epics) | 22 tools | 1,300+ |
 | **Platform** | 2 epics (12-13) | Combined server | 25+ |
-| **Total** | 74 epics | 48 tools | 5,995+ |
+| **Total** | All complete | 51 tools | 7,200+ |
 
 ---
 

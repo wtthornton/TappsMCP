@@ -25,9 +25,9 @@ tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp
 uv sync --all-packages
 
 # Run tests per package (recommended — avoids conftest collisions)
-uv run pytest packages/tapps-core/tests/ -v      # 1,269 tests
-uv run pytest packages/tapps-mcp/tests/ -v        # 3,420 tests
-uv run pytest packages/docs-mcp/tests/ -v         # 107 tests
+uv run pytest packages/tapps-core/tests/ -v      # 1,700+ tests
+uv run pytest packages/tapps-mcp/tests/ -v        # 4,200+ tests
+uv run pytest packages/docs-mcp/tests/ -v         # 1,300+ tests
 
 # Run a single test file
 uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v
@@ -106,9 +106,9 @@ src/tapps_mcp/
 ├── server_scoring_tools.py, server_pipeline_tools.py, server_metrics_tools.py
 ├── server_memory_tools.py, server_analysis_tools.py, server_expert_tools.py
 ├── server_resources.py
-├── common/     constants.py, elicitation.py, exceptions.py, logging.py,
-│               models.py, nudges.py, output_schemas.py, pipeline_models.py,
-│               utils.py
+├── common/     constants.py, developer_workflow.py, elicitation.py,
+│               exceptions.py, logging.py, models.py, nudges.py,
+│               output_schemas.py, pipeline_models.py, utils.py
 ├── config/     settings.py, default.yaml
 ├── security/   path_validator.py, io_guardrails.py, governance.py, api_keys.py,
 │               secret_scanner.py, security_scanner.py, content_safety.py
@@ -128,17 +128,18 @@ src/tapps_mcp/
 │               content_normalizer.py
 │   └── providers/ base.py, registry.py, context7_provider.py,
 │                  llms_txt_provider.py
-├── experts/    models.py, registry.py, domain_utils.py,
+├── experts/    (re-exports from tapps_core; subset also in tapps-mcp)
+│               models.py, registry.py, domain_utils.py,
 │               domain_detector.py, adaptive_domain_detector.py,
 │               rag.py, rag_chunker.py, rag_embedder.py, rag_index.py,
 │               vector_rag.py, rag_warming.py, confidence.py, engine.py,
-│               hot_rank.py, retrieval_eval.py,
+│               hot_rank.py, retrieval_eval.py, query_expansion.py,
 │               knowledge_freshness.py, knowledge_validator.py,
 │               knowledge_ingestion.py,
 │               business_config.py, business_knowledge.py,
 │               business_loader.py, business_templates.py,
-│               auto_generator.py
-│               knowledge/ (145 markdown files across 17 domains)
+│               auto_generator.py  (tapps-core only)
+│               knowledge/ (157 markdown files across 17 domains)
 ├── adaptive/   models.py, protocols.py, persistence.py,
 │               scoring_engine.py, scoring_wrapper.py,
 │               voting_engine.py, weight_distributor.py
@@ -150,8 +151,9 @@ src/tapps_mcp/
 │               dashboard.py, otel_export.py, feedback.py
 ├── memory/     models.py, persistence.py, store.py, decay.py,
 │               reinforcement.py, contradictions.py, gc.py,
-│               retrieval.py, injection.py, seeding.py, io.py,
-│               federation.py
+│               retrieval.py, injection.py, seeding.py, io.py
+│               (tapps-core also has: bm25.py, federation.py,
+│                similarity.py, consolidation.py, auto_consolidation.py)
 ├── prompts/    prompt_loader.py,
 │               overview.md, discover.md, research.md, develop.md,
 │               validate.md, verify.md, handoff_template.md,
@@ -181,6 +183,7 @@ src/tapps_mcp/
 │               promotion.py, tool_task_models.py, tool_evaluator.py,
 │               call_patterns.py, checklist_calibrator.py, expert_tracker.py,
 │               memory_tracker.py, adaptive_feedback.py, tool_report.py
+├── platform/  __init__.py, cli.py, combined_server.py
 ├── validators/ base.py, dockerfile.py, docker_compose.py,
 │               influxdb.py, mqtt.py, websocket.py
 ```

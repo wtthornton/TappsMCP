@@ -6,7 +6,7 @@ MCP server for automated documentation generation, validation, and maintenance.
 
 ## Overview
 
-DocsMCP is part of the [TappsMCP](https://github.com/tapps-mcp/tapps-mcp) platform. It provides 18 MCP tools that help AI coding assistants generate, validate, and maintain project documentation.
+DocsMCP is part of the [TappsMCP](https://github.com/tapps-mcp/tapps-mcp) platform. It provides 22 MCP tools that help AI coding assistants generate, validate, and maintain project documentation.
 
 ## Features
 

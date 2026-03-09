@@ -162,33 +162,37 @@ docker run -d --rm \
 
 ## Available Tools
 
-DocsMCP provides 18 MCP tools across these categories:
+DocsMCP provides 22 MCP tools across these categories:
+
+### Session
+- `docs_session_start` - Initialize session and detect project context
+- `docs_config` - View or update DocsMCP configuration
 
 ### Analysis
-- `docs_session_start` - Initialize session and detect project context
-- `docs_project_scan` - Scan project for documentation inventory
-- `docs_analyze_module` - Analyze a Python module's structure
+- `docs_project_scan` - Comprehensive documentation state audit
+- `docs_module_map` - Hierarchical Python module tree
+- `docs_api_surface` - Public API surface of a Python file
+- `docs_git_summary` - Git history with conventional commit parsing
 
 ### Generation
-- `docs_generate_readme` - Generate or update README.md
+- `docs_generate_readme` - Generate or update README.md (minimal/standard/comprehensive)
 - `docs_generate_changelog` - Generate CHANGELOG.md from git history
 - `docs_generate_release_notes` - Generate release notes for a version
-- `docs_generate_api` - Generate API documentation for a module
-- `docs_generate_adr` - Generate Architecture Decision Records
-- `docs_generate_onboarding` - Generate onboarding guides
-- `docs_generate_contributing` - Generate contributing guides
-- `docs_generate_diagram` - Generate architecture diagrams
+- `docs_generate_api` - Generate API documentation (markdown/mkdocs/sphinx_rst)
+- `docs_generate_adr` - Generate Architecture Decision Records (MADR/Nygard)
+- `docs_generate_onboarding` - Generate getting-started guide
+- `docs_generate_contributing` - Generate CONTRIBUTING.md
+- `docs_generate_prd` - Generate Product Requirements Document
+- `docs_generate_diagram` - Generate Mermaid/PlantUML diagrams (dependency/class/module/ER)
+- `docs_generate_architecture` - Self-contained HTML architecture report with SVG
+- `docs_generate_epic` - Generate epic planning docs with expert enrichment
+- `docs_generate_story` - Generate user story docs with expert enrichment
 
 ### Validation
-- `docs_validate_drift` - Check for code/documentation drift
-- `docs_validate_completeness` - Assess documentation completeness
-- `docs_validate_links` - Check for broken documentation links
-- `docs_validate_freshness` - Check documentation freshness
-
-### Git Integration
-- `docs_git_history` - Analyze git history for documentation context
-- `docs_git_changelog_preview` - Preview changelog from recent commits
-- `docs_detect_version` - Detect project version information
+- `docs_check_drift` - Detect code changes not reflected in docs
+- `docs_check_completeness` - Score documentation completeness (0-100)
+- `docs_check_links` - Validate internal links in markdown files
+- `docs_check_freshness` - Score documentation freshness (fresh/aging/stale/ancient)
 
 ## Environment Variables
 

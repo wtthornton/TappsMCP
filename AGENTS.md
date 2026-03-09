@@ -118,12 +118,12 @@ TappsMCP scoring tools support multiple programming languages:
 | Language | Extensions | Scoring Status | Notes |
 |----------|------------|----------------|-------|
 | **Python** | `.py`, `.pyi` | ✅ Full | ruff, mypy, bandit, radon, vulture |
-| **TypeScript** | `.ts`, `.tsx` | ⚠️ Stub | Returns neutral scores; full scoring coming in Story 56.3 |
-| **JavaScript** | `.js`, `.jsx`, `.mjs`, `.cjs` | ⚠️ Stub | Routes to TypeScript scorer |
-| **Go** | `.go` | ⚠️ Stub | Returns neutral scores; full scoring coming in Story 56.4 |
-| **Rust** | `.rs` | ⚠️ Stub | Returns neutral scores; full scoring coming in Story 56.5 |
+| **TypeScript** | `.ts`, `.tsx` | ✅ Full | Tree-sitter AST analysis (regex fallback); all 7 categories including `any` usage, nested callbacks |
+| **JavaScript** | `.js`, `.jsx`, `.mjs`, `.cjs` | ✅ Full | Routes to TypeScript scorer |
+| **Go** | `.go` | ✅ Full | Tree-sitter AST analysis (regex fallback); all 7 categories including `unsafe.Pointer`, defer-in-loop |
+| **Rust** | `.rs` | ✅ Full | Tree-sitter AST analysis (regex fallback); all 7 categories including unsafe blocks, `.unwrap()` abuse |
 
-**Stub behavior:** Non-Python files return `degraded: true` with a neutral score (50/100) and a message indicating full support is coming. The language is auto-detected from the file extension.
+**Tree-sitter mode:** When `tree-sitter` dependencies are installed (`uv sync --extra treesitter`), scorers use full AST analysis. Without tree-sitter, scorers fall back to regex-based analysis and mark results as `degraded: true`. The language is auto-detected from the file extension.
 
 **Language detection:** Use any scoring tool (`tapps_score_file`, `tapps_quick_check`, `tapps_quality_gate`) with any supported file extension. The correct scorer is selected automatically. Unsupported file types return a clear "unsupported language" message.
 
@@ -186,10 +186,9 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 - **SubagentStop** - Captures subagent quality context on exit
 - **MemoryCapture** - Persists session quality data to memory on session stop
 
-**Cursor** (`.cursor/hooks/`): 3 hook scripts:
+**Cursor** (`.cursor/hooks/`): 2 hook scripts:
 - **beforeMCPExecution** - Logs MCP tool invocations for observability
 - **afterFileEdit** - Fire-and-forget reminder to run quality checks
-- **stop** - Prompts validation via followup_message before session ends
 
 ### Subagents (auto-generated)
 
