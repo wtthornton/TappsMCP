@@ -1,6 +1,6 @@
 # TappsMCP Roadmap
 
-**Date:** 2026-03-06
+**Date:** 2026-03-09
 **Status:** All formal epics complete; this document tracks future enhancement opportunities
 
 ---
@@ -42,8 +42,8 @@ TappsMCP has completed all planned epics:
 | Epic | Name | Priority | LOE | Rationale |
 |------|------|----------|-----|-----------|
 | **62** | Context7-Assisted Memory Validation | P2 | ~2 weeks | Use docs lookup to validate/enrich memory entries. |
-| **63** | Auto Expert Generator | P3 | ~2-3 weeks | Analyze codebase patterns to suggest/create domain experts. |
-| **64** | Cross-Project Memory Federation | P3 | ~3-4 weeks | Share memory across related projects (monorepo packages). |
+| **63** | [Auto Expert Generator](epics/EPIC-63-AUTO-EXPERT-GENERATOR.md) | P3 | ~2-3 weeks | Analyze codebase patterns to suggest/create domain experts. **Complete** (2026-03-09). |
+| **64** | [Cross-Project Memory Federation](epics/EPIC-64-CROSS-PROJECT-MEMORY-FEDERATION.md) | P3 | ~3-4 weeks | Share memory across related projects (monorepo packages). **Complete** (2026-03-09). |
 
 ### Tier 4: Deferred Items (From Completed Epics)
 
@@ -82,6 +82,8 @@ Enhancements are prioritized by:
 | 2026-03-06 | Completed Epic 56 | All 7 stories done: TypeScript, Go, Rust scorers with tree-sitter; tool integration; 77 new tests |
 | 2026-03-06 | Completed Epic 57 | All 5 stories done: domain weight storage, adaptive detector with business support, feedback integration, detector delegation, docs; 51 new tests |
 | 2026-03-06 | Completed Epic 59 | MCP Registry submission: server.json for both packages, GitHub Actions workflow, README mcp-name verification |
+| 2026-03-09 | Completed Epic 63 | Auto Expert Generator: gap analysis, config generation, knowledge scaffolding, MCP tool integration, init suggestion |
+| 2026-03-09 | Completed Epic 64 | Cross-Project Memory Federation: hub store, publish/subscribe, federated search, scope extension, 6 MCP actions |
 
 ---
 

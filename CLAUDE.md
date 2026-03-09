@@ -92,9 +92,9 @@ The MCP server is split across eight tool files plus a shared helpers module and
 - **`server_scoring_tools.py`** — `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** — `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`
 - **`server_metrics_tools.py`** — `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`
-- **`server_memory_tools.py`** — `tapps_memory` (13 actions: save, get, list, delete, search, reinforce, gc, contradictions, reseed, import, export, consolidate, unconsolidate)
+- **`server_memory_tools.py`** — `tapps_memory` (20 actions: save, save_bulk, get, list, delete, search, reinforce, gc, contradictions, reseed, import, export, consolidate, unconsolidate, federate_register, federate_publish, federate_subscribe, federate_sync, federate_search, federate_status)
 - **`server_analysis_tools.py`** — `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`
-- **`server_expert_tools.py`** — `tapps_manage_experts` (5 actions: list, add, remove, scaffold, validate)
+- **`server_expert_tools.py`** — `tapps_manage_experts` (6 actions: list, add, remove, scaffold, validate, auto_generate)
 - **`server_resources.py`** — MCP resources (knowledge, config) and prompts (pipeline, workflow)
 - **`server_helpers.py`** — Shared utilities: `emit_ctx_info()` (defensive ctx notification helper), response builders, singleton caches (`_get_scorer()`, `_get_settings()`, `_get_memory_store()`)
 
@@ -136,7 +136,8 @@ src/tapps_mcp/
 │               knowledge_freshness.py, knowledge_validator.py,
 │               knowledge_ingestion.py,
 │               business_config.py, business_knowledge.py,
-│               business_loader.py, business_templates.py
+│               business_loader.py, business_templates.py,
+│               auto_generator.py
 │               knowledge/ (145 markdown files across 17 domains)
 ├── adaptive/   models.py, protocols.py, persistence.py,
 │               scoring_engine.py, scoring_wrapper.py,
@@ -149,7 +150,8 @@ src/tapps_mcp/
 │               dashboard.py, otel_export.py, feedback.py
 ├── memory/     models.py, persistence.py, store.py, decay.py,
 │               reinforcement.py, contradictions.py, gc.py,
-│               retrieval.py, injection.py, seeding.py, io.py
+│               retrieval.py, injection.py, seeding.py, io.py,
+│               federation.py
 ├── prompts/    prompt_loader.py,
 │               overview.md, discover.md, research.md, develop.md,
 │               validate.md, verify.md, handoff_template.md,
@@ -256,9 +258,11 @@ All file I/O goes through `security/path_validator.py`, which sandboxes operatio
 
 **Adaptive domain learning (Epic 57):** Domain routing weights are stored in `.tapps-mcp/adaptive/domain_weights.yaml` with separate `technical` and `business` sections. The `DomainWeightStore` class in `adaptive/persistence.py` provides persistence with `save_weight()`, `load_weights()`, `update_from_feedback()`, and `get_weight_value()`. When `adaptive.enabled` is True, `DomainDetector.detect_from_question_merged()` applies learned weights to adjust confidence scores. `tapps_feedback` accepts an optional `domain` parameter to trigger domain weight updates for expert tools.
 
+**Auto expert generation (Epic 63):** `experts/auto_generator.py` analyzes a project's tech stack to identify domains not covered by builtin or existing business experts. `analyze_expert_gaps()` maps detected libraries/frameworks to suggested domains via 15+ mapping rules (celery->task-queue, stripe->payments, etc.) plus structural pattern detection (ML model files). `generate_expert_configs()` creates valid `BusinessExpertEntry` configs. `scaffold_expert_with_knowledge()` creates knowledge directories with domain-specific best-practices.md. The `auto_generate` action in `tapps_manage_experts` orchestrates the full pipeline with dry_run support. `tapps_init` suggests auto-generation when no `experts.yaml` exists and uncovered domains are detected.
+
 ### Memory subsystem
 
-`memory/` provides persistent cross-session knowledge sharing via `tapps_memory`. Core: `memory/models.py` (MemoryEntry, enums, validators), `memory/persistence.py` (SQLite with WAL, FTS5, schema versioning, JSONL audit), `memory/store.py` (in-memory cache, write-through, RAG safety, eviction). Intelligence (Epic 24): `memory/decay.py` (time-based confidence decay), `memory/reinforcement.py` (access-based boosting), `memory/contradictions.py` (conflict detection), `memory/gc.py` (garbage collection). Retrieval (Epic 25+34): `memory/retrieval.py` (BM25-scored ranked retrieval with stemming and stop-word filtering), `memory/bm25.py` (pure Python BM25 scoring engine), `memory/injection.py` (context injection), `memory/seeding.py` (initial population), `memory/io.py` (import/export). `server_memory_tools.py` exposes the `tapps_memory` MCP tool with 13 actions: save, get, list, delete, search (with ranked BM25 scoring by default), reinforce, gc, contradictions (detect project state conflicts), reseed (re-seed from profile), import/export (JSON file I/O), consolidate (merge related entries with provenance), unconsolidate (undo consolidation, restore sources). Get on a consolidated entry includes provenance (source entries). Search/list filter out consolidated sources by default (`include_sources=True` to show all). Search returns composite scores (relevance + confidence + recency + frequency) and stale flags. List/search responses are curated with summaries and limits to avoid context-window bloat. Auto-GC triggers in `tapps_session_start` when memory exceeds 80% capacity (`gc_auto_threshold` setting). Storage lives at `{project_root}/.tapps-mcp/memory/`.
+`memory/` provides persistent cross-session knowledge sharing via `tapps_memory`. Core: `memory/models.py` (MemoryEntry, enums including `shared` scope, validators), `memory/persistence.py` (SQLite with WAL, FTS5, schema versioning, JSONL audit), `memory/store.py` (in-memory cache, write-through, RAG safety, eviction). Intelligence (Epic 24): `memory/decay.py` (time-based confidence decay), `memory/reinforcement.py` (access-based boosting), `memory/contradictions.py` (conflict detection), `memory/gc.py` (garbage collection). Retrieval (Epic 25+34): `memory/retrieval.py` (BM25-scored ranked retrieval with stemming and stop-word filtering), `memory/bm25.py` (pure Python BM25 scoring engine), `memory/injection.py` (context injection), `memory/seeding.py` (initial population), `memory/io.py` (import/export). Federation (Epic 64): `memory/federation.py` (cross-project memory sharing via central hub at `~/.tapps-mcp/memory/federated.db`, YAML config with project registry and subscriptions, publish/subscribe model, federated search with local boost). `server_memory_tools.py` exposes the `tapps_memory` MCP tool with 20 actions: save, save_bulk, get, list, delete, search (with ranked BM25 scoring by default), reinforce, gc, contradictions (detect project state conflicts), reseed (re-seed from profile), import/export (JSON file I/O), consolidate (merge related entries with provenance), unconsolidate (undo consolidation, restore sources), federate_register/publish/subscribe/sync/search/status (cross-project federation). `MemoryScope` has four values: `project`, `branch`, `session`, `shared` (eligible for federation). Get on a consolidated entry includes provenance (source entries). Search/list filter out consolidated sources by default (`include_sources=True` to show all). Search returns composite scores (relevance + confidence + recency + frequency) and stale flags. List/search responses are curated with summaries and limits to avoid context-window bloat. Auto-GC triggers in `tapps_session_start` when memory exceeds 80% capacity (`gc_auto_threshold` setting). Storage lives at `{project_root}/.tapps-mcp/memory/`.
 
 ### Platform generation
 

@@ -40,6 +40,8 @@ _VALID_ACTIONS = {
     "save", "save_bulk", "get", "list", "delete", "search",
     "reinforce", "gc", "contradictions", "reseed",
     "import", "export", "consolidate", "unconsolidate",
+    "federate_register", "federate_publish", "federate_subscribe",
+    "federate_sync", "federate_search", "federate_status",
 }
 
 _BULK_SAVE_MAX_ENTRIES = 50
@@ -81,6 +83,11 @@ class _Params:
     dry_run: bool
     # Retrieval deduplication (Epic 58, Story 58.5)
     include_sources: bool
+    # Federation parameters (Epic 64)
+    project_id: str = ""
+    sources: list[str] = dataclasses.field(default_factory=list)
+    min_confidence: float = 0.5
+    include_hub: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +116,10 @@ async def tapps_memory(
     entry_ids: str = "",
     dry_run: bool = False,
     include_sources: bool = False,
+    project_id: str = "",
+    sources: str = "",
+    min_confidence: float = 0.5,
+    include_hub: bool = True,
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
@@ -168,6 +179,15 @@ async def tapps_memory(
             Use dry_run=True to preview. (Epic 58, Story 58.4)
         unconsolidate: Undo a consolidation. Restores source entries and removes the
             consolidated entry. Requires key of the consolidated entry. (Epic 58, Story 58.6)
+        federate_register: Register this project in the federation hub for cross-project sharing.
+            Optional project_id (auto-detected) and tags. (Epic 64)
+        federate_publish: Publish shared-scope memories to the federation hub.
+            Optional key list to publish specific entries. (Epic 64)
+        federate_subscribe: Subscribe to memories from other projects.
+            Requires sources (comma-separated project IDs). Optional tags, min_confidence. (Epic 64)
+        federate_sync: Pull subscribed memories from the hub into local store. (Epic 64)
+        federate_search: Search across local and federated memories. Uses query param. (Epic 64)
+        federate_status: Show federation hub status and registered projects. (Epic 64)
     """
     await ensure_session_initialized()
     _record_call("tapps_memory")
@@ -192,6 +212,7 @@ async def tapps_memory(
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     entry_id_list = [e.strip() for e in entry_ids.split(",") if e.strip()] if entry_ids else []
+    source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else []
 
     params = _Params(
         key=key, value=value, tier=tier, source=source,
@@ -200,6 +221,8 @@ async def tapps_memory(
         ranked=ranked, limit=limit, include_summary=include_summary,
         file_path=file_path, overwrite=overwrite, entries=entries,
         entry_ids=entry_id_list, dry_run=dry_run, include_sources=include_sources,
+        project_id=project_id, sources=source_list,
+        min_confidence=min_confidence, include_hub=include_hub,
     )
 
     try:
@@ -864,6 +887,195 @@ def _find_entries_by_query(
 
 
 # ---------------------------------------------------------------------------
+# Federation action handlers (Epic 64)
+# ---------------------------------------------------------------------------
+
+
+def _handle_federate_register(store: MemoryStore, params: _Params) -> dict[str, Any]:
+    """Register this project in the federation hub."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.memory.federation import register_project
+
+    settings = load_settings()
+    pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
+    tags = params.tag_list or []
+
+    config = register_project(
+        project_id=pid,
+        project_root=str(settings.project_root),
+        tags=tags,
+    )
+
+    return {
+        "action": "federate_register",
+        "project_id": pid,
+        "registered_projects": len(config.projects),
+        "tags": tags,
+    }
+
+
+def _handle_federate_publish(store: MemoryStore, params: _Params) -> dict[str, Any]:
+    """Publish shared-scope memories to the federation hub."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.memory.federation import FederatedStore, sync_to_hub
+
+    settings = load_settings()
+    pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
+    keys = [params.key] if params.key else None
+
+    federated = FederatedStore()
+    try:
+        result = sync_to_hub(
+            store=store,
+            federated_store=federated,
+            project_id=pid,
+            project_root=str(settings.project_root),
+            keys=keys,
+        )
+    finally:
+        federated.close()
+
+    return {
+        "action": "federate_publish",
+        "project_id": pid,
+        **result,
+    }
+
+
+def _handle_federate_subscribe(store: MemoryStore, params: _Params) -> dict[str, Any]:
+    """Subscribe to memories from other projects."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.memory.federation import add_subscription
+
+    settings = load_settings()
+    pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
+
+    if not params.sources:
+        return {"error": "missing_sources", "message": "sources parameter required for subscribe."}
+
+    config = add_subscription(
+        subscriber=pid,
+        sources=params.sources,
+        tag_filter=params.tag_list or None,
+        min_confidence=params.min_confidence,
+    )
+
+    return {
+        "action": "federate_subscribe",
+        "subscriber": pid,
+        "sources": params.sources,
+        "tag_filter": params.tag_list,
+        "subscriptions": len(config.subscriptions),
+    }
+
+
+def _handle_federate_sync(store: MemoryStore, params: _Params) -> dict[str, Any]:
+    """Pull subscribed memories from the federation hub."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.memory.federation import FederatedStore, sync_from_hub
+
+    settings = load_settings()
+    pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
+
+    federated = FederatedStore()
+    try:
+        result = sync_from_hub(
+            store=store,
+            federated_store=federated,
+            project_id=pid,
+        )
+    finally:
+        federated.close()
+
+    return {
+        "action": "federate_sync",
+        "project_id": pid,
+        **result,
+    }
+
+
+def _handle_federate_search(store: MemoryStore, params: _Params) -> dict[str, Any]:
+    """Search across local and federated memories."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.memory.federation import FederatedStore, federated_search
+
+    if not params.query:
+        return {"error": "missing_query", "message": "query parameter required for federate_search."}
+
+    settings = load_settings()
+    pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
+    result_limit = params.limit if params.limit > 0 else 20
+
+    federated = FederatedStore()
+    try:
+        results = federated_search(
+            query=params.query,
+            local_store=store,
+            federated_store=federated,
+            project_id=pid,
+            include_local=True,
+            include_hub=params.include_hub,
+            max_results=result_limit,
+        )
+    finally:
+        federated.close()
+
+    return {
+        "action": "federate_search",
+        "query": params.query,
+        "result_count": len(results),
+        "results": [
+            {
+                "key": r.key,
+                "value": r.value[:200] + ("..." if len(r.value) > 200 else ""),
+                "source": r.source,
+                "project_id": r.project_id,
+                "confidence": round(r.confidence, 3),
+                "tier": r.tier,
+                "tags": r.tags,
+                "relevance_score": round(r.relevance_score, 3),
+            }
+            for r in results
+        ],
+    }
+
+
+def _handle_federate_status(store: MemoryStore, params: _Params) -> dict[str, Any]:
+    """Show federation hub status."""
+    from tapps_core.memory.federation import FederatedStore, load_federation_config
+
+    config = load_federation_config()
+    federated = FederatedStore()
+    try:
+        stats = federated.get_stats()
+    finally:
+        federated.close()
+
+    return {
+        "action": "federate_status",
+        "registered_projects": [
+            {
+                "project_id": p.project_id,
+                "project_root": p.project_root,
+                "tags": p.tags,
+                "registered_at": p.registered_at,
+            }
+            for p in config.projects
+        ],
+        "subscriptions": [
+            {
+                "subscriber": s.subscriber,
+                "sources": s.sources,
+                "tag_filter": s.tag_filter,
+                "min_confidence": s.min_confidence,
+            }
+            for s in config.subscriptions
+        ],
+        "hub_stats": stats,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Dispatch table — maps action names to handler functions
 # ---------------------------------------------------------------------------
 
@@ -882,6 +1094,12 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "export": _handle_export,
     "consolidate": _handle_consolidate,
     "unconsolidate": _handle_unconsolidate,
+    "federate_register": _handle_federate_register,
+    "federate_publish": _handle_federate_publish,
+    "federate_subscribe": _handle_federate_subscribe,
+    "federate_sync": _handle_federate_sync,
+    "federate_search": _handle_federate_search,
+    "federate_status": _handle_federate_status,
 }
 
 

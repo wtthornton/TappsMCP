@@ -49,9 +49,10 @@ class TestMemoryScope:
         assert MemoryScope.project == "project"
         assert MemoryScope.branch == "branch"
         assert MemoryScope.session == "session"
+        assert MemoryScope.shared == "shared"
 
     def test_member_count(self) -> None:
-        assert len(MemoryScope) == 3
+        assert len(MemoryScope) == 4
 
 
 class TestMemoryEntry:

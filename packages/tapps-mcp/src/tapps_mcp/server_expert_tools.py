@@ -27,7 +27,7 @@ from mcp.types import ToolAnnotations
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)  # type: ignore[assignment]
 
-_VALID_ACTIONS = {"list", "add", "remove", "scaffold", "validate"}
+_VALID_ACTIONS = {"list", "add", "remove", "scaffold", "validate", "auto_generate"}
 
 _ANNOTATIONS_EXPERTS = ToolAnnotations(
     readOnlyHint=False,
@@ -322,6 +322,51 @@ def _handle_validate(project_root: Path) -> dict[str, Any]:
     }
 
 
+def _handle_auto_generate(
+    project_root: Path,
+    dry_run: bool,
+    max_experts: int,
+    include_knowledge: bool,
+) -> dict[str, Any]:
+    """Auto-generate business experts from codebase analysis."""
+    from tapps_core.experts.auto_generator import auto_generate_experts
+    from tapps_mcp.project.profiler import detect_project_profile
+
+    profile = detect_project_profile(project_root)
+    result = auto_generate_experts(
+        project_root=project_root,
+        libraries=profile.tech_stack.libraries,
+        frameworks=profile.tech_stack.frameworks,
+        domains=profile.tech_stack.domains,
+        max_experts=max_experts,
+        dry_run=dry_run,
+        include_knowledge=include_knowledge,
+    )
+
+    return {
+        "action": "auto_generate",
+        "dry_run": dry_run,
+        "suggestions": [
+            {
+                "domain": s.domain,
+                "expert_name": s.expert_name,
+                "description": s.description,
+                "keywords": s.keywords,
+                "confidence": round(s.confidence, 2),
+                "rationale": s.rationale,
+                "detected_libraries": s.detected_libraries,
+            }
+            for s in result.suggestions
+        ],
+        "generated": result.generated,
+        "scaffolded": result.scaffolded,
+        "skipped_builtin_count": len(result.skipped_builtin),
+        "skipped_existing_count": len(result.skipped_existing),
+        "suggestion_count": len(result.suggestions),
+        "generated_count": len(result.generated),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Public MCP tool
 # ---------------------------------------------------------------------------
@@ -336,11 +381,14 @@ async def tapps_manage_experts(
     keywords: str = "",
     rag_enabled: bool = True,
     knowledge_dir: str = "",
+    dry_run: bool = True,
+    max_experts: int = 5,
+    include_knowledge: bool = True,
 ) -> dict[str, Any]:
-    """Manage user-defined business experts (CRUD + validation).
+    """Manage user-defined business experts (CRUD + validation + auto-generation).
 
     Args:
-        action: One of "list", "add", "remove", "scaffold", "validate".
+        action: One of "list", "add", "remove", "scaffold", "validate", "auto_generate".
         expert_id: Expert identifier (required for add/remove/scaffold).
             Must start with "expert-".
         expert_name: Human-readable name (required for add).
@@ -349,6 +397,9 @@ async def tapps_manage_experts(
         keywords: Comma-separated keywords for domain detection (optional).
         rag_enabled: Whether RAG retrieval is enabled (default: True).
         knowledge_dir: Override knowledge directory name (optional).
+        dry_run: For auto_generate: preview suggestions without writing (default: True).
+        max_experts: For auto_generate: max experts to generate (default: 5).
+        include_knowledge: For auto_generate: scaffold knowledge dirs (default: True).
 
     Actions:
         list: List all configured business experts with knowledge status.
@@ -357,6 +408,7 @@ async def tapps_manage_experts(
         remove: Remove a business expert from experts.yaml.
         scaffold: Create knowledge directory with README template.
         validate: Validate knowledge directories for all experts.
+        auto_generate: Analyze codebase and suggest/create experts for uncovered domains.
     """
     _record_call("tapps_manage_experts")
 
@@ -395,6 +447,13 @@ async def tapps_manage_experts(
             result_data = _handle_remove(project_root, expert_id=expert_id)
         elif action == "scaffold":
             result_data = _handle_scaffold(project_root, expert_id=expert_id)
+        elif action == "auto_generate":
+            result_data = _handle_auto_generate(
+                project_root,
+                dry_run=dry_run,
+                max_experts=max_experts,
+                include_knowledge=include_knowledge,
+            )
         else:  # validate
             result_data = _handle_validate(project_root)
     except Exception as exc:

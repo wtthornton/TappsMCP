@@ -45,6 +45,7 @@ class MemoryScope(StrEnum):
     project = "project"  # visible across the entire project
     branch = "branch"  # scoped to a git branch
     session = "session"  # ephemeral, current session only
+    shared = "shared"  # eligible for cross-project federation
 
 
 # ---------------------------------------------------------------------------

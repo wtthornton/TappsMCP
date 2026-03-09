@@ -316,6 +316,8 @@ def _load_business_experts(cfg: BootstrapConfig, state: _BootstrapState) -> None
     """Load and optionally scaffold business experts from experts.yaml."""
     experts_yaml = state.project_root / ".tapps-mcp" / "experts.yaml"
     if not experts_yaml.exists():
+        # Suggest auto-generation if profile has uncovered domains
+        _suggest_auto_generate(state)
         return
 
     try:
@@ -359,6 +361,41 @@ def _load_business_experts(cfg: BootstrapConfig, state: _BootstrapState) -> None
             summary["scaffold_error"] = str(exc)
 
     state.result["business_experts"] = summary
+
+
+def _suggest_auto_generate(state: _BootstrapState) -> None:
+    """Check if auto-generation would find useful expert suggestions."""
+    try:
+        profile_data = state.result.get("project_profile", {})
+        tech_stack = profile_data.get("tech_stack", {})
+        libraries = tech_stack.get("libraries", [])
+        frameworks = tech_stack.get("frameworks", [])
+        domains = tech_stack.get("domains", [])
+
+        if not (libraries or frameworks):
+            return
+
+        from tapps_core.experts.auto_generator import analyze_expert_gaps
+
+        suggestions = analyze_expert_gaps(
+            libraries=libraries,
+            frameworks=frameworks,
+            domains=domains,
+            project_root=state.project_root,
+        )
+
+        if suggestions:
+            state.result["auto_expert_suggestions"] = {
+                "available": True,
+                "suggestion_count": len(suggestions),
+                "domains": [s.domain for s in suggestions],
+                "hint": (
+                    "Run tapps_manage_experts(action='auto_generate') to create "
+                    f"business experts for {len(suggestions)} uncovered domain(s)."
+                ),
+            }
+    except Exception:
+        pass  # Non-critical; don't block init
 
 
 def _detect_docker_environment(state: _BootstrapState) -> None:
