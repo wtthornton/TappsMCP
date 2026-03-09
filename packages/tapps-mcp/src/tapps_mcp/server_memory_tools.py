@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 from tapps_mcp.server_helpers import (
     _get_memory_store,
-    _get_settings,
     ensure_session_initialized,
     error_response,
     success_response,
@@ -1145,7 +1144,9 @@ async def _handle_validate(
     from tapps_core.knowledge.lookup import LookupEngine
     from tapps_core.memory.doc_validation import MemoryDocValidator
 
-    settings = _get_settings()
+    from tapps_core.config.settings import load_settings
+
+    settings = load_settings()
     lookup = LookupEngine(settings=settings)
     validator = MemoryDocValidator(lookup)
 
