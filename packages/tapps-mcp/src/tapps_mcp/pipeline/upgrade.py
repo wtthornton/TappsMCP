@@ -321,15 +321,12 @@ def upgrade_pipeline(
             "transport": settings.docker.transport,
             "profile_preserved": True,
         }
-        # Determine companion installation status
-        installed_companions: list[str] = []
-        missing_companions: list[str] = []
-        for companion in settings.docker.companions:
-            # Best-effort check — companions are external MCP servers
-            installed_companions.append(companion)
+        # Report companions as "configured" — actual runtime availability
+        # depends on Docker Desktop and cannot be verified from here.
         docker_info["companions_status"] = {
-            "installed": installed_companions,
-            "missing": missing_companions,
+            "configured": list(settings.docker.companions),
+            "status": "configured",
+            "note": "runtime availability depends on Docker Desktop",
         }
         result["docker"] = docker_info
         log.info(
