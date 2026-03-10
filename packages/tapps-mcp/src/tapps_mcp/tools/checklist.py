@@ -26,6 +26,55 @@ from pydantic import BaseModel, Field
 logger = structlog.get_logger(__name__)
 
 
+async def _get_git_context(commit_sha: str = "") -> dict[str, Any] | None:
+    """Retrieve current git context (branch, HEAD SHA, dirty status).
+
+    Returns None if git is unavailable or not in a git repo.
+    If *commit_sha* is provided, it overrides the auto-detected HEAD SHA.
+    """
+    from tapps_mcp.tools.subprocess_runner import run_command_async
+
+    try:
+        branch_result = await run_command_async(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            timeout=5,
+        )
+        if branch_result.returncode != 0:
+            return None
+        branch = branch_result.stdout.strip()
+
+        sha_short_result = await run_command_async(
+            ["git", "rev-parse", "--short", "HEAD"],
+            timeout=5,
+        )
+        sha_full_result = await run_command_async(
+            ["git", "rev-parse", "HEAD"],
+            timeout=5,
+        )
+        dirty_result = await run_command_async(
+            ["git", "status", "--porcelain"],
+            timeout=5,
+        )
+
+        head_sha = sha_short_result.stdout.strip() if sha_short_result.returncode == 0 else ""
+        head_sha_full = sha_full_result.stdout.strip() if sha_full_result.returncode == 0 else ""
+        dirty = bool(dirty_result.stdout.strip()) if dirty_result.returncode == 0 else False
+
+        if commit_sha.strip():
+            head_sha = commit_sha.strip()[:8]
+            head_sha_full = commit_sha.strip()
+
+        return {
+            "branch": branch,
+            "head_sha": head_sha,
+            "head_sha_full": head_sha_full,
+            "dirty": dirty,
+        }
+    except Exception:
+        logger.debug("git_context_retrieval_failed", exc_info=True)
+        return None
+
+
 class ToolCallRecord(BaseModel):
     """Record of a single tool invocation."""
 
