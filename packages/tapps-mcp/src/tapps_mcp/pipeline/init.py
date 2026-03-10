@@ -1023,28 +1023,77 @@ def _bootstrap_claude(
     return "created"
 
 
+def _split_by_h1_headings(content: str) -> list[tuple[str, str]]:
+    """Split Markdown content by ``# `` (H1) headings.
+
+    Returns a list of ``(heading_line, body)`` tuples.  Content before the
+    first H1 heading is captured with an empty ``heading_line``.  Only
+    top-level ``# `` headings act as boundaries -- ``##``, ``###`` etc.
+    are treated as regular body content.
+
+    The *heading_line* includes the trailing newline (if present) so that
+    reassembly via simple concatenation preserves the original whitespace.
+    """
+    import re
+
+    sections: list[tuple[str, str]] = []
+    current_heading = ""
+    current_lines: list[str] = []
+
+    for line in content.splitlines(keepends=True):
+        if re.match(r"^# ", line):
+            # Flush previous section
+            if current_lines or current_heading:
+                sections.append((current_heading, "".join(current_lines)))
+            current_heading = line
+            current_lines = []
+        else:
+            current_lines.append(line)
+
+    # Flush last section
+    if current_lines or current_heading:
+        sections.append((current_heading, "".join(current_lines)))
+
+    return sections
+
+
 def _replace_tapps_section(existing: str, new_tapps_content: str) -> str:
     """Replace the TAPPS section in an existing CLAUDE.md.
 
     Finds the ``# TAPPS Quality Pipeline`` heading and replaces everything
     from that heading to the next top-level heading (or end of file) with
     *new_tapps_content*.
-    """
-    import re
 
-    # Match from "# TAPPS Quality Pipeline" to the next top-level heading or EOF
-    pattern = r"(?m)^# TAPPS Quality Pipeline.*?(?=\n# (?!TAPPS)|\Z)"
-    match = re.search(pattern, existing, re.DOTALL)
-    if match:
-        before = existing[: match.start()].rstrip()
-        after = existing[match.end() :].lstrip("\n")
-        parts = [before, new_tapps_content]
-        if after:
-            parts.append(after)
-        return "\n\n".join(parts)
-    # Fallback: no TAPPS heading found, just replace all TAPPS-referencing content
-    # by appending fresh content
-    return existing.rstrip() + "\n\n" + new_tapps_content
+    Uses :func:`_split_by_h1_headings` for robust heading-based splitting
+    instead of fragile regex matching.
+    """
+    sections = _split_by_h1_headings(existing)
+
+    tapps_idx: int | None = None
+    for idx, (heading, _body) in enumerate(sections):
+        if heading.startswith("# TAPPS Quality Pipeline"):
+            tapps_idx = idx
+            break
+
+    if tapps_idx is None:
+        # No TAPPS heading found -- append fresh content
+        return existing.rstrip() + "\n\n" + new_tapps_content
+
+    # Rebuild: sections before TAPPS + new content + sections after TAPPS
+    before_parts: list[str] = []
+    for heading, body in sections[:tapps_idx]:
+        before_parts.append(heading + body)
+    before = "".join(before_parts).rstrip()
+
+    after_parts: list[str] = []
+    for heading, body in sections[tapps_idx + 1 :]:
+        after_parts.append(heading + body)
+    after = "".join(after_parts).lstrip("\n")
+
+    parts = [before, new_tapps_content] if before else [new_tapps_content]
+    if after:
+        parts.append(after)
+    return "\n\n".join(parts)
 
 
 # Both entries needed for Claude Code permissions: bare match is the reliable

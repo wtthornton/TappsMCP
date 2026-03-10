@@ -6,6 +6,7 @@ from tapps_mcp import __version__
 from tapps_mcp.pipeline.init import (
     _bootstrap_claude,
     _replace_tapps_section,
+    _split_by_h1_headings,
     bootstrap_pipeline,
 )
 from tapps_mcp.prompts.prompt_loader import load_agents_template, load_platform_rules
@@ -446,3 +447,151 @@ class TestReplaceTappsSection:
         assert "Fresh content only." in result
         assert "Old sub content." not in result
         assert "# Another Section" in result
+
+    def test_tapps_section_at_start_of_file(self):
+        """TAPPS section is the first H1 heading in the file."""
+        existing = "# TAPPS Quality Pipeline\n\nOld content.\n\n# User Section\n\nUser text."
+        new_tapps = "# TAPPS Quality Pipeline\n\nReplaced."
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        assert result.startswith("# TAPPS Quality Pipeline\n\nReplaced.")
+        assert "Old content." not in result
+        assert "# User Section" in result
+        assert "User text." in result
+
+    def test_tapps_only_heading_in_file(self):
+        """File has no other H1 headings besides TAPPS."""
+        existing = "# TAPPS Quality Pipeline\n\nOld content only."
+        new_tapps = "# TAPPS Quality Pipeline\n\nBrand new."
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        assert result == "# TAPPS Quality Pipeline\n\nBrand new."
+        assert "Old content only." not in result
+
+    def test_tapps_in_middle_between_user_sections(self):
+        """TAPPS section sits between two user-defined H1 sections."""
+        existing = (
+            "# Intro\n\nHello.\n\n"
+            "# TAPPS Quality Pipeline\n\nOld TAPPS.\n\n"
+            "# Appendix\n\nEnd."
+        )
+        new_tapps = "# TAPPS Quality Pipeline\n\nUpdated TAPPS."
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        assert "# Intro" in result
+        assert "Hello." in result
+        assert "Updated TAPPS." in result
+        assert "Old TAPPS." not in result
+        assert "# Appendix" in result
+        assert "End." in result
+
+    def test_nested_headings_not_treated_as_boundaries(self):
+        """H2 and H3 inside user sections must NOT split at those headings."""
+        existing = (
+            "# User Section\n\n## Sub heading\n\n### Deep heading\n\nNested.\n\n"
+            "# TAPPS Quality Pipeline\n\nOld.\n\n"
+            "# Final\n\nDone."
+        )
+        new_tapps = "# TAPPS Quality Pipeline\n\nNew."
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        assert "## Sub heading" in result
+        assert "### Deep heading" in result
+        assert "Nested." in result
+        assert "New." in result
+        assert "Old." not in result
+        assert "# Final" in result
+
+    def test_preserves_trailing_newlines(self):
+        """Trailing newlines in the replacement content are preserved."""
+        existing = "# Preamble\n\nText.\n\n# TAPPS Quality Pipeline\n\nOld.\n\n# End\n\nFin.\n"
+        new_tapps = "# TAPPS Quality Pipeline\n\nNew content.\n"
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        # The new TAPPS content ends with \n and should be preserved
+        assert "New content.\n" in result
+        assert "Old." not in result
+
+    def test_content_before_first_heading_preserved(self):
+        """Content before any H1 heading (e.g., frontmatter) is preserved."""
+        existing = (
+            "---\ntitle: My Doc\n---\n\nPreamble text.\n\n"
+            "# TAPPS Quality Pipeline\n\nOld.\n\n"
+            "# Other\n\nStuff."
+        )
+        new_tapps = "# TAPPS Quality Pipeline\n\nFresh."
+
+        result = _replace_tapps_section(existing, new_tapps)
+
+        assert "---\ntitle: My Doc\n---" in result
+        assert "Preamble text." in result
+        assert "Fresh." in result
+        assert "Old." not in result
+        assert "# Other" in result
+
+
+class TestSplitByH1Headings:
+    """Tests for _split_by_h1_headings() helper."""
+
+    def test_single_heading(self):
+        content = "# Heading\n\nBody text.\n"
+        sections = _split_by_h1_headings(content)
+
+        assert len(sections) == 1
+        assert sections[0][0] == "# Heading\n"
+        assert "Body text." in sections[0][1]
+
+    def test_multiple_headings(self):
+        content = "# First\n\nA.\n\n# Second\n\nB.\n"
+        sections = _split_by_h1_headings(content)
+
+        assert len(sections) == 2
+        assert sections[0][0] == "# First\n"
+        assert "A." in sections[0][1]
+        assert sections[1][0] == "# Second\n"
+        assert "B." in sections[1][1]
+
+    def test_content_before_first_heading(self):
+        content = "Preamble.\n\n# Heading\n\nBody.\n"
+        sections = _split_by_h1_headings(content)
+
+        assert len(sections) == 2
+        assert sections[0][0] == ""
+        assert "Preamble." in sections[0][1]
+        assert sections[1][0] == "# Heading\n"
+
+    def test_h2_h3_not_boundaries(self):
+        content = "# Top\n\n## Sub\n\n### Deep\n\nText.\n"
+        sections = _split_by_h1_headings(content)
+
+        assert len(sections) == 1
+        assert "## Sub" in sections[0][1]
+        assert "### Deep" in sections[0][1]
+
+    def test_empty_content(self):
+        sections = _split_by_h1_headings("")
+        assert sections == []
+
+    def test_no_headings(self):
+        content = "Just plain text.\nMore text.\n"
+        sections = _split_by_h1_headings(content)
+
+        assert len(sections) == 1
+        assert sections[0][0] == ""
+        assert "Just plain text." in sections[0][1]
+
+    def test_reassembly_preserves_original(self):
+        """Concatenating heading + body for all sections reproduces input."""
+        content = (
+            "Preamble.\n\n"
+            "# First\n\nA.\n\n"
+            "# Second\n\n## Sub\n\nB.\n"
+        )
+        sections = _split_by_h1_headings(content)
+        reassembled = "".join(h + b for h, b in sections)
+        assert reassembled == content
