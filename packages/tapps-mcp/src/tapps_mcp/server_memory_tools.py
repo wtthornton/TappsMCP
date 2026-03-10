@@ -61,6 +61,7 @@ _VALID_ACTIONS = {
     "federate_status",
     "index_session",
     "validate",
+    "maintain",
 }
 
 # Async actions require special dispatch (doc lookups are async)
@@ -1248,6 +1249,59 @@ def _handle_federate_status(store: MemoryStore, params: _Params) -> dict[str, An
     }
 
 
+def _handle_maintain(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Run memory maintenance: GC + consolidation + deduplication (Epic 65.15)."""
+    gc_archived = 0
+    consolidated = 0
+    deduplicated = 0
+
+    # Run GC (same approach as _handle_gc)
+    try:
+        from tapps_core.memory.decay import DecayConfig
+        from tapps_core.memory.gc import MemoryGarbageCollector
+
+        config = DecayConfig()
+        gc_runner = MemoryGarbageCollector(config)
+        snap = store.snapshot()
+        candidates = gc_runner.identify_candidates(snap.entries)
+        for candidate in candidates:
+            if store.delete(candidate.key):
+                gc_archived += 1
+    except Exception:
+        pass
+
+    # Run consolidation scan
+    try:
+        from tapps_core.memory.auto_consolidation import run_periodic_consolidation_scan
+
+        consol_result = run_periodic_consolidation_scan(store)
+        consolidated = getattr(consol_result, "groups_formed", 0) if consol_result else 0
+    except Exception:
+        pass
+
+    # Deduplication: find exact duplicate values and merge
+    try:
+        snapshot = store.snapshot()
+        seen_values: dict[str, str] = {}  # value hash -> first key
+        for entry in snapshot.entries:
+            val_hash = entry.value.strip().lower()
+            if val_hash in seen_values and seen_values[val_hash] != entry.key:
+                store.delete(entry.key)
+                deduplicated += 1
+            else:
+                seen_values[val_hash] = entry.key
+    except Exception:
+        pass
+
+    return {
+        "action": "maintain",
+        "gc_archived": gc_archived,
+        "consolidated": consolidated,
+        "deduplicated": deduplicated,
+        "store_metadata": _store_metadata(store),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table — maps action names to handler functions
 # ---------------------------------------------------------------------------
@@ -1274,6 +1328,7 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "federate_search": _handle_federate_search,
     "federate_status": _handle_federate_status,
     "index_session": _handle_index_session,
+    "maintain": _handle_maintain,
 }
 
 

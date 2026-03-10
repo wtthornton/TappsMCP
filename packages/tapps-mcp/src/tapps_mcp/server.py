@@ -984,6 +984,12 @@ async def tapps_checklist(
                         "files_validated": vc_data.get("files_validated", 0),
                         "all_gates_passed": vc_data.get("all_gates_passed", False),
                     }
+                    # Epic 66.2: Add validation_note when 0 files validated
+                    if vc_data.get("files_validated", 0) == 0:
+                        auto_run_results["validate_changed"]["validation_note"] = (
+                            "Validation ran but 0 files validated. "
+                            "Consider tapps_quick_check on changed files."
+                        )
                 except Exception as exc:
                     auto_run_results["validate_changed"] = {
                         "success": False,
@@ -999,6 +1005,17 @@ async def tapps_checklist(
         if auto_run_results:
             resp_data["auto_run_results"] = auto_run_results
         resp = success_response("tapps_checklist", elapsed_ms, resp_data)
+
+        # Epic 66.2: Surface validation_note in next_steps
+        if auto_run_results.get("validate_changed", {}).get("validation_note"):
+            next_steps = resp_data.get("next_steps", [])
+            if not isinstance(next_steps, list):
+                next_steps = []
+            next_steps.append(
+                "tapps_validate_changed ran but validated 0 files. "
+                "Use tapps_quick_check on individual changed files as fallback."
+            )
+            resp_data["next_steps"] = next_steps
 
         # Attach structured output
         try:

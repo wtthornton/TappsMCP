@@ -452,5 +452,6 @@ class TestValidActions:
             "import", "export", "consolidate", "unconsolidate",
             "federate_register", "federate_publish", "federate_subscribe",
             "federate_sync", "federate_search", "federate_status",
+            "index_session", "validate", "maintain",
         }
         assert _VALID_ACTIONS == expected

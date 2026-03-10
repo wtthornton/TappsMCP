@@ -36,6 +36,45 @@ logger = structlog.get_logger(__name__)
 _MAX_ENTRIES = 500
 
 # RAG safety match count threshold for blocking content.
+# (moved up for visibility, original kept below for compat)
+
+
+def _validate_write_rules(
+    key: str,
+    value: str,
+    write_rules: Any,  # noqa: ANN401
+) -> str | None:
+    """Validate memory save against write rules (Epic 65.17).
+
+    Returns None if valid, or an error message string if invalid.
+    """
+    if write_rules is None:
+        return None
+
+    enforced = getattr(write_rules, "enforced", False)
+    if not enforced:
+        return None
+
+    # Check blocked keywords
+    blocked = getattr(write_rules, "block_sensitive_keywords", [])
+    combined = f"{key} {value}".lower()
+    for kw in blocked:
+        if kw.lower() in combined:
+            return f"Blocked by write rule: contains sensitive keyword '{kw}'"
+
+    # Check min length
+    min_len = getattr(write_rules, "min_value_length", 0)
+    if min_len > 0 and len(value) < min_len:
+        return f"Value too short ({len(value)} < {min_len} chars)"
+
+    # Check max length
+    max_len = getattr(write_rules, "max_value_length", 4096)
+    if len(value) > max_len:
+        return f"Value too long ({len(value)} > {max_len} chars)"
+
+    return None
+
+# RAG safety match count threshold for blocking content.
 _RAG_BLOCK_THRESHOLD = 3
 
 
@@ -62,12 +101,14 @@ class MemoryStore:
         *,
         consolidation_config: ConsolidationConfig | None = None,
         embedding_provider: EmbeddingProvider | None = None,
+        write_rules: Any = None,  # noqa: ANN401
     ) -> None:
         self._project_root = project_root
         self._persistence = MemoryPersistence(project_root)
         self._lock = threading.Lock()
         self._consolidation_config = consolidation_config or ConsolidationConfig()
         self._embedding_provider = embedding_provider
+        self._write_rules = write_rules
         self._consolidation_in_progress = False
 
         # Cold-start: load all entries into memory
@@ -126,6 +167,14 @@ class MemoryStore:
             confidence: Confidence score (-1.0 for auto from source).
             skip_consolidation: If True, skip auto-consolidation check.
         """
+        # Write rules validation (Epic 65.17)
+        wr_error = _validate_write_rules(key, value, self._write_rules)
+        if wr_error is not None:
+            return {
+                "error": "write_rules_violation",
+                "message": wr_error,
+            }
+
         # RAG safety check on value
         safety = check_content_safety(value)
         if not safety.safe and safety.match_count >= _RAG_BLOCK_THRESHOLD:

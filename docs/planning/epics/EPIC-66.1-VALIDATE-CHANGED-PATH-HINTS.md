@@ -1,6 +1,6 @@
 # Epic 66.1: validate_changed Path Mapping Hints (Tool UX)
 
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P2 | **LOE:** 2-3 days | **Source:** [TAPPS_MCP_TOOL_UX_REVIEW](../TAPPS_MCP_TOOL_UX_REVIEW.md)
 **Dependencies:** Epic 1, 8 (core quality, pipeline)
 

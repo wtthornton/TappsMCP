@@ -100,6 +100,7 @@ class MemoryRetriever:
         hybrid_config: object = None,
         reranker: Reranker | None = None,
         reranker_enabled: bool = False,
+        retrieval_policy: object | None = None,
     ) -> None:
         self._config = config or DecayConfig()
         self._bm25 = BM25Scorer()
@@ -110,6 +111,7 @@ class MemoryRetriever:
         self._hybrid_config = hybrid_config
         self._reranker = reranker
         self._reranker_enabled = reranker_enabled
+        self._retrieval_policy = retrieval_policy
 
     def search(
         self,
@@ -199,6 +201,15 @@ class MemoryRetriever:
                     stale=stale_flag,
                 )
             )
+
+        # Epic 65.14: Apply retrieval policy tag filtering
+        if self._retrieval_policy is not None:
+            blocked_tags = set(getattr(self._retrieval_policy, "block_sensitive_tags", []))
+            if blocked_tags:
+                scored = [
+                    s for s in scored
+                    if not blocked_tags.intersection(s.entry.tags)
+                ]
 
         # Sort by score descending
         scored.sort(key=lambda s: s.score, reverse=True)

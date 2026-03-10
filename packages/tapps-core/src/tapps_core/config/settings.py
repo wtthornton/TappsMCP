@@ -143,6 +143,10 @@ class MemoryWriteRules(BaseModel):
         ge=1,
         description="Maximum allowed value length (characters).",
     )
+    enforced: bool = Field(
+        default=False,
+        description="When True, block saves that violate write rules. Default: false (opt-in).",
+    )
 
 
 class MemoryAutoRecallSettings(BaseModel):
@@ -316,6 +320,45 @@ class MemorySessionIndexSettings(BaseModel):
     )
 
 
+class MemoryRetrievalPolicy(BaseModel):
+    """Retrieval policy for memory searches (Epic 65.14)."""
+
+    block_sensitive_tags: list[str] = Field(
+        default_factory=lambda: ["pii", "secret", "credentials"],
+        description="Entries with these tags are excluded from search unless explicitly requested.",
+    )
+    min_confidence: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Filter out entries below this confidence threshold.",
+    )
+    include_debug_trace: bool = Field(
+        default=False,
+        description="Add _used_memory_keys to response for debugging.",
+    )
+
+
+class MemoryMaintenanceSettings(BaseModel):
+    """Settings for memory maintenance schedule (Epic 65.15)."""
+
+    on_session_start: bool = Field(
+        default=False,
+        description="Run maintenance on session_start when capacity > threshold.",
+    )
+    interval_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Minimum hours between automatic maintenance runs.",
+    )
+    capacity_threshold: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Run maintenance when capacity exceeds this fraction.",
+    )
+
+
 class MemorySettings(BaseSettings):
     """Settings for the shared memory subsystem."""
 
@@ -371,6 +414,19 @@ class MemorySettings(BaseSettings):
     hybrid: MemoryHybridSettings = Field(
         default_factory=MemoryHybridSettings,
         description="Hybrid BM25+vector RRF settings (Epic 65.8).",
+    )
+    injection_max_tokens: int = Field(
+        default=2000,
+        ge=100,
+        description="Maximum tokens for memory injection context. Approximate: 1 token ~ 4 chars.",
+    )
+    retrieval_policy: MemoryRetrievalPolicy = Field(
+        default_factory=MemoryRetrievalPolicy,
+        description="Retrieval policy for memory searches (Epic 65.14).",
+    )
+    maintenance: MemoryMaintenanceSettings = Field(
+        default_factory=MemoryMaintenanceSettings,
+        description="Memory maintenance schedule (Epic 65.15).",
     )
 
 

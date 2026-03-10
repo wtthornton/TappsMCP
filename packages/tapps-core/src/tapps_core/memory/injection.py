@@ -30,6 +30,11 @@ _MIN_SCORE = 0.3
 _MIN_CONFIDENCE_MEDIUM = 0.5
 
 
+def estimate_tokens(text: str) -> int:
+    """Estimate token count. Approximation: 1 token ~ 4 characters."""
+    return max(1, len(text) // 4)
+
+
 # ---------------------------------------------------------------------------
 # Injection logic
 # ---------------------------------------------------------------------------
@@ -122,10 +127,29 @@ def inject_memories(
     if not safe_results:
         return {"memory_section": "", "memory_injected": 0, "memories": []}
 
+    # Context budget enforcement (Epic 65.16)
+    max_tokens = settings.memory.injection_max_tokens
+    budgeted_results: list[Any] = []
+    used_tokens = 0
+    for scored in safe_results[:max_inject]:
+        entry = scored.entry
+        tier = entry.tier.value if hasattr(entry.tier, "value") else str(entry.tier)
+        entry_text = (
+            f"- **{entry.key}** (confidence: {scored.effective_confidence:.2f}, "
+            f"tier: {tier}): {entry.value}"
+        )
+        entry_tokens = estimate_tokens(entry_text)
+        if used_tokens + entry_tokens > max_tokens and budgeted_results:
+            break
+        budgeted_results.append(scored)
+        used_tokens += entry_tokens
+
+    truncated = len(budgeted_results) < len(safe_results[:max_inject])
+
     # Format the injection section
     lines = ["### Project Memory"]
     summaries = []
-    for scored in safe_results[:max_inject]:
+    for scored in budgeted_results:
         entry = scored.entry
         tier = entry.tier.value if hasattr(entry.tier, "value") else str(entry.tier)
         lines.append(
@@ -142,8 +166,10 @@ def inject_memories(
 
     return {
         "memory_section": "\n".join(lines),
-        "memory_injected": len(safe_results[:max_inject]),
+        "memory_injected": len(budgeted_results),
         "memories": summaries,
+        "truncated": truncated,
+        "injected_tokens": used_tokens,
     }
 
 

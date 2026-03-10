@@ -544,7 +544,10 @@ async def tapps_validate_changed(
     paths = _discover_changed_files(file_paths, base_ref, settings.project_root)
 
     if not paths:
-        return _handle_no_changed_files(start, settings, _record_execution, _with_nudges)
+        return _handle_no_changed_files(
+            start, settings, _record_execution, _with_nudges,
+            explicit_paths=bool(file_paths.strip()),
+        )
 
     capped = len(paths) > MAX_BATCH_FILES
     extra_count = len(paths) - MAX_BATCH_FILES if capped else 0
@@ -620,6 +623,8 @@ def _handle_no_changed_files(
     settings: TappsMCPSettings,
     record_execution: Callable[..., object],
     with_nudges: Callable[..., dict[str, object]],
+    *,
+    explicit_paths: bool = False,
 ) -> dict[str, Any]:
     """Return early response when no changed Python files are found."""
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -632,16 +637,31 @@ def _handle_no_changed_files(
     task.add_done_callback(_background_tasks.discard)
 
     _write_validate_ok_marker(settings.project_root)
+
+    resp_data: dict[str, Any] = {
+        "files_validated": 0,
+        "all_gates_passed": True,
+        "total_security_issues": 0,
+        "results": [],
+        "summary": "No changed Python files found.",
+    }
+
+    if explicit_paths:
+        resp_data["path_hint"] = (
+            "Explicit paths provided but none validated. "
+            "If using Docker, check TAPPS_MCP_PROJECT_ROOT / "
+            "TAPPS_MCP_HOST_PROJECT_ROOT for path mapping."
+        )
+        resp_data["next_steps"] = [
+            "FALLBACK: Use tapps_quick_check on individual files when paths don't map.",
+            "Check that file paths are relative to server's project_root"
+            " or use TAPPS_MCP_HOST_PROJECT_ROOT.",
+        ]
+
     resp = success_response(
         "tapps_validate_changed",
         elapsed_ms,
-        {
-            "files_validated": 0,
-            "all_gates_passed": True,
-            "total_security_issues": 0,
-            "results": [],
-            "summary": "No changed Python files found.",
-        },
+        resp_data,
     )
     return with_nudges("tapps_validate_changed", resp)
 

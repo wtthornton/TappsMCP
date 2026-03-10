@@ -95,6 +95,16 @@
 
 *Source: [TAPPS_MCP_TOOL_UX_REVIEW](../TAPPS_MCP_TOOL_UX_REVIEW.md)*
 
+### Epic 74: Consumer Feedback — Automation & Pipeline UX (Proposed)
+
+*Source: HomeIQ `docs/tapps-feedback` (feedback-2026-03-10)*
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 74](EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX.md) | Consumer Feedback — Automation & Pipeline UX | P1–P2 | ~2–3 weeks | Epic 1, 8 | **Proposed** |
+
+Stories: [74.1](EPIC-74/story-74.1-quick-check-batch-mode.md) quick_check batch, [74.2](EPIC-74/story-74.2-checklist-compact-json-output.md) checklist compact/JSON, [74.3](EPIC-74/story-74.3-validate-changed-base-ref-warning.md) validate_changed base_ref warning, [74.4](EPIC-74/story-74.4-validate-changed-traceability.md) validate_changed traceability, [74.5](EPIC-74/story-74.5-mcp-config-validation.md) MCP config validation.
+
 ### Epic 70–73: Expert Agency-Personas Leverage (Proposed)
 
 *Source: [TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md](../../reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md)*

@@ -1,6 +1,6 @@
 # Epic 65.3: Configurable Capture Prompt & Write Rules (2026 Best Practices)
 
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P1 | **LOE:** 4-6 days | **Source:** [EPIC-65-MEMORY-2026-BEST-PRACTICES](../EPIC-65-MEMORY-2026-BEST-PRACTICES.md)
 **Dependencies:** Epic 23, config/settings
 

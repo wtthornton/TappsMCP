@@ -1,6 +1,6 @@
 # Epic 65.2: Markdown Export & Curation (2026 Best Practices)
 
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P1 | **LOE:** 3-5 days | **Source:** [EPIC-65-MEMORY-2026-BEST-PRACTICES](../EPIC-65-MEMORY-2026-BEST-PRACTICES.md)
 **Dependencies:** Epic 23, 42 (memory foundation, export action — both complete)
 
