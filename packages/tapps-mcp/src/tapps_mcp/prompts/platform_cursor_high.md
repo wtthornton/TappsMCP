@@ -55,6 +55,14 @@ Skipping this risks breaking downstream dependents.
 You MUST call `tapps_validate_config(file_path)` when changing Dockerfile, docker-compose, or infra config.
 This validates against security and operational best practices.
 
+## Memory System
+
+`tapps_memory` provides persistent cross-session knowledge with **20 actions**: save, save_bulk, get, list, delete, search, reinforce, gc, contradictions, reseed, import, export, consolidate, unconsolidate, and 6 federation actions (federate_register, federate_publish, federate_subscribe, federate_sync, federate_search, federate_status).
+
+**Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared (federation). Max 1500 entries.
+
+**Memory hooks:** Auto-recall injects relevant memories before each turn. Auto-capture saves durable facts on session end. Configure in `.tapps-mcp.yaml` under `memory_hooks`. Tune `min_score` to balance coverage vs noise.
+
 ## 5-Stage Pipeline
 
 Execute these stages IN ORDER for every code task:

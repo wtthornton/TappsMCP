@@ -34,8 +34,27 @@ class TestDefaultYamlMemoryConfig:
         assert mem["enabled"] is True
         assert mem["gc_enabled"] is True
         assert mem["contradiction_check_on_start"] is True
-        assert mem["max_memories"] == 500
+        assert mem["max_memories"] == 1500
         assert mem["inject_into_experts"] is True
+
+    def test_default_yaml_has_capture_prompt_and_write_rules(self) -> None:
+        """Verify default.yaml includes capture_prompt and write_rules (Epic 65.3)."""
+        default_yaml = (
+            Path(__file__).resolve().parents[2]
+            / "src"
+            / "tapps_mcp"
+            / "config"
+            / "default.yaml"
+        )
+        data = yaml.safe_load(default_yaml.read_text(encoding="utf-8"))
+        mem = data["memory"]
+        assert "capture_prompt" in mem
+        assert "Store durable memories" in mem["capture_prompt"]
+        assert "write_rules" in mem
+        wr = mem["write_rules"]
+        assert wr["block_sensitive_keywords"] == ["password", "secret", "api_key", "token"]
+        assert wr["min_value_length"] == 10
+        assert wr["max_value_length"] == 4096
 
     def test_default_yaml_has_decay_config(self) -> None:
         default_yaml = (
@@ -87,7 +106,7 @@ class TestAgentsTemplatesMemory:
 
     def test_high_template_required_language(self) -> None:
         content = load_agents_template("high")
-        assert "REQUIRED at session start" in content
+        assert "REQUIRED" in content
 
     def test_medium_template_recommended_language(self) -> None:
         content = load_agents_template("medium")

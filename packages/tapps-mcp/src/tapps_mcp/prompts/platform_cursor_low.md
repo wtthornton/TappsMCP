@@ -40,6 +40,10 @@ Consider calling `tapps_impact_analysis(file_path)` before refactoring or deleti
 
 Consider calling `tapps_validate_config(file_path)` when changing Dockerfile, docker-compose, or infra config.
 
+## Memory System
+
+`tapps_memory` provides persistent cross-session knowledge with 20 actions (save, search, consolidate, federation, etc.). Tiers: architectural/pattern/procedural/context. Scopes: project/branch/session/shared. Max 1500 entries. Memory is manual at low engagement: call `search` at session start and `save` before end.
+
 ## 5-Stage Pipeline (optional)
 
 When following a full workflow:

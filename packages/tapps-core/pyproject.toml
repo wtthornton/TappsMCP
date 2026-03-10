@@ -35,6 +35,9 @@ vector = [
     "sentence-transformers>=5.2.3,<6",
     "numpy>=2.4.2,<3",
 ]
+reranker = [
+    "cohere>=5.0,<6",
+]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/tapps_core/"]

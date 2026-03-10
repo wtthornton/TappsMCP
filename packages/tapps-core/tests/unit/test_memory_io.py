@@ -8,7 +8,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tapps_core.memory.io import export_memories, import_memories
+from tapps_core.memory.io import (
+    export_memories,
+    export_to_markdown,
+    import_memories,
+)
 from tapps_core.memory.models import (
     MemoryEntry,
     MemoryScope,
@@ -128,6 +132,148 @@ class TestExport:
         assert result["exported_count"] == 0
         data = json.loads(output.read_text())
         assert data["memories"] == []
+
+
+# ---------------------------------------------------------------------------
+# Markdown export tests (Epic 65.2)
+# ---------------------------------------------------------------------------
+
+
+class TestExportMarkdown:
+    def test_export_format_markdown_creates_valid_markdown(self, tmp_path: Path) -> None:
+        entries = [
+            _make_entry("key-1", "Memory content one"),
+            _make_entry("key-2", "Memory content two"),
+        ]
+        entries[0] = entries[0].model_copy(update={"tier": MemoryTier.pattern})
+        entries[1] = entries[1].model_copy(update={"tier": MemoryTier.architectural})
+        store = _make_store(entries)
+        validator = _make_validator(tmp_path)
+        output = tmp_path / "export.md"
+
+        result = export_memories(
+            store,
+            output,
+            validator,
+            export_format="markdown",
+        )
+
+        assert result["exported_count"] == 2
+        assert result["format"] == "markdown"
+        assert output.exists()
+        text = output.read_text()
+        assert "# TappsMCP Memory Export" in text
+        assert "key-1" in text
+        assert "key-2" in text
+        assert "Memory content one" in text
+        assert "Memory content two" in text
+
+    def test_export_markdown_grouped_by_tier(self, tmp_path: Path) -> None:
+        entries = [
+            _make_entry("arch-key", "Arch content"),
+            _make_entry("pattern-key", "Pattern content"),
+        ]
+        entries[0] = entries[0].model_copy(update={"tier": MemoryTier.architectural})
+        entries[1] = entries[1].model_copy(update={"tier": MemoryTier.pattern})
+        store = _make_store(entries)
+        validator = _make_validator(tmp_path)
+        output = tmp_path / "export.md"
+
+        export_memories(
+            store,
+            output,
+            validator,
+            export_format="markdown",
+            group_by="tier",
+        )
+
+        text = output.read_text()
+        assert "# Architectural" in text
+        assert "# Pattern" in text
+
+    def test_export_markdown_with_frontmatter(self, tmp_path: Path) -> None:
+        entries = [_make_entry("key-1", "Content")]
+        store = _make_store(entries)
+        validator = _make_validator(tmp_path)
+        output = tmp_path / "export.md"
+
+        export_memories(
+            store,
+            output,
+            validator,
+            export_format="markdown",
+            include_frontmatter=True,
+        )
+
+        text = output.read_text()
+        assert "---" in text
+        assert "tags:" in text
+        assert "created_at:" in text
+        assert "confidence:" in text
+        assert "tier:" in text
+
+    def test_export_markdown_without_frontmatter(self, tmp_path: Path) -> None:
+        entries = [_make_entry("key-1", "Content")]
+        store = _make_store(entries)
+        validator = _make_validator(tmp_path)
+        output = tmp_path / "export.md"
+
+        export_memories(
+            store,
+            output,
+            validator,
+            export_format="markdown",
+            include_frontmatter=False,
+        )
+
+        text = output.read_text()
+        assert "---" not in text or text.count("---") < 2
+        assert "## key-1" in text
+        assert "Content" in text
+
+    def test_export_markdown_group_by_none(self, tmp_path: Path) -> None:
+        entries = [
+            _make_entry("key-a", "A content"),
+            _make_entry("key-b", "B content"),
+        ]
+        store = _make_store(entries)
+        validator = _make_validator(tmp_path)
+        output = tmp_path / "export.md"
+
+        export_memories(
+            store,
+            output,
+            validator,
+            export_format="markdown",
+            group_by="none",
+        )
+
+        text = output.read_text()
+        assert "## key-a" in text
+        assert "## key-b" in text
+
+    def test_export_to_markdown_empty_returns_placeholder(self) -> None:
+        result = export_to_markdown([])
+        assert "# TappsMCP Memory Export" in result
+        assert "*No memories.*" in result
+
+    def test_export_to_markdown_include_metadata(self, tmp_path: Path) -> None:
+        entries = [_make_entry("key-1", "Content")]
+        store = _make_store(entries)
+        validator = _make_validator(tmp_path)
+        output = tmp_path / "export.md"
+
+        export_memories(
+            store,
+            output,
+            validator,
+            export_format="markdown",
+            include_metadata=True,
+        )
+
+        text = output.read_text()
+        assert "created:" in text
+        assert "confidence" in text
 
 
 # ---------------------------------------------------------------------------

@@ -73,6 +73,14 @@ class FeatureFlags:
             )
         return self._cache["radon"]
 
+    @property
+    def memory_semantic_search(self) -> bool:
+        """True when optional deps for memory semantic search (sentence-transformers) are available.
+
+        Gates the semantic search path in memory retrieval (Epic 65.7, 65.8).
+        """
+        return self.sentence_transformers
+
     # -- introspection / testing -------------------------------------------
 
     def reset(self) -> None:
@@ -85,7 +93,13 @@ class FeatureFlags:
         Forces evaluation of all flags.
         """
         # Touch each property to ensure cache is populated.
-        _ = self.faiss, self.numpy, self.sentence_transformers, self.radon
+        _ = (
+            self.faiss,
+            self.numpy,
+            self.sentence_transformers,
+            self.radon,
+            self.memory_semantic_search,
+        )
         return dict(self._cache)
 
 

@@ -128,6 +128,7 @@ def _get_memory_store() -> _MemoryStoreType:
     global _memory_store
     if _memory_store is None:
         from tapps_core.config.settings import load_settings
+        from tapps_core.memory.embeddings import get_embedding_provider
         from tapps_core.memory.store import ConsolidationConfig, MemoryStore
 
         settings = load_settings()
@@ -139,9 +140,18 @@ def _get_memory_store() -> _MemoryStoreType:
             min_entries=settings.memory.consolidation.min_entries,
         )
 
+        # Optional embedding provider for semantic search (Epic 65.7)
+        ss = settings.memory.semantic_search
+        embedding_provider = get_embedding_provider(
+            semantic_search_enabled=ss.enabled,
+            provider=ss.provider,
+            model=ss.model,
+        )
+
         _memory_store = MemoryStore(
             settings.project_root,
             consolidation_config=consolidation_config,
+            embedding_provider=embedding_provider,
         )
     return _memory_store
 

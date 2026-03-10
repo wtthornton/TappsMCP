@@ -21,11 +21,13 @@ logger = structlog.get_logger(__name__)
 
 
 class EpicStoryStub(BaseModel):
-    """A story stub within an epic (title + optional points/description)."""
+    """A story stub within an epic (title + optional points/description/tasks)."""
 
     title: str
     points: int = 0
     description: str = ""
+    tasks: list[str] = []
+    ac_count: int = 0
 
 
 class EpicConfig(BaseModel):
@@ -46,6 +48,11 @@ class EpicConfig(BaseModel):
     risks: list[str] = []
     non_goals: list[str] = []
     style: str = "standard"  # "standard" or "comprehensive"
+    success_metrics: list[str] = []
+    stakeholders: list[str] = []
+    references: list[str] = []
+    link_stories: bool = False
+    story_paths: dict[int, str] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -60,8 +67,8 @@ class EpicGenerator:
 
     - **standard**: Core sections (metadata, goal, motivation, acceptance
       criteria, stories, technical notes, out of scope).
-    - **comprehensive**: Adds implementation order, risk assessment,
-      files affected table, and performance targets placeholder.
+    - **comprehensive**: Adds success metrics, stakeholders, references,
+      implementation order, risk assessment, files affected table.
 
     Output includes ``<!-- docsmcp:start:section -->`` markers for SmartMerger
     compatibility.
@@ -120,10 +127,13 @@ class EpicGenerator:
         lines.extend(self._render_non_goals(config))
 
         if style == "comprehensive":
+            lines.extend(self._render_success_metrics(config))
+            lines.extend(self._render_stakeholders(config))
+            lines.extend(self._render_references(config))
             lines.extend(self._render_implementation_order(config))
             lines.extend(self._render_risk_assessment(config, enrichment))
             lines.extend(self._render_files_affected(config))
-            lines.extend(self._render_performance_targets())
+            lines.extend(self._render_performance_targets(enrichment))
 
         return "\n".join(lines)
 
@@ -247,10 +257,31 @@ class EpicGenerator:
                 else:
                     lines.append("Describe what this story delivers...")
                 lines.append("")
+
+                # Show AC count if available.
+                if story.ac_count:
+                    lines.append(f"({story.ac_count} acceptance criteria)")
+                    lines.append("")
+
+                # Story link if enabled.
+                story_path = config.story_paths.get(i)
+                if config.link_stories and story_path:
+                    lines.append(f"-> [Full story]({story_path})")
+                    lines.append("")
+
+                # Use real tasks from story if available, otherwise generic.
                 lines.append("**Tasks:**")
-                lines.append(f"- [ ] Implement {story.title.lower()}")
-                lines.append("- [ ] Write unit tests")
-                lines.append("- [ ] Update documentation")
+                if story.tasks:
+                    max_tasks = 4
+                    for task in story.tasks[:max_tasks]:
+                        lines.append(f"- [ ] {task}")
+                    remaining = len(story.tasks) - max_tasks
+                    if remaining > 0:
+                        lines.append(f"- ... and {remaining} more")
+                else:
+                    lines.append(f"- [ ] Implement {story.title.lower()}")
+                    lines.append("- [ ] Write unit tests")
+                    lines.append("- [ ] Update documentation")
                 lines.append("")
                 lines.append(f"**Definition of Done:** {story.title} is implemented, tests "
                              "pass, and documentation is updated.")
@@ -306,11 +337,13 @@ class EpicGenerator:
             lines.append(f"**Key Dependencies:** {', '.join(dependencies[:10])}")
 
         expert_guidance: list[dict[str, str]] = enrichment.get("expert_guidance", [])
-        if expert_guidance:
+        # Filter out low-quality expert guidance (Epic 18.3).
+        rendered_guidance = self._filter_expert_guidance(expert_guidance)
+        if rendered_guidance:
             lines.append("")
             lines.append("### Expert Recommendations")
             lines.append("")
-            for item in expert_guidance:
+            for item in rendered_guidance:
                 lines.append(
                     f"- **{item['expert']}** ({item['confidence']}): "
                     f"{item['advice']}"
@@ -338,6 +371,96 @@ class EpicGenerator:
 
     # -- comprehensive-only sections ----------------------------------------
 
+    def _render_success_metrics(self, config: EpicConfig) -> list[str]:
+        """Render the Success Metrics section (comprehensive only)."""
+        lines = [
+            "<!-- docsmcp:start:success-metrics -->",
+            "## Success Metrics",
+            "",
+            "| Metric | Baseline | Target | Measurement |",
+            "|--------|----------|--------|-------------|",
+        ]
+
+        if config.success_metrics:
+            for metric in config.success_metrics:
+                if "|" in metric:
+                    # Pipe-delimited: "MTTR|4h|1h|PagerDuty"
+                    parts = [p.strip() for p in metric.split("|")]
+                    while len(parts) < 4:
+                        parts.append("-")
+                    lines.append(f"| {parts[0]} | {parts[1]} | {parts[2]} | {parts[3]} |")
+                else:
+                    lines.append(f"| {metric} | - | - | - |")
+        else:
+            # Derive suggestions from config.
+            ac_count = len(config.acceptance_criteria)
+            story_count = len(config.stories)
+            if ac_count:
+                lines.append(
+                    f"| All {ac_count} acceptance criteria met "
+                    f"| 0/{ac_count} | {ac_count}/{ac_count} | Checklist review |"
+                )
+            if story_count:
+                lines.append(
+                    f"| All {story_count} stories completed "
+                    f"| 0/{story_count} | {story_count}/{story_count} | Sprint board |"
+                )
+            if not ac_count and not story_count:
+                lines.append(
+                    "| Define success metrics... | - | - | - |"
+                )
+
+        lines.extend(["", "<!-- docsmcp:end:success-metrics -->", ""])
+        return lines
+
+    def _render_stakeholders(self, config: EpicConfig) -> list[str]:
+        """Render the Stakeholders section (comprehensive only).
+
+        Omitted entirely when no stakeholders are provided.
+        """
+        if not config.stakeholders:
+            return []
+
+        lines = [
+            "<!-- docsmcp:start:stakeholders -->",
+            "## Stakeholders",
+            "",
+            "| Role | Person | Responsibility |",
+            "|------|--------|----------------|",
+        ]
+
+        for stakeholder in config.stakeholders:
+            if "|" in stakeholder:
+                parts = [p.strip() for p in stakeholder.split("|")]
+                while len(parts) < 3:
+                    parts.append("-")
+                lines.append(f"| {parts[0]} | {parts[1]} | {parts[2]} |")
+            else:
+                lines.append(f"| {stakeholder} | - | - |")
+
+        lines.extend(["", "<!-- docsmcp:end:stakeholders -->", ""])
+        return lines
+
+    def _render_references(self, config: EpicConfig) -> list[str]:
+        """Render the References section (comprehensive only).
+
+        Omitted entirely when no references are provided.
+        """
+        if not config.references:
+            return []
+
+        lines = [
+            "<!-- docsmcp:start:references -->",
+            "## References",
+            "",
+        ]
+
+        for ref in config.references:
+            lines.append(f"- {ref}")
+
+        lines.extend(["", "<!-- docsmcp:end:references -->", ""])
+        return lines
+
     def _render_implementation_order(self, config: EpicConfig) -> list[str]:
         """Render the Implementation Order section (comprehensive only)."""
         lines = [
@@ -360,7 +483,15 @@ class EpicGenerator:
     def _render_risk_assessment(
         self, config: EpicConfig, enrichment: dict[str, Any] | None = None,
     ) -> list[str]:
-        """Render the Risk Assessment section (comprehensive only)."""
+        """Render the Risk Assessment section (comprehensive only).
+
+        Auto-classifies risk probability/impact from keywords and derives
+        mitigations from expert advice when available.
+        """
+        from docs_mcp.generators.risk_classifier import RiskClassifier
+
+        classifier = RiskClassifier()
+
         lines = [
             "<!-- docsmcp:start:risk-assessment -->",
             "## Risk Assessment",
@@ -369,18 +500,32 @@ class EpicGenerator:
             "|---|---|---|---|",
         ]
 
+        expert_guidance: list[dict[str, str]] = (enrichment or {}).get("expert_guidance", [])
+        # Filter to risk-relevant experts.
+        risk_domains = {"security", "performance", "devops"}
+        risk_experts = {
+            g["domain"]: g["advice"]
+            for g in expert_guidance
+            if g["domain"] in risk_domains and g.get("advice", "").strip()
+        }
+
         if config.risks:
             for risk in config.risks:
-                lines.append(f"| {risk} | Low/Medium/High | Low/Medium/High "
-                             "| Define mitigation strategy |")
+                probability, impact, _score = classifier.classify(risk)
+                # Try to find relevant expert advice for mitigation.
+                mitigation = classifier.derive_mitigation(
+                    risk, expert_advice=self._find_risk_expert_advice(risk, risk_experts),
+                )
+                lines.append(f"| {risk} | {probability} | {impact} | {mitigation} |")
         else:
-            lines.append("| Describe potential risks... | Low/Medium/High | Low/Medium/High "
-                         "| Define mitigation strategy |")
+            lines.append(
+                "| No risks identified | - | - "
+                "| Consider adding risks during planning |"
+            )
 
         # Add expert-identified risks from security/performance domains.
-        expert_guidance: list[dict[str, str]] = (enrichment or {}).get("expert_guidance", [])
-        risk_domains = {"security", "performance", "devops"}
-        risk_items = [g for g in expert_guidance if g["domain"] in risk_domains]
+        rendered_experts = self._filter_expert_guidance(expert_guidance)
+        risk_items = [g for g in rendered_experts if g["domain"] in risk_domains]
         if risk_items:
             lines.append("")
             lines.append("**Expert-Identified Risks:**")
@@ -394,8 +539,7 @@ class EpicGenerator:
     def _render_files_affected(self, config: EpicConfig) -> list[str]:
         """Render the Files Affected table (comprehensive only).
 
-        Populates from story task file paths when available,
-        otherwise renders a placeholder row.
+        Aggregates real file paths from story stubs when available.
         """
         lines = [
             "<!-- docsmcp:start:files-affected -->",
@@ -406,39 +550,75 @@ class EpicGenerator:
         ]
 
         epic_num = config.number
-        has_rows = False
+
+        # Collect file paths from story tasks.
+        file_stories: dict[str, list[str]] = {}
         if config.stories:
             for i, story in enumerate(config.stories, 1):
                 story_id = f"{epic_num}.{i}"
-                if story.description and "/" in story.description:
-                    # Try to extract file paths mentioned in description
-                    pass
-                # Add a row per story as a tracking entry
-                lines.append(f"| *see tasks* | {story_id} ({story.title}) | Implement |")
-                has_rows = True
+                for task in story.tasks:
+                    # Extract file paths from task text (look for path-like patterns).
+                    paths = re.findall(r"`([^`]+\.\w+)`", task)
+                    for path in paths:
+                        if path not in file_stories:
+                            file_stories[path] = []
+                        if story_id not in file_stories[path]:
+                            file_stories[path].append(story_id)
 
-        if not has_rows:
-            lines.append("| `path/to/file.py` | N.M | Create / Modify |")
+        if file_stories:
+            # Sort by directory then filename.
+            sorted_files = sorted(file_stories.items())
+            max_files = 20
+            for file_path, story_ids in sorted_files[:max_files]:
+                lines.append(
+                    f"| `{file_path}` | {', '.join(story_ids)} | Modify |"
+                )
+            remaining = len(sorted_files) - max_files
+            if remaining > 0:
+                story_count = len(config.stories) if config.stories else 0
+                lines.append("")
+                lines.append(
+                    f"*and {remaining} more files across {story_count} stories*"
+                )
+        else:
+            lines.append(
+                "| Files will be determined during story refinement "
+                "| - | - |"
+            )
 
         lines.extend(["", "<!-- docsmcp:end:files-affected -->", ""])
         return lines
 
-    def _render_performance_targets(self) -> list[str]:
-        """Render the Performance Targets placeholder (comprehensive only)."""
+    def _render_performance_targets(
+        self, enrichment: dict[str, Any] | None = None,
+    ) -> list[str]:
+        """Render the Performance Targets section (comprehensive only).
+
+        Only rendered when performance-related expert advice exists at
+        sufficient confidence. Omitted entirely otherwise.
+        """
+        expert_guidance: list[dict[str, str]] = (enrichment or {}).get("expert_guidance", [])
+        perf_experts = [
+            g for g in expert_guidance
+            if g.get("domain") == "performance"
+            and g.get("advice", "").strip()
+            and self._parse_confidence(g.get("confidence", "0%")) >= 0.5
+        ]
+
+        if not perf_experts:
+            return []
+
         lines = [
             "<!-- docsmcp:start:performance-targets -->",
             "## Performance Targets",
             "",
-            "| Metric | Target | Measurement Method |",
-            "|---|---|---|",
-            "| Response latency (p50) | < N ms | Load test with k6/locust |",
-            "| Response latency (p99) | < N ms | Load test with k6/locust |",
-            "| Throughput | > N req/s | Sustained load for 5 min |",
-            "| Memory usage | < N MB | Profiling under peak load |",
-            "",
-            "<!-- docsmcp:end:performance-targets -->",
-            "",
         ]
+
+        for expert in perf_experts:
+            lines.append(f"**{expert['expert']}:** {expert['advice']}")
+            lines.append("")
+
+        lines.extend(["<!-- docsmcp:end:performance-targets -->", ""])
         return lines
 
     # -- auto-populate from analyzers ----------------------------------------
@@ -566,6 +746,74 @@ class EpicGenerator:
         if guidance:
             enrichment["expert_guidance"] = guidance
 
+    # -- expert filtering (Epic 18.3) ---------------------------------------
+
+    _NO_KNOWLEDGE_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
+        r"no specific knowledge found", re.IGNORECASE,
+    )
+
+    @classmethod
+    def _filter_expert_guidance(
+        cls,
+        guidance: list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        """Filter expert guidance based on confidence and content quality.
+
+        - Confidence < 30%: suppressed entirely.
+        - Confidence 30-50%: replaced with review-recommended message.
+        - Confidence >= 50% with real content: rendered as-is.
+        - Empty or "No specific knowledge" advice: suppressed.
+        """
+        filtered: list[dict[str, str]] = []
+        for item in guidance:
+            advice = item.get("advice", "").strip()
+            confidence = cls._parse_confidence(item.get("confidence", "0%"))
+
+            # Skip empty or "no knowledge" advice.
+            if not advice or cls._NO_KNOWLEDGE_PATTERN.search(advice):
+                continue
+
+            if confidence < 0.3:
+                continue
+
+            if confidence < 0.5:
+                domain = item.get("domain", "unknown")
+                filtered.append({
+                    **item,
+                    "advice": (
+                        f"Expert review recommended for {domain} "
+                        f"- automated analysis inconclusive"
+                    ),
+                })
+            else:
+                filtered.append(item)
+
+        return filtered
+
+    @staticmethod
+    def _parse_confidence(confidence_str: str) -> float:
+        """Parse a confidence string like '85%' to 0.85."""
+        try:
+            return float(confidence_str.rstrip("%")) / 100
+        except (ValueError, AttributeError):
+            return 0.0
+
+    @staticmethod
+    def _find_risk_expert_advice(
+        risk_text: str,
+        risk_experts: dict[str, str],
+    ) -> str | None:
+        """Find relevant expert advice for a specific risk."""
+        text_lower = risk_text.lower()
+        # Map risk keywords to expert domains.
+        if any(kw in text_lower for kw in ("security", "auth", "encrypt", "credential")):
+            return risk_experts.get("security")
+        if any(kw in text_lower for kw in ("performance", "latency", "throughput", "scale")):
+            return risk_experts.get("performance")
+        if any(kw in text_lower for kw in ("deploy", "ci", "pipeline", "infrastructure")):
+            return risk_experts.get("devops")
+        return None
+
     # -- helpers -----------------------------------------------------------
 
     @staticmethod
@@ -581,9 +829,9 @@ class EpicGenerator:
     def parse_stories_json(stories_json: str | list[Any]) -> list[EpicStoryStub]:
         """Parse a JSON string (or pre-parsed list) into EpicStoryStub objects.
 
-        Accepts a JSON array of objects with keys: title, points, description.
-        Also accepts an already-parsed list (from MCP clients that may send
-        typed values instead of JSON strings).
+        Accepts a JSON array of objects with keys: title, points, description,
+        tasks, ac_count. Also accepts an already-parsed list (from MCP clients
+        that may send typed values instead of JSON strings).
 
         Args:
             stories_json: JSON string or pre-parsed list of story dicts.
@@ -613,11 +861,15 @@ class EpicGenerator:
         stories: list[EpicStoryStub] = []
         for item in raw:
             if isinstance(item, dict):
+                tasks_raw = item.get("tasks", [])
+                tasks = [str(t) for t in tasks_raw] if isinstance(tasks_raw, list) else []
                 stories.append(
                     EpicStoryStub(
                         title=str(item.get("title", "Untitled")),
                         points=int(item.get("points", 0)),
                         description=str(item.get("description", "")),
+                        tasks=tasks,
+                        ac_count=int(item.get("ac_count", 0)),
                     )
                 )
         return stories

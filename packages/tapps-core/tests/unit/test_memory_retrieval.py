@@ -14,6 +14,7 @@ from tapps_core.memory.models import (
     MemorySource,
     MemoryTier,
 )
+from tapps_core.memory.reranker import NoopReranker
 from tapps_core.memory.retrieval import MemoryRetriever, ScoredMemory
 
 
@@ -448,6 +449,56 @@ class TestBM25Integration:
         assert "tag1" in doc
         assert "tag2" in doc
 
+    def test_semantic_disabled_uses_bm25_only(self) -> None:
+        """Epic 65.8: When semantic_enabled=False, BM25-only (no regression)."""
+        entries = [
+            _make_entry("key-a", "python testing framework"),
+            _make_entry("key-b", "python web server"),
+        ]
+        retriever = MemoryRetriever(semantic_enabled=False)
+        store = _make_store(entries)
+
+        results = retriever.search("python testing", store)
+        assert len(results) >= 1
+        assert results[0].entry.key == "key-a"
+
+    def test_hybrid_falls_back_to_bm25_when_vector_empty(self) -> None:
+        """Epic 65.8: When embedder unavailable, hybrid falls back to BM25."""
+        entries = [_make_entry("my-key", "matching content")]
+        retriever = MemoryRetriever(semantic_enabled=True)
+        store = _make_store(entries)
+
+        with patch(
+            "tapps_core.memory.retrieval.MemoryRetriever._vector_search",
+            return_value=[],
+        ):
+            results = retriever.search("matching content", store)
+        assert len(results) >= 1
+        assert results[0].entry.key == "my-key"
+
+    def test_hybrid_merges_rrf_when_both_return_results(self) -> None:
+        """Epic 65.8: Hybrid merges BM25 + vector via RRF."""
+        entries = [
+            _make_entry("a", "python framework"),
+            _make_entry("b", "testing library"),
+            _make_entry("c", "database config"),
+        ]
+        retriever = MemoryRetriever(semantic_enabled=True)
+        store = _make_store(entries)
+
+        def mock_vector_search(
+            query: str, store: object, limit: int = 20
+        ) -> list[tuple[str, float]]:
+            return [("b", 0.9), ("a", 0.7), ("c", 0.5)][:limit]
+
+        with patch.object(
+            retriever, "_vector_search", side_effect=mock_vector_search
+        ):
+            results = retriever.search("python", store, limit=5)
+        assert len(results) >= 1
+        keys = [r.entry.key for r in results]
+        assert "a" in keys or "b" in keys or "c" in keys
+
     def test_bm25_multi_term_query(self) -> None:
         """Multi-term queries should match entries with multiple terms."""
         entries = [
@@ -462,3 +513,74 @@ class TestBM25Integration:
         # full-match should rank first (matches more query terms)
         assert len(results) >= 1
         assert results[0].entry.key == "full-match"
+
+
+# ---------------------------------------------------------------------------
+# Reranker integration (Epic 65.9)
+# ---------------------------------------------------------------------------
+
+
+class TestRerankerIntegration:
+    """Tests for optional reranking in MemoryRetriever."""
+
+    def test_reranker_reorders_results(self) -> None:
+        """When reranker reverses order, final order follows reranker."""
+        entries = [
+            _make_entry("key-a", "python framework"),
+            _make_entry("key-b", "testing library"),
+            _make_entry("key-c", "database config"),
+        ]
+        # NoopReranker preserves order, so use a custom reranker that reverses
+        class ReverseReranker:
+            def rerank(
+                self,
+                query: str,
+                candidates: list[tuple[str, str]],
+                top_k: int,
+            ) -> list[tuple[str, float]]:
+                reversed_cands = list(reversed(candidates[:top_k]))
+                return [(k, 1.0 - i / 10) for i, (k, _) in enumerate(reversed_cands)]
+
+        retriever = MemoryRetriever(
+            reranker=ReverseReranker(),
+            reranker_enabled=True,
+        )
+        store = _make_store(entries)
+
+        results = retriever.search("python testing database", store, limit=3)
+        assert len(results) >= 1
+        # ReverseReranker puts last candidate first
+        assert results[0].entry.key == "key-c"
+
+    def test_reranker_disabled_uses_composite_order(self) -> None:
+        """When reranker disabled, original composite order is used."""
+        entries = [
+            _make_entry("high-conf", "matching content", confidence=0.9),
+            _make_entry("low-conf", "matching content", confidence=0.3),
+        ]
+        retriever = MemoryRetriever(reranker=NoopReranker(), reranker_enabled=False)
+        store = _make_store(entries)
+
+        results = retriever.search("matching content", store)
+        assert len(results) == 2
+        assert results[0].entry.key == "high-conf"
+
+    def test_reranker_failure_fallback(self) -> None:
+        """When reranker raises, fall back to original order."""
+        entries = [
+            _make_entry("key-a", "content a"),
+            _make_entry("key-b", "content b"),
+        ]
+        fail_reranker = MagicMock()
+        fail_reranker.rerank.side_effect = RuntimeError("API down")
+
+        retriever = MemoryRetriever(
+            reranker=fail_reranker,
+            reranker_enabled=True,
+        )
+        store = _make_store(entries)
+
+        results = retriever.search("content", store)
+        assert len(results) == 2
+        # Original composite order preserved on failure
+        assert results[0].entry.key in ("key-a", "key-b")

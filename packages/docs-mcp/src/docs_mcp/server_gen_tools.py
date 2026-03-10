@@ -1063,6 +1063,10 @@ async def docs_generate_epic(
     technical_notes: str = "",
     risks: str = "",
     non_goals: str = "",
+    success_metrics: str = "",
+    stakeholders: str = "",
+    references: str = "",
+    link_stories: bool = False,
     style: str = "standard",
     auto_populate: bool = False,
     output_path: str = "",
@@ -1074,8 +1078,9 @@ async def docs_generate_epic(
     metadata block, goal, motivation, acceptance criteria (checkbox list),
     numbered story stubs, technical notes, and out-of-scope items.
 
-    The ``comprehensive`` style adds implementation order, risk assessment
-    table, files affected table, and performance targets placeholder.
+    The ``comprehensive`` style adds success metrics, stakeholders, references,
+    implementation order, risk assessment with auto-classification, and files
+    affected table with aggregated paths from stories.
 
     When ``auto_populate=True``, enriches sections from project analyzers
     (module map, tech stack, git history).
@@ -1092,11 +1097,18 @@ async def docs_generate_epic(
         dependencies: Comma-separated list of dependencies (e.g. "Epic 0, Epic 4").
         blocks: Comma-separated list of epics this blocks.
         acceptance_criteria: Comma-separated list of acceptance criteria.
-        stories: JSON array of story objects with keys: title, points, description.
+        stories: JSON array of story objects with keys: title, points, description,
+            tasks, ac_count.
             Example: [{"title": "Data Models", "points": 3}]
         technical_notes: Comma-separated list of technical notes.
         risks: Comma-separated list of risks (comprehensive style only).
         non_goals: Comma-separated list of out-of-scope items.
+        success_metrics: Comma-separated or pipe-delimited success metrics
+            (comprehensive only). Example: "MTTR|4h|1h|PagerDuty"
+        stakeholders: Comma-separated or pipe-delimited stakeholders
+            (comprehensive only). Example: "Owner|Alice|Implementation"
+        references: Comma-separated OKR/roadmap references (comprehensive only).
+        link_stories: When True, story stubs link to full story files.
         style: Epic style - "standard" or "comprehensive".
         auto_populate: Enrich from project analyzers (ModuleMap, Metadata, etc).
         output_path: File path to write the epic (relative to project root).
@@ -1133,6 +1145,21 @@ async def docs_generate_epic(
     )
     risks_list = [r.strip() for r in risks.split(",") if r.strip()] if risks else []
     ng_list = [n.strip() for n in non_goals.split(",") if n.strip()] if non_goals else []
+    sm_list = (
+        [s.strip() for s in success_metrics.split(",") if s.strip()]
+        if success_metrics
+        else []
+    )
+    sh_list = (
+        [s.strip() for s in stakeholders.split(",") if s.strip()]
+        if stakeholders
+        else []
+    )
+    ref_list = (
+        [r.strip() for r in references.split(",") if r.strip()]
+        if references
+        else []
+    )
 
     # Parse stories JSON
     story_list: list[EpicStoryStub] = []
@@ -1161,6 +1188,10 @@ async def docs_generate_epic(
         technical_notes=notes_list,
         risks=risks_list,
         non_goals=ng_list,
+        success_metrics=sm_list,
+        stakeholders=sh_list,
+        references=ref_list,
+        link_stories=link_stories,
         style=style,
     )
 
@@ -1242,6 +1273,8 @@ async def docs_generate_story(
     technical_notes: str = "",
     criteria_format: str = "checkbox",
     style: str = "standard",
+    inherit_context: bool = True,
+    epic_path: str = "",
     auto_populate: bool = False,
     output_path: str = "",
     project_root: str = "",
@@ -1279,6 +1312,8 @@ async def docs_generate_story(
         technical_notes: Comma-separated list of technical notes.
         criteria_format: Acceptance criteria format - "checkbox" or "gherkin".
         style: Story style - "standard" or "comprehensive".
+        inherit_context: When True, skip project metadata in story (inherit from epic).
+        epic_path: Relative path to parent epic file for cross-referencing.
         auto_populate: Enrich from project analyzers (ModuleMap, Metadata).
         output_path: File path to write the story (relative to project root).
             When empty, returns the content without writing a file.
@@ -1362,6 +1397,8 @@ async def docs_generate_story(
         technical_notes=notes_list,
         criteria_format=criteria_format,
         style=style,
+        inherit_context=inherit_context,
+        epic_path=epic_path,
     )
 
     generator = StoryGenerator()

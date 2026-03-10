@@ -420,6 +420,68 @@ body {{
   color: var(--text-tertiary);
 }}
 
+/* Skip link */
+.skip-link {{
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  padding: 8px 16px;
+  z-index: 100;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  transition: top 0.2s var(--ease-enter);
+}}
+.skip-link:focus {{
+  top: 8px;
+}}
+
+/* TOC */
+.toc-section {{
+  padding: 24px 40px;
+}}
+.toc {{
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+}}
+.toc-title {{
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}}
+.toc-list {{
+  list-style: none;
+}}
+.toc-list li {{
+  margin-bottom: 6px;
+}}
+.toc-list a {{
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.8125rem;
+}}
+.toc-list a:hover {{
+  color: var(--accent-primary);
+}}
+
+/* Back to top */
+.back-to-top {{
+  color: var(--accent-primary);
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+}}
+.back-to-top:hover {{
+  text-decoration: underline;
+}}
+
 /* Footer */
 .footer {{
   text-align: center;
@@ -464,23 +526,67 @@ body {{
   .stats-grid {{ grid-template-columns: repeat(2, 1fr); }}
 }}
 
+/* Light theme (TappMCP style guide) */
+@media (prefers-color-scheme: light) {{
+  :root {{
+    --bg-primary: #f8f9fc;
+    --bg-secondary: #f0f1f5;
+    --card-bg: rgba(255, 255, 255, 0.92);
+    --card-bg-alt: rgba(245, 245, 250, 0.95);
+    --card-border: rgba(0, 0, 0, 0.08);
+    --accent-primary: #0d9488;
+    --accent-secondary: #b8941f;
+    --text-primary: #1a1a2e;
+    --text-secondary: #4a4a5e;
+    --text-muted: #9ca3af;
+  }}
+  body {{ color: var(--text-primary); }}
+  .hero {{ background: linear-gradient(135deg, #f8f9fc 0%, #f0f1f5 30%, #e5e7ed 70%, #ccfbf1 100%); }}
+  .stat-number {{ color: var(--accent-primary); }}
+}}
+
 </style>
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 
 <section class="hero">
   <div class="hero-content">
     <h1 class="hero-title">TappMCP</h1>
-    
+    <p class="hero-subtitle">MCP server for automated documentation generation, validation, and maintenance</p>
     <p class="hero-meta">Architecture Report</p>
   </div>
 </section>
-<section class="section" id="executive-summary">
-<h2 class="section-title">Executive Summary</h2>
+
+<section class="section document-purpose" id="main-content">
+  <h2 class="section-title">Document Purpose</h2>
+  <div class="purpose-block">
+    <h3>Audience &amp; Use</h3>
+    <p class="purpose-text">This report is for <strong>developers and architects</strong>. It explains how components fit together, why they are structured this way, and what constraints apply. Use it to understand the system before making changes, justify architectural decisions, and plan refactors.</p>
+  </div>
+</section>
+<section class="section toc-section">
+  <nav class="toc" aria-label="Table of contents">
+    <h3 class="toc-title">Contents</h3>
+    <ul class="toc-list">
+      <li><a href="#executive-summary">Executive Summary</a></li>
+      <li><a href="#architecture-diagram">High-Level Architecture</a></li>
+      <li><a href="#data-flow">Data Flow Pipeline</a></li>
+      <li><a href="#component-details">Component Deep-Dive</a></li>
+      <li><a href="#dependency-flow">Dependency Flow</a></li>
+      <li><a href="#api-surface">Public API Surface</a></li>
+      <li><a href="#tech-stack">Technology Stack</a></li>
+      <li><a href="#health-insights">Architecture Health</a></li>
+    </ul>
+  </nav>
+</section>
+<section class="section" id="executive-summary" role="region" aria-labelledby="exec-summary-heading">
+<h2 class="section-title" id="exec-summary-heading">Executive Summary</h2>
+<p><strong>Why this matters:</strong> Quick overview for stakeholders; key metrics support risk assessment and technical debt visibility.</p>
 
 <div class="purpose-block">
   <h3>Purpose &amp; Intent</h3>
-  <p class="purpose-text">A software project.</p>
+  <p class="purpose-text">MCP server for automated documentation generation, validation, and maintenance</p>
 </div>
 
 <div class="stats-grid">
@@ -497,19 +603,21 @@ body {{
     <div class="stat-label">Public Classes</div>
   </div>
   <div class="stat-card">
-    <div class="stat-number">1844</div>
-    <div class="stat-label">Public APIs</div>
+    <div class="stat-number">2221</div>
+    <div class="stat-label">Public APIs (fns + methods)</div>
   </div>
   <div class="stat-card">
-    <div class="stat-number">3405</div>
-    <div class="stat-label">External Deps</div>
+    <div class="stat-number">342</div>
+    <div class="stat-label">External Imports</div>
   </div>
 </div>
 </section>
 <section class="section" id="architecture-diagram">
 <h2 class="section-title">High-Level Architecture</h2>
 <p>The diagram below illustrates the major packages and components that comprise the system. Each box represents a distinct package or subsystem with its own responsibilities and boundaries.</p>
-<div class="diagram-container"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 290" class="arch-svg">
+<figure role="figure" aria-labelledby="arch-figcaption">
+<div class="diagram-container"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 290" class="arch-svg" role="img" aria-labelledby="arch-svg-title">
+  <title id="arch-svg-title">High-level architecture: TappMCP</title>
   <defs>
     <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
       <feDropShadow dx="2" dy="4" stdDeviation="6" flood-opacity="0.15"/>
@@ -546,11 +654,32 @@ body {{
   <text x="690.0" y="170" text-anchor="middle" fill="#fafafa" font-size="16" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">tapps_mcp</text>
   <text x="690.0" y="195" text-anchor="middle" fill="#fafafa" font-size="11" opacity="0.8" font-family="Outfit, Inter, system-ui, sans-serif">29 modules</text>
 </svg></div>
+<figcaption id="arch-figcaption">High-level architecture overview</figcaption>
+</figure>
 </section>
-<section class="section" id="data-flow">
-<h2 class="section-title">Data Flow Pipeline</h2>
-<p>This diagram illustrates how data and control flow through the system at runtime. Each stage represents a layer in the processing pipeline, showing how input is transformed as it passes through successive components toward the final output.</p>
-<div class="diagram-container"></div>
+<section class="section" id="data-flow" role="region" aria-labelledby="data-flow-heading">
+<h2 class="section-title" id="data-flow-heading">Data Flow Pipeline</h2>
+<p><strong>Why this matters:</strong> Understanding runtime flow helps trace how input moves through layers toward output. Each stage represents a processing boundary.</p>
+<figure role="figure" aria-labelledby="data-flow-figcaption">
+<div class="diagram-container"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 242" class="flow-svg">
+  <defs>
+    <marker id="flowArrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#14b8a6"/>
+    </marker>
+  </defs>
+  <rect width="480" height="242" rx="8" fill="#0a0a0f"/>
+  <text x="240.0" y="35" text-anchor="middle" fill="#fafafa" font-size="18" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">Data Flow Pipeline</text>
+  <text x="120.0" y="82" text-anchor="middle" fill="#14b8a6" font-size="13" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">Core Logic</text>
+  <rect x="40" y="90" width="160" height="52" rx="6" fill="rgba(18,18,26,0.85)" stroke="#14b8a6" stroke-width="1" opacity="0.8"/>
+  <text x="120.0" y="116" text-anchor="middle" fill="#d4d4d8" font-size="11" font-weight="500" font-family="Outfit, Inter, system-ui, sans-serif">tapps_core</text>
+  <line x1="205" y1="108.0" x2="275" y2="108.0" stroke="#14b8a6" stroke-width="2" marker-end="url(#flowArrow)" opacity="0.7"/>
+  <text x="360.0" y="82" text-anchor="middle" fill="#d4a847" font-size="13" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">Output / API</text>
+  <rect x="280" y="90" width="160" height="88" rx="6" fill="rgba(18,18,26,0.85)" stroke="#d4a847" stroke-width="1" opacity="0.8"/>
+  <text x="360.0" y="116" text-anchor="middle" fill="#d4d4d8" font-size="11" font-weight="500" font-family="Outfit, Inter, system-ui, sans-serif">docs_mcp</text>
+  <text x="360.0" y="152" text-anchor="middle" fill="#d4d4d8" font-size="11" font-weight="500" font-family="Outfit, Inter, system-ui, sans-serif">tapps_mcp</text>
+</svg></div>
+<figcaption id="data-flow-figcaption">Data flow pipeline</figcaption>
+</figure>
 </section>
 <section class="section" id="component-details">
 <h2 class="section-title">Component Deep-Dive</h2>
@@ -562,12 +691,12 @@ body {{
     <h3 class="component-name">docs_mcp</h3>
     <div class="component-stats">
       <span>15 modules</span>
-      <span>46 functions</span>
+      <span>48 functions</span>
       <span>0 classes</span>
     </div>
   </div>
   <div class="component-body">
-    <p class="component-description">The docs_mcp package docs mcp: documentation mcp server for the tapps platform. It is composed of 15 modules that work together to deliver its capabilities. With 46 functions, it provides a functional interface designed for straightforward integration. This component adds value by encapsulating domain-specific logic behind clean interfaces, reducing coupling between other parts of the system and enabling independent evolution of its internals.</p>
+    <p class="component-description">The docs_mcp package docs mcp: documentation mcp server for the tapps platform. It is composed of 15 modules that work together to deliver its capabilities. With 48 functions, it provides a functional interface designed for straightforward integration. This component adds value by encapsulating domain-specific logic behind clean interfaces, reducing coupling between other parts of the system and enabling independent evolution of its internals.</p>
     <div class="submodule-list">
       <h4>Key Modules</h4>
       <ul>
@@ -624,12 +753,12 @@ body {{
     <h3 class="component-name">tapps_mcp</h3>
     <div class="component-stats">
       <span>29 modules</span>
-      <span>186 functions</span>
+      <span>211 functions</span>
       <span>3 classes</span>
     </div>
   </div>
   <div class="component-body">
-    <p class="component-description">The tapps_mcp package tappsmcp: mcp server providing code quality tools. It is composed of 29 modules that work together to deliver its capabilities. The package exposes 186 functions and 3 classes, offering both procedural and object-oriented interfaces to its consumers. This component adds value by encapsulating domain-specific logic behind clean interfaces, reducing coupling between other parts of the system and enabling independent evolution of its internals.</p>
+    <p class="component-description">The tapps_mcp package tappsmcp: mcp server providing code quality tools. It is composed of 29 modules that work together to deliver its capabilities. The package exposes 211 functions and 3 classes, offering both procedural and object-oriented interfaces to its consumers. This component adds value by encapsulating domain-specific logic behind clean interfaces, reducing coupling between other parts of the system and enabling independent evolution of its internals.</p>
     <div class="submodule-list">
       <h4>Key Modules</h4>
       <ul>
@@ -651,7 +780,46 @@ body {{
   </div>
 </div>
 </section>
-
+<section class="section" id="dependency-flow" role="region" aria-labelledby="dep-flow-heading">
+<h2 class="section-title" id="dep-flow-heading">Dependency Flow</h2>
+<p><strong>Why this matters:</strong> The dependency flow reveals coupling between packages. Arrows show import relationships; understanding them helps plan refactors and avoid circular dependencies.</p>
+<figure role="figure" aria-labelledby="dep-flow-figcaption">
+<div class="diagram-container"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700" class="dep-svg">
+  <defs>
+    <filter id="dshadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1" dy="3" stdDeviation="4" flood-opacity="0.2"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#a1a1aa"/>
+    </marker>
+    <linearGradient id="dgrad0" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#2dd4bf"/>
+    </linearGradient>
+    <linearGradient id="dgrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4a847"/>
+      <stop offset="100%" stop-color="#e8c060"/>
+    </linearGradient>
+    <linearGradient id="dgrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d9488"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="700" rx="16" fill="#0a0a0f"/>
+  <text x="400" y="35" text-anchor="middle" fill="#fafafa" font-size="18" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">Dependency Flow</text>
+  <path d="M 400 100 Q 465 312 617 475" fill="none" stroke="rgba(63,63,90,0.5)" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowhead)" opacity="0.7"/>
+  <path d="M 183 475 Q 400 425 617 475" fill="none" stroke="rgba(63,63,90,0.5)" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowhead)" opacity="0.7"/>
+  <path d="M 183 475 Q 335 313 400 100" fill="none" stroke="rgba(63,63,90,0.5)" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowhead)" opacity="0.7"/>
+  <circle cx="400" cy="100" r="50" fill="url(#dgrad0)" filter="url(#dshadow)"/>
+  <text x="400" y="105" text-anchor="middle" fill="#0a0a0f" font-size="12" font-weight="600" font-family="Outfit, Inter, system-ui, sans-serif">docs_mcp</text>
+  <circle cx="617" cy="475" r="50" fill="url(#dgrad1)" filter="url(#dshadow)"/>
+  <text x="617" y="480" text-anchor="middle" fill="#0a0a0f" font-size="12" font-weight="600" font-family="Outfit, Inter, system-ui, sans-serif">tapps_core</text>
+  <circle cx="183" cy="475" r="50" fill="url(#dgrad2)" filter="url(#dshadow)"/>
+  <text x="183" y="480" text-anchor="middle" fill="#fafafa" font-size="12" font-weight="600" font-family="Outfit, Inter, system-ui, sans-serif">tapps_mcp</text>
+</svg></div>
+<figcaption id="dep-flow-figcaption">Package import relationships</figcaption>
+</figure>
+</section>
 <section class="section" id="api-surface">
 <h2 class="section-title">Public API Surface</h2>
 <p>The public API surface defines the contract between this project and its consumers. Classes listed below represent publicly accessible interfaces that external code may depend upon. This is a curated selection of the 51 public classes discovered.</p>
@@ -910,7 +1078,51 @@ body {{
 </div>
 <p style="color:var(--text-muted);font-size:0.75rem;">Showing 30 of 51 public classes. 21 additional classes omitted for brevity.</p>
 </section>
-
+<section class="section" id="tech-stack" role="region" aria-labelledby="tech-stack-heading">
+<h2 class="section-title" id="tech-stack-heading">Technology Stack</h2>
+<p><strong>Why this matters:</strong> Understanding dependencies helps set up your environment, assess supply-chain risk, and plan upgrades.</p>
+<p>The technology stack represents the foundation upon which this project is built. Each dependency has been selected to address specific technical requirements, from core framework capabilities to development tooling. Understanding these dependencies helps developers set up their environment and appreciate the design choices made.</p>
+<div class="dep-group">
+  <h4>Runtime Dependencies</h4>
+  <div class="dep-tags">
+    <span class="dep-tag">anyio</span>
+    <span class="dep-tag">click</span>
+    <span class="dep-tag">filelock</span>
+    <span class="dep-tag">gitpython</span>
+    <span class="dep-tag">httpx</span>
+    <span class="dep-tag">jinja2</span>
+    <span class="dep-tag">mcp</span>
+    <span class="dep-tag">pydantic-settings</span>
+    <span class="dep-tag">pydantic</span>
+    <span class="dep-tag">pyyaml</span>
+    <span class="dep-tag">structlog</span>
+    <span class="dep-tag">tapps-core</span>
+  </div>
+</div>
+<div class="dep-group">
+  <h4>Development Dependencies</h4>
+  <div class="dep-tags">
+    <span class="dep-tag dep-dev">faiss-cpu</span>
+    <span class="dep-tag dep-dev">mypy</span>
+    <span class="dep-tag dep-dev">numpy</span>
+    <span class="dep-tag dep-dev">pip-audit</span>
+    <span class="dep-tag dep-dev">playwright</span>
+    <span class="dep-tag dep-dev">pre-commit</span>
+    <span class="dep-tag dep-dev">pytest-asyncio</span>
+    <span class="dep-tag dep-dev">pytest-cov</span>
+    <span class="dep-tag dep-dev">pytest-timeout</span>
+    <span class="dep-tag dep-dev">pytest</span>
+    <span class="dep-tag dep-dev">ruff</span>
+    <span class="dep-tag dep-dev">sentence-transformers</span>
+    <span class="dep-tag dep-dev">tree-sitter-go</span>
+    <span class="dep-tag dep-dev">tree-sitter-java</span>
+    <span class="dep-tag dep-dev">tree-sitter-rust</span>
+    <span class="dep-tag dep-dev">tree-sitter-typescript</span>
+    <span class="dep-tag dep-dev">tree-sitter</span>
+    <span class="dep-tag dep-dev">types-PyYAML</span>
+  </div>
+</div>
+</section>
 <section class="section" id="health-insights">
 <h2 class="section-title">Architecture Health</h2>
 <p>Key indicators for technical leadership assessing system maturity, maintainability risk, and architectural fitness.</p>
@@ -927,13 +1139,13 @@ body {{
 </div>
 
 <div class="stat-card">
-  <div class="stat-number" style="color:var(--accent-primary)">Low</div>
+  <div class="stat-number" style="color:var(--accent-secondary)">Medium</div>
   <div class="stat-label">External Coupling</div>
 </div>
 
 <div class="stat-card">
   <div class="stat-number">96.2%</div>
-  <div class="stat-label">API Density</div>
+  <div class="stat-label">Class Coverage</div>
 </div>
 </div>
 <div class="purpose-block">
@@ -944,8 +1156,8 @@ body {{
 <div class="purpose-block">
 <h3>Highest Functionality Concentration</h3><p class="purpose-text">Packages with the most functions represent the core business logic. These are the most critical to test thoroughly and document carefully:</p>
 <div class="dep-tags" style="margin-top:12px">
-<span class="dep-tag">tapps_mcp (186 fn)</span>
-<span class="dep-tag">docs_mcp (46 fn)</span>
+<span class="dep-tag">tapps_mcp (211 fn)</span>
+<span class="dep-tag">docs_mcp (48 fn)</span>
 </div></div>
 <div class="purpose-block">
 <h3>Recommendations</h3>
@@ -955,10 +1167,11 @@ body {{
 </section>
 
 <footer class="footer">
+  <p><a href="#" class="back-to-top">Back to top</a></p>
   <p>Generated by <strong>DocsMCP</strong> &mdash; Architecture Report</p>
   <p style="margin-top:6px">
     3 packages &middot; 53 modules &middot;
-    51 public classes &middot; 2026-03-05 23:42 UTC
+    51 public classes &middot; 2026-03-09 22:32 UTC
   </p>
 </footer>
 </body>

@@ -278,7 +278,7 @@ class TestSelectTier:
         assert result == MemoryTier.pattern
 
     def test_selects_most_durable(self) -> None:
-        """Selects most durable tier (architectural > pattern > context)."""
+        """Selects most durable tier (architectural > pattern > procedural > context)."""
         entries = [
             _make_entry("a", "v", tier=MemoryTier.context),
             _make_entry("b", "v", tier=MemoryTier.architectural),
@@ -286,6 +286,15 @@ class TestSelectTier:
         ]
         result = select_tier(entries)
         assert result == MemoryTier.architectural
+
+    def test_procedural_over_context(self) -> None:
+        """Procedural is selected over context (Epic 65.11)."""
+        entries = [
+            _make_entry("a", "v", tier=MemoryTier.context),
+            _make_entry("b", "v", tier=MemoryTier.procedural),
+        ]
+        result = select_tier(entries)
+        assert result == MemoryTier.procedural
 
     def test_pattern_over_context(self) -> None:
         """Pattern is selected over context."""

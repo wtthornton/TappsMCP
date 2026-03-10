@@ -764,7 +764,7 @@ def _maybe_auto_gc(
     if not gc_enabled:
         return None
 
-    max_memories = getattr(mem_settings, "max_memories", 500)
+    max_memories = getattr(mem_settings, "max_memories", 1500)
     threshold = getattr(mem_settings, "gc_auto_threshold", 0.8)
     trigger_count = int(max_memories * threshold)
 
@@ -806,6 +806,35 @@ def _maybe_auto_gc(
     except Exception:
         _logger.debug("session_auto_gc_failed", exc_info=True)
         return {"ran": False, "error": "auto-gc failed"}
+
+
+def _enrich_memory_status_hints(
+    memory_status: dict[str, Any],
+    entries: list[Any],
+    settings: TappsMCPSettings,
+) -> None:
+    """Add consolidation and federation hints to memory_status when applicable (Epic 65.1)."""
+    try:
+        from tapps_core.metrics.dashboard import DashboardGenerator
+
+        consolidation = DashboardGenerator._compute_consolidation_stats(entries)
+        if consolidation.get("consolidation_groups", 0) > 0:
+            memory_status["consolidation_hint"] = (
+                f"{consolidation['consolidated_count']} groups, "
+                f"{consolidation['source_entries_count']} source entries"
+            )
+
+        from tapps_core.memory.federation import load_federation_config
+
+        config = load_federation_config()
+        project_root_str = str(settings.project_root)
+        if any(p.project_root == project_root_str for p in config.projects):
+            synced = sum(1 for e in entries if "federated" in (e.tags or []))
+            memory_status["federation_hint"] = (
+                f"hub_registered, {synced} synced entries"
+            )
+    except Exception:
+        _logger.debug("memory_status_hints_failed", exc_info=True)
 
 
 def _maybe_consolidation_scan(
@@ -1073,6 +1102,9 @@ async def tapps_session_start(
                     "capacity_pct": cap_pct,
                 }
 
+                # Epic 65.1: Consolidation and federation hints when applicable
+                _enrich_memory_status_hints(memory_status, snapshot.entries, settings)
+
                 # Auto-GC: run once per session when usage exceeds threshold
                 memory_gc_result = _maybe_auto_gc(
                     mem_store,
@@ -1273,6 +1305,8 @@ async def tapps_init(
     overwrite_tech_stack_md: bool = False,
     agent_teams: bool = False,
     memory_capture: bool = False,
+    memory_auto_capture: bool = False,
+    memory_auto_recall: bool = False,
     destructive_guard: bool | None = None,
     minimal: bool = False,
     dry_run: bool = False,
@@ -1328,6 +1362,13 @@ async def tapps_init(
             hooks (TeammateIdle, TaskCompleted) for quality watchdog teammate.
         memory_capture: When ``True`` and platform is ``"claude"``, generate a Stop
             hook that captures session quality data for memory persistence.
+        memory_auto_recall: When ``True`` and platform is ``"claude"``, generate
+            SessionStart/PreCompact hooks that inject relevant memories before
+            agent prompt (Epic 65.4). Use ``memory_hooks.auto_recall.enabled`` in
+            ``.tapps-mcp.yaml`` to enable.
+        memory_auto_capture: When ``True`` and platform is ``"claude"``, generate a
+            Stop hook that extracts durable facts from context and saves via
+            MemoryStore (Epic 65.5).
         destructive_guard: When ``True``, add a PreToolUse hook that blocks Bash
             commands containing destructive patterns (rm -rf, format c:, etc.).
             When ``None``, uses value from settings. Default ``False``.
@@ -1412,6 +1453,8 @@ async def tapps_init(
         overwrite_tech_stack_md=overwrite_tech_stack_md,
         agent_teams=agent_teams,
         memory_capture=memory_capture,
+        memory_auto_capture=memory_auto_capture,
+        memory_auto_recall=memory_auto_recall,
         destructive_guard=dg,
         minimal=minimal,
         dry_run=dry_run,

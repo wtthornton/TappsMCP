@@ -270,8 +270,9 @@ def select_tier(entries: list[MemoryEntry]) -> MemoryTier:
         return MemoryTier.pattern
 
     tier_priority = {
-        MemoryTier.architectural: 3,
-        MemoryTier.pattern: 2,
+        MemoryTier.architectural: 4,
+        MemoryTier.pattern: 3,
+        MemoryTier.procedural: 2,  # Epic 65.11
         MemoryTier.context: 1,
     }
 

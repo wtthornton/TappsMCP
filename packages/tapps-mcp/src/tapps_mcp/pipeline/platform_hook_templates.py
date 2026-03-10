@@ -340,6 +340,27 @@ if [ "$BLOCK" = 1 ]; then
 fi
 exit 0
 """,
+    "tapps-memory-auto-capture.sh": """\
+#!/usr/bin/env bash
+# TappsMCP Stop hook - Auto-Capture (Epic 65.5)
+# Extracts durable facts from context and saves via tapps_memory save_bulk.
+# Runs tapps-mcp auto-capture with stdin; configurable max_facts, min_context.
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+ACTIVE=$(echo "$INPUT" | "$PYBIN" -c \
+  "import sys,json; d=json.load(sys.stdin); print(d.get('stop_hook_active','false'))" \
+  2>/dev/null)
+if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
+  exit 0
+fi
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+if command -v tapps-mcp >/dev/null 2>&1; then
+  echo "$INPUT" | tapps-mcp auto-capture --project-root "$PROJECT_DIR" 2>/dev/null || true
+elif [ -n "$PYBIN" ]; then
+  echo "$INPUT" | "$PYBIN" -m tapps_mcp.cli auto-capture --project-root "$PROJECT_DIR" 2>/dev/null || true
+fi
+exit 0
+""",
     "tapps-memory-capture.sh": """\
 #!/usr/bin/env bash
 # TappsMCP Stop hook - Memory Capture (Epic 34.5)
@@ -647,6 +668,31 @@ if ($block) {
     Write-Error "TappsMCP: Blocked potentially destructive command."
     exit 2
 }
+exit 0
+""",
+    "tapps-memory-auto-capture.ps1": """\
+# TappsMCP Stop hook - Auto-Capture (Epic 65.5)
+# Extracts durable facts from context and saves via MemoryStore.
+# Runs tapps-mcp auto-capture with stdin; configurable max_facts, min_context.
+$rawInput = @($input) -join "`n"
+try {
+    $data = $rawInput | ConvertFrom-Json
+    $active = $data.stop_hook_active
+} catch {
+    $active = $false
+}
+if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
+    exit 0
+}
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) { $projDir = "." }
+try {
+    if (Get-Command tapps-mcp -ErrorAction SilentlyContinue) {
+        $rawInput | tapps-mcp auto-capture --project-root $projDir 2>$null
+    } else {
+        $rawInput | python -m tapps_mcp.cli auto-capture --project-root $projDir 2>$null
+    }
+} catch {}
 exit 0
 """,
     "tapps-memory-capture.ps1": """\
@@ -1039,8 +1085,211 @@ CURSOR_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
 }
 
 # ---------------------------------------------------------------------------
+# Memory auto-capture hook config (Epic 65.5) — opt-in via memory_auto_capture=True
+# ---------------------------------------------------------------------------
+
+MEMORY_AUTO_CAPTURE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
+    "Stop": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-memory-auto-capture.sh",
+                },
+            ],
+        },
+    ],
+}
+
+MEMORY_AUTO_CAPTURE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
+    "Stop": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-memory-auto-capture.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+}
+
+# ---------------------------------------------------------------------------
 # Memory capture hook config (Epic 34.5) — opt-in via memory_capture=True
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Memory auto-recall hook templates (Epic 65.4)
+# Runs before agent prompt (PreCompact, SessionStart) to inject relevant memories.
+# Calls tapps-mcp memory recall with query from prompt/last user message.
+# Configurable: max_results (5), min_score (0.3), min_prompt_length (50).
+# ---------------------------------------------------------------------------
+
+def _memory_auto_recall_script(
+    max_results: int = 5,
+    min_score: float = 0.3,
+    min_prompt_length: int = 50,
+) -> str:
+    """Return the bash script for memory auto-recall (Epic 65.4)."""
+    return f'''#!/usr/bin/env bash
+# TappsMCP Memory Auto-Recall (Epic 65.4)
+# Injects relevant memories before agent prompt. Runs on PreCompact, SessionStart.
+# Graceful fallback: no MemoryStore, MCP unavailable, empty results — exit 0.
+INPUT=$(cat)
+PY="import sys,json
+try:
+    d=json.load(sys.stdin)
+    q=d.get('prompt','') or d.get('last_user_message','') or d.get('last_message','')
+    if not q and 'messages' in d:
+        ms=d.get('messages',[])
+        if ms:
+            last=ms[-1] if isinstance(ms[-1],dict) else {{}}
+            q=last.get('content',last.get('text',''))
+    if not q: q=d.get('context','') or 'project context architecture'
+    q=(q or '')[:500]
+    print(q)
+except Exception:
+    print('project context architecture')
+"
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+QUERY=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null || echo "project context architecture")
+if [ ${{#QUERY}} -lt {min_prompt_length} ]; then
+  exit 0
+fi
+PROJECT_DIR="${{CLAUDE_PROJECT_DIR:-.}}"
+TAPPS=$(command -v tapps-mcp 2>/dev/null)
+if [ -z "$TAPPS" ]; then
+  exit 0
+fi
+OUT=$("$TAPPS" memory recall --query "$QUERY" --project-root "$PROJECT_DIR" \\
+  --max-results {max_results} --min-score {min_score} 2>/dev/null)
+if [ -n "$OUT" ]; then
+  echo "$OUT"
+fi
+exit 0
+'''
+
+
+def _memory_auto_recall_script_ps(
+    max_results: int = 5,
+    min_score: float = 0.3,
+    min_prompt_length: int = 50,
+) -> str:
+    """Return the PowerShell script for memory auto-recall (Epic 65.4)."""
+    return f'''# TappsMCP Memory Auto-Recall (Epic 65.4)
+# Injects relevant memories before agent prompt. Runs on PreCompact, SessionStart.
+# Graceful fallback: no MemoryStore, MCP unavailable, empty results — exit 0.
+$rawInput = @($input) -join "`n"
+$query = "project context architecture"
+try {{
+    $data = $rawInput | ConvertFrom-Json
+    $query = if ($data.prompt) {{ $data.prompt }}
+             elseif ($data.last_user_message) {{ $data.last_user_message }}
+             elseif ($data.last_message) {{ $data.last_message }}
+             elseif ($data.context) {{ $data.context }}
+             else {{ "project context architecture" }}
+    if ($data.messages -and $data.messages.Count -gt 0) {{
+        $last = $data.messages[-1]
+        $c = if ($last.content) {{ $last.content }} elseif ($last.text) {{ $last.text }} else {{ "" }}
+        if ($c) {{ $query = $c }}
+    }}
+    $query = ($query -as [string] -or "").Substring(0, [Math]::Min(500, ($query -as [string]).Length))
+}} catch {{}}
+if ($query.Length -lt {min_prompt_length}) {{
+    exit 0
+}}
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) {{ $projDir = "." }}
+$tapps = Get-Command tapps-mcp -ErrorAction SilentlyContinue
+if (-not $tapps) {{
+    exit 0
+}}
+try {{
+    $out = & tapps-mcp memory recall --query "$query" --project-root $projDir `
+        --max-results {max_results} --min-score {min_score} 2>$null
+    if ($out) {{ Write-Output $out }}
+}} catch {{}}
+exit 0
+'''
+
+
+MEMORY_AUTO_RECALL_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
+    "SessionStart": [
+        {
+            "matcher": "startup|resume",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-memory-auto-recall.sh",
+                },
+            ],
+        },
+        {
+            "matcher": "compact",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-memory-auto-recall.sh",
+                },
+            ],
+        },
+    ],
+    "PreCompact": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-memory-auto-recall.sh",
+                },
+            ],
+        },
+    ],
+}
+
+MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
+    "SessionStart": [
+        {
+            "matcher": "startup|resume",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-memory-auto-recall.ps1"
+                    ),
+                },
+            ],
+        },
+        {
+            "matcher": "compact",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-memory-auto-recall.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "PreCompact": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-memory-auto-recall.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+}
 
 MEMORY_CAPTURE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     "Stop": [

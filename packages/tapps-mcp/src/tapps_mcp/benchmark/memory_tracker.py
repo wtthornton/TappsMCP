@@ -1,7 +1,7 @@
 """Memory subsystem effectiveness tracking for MCP tool benchmarks.
 
 Measures how memory operations (save, get, search, inject) affect task
-resolution across different memory tiers (architectural, pattern, context).
+resolution across different memory tiers (architectural, pattern, procedural, context).
 """
 
 from __future__ import annotations
@@ -22,10 +22,10 @@ __all__ = [
 logger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
-# Memory tier definitions
+# Memory tier definitions (Epic 65.11: procedural added)
 # ---------------------------------------------------------------------------
 
-_MEMORY_TIERS = ["architectural", "pattern", "context"]
+_MEMORY_TIERS = ["architectural", "pattern", "procedural", "context"]
 _MEMORY_TOOL = "tapps_memory"
 
 
@@ -40,7 +40,7 @@ class MemoryEffectiveness(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     memory_tier: str = Field(
-        description="Memory tier: 'architectural', 'pattern', or 'context'.",
+        description="Memory tier: 'architectural', 'pattern', 'procedural', or 'context'.",
     )
     retrievals: int = Field(ge=0, description="Number of memory retrievals observed.")
     resolution_with: float = Field(
@@ -185,6 +185,7 @@ class MemoryEffectivenessAnalyzer:
         base_relevance: dict[str, float] = {
             "architectural": 0.85,
             "pattern": 0.70,
+            "procedural": 0.62,  # Epic 65.11: between pattern and context
             "context": 0.55,
         }
         base = base_relevance.get(tier, 0.5)

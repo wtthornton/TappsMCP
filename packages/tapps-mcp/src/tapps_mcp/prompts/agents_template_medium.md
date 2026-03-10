@@ -108,16 +108,34 @@ The checklist uses this to decide which tools are required vs recommended vs opt
 
 ## Memory systems
 
-Your project may have two complementary memory systems. Use the right one for each type of knowledge:
+Your project may have two complementary memory systems:
 
-- **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Session learnings, user preferences, build commands, IDE settings, debugging insights. Auto-managed by Claude Code across sessions.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge. Structured with tier classification (architectural/pattern/context), confidence scoring, decay, contradiction detection, and cross-session persistence.
-
-**When to use which:**
-- Build commands, IDE preferences, personal workflow notes --> auto memory
-- Architecture decisions, quality patterns, cross-agent knowledge --> `tapps_memory`
+- **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed.
+- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert findings, cross-agent knowledge. Structured with tiers, confidence decay, contradiction detection, consolidation, and federation.
 
 RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
+
+### Memory actions (20 total)
+
+**Core:** `save`, `save_bulk`, `get`, `list`, `delete` — CRUD operations with tier/scope/tag classification
+
+**Search:** `search` — ranked BM25 retrieval with composite scoring (relevance + confidence + recency + frequency)
+
+**Intelligence:** `reinforce` (reset decay clock), `gc` (archive stale entries), `contradictions` (detect stale claims), `reseed` (re-populate from profile)
+
+**Consolidation:** `consolidate` (merge related entries with provenance), `unconsolidate` (undo merge)
+
+**Import/export:** `import` (JSON), `export` (JSON or Markdown)
+
+**Federation:** `federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`, `federate_search`, `federate_status` — cross-project memory sharing via central hub
+
+### Memory tiers and scopes
+
+**Tiers:** `architectural` (180-day half-life, stable decisions), `pattern` (60-day, conventions), `procedural` (30-day, workflows), `context` (14-day, short-lived)
+
+**Scopes:** `project` (default, all sessions), `branch` (git branch), `session` (ephemeral), `shared` (federation-eligible)
+
+**Configuration:** Override `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
 
 ---
 

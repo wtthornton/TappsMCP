@@ -69,6 +69,63 @@ class MetadataExtractor:
         # Fallback to directory name
         return ProjectMetadata(name=project_root.name)
 
+    def extract_with_workspace(self, project_root: Path) -> ProjectMetadata:
+        """Extract metadata from root, then aggregate dependencies from workspace packages.
+
+        For uv/poetry monorepos with [tool.uv.workspace] members = ["packages/*"],
+        reads root pyproject.toml for name/description/version, then aggregates
+        dependencies from packages/*/pyproject.toml.
+        """
+        root = project_root.resolve()
+        base = self.extract(root)
+        pkgs_dir = root / "packages"
+        if not pkgs_dir.is_dir():
+            return base
+
+        all_deps: set[str] = set(base.dependencies)
+        all_dev: set[str] = set(base.dev_dependencies)
+        desc_fallback = base.description
+        name_fallback = base.name
+        for pkg_dir in sorted(pkgs_dir.iterdir()):
+            if not pkg_dir.is_dir() or pkg_dir.name.startswith("."):
+                continue
+            pyproject = pkg_dir / "pyproject.toml"
+            if not pyproject.exists():
+                continue
+            try:
+                pkg_meta = self._parse_pyproject(pyproject)
+            except Exception:
+                continue
+            for d in pkg_meta.dependencies:
+                all_deps.add(d)
+            for d in pkg_meta.dev_dependencies:
+                all_dev.add(d)
+            if not desc_fallback and pkg_meta.description:
+                desc_fallback = pkg_meta.description
+            if not name_fallback and pkg_meta.name:
+                name_fallback = pkg_meta.name
+
+        # Build result with fallbacks from packages
+        base_name = base.name or name_fallback or root.name
+        base_desc = base.description or desc_fallback
+
+        return ProjectMetadata(
+            name=base_name,
+            version=base.version,
+            description=base_desc,
+            author=base.author,
+            author_email=base.author_email,
+            license=base.license,
+            python_requires=base.python_requires,
+            homepage=base.homepage,
+            repository=base.repository,
+            keywords=base.keywords,
+            dependencies=sorted(all_deps),
+            dev_dependencies=sorted(all_dev),
+            entry_points=base.entry_points,
+            source_file=base.source_file,
+        )
+
     def _parse_pyproject(self, path: Path) -> ProjectMetadata:
         """Parse PEP 621 metadata from pyproject.toml."""
         try:

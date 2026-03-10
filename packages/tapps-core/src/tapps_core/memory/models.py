@@ -27,6 +27,7 @@ class MemoryTier(StrEnum):
 
     architectural = "architectural"  # slow decay - project structure, key decisions
     pattern = "pattern"  # medium decay - coding patterns, conventions
+    procedural = "procedural"  # medium decay - how to do (workflows, steps); Epic 65.11
     context = "context"  # fast decay - session-specific context
 
 
@@ -128,6 +129,12 @@ class MemoryEntry(BaseModel):
     # Reserved for Epic 25 (Memory Retrieval & Integration)
     seeded_from: str | None = Field(
         default=None, description="Populated by profile seeding."
+    )
+
+    # Optional embedding for semantic search (Epic 65.7)
+    embedding: list[float] | None = Field(
+        default=None,
+        description="Vector embedding for semantic search when enabled.",
     )
 
     # Class-level constants (not serialised)

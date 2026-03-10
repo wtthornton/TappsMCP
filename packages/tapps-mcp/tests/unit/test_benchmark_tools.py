@@ -766,13 +766,13 @@ class TestMemoryEffectivenessAnalyzer:
         analyzer = MemoryEffectivenessAnalyzer()
         report = analyzer.analyze(results)
         assert isinstance(report, MemoryEffectivenessReport)
-        assert report.most_effective_tier in {"architectural", "pattern", "context"}
+        assert report.most_effective_tier in {"architectural", "pattern", "procedural", "context"}
 
     def test_analyze_empty_results(self) -> None:
         analyzer = MemoryEffectivenessAnalyzer()
         report = analyzer.analyze([])
-        assert len(report.per_tier) == 3  # Still has all tiers
-        assert report.most_effective_tier in {"architectural", "pattern", "context"}
+        assert len(report.per_tier) == 4  # Epic 65.11: procedural added
+        assert report.most_effective_tier in {"architectural", "pattern", "procedural", "context"}
 
     def test_tier_assignment_deterministic(self) -> None:
         analyzer = MemoryEffectivenessAnalyzer()
@@ -782,7 +782,7 @@ class TestMemoryEffectivenessAnalyzer:
 
     def test_relevance_scores_bounded(self) -> None:
         analyzer = MemoryEffectivenessAnalyzer()
-        for tier in ["architectural", "pattern", "context"]:
+        for tier in ["architectural", "pattern", "procedural", "context"]:
             score = analyzer._estimate_relevance(tier, 100)
             assert 0.0 <= score <= 1.0
 

@@ -63,6 +63,38 @@
 | [Epic 63](EPIC-63-AUTO-EXPERT-GENERATOR.md) | Auto Expert Generator | P2 | ~1-2 weeks | Epic 43-45 | **Complete** — 49 tests, gap analysis, config generation, knowledge scaffolding |
 | [Epic 64](EPIC-64-CROSS-PROJECT-MEMORY-FEDERATION.md) | Cross-Project Memory Federation | P2 | ~2 weeks | Epic 23-25, 34, 42 | **Complete** — 56 tests, federated hub, publish/subscribe/search actions |
 
+### Epic 65: Memory 2026 Best Practices (Proposed)
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 65](EPIC-65-MEMORY-2026-BEST-PRACTICES.md) | Memory 2026 Best Practices (Parent Plan) | P1 | ~12-16 weeks | Epic 23, 24, 25, 34, 58, 64 | **Proposed** |
+| [Epic 65.1](EPIC-65.1-MEMORY-STATS-DASHBOARD.md) | Memory Stats in Dashboard | P1 | 3-5 days | Epic 23, 55 | **Proposed** |
+| [Epic 65.2](EPIC-65.2-MARKDOWN-EXPORT.md) | Markdown Export & Curation | P1 | 3-5 days | Epic 23, 42 | **Proposed** |
+| [Epic 65.3](EPIC-65.3-CONFIGURABLE-CAPTURE-PROMPT.md) | Configurable Capture Prompt & Write Rules | P1 | 4-6 days | Epic 23 | **Proposed** |
+| [Epic 65.4](EPIC-65.4-AUTO-RECALL-HOOK.md) | Auto-Recall Hook | P1 | 1-1.5 weeks | Epic 23, 25, 34, 36 | **Proposed** |
+| [Epic 65.5](EPIC-65.5-AUTO-CAPTURE-HOOK.md) | Auto-Capture Hook | P1 | 1.5-2 weeks | Epic 23, 36, 55, 65.3 | **Proposed** |
+| [Epic 65.6](EPIC-65.6-HOOK-INTEGRATION.md) | Hook Integration in tapps_init | P1 | 2-3 days | Epic 65.4, 65.5 | **Proposed** |
+| [Epic 65.7](EPIC-65.7-OPTIONAL-VECTOR-PROVIDER.md) | Optional Vector/Embedding Provider | P1 | 1.5-2 weeks | Epic 23, 25, 34 | **Proposed** |
+| [Epic 65.8](EPIC-65.8-HYBRID-SEARCH-RRF.md) | Hybrid Search with RRF | P1 | 2-2.5 weeks | Epic 23, 25, 34, 65.7 | **Proposed** |
+| [Epic 65.9](EPIC-65.9-OPTIONAL-RERANKING.md) | Optional Reranking | P2 | 1 week | Epic 65.8 | **Proposed** |
+| [Epic 65.10](EPIC-65.10-SESSION-INDEXING.md) | Session Indexing | P2 | 1.5-2 weeks | Epic 23, 25, 34 | **Proposed** |
+| [Epic 65.11](EPIC-65.11-PROCEDURAL-MEMORY-TIER.md) | Procedural Memory Tier | P2 | 1 week | Epic 23, 24, 25, 58 | **Proposed** |
+| [Epic 65.12](EPIC-65.12-ENTITY-RELATIONSHIP-EXTRACTION.md) | Entity/Relationship Extraction | P2 | 2-2.5 weeks | Epic 58 | **Proposed** |
+| [Epic 65.13](EPIC-65.13-RELATIONSHIP-AWARE-RETRIEVAL.md) | Relationship-Aware Retrieval | P2 | 1-1.5 weeks | Epic 65.12 | **Proposed** |
+| [Epic 65.14](EPIC-65.14-MEMORY-RETRIEVAL-POLICY.md) | Memory Retrieval Policy | P2 | 3-5 days | Epic 23, 25 | **Proposed** |
+| [Epic 65.15](EPIC-65.15-MEMORY-MAINTENANCE-SCHEDULE.md) | Memory Maintenance Schedule | P2 | 3-5 days | Epic 23, 24, 58 | **Proposed** |
+| [Epic 65.16](EPIC-65.16-CONTEXT-BUDGET.md) | Context Budget for Memory Injection | P2 | 2-3 days | Epic 25 | **Proposed** |
+| [Epic 65.17](EPIC-65.17-WRITE-RULES-VALIDATION.md) | Optional Write Rules Validation | P2 | 2-3 days | Epic 23, 65.3 | **Proposed** |
+
+### Epic 66: Tool UX Improvements (Proposed)
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 66.1](EPIC-66.1-VALIDATE-CHANGED-PATH-HINTS.md) | validate_changed Path Mapping Hints | P2 | 2-3 days | Epic 1, 8 | **Proposed** |
+| [Epic 66.2](EPIC-66.2-CHECKLIST-VALIDATION-NOTE.md) | Checklist Validation Note for 0 Files | P3 | 1-2 days | Epic 8 | **Proposed** |
+
+*Source: [TAPPS_MCP_TOOL_UX_REVIEW](../TAPPS_MCP_TOOL_UX_REVIEW.md)*
+
 ### Proposed Future Epics
 
 | Epic | Name | Priority | LOE | Dependencies | Status |

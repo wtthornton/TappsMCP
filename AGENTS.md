@@ -53,7 +53,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_research** | When you need **combined expert + docs** in one call - consults the domain expert, then supplements with Context7 (when key set) or LlmsTxt documentation. Pass `file_context` with the path to the file being edited to auto-infer library from imports. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
 | **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
 | **tapps_project_profile** | When you need **project context** - detects project type, tech stack, CI/Docker/tests, and recommendations. Session start does not include profile; call this on demand. |
-| **tapps_memory** | **At session start** - search or list past decisions with `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")`. **Before session end** - save learnings with `tapps_memory(action="save", key="...", value="...", tier="...", tags=[...])`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export, consolidate, unconsolidate. **Consolidation:** use `action="consolidate"` (with `entry_ids` or `query`) to merge related memories; `action="unconsolidate"` to undo. Get on a consolidated entry shows provenance (source entries). By default, search/list hide source entries of consolidated memories (`include_sources=True` to show all). |
+| **tapps_memory** | Persistent cross-session knowledge store with 20 actions (see **Memory action reference** below). **At session start** - `action="search"` or `action="list"` to recall past decisions. **Before session end** - `action="save"` to persist learnings. |
 | **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. Use `action="promote"` to promote a session note to persistent cross-session memory. |
 | **tapps_impact_analysis** | Before **modifying a file's public API** - shows what depends on it and what could break. |
 | **tapps_report** | After scoring/gating, when the user wants a **formatted quality summary** (Markdown, JSON, or HTML). |
@@ -320,13 +320,143 @@ The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard 
 Your project may have two complementary memory systems. Use the right one for each type of knowledge:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Session learnings, user preferences, build commands, IDE settings, debugging insights. Auto-managed by Claude Code across sessions.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge. Structured with tier classification (architectural/pattern/context), confidence scoring, decay, contradiction detection, consolidation, and cross-session persistence. Related memories can be auto-consolidated into summaries; use `unconsolidate` to undo.
+- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge. Structured with tier classification, confidence scoring, decay, contradiction detection, consolidation, federation, and cross-session persistence.
 
 **When to use which:**
 - Build commands, IDE preferences, personal workflow notes --> auto memory
 - Architecture decisions, quality patterns, cross-agent knowledge --> `tapps_memory`
 
 Use `tapps_memory` for architecture decisions and quality patterns.
+
+### Memory action reference
+
+The `tapps_memory` tool supports **20 actions** organized in 5 groups:
+
+#### Core CRUD
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **save** | `key`, `value`, `tier`, `scope`, `tags`, `source` | Save a memory entry. Tiers: `architectural` (180-day half-life), `pattern` (60-day), `procedural` (30-day), `context` (14-day). Scopes: `project` (default), `branch`, `session`, `shared` (federation-eligible). Sources: `human` (0.95 confidence), `agent` (0.6), `inferred` (0.4), `system` (0.9). |
+| **save_bulk** | `entries` (list of dicts) | Save up to 50 entries at once. Each entry has `key`, `value`, `tier`, `scope`, `tags`. Returns per-entry saved/skipped/error status. |
+| **get** | `key` | Retrieve a single entry by key. For consolidated entries, includes provenance (source entry IDs). |
+| **list** | `scope`, `tier`, `tags`, `limit`, `include_sources` | List entries with optional filters. Hides consolidated source entries by default (`include_sources=True` to show all). Max 50 results. |
+| **delete** | `key` | Delete a memory entry by key. |
+
+#### Search & retrieval
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **search** | `query`, `ranked`, `limit`, `scope`, `tier`, `tags`, `include_sources` | Search memories. Default `ranked=True` uses BM25 composite scoring (40% text relevance + 30% confidence + 15% recency + 15% access frequency). Returns composite scores and stale flags. Max 10 results. |
+
+#### Intelligence & maintenance
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **reinforce** | `key`, `boost` | Reset the decay clock on a memory and optionally boost confidence (max +0.2). Use when a memory is confirmed still relevant. |
+| **gc** | *(none)* | Run garbage collection. Archives stale memories (confidence at floor for 30+ days, contradicted with low confidence, or expired session entries). |
+| **contradictions** | *(none)* | Detect memories that contradict current project state (tech stack changes, deleted files, missing branches). Returns list of contradicted entries with reasons. |
+| **reseed** | *(none)* | Re-seed memories from current project profile. Deletes only auto-seeded entries; never overwrites human/agent memories. |
+
+#### Consolidation
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **consolidate** | `entry_ids` or `query`, `dry_run` | Merge related memories into a single consolidated entry with provenance tracking. Source entries are marked but kept for audit. Use `dry_run=True` to preview. |
+| **unconsolidate** | `key` | Undo a consolidation — restores original source entries and removes the consolidated entry. |
+
+#### Import / export
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **import** | `file_path`, `overwrite` | Import memories from a JSON file (up to 500 entries). Use `overwrite=True` to replace existing keys. |
+| **export** | `file_path`, `format` | Export memories to JSON or Markdown. Markdown uses Obsidian-style frontmatter with tags, confidence, and tier metadata. |
+
+#### Federation (cross-project sharing)
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **federate_register** | `project_id`, `tags` | Register this project in the federation hub (`~/.tapps-mcp/memory/federated.db`). Required before publishing or subscribing. |
+| **federate_publish** | *(none)* | Publish all `shared`-scope memories to the federation hub. Only entries with `scope="shared"` are eligible. |
+| **federate_subscribe** | `sources`, `tag_filter`, `min_confidence` | Subscribe to memories from other registered projects. Filter by source project IDs, tags, or minimum confidence. |
+| **federate_sync** | *(none)* | Pull subscribed memories from the federation hub into this project's local store. |
+| **federate_search** | `query` | Search across both local and federated memories. Local results get a relevance boost. |
+| **federate_status** | *(none)* | Show federation hub status: registered projects, subscriptions, and entry counts. |
+
+### Memory tiers and when to use them
+
+| Tier | Half-life | Use for | Examples |
+|------|-----------|---------|----------|
+| **architectural** | 180 days | Stable, long-lived decisions | "We use PostgreSQL", "Monorepo with 3 packages", "Auth via OAuth2" |
+| **pattern** | 60 days | Coding conventions and recurring solutions | "Use structlog not print", "All models inherit BaseModel", "Tests use pytest fixtures" |
+| **procedural** | 30 days | Workflows, step sequences, how-tos | "Deploy: build → test → push → tag", "Migration: alembic upgrade head" |
+| **context** | 14 days | Short-lived session facts | "Refactoring auth module this sprint", "Bug in rate limiter found" |
+
+### Memory scopes
+
+| Scope | Visibility | Use for |
+|-------|-----------|---------|
+| **project** | All sessions in this project (default) | Most memories — architecture, patterns, decisions |
+| **branch** | Only sessions on this git branch | Branch-specific work-in-progress |
+| **session** | Current session only (auto-expires after 7 days) | Temporary notes, ephemeral context |
+| **shared** | Federation-eligible (cross-project) | Reusable knowledge across projects (e.g., "always use parameterized SQL") |
+
+### Memory configuration (`.tapps-mcp.yaml`)
+
+```yaml
+memory:
+  enabled: true
+  max_memories: 1500           # Hard cap per project (default 1500)
+  gc_auto_threshold: 0.8       # Auto-GC at 80% capacity on session start
+  capture_prompt: |             # Guide what auto-capture stores
+    Store durable memories: architectural (project structure, key decisions),
+    pattern (coding conventions, recurring solutions),
+    context (session-specific facts that matter next week).
+    Skip: raw action logs, transient state, sensitive data.
+  write_rules:                  # Block sensitive data from being stored
+    block_sensitive_keywords: ["password", "secret", "api_key", "token"]
+    min_value_length: 10
+    max_value_length: 4096
+  decay:
+    architectural_half_life_days: 180
+    pattern_half_life_days: 60
+    procedural_half_life_days: 30
+    context_half_life_days: 14
+  # Optional: vector search for semantic similarity
+  semantic_search:
+    enabled: false              # Requires sentence-transformers
+  # Optional: cross-encoder reranking (Cohere API cost)
+  reranker:
+    enabled: false
+    provider: noop              # noop | cohere
+
+# Memory hooks — auto-inject/capture
+memory_hooks:
+  auto_recall:
+    enabled: false              # Inject relevant memories before each turn
+    min_score: 0.3              # Tune: lower = more coverage, higher = less noise
+  auto_capture:
+    enabled: false              # Extract facts on session end
+    max_facts: 5
+```
+
+### Memory hooks
+
+When `memory_hooks.auto_recall.enabled` or `memory_hooks.auto_capture.enabled` in `.tapps-mcp.yaml`, `tapps_init` generates hooks that inject memories before turns or extract facts on session stop.
+
+- **Auto-recall:** Injects relevant memories into context before each turn. Tune `min_score` (default 0.3) to balance coverage vs noise.
+- **Auto-capture:** Extracts durable facts from session context on session end. Quality of `capture_prompt` determines what gets stored.
+- **Engagement defaults:** high = both enabled, medium = auto_recall only, low = both disabled.
+
+### Federation use case (monorepos / multi-project teams)
+
+For teams working across multiple projects (e.g., monorepo packages, microservices):
+
+1. Register each project: `tapps_memory(action="federate_register", project_id="backend-api", tags=["python", "fastapi"])`
+2. Save reusable knowledge with shared scope: `tapps_memory(action="save", key="sql-parameterize", value="Always use parameterized queries", scope="shared")`
+3. Publish to hub: `tapps_memory(action="federate_publish")`
+4. From another project, subscribe: `tapps_memory(action="federate_subscribe", sources=["backend-api"])`
+5. Sync: `tapps_memory(action="federate_sync")`
+6. Search across all projects: `tapps_memory(action="federate_search", query="SQL best practices")`
 
 ---
 

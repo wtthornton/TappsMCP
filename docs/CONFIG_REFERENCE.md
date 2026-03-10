@@ -116,7 +116,7 @@ Nested under `memory`.
 | `enabled` | bool | `true` | Enable the memory subsystem. |
 | `gc_enabled` | bool | `true` | Enable garbage collection. |
 | `contradiction_check_on_start` | bool | `true` | Run contradiction detection at session start. |
-| `max_memories` | int | `500` | Maximum number of active memories per project. |
+| `max_memories` | int | `1500` | Maximum number of active memories per project. |
 | `gc_auto_threshold` | float | `0.8` | Run GC at session start when usage exceeds this fraction of max_memories. |
 | `inject_into_experts` | bool | `true` | Inject relevant memories into expert consultations. |
 

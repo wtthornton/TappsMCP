@@ -20,14 +20,49 @@ adaptive:
   learning_rate: 0.1
   min_outcomes: 5
 
+memory_hooks:
+  auto_recall:
+    enabled: false
+    max_results: 5
+    min_score: 0.3
+  auto_capture:
+    enabled: false
+    max_facts: 5
+
 memory:
   enabled: true
   gc_enabled: true
   contradiction_check_on_start: true
-  max_memories: 500
+  max_memories: 1500
   inject_into_experts: true
+  capture_prompt: |
+    Store durable memories: architectural (project structure, key decisions), pattern (coding conventions, recurring solutions), context (session-specific facts that matter next week).
+    Skip: raw action logs, transient state, sensitive data.
+    If it won't change future decisions, don't store it.
+  write_rules:
+    block_sensitive_keywords: ["password", "secret", "api_key", "token"]
+    min_value_length: 10
+    max_value_length: 4096
+  semantic_search:
+    enabled: false
+    provider: sentence_transformers
+    model: all-MiniLM-L6-v2
   decay:
     architectural_half_life_days: 180
     pattern_half_life_days: 60
     context_half_life_days: 14
     confidence_floor: 0.1
+  # Optional reranking (Epic 65.9) — improves precision after retrieval
+  reranker:
+    enabled: false
+    provider: noop  # noop | cohere
+    top_k: 10
+    # api_key: ${COHERE_API_KEY}  # required when provider=cohere; incurs API cost
+
+# Memory hooks (Epic 65.4) — opt-in
+memory_hooks:
+  auto_recall:
+    enabled: false
+    max_results: 5
+    min_score: 0.3
+    min_prompt_length: 50

@@ -15,7 +15,7 @@ class TestMemorySettings:
         assert settings.enabled is True
         assert settings.gc_enabled is True
         assert settings.contradiction_check_on_start is True
-        assert settings.max_memories == 500
+        assert settings.max_memories == 1500
         assert settings.inject_into_experts is True
 
     def test_decay_defaults(self) -> None:

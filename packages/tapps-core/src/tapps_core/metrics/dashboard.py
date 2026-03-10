@@ -218,6 +218,18 @@ class DashboardGenerator:
                 lines.append(f"- Stale count: {mem.get('stale_count', 0)}")
                 lines.append(f"- Avg confidence: {mem.get('avg_confidence', 0):.4f}")
                 lines.append(f"- Capacity: {mem.get('capacity_pct', 0):.1f}%")
+                if mem.get("consolidation_groups", 0) > 0:
+                    lines.append(
+                        f"- Consolidation: {mem.get('consolidated_count', 0)} groups, "
+                        f"{mem.get('source_entries_count', 0)} sources"
+                    )
+                fed = mem.get("federation")
+                if fed:
+                    lines.append(
+                        f"- Federation: registered={fed.get('hub_registered', False)}, "
+                        f"published={fed.get('published_count', 0)}, "
+                        f"synced={fed.get('synced_count', 0)}"
+                    )
                 lines.append("")
 
         # Recommendations
@@ -445,7 +457,11 @@ class DashboardGenerator:
         }
 
     def _build_memory_metrics(self) -> dict[str, Any]:
-        """Build memory subsystem metrics from live MemoryStore data."""
+        """Build memory subsystem metrics from live MemoryStore data.
+
+        Epic 65.1: Adds consolidation stats (consolidated_count, source_entries_count,
+        consolidation_groups) and optional federation subsection.
+        """
         if self._memory_store is None:
             return {
                 "available": False,
@@ -463,7 +479,12 @@ class DashboardGenerator:
             snapshot = self._memory_store.snapshot()
             entries = snapshot.entries
 
-            by_tier: dict[str, int] = {"architectural": 0, "pattern": 0, "context": 0}
+            by_tier: dict[str, int] = {
+                "architectural": 0,
+                "pattern": 0,
+                "procedural": 0,  # Epic 65.11
+                "context": 0,
+            }
             by_scope: dict[str, int] = {"project": 0, "branch": 0, "session": 0}
             confidences: list[float] = []
             stale_count = 0
@@ -490,7 +511,7 @@ class DashboardGenerator:
             max_memories = settings.memory.max_memories
             capacity_pct = round((snapshot.total_count / max_memories) * 100, 1)
 
-            return {
+            result: dict[str, Any] = {
                 "available": True,
                 "total_entries": snapshot.total_count,
                 "by_tier": by_tier,
@@ -499,6 +520,16 @@ class DashboardGenerator:
                 "avg_confidence": avg_confidence,
                 "capacity_pct": capacity_pct,
             }
+
+            # Epic 65.1: Consolidation stats
+            result.update(self._compute_consolidation_stats(entries))
+
+            # Epic 65.1: Federation stats (optional, when federation available)
+            fed = self._build_federation_stats(settings.project_root, entries)
+            if fed:
+                result["federation"] = fed
+
+            return result
         except Exception:
             logger.debug("memory_metrics_build_failed", exc_info=True)
             return {
@@ -510,6 +541,107 @@ class DashboardGenerator:
                 "avg_confidence": 0.0,
                 "capacity_pct": 0.0,
             }
+
+    @staticmethod
+    def _compute_consolidation_stats(entries: list[Any]) -> dict[str, int]:
+        """Compute consolidation stats from entries (Epic 65.1).
+
+        - source_entries_count: entries with contradiction_reason containing
+          'consolidated into'
+        - consolidated_count / consolidation_groups: unique target keys from
+          those source entries (each target = one consolidated entry / group).
+        """
+        source_entries = [
+            e for e in entries
+            if (e.contradiction_reason or "").find("consolidated into") >= 0
+        ]
+        source_entries_count = len(source_entries)
+
+        consolidated_keys: set[str] = set()
+        for e in source_entries:
+            reason = (e.contradiction_reason or "").strip()
+            idx = reason.lower().find("consolidated into")
+            if idx >= 0:
+                rest = reason[idx + len("consolidated into") :].strip()
+                if rest:
+                    key = rest.split()[0] if rest.split() else rest
+                    consolidated_keys.add(key)
+
+        # Also count entries with is_consolidated=True (ConsolidatedEntry)
+        for e in entries:
+            if getattr(e, "is_consolidated", False):
+                consolidated_keys.add(e.key)
+
+        consolidated_count = len(consolidated_keys)
+        consolidation_groups = consolidated_count
+
+        return {
+            "consolidated_count": consolidated_count,
+            "source_entries_count": source_entries_count,
+            "consolidation_groups": consolidation_groups,
+        }
+
+    def _build_federation_stats(
+        self, project_root: Path, entries: list[Any]
+    ) -> dict[str, Any] | None:
+        """Build federation subsection when federation is available (Epic 65.1)."""
+        try:
+            from tapps_core.memory.federation import (
+                FederatedStore,
+                load_federation_config,
+            )
+
+            config = load_federation_config()
+            project_root_str = str(project_root)
+
+            # Find if this project is registered
+            matching = next(
+                (p for p in config.projects if p.project_root == project_root_str),
+                None,
+            )
+            hub_registered = matching is not None
+            project_id = matching.project_id if matching else ""
+
+            if not hub_registered:
+                return {
+                    "hub_registered": False,
+                    "published_count": 0,
+                    "subscribed_projects": 0,
+                    "synced_count": 0,
+                }
+
+            hub = FederatedStore()
+            try:
+                stats = hub.get_stats()
+                projects_counts = stats.get("projects", {})
+                published_count = projects_counts.get(project_id, 0)
+            finally:
+                hub.close()
+
+            subs = [s for s in config.subscriptions if s.subscriber == project_id]
+            if subs:
+                sub = subs[0]
+                subscribed_projects = (
+                    len(sub.sources)
+                    if sub.sources
+                    else max(0, len(config.projects) - 1)
+                )
+            else:
+                subscribed_projects = 0
+
+            synced_count = sum(
+                1 for e in entries if "federated" in (e.tags or [])
+            )
+
+            return {
+                "hub_registered": True,
+                "published_count": published_count,
+                "subscribed_projects": subscribed_projects,
+                "synced_count": synced_count,
+            }
+        except Exception:
+            logger.debug("federation_stats_build_failed", exc_info=True)
+            return None
 
     def _build_alerts(self) -> list[dict[str, Any]]:
         current_metrics = self._current_alert_metrics()

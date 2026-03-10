@@ -24,10 +24,20 @@ memory:
   enabled: true
   gc_enabled: true
   contradiction_check_on_start: true
-  max_memories: 500
+  max_memories: 1500
   inject_into_experts: true
+  semantic_search:
+    enabled: false
+    provider: sentence_transformers
+    model: all-MiniLM-L6-v2
   decay:
     architectural_half_life_days: 180
     pattern_half_life_days: 60
+    procedural_half_life_days: 30  # Epic 65.11: workflows, steps
     context_half_life_days: 14
     confidence_floor: 0.1
+  session_index:  # Epic 65.10
+    enabled: false
+    max_chunks_per_session: 50
+    max_chars_per_chunk: 500
+    ttl_days: 7

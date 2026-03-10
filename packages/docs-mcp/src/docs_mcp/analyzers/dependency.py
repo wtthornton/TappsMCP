@@ -221,14 +221,30 @@ class ImportGraphBuilder:
         project_root: Path,
         source_dirs: list[str] | None,
     ) -> list[Path]:
-        """Resolve source directories, auto-detecting src/ layout."""
+        """Resolve source directories, auto-detecting src/ or monorepo layout."""
         if source_dirs:
-            return [project_root / d for d in source_dirs if (project_root / d).is_dir()]
+            resolved = [project_root / d for d in source_dirs if (project_root / d).is_dir()]
+            if resolved:
+                return resolved
 
-        # Auto-detect: prefer src/ layout, fallback to project root
+        # Auto-detect: prefer src/ layout
         src = project_root / "src"
         if src.is_dir():
             return [src]
+
+        # Monorepo: packages/*/src (for cross-package import resolution)
+        pkgs_dir = project_root / "packages"
+        if pkgs_dir.is_dir():
+            result: list[Path] = []
+            for pkg_dir in sorted(pkgs_dir.iterdir()):
+                if not pkg_dir.is_dir() or pkg_dir.name.startswith("."):
+                    continue
+                pkg_src = pkg_dir / "src"
+                if pkg_src.is_dir():
+                    result.append(pkg_src)
+            if result:
+                return result
+
         return [project_root]
 
     def _discover_python_files(self, src_paths: list[Path]) -> list[Path]:

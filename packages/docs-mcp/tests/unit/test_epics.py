@@ -258,17 +258,20 @@ class TestEpicGeneratorStyles:
         content = self.gen.generate(config)
         assert "## Risk Assessment" in content
         assert "Schema migration complexity" in content
-        assert "Define mitigation strategy" in content
+        # Risk auto-classification replaces "Define mitigation strategy"
+        assert "High" in content  # "migration" keyword -> High impact
 
     def test_comprehensive_has_files_affected(self) -> None:
         config = _make_config(style="comprehensive")
         content = self.gen.generate(config)
         assert "## Files Affected" in content
 
-    def test_comprehensive_has_performance_targets(self) -> None:
+    def test_comprehensive_omits_performance_targets_without_expert(self) -> None:
+        """Performance targets are only rendered when performance expert advice exists."""
         config = _make_config(style="comprehensive")
         content = self.gen.generate(config)
-        assert "## Performance Targets" in content
+        # Without auto_populate/expert advice, performance targets are omitted.
+        assert "## Performance Targets" not in content
 
     def test_invalid_style_falls_back_to_standard(self) -> None:
         config = _make_config(style="unknown")
@@ -309,15 +312,18 @@ class TestEpicGeneratorMarkers:
         config = _make_config(style="comprehensive")
         content = self.gen.generate(config)
 
-        extra = [
+        # These sections are always present in comprehensive mode.
+        always_present = [
+            "success-metrics",
             "implementation-order",
             "risk-assessment",
             "files-affected",
-            "performance-targets",
         ]
-        for section in extra:
+        for section in always_present:
             assert f"<!-- docsmcp:start:{section} -->" in content, f"Missing start: {section}"
             assert f"<!-- docsmcp:end:{section} -->" in content, f"Missing end: {section}"
+        # performance-targets is only present when expert advice exists.
+        # stakeholders and references are only present when provided.
 
 
 # ---------------------------------------------------------------------------
@@ -901,3 +907,314 @@ class TestDocsGenerateEpicTool:
 
         assert "elapsed_ms" in result
         assert isinstance(result["elapsed_ms"], int)
+
+
+# ---------------------------------------------------------------------------
+# Epic 18: Risk auto-classification
+# ---------------------------------------------------------------------------
+
+class TestEpicRiskAutoClassification:
+    """Tests for risk auto-classification in comprehensive mode."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_risk_auto_classifies_keywords(self) -> None:
+        config = _make_config(style="comprehensive", risks=["Authentication bypass vulnerability"])
+        content = self.gen.generate(config)
+        assert "## Risk Assessment" in content
+        assert "High" in content  # auth -> High impact
+
+    def test_risk_no_placeholder_mitigation(self) -> None:
+        config = _make_config(style="comprehensive", risks=["General risk"])
+        content = self.gen.generate(config)
+        assert "Define mitigation strategy" not in content
+        assert "Mitigation required" in content
+
+    def test_risk_empty_list_no_placeholder(self) -> None:
+        config = _make_config(style="comprehensive", risks=[])
+        content = self.gen.generate(config)
+        assert "## Risk Assessment" in content
+        assert "No risks identified" in content
+
+
+# ---------------------------------------------------------------------------
+# Epic 18: Expert filtering
+# ---------------------------------------------------------------------------
+
+class TestEpicExpertFiltering:
+    """Tests for expert guidance filtering (Epic 18.3)."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_filter_below_30_suppressed(self) -> None:
+        guidance = [{"domain": "security", "expert": "X", "advice": "Real advice", "confidence": "25%"}]
+        result = EpicGenerator._filter_expert_guidance(guidance)
+        assert len(result) == 0
+
+    def test_filter_30_to_50_flagged(self) -> None:
+        guidance = [{"domain": "security", "expert": "X", "advice": "Real advice", "confidence": "40%"}]
+        result = EpicGenerator._filter_expert_guidance(guidance)
+        assert len(result) == 1
+        assert "Expert review recommended" in result[0]["advice"]
+
+    def test_filter_above_50_rendered(self) -> None:
+        guidance = [{"domain": "security", "expert": "X", "advice": "Use input validation.", "confidence": "85%"}]
+        result = EpicGenerator._filter_expert_guidance(guidance)
+        assert len(result) == 1
+        assert result[0]["advice"] == "Use input validation."
+
+    def test_filter_no_knowledge_suppressed(self) -> None:
+        guidance = [{"domain": "security", "expert": "X", "advice": "No specific knowledge found for this domain.", "confidence": "30%"}]
+        result = EpicGenerator._filter_expert_guidance(guidance)
+        assert len(result) == 0
+
+    def test_filter_empty_advice_suppressed(self) -> None:
+        guidance = [{"domain": "security", "expert": "X", "advice": "", "confidence": "85%"}]
+        result = EpicGenerator._filter_expert_guidance(guidance)
+        assert len(result) == 0
+
+
+# ---------------------------------------------------------------------------
+# Epic 18.5: Performance targets suppression
+# ---------------------------------------------------------------------------
+
+class TestEpicPerformanceTargetsSuppression:
+    """Tests for performance targets section suppression."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_omitted_without_expert(self) -> None:
+        config = _make_config(style="comprehensive")
+        content = self.gen.generate(config)
+        assert "## Performance Targets" not in content
+
+    def test_rendered_with_high_confidence_expert(self) -> None:
+        enrichment = {
+            "expert_guidance": [
+                {"domain": "performance", "expert": "Perf Expert", "advice": "Use caching.", "confidence": "70%"}
+            ]
+        }
+        result = self.gen._render_performance_targets(enrichment)
+        rendered = "\n".join(result)
+        assert "## Performance Targets" in rendered
+        assert "Use caching." in rendered
+
+    def test_omitted_with_low_confidence_expert(self) -> None:
+        enrichment = {
+            "expert_guidance": [
+                {"domain": "performance", "expert": "Perf Expert", "advice": "Maybe cache.", "confidence": "25%"}
+            ]
+        }
+        result = self.gen._render_performance_targets(enrichment)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Epic 19: Success Metrics
+# ---------------------------------------------------------------------------
+
+class TestEpicSuccessMetrics:
+    """Tests for success metrics section (Epic 19.1)."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_success_metrics_provided(self) -> None:
+        config = _make_config(style="comprehensive", success_metrics=["All tests pass", "Latency < 200ms"])
+        content = self.gen.generate(config)
+        assert "## Success Metrics" in content
+        assert "All tests pass" in content
+
+    def test_success_metrics_pipe_delimited(self) -> None:
+        config = _make_config(style="comprehensive", success_metrics=["MTTR|4h|1h|PagerDuty"])
+        content = self.gen.generate(config)
+        assert "MTTR" in content
+        assert "4h" in content
+        assert "1h" in content
+        assert "PagerDuty" in content
+
+    def test_success_metrics_derives_suggestions(self) -> None:
+        config = _make_config(style="comprehensive", success_metrics=[], acceptance_criteria=["AC1", "AC2", "AC3"])
+        content = self.gen.generate(config)
+        assert "## Success Metrics" in content
+        assert "All 3 acceptance criteria met" in content
+
+    def test_success_metrics_standard_style_omitted(self) -> None:
+        config = _make_config(style="standard", success_metrics=["Metric 1"])
+        content = self.gen.generate(config)
+        assert "## Success Metrics" not in content
+
+    def test_success_metrics_markers(self) -> None:
+        config = _make_config(style="comprehensive")
+        content = self.gen.generate(config)
+        assert "<!-- docsmcp:start:success-metrics -->" in content
+        assert "<!-- docsmcp:end:success-metrics -->" in content
+
+
+# ---------------------------------------------------------------------------
+# Epic 19: Stakeholders
+# ---------------------------------------------------------------------------
+
+class TestEpicStakeholders:
+    """Tests for stakeholders section (Epic 19.2)."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_stakeholders_provided(self) -> None:
+        config = _make_config(style="comprehensive", stakeholders=["Owner|Alice|Implementation", "Reviewer|Bob|Code review"])
+        content = self.gen.generate(config)
+        assert "## Stakeholders" in content
+        assert "Alice" in content
+        assert "Bob" in content
+
+    def test_stakeholders_empty_omitted(self) -> None:
+        config = _make_config(style="comprehensive", stakeholders=[])
+        content = self.gen.generate(config)
+        assert "## Stakeholders" not in content
+
+    def test_stakeholders_standard_style_omitted(self) -> None:
+        config = _make_config(style="standard", stakeholders=["Owner|Alice|Implementation"])
+        content = self.gen.generate(config)
+        assert "## Stakeholders" not in content
+
+
+# ---------------------------------------------------------------------------
+# Epic 19: References
+# ---------------------------------------------------------------------------
+
+class TestEpicReferences:
+    """Tests for references section (Epic 19.3)."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_references_provided(self) -> None:
+        config = _make_config(style="comprehensive", references=["[OKR Q1](http://okr.example.com)", "Roadmap item 42"])
+        content = self.gen.generate(config)
+        assert "## References" in content
+        assert "[OKR Q1](http://okr.example.com)" in content
+
+    def test_references_empty_omitted(self) -> None:
+        config = _make_config(style="comprehensive", references=[])
+        content = self.gen.generate(config)
+        assert "## References" not in content
+
+
+# ---------------------------------------------------------------------------
+# Epic 19.4: Rich story stubs
+# ---------------------------------------------------------------------------
+
+class TestEpicRichStoryStubs:
+    """Tests for rich story stubs with real tasks (Epic 19.4)."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_story_stub_with_tasks(self) -> None:
+        stories = [EpicStoryStub(title="Auth", tasks=["Create login endpoint", "Add JWT validation", "Write auth tests", "Update docs", "Add rate limiting", "Integration test"])]
+        config = _make_config(style="standard", stories=stories)
+        content = self.gen.generate(config)
+        # Should show first 4 tasks.
+        assert "Create login endpoint" in content
+        assert "Add JWT validation" in content
+        assert "Write auth tests" in content
+        assert "Update docs" in content
+        # Should indicate more exist.
+        assert "and 2 more" in content
+
+    def test_story_stub_with_ac_count(self) -> None:
+        stories = [EpicStoryStub(title="Auth", ac_count=5)]
+        config = _make_config(style="standard", stories=stories)
+        content = self.gen.generate(config)
+        assert "(5 acceptance criteria)" in content
+
+    def test_story_stub_no_tasks_generic(self) -> None:
+        stories = [EpicStoryStub(title="Auth")]
+        config = _make_config(style="standard", stories=stories)
+        content = self.gen.generate(config)
+        assert "Implement auth" in content  # generic fallback
+
+
+# ---------------------------------------------------------------------------
+# Epic 20.2: Files aggregation
+# ---------------------------------------------------------------------------
+
+class TestEpicFilesAggregation:
+    """Tests for files affected aggregation from story stubs (Epic 20.2)."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_files_aggregated_from_tasks(self) -> None:
+        stories = [
+            EpicStoryStub(title="Models", tasks=["Create `src/models.py` with schemas", "Update `src/db.py`"]),
+            EpicStoryStub(title="API", tasks=["Add endpoints in `src/api.py`"]),
+        ]
+        config = _make_config(style="comprehensive", stories=stories)
+        content = self.gen.generate(config)
+        assert "`src/models.py`" in content
+        assert "`src/api.py`" in content
+        # Should NOT have "see tasks" placeholder.
+        assert "*see tasks*" not in content
+
+    def test_files_no_paths_fallback(self) -> None:
+        stories = [EpicStoryStub(title="Models", tasks=["Create schemas"])]
+        config = _make_config(style="comprehensive", stories=stories)
+        content = self.gen.generate(config)
+        assert "Files will be determined during story refinement" in content
+
+
+# ---------------------------------------------------------------------------
+# Epic 20.3: Story linking
+# ---------------------------------------------------------------------------
+
+class TestEpicStoryLinking:
+    """Tests for story-to-epic linking (Epic 20.3)."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_story_links_rendered(self) -> None:
+        stories = [EpicStoryStub(title="Auth")]
+        config = _make_config(
+            style="standard",
+            stories=stories,
+            link_stories=True,
+            story_paths={1: "stories/story-42.1-auth.md"},  # type: ignore[arg-type]
+        )
+        # Need to set these on the config directly since _make_config uses **kwargs
+        config.link_stories = True
+        config.story_paths = {1: "stories/story-42.1-auth.md"}
+        content = self.gen.generate(config)
+        assert "[Full story](stories/story-42.1-auth.md)" in content
+
+    def test_story_links_disabled(self) -> None:
+        stories = [EpicStoryStub(title="Auth")]
+        config = _make_config(style="standard", stories=stories, link_stories=False)
+        content = self.gen.generate(config)
+        assert "Full story" not in content
+
+
+# ---------------------------------------------------------------------------
+# parse_stories_json with new fields
+# ---------------------------------------------------------------------------
+
+class TestParseStoriesJsonExtended:
+    """Tests for parse_stories_json with tasks and ac_count."""
+
+    def test_json_with_tasks(self) -> None:
+        import json
+        raw = json.dumps([{"title": "Auth", "tasks": ["Create login", "Add tests"]}])
+        stories = EpicGenerator.parse_stories_json(raw)
+        assert len(stories) == 1
+        assert stories[0].tasks == ["Create login", "Add tests"]
+
+    def test_json_with_ac_count(self) -> None:
+        import json
+        raw = json.dumps([{"title": "Auth", "ac_count": 5}])
+        stories = EpicGenerator.parse_stories_json(raw)
+        assert stories[0].ac_count == 5

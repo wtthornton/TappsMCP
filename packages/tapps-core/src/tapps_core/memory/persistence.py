@@ -23,7 +23,7 @@ from tapps_core.memory.models import MemoryEntry
 logger = structlog.get_logger(__name__)
 
 # Current schema version - bump when adding migrations.
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 3
 
 # Maximum JSONL audit log lines before truncation.
 _MAX_AUDIT_LINES = 10_000
@@ -77,15 +77,16 @@ class MemoryPersistence:
             )
 
             # Check current version
-            row = cur.execute(
-                "SELECT MAX(version) FROM schema_version"
-            ).fetchone()
+            row = cur.execute("SELECT MAX(version) FROM schema_version").fetchone()
             current_version: int = row[0] if row[0] is not None else 0
 
             if current_version < 1:
                 self._create_v1_schema(cur)
 
-            # Future: if current_version < 2: self._migrate_v1_to_v2(cur)
+            if current_version < 2:
+                self._migrate_v1_to_v2(cur)
+            if current_version < _SCHEMA_VERSION:
+                self._migrate_v2_to_v3(cur)
 
             self._conn.commit()
 
@@ -117,16 +118,9 @@ class MemoryPersistence:
         """)
 
         # Indexes for common queries
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_memories_tier ON memories(tier)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_memories_confidence "
-            "ON memories(confidence)"
-        )
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_memories_tier ON memories(tier)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(confidence)")
 
         # FTS5 full-text search index
         cur.execute("""
@@ -187,6 +181,67 @@ class MemoryPersistence:
             (1, datetime.now(tz=UTC).isoformat()),
         )
 
+    def _migrate_v1_to_v2(self, cur: sqlite3.Cursor) -> None:
+        """Add optional embedding column for semantic search (Epic 65.7).
+
+        Stores JSON array of floats. Existing rows get NULL.
+        """
+        try:
+            cur.execute("ALTER TABLE memories ADD COLUMN embedding TEXT")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" in str(e).lower():
+                pass  # Column already exists
+            else:
+                raise
+
+        cur.execute(
+            "INSERT INTO schema_version (version, migrated_at) VALUES (?, ?)",
+            (2, datetime.now(tz=UTC).isoformat()),
+        )
+
+    def _migrate_v2_to_v3(self, cur: sqlite3.Cursor) -> None:
+        """Add session_index table for searchable session chunks (Epic 65.10)."""
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS session_index (
+                session_id TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (session_id, chunk_index)
+            )
+        """)
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_session_index_session ON session_index(session_id)"
+        )
+        cur.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS session_index_fts
+            USING fts5(session_id, content, content=session_index, content_rowid=rowid)
+        """)
+        cur.execute("""
+            CREATE TRIGGER IF NOT EXISTS session_index_ai AFTER INSERT ON session_index BEGIN
+                INSERT INTO session_index_fts(rowid, session_id, content)
+                VALUES (new.rowid, new.session_id, new.content);
+            END
+        """)
+        cur.execute("""
+            CREATE TRIGGER IF NOT EXISTS session_index_ad AFTER DELETE ON session_index BEGIN
+                INSERT INTO session_index_fts(session_index_fts, rowid, session_id, content)
+                VALUES ('delete', old.rowid, old.session_id, old.content);
+            END
+        """)
+        cur.execute("""
+            CREATE TRIGGER IF NOT EXISTS session_index_au AFTER UPDATE ON session_index BEGIN
+                INSERT INTO session_index_fts(session_index_fts, rowid, session_id, content)
+                VALUES ('delete', old.rowid, old.session_id, old.content);
+                INSERT INTO session_index_fts(rowid, session_id, content)
+                VALUES (new.rowid, new.session_id, new.content);
+            END
+        """)
+        cur.execute(
+            "INSERT INTO schema_version (version, migrated_at) VALUES (?, ?)",
+            (3, datetime.now(tz=UTC).isoformat()),
+        )
+
     # ------------------------------------------------------------------
     # CRUD operations
     # ------------------------------------------------------------------
@@ -194,36 +249,64 @@ class MemoryPersistence:
     def save(self, entry: MemoryEntry) -> None:
         """Insert or replace a memory entry."""
         tags_json = json.dumps(entry.tags, ensure_ascii=False)
+        embedding_json: str | None = None
+        if entry.embedding is not None:
+            embedding_json = json.dumps(entry.embedding, ensure_ascii=False)
+
+        columns = [
+            "key",
+            "value",
+            "tier",
+            "confidence",
+            "source",
+            "source_agent",
+            "scope",
+            "tags",
+            "created_at",
+            "updated_at",
+            "last_accessed",
+            "access_count",
+            "branch",
+            "last_reinforced",
+            "reinforce_count",
+            "contradicted",
+            "contradiction_reason",
+            "seeded_from",
+        ]
+        placeholders = ", ".join("?" * len(columns))
+        values: tuple[Any, ...] = (
+            entry.key,
+            entry.value,
+            entry.tier.value,
+            entry.confidence,
+            entry.source.value,
+            entry.source_agent,
+            entry.scope.value,
+            tags_json,
+            entry.created_at,
+            entry.updated_at,
+            entry.last_accessed,
+            entry.access_count,
+            entry.branch,
+            entry.last_reinforced,
+            entry.reinforce_count,
+            1 if entry.contradicted else 0,
+            entry.contradiction_reason,
+            entry.seeded_from,
+        )
+
+        # Include embedding if schema supports it (v2+)
+        schema_ver = self.get_schema_version()
+        if schema_ver >= _SCHEMA_VERSION:
+            columns.append("embedding")
+            placeholders = ", ".join("?" * len(columns))
+            values = (*values, embedding_json)
+
+        cols = ", ".join(columns)
         with self._lock:
             self._conn.execute(
-                """
-                INSERT OR REPLACE INTO memories
-                (key, value, tier, confidence, source, source_agent, scope,
-                 tags, created_at, updated_at, last_accessed, access_count,
-                 branch, last_reinforced, reinforce_count, contradicted,
-                 contradiction_reason, seeded_from)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    entry.key,
-                    entry.value,
-                    entry.tier.value,
-                    entry.confidence,
-                    entry.source.value,
-                    entry.source_agent,
-                    entry.scope.value,
-                    tags_json,
-                    entry.created_at,
-                    entry.updated_at,
-                    entry.last_accessed,
-                    entry.access_count,
-                    entry.branch,
-                    entry.last_reinforced,
-                    entry.reinforce_count,
-                    1 if entry.contradicted else 0,
-                    entry.contradiction_reason,
-                    entry.seeded_from,
-                ),
+                f"INSERT OR REPLACE INTO memories ({cols}) VALUES ({placeholders})",  # noqa: S608
+                values,
             )
             self._conn.commit()
         self._audit_log("save", entry.key)
@@ -231,9 +314,7 @@ class MemoryPersistence:
     def get(self, key: str) -> MemoryEntry | None:
         """Retrieve a single memory entry by key."""
         with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM memories WHERE key = ?", (key,)
-            ).fetchone()
+            row = self._conn.execute("SELECT * FROM memories WHERE key = ?", (key,)).fetchone()
         if row is None:
             return None
         return self._row_to_entry(row)
@@ -263,18 +344,14 @@ class MemoryPersistence:
         # Filter by tags in Python (tags stored as JSON array)
         if tags:
             tag_set = set(tags)
-            entries = [
-                e for e in entries if tag_set.intersection(e.tags)
-            ]
+            entries = [e for e in entries if tag_set.intersection(e.tags)]
 
         return entries
 
     def delete(self, key: str) -> bool:
         """Delete a memory entry by key. Returns True if deleted."""
         with self._lock:
-            cur = self._conn.execute(
-                "DELETE FROM memories WHERE key = ?", (key,)
-            )
+            cur = self._conn.execute("DELETE FROM memories WHERE key = ?", (key,))
             self._conn.commit()
         deleted = cur.rowcount > 0
         if deleted:
@@ -316,23 +393,109 @@ class MemoryPersistence:
     def count(self) -> int:
         """Return the total number of memory entries."""
         with self._lock:
-            row = self._conn.execute(
-                "SELECT COUNT(*) FROM memories"
-            ).fetchone()
+            row = self._conn.execute("SELECT COUNT(*) FROM memories").fetchone()
         return int(row[0]) if row else 0
 
     def get_schema_version(self) -> int:
         """Return the current schema version."""
         with self._lock:
-            row = self._conn.execute(
-                "SELECT MAX(version) FROM schema_version"
-            ).fetchone()
+            row = self._conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
         return int(row[0]) if row and row[0] is not None else 0
 
     def close(self) -> None:
         """Close the database connection."""
         with self._lock:
             self._conn.close()
+
+    # ------------------------------------------------------------------
+    # Session index (Epic 65.10)
+    # ------------------------------------------------------------------
+
+    def save_session_chunks(
+        self,
+        session_id: str,
+        chunks: list[str],
+        *,
+        max_chunks: int = 50,
+        max_chars_per_chunk: int = 500,
+    ) -> int:
+        """Store session chunks for indexing. Returns count stored."""
+        if not chunks or not session_id.strip():
+            return 0
+        now = datetime.now(tz=UTC).isoformat()
+        stored = 0
+        with self._lock:
+            for i, raw in enumerate(chunks[:max_chunks]):
+                content = (raw or "")[:max_chars_per_chunk].strip()
+                if not content:
+                    continue
+                try:
+                    self._conn.execute(
+                        """
+                        INSERT OR REPLACE INTO session_index
+                        (session_id, chunk_index, content, created_at)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (session_id, i, content, now),
+                    )
+                    stored += 1
+                except sqlite3.IntegrityError:
+                    pass
+            self._conn.commit()
+        return stored
+
+    def search_session_index(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Full-text search session index. Returns list of {session_id, chunk_index, content, created_at}."""
+        if not query or not query.strip():
+            return []
+        safe = self._escape_fts_query(query)
+        if not safe:
+            return []
+        with self._lock:
+            try:
+                rows = self._conn.execute(
+                    """
+                    SELECT s.session_id, s.chunk_index, s.content, s.created_at
+                    FROM session_index s
+                    JOIN session_index_fts fts ON s.rowid = fts.rowid
+                    WHERE session_index_fts MATCH ?
+                    ORDER BY s.created_at DESC
+                    LIMIT ?
+                    """,
+                    (safe, limit),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                logger.debug("session_index_fts_search_failed", query=query)
+                return []
+        return [
+            {
+                "session_id": r["session_id"],
+                "chunk_index": r["chunk_index"],
+                "content": r["content"],
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+
+    def delete_expired_session_chunks(self, ttl_days: int) -> int:
+        """Delete session chunks older than ttl_days. Returns count deleted."""
+        from datetime import timedelta
+
+        cutoff = (datetime.now(tz=UTC) - timedelta(days=ttl_days)).isoformat()
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM session_index WHERE created_at < ?", (cutoff,)
+            )
+            self._conn.commit()
+            return cur.rowcount
+
+    def count_session_chunks(self) -> int:
+        """Return total session index chunk count."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM session_index"
+            ).fetchone()
+        return int(row[0]) if row else 0
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -346,6 +509,21 @@ class MemoryPersistence:
             tags = json.loads(tags_raw) if tags_raw else []
         except (json.JSONDecodeError, TypeError):
             tags = []
+
+        embedding: list[float] | None = None
+        try:
+            emb_raw = row["embedding"]
+        except (KeyError, IndexError):
+            emb_raw = None
+        if emb_raw:
+            try:
+                parsed = json.loads(str(emb_raw))
+                if isinstance(parsed, list) and all(
+                    isinstance(x, (int, float)) for x in parsed
+                ):
+                    embedding = [float(x) for x in parsed]
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         return MemoryEntry(
             key=row["key"],
@@ -366,6 +544,7 @@ class MemoryPersistence:
             contradicted=bool(row["contradicted"]),
             contradiction_reason=row["contradiction_reason"],
             seeded_from=row["seeded_from"],
+            embedding=embedding,
         )
 
     @staticmethod
@@ -400,8 +579,6 @@ class MemoryPersistence:
             if len(lines) > _MAX_AUDIT_LINES:
                 # Keep the most recent entries
                 keep = lines[-_MAX_AUDIT_LINES:]
-                self._audit_path.write_text(
-                    "\n".join(keep) + "\n", encoding="utf-8"
-                )
+                self._audit_path.write_text("\n".join(keep) + "\n", encoding="utf-8")
         except OSError:
             pass

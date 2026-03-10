@@ -205,11 +205,11 @@ class ArchitectureGenerator:
     # ------------------------------------------------------------------
 
     def _extract_metadata(self, project_root: Path) -> ProjectMetadata:
-        """Extract project metadata from config files."""
+        """Extract project metadata, aggregating from workspace packages when present."""
         try:
             from docs_mcp.generators.metadata import MetadataExtractor
 
-            return MetadataExtractor().extract(project_root)
+            return MetadataExtractor().extract_with_workspace(project_root)
         except Exception:
             from docs_mcp.generators.metadata import ProjectMetadata as PMeta
 
@@ -226,7 +226,7 @@ class ArchitectureGenerator:
             return None
 
     def _build_dependency_graph(self, project_root: Path) -> ImportGraph | None:
-        """Build the import dependency graph."""
+        """Build the import dependency graph (auto-detects monorepo layout)."""
         try:
             from docs_mcp.analyzers.dependency import ImportGraphBuilder
 
@@ -488,8 +488,22 @@ class ArchitectureGenerator:
 
         sections: list[str] = []
 
+        # Skip link (accessibility)
+        sections.append(
+            '<a href="#main-content" class="skip-link">Skip to main content</a>'
+        )
+
         # Hero / title
         sections.append(self._render_hero(safe_name, safe_subtitle))
+
+        # Document purpose block (for developers)
+        sections.append(self._render_document_purpose())
+
+        # Table of contents
+        toc_ids = ["executive-summary", "architecture-diagram", "data-flow",
+                   "component-details", "dependency-flow", "api-surface",
+                   "tech-stack", "health-insights"]
+        sections.append(self._render_toc(toc_ids, packages, dep_edges, api_info, metadata))
 
         # Executive summary (use filtered packages for accurate counts)
         sections.append(self._render_executive_summary(
@@ -536,6 +550,62 @@ class ArchitectureGenerator:
     # Section renderers
     # ------------------------------------------------------------------
 
+    def _render_document_purpose(self) -> str:
+        """Render document purpose block (audience, use cases)."""
+        return """
+<section class="section document-purpose" id="main-content">
+  <h2 class="section-title">Document Purpose</h2>
+  <div class="purpose-block">
+    <h3>Audience &amp; Use</h3>
+    <p class="purpose-text">This report is for <strong>developers and architects</strong>. It explains how components fit together, why they are structured this way, and what constraints apply. Use it to understand the system before making changes, justify architectural decisions, and plan refactors.</p>
+  </div>
+</section>"""
+
+    def _render_toc(
+        self,
+        toc_ids: list[str],
+        packages: list[dict[str, Any]],
+        dep_edges: list[tuple[int, int]],
+        api_info: list[dict[str, Any]],
+        metadata: ProjectMetadata,
+    ) -> str:
+        """Render table of contents (omit empty sections)."""
+        labels = {
+            "executive-summary": "Executive Summary",
+            "architecture-diagram": "High-Level Architecture",
+            "data-flow": "Data Flow Pipeline",
+            "component-details": "Component Deep-Dive",
+            "dependency-flow": "Dependency Flow",
+            "api-surface": "Public API Surface",
+            "tech-stack": "Technology Stack",
+            "health-insights": "Architecture Health",
+        }
+        skip = set()
+        if not packages:
+            skip.update({"architecture-diagram", "data-flow", "component-details", "dependency-flow"})
+        if not dep_edges and packages:
+            skip.add("dependency-flow")
+        if not api_info:
+            skip.add("api-surface")
+        # tech-stack always shown (with message when empty)
+        layers = self._group_into_layers(packages) if packages else {}
+        if len(layers) < _MIN_LAYERS_FOR_FLOW:
+            skip.add("data-flow")
+
+        lines = ['<section class="section toc-section">']
+        lines.append('  <nav class="toc" aria-label="Table of contents">')
+        lines.append('    <h3 class="toc-title">Contents</h3>')
+        lines.append('    <ul class="toc-list">')
+        for tid in toc_ids:
+            if tid in skip:
+                continue
+            label = labels.get(tid, tid.replace("-", " ").title())
+            lines.append(f'      <li><a href="#{tid}">{html.escape(label)}</a></li>')
+        lines.append("    </ul>")
+        lines.append("  </nav>")
+        lines.append("</section>")
+        return "\n".join(lines)
+
     def _render_hero(self, name: str, subtitle: str) -> str:
         desc = f'<p class="hero-subtitle">{subtitle}</p>' if subtitle else ""
         return f"""
@@ -558,8 +628,12 @@ class ArchitectureGenerator:
         packages: list[dict[str, Any]] | None = None,
     ) -> str:
         parts: list[str] = []
-        parts.append('<section class="section" id="executive-summary">')
-        parts.append('<h2 class="section-title">Executive Summary</h2>')
+        parts.append('<section class="section" id="executive-summary" role="region" aria-labelledby="exec-summary-heading">')
+        parts.append('<h2 class="section-title" id="exec-summary-heading">Executive Summary</h2>')
+        parts.append(
+            "<p><strong>Why this matters:</strong> Quick overview for stakeholders; "
+            "key metrics support risk assessment and technical debt visibility.</p>"
+        )
 
         # Purpose statement
         purpose = subtitle or metadata.description or "A software project."
@@ -596,11 +670,11 @@ class ArchitectureGenerator:
   </div>
   <div class="stat-card">
     <div class="stat-number">{api_count}</div>
-    <div class="stat-label">Public APIs</div>
+    <div class="stat-label">Public APIs (fns + methods)</div>
   </div>
   <div class="stat-card">
     <div class="stat-number">{deps}</div>
-    <div class="stat-label">External Deps</div>
+    <div class="stat-label">External Imports</div>
   </div>
 </div>""")
 
@@ -644,7 +718,10 @@ class ArchitectureGenerator:
         )
 
         svg = self._build_architecture_svg(name, packages)
+        parts.append('<figure role="figure" aria-labelledby="arch-figcaption">')
         parts.append(f'<div class="diagram-container">{svg}</div>')
+        parts.append('<figcaption id="arch-figcaption">High-level architecture overview</figcaption>')
+        parts.append("</figure>")
         parts.append("</section>")
         return "\n".join(parts)
 
@@ -720,23 +797,33 @@ class ArchitectureGenerator:
         packages: list[dict[str, Any]],
         edges: list[tuple[int, int]],
     ) -> str:
-        """Render the dependency flow SVG diagram."""
-        if not packages or not edges:
+        """Render the dependency flow SVG diagram (or empty-state message)."""
+        if not packages:
             return ""
 
         parts: list[str] = []
-        parts.append('<section class="section" id="dependency-flow">')
-        parts.append('<h2 class="section-title">Dependency Flow</h2>')
+        parts.append('<section class="section" id="dependency-flow" role="region" aria-labelledby="dep-flow-heading">')
+        parts.append('<h2 class="section-title" id="dep-flow-heading">Dependency Flow</h2>')
         parts.append(
-            "<p>The dependency flow diagram reveals how information and control flow "
-            "through the system. Arrows indicate import relationships between packages, "
-            "showing which components depend on which. This visualization is crucial for "
-            "understanding coupling, identifying potential circular dependencies, and "
-            "planning refactoring efforts.</p>"
+            "<p><strong>Why this matters:</strong> The dependency flow reveals coupling between "
+            "packages. Arrows show import relationships; understanding them helps plan refactors "
+            "and avoid circular dependencies.</p>"
         )
 
-        svg = self._build_dependency_svg(packages, edges)
-        parts.append(f'<div class="diagram-container">{svg}</div>')
+        if edges:
+            svg = self._build_dependency_svg(packages, edges)
+            parts.append(f'<figure role="figure" aria-labelledby="dep-flow-figcaption">')
+            parts.append(f'<div class="diagram-container">{svg}</div>')
+            parts.append(f'<figcaption id="dep-flow-figcaption">Package import relationships</figcaption>')
+            parts.append("</figure>")
+        else:
+            parts.append(
+                '<div class="purpose-block">'
+                '<p class="purpose-text">No cross-package dependencies detected. '
+                'The analyzer may need monorepo-aware path resolution; '
+                'or packages may be loosely coupled with few direct imports.</p>'
+                '</div>'
+            )
         parts.append("</section>")
         return "\n".join(parts)
 
@@ -827,13 +914,23 @@ class ArchitectureGenerator:
         return "\n".join(parts)
 
     def _render_tech_stack(self, metadata: ProjectMetadata) -> str:
-        """Render the technology stack section."""
-        if not metadata.dependencies and not metadata.dev_dependencies:
-            return ""
-
+        """Render the technology stack section (always show; message when empty)."""
         parts: list[str] = []
-        parts.append('<section class="section" id="tech-stack">')
-        parts.append('<h2 class="section-title">Technology Stack</h2>')
+        parts.append('<section class="section" id="tech-stack" role="region" aria-labelledby="tech-stack-heading">')
+        parts.append('<h2 class="section-title" id="tech-stack-heading">Technology Stack</h2>')
+        parts.append(
+            "<p><strong>Why this matters:</strong> Understanding dependencies helps set up your "
+            "environment, assess supply-chain risk, and plan upgrades.</p>"
+        )
+        if not metadata.dependencies and not metadata.dev_dependencies:
+            parts.append(
+                '<div class="purpose-block">'
+                '<p class="purpose-text">No dependencies extracted. For uv/poetry workspaces, '
+                'ensure root and package pyproject.toml files are parseable.</p>'
+                '</div>'
+            )
+            parts.append("</section>")
+            return "\n".join(parts)
         parts.append(
             "<p>The technology stack represents the foundation upon which this project is "
             "built. Each dependency has been selected to address specific technical "
@@ -873,22 +970,36 @@ class ArchitectureGenerator:
         return "\n".join(parts)
 
     def _render_data_flow(self, packages: list[dict[str, Any]]) -> str:
-        """Render a data flow / pipeline diagram showing how components interact."""
-        if len(packages) < _MIN_LAYERS_FOR_FLOW:
-            return ""
-
+        """Render a data flow / pipeline diagram (or fallback when single layer)."""
         parts: list[str] = []
-        parts.append('<section class="section" id="data-flow">')
-        parts.append('<h2 class="section-title">Data Flow Pipeline</h2>')
+        parts.append('<section class="section" id="data-flow" role="region" aria-labelledby="data-flow-heading">')
+        parts.append('<h2 class="section-title" id="data-flow-heading">Data Flow Pipeline</h2>')
         parts.append(
-            "<p>This diagram illustrates how data and control flow through the "
-            "system at runtime. Each stage represents a layer in the processing "
-            "pipeline, showing how input is transformed as it passes through "
-            "successive components toward the final output.</p>"
+            "<p><strong>Why this matters:</strong> Understanding runtime flow helps trace "
+            "how input moves through layers toward output. Each stage represents a "
+            "processing boundary.</p>"
         )
 
-        svg = self._build_flow_pipeline_svg(packages)
-        parts.append(f'<div class="diagram-container">{svg}</div>')
+        if len(packages) < _MIN_LAYERS_FOR_FLOW:
+            parts.append(
+                '<div class="purpose-block">'
+                '<p class="purpose-text">Single-package or minimal project; '
+                'data flow diagram requires at least two logical layers.</p>'
+                '</div>'
+            )
+        else:
+            svg = self._build_flow_pipeline_svg(packages)
+            if svg:
+                parts.append(f'<figure role="figure" aria-labelledby="data-flow-figcaption">')
+                parts.append(f'<div class="diagram-container">{svg}</div>')
+                parts.append(f'<figcaption id="data-flow-figcaption">Data flow pipeline</figcaption>')
+                parts.append("</figure>")
+            else:
+                parts.append(
+                    '<div class="purpose-block">'
+                    '<p class="purpose-text">Could not group packages into flow layers.</p>'
+                    '</div>'
+                )
         parts.append("</section>")
         return "\n".join(parts)
 
@@ -968,7 +1079,7 @@ class ArchitectureGenerator:
         parts.append(f"""
 <div class="stat-card">
   <div class="stat-number">{api_density}%</div>
-  <div class="stat-label">API Density</div>
+  <div class="stat-label">Class Coverage</div>
 </div>""")
 
         parts.append("</div>")
@@ -1052,6 +1163,7 @@ class ArchitectureGenerator:
         now = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
         return f"""
 <footer class="footer">
+  <p><a href="#" class="back-to-top">Back to top</a></p>
   <p>Generated by <strong>DocsMCP</strong> &mdash; Architecture Report</p>
   <p style="margin-top:6px">
     {pkg_count} packages &middot; {mod_count} modules &middot;
@@ -1200,8 +1312,9 @@ class ArchitectureGenerator:
         lines: list[str] = []
         lines.append(
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" '
-            f'class="arch-svg">'
+            f'class="arch-svg" role="img" aria-labelledby="arch-svg-title">'
         )
+        lines.append(f'  <title id="arch-svg-title">High-level architecture: {html.escape(name)}</title>')
 
         # Defs: gradients, shadows, filters
         lines.append("  <defs>")
@@ -1404,7 +1517,7 @@ class ArchitectureGenerator:
             if any(k in name for k in ("config", "setting", "common", "util")):
                 layers["Input / Config"].append(str(pkg["name"]))
             elif any(k in name for k in (
-                "server", "cli", "api", "pipeline", "distribution",
+                "server", "cli", "api", "pipeline", "distribution", "mcp", "docs",
             )):
                 layers["Output / API"].append(str(pkg["name"]))
             elif any(k in name for k in (
@@ -1415,7 +1528,17 @@ class ArchitectureGenerator:
                 layers["Core Logic"].append(str(pkg["name"]))
 
         # Remove empty layers
-        return {k: v for k, v in layers.items() if v}
+        result = {k: v for k, v in layers.items() if v}
+        # Fallback: when all packages land in one layer, split into "Core" and "Interface"
+        if len(result) == 1 and len(packages) >= 2:
+            layer_name = next(iter(result))
+            items = result[layer_name]
+            mid = (len(items) + 1) // 2
+            return {
+                "Core / Shared": items[:mid],
+                "Interface / Server": items[mid:],
+            }
+        return result
 
     def _build_dependency_svg(
         self,
@@ -2126,6 +2249,68 @@ body {{
   color: var(--text-tertiary);
 }}
 
+/* Skip link */
+.skip-link {{
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  padding: 8px 16px;
+  z-index: 100;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  transition: top 0.2s var(--ease-enter);
+}}
+.skip-link:focus {{
+  top: 8px;
+}}
+
+/* TOC */
+.toc-section {{
+  padding: 24px 40px;
+}}
+.toc {{
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+}}
+.toc-title {{
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}}
+.toc-list {{
+  list-style: none;
+}}
+.toc-list li {{
+  margin-bottom: 6px;
+}}
+.toc-list a {{
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.8125rem;
+}}
+.toc-list a:hover {{
+  color: var(--accent-primary);
+}}
+
+/* Back to top */
+.back-to-top {{
+  color: var(--accent-primary);
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+}}
+.back-to-top:hover {{
+  text-decoration: underline;
+}}
+
 /* Footer */
 .footer {{
   text-align: center;
@@ -2168,5 +2353,24 @@ body {{
   .section {{ padding: 32px 20px; }}
   .component-header {{ flex-direction: column; gap: 6px; }}
   .stats-grid {{ grid-template-columns: repeat(2, 1fr); }}
+}}
+
+/* Light theme (TappMCP style guide) */
+@media (prefers-color-scheme: light) {{
+  :root {{
+    --bg-primary: #f8f9fc;
+    --bg-secondary: #f0f1f5;
+    --card-bg: rgba(255, 255, 255, 0.92);
+    --card-bg-alt: rgba(245, 245, 250, 0.95);
+    --card-border: rgba(0, 0, 0, 0.08);
+    --accent-primary: #0d9488;
+    --accent-secondary: #b8941f;
+    --text-primary: #1a1a2e;
+    --text-secondary: #4a4a5e;
+    --text-muted: #9ca3af;
+  }}
+  body {{ color: var(--text-primary); }}
+  .hero {{ background: linear-gradient(135deg, #f8f9fc 0%, #f0f1f5 30%, #e5e7ed 70%, #ccfbf1 100%); }}
+  .stat-number {{ color: var(--accent-primary); }}
 }}
 """

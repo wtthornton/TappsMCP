@@ -22,10 +22,13 @@ from tapps_core.memory.models import (
     _utc_now_iso,
 )
 from tapps_core.memory.persistence import MemoryPersistence
-from tapps_core.security.content_safety import check_content_safety
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from tapps_core.memory.embeddings import EmbeddingProvider
+
+from tapps_core.security.content_safety import check_content_safety
 
 logger = structlog.get_logger(__name__)
 
@@ -58,11 +61,13 @@ class MemoryStore:
         project_root: Path,
         *,
         consolidation_config: ConsolidationConfig | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
     ) -> None:
         self._project_root = project_root
         self._persistence = MemoryPersistence(project_root)
         self._lock = threading.Lock()
         self._consolidation_config = consolidation_config or ConsolidationConfig()
+        self._embedding_provider = embedding_provider
         self._consolidation_in_progress = False
 
         # Cold-start: load all entries into memory
@@ -162,9 +167,7 @@ class MemoryStore:
                 last_reinforced=existing.last_reinforced if existing else None,
                 reinforce_count=existing.reinforce_count if existing else 0,
                 contradicted=existing.contradicted if existing else False,
-                contradiction_reason=(
-                    existing.contradiction_reason if existing else None
-                ),
+                contradiction_reason=(existing.contradiction_reason if existing else None),
                 seeded_from=existing.seeded_from if existing else None,
             )
 
@@ -173,6 +176,16 @@ class MemoryStore:
                 self._evict_lowest_confidence()
 
             self._entries[key] = entry
+
+        # Compute embedding when semantic search is enabled (Epic 65.7)
+        if self._embedding_provider is not None:
+            try:
+                emb = self._embedding_provider.embed(value)
+                entry = entry.model_copy(update={"embedding": emb})
+                with self._lock:
+                    self._entries[key] = entry
+            except Exception:
+                logger.debug("embedding_compute_failed", key=key, exc_info=True)
 
         self._persistence.save(entry)
 
@@ -210,7 +223,9 @@ class MemoryStore:
                 logger.info(
                     "auto_consolidation_on_save",
                     entry_key=entry.key,
-                    consolidated_key=result.consolidated_entry.key if result.consolidated_entry else None,
+                    consolidated_key=result.consolidated_entry.key
+                    if result.consolidated_entry
+                    else None,
                     source_keys=result.source_keys,
                 )
         except Exception:
@@ -359,16 +374,12 @@ class MemoryStore:
         if not self._entries:
             return
 
-        lowest_key = min(
-            self._entries, key=lambda k: self._entries[k].confidence
-        )
+        lowest_key = min(self._entries, key=lambda k: self._entries[k].confidence)
         del self._entries[lowest_key]
         self._persistence.delete(lowest_key)
         logger.info("memory_evicted", key=lowest_key, reason="max_entries")
 
-    def _resolve_scope(
-        self, key: str, scope: str, branch: str
-    ) -> MemoryEntry | None:
+    def _resolve_scope(self, key: str, scope: str, branch: str) -> MemoryEntry | None:
         """Resolve scope precedence: session > branch > project.
 
         Must be called while holding ``self._lock``.

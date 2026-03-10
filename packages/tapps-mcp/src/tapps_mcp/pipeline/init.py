@@ -49,6 +49,8 @@ class BootstrapConfig:
     overwrite_agents_md: bool = False
     agent_teams: bool = False
     memory_capture: bool = False
+    memory_auto_recall: bool = False
+    memory_auto_capture: bool = False
     overwrite_tech_stack_md: bool = False
     destructive_guard: bool = False
     minimal: bool = False
@@ -132,6 +134,8 @@ def bootstrap_pipeline(
     overwrite_tech_stack_md: bool = False,
     agent_teams: bool = False,
     memory_capture: bool = False,
+    memory_auto_capture: bool = False,
+    memory_auto_recall: bool = False,
     destructive_guard: bool = False,
     minimal: bool = False,
     dry_run: bool = False,
@@ -177,6 +181,8 @@ def bootstrap_pipeline(
             overwrite_tech_stack_md=overwrite_tech_stack_md,
             agent_teams=agent_teams,
             memory_capture=memory_capture,
+            memory_auto_recall=memory_auto_recall,
+            memory_auto_capture=memory_auto_capture,
             destructive_guard=destructive_guard,
             minimal=minimal,
             dry_run=dry_run,
@@ -429,6 +435,86 @@ def _detect_docker_environment(state: _BootstrapState) -> None:
         state.result["docker_companions"] = companions
 
 
+def _memory_hooks_defaults_for_engagement(engagement_level: str) -> dict[str, Any]:
+    """Return memory_hooks section defaults by engagement (Epic 65.6).
+
+    high: both auto_recall and auto_capture enabled
+    medium: auto_recall only
+    low: both disabled
+    """
+    if engagement_level == "high":
+        return {
+            "auto_recall": {"enabled": True, "max_results": 5, "min_score": 0.3},
+            "auto_capture": {"enabled": True, "max_facts": 5},
+        }
+    if engagement_level == "medium":
+        return {
+            "auto_recall": {"enabled": True, "max_results": 5, "min_score": 0.3},
+            "auto_capture": {"enabled": False, "max_facts": 5},
+        }
+    return {
+        "auto_recall": {"enabled": False, "max_results": 5, "min_score": 0.3},
+        "auto_capture": {"enabled": False, "max_facts": 5},
+    }
+
+
+def _ensure_memory_hooks_config(
+    project_root: Path,
+    engagement_level: str,
+    *,
+    dry_run: bool = False,
+) -> str:
+    """Merge memory_hooks section into .tapps-mcp.yaml with engagement defaults (Epic 65.6).
+
+    Adds or updates memory_hooks only; other keys preserved.
+    Returns 'created', 'updated', or 'skipped'.
+    """
+    import yaml
+
+    yaml_path = project_root / ".tapps-mcp.yaml"
+    defaults = _memory_hooks_defaults_for_engagement(engagement_level)
+
+    if dry_run:
+        return "skipped"
+
+    existing: dict[str, Any] = {}
+    if yaml_path.exists():
+        try:
+            raw = yaml_path.read_text(encoding="utf-8-sig")
+            existing = yaml.safe_load(raw) or {}
+        except Exception:
+            return "skipped"
+
+    if "memory_hooks" not in existing:
+        existing["memory_hooks"] = defaults
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
+        yaml_path.write_text(yaml.dump(existing, default_flow_style=False), encoding="utf-8")
+        return "created"
+
+    mh = existing["memory_hooks"]
+    if not isinstance(mh, dict):
+        mh = {}
+    updated = False
+    for key in ("auto_recall", "auto_capture"):
+        sub_defaults = defaults.get(key, {})
+        if not isinstance(sub_defaults, dict):
+            continue
+        sub = mh.get(key)
+        if not isinstance(sub, dict):
+            mh[key] = sub_defaults.copy()
+            updated = True
+        else:
+            for k, v in sub_defaults.items():
+                if k not in sub:
+                    sub[k] = v
+                    updated = True
+    existing["memory_hooks"] = mh
+    if updated:
+        yaml_path.write_text(yaml.dump(existing, default_flow_style=False), encoding="utf-8")
+        return "updated"
+    return "skipped"
+
+
 def _detect_docsmcp(state: _BootstrapState) -> bool:
     """Detect whether DocsMCP is available (importable or in project deps).
 
@@ -545,9 +631,7 @@ def _create_templates(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     if not state.dry_run:
         from tapps_mcp.common.developer_workflow import render_workflow_md
 
-        action = state.safe_write_or_overwrite(
-            "docs/TAPPS_WORKFLOW.md", render_workflow_md()
-        )
+        action = state.safe_write_or_overwrite("docs/TAPPS_WORKFLOW.md", render_workflow_md())
         state.result["workflow_doc"] = {"action": action}
 
 
@@ -582,6 +666,10 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
     platform_action: str | None = None
     engagement = cfg.llm_engagement_level
+
+    # Epic 65.6: Ensure memory_hooks in .tapps-mcp.yaml with engagement defaults
+    mh_action = _ensure_memory_hooks_config(state.project_root, engagement, dry_run=cfg.dry_run)
+    state.result["memory_hooks_config"] = {"action": mh_action}
     if cfg.platform == "claude":
         platform_action = _bootstrap_claude(
             state.project_root, cfg.overwrite_platform_rules, engagement_level=engagement
@@ -612,9 +700,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 engagement_level=engagement,
                 destructive_guard=cfg.destructive_guard,
             )
-            state.result["agents"] = generate_subagent_definitions(
-                state.project_root, "claude"
-            )
+            state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
             state.result["skills"] = generate_skills(
                 state.project_root, "claude", engagement_level=engagement
             )
@@ -622,15 +708,38 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 state.project_root, engagement_level=engagement
             )
             if cfg.agent_teams:
-                state.result["agent_teams"] = generate_agent_teams_hooks(
-                    state.project_root
-                )
+                state.result["agent_teams"] = generate_agent_teams_hooks(state.project_root)
             if cfg.memory_capture:
                 from tapps_mcp.pipeline.platform_hooks import generate_memory_capture_hook
 
-                state.result["memory_capture"] = generate_memory_capture_hook(
-                    state.project_root
-                )
+                state.result["memory_capture"] = generate_memory_capture_hook(state.project_root)
+            # Epic 65.4/65.6: Wire auto-recall and auto-capture hooks from config or explicit param
+            try:
+                from tapps_core.config.settings import load_settings
+
+                settings = load_settings(project_root=state.project_root)
+                mh = settings.memory_hooks
+                if cfg.memory_auto_recall or mh.auto_recall.enabled:
+                    from tapps_mcp.pipeline.platform_hooks import (
+                        generate_memory_auto_recall_hook,
+                    )
+
+                    state.result["memory_auto_recall"] = generate_memory_auto_recall_hook(
+                        state.project_root,
+                        max_results=mh.auto_recall.max_results,
+                        min_score=mh.auto_recall.min_score,
+                        min_prompt_length=mh.auto_recall.min_prompt_length,
+                    )
+                if mh.auto_capture.enabled:
+                    from tapps_mcp.pipeline.platform_hooks import (
+                        generate_memory_auto_capture_hook,
+                    )
+
+                    state.result["memory_auto_capture"] = generate_memory_auto_capture_hook(
+                        state.project_root
+                    )
+            except Exception:  # noqa: S110
+                pass  # Non-critical; settings may not have memory_hooks yet
             state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
             state.result["copilot_instructions"] = generate_copilot_instructions(
                 state.project_root,
@@ -657,9 +766,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             state.result["hooks"] = generate_cursor_hooks(
                 state.project_root, engagement_level=engagement
             )
-            state.result["agents"] = generate_subagent_definitions(
-                state.project_root, "cursor"
-            )
+            state.result["agents"] = generate_subagent_definitions(state.project_root, "cursor")
             state.result["skills"] = generate_skills(
                 state.project_root, "cursor", engagement_level=engagement
             )

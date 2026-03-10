@@ -49,6 +49,7 @@ class TestDecayConfig:
         cfg = DecayConfig()
         assert cfg.architectural_half_life_days == 180
         assert cfg.pattern_half_life_days == 60
+        assert cfg.procedural_half_life_days == 30  # Epic 65.11
         assert cfg.context_half_life_days == 14
 
     def test_default_ceilings(self) -> None:
@@ -110,6 +111,24 @@ class TestCalculateDecayedConfidence:
         ctx_conf = calculate_decayed_confidence(ctx, config, now=now)
         pat_conf = calculate_decayed_confidence(pat, config, now=now)
         assert ctx_conf < pat_conf
+
+    def test_procedural_decays_between_pattern_and_context(
+        self, config: DecayConfig
+    ) -> None:
+        """Procedural (30d half-life) decays slower than context (14d), faster than pattern (60d). Epic 65.11."""
+        now = datetime.now(tz=UTC)
+        updated = (now - timedelta(days=30)).isoformat()
+
+        proc = _make_entry(
+            tier=MemoryTier.procedural, confidence=0.8, updated_at=updated
+        )
+        ctx = _make_entry(tier=MemoryTier.context, confidence=0.8, updated_at=updated)
+        pat = _make_entry(tier=MemoryTier.pattern, confidence=0.8, updated_at=updated)
+
+        proc_conf = calculate_decayed_confidence(proc, config, now=now)
+        ctx_conf = calculate_decayed_confidence(ctx, config, now=now)
+        pat_conf = calculate_decayed_confidence(pat, config, now=now)
+        assert ctx_conf < proc_conf < pat_conf
 
     def test_confidence_floor_prevents_zero(self, config: DecayConfig) -> None:
         """Confidence never drops below the floor (0.1)."""

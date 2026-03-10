@@ -29,6 +29,9 @@ from tapps_core.memory.consolidation import (
 from tapps_core.memory.models import ConsolidatedEntry as ConsolidatedEntry
 from tapps_core.memory.models import ConsolidationReason as ConsolidationReason
 
+# RRF fusion (Epic 65.8)
+from tapps_core.memory.fusion import reciprocal_rank_fusion as reciprocal_rank_fusion
+
 # Auto-consolidation triggers (Epic 58, Story 58.3)
 from tapps_core.memory.auto_consolidation import (
     ConsolidationResult as ConsolidationResult,

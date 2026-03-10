@@ -1345,7 +1345,7 @@ Settings for the shared memory subsystem.
 | `enabled` | `bool` | `Field(default=True, description='Enable the memory subsystem.')` |
 | `gc_enabled` | `bool` | `Field(default=True, description='Enable garbage collection.')` |
 | `contradiction_check_on_start` | `bool` | `Field(default=True, description='Run contradiction detection at session start.')` |
-| `max_memories` | `int` | `Field(default=500, ge=1, description='Maximum number of active memories per project.')` |
+| `max_memories` | `int` | `Field(default=1500, ge=1, description='Maximum number of active memories per project.')` |
 | `gc_auto_threshold` | `float` | `Field(default=0.8, ge=0.0, le=1.0, description='Run GC at session start when usage exceeds this fraction of max_memories.')` |
 | `inject_into_experts` | `bool` | `Field(default=True, description='Inject relevant memories into expert consultations (Epic 25).')` |
 | `decay` | `MemoryDecaySettings` | `Field(default_factory=MemoryDecaySettings)` |

@@ -39,11 +39,27 @@ _ANNOTATIONS_MEMORY = ToolAnnotations(
 _VALUE_PREVIEW_LEN = 200
 
 _VALID_ACTIONS = {
-    "save", "save_bulk", "get", "list", "delete", "search",
-    "reinforce", "gc", "contradictions", "reseed",
-    "import", "export", "consolidate", "unconsolidate",
-    "federate_register", "federate_publish", "federate_subscribe",
-    "federate_sync", "federate_search", "federate_status",
+    "save",
+    "save_bulk",
+    "get",
+    "list",
+    "delete",
+    "search",
+    "reinforce",
+    "gc",
+    "contradictions",
+    "reseed",
+    "import",
+    "export",
+    "consolidate",
+    "unconsolidate",
+    "federate_register",
+    "federate_publish",
+    "federate_subscribe",
+    "federate_sync",
+    "federate_search",
+    "federate_status",
+    "index_session",
     "validate",
 }
 
@@ -97,6 +113,14 @@ class _Params:
     # Validation parameters (Epic 62)
     stale_only: bool = False
     max_entries: int = 10
+    # Export format parameters (Epic 65.2)
+    export_format: str = "json"
+    include_frontmatter: bool = True
+    export_group_by: str = "tier"
+    # Session index (Epic 65.10)
+    include_session_index: bool = False
+    session_id: str = ""
+    chunks: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +155,12 @@ async def tapps_memory(
     include_hub: bool = True,
     stale_only: bool = False,
     max_entries: int = 10,
+    format: str = "json",  # noqa: A002
+    include_frontmatter: bool = True,
+    group_by: str = "tier",
+    include_session_index: bool = False,
+    session_id: str = "",
+    chunks: str = "",
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
@@ -184,7 +214,8 @@ async def tapps_memory(
         contradictions: Detect memories that contradict observable project state.
         reseed: Re-seed memory from project profile (only updates auto-seeded entries).
         import: Import memories from a JSON file (requires file_path).
-        export: Export memories to a JSON file (optional file_path, tier, scope filters).
+        export: Export memories to JSON or Markdown (format: json|markdown, optional
+            file_path, tier, scope filters, include_frontmatter, group_by).
         consolidate: Merge related entries into a consolidated entry with provenance.
             Use entry_ids for explicit keys or query to find similar entries.
             Use dry_run=True to preview. (Epic 58, Story 58.4)
@@ -211,15 +242,15 @@ async def tapps_memory(
         return error_response(
             "tapps_memory",
             "invalid_action",
-            f"Invalid action '{action}'. "
-            f"Must be one of: {', '.join(sorted(_VALID_ACTIONS))}",
+            f"Invalid action '{action}'. Must be one of: {', '.join(sorted(_VALID_ACTIONS))}",
         )
 
     try:
         store = _get_memory_store()
     except Exception as exc:
         return error_response(
-            "tapps_memory", "store_init_failed",
+            "tapps_memory",
+            "store_init_failed",
             f"Failed to initialize memory store: {exc}",
         )
 
@@ -228,15 +259,37 @@ async def tapps_memory(
     source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else []
 
     params = _Params(
-        key=key, value=value, tier=tier, source=source,
-        source_agent=source_agent, scope=scope, tag_list=tag_list,
-        branch=branch, query=query, confidence=confidence,
-        ranked=ranked, limit=limit, include_summary=include_summary,
-        file_path=file_path, overwrite=overwrite, entries=entries,
-        entry_ids=entry_id_list, dry_run=dry_run, include_sources=include_sources,
-        project_id=project_id, sources=source_list,
-        min_confidence=min_confidence, include_hub=include_hub,
-        stale_only=stale_only, max_entries=max_entries,
+        key=key,
+        value=value,
+        tier=tier,
+        source=source,
+        source_agent=source_agent,
+        scope=scope,
+        tag_list=tag_list,
+        branch=branch,
+        query=query,
+        confidence=confidence,
+        ranked=ranked,
+        limit=limit,
+        include_summary=include_summary,
+        file_path=file_path,
+        overwrite=overwrite,
+        entries=entries,
+        entry_ids=entry_id_list,
+        dry_run=dry_run,
+        include_sources=include_sources,
+        project_id=project_id,
+        sources=source_list,
+        min_confidence=min_confidence,
+        include_hub=include_hub,
+        stale_only=stale_only,
+        max_entries=max_entries,
+        export_format=format,
+        include_frontmatter=include_frontmatter,
+        export_group_by=group_by,
+        include_session_index=include_session_index,
+        session_id=session_id,
+        chunks=chunks,
     )
 
     try:
@@ -246,7 +299,8 @@ async def tapps_memory(
             result_data = _DISPATCH[action](store, params)
     except Exception as exc:
         return error_response(
-            "tapps_memory", "action_failed",
+            "tapps_memory",
+            "action_failed",
             f"Memory {action} failed: {exc}",
         )
 
@@ -267,9 +321,15 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
         return {"error": "missing_value", "message": "Value is required for save."}
 
     result = store.save(
-        key=p.key, value=p.value, tier=p.tier, source=p.source,
-        source_agent=p.source_agent, scope=p.scope, tags=p.tag_list,
-        branch=p.branch or None, confidence=p.confidence,
+        key=p.key,
+        value=p.value,
+        tier=p.tier,
+        source=p.source,
+        source_agent=p.source_agent,
+        scope=p.scope,
+        tags=p.tag_list,
+        branch=p.branch or None,
+        confidence=p.confidence,
     )
 
     if isinstance(result, dict):
@@ -304,10 +364,7 @@ def _handle_save_bulk(store: MemoryStore, p: _Params) -> dict[str, Any]:
     if len(parsed) > _BULK_SAVE_MAX_ENTRIES:
         return {
             "error": "too_many_entries",
-            "message": (
-                f"Maximum {_BULK_SAVE_MAX_ENTRIES} entries per call, "
-                f"got {len(parsed)}."
-            ),
+            "message": (f"Maximum {_BULK_SAVE_MAX_ENTRIES} entries per call, got {len(parsed)}."),
         }
 
     saved = 0
@@ -327,10 +384,13 @@ def _handle_save_bulk(store: MemoryStore, p: _Params) -> dict[str, Any]:
             skipped += 1
             continue
         if not e_value:
-            errors.append({
-                "index": str(i), "key": e_key,
-                "error": "Missing required field 'value'.",
-            })
+            errors.append(
+                {
+                    "index": str(i),
+                    "key": e_key,
+                    "error": "Missing required field 'value'.",
+                }
+            )
             skipped += 1
             continue
 
@@ -456,7 +516,12 @@ def _handle_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
 
     if p.ranked and p.query:
         return _ranked_search(
-            store, p.query, effective_limit, p.include_summary, p.include_sources,
+            store,
+            p.query,
+            effective_limit,
+            p.include_summary,
+            p.include_sources,
+            p.include_session_index,
         )
 
     # Unranked (legacy FTS5-only) search
@@ -603,31 +668,48 @@ def _handle_import(store: MemoryStore, p: _Params) -> dict[str, Any]:
     validator = PathValidator(settings.project_root)
 
     result = import_memories(
-        store, Path(p.file_path), validator, overwrite=p.overwrite,
+        store,
+        Path(p.file_path),
+        validator,
+        overwrite=p.overwrite,
     )
 
     return {"action": "import", **result, "store_metadata": _store_metadata(store)}
 
 
 def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
-    """Export memories to a JSON file."""
+    """Export memories to JSON or Markdown (Epic 65.2)."""
     from tapps_core.config.settings import load_settings
     from tapps_core.memory.io import export_memories
     from tapps_core.security.path_validator import PathValidator
 
+    fmt = (p.export_format or "json").lower()
+    if fmt not in ("json", "markdown"):
+        return {
+            "error": "invalid_format",
+            "message": f'format must be "json" or "markdown", got {p.export_format!r}.',
+        }
+
+    group_by_val = (p.export_group_by or "tier").lower()
+    if group_by_val not in ("tier", "tag", "none"):
+        group_by_val = "tier"
+
     settings = load_settings()
     validator = PathValidator(settings.project_root)
 
-    output = (
-        Path(p.file_path) if p.file_path
-        else settings.project_root / "memory-export.json"
-    )
+    default_name = "memory-export.md" if fmt == "markdown" else "memory-export.json"
+    output = Path(p.file_path) if p.file_path else settings.project_root / default_name
 
     result = export_memories(
-        store, output, validator,
+        store,
+        output,
+        validator,
         tier=p.tier if p.tier != "pattern" else None,
         scope=p.scope if p.scope != "project" else None,
         min_confidence=p.confidence if p.confidence >= 0 else None,
+        export_format=fmt,
+        include_frontmatter=p.include_frontmatter,
+        group_by=group_by_val,
     )
 
     return {"action": "export", **result, "store_metadata": _store_metadata(store)}
@@ -662,7 +744,8 @@ def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
         # Auto-discover consolidation groups
         all_entries = store.list_all()
         active_entries = [
-            e for e in all_entries
+            e
+            for e in all_entries
             if not getattr(e, "is_consolidated", False) and not e.contradicted
         ]
 
@@ -799,10 +882,9 @@ def _handle_unconsolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
     marker = f"consolidated into {p.key}"
     all_entries = store.list_all()
     source_entries = [
-        e for e in all_entries
-        if e.contradicted
-        and e.contradiction_reason
-        and marker in e.contradiction_reason
+        e
+        for e in all_entries
+        if e.contradicted and e.contradiction_reason and marker in e.contradiction_reason
     ]
 
     if not source_entries:
@@ -876,10 +958,29 @@ def _find_entries_by_query(
     limit: int,
 ) -> list[MemoryEntry] | dict[str, Any]:
     """Find entries by query for consolidation."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.memory.reranker import get_reranker
     from tapps_core.memory.retrieval import MemoryRetriever
     from tapps_core.memory.similarity import find_consolidation_groups
 
-    retriever = MemoryRetriever()
+    settings = load_settings()
+    rr = settings.memory.reranker
+    reranker = (
+        get_reranker(
+            enabled=rr.enabled,
+            provider=rr.provider,
+            top_k=rr.top_k,
+            api_key=rr.api_key,
+        )
+        if rr.enabled
+        else None
+    )
+    retriever = MemoryRetriever(
+        semantic_enabled=settings.memory.semantic_search.enabled,
+        hybrid_config=settings.memory.hybrid,
+        reranker=reranker,
+        reranker_enabled=rr.enabled,
+    )
     effective_limit = limit if limit > 0 else _SEARCH_DEFAULT_LIMIT
 
     # Search for related entries
@@ -912,6 +1013,49 @@ def _find_entries_by_query(
 # ---------------------------------------------------------------------------
 # Federation action handlers (Epic 64)
 # ---------------------------------------------------------------------------
+
+
+def _handle_index_session(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Handle index_session action (Epic 65.10). Store session chunks for search."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.memory.session_index import index_session as do_index_session
+
+    if not p.session_id or not p.session_id.strip():
+        return {"error": "missing_session_id", "message": "session_id is required."}
+    if not p.chunks:
+        return {"error": "missing_chunks", "message": "chunks is required (JSON array of strings)."}
+    try:
+        parsed = json.loads(p.chunks)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {"error": "invalid_chunks", "message": f"chunks must be JSON array of strings: {exc}"}
+    if not isinstance(parsed, list):
+        return {"error": "invalid_chunks", "message": "chunks must be a JSON array."}
+    chunks_list = [str(c) for c in parsed if c]
+    if not chunks_list:
+        return {"action": "index_session", "chunks_stored": 0, "session_id": p.session_id}
+
+    settings = load_settings()
+    if not settings.memory.session_index.enabled:
+        return {
+            "error": "session_index_disabled",
+            "message": "Session indexing is disabled. Set memory.session_index.enabled: true in .tapps-mcp.yaml.",
+        }
+
+    si = settings.memory.session_index
+    count = do_index_session(
+        store.project_root,
+        p.session_id,
+        chunks_list,
+        max_chunks=si.max_chunks_per_session,
+        max_chars_per_chunk=si.max_chars_per_chunk,
+    )
+    return {
+        "action": "index_session",
+        "session_id": p.session_id,
+        "chunks_stored": count,
+        "chunks_input": len(chunks_list),
+        "store_metadata": _store_metadata(store),
+    }
 
 
 def _handle_federate_register(store: MemoryStore, params: _Params) -> dict[str, Any]:
@@ -1129,6 +1273,7 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "federate_sync": _handle_federate_sync,
     "federate_search": _handle_federate_search,
     "federate_status": _handle_federate_status,
+    "index_session": _handle_index_session,
 }
 
 
@@ -1137,9 +1282,7 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
 # ---------------------------------------------------------------------------
 
 
-async def _handle_validate(
-    store: MemoryStore, params: _Params
-) -> dict[str, Any]:
+async def _handle_validate(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Validate memory entries against authoritative documentation."""
     from tapps_core.knowledge.lookup import LookupEngine
     from tapps_core.memory.doc_validation import MemoryDocValidator
@@ -1157,7 +1300,7 @@ async def _handle_validate(
             return {"action": "validate", "error": f"Key '{params.key}' not found"}
         report = await validator.validate_batch([entry])
     elif params.query:
-        entries = store.search(params.query)[:params.max_entries]
+        entries = store.search(params.query)[: params.max_entries]
         report = await validator.validate_batch(entries)
     elif params.stale_only:
         all_entries = list(store.list_all().values())
@@ -1168,12 +1311,14 @@ async def _handle_validate(
         )
     else:
         # Validate all (up to max_entries)
-        all_entries = list(store.list_all().values())[:params.max_entries]
+        all_entries = list(store.list_all().values())[: params.max_entries]
         report = await validator.validate_batch(all_entries)
 
     # Apply results if not dry_run
     apply_result = await validator.apply_results(
-        report, store, dry_run=params.dry_run,
+        report,
+        store,
+        dry_run=params.dry_run,
     )
 
     # Format response
@@ -1232,11 +1377,35 @@ def _ranked_search(
     limit: int,
     include_summary: bool,
     include_sources: bool = False,
+    include_session_index: bool = False,
 ) -> dict[str, Any]:
-    """Execute ranked BM25 search via MemoryRetriever."""
+    """Execute ranked BM25 search via MemoryRetriever (hybrid + reranker when enabled).
+
+    When include_session_index and memory.session_index.enabled, merges session
+    index hits with memory results (Epic 65.10).
+    """
+    from tapps_core.config.settings import load_settings
+    from tapps_core.memory.reranker import get_reranker
     from tapps_core.memory.retrieval import MemoryRetriever
 
-    retriever = MemoryRetriever()
+    settings = load_settings()
+    rr = settings.memory.reranker
+    reranker = (
+        get_reranker(
+            enabled=rr.enabled,
+            provider=rr.provider,
+            top_k=rr.top_k,
+            api_key=rr.api_key,
+        )
+        if rr.enabled
+        else None
+    )
+    retriever = MemoryRetriever(
+        semantic_enabled=settings.memory.semantic_search.enabled,
+        hybrid_config=settings.memory.hybrid,
+        reranker=reranker,
+        reranker_enabled=rr.enabled,
+    )
     scored = retriever.search(query, store, limit=limit, include_sources=include_sources)
 
     result_entries: list[dict[str, Any]] = []
@@ -1246,18 +1415,46 @@ def _ranked_search(
             if include_summary and i >= _FULL_VALUE_THRESHOLD
             else sm.entry.model_dump()
         )
-        result_entries.append({
-            "entry": entry_data,
-            "score": sm.score,
-            "effective_confidence": sm.effective_confidence,
-            "stale": sm.stale,
-        })
+        result_entries.append(
+            {
+                "entry": entry_data,
+                "score": sm.score,
+                "effective_confidence": sm.effective_confidence,
+                "stale": sm.stale,
+                "source": "memory",
+            }
+        )
+
+    # Epic 65.10: optionally include session index hits
+    if include_session_index and settings.memory.session_index.enabled:
+        from tapps_core.memory.session_index import search_session_index
+
+        sess_limit = min(limit, 5)
+        sess_hits = search_session_index(store.project_root, query, limit=sess_limit)
+        for i, hit in enumerate(sess_hits):
+            score = 0.7 - (i * 0.05)
+            result_entries.append(
+                {
+                    "session_chunk": {
+                        "session_id": hit["session_id"],
+                        "chunk_index": hit["chunk_index"],
+                        "content": hit["content"][:200] + ("..." if len(hit["content"]) > 200 else ""),
+                        "created_at": hit["created_at"],
+                    },
+                    "score": max(0.4, score),
+                    "effective_confidence": 0.5,
+                    "stale": False,
+                    "source": "session_index",
+                }
+            )
+        result_entries.sort(key=lambda x: x["score"], reverse=True)
+        result_entries = result_entries[:limit]
 
     return {
         "action": "search",
         "ranked": True,
         "results": result_entries,
-        "total_count": len(scored),
+        "total_count": len(result_entries),
         "returned_count": len(result_entries),
         "query": query,
         "store_metadata": _store_metadata(store),
@@ -1300,10 +1497,9 @@ def _get_provenance(store: MemoryStore, entry: MemoryEntry) -> dict[str, Any] | 
     marker = f"consolidated into {entry.key}"
     all_entries = store.list_all()
     source_entries = [
-        e for e in all_entries
-        if e.contradicted
-        and e.contradiction_reason
-        and marker in e.contradiction_reason
+        e
+        for e in all_entries
+        if e.contradicted and e.contradiction_reason and marker in e.contradiction_reason
     ]
 
     if not source_entries:
@@ -1337,9 +1533,7 @@ def _summarize_entry(entry: MemoryEntry) -> dict[str, Any]:
     """Build a summary-only dict for an entry (key, tier, summary, tags)."""
     value_str = entry.value if isinstance(entry.value, str) else str(entry.value)
     summary = (
-        value_str[:_SUMMARY_MAX_LEN] + "..."
-        if len(value_str) > _SUMMARY_MAX_LEN
-        else value_str
+        value_str[:_SUMMARY_MAX_LEN] + "..." if len(value_str) > _SUMMARY_MAX_LEN else value_str
     )
     return {
         "key": entry.key,
@@ -1356,8 +1550,7 @@ def _build_entry_list(
 ) -> list[dict[str, Any]]:
     """Build entry list with optional summary truncation past threshold."""
     return [
-        _summarize_entry(e) if include_summary and i >= _FULL_VALUE_THRESHOLD
-        else e.model_dump()
+        _summarize_entry(e) if include_summary and i >= _FULL_VALUE_THRESHOLD else e.model_dump()
         for i, e in enumerate(entries)
     ]
 

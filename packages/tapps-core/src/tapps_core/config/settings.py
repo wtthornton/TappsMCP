@@ -84,6 +84,9 @@ class MemoryDecaySettings(BaseSettings):
     pattern_half_life_days: int = Field(
         default=60, ge=1, description="Half-life for pattern memories (days)."
     )
+    procedural_half_life_days: int = Field(
+        default=30, ge=1, description="Epic 65.11: Half-life for procedural memories (workflows, steps)."
+    )
     context_half_life_days: int = Field(
         default=14, ge=1, description="Half-life for context memories (days)."
     )
@@ -123,6 +126,148 @@ class MemoryConsolidationSettings(BaseSettings):
     )
 
 
+class MemoryWriteRules(BaseModel):
+    """Write rules for memory saves (Epic 65.3). Used by optional validation gate (Epic 65.17)."""
+
+    block_sensitive_keywords: list[str] = Field(
+        default_factory=lambda: ["password", "secret", "api_key", "token"],
+        description="Memory keys/values containing these substrings are blocked.",
+    )
+    min_value_length: int = Field(
+        default=10,
+        ge=0,
+        description="Minimum allowed value length (characters).",
+    )
+    max_value_length: int = Field(
+        default=4096,
+        ge=1,
+        description="Maximum allowed value length (characters).",
+    )
+
+
+class MemoryAutoRecallSettings(BaseModel):
+    """Settings for the auto-recall hook (Epic 65.4)."""
+
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable auto-recall hook that injects relevant memories before agent prompt. "
+            "Default: false for backward compatibility."
+        ),
+    )
+    max_results: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Maximum memories to inject (1-10). Default: 5.",
+    )
+    min_score: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence (0-1). Default: 0.3.",
+    )
+    min_prompt_length: int = Field(
+        default=50,
+        ge=0,
+        description="Skip recall if prompt/query shorter than N chars. Default: 50.",
+    )
+
+
+class MemoryAutoCaptureSettings(BaseModel):
+    """Settings for the auto-capture hook (Epic 65.5)."""
+
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable auto-capture hook that extracts durable facts on session stop. "
+            "Default: false for backward compatibility."
+        ),
+    )
+    max_facts: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Maximum facts to extract per session (1-10). Default: 5.",
+    )
+
+
+class MemoryHooksSettings(BaseModel):
+    """Settings for memory-related hooks (Epic 65.4, 65.5)."""
+
+    auto_recall: MemoryAutoRecallSettings = Field(
+        default_factory=MemoryAutoRecallSettings,
+        description="Auto-recall hook: inject relevant memories before agent prompt.",
+    )
+    auto_capture: MemoryAutoCaptureSettings = Field(
+        default_factory=MemoryAutoCaptureSettings,
+        description="Auto-capture hook: extract durable facts on session stop.",
+    )
+
+
+class MemoryHybridSettings(BaseModel):
+    """Settings for hybrid BM25+vector search with RRF (Epic 65.8)."""
+
+    top_bm25: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Number of top BM25 results to fetch for RRF fusion.",
+    )
+    top_vector: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Number of top vector results to fetch for RRF fusion.",
+    )
+    rrf_k: int = Field(
+        default=60,
+        ge=1,
+        le=200,
+        description="RRF constant: score = 1/(k+rank). Typical default 60.",
+    )
+
+
+class MemorySemanticSearchSettings(BaseModel):
+    """Settings for optional vector/semantic search (Epic 65.7)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable semantic search via optional embedding provider. Default: false.",
+    )
+    provider: str = Field(
+        default="sentence_transformers",
+        description="Provider name: sentence_transformers (openai future).",
+    )
+    model: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Model name for sentence_transformers provider.",
+    )
+
+
+class MemoryRerankerSettings(BaseModel):
+    """Settings for optional cross-encoder reranking (Epic 65.9)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable reranking of top retrieval candidates (default: false).",
+    )
+    provider: str = Field(
+        default="noop",
+        description="Reranker provider: 'noop' (passthrough) or 'cohere'.",
+    )
+    top_k: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Number of results to return after reranking (1-50). Default: 10.",
+    )
+    api_key: str | None = Field(
+        default=None,
+        description="API key for Cohere reranker (required when provider=cohere).",
+    )
+
+
 class MemoryDocValidationSettings(BaseModel):
     """Settings for Context7-assisted memory validation (Epic 62)."""
 
@@ -152,6 +297,25 @@ class MemoryDocValidationSettings(BaseModel):
     )
 
 
+class MemorySessionIndexSettings(BaseModel):
+    """Settings for session indexing (Epic 65.10)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable session indexing (default: false). Trade-off: more coverage, more noise.",
+    )
+    max_chunks_per_session: int = Field(
+        default=50, ge=1, le=200, description="Maximum chunks per session (default: 50)."
+    )
+    max_chars_per_chunk: int = Field(
+        default=500, ge=50, le=2000, description="Maximum characters per chunk (default: 500)."
+    )
+    ttl_days: int | None = Field(
+        default=7,
+        description="TTL in days (default: 7). None = no expiry.",
+    )
+
+
 class MemorySettings(BaseSettings):
     """Settings for the shared memory subsystem."""
 
@@ -163,7 +327,7 @@ class MemorySettings(BaseSettings):
         default=True, description="Run contradiction detection at session start."
     )
     max_memories: int = Field(
-        default=500, ge=1, description="Maximum number of active memories per project."
+        default=1500, ge=1, description="Maximum number of active memories per project."
     )
     gc_auto_threshold: float = Field(
         default=0.8,
@@ -175,12 +339,38 @@ class MemorySettings(BaseSettings):
         default=True,
         description="Inject relevant memories into expert consultations (Epic 25).",
     )
-    decay: MemoryDecaySettings = Field(default_factory=MemoryDecaySettings)
-    consolidation: MemoryConsolidationSettings = Field(
-        default_factory=MemoryConsolidationSettings
+    capture_prompt: str = Field(
+        default=(
+            "Store durable memories: architectural (project structure, key decisions), "
+            "pattern (coding conventions, recurring solutions), procedural (how-to workflows), context "
+            "(session-specific facts that matter next week). "
+            "Skip: raw action logs, transient state, sensitive data. "
+            "If it won't change future decisions, don't store it."
+        ),
+        description="Prompt for auto-capture (Epic 65.5) and manual save guidance (Epic 65.3).",
     )
-    doc_validation: MemoryDocValidationSettings = Field(
-        default_factory=MemoryDocValidationSettings
+    write_rules: MemoryWriteRules = Field(
+        default_factory=MemoryWriteRules,
+        description="Rules for memory write validation (Epic 65.3).",
+    )
+    decay: MemoryDecaySettings = Field(default_factory=MemoryDecaySettings)
+    consolidation: MemoryConsolidationSettings = Field(default_factory=MemoryConsolidationSettings)
+    reranker: MemoryRerankerSettings = Field(
+        default_factory=MemoryRerankerSettings,
+        description="Optional reranking of retrieval results (Epic 65.9).",
+    )
+    semantic_search: MemorySemanticSearchSettings = Field(
+        default_factory=MemorySemanticSearchSettings,
+        description="Optional vector/semantic search (Epic 65.7).",
+    )
+    doc_validation: MemoryDocValidationSettings = Field(default_factory=MemoryDocValidationSettings)
+    session_index: MemorySessionIndexSettings = Field(
+        default_factory=MemorySessionIndexSettings,
+        description="Session indexing for searchable past sessions (Epic 65.10).",
+    )
+    hybrid: MemoryHybridSettings = Field(
+        default_factory=MemoryHybridSettings,
+        description="Hybrid BM25+vector RRF settings (Epic 65.8).",
     )
 
 
@@ -342,6 +532,12 @@ class TappsMCPSettings(BaseSettings):
 
     # Memory subsystem (Epic 23-25)
     memory: MemorySettings = Field(default_factory=MemorySettings)
+
+    # Memory hooks (Epic 65.4)
+    memory_hooks: MemoryHooksSettings = Field(
+        default_factory=MemoryHooksSettings,
+        description="Settings for memory-related hooks (auto-recall).",
+    )
 
     # Knowledge cache
     cache_max_mb: int = Field(

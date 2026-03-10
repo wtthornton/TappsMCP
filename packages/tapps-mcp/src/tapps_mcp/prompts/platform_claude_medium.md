@@ -42,6 +42,10 @@ This maps the blast radius via import graph analysis.
 
 You should call `tapps_validate_config(file_path)` when changing Dockerfile, docker-compose, or infra config.
 
+## Memory System
+
+`tapps_memory` provides persistent cross-session knowledge with **20 actions** (save, search, consolidate, federation, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall (inject memories before turns) and auto-capture (extract facts on session end).
+
 ## 5-Stage Pipeline
 
 Recommended order for every code task:

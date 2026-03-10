@@ -15,7 +15,7 @@ When the **TappsMCP** MCP server is configured, you **MUST** use its tools for c
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files. **Always pass explicit `file_paths`** (comma-separated). Default is quick mode; only use `quick=false` as a last resort. |
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
-| **tapps_memory** | **REQUIRED at session start** - search past decisions. Save learnings before session end. |
+| **tapps_memory** | **REQUIRED** - persistent cross-session knowledge (20 actions). Search at session start, save before end. See **Memory action reference** below. |
 
 **For full tool reference** (29 tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
@@ -107,16 +107,63 @@ The checklist uses this to decide which tools are required vs recommended vs opt
 
 ## Memory systems
 
-Your project may have two complementary memory systems. Use the right one for each type of knowledge:
+Your project may have two complementary memory systems:
 
-- **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Session learnings, user preferences, build commands, IDE settings, debugging insights. Auto-managed by Claude Code across sessions.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge. Structured with tier classification (architectural/pattern/context), confidence scoring, decay, contradiction detection, and cross-session persistence.
-
-**When to use which:**
-- Build commands, IDE preferences, personal workflow notes --> auto memory
-- Architecture decisions, quality patterns, cross-agent knowledge --> `tapps_memory`
+- **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed by Claude Code.
+- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert findings, cross-agent knowledge. Structured with tiers, confidence decay, contradiction detection, consolidation, and federation.
 
 REQUIRED: Use `tapps_memory` for all architecture decisions and quality patterns. Check memory at session start and save learnings before session end.
+
+### Memory action reference (20 actions)
+
+**Core:** `save` (key, value, tier, scope, tags), `save_bulk` (up to 50 entries), `get` (by key), `list` (filter by scope/tier/tags), `delete` (by key)
+
+**Search:** `search` (ranked BM25 with composite scoring: 40% relevance + 30% confidence + 15% recency + 15% frequency)
+
+**Intelligence:** `reinforce` (reset decay clock, boost confidence), `gc` (archive stale entries), `contradictions` (detect stale claims vs project state), `reseed` (re-populate from project profile)
+
+**Consolidation:** `consolidate` (merge related entries with provenance tracking, `dry_run=True` to preview), `unconsolidate` (undo a merge, restore sources)
+
+**Import/export:** `import` (from JSON, up to 500 entries), `export` (to JSON or Markdown with Obsidian frontmatter)
+
+**Federation:** `federate_register` (register project in hub), `federate_publish` (publish `shared`-scope entries), `federate_subscribe` (subscribe to other projects), `federate_sync` (pull subscribed entries), `federate_search` (search local + federated), `federate_status` (hub overview)
+
+### Memory tiers
+
+| Tier | Half-life | Use for |
+|------|-----------|---------|
+| **architectural** | 180 days | Stable decisions: DB choice, project structure, auth strategy |
+| **pattern** | 60 days | Conventions: coding style, recurring solutions, test patterns |
+| **procedural** | 30 days | Workflows: deploy steps, migration procedures |
+| **context** | 14 days | Short-lived facts: current sprint focus, recent bugs |
+
+### Memory scopes
+
+| Scope | Visibility | Use for |
+|-------|-----------|---------|
+| **project** | All sessions (default) | Architecture, patterns, decisions |
+| **branch** | Current git branch only | Branch-specific WIP |
+| **session** | Current session (expires 7 days) | Temporary notes |
+| **shared** | Federation-eligible (cross-project) | Reusable knowledge across projects |
+
+### Memory configuration (`.tapps-mcp.yaml`)
+
+```yaml
+memory:
+  max_memories: 1500           # Hard cap per project
+  gc_auto_threshold: 0.8       # Auto-GC at 80% capacity
+  capture_prompt: |             # Guide auto-capture
+    Store durable memories: architectural, pattern, context.
+    Skip: raw logs, transient state, sensitive data.
+  write_rules:
+    block_sensitive_keywords: ["password", "secret", "api_key", "token"]
+memory_hooks:
+  auto_recall:
+    enabled: true               # Inject relevant memories before turns
+    min_score: 0.3              # Tune coverage vs noise
+  auto_capture:
+    enabled: true               # Extract facts on session end
+```
 
 ---
 

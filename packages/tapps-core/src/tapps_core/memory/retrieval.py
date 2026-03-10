@@ -5,11 +5,13 @@ ranked retrieval combining text relevance with memory-specific
 signals (confidence, recency, access frequency).
 
 Uses BM25 (Okapi) for text relevance scoring with automatic
-index building and invalidation.
+index building and invalidation. Epic 65.8: hybrid BM25 + vector
+search with RRF when semantic_search.enabled.
 """
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -19,6 +21,7 @@ from pydantic import BaseModel, Field
 from tapps_core.memory.bm25 import BM25Scorer
 from tapps_core.memory.decay import DecayConfig, calculate_decayed_confidence, is_stale
 from tapps_core.memory.models import MemoryEntry  # noqa: TC001
+from tapps_core.memory.reranker import RERANKER_TOP_CANDIDATES, Reranker
 
 if TYPE_CHECKING:
     from tapps_core.memory.store import MemoryStore
@@ -43,9 +46,7 @@ class ScoredMemory(BaseModel):
 
     entry: MemoryEntry
     score: float = Field(ge=0.0, description="Composite retrieval score.")
-    effective_confidence: float = Field(
-        ge=0.0, le=1.0, description="Time-decayed confidence."
-    )
+    effective_confidence: float = Field(ge=0.0, le=1.0, description="Time-decayed confidence.")
     bm25_relevance: float = Field(ge=0.0, description="Normalized text relevance.")
     stale: bool = Field(default=False, description="Whether the memory is stale.")
 
@@ -91,12 +92,24 @@ def _is_consolidated_source(entry: MemoryEntry) -> bool:
 class MemoryRetriever:
     """Ranked retrieval engine for memory entries."""
 
-    def __init__(self, config: DecayConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: DecayConfig | None = None,
+        *,
+        semantic_enabled: bool = False,
+        hybrid_config: object = None,
+        reranker: Reranker | None = None,
+        reranker_enabled: bool = False,
+    ) -> None:
         self._config = config or DecayConfig()
         self._bm25 = BM25Scorer()
         self._bm25_entries: list[MemoryEntry] = []
         self._bm25_corpus_size: int = 0
         self._bm25_fingerprint: int = 0
+        self._semantic_enabled = semantic_enabled
+        self._hybrid_config = hybrid_config
+        self._reranker = reranker
+        self._reranker_enabled = reranker_enabled
 
     def search(
         self,
@@ -134,8 +147,11 @@ class MemoryRetriever:
         limit = max(1, min(limit, _MAX_RESULTS))
         now = datetime.now(tz=UTC)
 
-        # Get candidates via store search (FTS5-backed) + fallback
-        candidates = self._get_candidates(query, store)
+        # Epic 65.8: hybrid path when semantic enabled
+        if self._semantic_enabled:
+            candidates = self._get_hybrid_candidates(query, store)
+        else:
+            candidates = self._get_candidates(query, store)
 
         # Score and filter
         scored: list[ScoredMemory] = []
@@ -186,7 +202,59 @@ class MemoryRetriever:
 
         # Sort by score descending
         scored.sort(key=lambda s: s.score, reverse=True)
+
+        # Epic 65.9: optional reranking of top-20 -> top_k
+        if self._reranker_enabled and self._reranker is not None and scored:
+            scored = self._apply_reranker(query, scored, limit)
+
         return scored[:limit]
+
+    def _apply_reranker(
+        self,
+        query: str,
+        scored: list[ScoredMemory],
+        limit: int,
+    ) -> list[ScoredMemory]:
+        """Apply reranker to top candidates; fallback to original order on failure."""
+        top_candidates = scored[:RERANKER_TOP_CANDIDATES]
+        candidates = [(sm.entry.key, sm.entry.value) for sm in top_candidates]
+        effective_top_k = min(limit, len(candidates))
+
+        try:
+            reranked = self._reranker.rerank(query, candidates, top_k=effective_top_k)
+        except Exception as e:
+            logger.warning(
+                "reranker_failed_fallback_to_original",
+                reason=str(e),
+            )
+            return scored
+
+        if not reranked:
+            return scored
+
+        key_to_scored = {sm.entry.key: sm for sm in scored}
+        result: list[ScoredMemory] = []
+        for key, rerank_score in reranked:
+            sm = key_to_scored.get(key)
+            if sm is not None:
+                # Use reranker score as primary relevance; preserve other fields
+                result.append(
+                    ScoredMemory(
+                        entry=sm.entry,
+                        score=round(rerank_score, 4),
+                        effective_confidence=sm.effective_confidence,
+                        bm25_relevance=sm.bm25_relevance,
+                        stale=sm.stale,
+                    )
+                )
+        # Append any from original not in reranker result (e.g. API dropped some)
+        seen = {sm.entry.key for sm in result}
+        for sm in scored:
+            if sm.entry.key not in seen:
+                result.append(sm)
+                if len(result) >= limit:
+                    break
+        return result[:limit]
 
     # -----------------------------------------------------------------------
     # BM25 index management
@@ -241,6 +309,111 @@ class MemoryRetriever:
         # Fallback: full corpus BM25 scan
         return self._bm25_full_scan(query, store)
 
+    def _get_hybrid_candidates(
+        self,
+        query: str,
+        store: MemoryStore,
+    ) -> list[tuple[MemoryEntry, float]]:
+        """Epic 65.8: Run BM25 + vector search in parallel, merge with RRF."""
+        top_bm25 = 20
+        top_vector = 20
+        rrf_k = 60
+        if self._hybrid_config is not None:
+            top_bm25 = getattr(self._hybrid_config, "top_bm25", 20)
+            top_vector = getattr(self._hybrid_config, "top_vector", 20)
+            rrf_k = getattr(self._hybrid_config, "rrf_k", 60)
+
+        bm25_keys: list[str] = []
+        vector_keys: list[str] = []
+
+        def run_bm25() -> None:
+            nonlocal bm25_keys
+            candidates = self._get_candidates(query, store)
+            # Take top top_bm25 by score
+            sorted_cands = sorted(
+                candidates,
+                key=lambda x: x[1],
+                reverse=True,
+            )[:top_bm25]
+            bm25_keys = [e.key for e, _ in sorted_cands]
+
+        def run_vector() -> None:
+            nonlocal vector_keys
+            vector_results = self._vector_search(query, store, limit=top_vector)
+            vector_keys = [k for k, _ in vector_results]
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f1 = ex.submit(run_bm25)
+            f2 = ex.submit(run_vector)
+            for f in as_completed([f1, f2]):
+                f.result()
+
+        from tapps_core.memory.fusion import reciprocal_rank_fusion
+
+        fused = reciprocal_rank_fusion(bm25_keys, vector_keys, k=rrf_k)
+
+        if not fused:
+            return self._get_candidates(query, store)
+
+        entry_by_key = {e.key: e for e in store.list_all()}
+        max_rrf = fused[0][1] if fused else 1.0
+
+        results: list[tuple[MemoryEntry, float]] = []
+        for key, rrf_score in fused:
+            entry = entry_by_key.get(key)
+            if entry is None:
+                continue
+            relevance_raw = rrf_score / max_rrf if max_rrf > 0 else 0.0
+            results.append((entry, relevance_raw))
+
+        return results
+
+    def _vector_search(
+        self,
+        query: str,
+        store: MemoryStore,
+        limit: int = 20,
+    ) -> list[tuple[str, float]]:
+        """Epic 65.8: Embed query, cosine similarity with entry embeddings.
+
+        Uses on-the-fly embedding when stored embeddings are unavailable.
+        Returns [(entry_key, score), ...] sorted by score descending.
+        """
+        empty: list[tuple[str, float]] = []
+
+        try:
+            from tapps_core.experts.rag_embedder import create_embedder
+        except ImportError:
+            logger.debug("vector_search_embedder_unavailable")
+            return empty
+
+        embedder = create_embedder()
+        if embedder is None or not (all_entries := store.list_all()):
+            return empty
+
+        texts = [self._entry_to_document(e) for e in all_entries]
+        try:
+            query_emb = embedder.embed([query])
+            entry_embs = embedder.embed(texts)
+        except Exception as e:
+            logger.debug("vector_search_embed_failed", error=str(e))
+            return empty
+
+        if not query_emb or len(entry_embs) != len(all_entries):
+            return empty
+
+        q = query_emb[0]
+        scored: list[tuple[str, float]] = []
+        for i, entry in enumerate(all_entries):
+            if i >= len(entry_embs):
+                break
+            emb = entry_embs[i]
+            if len(emb) == len(q):
+                sim = sum(a * b for a, b in zip(q, emb, strict=True))
+                scored.append((entry.key, max(0.0, sim)))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[:limit]
+
     def _bm25_score_entries(
         self,
         query: str,
@@ -267,16 +440,11 @@ class MemoryRetriever:
                     results.append((entry, all_scores[idx]))
                 else:
                     # Entry not in index (new entry?), use word overlap
-                    results.append(
-                        (entry, self._word_overlap_score(query, entry))
-                    )
+                    results.append((entry, self._word_overlap_score(query, entry)))
             return results
         except Exception:
             logger.debug("bm25_scoring_failed_using_word_overlap", query=query)
-            return [
-                (entry, self._word_overlap_score(query, entry))
-                for entry in entries
-            ]
+            return [(entry, self._word_overlap_score(query, entry)) for entry in entries]
 
     def _bm25_full_scan(
         self,
@@ -296,7 +464,7 @@ class MemoryRetriever:
             scores = self._bm25.score(query)
             return [
                 (entry, score)
-                for entry, score in zip(all_entries, scores)
+                for entry, score in zip(all_entries, scores, strict=True)
                 if score > 0
             ]
         except Exception:

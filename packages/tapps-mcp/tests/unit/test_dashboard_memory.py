@@ -120,6 +120,79 @@ class TestDashboardMemoryMetrics:
         data = generator_with_memory.generate_json_dashboard()
         assert "memory_metrics" in data
 
+    def test_dashboard_memory_consolidation_stats(
+        self, tmp_path: Path, metrics_dir: Path,
+    ) -> None:
+        """Epic 65.1: memory_metrics includes consolidation stats."""
+        from tapps_core.memory.store import MemoryStore
+
+        store = MemoryStore(tmp_path / "memory")
+        store.save(key="arch-1", value="Architecture decision", tier="architectural")
+        store.save(key="pat-1", value="Pattern one", tier="pattern")
+        store.update_fields(
+            "pat-1",
+            contradicted=True,
+            contradiction_reason="consolidated into pat-merged",
+        )
+        store.save(key="pat-2", value="Pattern two", tier="pattern")
+        store.update_fields(
+            "pat-2",
+            contradicted=True,
+            contradiction_reason="consolidated into pat-merged",
+        )
+        store.save(key="pat-merged", value="Pattern merged", tier="pattern")
+
+        gen = DashboardGenerator(metrics_dir, memory_store=store)
+        data = gen.generate_json_dashboard(sections=["memory_metrics"])
+        mem = data["memory_metrics"]
+
+        assert mem["available"] is True
+        assert mem["consolidated_count"] == 1
+        assert mem["source_entries_count"] == 2
+        assert mem["consolidation_groups"] == 1
+
+    def test_dashboard_memory_consolidation_stats_empty(
+        self, generator_with_memory: DashboardGenerator,
+    ) -> None:
+        """Epic 65.1: consolidation stats are 0 when no consolidation."""
+        data = generator_with_memory.generate_json_dashboard(
+            sections=["memory_metrics"],
+        )
+        mem = data["memory_metrics"]
+        assert mem["consolidated_count"] == 0
+        assert mem["source_entries_count"] == 0
+        assert mem["consolidation_groups"] == 0
+
+    def test_dashboard_memory_federation_stats(
+        self, tmp_path: Path, metrics_dir: Path,
+    ) -> None:
+        """Epic 65.1: memory_metrics includes federation when available."""
+        from tapps_core.memory.store import MemoryStore
+
+        store = MemoryStore(tmp_path / "memory")
+        store.save(key="k1", value="v1", tier="pattern")
+
+        gen = DashboardGenerator(metrics_dir, memory_store=store)
+
+        with patch(
+            "tapps_core.metrics.dashboard.DashboardGenerator._build_federation_stats",
+            return_value={
+                "hub_registered": True,
+                "published_count": 5,
+                "subscribed_projects": 2,
+                "synced_count": 3,
+            },
+        ):
+            data = gen.generate_json_dashboard(sections=["memory_metrics"])
+        mem = data["memory_metrics"]
+
+        assert "federation" in mem
+        fed = mem["federation"]
+        assert fed["hub_registered"] is True
+        assert fed["published_count"] == 5
+        assert fed["subscribed_projects"] == 2
+        assert fed["synced_count"] == 3
+
 
 @pytest.mark.asyncio()
 class TestSessionStartEnrichedMemory:
@@ -156,7 +229,7 @@ class TestSessionStartEnrichedMemory:
         mock_settings = MagicMock()
         mock_settings.memory.enabled = True
         mock_settings.memory.gc_enabled = False
-        mock_settings.memory.max_memories = 500
+        mock_settings.memory.max_memories = 1500
         mock_settings.memory.gc_auto_threshold = 0.8
         mock_settings.business_experts_enabled = False
 
@@ -185,4 +258,61 @@ class TestSessionStartEnrichedMemory:
         assert mem["by_tier"]["pattern"] == 1
         assert mem["by_tier"]["context"] == 1
         assert abs(mem["avg_confidence"] - 0.7) < 0.01
-        assert mem["capacity_pct"] == 0.6  # 3/500 * 100
+        assert mem["capacity_pct"] == 0.2  # 3/1500 * 100
+
+    async def test_session_start_consolidation_hint(self) -> None:
+        """Epic 65.1: memory_status includes consolidation_hint when applicable."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_entry = MagicMock()
+        mock_entry.key = "pat-1"
+        mock_entry.tier = "pattern"
+        mock_entry.scope = "project"
+        mock_entry.confidence = 0.8
+        mock_entry.contradicted = True
+        mock_entry.contradiction_reason = "consolidated into merged-key"
+        mock_entry.tags = []
+        mock_entry.is_consolidated = False
+
+        mock_merged = MagicMock()
+        mock_merged.key = "merged-key"
+        mock_merged.tier = "pattern"
+        mock_merged.scope = "project"
+        mock_merged.confidence = 0.9
+        mock_merged.contradicted = False
+        mock_merged.contradiction_reason = None
+        mock_merged.tags = []
+        mock_merged.is_consolidated = False
+
+        mock_store = MagicMock()
+        snapshot = MagicMock()
+        snapshot.total_count = 2
+        snapshot.entries = [mock_entry, mock_merged]
+        mock_store.snapshot.return_value = snapshot
+        mock_store.count.return_value = 2
+
+        mock_settings = MagicMock()
+        mock_settings.memory.enabled = True
+        mock_settings.memory.gc_enabled = False
+        mock_settings.memory.max_memories = 1500
+        mock_settings.memory.gc_auto_threshold = 0.8
+        mock_settings.business_experts_enabled = False
+        mock_settings.project_root = Path("/fake/project")
+
+        with (
+            patch(
+                "tapps_mcp.server_pipeline_tools.load_settings",
+                return_value=mock_settings,
+            ),
+            patch(
+                "tapps_mcp.server_helpers._get_memory_store",
+                return_value=mock_store,
+            ),
+        ):
+            result = await tapps_session_start()
+
+        mem = result["data"]["memory_status"]
+        assert mem["enabled"] is True
+        assert "consolidation_hint" in mem
+        assert "1 groups" in mem["consolidation_hint"]
+        assert "1 source entries" in mem["consolidation_hint"]

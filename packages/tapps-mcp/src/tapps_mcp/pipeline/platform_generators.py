@@ -70,6 +70,8 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 from tapps_mcp.pipeline.platform_hooks import (
     generate_claude_hooks,
     generate_cursor_hooks,
+    generate_memory_auto_capture_hook,
+    generate_memory_auto_recall_hook,
     generate_memory_capture_hook,
 )
 from tapps_mcp.pipeline.platform_rules import (
@@ -107,6 +109,9 @@ __all__ = [
     "generate_cursor_hooks",
     "generate_cursor_plugin_bundle",
     "generate_cursor_rules",
+    "generate_memory_auto_capture_hook",
+    "generate_memory_auto_recall_hook",
+    "generate_memory_auto_recall_hook",
     "generate_memory_capture_hook",
     "generate_python_quality_rule",
     "generate_skills",

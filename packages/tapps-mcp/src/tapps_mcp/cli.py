@@ -199,6 +199,39 @@ def doctor(project_root: str, quick: bool) -> None:
         raise SystemExit(1)
 
 
+@main.command("auto-capture")
+@click.option(
+    "--project-root",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    help="Project root directory (default: CLAUDE_PROJECT_DIR or current).",
+)
+@click.option(
+    "--max-facts",
+    default=5,
+    type=int,
+    help="Maximum facts to extract (default: 5).",
+)
+def auto_capture(project_root: str, max_facts: int) -> None:
+    """Extract durable facts from stdin (Stop hook JSON) and save to memory (Epic 65.5).
+
+    Read JSON from stdin (Claude Code Stop event), extract decision-like facts,
+    and save to project memory. Invoked by memory_auto_capture Stop hook.
+    """
+    import sys
+    from pathlib import Path
+
+    project_root_path = Path(
+        os.environ.get("CLAUDE_PROJECT_DIR")
+        or os.environ.get("TAPPS_MCP_PROJECT_ROOT")
+        or project_root
+    ).resolve()
+    raw = sys.stdin.read()
+    from tapps_mcp.memory.auto_capture import run_auto_capture
+
+    run_auto_capture(raw, project_root_path, max_facts=max_facts)
+
+
 @main.command("validate-changed")
 @click.option(
     "--quick/--full",
@@ -305,9 +338,7 @@ def build_plugin(output_dir: str, engagement_level: str) -> None:
     is_flag=True,
     help="Show what would be restored without making changes.",
 )
-def rollback(
-    project_root: str, backup_id: str | None, list_backups: bool, dry_run: bool
-) -> None:
+def rollback(project_root: str, backup_id: str | None, list_backups: bool, dry_run: bool) -> None:
     """Restore configuration files from a pre-upgrade backup.
 
     By default restores from the latest backup.
@@ -470,6 +501,75 @@ def memory_get(key: str) -> None:
         store.close()
 
 
+@memory.command("recall")
+@click.option("--query", required=True, help="Search query (from prompt or last user message).")
+@click.option("--project-root", default=".", type=click.Path(exists=True, path_type=str))
+@click.option(
+    "--max-results",
+    default=5,
+    type=int,
+    help="Max results (1-10). Default: 5.",
+)
+@click.option(
+    "--min-score",
+    default=0.3,
+    type=float,
+    help="Minimum confidence (0-1). Default: 0.3.",
+)
+def memory_recall(query: str, project_root: str, max_results: int, min_score: float) -> None:
+    """Search memories and output XML for auto-recall hook injection.
+
+    Used by the memory_auto_recall hook (Epic 65.4). Outputs
+    <memory_context>...</memory_context> to stdout.
+    Handles: no MemoryStore, empty results (graceful fallback).
+    """
+    import sys
+    from pathlib import Path
+
+    from tapps_core.memory.retrieval import MemoryRetriever, ScoredMemory
+    from tapps_core.memory.store import MemoryStore
+
+    root = _get_project_root() if project_root == "." else Path(project_root).resolve()
+    max_results = max(1, min(max_results, 10))
+    min_score = max(0.0, min(min_score, 1.0))
+
+    store: MemoryStore | None = None
+    scored: list[ScoredMemory] = []
+    try:
+        store = MemoryStore(root)
+        retriever = MemoryRetriever()
+        scored = retriever.search(
+            query,
+            store,
+            limit=max_results,
+            min_confidence=min_score,
+        )
+    except Exception:
+        sys.exit(0)
+    finally:
+        if store is not None:
+            store.close()
+
+    if not scored:
+        sys.exit(0)
+
+    def _escape_xml_text(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def _escape_xml_attr(s: str) -> str:
+        return _escape_xml_text(s).replace('"', "&quot;")
+
+    parts: list[str] = []
+    for sm in scored:
+        entry = sm.entry
+        parts.append(
+            f'  <memory key="{_escape_xml_attr(entry.key)}" tier="{entry.tier.value}">'
+            f"{_escape_xml_text(entry.value)}</memory>"
+        )
+    xml = "<memory_context>\n" + "\n".join(parts) + "\n</memory_context>"
+    click.echo(xml)
+
+
 @memory.command("search")
 @click.option("--query", required=True, help="Search query.")
 @click.option("--limit", default=10, type=int, help="Max results.")
@@ -495,9 +595,7 @@ def memory_search(query: str, limit: int, as_json: bool) -> None:
             value_preview = e.value[:40].replace("\n", " ")
             if len(e.value) > 40:
                 value_preview += "..."
-            click.echo(
-                f"{e.key:<30} {e.tier.value:<15} {e.confidence:<12.2f} {value_preview}"
-            )
+            click.echo(f"{e.key:<30} {e.tier.value:<15} {e.confidence:<12.2f} {value_preview}")
     finally:
         store.close()
 

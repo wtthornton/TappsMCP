@@ -60,6 +60,23 @@ class TestLoadSettings:
         assert settings.quality_preset == "strict"
         assert settings.log_level == "DEBUG"
 
+    def test_load_memory_capture_prompt_write_rules_from_yaml(self, tmp_path):
+        """Memory capture_prompt and write_rules override from .tapps-mcp.yaml (Epic 65.3)."""
+        yaml_file = tmp_path / ".tapps-mcp.yaml"
+        yaml_file.write_text(
+            "memory:\n"
+            "  capture_prompt: 'Store only validated decisions.'\n"
+            "  write_rules:\n"
+            "    block_sensitive_keywords: ['pwd']\n"
+            "    min_value_length: 5\n"
+            "    max_value_length: 1024\n"
+        )
+        settings = load_settings(project_root=tmp_path)
+        assert settings.memory.capture_prompt == "Store only validated decisions."
+        assert settings.memory.write_rules.block_sensitive_keywords == ["pwd"]
+        assert settings.memory.write_rules.min_value_length == 5
+        assert settings.memory.write_rules.max_value_length == 1024
+
     def test_load_with_invalid_yaml(self, tmp_path):
         yaml_file = tmp_path / ".tapps-mcp.yaml"
         yaml_file.write_text("not: valid: yaml: [")

@@ -60,7 +60,26 @@ def inject_memories(
     if engagement_level == "low":
         return {"memory_section": "", "memory_injected": 0, "memories": []}
 
-    retriever = MemoryRetriever(config=decay_config)
+    from tapps_core.config.settings import load_settings
+    from tapps_core.memory.reranker import get_reranker
+
+    settings = load_settings()
+    rr = settings.memory.reranker
+    reranker = (
+        get_reranker(
+            enabled=rr.enabled,
+            provider=rr.provider,
+            top_k=rr.top_k,
+            api_key=rr.api_key,
+        )
+        if rr.enabled
+        else None
+    )
+    retriever = MemoryRetriever(
+        config=decay_config,
+        reranker=reranker,
+        reranker_enabled=rr.enabled,
+    )
 
     # Determine limits based on engagement level
     if engagement_level == "medium":

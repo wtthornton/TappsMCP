@@ -23,10 +23,11 @@ class TestMemoryTier:
     def test_values(self) -> None:
         assert MemoryTier.architectural == "architectural"
         assert MemoryTier.pattern == "pattern"
+        assert MemoryTier.procedural == "procedural"  # Epic 65.11
         assert MemoryTier.context == "context"
 
     def test_member_count(self) -> None:
-        assert len(MemoryTier) == 3
+        assert len(MemoryTier) == 4
 
 
 class TestMemorySource:

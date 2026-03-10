@@ -46,6 +46,8 @@ class StoryConfig(BaseModel):
     technical_notes: list[str] = []
     criteria_format: str = "checkbox"  # "checkbox" or "gherkin"
     style: str = "standard"  # "standard" or "comprehensive"
+    inherit_context: bool = True
+    epic_path: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +76,10 @@ class StoryGenerator:
     VALID_STYLES: ClassVar[frozenset[str]] = frozenset({"standard", "comprehensive"})
     VALID_SIZES: ClassVar[frozenset[str]] = frozenset({"S", "M", "L", "XL", ""})
     VALID_CRITERIA_FORMATS: ClassVar[frozenset[str]] = frozenset({"checkbox", "gherkin"})
+
+    _NO_KNOWLEDGE_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
+        r"no specific knowledge found", re.IGNORECASE,
+    )
 
     def generate(
         self,
@@ -122,7 +128,7 @@ class StoryGenerator:
             lines.extend(self._render_test_cases(config))
             lines.extend(self._render_technical_notes(config, enrichment))
             lines.extend(self._render_dependencies(config))
-            lines.extend(self._render_invest_checklist())
+            lines.extend(self._render_invest_checklist(config))
 
         return "\n".join(lines)
 
@@ -194,10 +200,27 @@ class StoryGenerator:
         else:
             lines.append("Describe what this story delivers and any important context...")
 
-        tech_stack = enrichment.get("tech_stack")
-        if tech_stack:
+        # Only include tech stack if not inheriting from epic.
+        if not config.inherit_context:
+            tech_stack = enrichment.get("tech_stack")
+            if tech_stack:
+                lines.append("")
+                lines.append(f"**Tech Stack:** {tech_stack}")
+
+        # Add epic reference when inheriting.
+        if config.inherit_context and config.epic_path:
             lines.append("")
-            lines.append(f"**Tech Stack:** {tech_stack}")
+            epic_num = config.epic_number
+            if epic_num:
+                lines.append(
+                    f"See [Epic {epic_num}]({config.epic_path}) "
+                    f"for project context and shared definitions."
+                )
+            else:
+                lines.append(
+                    f"See [epic]({config.epic_path}) "
+                    f"for project context and shared definitions."
+                )
 
         lines.extend(["", "<!-- docsmcp:end:description -->", ""])
         return lines
@@ -317,6 +340,21 @@ class StoryGenerator:
             "",
         ]
 
+        # If inheriting from epic, just reference it.
+        if config.inherit_context and config.epic_path:
+            epic_num = config.epic_number
+            if epic_num:
+                lines.append(
+                    f"Definition of Done per [Epic {epic_num}]({config.epic_path})."
+                )
+            else:
+                lines.append(
+                    f"Definition of Done per [epic]({config.epic_path})."
+                )
+            lines.extend(["", "<!-- docsmcp:end:definition-of-done -->", ""])
+            return lines
+
+        # Full DoD checklist.
         if config.tasks:
             lines.append("- [ ] All tasks completed")
         lines.append("- [ ] Code reviewed and approved")
@@ -341,7 +379,12 @@ class StoryGenerator:
     # -- comprehensive-only sections ----------------------------------------
 
     def _render_test_cases(self, config: StoryConfig) -> list[str]:
-        """Render the Test Cases section (comprehensive only)."""
+        """Render the Test Cases section (comprehensive only).
+
+        When explicit test cases are provided, uses them. When only
+        acceptance criteria exist, derives test names from them.
+        When neither exists, omits the section entirely.
+        """
         lines = [
             "<!-- docsmcp:start:test-cases -->",
             "## Test Cases",
@@ -351,10 +394,20 @@ class StoryGenerator:
         if config.test_cases:
             for i, test in enumerate(config.test_cases, 1):
                 lines.append(f"{i}. {test}")
+        elif config.acceptance_criteria:
+            # Derive test names from acceptance criteria.
+            from docs_mcp.generators.test_deriver import derive_test_names
+
+            derived = derive_test_names(config.acceptance_criteria)
+            if derived:
+                for i, name in enumerate(derived, 1):
+                    lines.append(f"{i}. `{name}`")
+            else:
+                # Couldn't derive anything useful — omit section.
+                return []
         else:
-            lines.append("1. Test happy path...")
-            lines.append("2. Test edge cases...")
-            lines.append("3. Test error handling...")
+            # No test cases and no ACs — omit section entirely.
+            return []
 
         lines.extend(["", "<!-- docsmcp:end:test-cases -->", ""])
         return lines
@@ -377,17 +430,21 @@ class StoryGenerator:
         else:
             lines.append("- Document implementation hints, API contracts, data formats...")
 
-        module_summary = enrichment.get("module_summary")
-        if module_summary:
-            lines.append("")
-            lines.append(f"**Project Structure:** {module_summary}")
+        # Only include module summary if not inheriting from epic.
+        if not config.inherit_context:
+            module_summary = enrichment.get("module_summary")
+            if module_summary:
+                lines.append("")
+                lines.append(f"**Project Structure:** {module_summary}")
 
         expert_guidance: list[dict[str, str]] = enrichment.get("expert_guidance", [])
-        if expert_guidance:
+        # Filter expert guidance (Epic 18.3).
+        rendered_guidance = self._filter_expert_guidance(expert_guidance)
+        if rendered_guidance:
             lines.append("")
             lines.append("### Expert Recommendations")
             lines.append("")
-            for item in expert_guidance:
+            for item in rendered_guidance:
                 lines.append(
                     f"- **{item['expert']}** ({item['confidence']}): "
                     f"{item['advice']}"
@@ -413,22 +470,71 @@ class StoryGenerator:
         lines.extend(["", "<!-- docsmcp:end:dependencies -->", ""])
         return lines
 
-    def _render_invest_checklist(self) -> list[str]:
-        """Render the INVEST checklist (comprehensive only)."""
+    def _render_invest_checklist(self, config: StoryConfig) -> list[str]:
+        """Render the INVEST checklist with auto-assessment (comprehensive only)."""
+        from docs_mcp.generators.invest_assessor import assess_invest
+
+        assessment = assess_invest(config)
+
+        def _check(item: str) -> str:
+            return "[x]" if assessment.get(item, False) else "[ ]"
+
         return [
             "<!-- docsmcp:start:invest -->",
             "## INVEST Checklist",
             "",
-            "- [ ] **I**ndependent -- Can be developed and delivered independently",
-            "- [ ] **N**egotiable -- Details can be refined during implementation",
-            "- [ ] **V**aluable -- Delivers value to a user or the system",
-            "- [ ] **E**stimable -- Team can estimate the effort",
-            "- [ ] **S**mall -- Completable within one sprint/iteration",
-            "- [ ] **T**estable -- Has clear criteria to verify completion",
+            f"- {_check('Independent')} **I**ndependent -- Can be developed and delivered independently",
+            f"- {_check('Negotiable')} **N**egotiable -- Details can be refined during implementation",
+            f"- {_check('Valuable')} **V**aluable -- Delivers value to a user or the system",
+            f"- {_check('Estimable')} **E**stimable -- Team can estimate the effort",
+            f"- {_check('Small')} **S**mall -- Completable within one sprint/iteration",
+            f"- {_check('Testable')} **T**estable -- Has clear criteria to verify completion",
             "",
             "<!-- docsmcp:end:invest -->",
             "",
         ]
+
+    # -- expert filtering (Epic 18.3) ---------------------------------------
+
+    @classmethod
+    def _filter_expert_guidance(
+        cls,
+        guidance: list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        """Filter expert guidance based on confidence and content quality."""
+        filtered: list[dict[str, str]] = []
+        for item in guidance:
+            advice = item.get("advice", "").strip()
+            confidence = cls._parse_confidence(item.get("confidence", "0%"))
+
+            # Skip empty or "no knowledge" advice.
+            if not advice or cls._NO_KNOWLEDGE_PATTERN.search(advice):
+                continue
+
+            if confidence < 0.3:
+                continue
+
+            if confidence < 0.5:
+                domain = item.get("domain", "unknown")
+                filtered.append({
+                    **item,
+                    "advice": (
+                        f"Expert review recommended for {domain} "
+                        f"- automated analysis inconclusive"
+                    ),
+                })
+            else:
+                filtered.append(item)
+
+        return filtered
+
+    @staticmethod
+    def _parse_confidence(confidence_str: str) -> float:
+        """Parse a confidence string like '85%' to 0.85."""
+        try:
+            return float(confidence_str.rstrip("%")) / 100
+        except (ValueError, AttributeError):
+            return 0.0
 
     # -- auto-populate from analyzers ----------------------------------------
 
