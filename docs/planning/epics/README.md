@@ -95,6 +95,17 @@
 
 *Source: [TAPPS_MCP_TOOL_UX_REVIEW](../TAPPS_MCP_TOOL_UX_REVIEW.md)*
 
+### Epic 70–73: Expert Agency-Personas Leverage (Proposed)
+
+*Source: [TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md](../../reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md)*
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 70](EPIC-70-EXPERT-PERSONA-COMPLETION.md) | Expert Persona Completion | P2 | 3–5 days | Epic 69 | **Draft** |
+| [Epic 71](EPIC-71-EXPERT-CRITICAL-RULES-AND-STANCE.md) | Expert Critical Rules & Default Stance | P2 | ~1 week | Epic 69, opt. 70 | **Draft** |
+| [Epic 72](EPIC-72-EXPERT-KNOWLEDGE-ENRICHMENT.md) | Expert Knowledge Enrichment (metrics, workflow, templates) | P2 | 1–2 weeks | None | **Draft** |
+| [Epic 73](EPIC-73-EXPERT-COMMUNICATION-STYLE.md) | Expert Communication Style (optional) | P3 | 2–3 days | Epic 69, opt. 70–71 | **Draft** |
+
 ### Proposed Future Epics
 
 | Epic | Name | Priority | LOE | Dependencies | Status |

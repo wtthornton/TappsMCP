@@ -56,6 +56,8 @@ class ExpertRegistry:
             expert_name="Security Expert",
             primary_domain="security",
             description="Application security, vulnerability analysis, secure coding practices.",
+            persona="Senior application security architect specializing in OWASP, "
+            "threat modeling, and secure-by-default design.",
         ),
         ExpertConfig(
             expert_id="expert-performance",
@@ -82,6 +84,8 @@ class ExpertRegistry:
             expert_name="Software Architecture Expert",
             primary_domain="software-architecture",
             description="System design, architectural patterns, scalability.",
+            persona="Principal software architect focused on clean architecture, "
+            "domain-driven design, and evolutionary system design.",
         ),
         ExpertConfig(
             expert_id="expert-devops",

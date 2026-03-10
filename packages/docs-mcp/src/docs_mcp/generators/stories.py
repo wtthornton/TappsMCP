@@ -46,6 +46,8 @@ class StoryConfig(BaseModel):
     technical_notes: list[str] = []
     criteria_format: str = "checkbox"  # "checkbox" or "gherkin"
     style: str = "standard"  # "standard" or "comprehensive"
+    inherit_context: bool = True
+    epic_path: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +124,7 @@ class StoryGenerator:
             lines.extend(self._render_test_cases(config))
             lines.extend(self._render_technical_notes(config, enrichment))
             lines.extend(self._render_dependencies(config))
-            lines.extend(self._render_invest_checklist())
+            lines.extend(self._render_invest_checklist(config))
 
         return "\n".join(lines)
 
@@ -182,7 +184,11 @@ class StoryGenerator:
         config: StoryConfig,
         enrichment: dict[str, Any],
     ) -> list[str]:
-        """Render the Description section."""
+        """Render the Description section.
+
+        When ``inherit_context=True``, project metadata (Tech Stack, Project
+        Structure) is suppressed since it belongs in the parent epic.
+        """
         lines = [
             "<!-- docsmcp:start:description -->",
             "## Description",
@@ -194,10 +200,22 @@ class StoryGenerator:
         else:
             lines.append("Describe what this story delivers and any important context...")
 
-        tech_stack = enrichment.get("tech_stack")
-        if tech_stack:
+        # Epic cross-reference when inheriting context.
+        if config.inherit_context and config.epic_path:
             lines.append("")
-            lines.append(f"**Tech Stack:** {tech_stack}")
+            epic_num = config.epic_number
+            label = f"Epic {epic_num}" if epic_num else "parent epic"
+            lines.append(
+                f"See [{label}]({config.epic_path}) for project context "
+                "and shared definitions."
+            )
+
+        # Only include project metadata when NOT inheriting from epic.
+        if not config.inherit_context:
+            tech_stack = enrichment.get("tech_stack")
+            if tech_stack:
+                lines.append("")
+                lines.append(f"**Tech Stack:** {tech_stack}")
 
         lines.extend(["", "<!-- docsmcp:end:description -->", ""])
         return lines
@@ -310,12 +328,26 @@ class StoryGenerator:
     def _render_definition_of_done(
         self, config: StoryConfig, enrichment: dict[str, Any] | None = None,
     ) -> list[str]:
-        """Render the Definition of Done section."""
+        """Render the Definition of Done section.
+
+        When ``inherit_context=True`` and ``epic_path`` is set, renders a
+        reference to the epic-level DoD instead of repeating the checklist.
+        """
         lines = [
             "<!-- docsmcp:start:definition-of-done -->",
             "## Definition of Done",
             "",
         ]
+
+        # When inheriting from epic, reference the epic DoD instead of repeating.
+        if config.inherit_context and config.epic_path:
+            epic_num = config.epic_number
+            label = f"Epic {epic_num}" if epic_num else "parent epic"
+            lines.append(
+                f"Definition of Done per [{label}]({config.epic_path})."
+            )
+            lines.extend(["", "<!-- docsmcp:end:definition-of-done -->", ""])
+            return lines
 
         if config.tasks:
             lines.append("- [ ] All tasks completed")
@@ -345,8 +377,13 @@ class StoryGenerator:
 
         When explicit ``test_cases`` are provided they are rendered as-is.
         Otherwise, test case stubs are auto-generated from acceptance criteria
-        using :meth:`generate_test_name`.
+        using :meth:`generate_test_name`.  When both are empty the section is
+        omitted entirely (Epic 18.2).
         """
+        # Omit section entirely when no test data exists.
+        if not config.test_cases and not config.acceptance_criteria:
+            return []
+
         lines = [
             "<!-- docsmcp:start:test-cases -->",
             "## Test Cases",
@@ -356,14 +393,10 @@ class StoryGenerator:
         if config.test_cases:
             for i, test in enumerate(config.test_cases, 1):
                 lines.append(f"{i}. {test}")
-        elif config.acceptance_criteria:
+        else:
             for i, ac in enumerate(config.acceptance_criteria, 1):
                 name = self.generate_test_name(ac, index=i)
                 lines.append(f"{i}. `{name}` -- {ac}")
-        else:
-            lines.append("1. Test happy path...")
-            lines.append("2. Test edge cases...")
-            lines.append("3. Test error handling...")
 
         lines.extend(["", "<!-- docsmcp:end:test-cases -->", ""])
         return lines
@@ -373,7 +406,11 @@ class StoryGenerator:
         config: StoryConfig,
         enrichment: dict[str, Any],
     ) -> list[str]:
-        """Render the Technical Notes section (comprehensive only)."""
+        """Render the Technical Notes section (comprehensive only).
+
+        When ``inherit_context=True``, project structure metadata is suppressed.
+        Expert guidance is filtered by confidence (Epic 18.3).
+        """
         lines = [
             "<!-- docsmcp:start:technical-notes -->",
             "## Technical Notes",
@@ -386,17 +423,23 @@ class StoryGenerator:
         else:
             lines.append("- Document implementation hints, API contracts, data formats...")
 
-        module_summary = enrichment.get("module_summary")
-        if module_summary:
-            lines.append("")
-            lines.append(f"**Project Structure:** {module_summary}")
+        # Only include project structure when NOT inheriting from epic.
+        if not config.inherit_context:
+            module_summary = enrichment.get("module_summary")
+            if module_summary:
+                lines.append("")
+                lines.append(f"**Project Structure:** {module_summary}")
 
         expert_guidance: list[dict[str, str]] = enrichment.get("expert_guidance", [])
-        if expert_guidance:
+        # Filter by confidence and content quality (Epic 18.3).
+        from docs_mcp.generators.expert_utils import filter_expert_guidance
+
+        rendered_guidance = filter_expert_guidance(expert_guidance)
+        if rendered_guidance:
             lines.append("")
             lines.append("### Expert Recommendations")
             lines.append("")
-            for item in expert_guidance:
+            for item in rendered_guidance:
                 lines.append(
                     f"- **{item['expert']}** ({item['confidence']}): "
                     f"{item['advice']}"
@@ -422,22 +465,39 @@ class StoryGenerator:
         lines.extend(["", "<!-- docsmcp:end:dependencies -->", ""])
         return lines
 
-    def _render_invest_checklist(self) -> list[str]:
-        """Render the INVEST checklist (comprehensive only)."""
-        return [
+    def _render_invest_checklist(self, config: StoryConfig | None = None) -> list[str]:
+        """Render the INVEST checklist with auto-assessment (comprehensive only).
+
+        When *config* is provided, auto-checks items based on story signals
+        using :func:`~docs_mcp.generators.invest_assessor.assess_invest`.
+        """
+        from docs_mcp.generators.invest_assessor import assess_invest
+
+        assessment = assess_invest(config) if config else {}
+
+        items = [
+            ("I", "Independent", "Can be developed and delivered independently"),
+            ("N", "Negotiable", "Details can be refined during implementation"),
+            ("V", "Valuable", "Delivers value to a user or the system"),
+            ("E", "Estimable", "Team can estimate the effort"),
+            ("S", "Small", "Completable within one sprint/iteration"),
+            ("T", "Testable", "Has clear criteria to verify completion"),
+        ]
+
+        lines = [
             "<!-- docsmcp:start:invest -->",
             "## INVEST Checklist",
             "",
-            "- [ ] **I**ndependent -- Can be developed and delivered independently",
-            "- [ ] **N**egotiable -- Details can be refined during implementation",
-            "- [ ] **V**aluable -- Delivers value to a user or the system",
-            "- [ ] **E**stimable -- Team can estimate the effort",
-            "- [ ] **S**mall -- Completable within one sprint/iteration",
-            "- [ ] **T**estable -- Has clear criteria to verify completion",
-            "",
-            "<!-- docsmcp:end:invest -->",
-            "",
         ]
+
+        for letter, name, description in items:
+            checked = "x" if assessment.get(name, False) else " "
+            lines.append(
+                f"- [{checked}] **{letter}**{name[1:]} -- {description}"
+            )
+
+        lines.extend(["", "<!-- docsmcp:end:invest -->", ""])
+        return lines
 
     # -- auto-populate from analyzers ----------------------------------------
 

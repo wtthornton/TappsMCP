@@ -1,7 +1,7 @@
 # Epic 69: Expert Personas
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P2
 **Estimated LOE:** ~1 week (1 developer)
 

@@ -541,9 +541,15 @@ def _build_answer(
     """Build the answer text, including fallback docs if needed."""
     result = _AnswerResult()
 
+    # Persona preamble (Epic 69) — prepended when expert has a persona defined.
+    persona_line = ""
+    if expert.persona:
+        persona_line = f"*{expert.persona}*\n\n"
+
     if knowledge.context:
         result.answer = (
             f"## {expert.expert_name} \u2014 {resolved_domain}\n\n"
+            f"{persona_line}"
             f"Based on domain knowledge ({len(knowledge.chunks)} source(s), "
             f"confidence {conf.confidence:.0%}):\n\n"
             f"{knowledge.context}"
@@ -724,6 +730,7 @@ def list_experts() -> list[ExpertInfo]:
                 knowledge_files=file_count,
                 is_builtin=expert.is_builtin,
                 keywords=expert.keywords,
+                persona=expert.persona,
             )
         )
     return results

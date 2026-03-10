@@ -402,7 +402,7 @@ class TestStoryGeneratorAutoPopulate:
             ),
         ):
             mock_cls.return_value.extract.return_value = mock_metadata
-            config = _make_config()
+            config = _make_config(inherit_context=False)
             content = self.gen.generate(config, project_root=tmp_path, auto_populate=True)
 
         assert "my-project" in content

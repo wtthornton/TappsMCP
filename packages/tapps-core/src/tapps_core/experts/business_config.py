@@ -35,6 +35,10 @@ class BusinessExpertEntry(BaseModel):
         default=None,
         description="Override knowledge directory name.",
     )
+    persona: str = Field(
+        default="",
+        description="Optional persona/voice for consultation responses.",
+    )
 
     @field_validator("expert_id")
     @classmethod
@@ -124,6 +128,7 @@ def load_business_experts(project_root: Path) -> list[ExpertConfig]:
                 rag_enabled=entry.rag_enabled,
                 knowledge_dir=entry.knowledge_dir,
                 is_builtin=False,
+                persona=entry.persona,
             )
         )
 

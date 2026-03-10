@@ -27,6 +27,12 @@ class ExpertConfig(BaseModel):
         default_factory=list,
         description="Custom keywords for domain detection routing.",
     )
+    persona: str = Field(
+        default="",
+        description="Optional persona/voice for consultation responses "
+        "(e.g. 'Senior security architect with 15 years in AppSec'). "
+        "When set, prepended to answer assembly.",
+    )
 
 
 class KnowledgeChunk(BaseModel):
@@ -159,4 +165,8 @@ class ExpertInfo(BaseModel):
     keywords: list[str] = Field(
         default_factory=list,
         description="Custom domain detection keywords.",
+    )
+    persona: str = Field(
+        default="",
+        description="Optional persona/voice for consultation responses.",
     )
