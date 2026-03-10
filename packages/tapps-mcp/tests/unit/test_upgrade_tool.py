@@ -432,6 +432,79 @@ class TestUpgradePipeline:
         assert "success" in result
         assert isinstance(result["success"], bool)
 
+    def test_result_includes_github_templates_component(self, tmp_path: Path) -> None:
+        """Upgrade result includes github_templates component."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        result = upgrade_pipeline(tmp_path)
+        assert "github_templates" in result["components"]
+        templates = result["components"]["github_templates"]
+        assert templates["success"] is True
+        assert "issue_templates" in templates
+        assert "pr_template" in templates
+        assert "dependabot" in templates
+
+    def test_result_includes_governance_component(self, tmp_path: Path) -> None:
+        """Upgrade result includes governance component."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        result = upgrade_pipeline(tmp_path)
+        assert "governance" in result["components"]
+        governance = result["components"]["governance"]
+        assert governance["success"] is True
+        assert "security_policy" in governance
+        assert "codeowners" in governance
+
+    def test_dry_run_reports_would_regenerate_for_github_templates(
+        self, tmp_path: Path
+    ) -> None:
+        """Dry run reports would-regenerate for github_templates."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        result = upgrade_pipeline(tmp_path, dry_run=True)
+        assert result["components"]["github_templates"] == {"action": "would-regenerate"}
+
+    def test_dry_run_reports_would_regenerate_for_governance(self, tmp_path: Path) -> None:
+        """Dry run reports would-regenerate for governance."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        result = upgrade_pipeline(tmp_path, dry_run=True)
+        assert result["components"]["governance"] == {"action": "would-regenerate"}
+
+    def test_github_templates_error_does_not_block_upgrade(self, tmp_path: Path) -> None:
+        """Error in github_templates generation doesn't block other upgrades."""
+        from unittest.mock import patch as mock_patch
+
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        with mock_patch(
+            "tapps_mcp.pipeline.github_templates.generate_all_github_templates",
+            side_effect=RuntimeError("template error"),
+        ):
+            result = upgrade_pipeline(tmp_path)
+
+        assert any("GitHub templates" in e for e in result["errors"])
+        # Other components still present
+        assert "agents_md" in result["components"]
+        assert "governance" in result["components"]
+
+    def test_governance_error_does_not_block_upgrade(self, tmp_path: Path) -> None:
+        """Error in governance generation doesn't block other upgrades."""
+        from unittest.mock import patch as mock_patch
+
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        with mock_patch(
+            "tapps_mcp.pipeline.github_governance.generate_all_governance",
+            side_effect=RuntimeError("governance error"),
+        ):
+            result = upgrade_pipeline(tmp_path)
+
+        assert any("Governance" in e for e in result["errors"])
+        # Other components still present
+        assert "agents_md" in result["components"]
+        assert "github_templates" in result["components"]
+
 
 # ---------------------------------------------------------------------------
 # Story 7: EXPECTED_TOOLS count

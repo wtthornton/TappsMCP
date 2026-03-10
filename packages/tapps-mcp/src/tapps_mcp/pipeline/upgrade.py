@@ -358,7 +358,7 @@ def upgrade_pipeline(
 
     result["components"]["platforms"] = platform_results
 
-    # GitHub templates, CI, Copilot, and governance (platform-agnostic)
+    # GitHub templates, CI, Copilot, governance, and issue/PR templates (platform-agnostic)
     if not dry_run:
         try:
             from tapps_mcp.pipeline.github_ci import generate_all_ci_workflows
@@ -375,9 +375,27 @@ def upgrade_pipeline(
             result["components"]["github_copilot"] = copilot_result
         except Exception as exc:
             result["errors"].append(f"Copilot config: {exc}")
+
+        try:
+            from tapps_mcp.pipeline.github_templates import generate_all_github_templates
+
+            templates_result = generate_all_github_templates(project_root)
+            result["components"]["github_templates"] = templates_result
+        except Exception as exc:
+            result["errors"].append(f"GitHub templates: {exc}")
+
+        try:
+            from tapps_mcp.pipeline.github_governance import generate_all_governance
+
+            governance_result = generate_all_governance(project_root)
+            result["components"]["governance"] = governance_result
+        except Exception as exc:
+            result["errors"].append(f"Governance: {exc}")
     else:
         result["components"]["ci_workflows"] = {"action": "would-regenerate"}
         result["components"]["github_copilot"] = {"action": "would-regenerate"}
+        result["components"]["github_templates"] = {"action": "would-regenerate"}
+        result["components"]["governance"] = {"action": "would-regenerate"}
 
     result["success"] = len(result["errors"]) == 0
     result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
