@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from tapps_mcp import __version__
+from tapps_mcp.pipeline.platform_generators import _add_version_marker, _check_version_marker
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -263,6 +266,7 @@ def generate_agent_profiles(project_root: Path) -> dict[str, Any]:
     agents_dir.mkdir(parents=True, exist_ok=True)
 
     files_written: list[str] = []
+    skipped = 0
     profiles = {
         "tapps-quality.md": _QUALITY_AGENT_PROFILE,
         "tapps-researcher.md": _RESEARCHER_AGENT_PROFILE,
@@ -270,10 +274,21 @@ def generate_agent_profiles(project_root: Path) -> dict[str, Any]:
 
     for filename, content in profiles.items():
         target = agents_dir / filename
-        target.write_text(content, encoding="utf-8")
+        if _check_version_marker(target) == __version__:
+            skipped += 1
+            continue
+        target.write_text(_add_version_marker(content), encoding="utf-8")
         files_written.append(str(target.relative_to(project_root)))
 
-    return {"files": files_written, "action": "created", "count": len(files_written)}
+    if skipped == len(profiles) and not files_written:
+        return {
+            "files": [],
+            "action": "up-to-date",
+            "count": 0,
+        }
+
+    action = "created" if skipped == 0 else "updated"
+    return {"files": files_written, "action": action, "count": len(files_written)}
 
 
 def generate_path_scoped_instructions(project_root: Path) -> dict[str, Any]:
@@ -289,6 +304,7 @@ def generate_path_scoped_instructions(project_root: Path) -> dict[str, Any]:
     instructions_dir.mkdir(parents=True, exist_ok=True)
 
     files_written: list[str] = []
+    skipped = 0
     instructions = {
         "quality.instructions.md": _QUALITY_INSTRUCTIONS,
         "security.instructions.md": _SECURITY_INSTRUCTIONS,
@@ -297,10 +313,21 @@ def generate_path_scoped_instructions(project_root: Path) -> dict[str, Any]:
 
     for filename, content in instructions.items():
         target = instructions_dir / filename
-        target.write_text(content, encoding="utf-8")
+        if _check_version_marker(target) == __version__:
+            skipped += 1
+            continue
+        target.write_text(_add_version_marker(content), encoding="utf-8")
         files_written.append(str(target.relative_to(project_root)))
 
-    return {"files": files_written, "action": "created", "count": len(files_written)}
+    if skipped == len(instructions) and not files_written:
+        return {
+            "files": [],
+            "action": "up-to-date",
+            "count": 0,
+        }
+
+    action = "created" if skipped == 0 else "updated"
+    return {"files": files_written, "action": action, "count": len(files_written)}
 
 
 def generate_enhanced_copilot_instructions(project_root: Path) -> dict[str, Any]:
@@ -314,11 +341,19 @@ def generate_enhanced_copilot_instructions(project_root: Path) -> dict[str, Any]
     github_dir = project_root / ".github"
     github_dir.mkdir(parents=True, exist_ok=True)
     target = github_dir / "copilot-instructions.md"
-    existed = target.exists()
-    target.write_text(_ENHANCED_COPILOT_INSTRUCTIONS, encoding="utf-8")
+
+    existing_version = _check_version_marker(target)
+    if existing_version == __version__:
+        return {
+            "file": str(target.relative_to(project_root)),
+            "action": "up-to-date",
+        }
+
+    action = "updated" if target.exists() else "created"
+    target.write_text(_add_version_marker(_ENHANCED_COPILOT_INSTRUCTIONS), encoding="utf-8")
     return {
         "file": str(target.relative_to(project_root)),
-        "action": "updated" if existed else "created",
+        "action": action,
     }
 
 

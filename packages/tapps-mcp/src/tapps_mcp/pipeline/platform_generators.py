@@ -5,9 +5,53 @@ configuration artifacts alongside the existing rule-file bootstrapping.
 
 This module serves as a facade that re-exports all public API from the split
 submodules. Import from here for backward compatibility.
+
+Also provides shared version-marker helpers used by Markdown generators to
+detect staleness and skip regeneration when artifacts are current.
 """
 
 from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from tapps_mcp import __version__
+
+# ---------------------------------------------------------------------------
+# Version marker helpers
+# ---------------------------------------------------------------------------
+
+_VERSION_MARKER_RE = re.compile(r"<!--\s*tapps-generated:\s*v([\d.]+)\s*-->")
+_MAX_SCAN_LINES = 5
+
+
+def _check_version_marker(path: Path) -> str | None:
+    """Extract ``tapps-generated`` version from the first few lines of a file.
+
+    Returns the version string (e.g. ``"0.8.5"``) if found, or ``None`` if
+    the file does not exist or contains no marker in the first
+    ``_MAX_SCAN_LINES`` lines.
+    """
+    if not path.exists():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for i, line in enumerate(text.splitlines()):
+        if i >= _MAX_SCAN_LINES:
+            break
+        match = _VERSION_MARKER_RE.search(line)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _add_version_marker(content: str) -> str:
+    """Prepend a ``<!-- tapps-generated: vX.Y.Z -->`` marker to *content*."""
+    marker = f"<!-- tapps-generated: v{__version__} -->\n"
+    return marker + content
+
 
 # Re-export generators from submodules for backward compatibility
 from tapps_mcp.pipeline.platform_bundles import (
@@ -84,6 +128,8 @@ from tapps_mcp.pipeline.platform_subagents import generate_subagent_definitions
 
 # Re-export private names used by tests (backward compat)
 __all__ = [
+    "_add_version_marker",
+    "_check_version_marker",
     "_AGENT_TEAMS_CLAUDE_MD_SECTION",
     "_AGENT_TEAMS_HOOKS_CONFIG",
     "_AGENT_TEAMS_HOOK_SCRIPTS",

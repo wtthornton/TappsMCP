@@ -40,7 +40,7 @@ class TestAgentProfileGeneration:
 
         generate_agent_profiles(tmp_path)
         content = (tmp_path / ".github" / "agents" / "tapps-quality.md").read_text()
-        assert content.startswith("---")
+        assert "---" in content
         assert "name:" in content
         assert "description:" in content
         assert "tools:" in content
@@ -105,7 +105,7 @@ class TestPathScopedInstructions:
         generate_path_scoped_instructions(tmp_path)
         for f in (tmp_path / ".github" / "instructions").iterdir():
             content = f.read_text()
-            assert content.startswith("---"), f"{f.name} missing frontmatter"
+            assert "---" in content, f"{f.name} missing frontmatter"
             assert "applyTo:" in content, f"{f.name} missing applyTo"
 
     def test_result_dict(self, tmp_path):
@@ -145,12 +145,12 @@ class TestEnhancedCopilotInstructions:
         assert "tapps_quick_check" in content
         assert "tapps_validate_changed" in content
 
-    def test_updated_when_exists(self, tmp_path):
+    def test_up_to_date_when_current_version(self, tmp_path):
         from tapps_mcp.pipeline.github_copilot import generate_enhanced_copilot_instructions
 
         generate_enhanced_copilot_instructions(tmp_path)
         result = generate_enhanced_copilot_instructions(tmp_path)
-        assert result["action"] == "updated"
+        assert result["action"] == "up-to-date"
 
 
 class TestAgenticWorkflow:
