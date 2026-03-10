@@ -262,8 +262,41 @@ class TestUpgradePipelineDockerStatus:
         assert docker_info["transport"] == "docker"
         assert docker_info["profile_preserved"] is True
         assert "companions_status" in docker_info
-        assert "context7" in docker_info["companions_status"]["installed"]
-        assert "filesystem" in docker_info["companions_status"]["installed"]
+        companions_status = docker_info["companions_status"]
+        assert companions_status["status"] == "configured"
+        assert "context7" in companions_status["configured"]
+        assert "filesystem" in companions_status["configured"]
+
+    def test_upgrade_companions_reported_as_configured_not_installed(
+        self, tmp_path: Path
+    ) -> None:
+        """Companions are reported as 'configured' not 'installed'."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir()
+
+        mock_settings = _make_mock_settings(
+            docker_enabled=True,
+            docker_transport="docker",
+            docker_profile="tapps-standard",
+            docker_companions=["context7", "filesystem"],
+        )
+
+        with (
+            patch("tapps_core.config.settings.load_settings", return_value=mock_settings),
+            patch("tapps_mcp.pipeline.upgrade._upgrade_agents_md", return_value={"action": "up-to-date"}),
+            patch("tapps_mcp.pipeline.upgrade._upgrade_platform", return_value={"host": "claude-code", "components": {}}),
+        ):
+            result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        companions_status = result["docker"]["companions_status"]
+        # Must NOT have "installed" or "missing" keys (the old no-op pattern)
+        assert "installed" not in companions_status
+        assert "missing" not in companions_status
+        # Must have "configured" with honest status
+        assert companions_status["status"] == "configured"
+        assert companions_status["configured"] == ["context7", "filesystem"]
+        assert "note" in companions_status
 
     def test_upgrade_no_docker_key_when_disabled(self, tmp_path: Path) -> None:
         """Docker status dict is NOT included when docker.enabled is False."""
@@ -303,8 +336,33 @@ class TestUpgradePipelineDockerStatus:
         ):
             result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
 
-        assert result["docker"]["companions_status"]["installed"] == []
-        assert result["docker"]["companions_status"]["missing"] == []
+        assert result["docker"]["companions_status"]["configured"] == []
+        assert result["docker"]["companions_status"]["status"] == "configured"
+
+    def test_upgrade_docker_key_present_for_backward_compat(self, tmp_path: Path) -> None:
+        """Result dict still contains 'docker' key for backward compat."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir()
+
+        mock_settings = _make_mock_settings(
+            docker_enabled=True,
+            docker_transport="docker",
+            docker_profile="tapps-standard",
+            docker_companions=["context7"],
+        )
+
+        with (
+            patch("tapps_core.config.settings.load_settings", return_value=mock_settings),
+            patch("tapps_mcp.pipeline.upgrade._upgrade_agents_md", return_value={"action": "up-to-date"}),
+            patch("tapps_mcp.pipeline.upgrade._upgrade_platform", return_value={"host": "claude-code", "components": {}}),
+        ):
+            result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        # "docker" key must exist for backward compat
+        assert "docker" in result
+        assert "transport" in result["docker"]
+        assert "companions_status" in result["docker"]
 
 
 # ---------------------------------------------------------------------------

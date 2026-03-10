@@ -156,36 +156,29 @@ class TestDetectDocker:
 class TestRecommendCompanions:
     """Tests for _recommend_companions function."""
 
-    def test_all_missing(self) -> None:
+    def test_reports_configured_status(self) -> None:
+        """Companions are reported as 'configured' not 'installed'."""
         docker_result: dict[str, Any] = {"installed_servers": []}
         companions = ["context7", "github"]
         rec = _recommend_companions(docker_result, companions)
-        assert rec["installed"] == []
-        assert rec["missing"] == ["context7", "github"]
+        assert rec["status"] == "configured"
+        assert rec["configured"] == ["context7", "github"]
+        assert "installed" not in rec
+        assert "missing" not in rec
+
+    def test_includes_install_commands(self) -> None:
+        """Install commands are provided for all configured companions."""
+        docker_result: dict[str, Any] = {"installed_servers": []}
+        companions = ["context7", "github"]
+        rec = _recommend_companions(docker_result, companions)
         assert len(rec["install_commands"]) == 2
-
-    def test_some_installed(self) -> None:
-        docker_result: dict[str, Any] = {"installed_servers": ["context7"]}
-        companions = ["context7", "github"]
-        rec = _recommend_companions(docker_result, companions)
-        assert rec["installed"] == ["context7"]
-        assert rec["missing"] == ["github"]
-        assert len(rec["install_commands"]) == 1
-
-    def test_all_installed(self) -> None:
-        docker_result: dict[str, Any] = {"installed_servers": ["context7", "github"]}
-        companions = ["context7", "github"]
-        rec = _recommend_companions(docker_result, companions)
-        assert rec["installed"] == ["context7", "github"]
-        assert rec["missing"] == []
-        assert rec["install_commands"] == []
 
     def test_empty_companions(self) -> None:
         docker_result: dict[str, Any] = {"installed_servers": ["context7"]}
         rec = _recommend_companions(docker_result, [])
-        assert rec["installed"] == []
-        assert rec["missing"] == []
+        assert rec["configured"] == []
         assert rec["install_commands"] == []
+        assert rec["status"] == "configured"
 
     def test_install_command_format(self) -> None:
         docker_result: dict[str, Any] = {"installed_servers": []}
@@ -195,10 +188,18 @@ class TestRecommendCompanions:
             "docker mcp profile server add tapps-standard --server catalog://myserver"
         ]
 
-    def test_extra_installed_ignored(self) -> None:
-        """Servers installed but not in companions list are ignored."""
+    def test_docker_result_ignored(self) -> None:
+        """docker_result installed_servers is ignored -- we report config only."""
         docker_result: dict[str, Any] = {"installed_servers": ["extra", "context7"]}
         companions = ["context7"]
         rec = _recommend_companions(docker_result, companions)
-        assert rec["installed"] == ["context7"]
-        assert rec["missing"] == []
+        assert rec["configured"] == ["context7"]
+        assert rec["status"] == "configured"
+
+    def test_includes_note_about_runtime(self) -> None:
+        """Result includes a note about Docker Desktop dependency."""
+        docker_result: dict[str, Any] = {}
+        companions = ["context7"]
+        rec = _recommend_companions(docker_result, companions)
+        assert "note" in rec
+        assert "Docker Desktop" in rec["note"]

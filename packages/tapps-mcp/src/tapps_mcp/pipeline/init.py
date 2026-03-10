@@ -298,16 +298,19 @@ def _recommend_companions(
     docker_result: dict[str, Any],
     companions: list[str],
 ) -> dict[str, Any]:
-    """Recommend missing companion MCP servers."""
-    installed = set(docker_result.get("installed_servers", []))
-    recommended = set(companions)
-    missing = recommended - installed
+    """Report companion MCP servers as configured.
+
+    Actual runtime availability depends on Docker Desktop -- we cannot
+    verify installation from here, so we report them honestly as
+    ``"configured"`` rather than ``"installed"``.
+    """
     return {
-        "installed": sorted(installed & recommended),
-        "missing": sorted(missing),
+        "configured": sorted(companions),
+        "status": "configured",
+        "note": "runtime availability depends on Docker Desktop",
         "install_commands": [
             f"docker mcp profile server add tapps-standard --server catalog://{s}"
-            for s in sorted(missing)
+            for s in sorted(companions)
         ],
     }
 
