@@ -1,3 +1,7 @@
 """TappsMCP: MCP server providing code quality tools."""
 
-__version__ = "0.8.5"
+from __future__ import annotations
+
+from importlib.metadata import version
+
+__version__ = version("tapps-mcp")

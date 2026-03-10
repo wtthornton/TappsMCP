@@ -103,9 +103,13 @@ class ExpertRegistry:
         ),
         ExpertConfig(
             expert_id="expert-user-experience",
-            expert_name="User Experience Expert",
+            expert_name="UX Design Expert",
             primary_domain="user-experience",
-            description="UX patterns, usability, frontend best practices.",
+            description=(
+                "UX design, frontend architecture, design systems, accessibility, "
+                "React patterns, modern CSS, responsive design, performance UX, "
+                "AI UX patterns, dark mode, forms, motion design."
+            ),
         ),
         ExpertConfig(
             expert_id="expert-documentation",

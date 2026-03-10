@@ -46,17 +46,21 @@ class TestCLICommands:
     """Verify all CLI commands work via CliRunner."""
 
     def test_version_flag(self) -> None:
+        from docs_mcp import __version__
+
         runner = CliRunner()
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.5" in result.output
+        assert __version__ in result.output
 
     def test_version_command(self) -> None:
+        from docs_mcp import __version__
+
         runner = CliRunner()
         result = runner.invoke(cli, ["version"])
         assert result.exit_code == 0
         assert "docsmcp" in result.output.lower()
-        assert "0.1.5" in result.output
+        assert __version__ in result.output
 
     def test_help(self) -> None:
         runner = CliRunner()

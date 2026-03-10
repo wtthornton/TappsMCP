@@ -12,7 +12,9 @@ class TestCLI:
         runner = CliRunner()
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.5" in result.output
+        from docs_mcp import __version__
+
+        assert __version__ in result.output
 
     def test_cli_help(self) -> None:
         runner = CliRunner()
