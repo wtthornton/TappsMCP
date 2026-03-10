@@ -305,6 +305,19 @@ def test_user_login(user):
 - Parallel execution
 - Separate slow tests
 
+## Typical steps
+
+Follow this process when planning and executing a testing strategy for a feature or project:
+
+1. **Identify scope**: Determine what needs testing -- new feature, bug fix, refactor, or integration
+2. **Choose strategy**: Select TDD, BDD, or ATDD based on team and stakeholder needs
+3. **Design test plan**: Map requirements to test cases; identify unit, integration, and E2E coverage
+4. **Set up fixtures**: Create reusable test data, factories, and environment configuration
+5. **Write unit tests**: Cover individual functions, edge cases, and error paths first
+6. **Write integration tests**: Verify cross-module and external dependency interactions
+7. **Run and iterate**: Execute tests, review failures, fix bugs, and re-run until green
+8. **Review coverage**: Check coverage reports, add tests for uncovered critical paths
+
 ## References
 
 - [Testing Strategies](https://martinfowler.com/articles/practical-test-pyramid.html)

@@ -164,3 +164,14 @@ Track these metrics over time:
 - **Build Times**: CI/CD performance
 - **Review Time**: PR review duration
 - **Deployment Frequency**: Release cadence
+
+## Success metrics
+
+- All files score >=70 on TappsMCP quality gate
+- Cyclomatic complexity per function <=10
+- No high-severity linting violations
+- Maintainability index >=65
+- Zero type errors (mypy --strict passes)
+- No functions longer than 50 lines
+- Duplicate code ratio <5%
+- All public modules have docstrings

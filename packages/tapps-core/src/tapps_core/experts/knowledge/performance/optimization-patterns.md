@@ -325,3 +325,14 @@ async def fetch_data(urls):
 - [System Design Primer](https://github.com/donnemartin/system-design-primer)
 - [Performance Best Practices](https://web.dev/performance/)
 
+## Success metrics
+
+- Largest Contentful Paint (LCP) <2.5s
+- First Input Delay (FID) <100ms
+- Cumulative Layout Shift (CLS) <0.1
+- API response time p95 <500ms
+- Memory usage stable under sustained load (no leaks over 24h)
+- Database query p95 <200ms
+- Time to First Byte (TTFB) <600ms
+- Bundle size within budget (e.g. <250KB gzipped for SPA)
+

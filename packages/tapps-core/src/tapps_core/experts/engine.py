@@ -545,11 +545,21 @@ def _build_answer(
     persona_line = ""
     if expert.persona:
         persona_line = f"*{expert.persona}*\n\n"
+    # Critical rules (Epic 71) — prepended after persona when expert has rules defined.
+    rules_line = ""
+    if expert.critical_rules:
+        rules_line = f"**Critical rules:** {expert.critical_rules}\n\n"
+    # Communication style (Epic 73) — appended after persona and rules.
+    style_line = ""
+    if expert.communication_style:
+        style_line = f"*Style: {expert.communication_style}*\n\n"
 
     if knowledge.context:
         result.answer = (
             f"## {expert.expert_name} \u2014 {resolved_domain}\n\n"
             f"{persona_line}"
+            f"{rules_line}"
+            f"{style_line}"
             f"Based on domain knowledge ({len(knowledge.chunks)} source(s), "
             f"confidence {conf.confidence:.0%}):\n\n"
             f"{knowledge.context}"
@@ -731,6 +741,8 @@ def list_experts() -> list[ExpertInfo]:
                 is_builtin=expert.is_builtin,
                 keywords=expert.keywords,
                 persona=expert.persona,
+                critical_rules=expert.critical_rules,
+                communication_style=expert.communication_style,
             )
         )
     return results

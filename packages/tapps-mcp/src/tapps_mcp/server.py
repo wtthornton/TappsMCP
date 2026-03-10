@@ -17,17 +17,19 @@ Tool handlers are split across modules for maintainability:
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
+import tempfile
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from tapps_core.common.models import InstalledTool, StartupDiagnostics
     from tapps_core.config.settings import TappsMCPSettings
     from tapps_core.knowledge.models import LookupResult
     from tapps_core.metrics.collector import MetricsHub
+    from tapps_mcp.tools.checklist import ChecklistResult
 
 import structlog
 from mcp.server.fastmcp import FastMCP
@@ -79,6 +81,43 @@ mcp = FastMCP("TappsMCP")
 
 
 _MIN_DRIVE_PATH_LEN = 2
+
+
+def _bootstrap_cache_dir(project_root: Path) -> tuple[Path, bool]:
+    """Create cache directory, returning ``(cache_dir, fallback_used)``.
+
+    Priority:
+    1. ``TAPPS_CACHE_DIR`` env var (if set)
+    2. ``<project_root>/.tapps-mcp-cache``
+    3. ``<tempdir>/.tapps-mcp-cache`` (fallback when project root not writable)
+    """
+    cache_dir = Path(os.environ["TAPPS_CACHE_DIR"]) if os.environ.get("TAPPS_CACHE_DIR") else (
+        project_root / ".tapps-mcp-cache"
+    )
+    fallback_used = False
+
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        # Fall back to temp directory if primary path not writable
+        cache_dir = Path(tempfile.gettempdir()) / ".tapps-mcp-cache"
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            fallback_used = True
+        except (PermissionError, OSError):
+            logger.debug("cache_dir_creation_failed", cache_dir=str(cache_dir))
+
+    return cache_dir, fallback_used
+
+
+def _cache_info_dict(cache_dir: Path, fallback_used: bool) -> dict[str, object]:
+    """Build the ``cache`` sub-dict for server info responses."""
+    return {
+        "dir": str(cache_dir),
+        "exists": cache_dir.is_dir(),
+        "writable": os.access(str(cache_dir), os.W_OK) if cache_dir.is_dir() else False,
+        "fallback_used": fallback_used,
+    }
 
 
 def _normalize_path_for_mapping(path: str) -> str:
@@ -170,6 +209,7 @@ _VALID_CONFIG_TYPES: frozenset[str] = frozenset({
     "websocket",
     "mqtt",
     "influxdb",
+    "mcp",
 })
 
 _MAX_CONFIG_FILE_SIZE: int = 1_048_576  # 1 MB
@@ -344,7 +384,8 @@ async def tapps_server_info() -> dict[str, Any]:
 
     from tapps_mcp.diagnostics import collect_diagnostics
 
-    cache_dir = settings.project_root / ".tapps-mcp-cache"
+    # Story 75.3: Auto-create cache directory for faster subsequent starts
+    cache_dir, cache_fallback = _bootstrap_cache_dir(settings.project_root)
 
     # Run tool detection (parallel subprocesses) and diagnostics concurrently
     installed, diagnostics = await asyncio.gather(
@@ -360,6 +401,7 @@ async def tapps_server_info() -> dict[str, Any]:
     _record_execution("tapps_server_info", start)
 
     data = _build_server_info_data(settings, installed, diagnostics, available_tools)
+    data["cache"] = _cache_info_dict(cache_dir, cache_fallback)
     resp = success_response("tapps_server_info", elapsed_ms, data)
     return _with_nudges("tapps_server_info", resp)
 
@@ -377,7 +419,8 @@ async def _server_info_async() -> dict[str, Any]:
 
     from tapps_mcp.diagnostics import collect_diagnostics
 
-    cache_dir = settings.project_root / ".tapps-mcp-cache"
+    # Story 75.3: Auto-create cache directory for faster subsequent starts
+    cache_dir, cache_fallback = _bootstrap_cache_dir(settings.project_root)
 
     # Run tool detection (parallel subprocesses) and diagnostics concurrently
     installed, diagnostics = await asyncio.gather(
@@ -393,6 +436,7 @@ async def _server_info_async() -> dict[str, Any]:
     _record_execution("tapps_server_info", start)
 
     data = _build_server_info_data(settings, installed, diagnostics, available_tools)
+    data["cache"] = _cache_info_dict(cache_dir, cache_fallback)
     resp = success_response("tapps_server_info", elapsed_ms, data)
     return _with_nudges("tapps_server_info", resp)
 
@@ -936,10 +980,74 @@ def tapps_list_experts() -> dict[str, Any]:
     return _with_nudges("tapps_list_experts", resp)
 
 
+def _checklist_json_format(
+    result: ChecklistResult,
+    auto_run_results: dict[str, Any],
+) -> dict[str, Any]:
+    """Build structured JSON output with computed counts for checklist."""
+    required_called = [t for t in result.called if t not in result.missing_required]
+    recommended_missing = result.missing_recommended
+    recommended_called = [
+        t for t in result.called if t not in result.missing_recommended
+    ]
+    optional_missing = result.missing_optional
+    optional_called = [t for t in result.called if t not in result.missing_optional]
+
+    data: dict[str, Any] = {
+        "task_type": result.task_type,
+        "complete": result.complete,
+        "total_calls": result.total_calls,
+        "required_called": required_called,
+        "required_missing": result.missing_required,
+        "recommended_called": recommended_called,
+        "recommended_missing": recommended_missing,
+        "optional_called": optional_called,
+        "optional_missing": optional_missing,
+        "priority_actions": result.missing_required[:3] if result.missing_required else [],
+    }
+    if auto_run_results:
+        data["auto_run_results"] = auto_run_results
+    return data
+
+
+def _checklist_compact_format(
+    result: ChecklistResult,
+    auto_run_results: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a short 1-2 line compact summary for checklist."""
+    req_ok = len(result.called) - len(result.missing_required)
+    parts = [f"complete={result.complete}"]
+
+    if req_ok > 0:
+        parts.append(f"{req_ok} required OK")
+    if result.missing_required:
+        missing_names = ", ".join(result.missing_required)
+        parts.append(f"{len(result.missing_required)} required missing ({missing_names})")
+    if result.missing_recommended:
+        missing_names = ", ".join(result.missing_recommended)
+        parts.append(
+            f"{len(result.missing_recommended)} recommended missing ({missing_names})"
+        )
+
+    summary = f"Checklist {result.task_type}: {', '.join(parts)}"
+
+    data: dict[str, Any] = {
+        "summary": summary,
+        "complete": result.complete,
+        "task_type": result.task_type,
+        "total_calls": result.total_calls,
+    }
+    if auto_run_results:
+        data["auto_run_results"] = auto_run_results
+    return data
+
+
 @mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def tapps_checklist(
     task_type: str = "review",
     auto_run: bool = False,
+    output_format: str = "markdown",
+    commit_sha: str = "",
 ) -> dict[str, Any]:
     """REQUIRED as the FINAL step before declaring work complete.
 
@@ -947,9 +1055,20 @@ async def tapps_checklist(
         task_type: "feature" | "bugfix" | "refactor" | "security" | "review".
         auto_run: When True, automatically run missing required validations
             (via tapps_validate_changed) and re-evaluate the checklist.
+        output_format: "markdown" (default, full table), "json" (structured counts),
+            or "compact" (short 1-2 line summary).
+        commit_sha: Optional git SHA to embed in response. If empty, auto-detects HEAD.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_checklist")
+
+    valid_formats = {"markdown", "json", "compact"}
+    if output_format not in valid_formats:
+        return error_response(
+            "tapps_checklist",
+            "invalid_format",
+            f"output_format must be one of {sorted(valid_formats)}, got '{output_format}'",
+        )
 
     try:
         from tapps_mcp.tools.checklist import CallTracker
@@ -1004,6 +1123,22 @@ async def tapps_checklist(
         resp_data = result.model_dump()
         if auto_run_results:
             resp_data["auto_run_results"] = auto_run_results
+
+        # Story 75.5: Add git context for audit trail linkage
+        try:
+            from tapps_mcp.tools.checklist import _get_git_context
+
+            git_context = await _get_git_context(commit_sha=commit_sha)
+            resp_data["git_context"] = git_context
+        except Exception:
+            resp_data["git_context"] = None
+
+        # Format output based on output_format
+        if output_format == "json":
+            resp_data = _checklist_json_format(result, auto_run_results)
+        elif output_format == "compact":
+            resp_data = _checklist_compact_format(result, auto_run_results)
+
         resp = success_response("tapps_checklist", elapsed_ms, resp_data)
 
         # Epic 66.2: Surface validation_note in next_steps
@@ -1017,22 +1152,23 @@ async def tapps_checklist(
             )
             resp_data["next_steps"] = next_steps
 
-        # Attach structured output
-        try:
-            from tapps_mcp.common.output_schemas import ChecklistOutput
+        # Attach structured output (markdown/json only - compact is already minimal)
+        if output_format != "compact":
+            try:
+                from tapps_mcp.common.output_schemas import ChecklistOutput
 
-            structured = ChecklistOutput(
-                task_type=result.task_type,
-                complete=result.complete,
-                called=result.called,
-                missing_required=result.missing_required,
-                missing_recommended=result.missing_recommended,
-                total_calls=result.total_calls,
-                auto_run_results=auto_run_results or None,
-            )
-            resp["structuredContent"] = structured.to_structured_content()
-        except Exception:
-            logger.debug("structured_output_failed: tapps_checklist", exc_info=True)
+                structured = ChecklistOutput(
+                    task_type=result.task_type,
+                    complete=result.complete,
+                    called=result.called,
+                    missing_required=result.missing_required,
+                    missing_recommended=result.missing_recommended,
+                    total_calls=result.total_calls,
+                    auto_run_results=auto_run_results or None,
+                )
+                resp["structuredContent"] = structured.to_structured_content()
+            except Exception:
+                logger.debug("structured_output_failed: tapps_checklist", exc_info=True)
 
         return _with_nudges("tapps_checklist", resp, {"complete": result.complete})
     except ImportError:

@@ -495,8 +495,54 @@ class TestTappsValidateChanged:
 
         assert result["success"] is True
         assert result["data"]["files_validated"] == 0
-        assert result["data"]["summary"] == "No changed Python files found."
+        assert result["data"]["summary"] == "No changed scorable files found."
+        # base_ref=HEAD with auto-detect should include a warning
+        assert "warnings" in result["data"]
+        assert any("base_ref=HEAD" in w for w in result["data"]["warnings"])
         ensure_init.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_base_ref_head_zero_diff_warning(self, tmp_path: Path) -> None:
+        """When base_ref=HEAD and auto-detect finds zero files, response has a warning."""
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.tools.batch_validator.detect_changed_scorable_files",
+                return_value=[],
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            result = await tapps_validate_changed(file_paths="", base_ref="HEAD")
+
+        assert result["success"] is True
+        assert result["data"]["files_validated"] == 0
+        assert result["data"]["all_gates_passed"] is True
+        warnings = result["data"].get("warnings", [])
+        assert len(warnings) >= 1
+        assert "base_ref=HEAD" in warnings[0]
+        assert "staged-but-uncommitted" in warnings[0]
+
+    @pytest.mark.asyncio
+    async def test_base_ref_non_head_no_warning(self, tmp_path: Path) -> None:
+        """When base_ref is not HEAD and zero files found, no HEAD-specific warning."""
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.tools.batch_validator.detect_changed_scorable_files",
+                return_value=[],
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            result = await tapps_validate_changed(file_paths="", base_ref="main")
+
+        assert result["success"] is True
+        assert "warnings" not in result["data"]
 
     @pytest.mark.asyncio
     async def test_explicit_non_python_files_returns_fast_no_scorer(
@@ -534,7 +580,7 @@ class TestTappsValidateChanged:
 
         assert result["success"] is True
         assert result["data"]["files_validated"] == 0
-        assert result["data"]["summary"] == "No changed Python files found."
+        assert result["data"]["summary"] == "No changed scorable files found."
         ensure_init.assert_not_called()
         mock_scorer.score_file_quick.assert_not_called()
 
@@ -1174,3 +1220,220 @@ class TestBatchValidator:
         assert "1 passed" in summary
         assert "1 failed" in summary
         assert "2 security" in summary
+
+
+# ---------------------------------------------------------------------------
+# tapps_quick_check - batch mode (Story 74.1)
+# ---------------------------------------------------------------------------
+
+
+class TestTappsQuickCheckBatch:
+    """Tests for the tapps_quick_check batch mode (file_paths parameter)."""
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server_scoring_tools.load_settings")
+    async def test_batch_single_file(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f = tmp_path / "test.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        mock_validate.return_value = f
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "standard"
+        mock_settings.return_value.tool_timeout = 30
+
+        result = await tapps_quick_check(file_path="", file_paths=str(f))
+        assert result["success"] is True
+        data = result["data"]
+        assert data["files_checked"] == 1
+        assert isinstance(data["results"], list)
+        assert len(data["results"]) == 1
+        assert data["results"][0]["success"] is True
+        assert "all_passed" in data
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server_scoring_tools.load_settings")
+    async def test_batch_multiple_files(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f1 = tmp_path / "a.py"
+        f2 = tmp_path / "b.py"
+        f1.write_text("x = 1\n", encoding="utf-8")
+        f2.write_text("y = 2\n", encoding="utf-8")
+
+        def _validate_side_effect(fp: str) -> Path:
+            if "a.py" in fp:
+                return f1
+            return f2
+
+        mock_validate.side_effect = _validate_side_effect
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "standard"
+        mock_settings.return_value.tool_timeout = 30
+
+        result = await tapps_quick_check(
+            file_path="", file_paths=f"{f1},{f2}"
+        )
+        assert result["success"] is True
+        data = result["data"]
+        assert data["files_checked"] == 2
+        assert len(data["results"]) == 2
+        assert all(r["success"] for r in data["results"])
+
+    @pytest.mark.asyncio
+    async def test_batch_empty_string(self) -> None:
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        result = await tapps_quick_check(file_path="", file_paths="  ,  , ")
+        assert result["success"] is False
+        assert result["error"]["code"] == "invalid_input"
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server_scoring_tools.load_settings")
+    async def test_batch_mixed_pass_fail(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f_good = tmp_path / "good.py"
+        f_good.write_text("x = 1\n", encoding="utf-8")
+
+        def _validate_side_effect(fp: str) -> Path:
+            if "good.py" in fp:
+                return f_good
+            raise FileNotFoundError(f"not found: {fp}")
+
+        mock_validate.side_effect = _validate_side_effect
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "standard"
+        mock_settings.return_value.tool_timeout = 30
+
+        result = await tapps_quick_check(
+            file_path="", file_paths=f"{f_good},/nonexistent/bad.py"
+        )
+        assert result["success"] is True
+        data = result["data"]
+        assert data["files_checked"] == 2
+        assert data["all_passed"] is False
+        assert data["failure_count"] >= 1
+        successes = [r for r in data["results"] if r.get("success")]
+        failures = [r for r in data["results"] if not r.get("success")]
+        assert len(successes) == 1
+        assert len(failures) == 1
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._validate_file_path")
+    @patch("tapps_mcp.server_scoring_tools.load_settings")
+    async def test_batch_file_paths_takes_precedence(
+        self,
+        mock_settings: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """When both file_path and file_paths are provided, file_paths wins."""
+        from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+        f = tmp_path / "batch.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        mock_validate.return_value = f
+        mock_settings.return_value.project_root = tmp_path
+        mock_settings.return_value.quality_preset = "standard"
+        mock_settings.return_value.tool_timeout = 30
+
+        result = await tapps_quick_check(
+            file_path="/ignored/single.py", file_paths=str(f)
+        )
+        assert result["success"] is True
+        data = result["data"]
+        assert "files_checked" in data
+        assert "results" in data
+
+
+# ---------------------------------------------------------------------------
+# correlation_id traceability (Story 74.4)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateChangedCorrelationId:
+    """Tests for optional correlation_id parameter on tapps_validate_changed."""
+
+    @pytest.mark.asyncio
+    async def test_validate_changed_correlation_id_no_changed_files(
+        self, tmp_path: Path
+    ) -> None:
+        """correlation_id is included even when no files are changed."""
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_pipeline_tools._discover_changed_files",
+                return_value=[],
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.dependency_scan_enabled = False
+
+            result = await tapps_validate_changed(
+                correlation_id="empty-run-456",
+            )
+
+        assert result["success"] is True
+        assert result["data"]["correlation_id"] == "empty-run-456"
+
+    @pytest.mark.asyncio
+    async def test_validate_changed_without_correlation_id(self, tmp_path: Path) -> None:
+        """When correlation_id is empty (default), it is absent from response data."""
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_pipeline_tools._discover_changed_files",
+                return_value=[],
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.dependency_scan_enabled = False
+
+            result = await tapps_validate_changed()
+
+        assert result["success"] is True
+        assert "correlation_id" not in result["data"]
+
+    @pytest.mark.asyncio
+    async def test_validate_changed_correlation_id_stripped(self, tmp_path: Path) -> None:
+        """correlation_id with whitespace is stripped before inclusion."""
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_pipeline_tools._discover_changed_files",
+                return_value=[],
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.dependency_scan_enabled = False
+
+            result = await tapps_validate_changed(
+                correlation_id="  spaces-trimmed  ",
+            )
+
+        assert result["data"]["correlation_id"] == "spaces-trimmed"

@@ -475,6 +475,27 @@ def _build_quick_check_suggestions(
     return suggestions
 
 
+def _attach_cross_file_analysis(
+    data: dict[str, Any],
+    resolved: Path,
+    project_root: Path,
+) -> None:
+    """Run cross-file kwarg mismatch detection and attach results in-place.
+
+    Story 75.2: Adds ``cross_file_analysis`` status and optional
+    ``cross_file_findings`` list to the data dict.
+    """
+    try:
+        from tapps_mcp.scoring.cross_ref import analyze_cross_references
+
+        cross_ref = analyze_cross_references(resolved, project_root)
+        data["cross_file_analysis"] = cross_ref.status
+        if cross_ref.findings:
+            data["cross_file_findings"] = [f.to_dict() for f in cross_ref.findings]
+    except Exception:
+        data["cross_file_analysis"] = "degraded"
+
+
 def _attach_uncached_libraries_hint(
     data: dict[str, Any],
     resolved: Path,
@@ -536,10 +557,91 @@ def _attach_quick_check_structured_output(
         _logger.debug("structured_output_failed: tapps_quick_check", exc_info=True)
 
 
+_BATCH_CONCURRENCY = 10
+
+
+async def _quick_check_single(
+    resolved: Path,
+    preset: str,
+    fix: bool,
+    settings: Any,
+) -> dict[str, Any]:
+    """Run quick_check logic on a single validated file and return the result dict."""
+    from tapps_mcp.gates.evaluator import evaluate_gate
+    from tapps_mcp.security.security_scanner import run_security_scan
+
+    scorer = _get_scorer_for_file(resolved)
+    if scorer is None:
+        return {
+            "file_path": str(resolved),
+            "success": False,
+            "error": (
+                f"File extension not supported for scoring: {resolved.suffix}. "
+                "Supported: .py, .pyi, .ts, .tsx, .js, .jsx, .mjs, .cjs, .go, .rs"
+            ),
+        }
+
+    is_python = scorer.language == "python"
+
+    fixes_applied = 0
+    if fix and is_python:
+        from tapps_mcp.tools.ruff import run_ruff_fix
+
+        fixes_applied = await asyncio.to_thread(
+            run_ruff_fix, str(resolved), cwd=str(resolved.parent)
+        )
+
+    if is_python:
+        score_coro = asyncio.to_thread(scorer.score_file_quick_enriched, resolved)
+    else:
+        score_coro = asyncio.to_thread(scorer.score_file_quick, resolved)
+
+    if is_python:
+        sec_coro = asyncio.to_thread(
+            run_security_scan,
+            str(resolved),
+            scan_secrets=True,
+            cwd=str(settings.project_root),
+            timeout=settings.tool_timeout,
+        )
+        score_result, sec_result = await asyncio.gather(score_coro, sec_coro)
+    else:
+        score_result = await score_coro
+        from tapps_mcp.security.security_scanner import SecurityScanResult
+
+        sec_result = SecurityScanResult(
+            passed=True,
+            bandit_issues=[],
+            secret_findings=[],
+            bandit_available=False,
+            total_issues=0,
+        )
+
+    complexity_hint = _compute_complexity_hint(resolved) if is_python else None
+    gate_result = evaluate_gate(score_result, preset=preset)
+
+    data, _suggestions = _build_quick_check_data(
+        resolved, score_result, sec_result, gate_result,
+        preset, complexity_hint, fixes_applied, fix,
+    )
+
+    _attach_uncached_libraries_hint(data, resolved, settings.project_root)
+
+    # Story 75.2: Cross-file kwarg mismatch detection (Python only)
+    if is_python:
+        _attach_cross_file_analysis(data, resolved, settings.project_root)
+
+    data["success"] = True
+    data["gate_passed"] = gate_result.passed
+    data["security_passed"] = sec_result.passed
+    return data
+
+
 async def tapps_quick_check(
     file_path: str,
     preset: str = "standard",
     fix: bool = False,
+    file_paths: str = "",
 ) -> dict[str, Any]:
     """REQUIRED at minimum after editing any source file. Runs quick
     score + quality gate + basic security check in one fast call.
@@ -550,10 +652,15 @@ async def tapps_quick_check(
     Supports Python (.py), TypeScript/JavaScript (.ts, .tsx, .js, .jsx),
     Go (.go), and Rust (.rs) files.
 
+    Supports batch mode: pass multiple comma-separated paths via ``file_paths``
+    to check many files in one call with bounded concurrency.
+
     Args:
-        file_path: Path to the source file to check.
+        file_path: Path to the source file to check (single-file mode).
         preset: Quality gate preset - "standard", "strict", or "framework".
         fix: If True (Python only), apply ruff auto-fixes before scoring.
+        file_paths: Comma-separated file paths for batch mode. When non-empty,
+            takes precedence over ``file_path``.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
 
@@ -561,6 +668,62 @@ async def tapps_quick_check(
     _record_call("tapps_quick_check")
     await ensure_session_initialized()
 
+    # --- Batch mode ---
+    if file_paths.strip():
+        raw_paths = [p.strip() for p in file_paths.split(",") if p.strip()]
+        if not raw_paths:
+            return error_response(
+                "tapps_quick_check", "invalid_input", "file_paths is empty after parsing"
+            )
+
+        settings = load_settings()
+        sem = asyncio.Semaphore(_BATCH_CONCURRENCY)
+
+        async def _run_one(fp: str) -> dict[str, Any]:
+            async with sem:
+                try:
+                    resolved = _validate_file_path(fp)
+                except (ValueError, FileNotFoundError) as exc:
+                    return {
+                        "file_path": fp,
+                        "success": False,
+                        "error": str(exc),
+                    }
+                try:
+                    return await _quick_check_single(resolved, preset, fix, settings)
+                except Exception as exc:
+                    _logger.error(
+                        "quick_check_batch_file_failed", file_path=fp, error=str(exc),
+                    )
+                    return {
+                        "file_path": fp,
+                        "success": False,
+                        "error": str(exc),
+                    }
+
+        results = await asyncio.gather(*[_run_one(fp) for fp in raw_paths])
+        result_list: list[dict[str, Any]] = list(results)
+
+        passed_count = sum(
+            1 for r in result_list if r.get("success") and r.get("gate_passed", False)
+        )
+        failure_count = len(result_list) - passed_count
+
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_quick_check", start)
+
+        return success_response(
+            "tapps_quick_check",
+            elapsed_ms,
+            {
+                "files_checked": len(result_list),
+                "all_passed": failure_count == 0,
+                "failure_count": failure_count,
+                "results": result_list,
+            },
+        )
+
+    # --- Single-file mode (original behavior) ---
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
@@ -571,7 +734,6 @@ async def tapps_quick_check(
 
     settings = load_settings()
 
-    # Get language-appropriate scorer
     scorer = _get_scorer_for_file(resolved)
     if scorer is None:
         return error_response(
@@ -583,7 +745,6 @@ async def tapps_quick_check(
 
     is_python = scorer.language == "python"
 
-    # Optional ruff auto-fix before scoring (Python only)
     fixes_applied = 0
     if fix and is_python:
         from tapps_mcp.tools.ruff import run_ruff_fix
@@ -592,14 +753,11 @@ async def tapps_quick_check(
             run_ruff_fix, str(resolved), cwd=str(resolved.parent)
         )
 
-    # For Python: use enriched scoring with AST heuristics
-    # For other languages: use standard quick scoring
     if is_python:
         score_coro = asyncio.to_thread(scorer.score_file_quick_enriched, resolved)
     else:
         score_coro = asyncio.to_thread(scorer.score_file_quick, resolved)
 
-    # Security scan (Python only, uses bandit)
     if is_python:
         sec_coro = asyncio.to_thread(
             run_security_scan,
@@ -614,14 +772,12 @@ async def tapps_quick_check(
             _logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
             return error_response("tapps_quick_check", "scoring_failed", str(exc))
     else:
-        # Non-Python: scoring only (no security scan yet)
         try:
             score_result = await score_coro
         except Exception as exc:
             _logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
             return error_response("tapps_quick_check", "scoring_failed", str(exc))
 
-        # Create a dummy security result for non-Python files
         from tapps_mcp.security.security_scanner import SecurityScanResult
 
         sec_result = SecurityScanResult(
@@ -632,7 +788,6 @@ async def tapps_quick_check(
             total_issues=0,
         )
 
-    # Complexity hint (Python only, uses AST)
     complexity_hint = _compute_complexity_hint(resolved) if is_python else None
     gate_result = evaluate_gate(score_result, preset=preset)
 
@@ -651,6 +806,10 @@ async def tapps_quick_check(
     )
 
     _attach_uncached_libraries_hint(data, resolved, settings.project_root)
+
+    # Story 75.2: Cross-file kwarg mismatch detection (Python only)
+    if is_python:
+        _attach_cross_file_analysis(data, resolved, settings.project_root)
 
     resp = success_response(
         "tapps_quick_check",

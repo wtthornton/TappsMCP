@@ -475,6 +475,55 @@ def _resolve_security_depth(
     return (security_depth == "full") or (include_security and not quick)
 
 
+def _build_per_file_results(
+    results: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Build machine-readable per-file results and grep-friendly summary rows.
+
+    Returns:
+        Tuple of (per_file_results list, summary_rows text lines).
+    """
+    per_file: list[dict[str, Any]] = []
+    rows: list[str] = []
+
+    for r in results:
+        file_path = r.get("file_path", r.get("file", "unknown"))
+        file_name = Path(file_path).name if file_path != "unknown" else "unknown"
+        gate_passed = r.get("gate_passed", False)
+        score = r.get("score", r.get("overall_score", 0.0))
+        security_issues = r.get("security_issues", 0)
+        errors = r.get("errors", [])
+
+        status = "PASS" if gate_passed and not errors else "FAIL"
+        security_status = "fail" if security_issues > 0 else "pass"
+        issue_count = len(errors) + security_issues
+
+        entry: dict[str, Any] = {
+            "file": file_name,
+            "file_path": str(file_path),
+            "status": status,
+            "score": round(float(score), 1) if score else 0.0,
+            "gate_passed": gate_passed,
+            "security_passed": security_issues == 0,
+            "issue_count": issue_count,
+        }
+        per_file.append(entry)
+
+        # Build grep-friendly row
+        row_parts = [
+            f"{status:<5}",
+            f"{file_name:<30}",
+            f"score={entry['score']:.1f}",
+            f"gate={'pass' if gate_passed else 'fail'}",
+            f"security={security_status}",
+        ]
+        if issue_count > 0:
+            row_parts.append(f"issues={issue_count}")
+        rows.append("  ".join(row_parts))
+
+    return per_file, rows
+
+
 def _build_validation_summary(
     results: list[dict[str, Any]],
     quick: bool,
@@ -500,6 +549,7 @@ async def tapps_validate_changed(
     quick: bool = True,
     security_depth: str = "basic",
     include_impact: bool = True,
+    correlation_id: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """REQUIRED before declaring multi-file work complete.
@@ -531,6 +581,8 @@ async def tapps_validate_changed(
         security_depth: Security scan depth - "basic" (default) or "full". When "full",
             security scan runs even in quick mode.
         include_impact: Whether to run impact analysis on changed files (default: True).
+        correlation_id: Optional caller-provided ID echoed in the response for traceability.
+            Empty string (default) means no correlation ID is included in the response.
         ctx: Optional MCP context (injected by host); used for progress notifications.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
@@ -547,6 +599,8 @@ async def tapps_validate_changed(
         return _handle_no_changed_files(
             start, settings, _record_execution, _with_nudges,
             explicit_paths=bool(file_paths.strip()),
+            base_ref=base_ref,
+            correlation_id=correlation_id,
         )
 
     capped = len(paths) > MAX_BATCH_FILES
@@ -596,6 +650,7 @@ async def tapps_validate_changed(
     )
 
     summary = _build_validation_summary(results, quick, capped, extra_count)
+    per_file_results, summary_rows = _build_per_file_results(results)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_validate_changed", start, gate_passed=all_passed)
@@ -607,11 +662,15 @@ async def tapps_validate_changed(
         "files_validated": len(results),
         "all_gates_passed": all_passed,
         "total_security_issues": total_sec,
+        "per_file_results": per_file_results,
+        "summary_rows": summary_rows,
         "results": results,
         "summary": summary,
     }
     if impact_data is not None:
         resp_data["impact_summary"] = impact_data
+    if correlation_id.strip():
+        resp_data["correlation_id"] = correlation_id.strip()
 
     resp = success_response("tapps_validate_changed", elapsed_ms, resp_data)
     _build_structured_validation_output(results, all_passed, security_depth, impact_data, resp)
@@ -625,6 +684,8 @@ def _handle_no_changed_files(
     with_nudges: Callable[..., dict[str, object]],
     *,
     explicit_paths: bool = False,
+    base_ref: str = "HEAD",
+    correlation_id: str = "",
 ) -> dict[str, Any]:
     """Return early response when no changed Python files are found."""
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -643,8 +704,19 @@ def _handle_no_changed_files(
         "all_gates_passed": True,
         "total_security_issues": 0,
         "results": [],
-        "summary": "No changed Python files found.",
+        "summary": "No changed scorable files found.",
     }
+
+    warnings: list[str] = []
+
+    # Warn when auto-detecting with base_ref=HEAD and zero files found
+    if not explicit_paths and base_ref.strip().upper() == "HEAD":
+        warnings.append(
+            "Zero changed files detected with base_ref=HEAD. "
+            "If you have staged-but-uncommitted changes, diff against HEAD "
+            "will not include them. Consider committing first or using a "
+            "different base_ref (e.g. base_ref='HEAD~1')."
+        )
 
     if explicit_paths:
         resp_data["path_hint"] = (
@@ -657,6 +729,11 @@ def _handle_no_changed_files(
             "Check that file paths are relative to server's project_root"
             " or use TAPPS_MCP_HOST_PROJECT_ROOT.",
         ]
+
+    if warnings:
+        resp_data["warnings"] = warnings
+    if correlation_id.strip():
+        resp_data["correlation_id"] = correlation_id.strip()
 
     resp = success_response(
         "tapps_validate_changed",
@@ -1220,6 +1297,23 @@ async def tapps_session_start(
         "Call tapps_project_profile when you need project context"
         " (tech stack, type, CI/Docker/tests)."
     )
+    # Docker path mapping (Story 75.1)
+    path_mapping = None
+    container_warning = None
+    try:
+        from tapps_core.common.utils import get_path_mapping, is_running_in_container
+
+        if is_running_in_container():
+            path_mapping = get_path_mapping()
+            if path_mapping and not path_mapping.get("mapping_available"):
+                container_warning = (
+                    "Running in container but TAPPS_HOST_ROOT not set. "
+                    "File paths will use container paths (e.g. /workspace/...). "
+                    "Set TAPPS_HOST_ROOT to enable host path mapping."
+                )
+    except Exception:
+        _logger.debug("path_mapping_detection_failed", exc_info=True)
+
     data: dict[str, Any] = {
         "server": info["data"]["server"],
         "configuration": info["data"]["configuration"],
@@ -1241,7 +1335,12 @@ async def tapps_session_start(
             "(tech stack, type, recommendations). Session start does not include profile."
         ),
         "timings": timings,
+        "path_mapping": path_mapping,
+        "cache": info["data"].get("cache"),
     }
+
+    if container_warning:
+        data["warnings"] = [container_warning]
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
 
@@ -1292,9 +1391,13 @@ async def _session_start_quick(
     diagnostics, memory GC, contradiction checks, and business expert loading.
     """
     from tapps_mcp import __version__
+    from tapps_mcp.server import _bootstrap_cache_dir, _cache_info_dict
     from tapps_mcp.tools.tool_detection import detect_installed_tools
 
     settings = load_settings()
+
+    # Story 75.3: Auto-create cache directory for faster subsequent starts
+    cache_dir, cache_fallback = _bootstrap_cache_dir(settings.project_root)
 
     # Load tools from cache only (disk cache -> memory cache, no subprocesses if cached)
     installed = detect_installed_tools()
@@ -1314,6 +1417,7 @@ async def _session_start_quick(
             "log_level": settings.log_level,
         },
         "installed_checkers": [t.model_dump() for t in installed],
+        "cache": _cache_info_dict(cache_dir, cache_fallback),
         "quick": True,
         "recommended_next": (
             "Quick session started (diagnostics skipped). "

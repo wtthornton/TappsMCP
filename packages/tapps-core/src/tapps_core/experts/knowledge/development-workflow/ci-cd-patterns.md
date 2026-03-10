@@ -205,3 +205,16 @@ CMD ["python", "app.py"]
 5. **Secret Hardcoding**: Use secrets management
 6. **Skipping Tests**: Don't disable tests
 7. **Monolithic Pipelines**: Break into stages
+
+## Typical steps
+
+Follow this process when setting up or improving a CI/CD pipeline:
+
+1. **Define pipeline stages**: Identify build, lint, test, security scan, and deploy stages
+2. **Configure source triggers**: Set up triggers for push to main, PRs, and tag releases
+3. **Add linting and formatting**: Run ruff/eslint and formatters as the first quality gate
+4. **Add test execution**: Run unit tests with coverage; fail the build below coverage threshold
+5. **Add security scanning**: Integrate dependency scanning (pip-audit/npm audit) and secret detection
+6. **Build artifacts**: Create Docker images, packages, or binaries with version tags
+7. **Deploy to staging**: Auto-deploy passing builds to a staging environment; run smoke tests
+8. **Deploy to production**: Use blue-green or canary deployment; enable rollback on health check failure

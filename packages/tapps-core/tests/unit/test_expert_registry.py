@@ -84,6 +84,13 @@ class TestExpertRegistry:
         assert expert.expert_name == "Security Expert"
         assert expert.rag_enabled is True
 
+    def test_all_experts_have_persona(self) -> None:
+        for expert in ExpertRegistry.BUILTIN_EXPERTS:
+            assert expert.persona, f"{expert.expert_id} is missing a persona"
+            assert len(expert.persona) >= 20, (
+                f"{expert.expert_id} persona is too short: {expert.persona!r}"
+            )
+
     def test_performance_expert_has_knowledge_dir_override(self) -> None:
         expert = ExpertRegistry.get_expert_by_id("expert-performance")
         assert expert is not None

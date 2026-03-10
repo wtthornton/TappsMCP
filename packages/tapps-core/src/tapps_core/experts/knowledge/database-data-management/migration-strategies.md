@@ -214,3 +214,16 @@ END WHILE;
 9. **Zero-downtime:** When possible
 10. **Review:** Post-migration review
 
+## Typical steps
+
+Follow this process when planning and executing a database migration:
+
+1. **Assess the change**: Determine if this is a schema migration, data migration, or both; estimate impact
+2. **Write the migration**: Create versioned up/down migration scripts using your tool (Alembic, Flyway, etc.)
+3. **Write rollback scripts**: Ensure every migration has a tested rollback path
+4. **Test on development**: Run the migration against a dev database; verify data integrity
+5. **Test on staging**: Run against a staging copy of production data; measure execution time and locks
+6. **Take a backup**: Create a full backup of the production database immediately before migration
+7. **Execute in production**: Run the migration during a low-traffic window; monitor locks, CPU, and I/O
+8. **Verify and document**: Confirm data integrity post-migration; document what changed and any issues
+

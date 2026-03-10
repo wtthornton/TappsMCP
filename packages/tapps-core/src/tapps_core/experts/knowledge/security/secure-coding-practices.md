@@ -207,3 +207,33 @@ except Exception as e:
 - [CWE Top 25](https://cwe.mitre.org/top25/)
 - [NIST Cybersecurity Framework](https://www.nist.gov/cyberframework)
 
+## Success metrics
+
+- Zero high/critical findings in security scan
+- No hardcoded secrets or API keys in codebase
+- All user input validated and sanitized
+- OWASP Top 10 mitigations verified
+- Dependencies free of known CVEs (pip-audit clean)
+- Authentication and authorization enforced on all endpoints
+- Secrets rotated on schedule (at least quarterly)
+- Security headers configured (CSP, HSTS, X-Frame-Options)
+
+## Checklist
+
+Use this checklist for security review of code changes:
+
+- [ ] No hardcoded secrets, API keys, or credentials
+- [ ] All user input is validated (type, length, format)
+- [ ] SQL queries use parameterized statements (no string interpolation)
+- [ ] Output is encoded/escaped to prevent XSS
+- [ ] Authentication is enforced on all non-public endpoints
+- [ ] Authorization checks verify user has required permissions
+- [ ] Sensitive data is encrypted at rest and in transit
+- [ ] Error messages do not leak internal details or stack traces
+- [ ] File uploads are validated (type, size, content)
+- [ ] Rate limiting is applied to authentication endpoints
+- [ ] Dependencies have no known high/critical CVEs
+- [ ] Logging does not include sensitive data (passwords, tokens)
+- [ ] CORS policy is restrictive (not wildcard in production)
+- [ ] CSRF protection is enabled for state-changing operations
+

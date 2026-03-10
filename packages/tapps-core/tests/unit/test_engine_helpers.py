@@ -163,6 +163,134 @@ class TestFormatResponseIncludesDomain:
 
 
 # ---------------------------------------------------------------------------
+# _build_answer / communication_style (Epic 73)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildAnswerCommunicationStyle:
+    """Tests for communication_style in _build_answer (Epic 73)."""
+
+    def _make_knowledge(self) -> _KnowledgeResult:
+        return _KnowledgeResult(
+            chunks=[
+                KnowledgeChunk(
+                    content="Use parameterised queries.",
+                    source_file="security.md",
+                    line_start=1,
+                    line_end=1,
+                    score=0.9,
+                )
+            ],
+            context="Use parameterised queries.",
+            sources=["security.md"],
+        )
+
+    def _make_conf(self) -> "_ConfidenceResult":
+        from tapps_core.experts.engine import _ConfidenceResult
+        from tapps_core.experts.models import ConfidenceFactors
+
+        return _ConfidenceResult(
+            confidence=0.8,
+            factors=ConfidenceFactors(rag_quality=0.8, source_count=1, chunk_coverage=0.7),
+        )
+
+    def test_communication_style_appears_in_answer(self) -> None:
+        """When communication_style is set, it appears in the answer preamble."""
+        from tapps_core.experts.models import ExpertConfig
+
+        expert = ExpertConfig(
+            expert_id="expert-test",
+            expert_name="Test Expert",
+            primary_domain="testing-strategies",
+            communication_style="Use concrete examples with test code snippets.",
+        )
+        result = _build_answer(
+            question="How to test?",
+            expert=expert,
+            resolved_domain="testing-strategies",
+            knowledge=self._make_knowledge(),
+            conf=self._make_conf(),
+        )
+        assert "Style: Use concrete examples with test code snippets." in result.answer
+
+    def test_no_communication_style_no_style_line(self) -> None:
+        """When communication_style is empty, no Style: line appears."""
+        from tapps_core.experts.models import ExpertConfig
+
+        expert = ExpertConfig(
+            expert_id="expert-test",
+            expert_name="Test Expert",
+            primary_domain="testing-strategies",
+        )
+        result = _build_answer(
+            question="How to test?",
+            expert=expert,
+            resolved_domain="testing-strategies",
+            knowledge=self._make_knowledge(),
+            conf=self._make_conf(),
+        )
+        assert "Style:" not in result.answer
+
+    def test_persona_and_communication_style_both_appear(self) -> None:
+        """When both persona and communication_style are set, both appear."""
+        from tapps_core.experts.models import ExpertConfig
+
+        expert = ExpertConfig(
+            expert_id="expert-test",
+            expert_name="Test Expert",
+            primary_domain="testing-strategies",
+            persona="Senior test engineer with 10 years experience.",
+            communication_style="Recommend specific testing patterns by name.",
+        )
+        result = _build_answer(
+            question="How to test?",
+            expert=expert,
+            resolved_domain="testing-strategies",
+            knowledge=self._make_knowledge(),
+            conf=self._make_conf(),
+        )
+        assert "Senior test engineer" in result.answer
+        assert "Style: Recommend specific testing patterns by name." in result.answer
+        persona_pos = result.answer.index("Senior test engineer")
+        style_pos = result.answer.index("Style:")
+        assert persona_pos < style_pos
+
+    def test_builtin_security_expert_has_communication_style(self) -> None:
+        """The Security expert in the registry has communication_style set."""
+        from tapps_core.experts.registry import ExpertRegistry
+
+        expert = ExpertRegistry.get_expert_for_domain("security")
+        assert expert is not None
+        assert expert.communication_style != ""
+        assert "CWE" in expert.communication_style
+
+    def test_builtin_testing_expert_has_communication_style(self) -> None:
+        """The Testing expert in the registry has communication_style set."""
+        from tapps_core.experts.registry import ExpertRegistry
+
+        expert = ExpertRegistry.get_expert_for_domain("testing-strategies")
+        assert expert is not None
+        assert expert.communication_style != ""
+        assert "Arrange-Act-Assert" in expert.communication_style
+
+    def test_expert_without_style_unchanged(self) -> None:
+        """Experts without communication_style produce same output as before."""
+        from tapps_core.experts.registry import ExpertRegistry
+
+        expert = ExpertRegistry.get_expert_for_domain("performance-optimization")
+        assert expert is not None
+        assert expert.communication_style == ""
+        result = _build_answer(
+            question="How to optimize?",
+            expert=expert,
+            resolved_domain="performance-optimization",
+            knowledge=self._make_knowledge(),
+            conf=self._make_conf(),
+        )
+        assert "Style:" not in result.answer
+
+
+# ---------------------------------------------------------------------------
 # _unique_top_sources (newly extracted helper)
 # ---------------------------------------------------------------------------
 

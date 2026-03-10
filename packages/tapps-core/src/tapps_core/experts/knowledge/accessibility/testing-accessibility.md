@@ -367,3 +367,31 @@ Accessibility testing ensures that websites and applications are usable by peopl
 9. **Stay Current**: Follow latest standards
 10. **User Feedback**: Gather and act on feedback
 
+## Success metrics
+
+- WCAG 2.1 AA compliance on all user-facing pages
+- Lighthouse Accessibility score >=90
+- Zero critical accessibility violations in automated scan
+- Keyboard navigation works for all interactive elements
+- Screen reader announces all dynamic content changes
+- Color contrast ratio meets minimum 4.5:1 for normal text
+- All images have meaningful alt text or are marked decorative
+- Focus order is logical and visible on all pages
+
+## Checklist
+
+Use this checklist when auditing a page or component for accessibility:
+
+- [ ] All images have appropriate alt text
+- [ ] Color contrast meets WCAG AA ratio (4.5:1 normal, 3:1 large text)
+- [ ] All interactive elements are keyboard accessible
+- [ ] Focus indicator is visible on all focusable elements
+- [ ] Tab order follows logical reading order
+- [ ] ARIA roles and labels are used correctly (no redundant ARIA)
+- [ ] Form inputs have associated labels
+- [ ] Error messages are announced to screen readers
+- [ ] Dynamic content updates are communicated via live regions
+- [ ] Skip navigation link is present
+- [ ] Page has proper heading hierarchy (h1 > h2 > h3)
+- [ ] No content relies solely on color to convey meaning
+

@@ -39,6 +39,15 @@ class BusinessExpertEntry(BaseModel):
         default="",
         description="Optional persona/voice for consultation responses.",
     )
+    critical_rules: str = Field(
+        default="",
+        description="Optional critical rules or default stance prepended with persona in "
+        "consultation answers.",
+    )
+    communication_style: str = Field(
+        default="",
+        description="Optional communication style or example phrases for consultation responses.",
+    )
 
     @field_validator("expert_id")
     @classmethod
@@ -129,6 +138,8 @@ def load_business_experts(project_root: Path) -> list[ExpertConfig]:
                 knowledge_dir=entry.knowledge_dir,
                 is_builtin=False,
                 persona=entry.persona,
+                critical_rules=entry.critical_rules,
+                communication_style=entry.communication_style,
             )
         )
 

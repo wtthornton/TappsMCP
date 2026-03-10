@@ -23,6 +23,7 @@ CONFIG_PATTERNS: dict[str, list[re.Pattern[str]]] = {
     "websocket": [re.compile(r"\.py$|\.ts$|\.js$", re.IGNORECASE)],
     "mqtt": [re.compile(r"\.py$|\.ts$|\.js$", re.IGNORECASE)],
     "influxdb": [re.compile(r"\.py$|\.ts$|\.js$", re.IGNORECASE)],
+    "mcp": [re.compile(r"^\.?mcp\.json$", re.IGNORECASE)],
 }
 
 # Content signatures for code-file validators
@@ -50,6 +51,10 @@ def detect_config_type(file_path: str, content: str | None = None) -> str | None
         Config type string (e.g., ``"dockerfile"``) or ``None`` if unknown.
     """
     name = Path(file_path).name
+
+    # MCP config detection - covers mcp.json, .mcp.json, .cursor/mcp.json, etc.
+    if name.lower() in ("mcp.json", ".mcp.json"):
+        return "mcp"
 
     # Filename-based detection (definitive for Dockerfile / docker-compose)
     for config_type, patterns in CONFIG_PATTERNS.items():
@@ -122,6 +127,11 @@ def validate_config(
         from tapps_mcp.validators.influxdb import validate_influxdb
 
         return validate_influxdb(file_path, content)
+
+    if resolved_type == "mcp":
+        from tapps_mcp.validators.mcp_config import validate_mcp_config
+
+        return validate_mcp_config(file_path, content)
 
     return ConfigValidationResult(
         file_path=file_path,

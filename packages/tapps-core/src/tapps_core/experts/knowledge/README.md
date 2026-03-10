@@ -220,6 +220,38 @@ The next `tapps_consult_expert` call for that domain will rebuild the index from
 - **Be structured**: Use headers and sections for easy navigation
 - **Be actionable**: Provide clear guidance and checklists
 
+## Knowledge Enrichment Patterns
+
+Beyond core technical content (patterns, examples, anti-patterns), knowledge files can include enrichment sections that make expert consultation answers more actionable. Use these patterns when adding or updating knowledge files.
+
+### Success metrics / Definition of done
+
+Add a `## Success metrics` section with concrete, measurable thresholds that define "what good looks like" for the domain. Use bullet lists with specific numbers where possible.
+
+**When to add:** Any domain where users ask "how do I know this is good enough?" -- testing (coverage targets), performance (latency budgets), security (zero critical findings), accessibility (WCAG level), code quality (complexity limits).
+
+**Example files:** `testing/best-practices.md`, `performance/optimization-patterns.md`, `code-quality-analysis/quality-gates.md`
+
+### Typical steps / Recommended process
+
+Add a `## Typical steps` or `## Recommended process` section with a numbered list of 5-8 sequential steps that guide the user through a workflow. Each step should be one line with a brief explanation.
+
+**When to add:** Any domain with a multi-step workflow -- security reviews, API design, database migrations, CI/CD setup, testing strategy planning.
+
+**Example files:** `testing/test-strategies.md`, `security/threat-modeling.md`, `api-design-integration/restful-api-design.md`
+
+### Deliverable templates (checklists, report outlines)
+
+Add a `## Checklist` or `## Template` section with a markdown checkbox list (10-15 items) or a report outline that users can copy and adapt. Checklists work well for review processes; templates work well for deliverables.
+
+**When to add:** Domains with review or audit processes -- security reviews, testing sign-off, accessibility audits, code quality gates.
+
+**Example files:** `security/secure-coding-practices.md`, `testing/best-practices.md`, `accessibility/testing-accessibility.md`
+
+### When-to-use guidance
+
+Each expert domain already has a description in the registry. Optionally, the first knowledge file in a domain can include a brief "Use this expert when..." note to help RAG match ambiguous queries to the right domain.
+
 ## References
 
 - [Knowledge Base Guide](../../../docs/KNOWLEDGE_BASE_GUIDE.md)

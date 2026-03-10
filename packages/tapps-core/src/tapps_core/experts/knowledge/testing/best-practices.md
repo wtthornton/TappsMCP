@@ -303,6 +303,33 @@ def test_calculate_total_with_discount():
 - Use real objects when possible
 - Balance isolation and realism
 
+## Success metrics
+
+- Test coverage >=80% for all changed code
+- Zero failing tests in CI before merge
+- Critical paths have integration tests, not just unit tests
+- Test execution time <5 minutes for unit suite
+- Flaky test rate <1% of total test runs
+- All public API functions have at least one test
+- Mutation testing score >=70% on critical modules
+
+## Checklist
+
+Use this checklist before declaring testing complete on a feature or PR:
+
+- [ ] Unit tests cover all new/changed functions
+- [ ] Edge cases and error paths are tested
+- [ ] Integration tests cover cross-module interactions
+- [ ] No hardcoded test data that could become stale
+- [ ] Tests are independent and can run in any order
+- [ ] Mocks are minimal and only mock external dependencies
+- [ ] Test names clearly describe the scenario and expected outcome
+- [ ] CI pipeline passes with zero failures
+- [ ] Coverage report reviewed for uncovered branches
+- [ ] Performance-sensitive code has benchmark tests
+- [ ] Flaky tests identified and fixed or quarantined
+- [ ] Test documentation updated if testing patterns changed
+
 ## References
 
 - [Testing Best Practices](https://testing.googleblog.com/)

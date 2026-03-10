@@ -616,3 +616,16 @@ GET /api/userList
 /api/v1/users/123/posts/456/comments/789/reactions/10
 ```
 
+## Typical steps
+
+Follow this process when designing a new REST API or extending an existing one:
+
+1. **Identify resources**: List the domain entities (users, orders, products) and their relationships
+2. **Define URL structure**: Map resources to nouns; use plural names and limit nesting to 2 levels
+3. **Choose HTTP methods**: Assign GET, POST, PUT, PATCH, DELETE to each operation; ensure idempotency
+4. **Design request/response schemas**: Define JSON payloads using Pydantic or OpenAPI models
+5. **Plan error handling**: Establish a consistent error response format with error codes and messages
+6. **Add pagination and filtering**: Implement cursor- or offset-based pagination for list endpoints
+7. **Document with OpenAPI**: Write the OpenAPI spec; generate interactive docs (Swagger UI / Redoc)
+8. **Implement security**: Add authentication (OAuth 2.1 / JWT), rate limiting, input validation, and CORS
+

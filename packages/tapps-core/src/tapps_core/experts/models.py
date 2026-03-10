@@ -33,6 +33,18 @@ class ExpertConfig(BaseModel):
         "(e.g. 'Senior security architect with 15 years in AppSec'). "
         "When set, prepended to answer assembly.",
     )
+    critical_rules: str = Field(
+        default="",
+        description="Optional critical rules or default stance prepended with persona in "
+        "consultation answers (e.g. 'Assume breach' for Security). When set, appears after "
+        "persona in answer assembly.",
+    )
+    communication_style: str = Field(
+        default="",
+        description="Optional communication style or example phrases for consultation responses "
+        "(e.g. 'Use concrete examples; cite specific line numbers'). When set, appended to "
+        "answer assembly preamble after persona and critical_rules.",
+    )
 
 
 class KnowledgeChunk(BaseModel):
@@ -169,4 +181,12 @@ class ExpertInfo(BaseModel):
     persona: str = Field(
         default="",
         description="Optional persona/voice for consultation responses.",
+    )
+    critical_rules: str = Field(
+        default="",
+        description="Optional critical rules or default stance for consultation answers.",
+    )
+    communication_style: str = Field(
+        default="",
+        description="Optional communication style or example phrases.",
     )

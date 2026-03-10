@@ -218,3 +218,16 @@ For each identified threat:
 - [MITRE ATT&CK](https://attack.mitre.org/)
 - [STRIDE Methodology](https://en.wikipedia.org/wiki/STRIDE_(security))
 
+## Recommended process
+
+Follow this process when conducting a security review or threat model:
+
+1. **Define scope**: Identify the system, feature, or change under review and its trust boundaries
+2. **Gather context**: Collect architecture diagrams, data flow diagrams, and deployment information
+3. **Enumerate assets**: List sensitive data, services, APIs, and infrastructure components
+4. **Identify threats**: Apply STRIDE to each component and data flow; use MITRE ATT&CK for threat examples
+5. **Assess risk**: Rate each threat using DREAD or a simple likelihood/impact matrix
+6. **Design mitigations**: Propose countermeasures for high and critical risks; document accepted risks
+7. **Verify implementation**: Confirm mitigations are coded, tested, and deployed correctly
+8. **Document and review**: Record the threat model, share with the team, and schedule periodic re-review
+
