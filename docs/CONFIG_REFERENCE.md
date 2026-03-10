@@ -185,7 +185,7 @@ quality_gate:
 tool_timeout: 45
 
 memory:
-  max_memories: 1000
+  max_memories: 2000        # default 1500; increase for large projects
   gc_auto_threshold: 0.7
 ```
 

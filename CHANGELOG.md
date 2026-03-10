@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Memory cap** — Increased default `max_memories` from 500 to 1500 per project
+- **Memory documentation** — Comprehensive 20-action reference added to AGENTS.md templates (high/medium/low), all 6 platform rules, and skill templates
+- **Memory system docs** — All templates now document 4 tiers, 4 scopes, federation, consolidation, and configuration examples
+
+### Fixed
+
+- **Dockerfile.platform** — Fixed missing README references for docs-mcp wheel build
+- **PyInstaller bundle** — Rebuilt exe to include all engagement-level template files (agents_template_medium.md, platform_cursor_medium.md, etc.)
+
 ## [1.0.0] - 2026-03-06
 
 ### Highlights
