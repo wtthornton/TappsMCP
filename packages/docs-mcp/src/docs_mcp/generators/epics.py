@@ -614,11 +614,13 @@ class EpicGenerator:
         sufficient confidence. Omitted entirely otherwise.
         """
         expert_guidance: list[dict[str, str]] = (enrichment or {}).get("expert_guidance", [])
+        from docs_mcp.generators.expert_utils import parse_confidence
+
         perf_experts = [
             g for g in expert_guidance
             if g.get("domain") == "performance"
             and g.get("advice", "").strip()
-            and self._parse_confidence(g.get("confidence", "0%")) >= 0.5
+            and parse_confidence(g.get("confidence", "0%")) >= 0.5
         ]
 
         if not perf_experts:
@@ -933,18 +935,14 @@ class EpicGenerator:
                 result = consult_expert(question, domain=domain, max_chunks=3,
                                         max_context_length=1500)
                 if result.confidence >= 0.3 and result.answer:
-                    # Extract first meaningful paragraph, skipping markdown headers.
-                    first_para = ""
-                    for para in result.answer.strip().split("\n\n"):
-                        cleaned = para.strip()
-                        if cleaned and not cleaned.startswith("#"):
-                            first_para = cleaned
-                            break
-                    if first_para:
+                    from docs_mcp.generators.expert_utils import extract_expert_advice
+
+                    advice = extract_expert_advice(result.answer)
+                    if advice:
                         guidance.append({
                             "domain": result.domain,
                             "expert": result.expert_name,
-                            "advice": first_para,
+                            "advice": advice,
                             "confidence": f"{result.confidence:.0%}",
                         })
             except Exception:
@@ -955,55 +953,15 @@ class EpicGenerator:
 
     # -- expert filtering (Epic 18.3) ---------------------------------------
 
-    _NO_KNOWLEDGE_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
-        r"no specific knowledge found", re.IGNORECASE,
-    )
-
     @classmethod
     def _filter_expert_guidance(
         cls,
         guidance: list[dict[str, str]],
     ) -> list[dict[str, str]]:
-        """Filter expert guidance based on confidence and content quality.
+        """Filter expert guidance based on confidence and content quality."""
+        from docs_mcp.generators.expert_utils import filter_expert_guidance
 
-        - Confidence < 30%: suppressed entirely.
-        - Confidence 30-50%: replaced with review-recommended message.
-        - Confidence >= 50% with real content: rendered as-is.
-        - Empty or "No specific knowledge" advice: suppressed.
-        """
-        filtered: list[dict[str, str]] = []
-        for item in guidance:
-            advice = item.get("advice", "").strip()
-            confidence = cls._parse_confidence(item.get("confidence", "0%"))
-
-            # Skip empty or "no knowledge" advice.
-            if not advice or cls._NO_KNOWLEDGE_PATTERN.search(advice):
-                continue
-
-            if confidence < 0.3:
-                continue
-
-            if confidence < 0.5:
-                domain = item.get("domain", "unknown")
-                filtered.append({
-                    **item,
-                    "advice": (
-                        f"Expert review recommended for {domain} "
-                        f"- automated analysis inconclusive"
-                    ),
-                })
-            else:
-                filtered.append(item)
-
-        return filtered
-
-    @staticmethod
-    def _parse_confidence(confidence_str: str) -> float:
-        """Parse a confidence string like '85%' to 0.85."""
-        try:
-            return float(confidence_str.rstrip("%")) / 100
-        except (ValueError, AttributeError):
-            return 0.0
+        return filter_expert_guidance(guidance)
 
     @staticmethod
     def _find_risk_expert_advice(

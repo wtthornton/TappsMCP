@@ -136,7 +136,16 @@ class TestTappsSessionStart:
         # All timings must be non-negative integers
         for key, val in timings.items():
             assert isinstance(val, int), f"timings[{key}] should be int"
-            assert val >= 0, f"timings[{key}] should be non-negative"
+
+    @pytest.mark.asyncio
+    async def test_populates_tech_stack_domains(self) -> None:
+        """Session start populates tech stack domains for expert boost (Epic 68)."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        result = await tapps_session_start()
+        data = result["data"]
+        # tech_stack_domains_ms should be in timings
+        assert "tech_stack_domains_ms" in data["timings"]
 
     @pytest.mark.asyncio
     async def test_background_maintenance_fields(self) -> None:

@@ -1,7 +1,7 @@
 # Epic 68: Expert & Research Effectiveness
 
 <!-- docsmcp:start:metadata -->
-- **Status:** Open
+- **Status:** Complete
 - **Priority:** P1
 - **Estimated LOE:** ~2 weeks (1 developer)
 - **Dependencies:** None (builds on existing expert/research infrastructure)

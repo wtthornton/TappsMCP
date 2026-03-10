@@ -520,25 +520,23 @@ class StoryGenerator:
                 result = consult_expert(question, domain=domain, max_chunks=3,
                                         max_context_length=1500)
                 if result.confidence >= 0.3 and result.answer:
-                    # Skip markdown headers to get actual advice content.
-                    first_para = ""
-                    for para in result.answer.strip().split("\n\n"):
-                        cleaned = para.strip()
-                        if cleaned and not cleaned.startswith("#"):
-                            first_para = cleaned
-                            break
-                    if first_para:
+                    from docs_mcp.generators.expert_utils import extract_expert_advice
+
+                    advice = extract_expert_advice(result.answer)
+                    if advice:
                         guidance.append({
                             "domain": result.domain,
                             "expert": result.expert_name,
-                            "advice": first_para,
+                            "advice": advice,
                             "confidence": f"{result.confidence:.0%}",
                         })
             except Exception:
                 logger.debug("story_expert_consult_failed", domain=domain, exc_info=True)
 
         if guidance:
-            enrichment["expert_guidance"] = guidance
+            from docs_mcp.generators.expert_utils import filter_expert_guidance
+
+            enrichment["expert_guidance"] = filter_expert_guidance(guidance)
 
     # -- helpers -----------------------------------------------------------
 

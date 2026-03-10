@@ -19,6 +19,9 @@ from docs_mcp.server_helpers import _get_settings, error_response, success_respo
 async def docs_check_drift(
     since: str = "",
     doc_dirs: str = "",
+    source_files: str = "",
+    search_names: str = "",
+    max_items: int = 0,
     project_root: str = "",
 ) -> dict[str, Any]:
     """Detect documentation drift -- code changes not reflected in docs.
@@ -30,6 +33,14 @@ async def docs_check_drift(
         since: Reserved for future use (git ref or date filter).
         doc_dirs: Comma-separated list of documentation directories to search.
             When empty, scans the entire project for doc files.
+        source_files: Comma-separated list of source file paths to limit drift
+            analysis to. Paths are relative to project root (e.g.
+            ``"server.py,upgrade.py"``). When empty, scans all Python files.
+        search_names: Comma-separated list of public names (functions, classes)
+            to search for in drift items. Only items containing at least one
+            matching name are returned.
+        max_items: Maximum number of drift items to return. 0 means unlimited
+            (default). Summary counts always reflect the unfiltered totals.
         project_root: Override project root path (default: configured root).
     """
     _record_call("docs_check_drift")
@@ -51,13 +62,50 @@ async def docs_check_drift(
     if doc_dirs.strip():
         dirs_list = [d.strip() for d in doc_dirs.split(",") if d.strip()]
 
+    # Parse source_files filter
+    source_filter: list[str] | None = None
+    if source_files.strip():
+        source_filter = [f.strip() for f in source_files.split(",") if f.strip()]
+
     report = detector.check(
         root,
         since=since if since.strip() else None,
         doc_dirs=dirs_list,
     )
 
-    data: dict[str, Any] = report.model_dump()
+    # Apply post-filters on the report items
+    items = report.items
+    total_unfiltered = len(items)
+
+    if source_filter:
+        normalised = {sf.replace("\\", "/").lower() for sf in source_filter}
+        items = [
+            it for it in items
+            if any(it.file_path.lower().endswith(sf) for sf in normalised)
+        ]
+
+    if search_names.strip():
+        names_lower = {
+            n.strip().lower() for n in search_names.split(",") if n.strip()
+        }
+        items = [
+            it for it in items
+            if any(nm in it.description.lower() for nm in names_lower)
+        ]
+
+    total_filtered = len(items)
+
+    if max_items > 0:
+        items = items[:max_items]
+
+    data: dict[str, Any] = {
+        "total_items": total_filtered,
+        "total_unfiltered": total_unfiltered,
+        "showing": len(items),
+        "items": [it.model_dump() for it in items],
+        "drift_score": report.drift_score,
+        "checked_files": report.checked_files,
+    }
 
     # Optional TappsMCP enrichment
     try:

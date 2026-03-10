@@ -1,7 +1,7 @@
 # DocsMCP Epic 21: Tool Quality & Usability Improvements
 
 <!-- docsmcp:start:metadata -->
-- **Status:** Open
+- **Status:** Complete
 - **Priority:** P1
 - **Estimated LOE:** ~2 weeks (1 developer)
 - **Dependencies:** None (all improvements are to existing tools)

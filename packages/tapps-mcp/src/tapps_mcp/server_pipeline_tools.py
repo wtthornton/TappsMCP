@@ -1175,6 +1175,23 @@ async def tapps_session_start(
         _logger.debug("business_experts_load_failed", exc_info=True)
     timings["business_experts_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
 
+    # Populate tech stack domains for expert consultation boost (Epic 68).
+    # Uses the lightweight TECH_STACK_TO_EXPERT_DOMAINS mapping — no subprocess
+    # or file-system scan required, just reads the project's detected tech stack.
+    phase_start = time.perf_counter_ns()
+    try:
+        ts_settings = load_settings()
+        if ts_settings.project_root.is_dir():
+            from tapps_core.experts.engine import set_tech_stack_domains
+            from tapps_core.experts.rag_warming import tech_stack_to_expert_domains
+
+            domains = tech_stack_to_expert_domains(ts_settings.project_root)
+            if domains:
+                set_tech_stack_domains(domains)
+    except Exception:
+        _logger.debug("tech_stack_domains_population_failed", exc_info=True)
+    timings["tech_stack_domains_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)
     timings["total_ms"] = elapsed_ms

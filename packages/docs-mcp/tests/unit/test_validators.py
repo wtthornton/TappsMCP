@@ -612,10 +612,18 @@ class TestDocsCheckDriftTool:
     @pytest.mark.asyncio
     async def test_with_patched_detector(self, tmp_path: Path) -> None:
         """Verify tool delegates to DriftDetector correctly."""
-        from docs_mcp.validators.drift import DriftReport
+        from docs_mcp.validators.drift import DriftItem, DriftReport
 
         mock_report = DriftReport(
             total_items=3,
+            items=[
+                DriftItem(
+                    file_path=f"src/mod{i}.py",
+                    drift_type="added_undocumented",
+                    description=f"Public names not found in docs: func_{i}",
+                )
+                for i in range(3)
+            ],
             drift_score=0.5,
             checked_files=6,
         )
@@ -630,6 +638,221 @@ class TestDocsCheckDriftTool:
         assert result["success"] is True
         assert result["data"]["total_items"] == 3
         assert result["data"]["drift_score"] == 0.5
+
+    @pytest.mark.asyncio
+    async def test_source_files_filter(self, tmp_path: Path) -> None:
+        """source_files limits results to matching file paths."""
+        from unittest.mock import patch
+
+        from docs_mcp.validators.drift import DriftItem, DriftReport
+
+        mock_report = DriftReport(
+            total_items=3,
+            items=[
+                DriftItem(
+                    file_path="src/server.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: handle_request",
+                ),
+                DriftItem(
+                    file_path="src/upgrade.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: run_upgrade",
+                ),
+                DriftItem(
+                    file_path="src/utils.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: parse_config",
+                ),
+            ],
+            drift_score=0.5,
+            checked_files=6,
+        )
+
+        with patch(
+            "docs_mcp.validators.drift.DriftDetector"
+        ) as mock_cls:
+            mock_cls.return_value.check.return_value = mock_report
+            from docs_mcp.server_val_tools import docs_check_drift
+
+            result = await docs_check_drift(
+                source_files="server.py,upgrade.py",
+                project_root=str(tmp_path),
+            )
+
+        data = result["data"]
+        assert data["total_unfiltered"] == 3
+        assert data["total_items"] == 2
+        assert data["showing"] == 2
+        paths = {it["file_path"] for it in data["items"]}
+        assert paths == {"src/server.py", "src/upgrade.py"}
+
+    @pytest.mark.asyncio
+    async def test_search_names_filter(self, tmp_path: Path) -> None:
+        """search_names limits results to items mentioning the given names."""
+        from unittest.mock import patch
+
+        from docs_mcp.validators.drift import DriftItem, DriftReport
+
+        mock_report = DriftReport(
+            total_items=2,
+            items=[
+                DriftItem(
+                    file_path="src/server.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: handle_request, init_app",
+                ),
+                DriftItem(
+                    file_path="src/utils.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: parse_config",
+                ),
+            ],
+            drift_score=0.3,
+            checked_files=4,
+        )
+
+        with patch(
+            "docs_mcp.validators.drift.DriftDetector"
+        ) as mock_cls:
+            mock_cls.return_value.check.return_value = mock_report
+            from docs_mcp.server_val_tools import docs_check_drift
+
+            result = await docs_check_drift(
+                search_names="handle_request",
+                project_root=str(tmp_path),
+            )
+
+        data = result["data"]
+        assert data["total_unfiltered"] == 2
+        assert data["total_items"] == 1
+        assert data["items"][0]["file_path"] == "src/server.py"
+
+    @pytest.mark.asyncio
+    async def test_max_items_limit(self, tmp_path: Path) -> None:
+        """max_items caps the number of returned items."""
+        from unittest.mock import patch
+
+        from docs_mcp.validators.drift import DriftItem, DriftReport
+
+        items = [
+            DriftItem(
+                file_path=f"src/mod{i}.py",
+                drift_type="added_undocumented",
+                description=f"Public names not found in docs: func_{i}",
+            )
+            for i in range(10)
+        ]
+        mock_report = DriftReport(
+            total_items=10,
+            items=items,
+            drift_score=0.8,
+            checked_files=10,
+        )
+
+        with patch(
+            "docs_mcp.validators.drift.DriftDetector"
+        ) as mock_cls:
+            mock_cls.return_value.check.return_value = mock_report
+            from docs_mcp.server_val_tools import docs_check_drift
+
+            result = await docs_check_drift(
+                max_items=3,
+                project_root=str(tmp_path),
+            )
+
+        data = result["data"]
+        assert data["total_unfiltered"] == 10
+        assert data["total_items"] == 10
+        assert data["showing"] == 3
+        assert len(data["items"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_combined_filters(self, tmp_path: Path) -> None:
+        """source_files + search_names + max_items combine correctly."""
+        from unittest.mock import patch
+
+        from docs_mcp.validators.drift import DriftItem, DriftReport
+
+        mock_report = DriftReport(
+            total_items=3,
+            items=[
+                DriftItem(
+                    file_path="src/server.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: handle_request",
+                ),
+                DriftItem(
+                    file_path="src/server.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: shutdown",
+                ),
+                DriftItem(
+                    file_path="src/utils.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: parse_config",
+                ),
+            ],
+            drift_score=0.5,
+            checked_files=6,
+        )
+
+        with patch(
+            "docs_mcp.validators.drift.DriftDetector"
+        ) as mock_cls:
+            mock_cls.return_value.check.return_value = mock_report
+            from docs_mcp.server_val_tools import docs_check_drift
+
+            result = await docs_check_drift(
+                source_files="server.py",
+                search_names="handle_request",
+                max_items=1,
+                project_root=str(tmp_path),
+            )
+
+        data = result["data"]
+        assert data["total_unfiltered"] == 3
+        assert data["total_items"] == 1
+        assert data["showing"] == 1
+
+    @pytest.mark.asyncio
+    async def test_no_filters_backward_compat(self, tmp_path: Path) -> None:
+        """Without filters, response includes summary counts and all items."""
+        from unittest.mock import patch
+
+        from docs_mcp.validators.drift import DriftItem, DriftReport
+
+        mock_report = DriftReport(
+            total_items=2,
+            items=[
+                DriftItem(
+                    file_path="src/a.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: foo",
+                ),
+                DriftItem(
+                    file_path="src/b.py",
+                    drift_type="added_undocumented",
+                    description="Public names not found in docs: bar",
+                ),
+            ],
+            drift_score=0.3,
+            checked_files=4,
+        )
+
+        with patch(
+            "docs_mcp.validators.drift.DriftDetector"
+        ) as mock_cls:
+            mock_cls.return_value.check.return_value = mock_report
+            from docs_mcp.server_val_tools import docs_check_drift
+
+            result = await docs_check_drift(project_root=str(tmp_path))
+
+        data = result["data"]
+        assert data["total_unfiltered"] == 2
+        assert data["total_items"] == 2
+        assert data["showing"] == 2
+        assert len(data["items"]) == 2
 
 
 # ---------------------------------------------------------------------------

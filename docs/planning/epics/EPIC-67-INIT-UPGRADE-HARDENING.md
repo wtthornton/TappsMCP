@@ -1,7 +1,7 @@
 # Epic 67: Init & Upgrade Hardening
 
 <!-- docsmcp:start:metadata -->
-- **Status:** Open
+- **Status:** Complete
 - **Priority:** P2
 - **Estimated LOE:** ~1 week (1 developer)
 - **Dependencies:** None (builds on existing init/upgrade infrastructure)
