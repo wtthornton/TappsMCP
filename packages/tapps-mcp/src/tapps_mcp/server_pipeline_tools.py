@@ -1387,17 +1387,16 @@ async def tapps_init(
     if wizard_answers is not None and wizard_answers.add_other_mcps:
         add_other_mcps_hint = True
 
-    from tapps_mcp.pipeline.init import bootstrap_pipeline
+    from tapps_mcp.pipeline.init import BootstrapConfig, bootstrap_pipeline
 
     settings = load_settings()
     dg = destructive_guard
     if dg is None:
         dg = getattr(settings, "destructive_guard", False)
-    # Run in thread to avoid blocking the event loop - bootstrap_pipeline
-    # is sync and may run subprocesses, file I/O, and cache warming.
-    result = await asyncio.to_thread(
-        bootstrap_pipeline,
-        settings.project_root,
+
+    # Construct BootstrapConfig at the call site instead of forwarding
+    # 18 kwargs individually (Story 67.4).
+    cfg = BootstrapConfig(
         create_handoff=create_handoff,
         create_runlog=create_runlog,
         create_agents_md=create_agents_md,
@@ -1416,8 +1415,16 @@ async def tapps_init(
         minimal=minimal,
         dry_run=dry_run,
         verify_only=verify_only,
-        llm_engagement_level=llm_engagement_level,
+        llm_engagement_level=llm_engagement_level or settings.llm_engagement_level,
         scaffold_experts=scaffold_experts,
+    )
+
+    # Run in thread to avoid blocking the event loop - bootstrap_pipeline
+    # is sync and may run subprocesses, file I/O, and cache warming.
+    result = await asyncio.to_thread(
+        bootstrap_pipeline,
+        settings.project_root,
+        config=cfg,
     )
 
     # Optional: write project-scoped MCP config (Epic 47.2)

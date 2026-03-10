@@ -232,3 +232,63 @@ class TestAutoDetectClaudeSettings:
 
         assert not (claude_dir / "settings.json").exists()
         assert "claude_settings" not in result
+
+
+class TestBootstrapConfigFromParams:
+    """Tests for BootstrapConfig.from_params() classmethod (Story 67.4)."""
+
+    def test_from_params_defaults(self):
+        """from_params with explicit level returns config with that level."""
+        cfg = BootstrapConfig.from_params(llm_engagement_level="high")
+        assert cfg.llm_engagement_level == "high"
+        # All other fields should be at their defaults
+        assert cfg.create_handoff is True
+        assert cfg.dry_run is False
+        assert cfg.minimal is False
+
+    def test_from_params_forwards_kwargs(self):
+        """from_params forwards extra kwargs to BootstrapConfig constructor."""
+        cfg = BootstrapConfig.from_params(
+            llm_engagement_level="low",
+            dry_run=True,
+            minimal=True,
+            platform="cursor",
+        )
+        assert cfg.llm_engagement_level == "low"
+        assert cfg.dry_run is True
+        assert cfg.minimal is True
+        assert cfg.platform == "cursor"
+
+    def test_from_params_none_level_falls_back_to_settings(self):
+        """from_params with None level loads from settings."""
+        with patch(
+            "tapps_core.config.settings.load_settings",
+        ) as mock_settings:
+            mock_settings.return_value.llm_engagement_level = "high"
+            cfg = BootstrapConfig.from_params(llm_engagement_level=None)
+            assert cfg.llm_engagement_level == "high"
+            mock_settings.assert_called_once()
+
+    def test_from_params_omitted_level_falls_back_to_settings(self):
+        """from_params without llm_engagement_level loads from settings."""
+        with patch(
+            "tapps_core.config.settings.load_settings",
+        ) as mock_settings:
+            mock_settings.return_value.llm_engagement_level = "low"
+            cfg = BootstrapConfig.from_params()
+            assert cfg.llm_engagement_level == "low"
+
+    def test_bootstrap_pipeline_accepts_config(self, tmp_path):
+        """bootstrap_pipeline works when passed a pre-built BootstrapConfig."""
+        cfg = BootstrapConfig(
+            create_handoff=True,
+            create_runlog=False,
+            create_agents_md=False,
+            create_tech_stack_md=False,
+            verify_server=False,
+            warm_cache_from_tech_stack=False,
+            warm_expert_rag_from_tech_stack=False,
+        )
+        result = bootstrap_pipeline(tmp_path, config=cfg)
+        assert "docs/TAPPS_HANDOFF.md" in result["created"]
+        assert result["success"]

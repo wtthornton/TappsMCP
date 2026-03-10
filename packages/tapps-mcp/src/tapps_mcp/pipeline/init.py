@@ -57,6 +57,25 @@ class BootstrapConfig:
     llm_engagement_level: str = "medium"
     scaffold_experts: bool = False
 
+    @classmethod
+    def from_params(
+        cls,
+        *,
+        llm_engagement_level: str | None = None,
+        **kwargs: Any,
+    ) -> BootstrapConfig:
+        """Construct with optional ``llm_engagement_level`` fallback.
+
+        When *llm_engagement_level* is ``None``, reads the value from
+        :func:`~tapps_core.config.settings.load_settings`.  All other
+        keyword arguments are forwarded to the dataclass constructor.
+        """
+        if llm_engagement_level is None:
+            from tapps_core.config.settings import load_settings
+
+            llm_engagement_level = load_settings().llm_engagement_level
+        return cls(llm_engagement_level=llm_engagement_level or "medium", **kwargs)
+
 
 @dataclass
 class _BootstrapState:
@@ -157,12 +176,7 @@ def bootstrap_pipeline(
     if config is not None:
         cfg = config
     else:
-        level = llm_engagement_level
-        if level is None:
-            from tapps_core.config.settings import load_settings
-
-            level = load_settings().llm_engagement_level
-        cfg = BootstrapConfig(
+        cfg = BootstrapConfig.from_params(
             create_handoff=create_handoff,
             create_runlog=create_runlog,
             create_agents_md=create_agents_md,
@@ -181,10 +195,10 @@ def bootstrap_pipeline(
             minimal=minimal,
             dry_run=dry_run,
             verify_only=verify_only,
-            llm_engagement_level=level or "medium",
+            llm_engagement_level=llm_engagement_level,
             scaffold_experts=scaffold_experts,
         )
-    state = _BootstrapState(project_root=project_root.resolve(), dry_run=dry_run)
+    state = _BootstrapState(project_root=project_root.resolve(), dry_run=cfg.dry_run)
 
     _verify_server(cfg, state)
     if cfg.verify_only:
