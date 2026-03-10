@@ -13,11 +13,11 @@ about:
   description: >
     Deterministic code quality MCP server. Scores Python files across 7
     categories, runs security scans, enforces quality gates, looks up
-    library docs, and consults 17 domain experts. 28 tools, zero LLM
-    calls in the tool chain.
+    library docs, and consults 17 domain experts (171 knowledge files).
+    29 tools, zero LLM calls in the tool chain.
   icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:
   project: https://github.com/wtthornton/TappsMCP
-  commit: f15ff75cefd961f1773ec73b76ff670b3868ed34
+  commit: d0635cb
 config:
   description: "Mount your project directory to /workspace."

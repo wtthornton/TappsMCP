@@ -1,7 +1,7 @@
 registry:
     tapps-mcp:
         title: TappsMCP
-        description: "Deterministic code quality MCP server. Scores Python files across 7 categories, runs security scans, enforces quality gates, looks up library docs, and consults 17 domain experts. 29 tools, zero LLM calls."
+        description: "Deterministic code quality MCP server. Scores Python files across 7 categories, runs security scans, enforces quality gates, looks up library docs, and consults 17 domain experts (171 knowledge files). 29 tools, zero LLM calls."
         image: tapps-mcp:latest
         command:
             - tapps-mcp

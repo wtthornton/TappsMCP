@@ -18,6 +18,6 @@ about:
   icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:
   project: https://github.com/wtthornton/TappsMCP
-  commit: f15ff75cefd961f1773ec73b76ff670b3868ed34
+  commit: d0635cb
 config:
   description: "Mount your project directory to /workspace. Git required for history features."

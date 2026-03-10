@@ -33,7 +33,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 - **29 deterministic MCP tools** — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** — Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
-- **17 domain experts** with 157 curated knowledge files and RAG-backed answers
+- **17 domain experts** with 171 curated knowledge files and RAG-backed answers
 - **Persistent shared memory** — project decisions survive across sessions (SQLite + BM25 retrieval)
 - **Unified feature flags** — optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** — auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code

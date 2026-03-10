@@ -66,7 +66,7 @@ src/tapps_mcp/
 │               business_config.py, business_knowledge.py,
 │               business_loader.py, business_templates.py,
 │               auto_generator.py  (tapps-core only)
-│               knowledge/ (157 markdown files across 17 domains)
+│               knowledge/ (171 markdown files across 17 domains)
 ├── adaptive/   models.py, protocols.py, persistence.py,
 │               scoring_engine.py, scoring_wrapper.py,
 │               voting_engine.py, weight_distributor.py
@@ -149,7 +149,7 @@ All file I/O through `security/path_validator.py` (sandboxed to `TAPPS_MCP_PROJE
 
 ## Expert system
 
-17 domain experts with 145+ curated knowledge files. Keyword-based RAG (or optional vector RAG with faiss). Adaptive domain learning stores weights in `.tapps-mcp/adaptive/domain_weights.yaml`. Auto expert generation via `experts/auto_generator.py`.
+17 domain experts with 171 curated knowledge files. Keyword-based RAG (or optional vector RAG with faiss). Adaptive domain learning stores weights in `.tapps-mcp/adaptive/domain_weights.yaml`. Auto expert generation via `experts/auto_generator.py`. The UX Design Expert covers modern frontend architecture (React, CSS, design systems, accessibility, AI UX patterns, performance, responsive/mobile).
 
 ## Memory subsystem
 

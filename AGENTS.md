@@ -76,6 +76,8 @@ When the **TappsMCP** MCP server is configured, you have access to 29 tools for 
 | CI/CD, build config | `development-workflow` |
 | Code quality, linting | `code-quality-analysis` |
 | Architecture decisions | `software-architecture` |
+| UX, React, CSS, design systems | `user-experience` |
+| Accessibility, WCAG | `accessibility` |
 
 ## Checklist task types
 

@@ -2,7 +2,7 @@
 
 This directory contains knowledge bases for built-in framework experts. These knowledge bases provide technical domain expertise that ships with TappsMCP.
 
-**Last reviewed**: 2026-02. Keep content current with latest practices; remove or replace deprecated material.
+**Last reviewed**: 2026-03. Keep content current with latest practices; remove or replace deprecated material.
 
 ## Structure
 
@@ -58,7 +58,7 @@ knowledge/
 │   ├── color-contrast.md
 │   ├── accessible-forms.md
 │   └── testing-accessibility.md
-├── user-experience/               # UX Expert (8 files)
+├── user-experience/               # UX Design Expert (19 files)
 │   ├── ux-principles.md
 │   ├── user-research.md
 │   ├── user-journeys.md
@@ -66,7 +66,18 @@ knowledge/
 │   ├── interaction-design.md
 │   ├── prototyping.md
 │   ├── usability-heuristics.md
-│   └── usability-testing.md
+│   ├── usability-testing.md
+│   ├── design-systems.md
+│   ├── modern-css.md
+│   ├── accessibility-wcag22.md
+│   ├── performance-ux.md
+│   ├── ai-ux-patterns.md
+│   ├── motion-animation.md
+│   ├── dark-mode-theming.md
+│   ├── form-patterns.md
+│   ├── responsive-mobile.md
+│   ├── frontend-architecture.md
+│   └── industry-landscape.md
 ├── observability-monitoring/      # Observability Expert (8 files)
 │   ├── distributed-tracing.md
 │   ├── metrics-and-monitoring.md
