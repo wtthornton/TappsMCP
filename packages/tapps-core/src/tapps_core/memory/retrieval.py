@@ -101,6 +101,8 @@ class MemoryRetriever:
         reranker: Reranker | None = None,
         reranker_enabled: bool = False,
         retrieval_policy: object | None = None,
+        relations_enabled: bool = False,
+        expand_queries: bool = True,
     ) -> None:
         self._config = config or DecayConfig()
         self._bm25 = BM25Scorer()
@@ -112,6 +114,8 @@ class MemoryRetriever:
         self._reranker = reranker
         self._reranker_enabled = reranker_enabled
         self._retrieval_policy = retrieval_policy
+        self._relations_enabled = relations_enabled
+        self._expand_queries = expand_queries
 
     def search(
         self,
@@ -149,11 +153,16 @@ class MemoryRetriever:
         limit = max(1, min(limit, _MAX_RESULTS))
         now = datetime.now(tz=UTC)
 
+        # Epic 65.13: expand query via relations when enabled
+        effective_query = query
+        if self._relations_enabled and self._expand_queries:
+            effective_query = self._expand_query_via_relations(query, store)
+
         # Epic 65.8: hybrid path when semantic enabled
         if self._semantic_enabled:
-            candidates = self._get_hybrid_candidates(query, store)
+            candidates = self._get_hybrid_candidates(effective_query, store)
         else:
-            candidates = self._get_candidates(query, store)
+            candidates = self._get_candidates(effective_query, store)
 
         # Score and filter
         scored: list[ScoredMemory] = []
@@ -266,6 +275,64 @@ class MemoryRetriever:
                 if len(result) >= limit:
                     break
         return result[:limit]
+
+    # -----------------------------------------------------------------------
+    # Relation expansion (Epic 65.13)
+    # -----------------------------------------------------------------------
+
+    def _expand_query_via_relations(
+        self,
+        query: str,
+        store: MemoryStore,
+    ) -> str:
+        """Expand a query using entity/relationship graph traversal.
+
+        If the query matches a relationship pattern (e.g. "who handles API"),
+        load relations from the persistence layer and expand with connected
+        entities. Falls back to the original query on any error.
+        """
+        try:
+            from tapps_core.memory.relations import (
+                RelationEntry,
+                expand_via_relations,
+            )
+        except ImportError:
+            return query
+
+        # Load relations from persistence if available
+        try:
+            persistence = getattr(store, "_persistence", None)
+            if persistence is None:
+                return query
+            raw_relations = persistence.list_relations()
+            if not raw_relations:
+                return query
+
+            relations = [
+                RelationEntry(
+                    subject=r["subject"],
+                    predicate=r["predicate"],
+                    object_entity=r["object_entity"],
+                    source_entry_keys=r.get("source_entry_keys", []),
+                    confidence=r.get("confidence", 0.8),
+                )
+                for r in raw_relations
+            ]
+
+            expanded_terms = expand_via_relations(query, relations)
+            if expanded_terms:
+                expanded_query = f"{query} {' '.join(expanded_terms)}"
+                logger.debug(
+                    "query_expanded_via_relations",
+                    original=query,
+                    expanded=expanded_query,
+                    terms_added=len(expanded_terms),
+                )
+                return expanded_query
+        except Exception:
+            logger.debug("relation_expansion_failed", query=query)
+
+        return query
 
     # -----------------------------------------------------------------------
     # BM25 index management

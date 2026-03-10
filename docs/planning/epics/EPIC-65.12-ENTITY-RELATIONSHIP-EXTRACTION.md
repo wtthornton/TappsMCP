@@ -1,6 +1,6 @@
 # Epic 65.12: Entity/Relationship Extraction in Consolidation (2026 Best Practices)
 
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P2 | **LOE:** 2-2.5 weeks | **Source:** [EPIC-65-MEMORY-2026-BEST-PRACTICES](../EPIC-65-MEMORY-2026-BEST-PRACTICES.md)
 **Dependencies:** Epic 58 (consolidation)
 

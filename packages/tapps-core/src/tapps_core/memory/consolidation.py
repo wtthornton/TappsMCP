@@ -348,6 +348,20 @@ def consolidate(
         consolidation_reason=reason,
     )
 
+    # Epic 65.12: extract relations from consolidated value (optional)
+    try:
+        from tapps_core.memory.relations import extract_relations as _extract_rels
+
+        relations = _extract_rels(key, value)
+        if relations:
+            logger.debug(
+                "consolidation_relations_extracted",
+                key=key,
+                relation_count=len(relations),
+            )
+    except ImportError:
+        pass
+
     logger.debug(
         "memory_consolidated",
         key=key,

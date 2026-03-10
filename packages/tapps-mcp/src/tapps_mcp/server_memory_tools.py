@@ -981,6 +981,8 @@ def _find_entries_by_query(
         hybrid_config=settings.memory.hybrid,
         reranker=reranker,
         reranker_enabled=rr.enabled,
+        relations_enabled=settings.memory.relations.enabled,
+        expand_queries=settings.memory.relations.expand_queries,
     )
     effective_limit = limit if limit > 0 else _SEARCH_DEFAULT_LIMIT
 
@@ -1460,6 +1462,8 @@ def _ranked_search(
         hybrid_config=settings.memory.hybrid,
         reranker=reranker,
         reranker_enabled=rr.enabled,
+        relations_enabled=settings.memory.relations.enabled,
+        expand_queries=settings.memory.relations.expand_queries,
     )
     scored = retriever.search(query, store, limit=limit, include_sources=include_sources)
 

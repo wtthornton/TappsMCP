@@ -23,7 +23,7 @@ from tapps_core.memory.models import MemoryEntry
 logger = structlog.get_logger(__name__)
 
 # Current schema version - bump when adding migrations.
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 
 # Maximum JSONL audit log lines before truncation.
 _MAX_AUDIT_LINES = 10_000
@@ -85,8 +85,10 @@ class MemoryPersistence:
 
             if current_version < 2:
                 self._migrate_v1_to_v2(cur)
-            if current_version < _SCHEMA_VERSION:
+            if current_version < 3:
                 self._migrate_v2_to_v3(cur)
+            if current_version < _SCHEMA_VERSION:
+                self._migrate_v3_to_v4(cur)
 
             self._conn.commit()
 
@@ -240,6 +242,30 @@ class MemoryPersistence:
         cur.execute(
             "INSERT INTO schema_version (version, migrated_at) VALUES (?, ?)",
             (3, datetime.now(tz=UTC).isoformat()),
+        )
+
+    def _migrate_v3_to_v4(self, cur: sqlite3.Cursor) -> None:
+        """Add relations table for entity/relationship extraction (Epic 65.12)."""
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS relations (
+                subject TEXT NOT NULL,
+                predicate TEXT NOT NULL,
+                object_entity TEXT NOT NULL,
+                source_entry_keys TEXT NOT NULL DEFAULT '[]',
+                confidence REAL NOT NULL DEFAULT 0.8,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (subject, predicate, object_entity)
+            )
+        """)
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_relations_subject ON relations(subject)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_relations_object ON relations(object_entity)"
+        )
+        cur.execute(
+            "INSERT INTO schema_version (version, migrated_at) VALUES (?, ?)",
+            (4, datetime.now(tz=UTC).isoformat()),
         )
 
     # ------------------------------------------------------------------
@@ -495,6 +521,56 @@ class MemoryPersistence:
             row = self._conn.execute(
                 "SELECT COUNT(*) FROM session_index"
             ).fetchone()
+        return int(row[0]) if row else 0
+
+    # ------------------------------------------------------------------
+    # Relations (Epic 65.12)
+    # ------------------------------------------------------------------
+
+    def save_relation(
+        self,
+        subject: str,
+        predicate: str,
+        object_entity: str,
+        source_entry_keys: list[str],
+        confidence: float = 0.8,
+    ) -> None:
+        """Insert or replace a relation triple."""
+        keys_json = json.dumps(source_entry_keys, ensure_ascii=False)
+        now = datetime.now(tz=UTC).isoformat()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO relations "
+                "(subject, predicate, object_entity, source_entry_keys, confidence, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (subject, predicate, object_entity, keys_json, confidence, now),
+            )
+            self._conn.commit()
+
+    def list_relations(self) -> list[dict[str, Any]]:
+        """Return all stored relations as dicts."""
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM relations").fetchall()
+        results: list[dict[str, Any]] = []
+        for r in rows:
+            try:
+                keys = json.loads(r["source_entry_keys"])
+            except (json.JSONDecodeError, TypeError):
+                keys = []
+            results.append({
+                "subject": r["subject"],
+                "predicate": r["predicate"],
+                "object_entity": r["object_entity"],
+                "source_entry_keys": keys,
+                "confidence": r["confidence"],
+                "created_at": r["created_at"],
+            })
+        return results
+
+    def count_relations(self) -> int:
+        """Return the total number of stored relations."""
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) FROM relations").fetchone()
         return int(row[0]) if row else 0
 
     # ------------------------------------------------------------------

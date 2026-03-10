@@ -320,6 +320,25 @@ class MemorySessionIndexSettings(BaseModel):
     )
 
 
+class MemoryRelationSettings(BaseModel):
+    """Settings for entity/relationship extraction (Epic 65.12)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable entity/relationship extraction during consolidation.",
+    )
+    expand_queries: bool = Field(
+        default=True,
+        description="Use relation expansion for 'who/what handles X' queries (Epic 65.13).",
+    )
+    max_relations_per_entry: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum relations to extract per memory entry.",
+    )
+
+
 class MemoryRetrievalPolicy(BaseModel):
     """Retrieval policy for memory searches (Epic 65.14)."""
 
@@ -427,6 +446,10 @@ class MemorySettings(BaseSettings):
     maintenance: MemoryMaintenanceSettings = Field(
         default_factory=MemoryMaintenanceSettings,
         description="Memory maintenance schedule (Epic 65.15).",
+    )
+    relations: MemoryRelationSettings = Field(
+        default_factory=MemoryRelationSettings,
+        description="Entity/relationship extraction settings (Epic 65.12).",
     )
 
 

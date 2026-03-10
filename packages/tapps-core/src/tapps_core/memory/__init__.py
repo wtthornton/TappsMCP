@@ -32,6 +32,14 @@ from tapps_core.memory.models import ConsolidationReason as ConsolidationReason
 # RRF fusion (Epic 65.8)
 from tapps_core.memory.fusion import reciprocal_rank_fusion as reciprocal_rank_fusion
 
+# Relations (Epic 65.12)
+from tapps_core.memory.relations import RelationEntry as RelationEntry
+from tapps_core.memory.relations import expand_via_relations as expand_via_relations
+from tapps_core.memory.relations import extract_relations as extract_relations
+from tapps_core.memory.relations import (
+    extract_relations_from_entries as extract_relations_from_entries,
+)
+
 # Auto-consolidation triggers (Epic 58, Story 58.3)
 from tapps_core.memory.auto_consolidation import (
     ConsolidationResult as ConsolidationResult,

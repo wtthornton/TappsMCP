@@ -1,6 +1,6 @@
 # Epic 65.13: Relationship-Aware Retrieval (2026 Best Practices)
 
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P2 | **LOE:** 1-1.5 weeks | **Source:** [EPIC-65-MEMORY-2026-BEST-PRACTICES](../EPIC-65-MEMORY-2026-BEST-PRACTICES.md)
 **Dependencies:** Epic 65.12 (entity/relationship extraction)
 

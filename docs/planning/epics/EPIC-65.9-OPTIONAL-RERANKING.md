@@ -1,6 +1,6 @@
 # Epic 65.9: Optional Reranking (2026 Best Practices)
 
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P2 | **LOE:** 1 week | **Source:** [EPIC-65-MEMORY-2026-BEST-PRACTICES](../EPIC-65-MEMORY-2026-BEST-PRACTICES.md)
 **Dependencies:** Epic 65.8 (hybrid search)
 
