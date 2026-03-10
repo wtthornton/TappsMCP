@@ -7,10 +7,13 @@ from pathlib import Path
 import pytest
 
 from docs_mcp.validators.link_checker import (
+    BacktickReference,
     BrokenLink,
     LinkChecker,
     LinkReport,
+    _check_backtick_refs,
     _extract_headings,
+    _find_fenced_blocks,
     _is_anchor_only,
     _is_external_link,
 )
@@ -37,6 +40,24 @@ class TestBrokenLinkModel:
         assert bl.reason == "file_not_found"
 
 
+class TestBacktickReferenceModel:
+    """Test BacktickReference Pydantic model."""
+
+    def test_construction(self) -> None:
+        ref = BacktickReference(
+            source_file="README.md",
+            line=10,
+            reference="src/foo/bar.py",
+            exists=True,
+            reason="found",
+        )
+        assert ref.source_file == "README.md"
+        assert ref.line == 10
+        assert ref.reference == "src/foo/bar.py"
+        assert ref.exists is True
+        assert ref.reason == "found"
+
+
 class TestLinkReportModel:
     """Test LinkReport Pydantic model."""
 
@@ -45,6 +66,11 @@ class TestLinkReportModel:
         assert report.total_links == 0
         assert report.valid_links == 0
         assert report.broken_links == []
+        assert report.backtick_references == []
+        assert report.total_backtick_refs == 0
+        assert report.valid_backtick_refs == 0
+        assert report.missing_backtick_refs == 0
+        assert report.warnings == []
 
 
 # ---------------------------------------------------------------------------
@@ -266,3 +292,263 @@ class TestLinkChecker:
         report = checker.check(tmp_path)
         assert report.total_links == 1
         assert report.valid_links == 1
+
+
+# ---------------------------------------------------------------------------
+# Fenced code block detection tests
+# ---------------------------------------------------------------------------
+
+
+class TestFencedBlocks:
+    """Test _find_fenced_blocks()."""
+
+    def test_no_fences(self) -> None:
+        content = "line 1\nline 2\nline 3\n"
+        assert _find_fenced_blocks(content) == set()
+
+    def test_simple_fence(self) -> None:
+        content = "before\n```\ncode line\n```\nafter\n"
+        fenced = _find_fenced_blocks(content)
+        # Lines 2 (```), 3 (code), 4 (```) are inside/part of fence
+        assert 2 in fenced
+        assert 3 in fenced
+        assert 4 in fenced
+        assert 1 not in fenced
+        assert 5 not in fenced
+
+    def test_fence_with_language(self) -> None:
+        content = "text\n```python\nimport os\n```\nmore text\n"
+        fenced = _find_fenced_blocks(content)
+        assert 2 in fenced
+        assert 3 in fenced
+        assert 4 in fenced
+        assert 1 not in fenced
+
+    def test_tilde_fence(self) -> None:
+        content = "text\n~~~\ncode\n~~~\n"
+        fenced = _find_fenced_blocks(content)
+        assert 2 in fenced
+        assert 3 in fenced
+        assert 4 in fenced
+
+    def test_unclosed_fence(self) -> None:
+        content = "text\n```\ncode\nmore code\n"
+        fenced = _find_fenced_blocks(content)
+        assert 2 in fenced
+        assert 3 in fenced
+        assert 4 in fenced
+
+
+# ---------------------------------------------------------------------------
+# Backtick reference detection tests
+# ---------------------------------------------------------------------------
+
+
+class TestBacktickRefs:
+    """Test _check_backtick_refs() and backtick integration."""
+
+    def test_backtick_ref_existing_file(self, tmp_path: Path) -> None:
+        """Backtick ref to existing file is detected and validated."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "upgrade.py").write_text("# upgrade\n", encoding="utf-8")
+        md_file = tmp_path / "README.md"
+        md_file.write_text(
+            "# Project\n\nSee `src/upgrade.py` for details.\n",
+            encoding="utf-8",
+        )
+
+        content = md_file.read_text(encoding="utf-8")
+        fenced = _find_fenced_blocks(content)
+        refs = _check_backtick_refs(md_file, tmp_path, content, fenced)
+
+        assert len(refs) == 1
+        assert refs[0].reference == "src/upgrade.py"
+        assert refs[0].exists is True
+        assert refs[0].reason == "found"
+
+    def test_backtick_ref_missing_file(self, tmp_path: Path) -> None:
+        """Backtick ref to non-existent file reports not_found."""
+        md_file = tmp_path / "README.md"
+        md_file.write_text(
+            "# Project\n\nSee `pipeline/upgrade.py` for details.\n",
+            encoding="utf-8",
+        )
+
+        content = md_file.read_text(encoding="utf-8")
+        fenced = _find_fenced_blocks(content)
+        refs = _check_backtick_refs(md_file, tmp_path, content, fenced)
+
+        assert len(refs) == 1
+        assert refs[0].reference == "pipeline/upgrade.py"
+        assert refs[0].exists is False
+        assert refs[0].reason == "not_found"
+
+    def test_backtick_ref_inside_code_block_skipped(self, tmp_path: Path) -> None:
+        """Backtick refs inside fenced code blocks are skipped."""
+        md_file = tmp_path / "README.md"
+        md_file.write_text(
+            "# Project\n\n```\nSee `src/foo.py` here\n```\n",
+            encoding="utf-8",
+        )
+
+        content = md_file.read_text(encoding="utf-8")
+        fenced = _find_fenced_blocks(content)
+        refs = _check_backtick_refs(md_file, tmp_path, content, fenced)
+
+        assert len(refs) == 1
+        assert refs[0].reason == "skipped_code_block"
+
+    def test_non_path_backtick_ignored(self, tmp_path: Path) -> None:
+        """Non-path backtick content like `variable_name` is not a file ref."""
+        md_file = tmp_path / "README.md"
+        md_file.write_text(
+            "# Project\n\nUse the `variable_name` variable.\n",
+            encoding="utf-8",
+        )
+
+        content = md_file.read_text(encoding="utf-8")
+        fenced = _find_fenced_blocks(content)
+        refs = _check_backtick_refs(md_file, tmp_path, content, fenced)
+
+        assert len(refs) == 0
+
+    def test_triple_backtick_not_matched(self, tmp_path: Path) -> None:
+        """Triple backtick (```) should not be matched as a file ref."""
+        md_file = tmp_path / "README.md"
+        md_file.write_text(
+            "# Project\n\n```foo.py```\n",
+            encoding="utf-8",
+        )
+
+        content = md_file.read_text(encoding="utf-8")
+        fenced = _find_fenced_blocks(content)
+        refs = _check_backtick_refs(md_file, tmp_path, content, fenced)
+
+        # The regex excludes triple-backtick wrapping
+        assert len(refs) == 0
+
+    def test_backtick_ref_relative_to_file_dir(self, tmp_path: Path) -> None:
+        """Backtick ref resolved relative to file's directory."""
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "helper.py").write_text("# helper\n", encoding="utf-8")
+        md_file = docs / "guide.md"
+        md_file.write_text(
+            "# Guide\n\nSee `helper.py` for details.\n",
+            encoding="utf-8",
+        )
+
+        content = md_file.read_text(encoding="utf-8")
+        fenced = _find_fenced_blocks(content)
+        refs = _check_backtick_refs(md_file, tmp_path, content, fenced)
+
+        assert len(refs) == 1
+        assert refs[0].exists is True
+        assert refs[0].reason == "found"
+
+
+# ---------------------------------------------------------------------------
+# Integration: backtick refs in LinkChecker.check()
+# ---------------------------------------------------------------------------
+
+
+class TestLinkCheckerBacktickIntegration:
+    """Test backtick reference detection via LinkChecker.check()."""
+
+    def test_backtick_ref_counted_in_report(self, tmp_path: Path) -> None:
+        """Backtick file refs should appear in the report."""
+        (tmp_path / "config.yaml").write_text("key: val\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nEdit `config.yaml` to configure.\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert report.total_backtick_refs == 1
+        assert report.valid_backtick_refs == 1
+        assert report.missing_backtick_refs == 0
+        assert len(report.backtick_references) == 1
+
+    def test_missing_backtick_ref_counted(self, tmp_path: Path) -> None:
+        """Missing backtick file refs are counted."""
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nEdit `nonexistent.yaml` to configure.\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert report.total_backtick_refs == 1
+        assert report.valid_backtick_refs == 0
+        assert report.missing_backtick_refs == 1
+
+    def test_mix_of_markdown_links_and_backtick_refs(self, tmp_path: Path) -> None:
+        """Both markdown links and backtick refs are counted."""
+        (tmp_path / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        (tmp_path / "config.toml").write_text("[tool]\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            "# Project\n\n"
+            "See [guide](guide.md) and `config.toml`.\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert report.total_links == 1
+        assert report.valid_links == 1
+        assert report.total_backtick_refs == 1
+        assert report.valid_backtick_refs == 1
+
+    def test_zero_link_warning(self, tmp_path: Path) -> None:
+        """A doc with no links and no backtick refs gets a warning."""
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nJust plain text here.\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert len(report.warnings) == 1
+        assert "README.md" in report.warnings[0]
+        assert "No links or file references" in report.warnings[0]
+
+    def test_no_warning_when_links_present(self, tmp_path: Path) -> None:
+        """A doc with links should not get a zero-link warning for that file."""
+        (tmp_path / "other.txt").write_text("Other content\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nSee [other](other.txt).\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        # Only check README.md which has a link
+        report = checker.check(tmp_path, files=["README.md"])
+        assert len(report.warnings) == 0
+
+    def test_no_warning_when_backtick_refs_present(self, tmp_path: Path) -> None:
+        """A doc with backtick refs should not get a zero-link warning."""
+        (tmp_path / "setup.py").write_text("# setup\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nSee `setup.py` for build config.\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert len(report.warnings) == 0
+
+    def test_code_block_refs_dont_prevent_warning(self, tmp_path: Path) -> None:
+        """Backtick refs inside code blocks are skipped, so zero-link warning fires."""
+        (tmp_path / "README.md").write_text(
+            "# Project\n\n```\n`foo.py`\n```\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        # The only backtick ref is inside a code block (skipped),
+        # so the file has 0 effective refs
+        assert len(report.warnings) == 1
+        assert "No links or file references" in report.warnings[0]

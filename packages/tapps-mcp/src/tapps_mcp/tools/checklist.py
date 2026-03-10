@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import threading
 import time
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -117,6 +118,11 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_checklist", "tapps_dead_code"],
         "optional": ["tapps_dependency_scan", "tapps_dependency_graph", "tapps_memory"],
     },
+    "epic": {
+        "required": ["tapps_checklist"],
+        "recommended": ["tapps_score_file", "tapps_quality_gate"],
+        "optional": ["tapps_security_scan", "tapps_validate_changed"],
+    },
 }
 
 # High engagement: more tools required (stricter)
@@ -149,6 +155,11 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_dead_code", "tapps_validate_changed"],
         "optional": ["tapps_dependency_scan", "tapps_dependency_graph"],
     },
+    "epic": {
+        "required": ["tapps_checklist", "tapps_score_file"],
+        "recommended": ["tapps_quality_gate", "tapps_validate_changed"],
+        "optional": ["tapps_security_scan"],
+    },
 }
 
 # Low engagement: fewer tools required (lighter)
@@ -177,6 +188,11 @@ TASK_TOOL_MAP_LOW: dict[str, dict[str, list[str]]] = {
         "required": ["tapps_quality_gate"],
         "recommended": ["tapps_score_file", "tapps_security_scan", "tapps_checklist"],
         "optional": ["tapps_dead_code", "tapps_dependency_scan", "tapps_dependency_graph"],
+    },
+    "epic": {
+        "required": ["tapps_checklist"],
+        "recommended": ["tapps_score_file"],
+        "optional": ["tapps_quality_gate", "tapps_validate_changed"],
     },
 }
 
@@ -399,3 +415,447 @@ class CallTracker:
             complete=len(missing_required) == 0,
             total_calls=call_count,
         )
+
+    @classmethod
+    def evaluate_epic(
+        cls,
+        file_path: str | None = None,
+        engagement_level: str | None = None,
+    ) -> EpicChecklistResult:
+        """Evaluate the epic checklist, optionally validating an epic file.
+
+        When *file_path* is provided, the markdown file is parsed and
+        structural validation is performed. When not provided, only the
+        checklist template items are returned.
+        """
+        base = cls.evaluate("epic", engagement_level=engagement_level)
+        validation: EpicValidation | None = None
+        if file_path is not None:
+            from pathlib import Path as _Path
+
+            content = _Path(file_path).read_text(encoding="utf-8")
+            validation = validate_epic_markdown(content)
+        return EpicChecklistResult(
+            task_type=base.task_type,
+            called=base.called,
+            missing_required=base.missing_required,
+            missing_recommended=base.missing_recommended,
+            missing_optional=base.missing_optional,
+            missing_required_hints=base.missing_required_hints,
+            missing_recommended_hints=base.missing_recommended_hints,
+            missing_optional_hints=base.missing_optional_hints,
+            complete=base.complete,
+            total_calls=base.total_calls,
+            epic_validation=validation,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Epic validation models
+# ---------------------------------------------------------------------------
+
+# Valid point ranges per size label
+_SIZE_POINT_RANGES: dict[str, tuple[int, int]] = {
+    "S": (1, 2),
+    "M": (3, 5),
+    "L": (8, 13),
+}
+
+
+class EpicStoryInfo(BaseModel):
+    """Parsed information about a single story in an epic."""
+
+    story_id: str = Field(description="Story identifier (e.g. '1.1').")
+    title: str = Field(default="", description="Story title text.")
+    points: int | None = Field(default=None, description="Story points.")
+    size: str | None = Field(default=None, description="Size label (S/M/L).")
+    priority: str | None = Field(default=None, description="Priority (P0-P4).")
+    files: list[str] = Field(default_factory=list, description="Files listed.")
+    has_acceptance_criteria: bool = Field(
+        default=False, description="Whether AC section exists."
+    )
+    has_tasks: bool = Field(default=False, description="Whether Tasks section exists.")
+
+
+class EpicFinding(BaseModel):
+    """A single validation finding for an epic document."""
+
+    severity: str = Field(description="'error' or 'warning'.")
+    message: str = Field(description="Human-readable finding description.")
+    story_id: str | None = Field(
+        default=None, description="Story ID if finding is story-specific."
+    )
+
+
+class EpicValidation(BaseModel):
+    """Result of structural validation of an epic markdown file."""
+
+    sections_found: list[str] = Field(
+        default_factory=list, description="Top-level sections found."
+    )
+    stories: list[EpicStoryInfo] = Field(
+        default_factory=list, description="Parsed stories."
+    )
+    files_affected_entries: list[str] = Field(
+        default_factory=list,
+        description="Files listed in a files-affected table.",
+    )
+    findings: list[EpicFinding] = Field(
+        default_factory=list, description="Validation findings."
+    )
+    valid: bool = Field(
+        default=True,
+        description="True when no error-severity findings exist.",
+    )
+
+
+class EpicChecklistResult(ChecklistResult):
+    """Extended checklist result with epic-specific validation."""
+
+    epic_validation: EpicValidation | None = Field(
+        default=None,
+        description="Epic structural validation (present when file_path provided).",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Epic markdown parsing
+# ---------------------------------------------------------------------------
+
+# Regex for story headings: "### Story X.Y: Title" or "### X.Y — Title"
+_STORY_HEADING_RE = re.compile(
+    r"^###\s+(?:Story\s+)?(\d+\.\d+)\s*[:\u2014-]\s*(.*)",
+    re.MULTILINE,
+)
+
+# Points pattern: "**Points:** N" or "Points: N"
+_POINTS_RE = re.compile(r"\*{0,2}Points:?\*{0,2}:?\s*(\d+)", re.IGNORECASE)
+
+# Size pattern: "**Size:** S" or "Size: M"
+_SIZE_RE = re.compile(r"\*{0,2}Size:?\*{0,2}:?\s*([SML])\b", re.IGNORECASE)
+
+# Priority pattern: "**Priority:** P1" or "Priority: P2"
+_PRIORITY_RE = re.compile(r"\*{0,2}Priority:?\*{0,2}:?\s*(P\d)\b", re.IGNORECASE)
+
+# Files pattern: lines starting with "- `path`" in a Files section
+_FILE_ENTRY_RE = re.compile(r"^-\s+`([^`]+)`", re.MULTILINE)
+
+# Table row for files-affected: "| `path` | ..."
+_FILES_TABLE_ROW_RE = re.compile(r"^\|\s*`([^`]+)`", re.MULTILINE)
+
+
+def _parse_epic_markdown(content: str) -> tuple[
+    list[str],
+    list[EpicStoryInfo],
+    list[str],
+]:
+    """Parse an epic markdown file and extract structural information.
+
+    Returns:
+        Tuple of (section_headings, stories, files_affected_entries).
+    """
+    # Extract top-level (##) section headings
+    sections = re.findall(r"^##\s+(.+)", content, re.MULTILINE)
+    section_names = [s.strip() for s in sections]
+
+    # Find story blocks
+    story_matches = list(_STORY_HEADING_RE.finditer(content))
+    stories: list[EpicStoryInfo] = []
+
+    for i, match in enumerate(story_matches):
+        story_id = match.group(1)
+        title = match.group(2).strip()
+
+        # Extract story block text (from this heading to the next story or end)
+        start = match.end()
+        end = story_matches[i + 1].start() if i + 1 < len(story_matches) else len(content)
+        block = content[start:end]
+
+        # Parse fields
+        points_m = _POINTS_RE.search(block)
+        size_m = _SIZE_RE.search(block)
+        priority_m = _PRIORITY_RE.search(block)
+
+        # Find files listed in the story
+        files = _extract_story_files(block)
+
+        # Check for AC and Tasks sub-sections
+        has_ac = _has_subsection(block, "acceptance criteria")
+        has_tasks = _has_subsection(block, "tasks")
+
+        stories.append(
+            EpicStoryInfo(
+                story_id=story_id,
+                title=title,
+                points=int(points_m.group(1)) if points_m else None,
+                size=size_m.group(1).upper() if size_m else None,
+                priority=priority_m.group(1).upper() if priority_m else None,
+                files=files,
+                has_acceptance_criteria=has_ac,
+                has_tasks=has_tasks,
+            )
+        )
+
+    # Extract files-affected table entries
+    files_affected = _extract_files_affected(content)
+
+    return section_names, stories, files_affected
+
+
+def _extract_story_files(block: str) -> list[str]:
+    """Extract file paths from a story block's Files section."""
+    # Find "**Files:**" or "#### Files" section
+    files_match = re.search(
+        r"(?:\*\*Files:?\*\*|####\s+Files)\s*\n((?:\s*-\s+`[^`]+`.*\n?)+)",
+        block,
+        re.IGNORECASE,
+    )
+    if not files_match:
+        return []
+    files_text = files_match.group(1)
+    return _FILE_ENTRY_RE.findall(files_text)
+
+
+def _has_subsection(block: str, name: str) -> bool:
+    """Check whether a block contains a sub-section with the given name."""
+    pattern = re.compile(
+        rf"(?:^####?\s+{re.escape(name)}|^\*\*{re.escape(name)}:?\*\*)",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    return bool(pattern.search(block))
+
+
+def _extract_files_affected(content: str) -> list[str]:
+    """Extract file paths from a files-affected table."""
+    # Look for a "Files Affected" or "Files-Affected" section
+    section_match = re.search(
+        r"(?:^##\s+Files[- ]Affected|^\*\*Files[- ]Affected:?\*\*)",
+        content,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if not section_match:
+        return []
+    start = section_match.end()
+    # Find next section heading
+    next_section = re.search(r"^##\s+", content[start:], re.MULTILINE)
+    end = start + next_section.start() if next_section else len(content)
+    table_text = content[start:end]
+    return _FILES_TABLE_ROW_RE.findall(table_text)
+
+
+# ---------------------------------------------------------------------------
+# Epic structural validation
+# ---------------------------------------------------------------------------
+
+_REQUIRED_SECTIONS = {"Goal", "Acceptance Criteria", "Stories"}
+
+
+def _check_required_sections(
+    section_names: list[str],
+    findings: list[EpicFinding],
+) -> None:
+    """Check that required top-level sections exist."""
+    normalized = {s.lower().strip() for s in section_names}
+    for req in _REQUIRED_SECTIONS:
+        if req.lower() not in normalized:
+            findings.append(
+                EpicFinding(
+                    severity="error",
+                    message=f"Missing required section: '{req}'",
+                )
+            )
+
+
+def _check_story_completeness(
+    stories: list[EpicStoryInfo],
+    findings: list[EpicFinding],
+) -> None:
+    """Check each story for required sub-fields."""
+    for story in stories:
+        if story.points is None:
+            findings.append(
+                EpicFinding(
+                    severity="warning",
+                    message=f"Story {story.story_id} missing Points",
+                    story_id=story.story_id,
+                )
+            )
+        if story.size is None:
+            findings.append(
+                EpicFinding(
+                    severity="warning",
+                    message=f"Story {story.story_id} missing Size",
+                    story_id=story.story_id,
+                )
+            )
+        if story.priority is None:
+            findings.append(
+                EpicFinding(
+                    severity="warning",
+                    message=f"Story {story.story_id} missing Priority",
+                    story_id=story.story_id,
+                )
+            )
+        if not story.files:
+            findings.append(
+                EpicFinding(
+                    severity="warning",
+                    message=f"Story {story.story_id} missing Files list",
+                    story_id=story.story_id,
+                )
+            )
+        if not story.has_acceptance_criteria:
+            findings.append(
+                EpicFinding(
+                    severity="error",
+                    message=f"Story {story.story_id} missing Acceptance Criteria",
+                    story_id=story.story_id,
+                )
+            )
+        if not story.has_tasks:
+            findings.append(
+                EpicFinding(
+                    severity="warning",
+                    message=f"Story {story.story_id} missing Tasks",
+                    story_id=story.story_id,
+                )
+            )
+
+
+def _check_point_size_consistency(
+    stories: list[EpicStoryInfo],
+    findings: list[EpicFinding],
+) -> None:
+    """Flag stories where points don't match the expected range for the size."""
+    for story in stories:
+        if story.points is None or story.size is None:
+            continue
+        expected = _SIZE_POINT_RANGES.get(story.size)
+        if expected is None:
+            continue
+        lo, hi = expected
+        if not (lo <= story.points <= hi):
+            findings.append(
+                EpicFinding(
+                    severity="warning",
+                    message=(
+                        f"Story {story.story_id} size {story.size} "
+                        f"expects {lo}-{hi} points but has {story.points}"
+                    ),
+                    story_id=story.story_id,
+                )
+            )
+
+
+def _check_dependency_cycles(
+    content: str,
+    findings: list[EpicFinding],
+) -> None:
+    """Check for cycles in story dependency references.
+
+    Looks for patterns like "Dependencies: Story X.Y" and builds
+    a simple DAG to detect cycles.
+    """
+    dep_re = re.compile(
+        r"(?:depends\s+on|dependencies?:?|requires)\s+(?:story\s+)?(\d+\.\d+)",
+        re.IGNORECASE,
+    )
+    # Build adjacency from story blocks
+    story_blocks = list(_STORY_HEADING_RE.finditer(content))
+    graph: dict[str, list[str]] = {}
+
+    for i, match in enumerate(story_blocks):
+        story_id = match.group(1)
+        start = match.end()
+        end = story_blocks[i + 1].start() if i + 1 < len(story_blocks) else len(content)
+        block = content[start:end]
+        deps = dep_re.findall(block)
+        if deps:
+            graph[story_id] = deps
+
+    # Simple cycle detection via DFS
+    visited: set[str] = set()
+    in_stack: set[str] = set()
+
+    def _dfs(node: str) -> bool:
+        if node in in_stack:
+            return True
+        if node in visited:
+            return False
+        visited.add(node)
+        in_stack.add(node)
+        for dep in graph.get(node, []):
+            if _dfs(dep):
+                return True
+        in_stack.discard(node)
+        return False
+
+    for node in graph:
+        if _dfs(node):
+            findings.append(
+                EpicFinding(
+                    severity="error",
+                    message=f"Dependency cycle detected involving story {node}",
+                    story_id=node,
+                )
+            )
+            break  # One cycle finding is sufficient
+
+
+def _check_files_table_coverage(
+    stories: list[EpicStoryInfo],
+    files_affected: list[str],
+    findings: list[EpicFinding],
+) -> None:
+    """Check that files in stories appear in the files-affected table."""
+    if not files_affected:
+        return  # No table present, skip check
+    table_set = set(files_affected)
+    for story in stories:
+        for f in story.files:
+            if f not in table_set:
+                findings.append(
+                    EpicFinding(
+                        severity="warning",
+                        message=(
+                            f"Story {story.story_id} references '{f}' "
+                            f"not found in files-affected table"
+                        ),
+                        story_id=story.story_id,
+                    )
+                )
+
+
+def validate_epic_markdown(content: str) -> EpicValidation:
+    """Validate an epic markdown document for structural completeness.
+
+    Returns an ``EpicValidation`` with all findings.
+    """
+    section_names, stories, files_affected = _parse_epic_markdown(content)
+    findings: list[EpicFinding] = []
+
+    _check_required_sections(section_names, findings)
+
+    if not stories:
+        findings.append(
+            EpicFinding(
+                severity="error",
+                message="No stories found (expected '### Story X.Y:' headings)",
+            )
+        )
+    else:
+        _check_story_completeness(stories, findings)
+        _check_point_size_consistency(stories, findings)
+        _check_files_table_coverage(stories, files_affected, findings)
+
+    _check_dependency_cycles(content, findings)
+
+    has_errors = any(f.severity == "error" for f in findings)
+
+    return EpicValidation(
+        sections_found=section_names,
+        stories=stories,
+        files_affected_entries=files_affected,
+        findings=findings,
+        valid=not has_errors,
+    )

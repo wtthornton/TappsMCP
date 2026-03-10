@@ -1066,6 +1066,7 @@ async def docs_generate_epic(
     success_metrics: str = "",
     stakeholders: str = "",
     references: str = "",
+    files: str = "",
     link_stories: bool = False,
     style: str = "standard",
     auto_populate: bool = False,
@@ -1084,6 +1085,11 @@ async def docs_generate_epic(
 
     When ``auto_populate=True``, enriches sections from project analyzers
     (module map, tech stack, git history).
+
+    When ``files`` is provided, generates a detailed Files Affected table
+    with per-file analysis (line counts, recent git commits, public symbols)
+    and a Related Epics section cross-referencing existing epics that mention
+    the same files.
 
     Args:
         title: Epic title (e.g. "User Authentication System").
@@ -1108,6 +1114,9 @@ async def docs_generate_epic(
         stakeholders: Comma-separated or pipe-delimited stakeholders
             (comprehensive only). Example: "Owner|Alice|Implementation"
         references: Comma-separated OKR/roadmap references (comprehensive only).
+        files: Comma-separated file paths the epic affects. When provided with
+            auto_populate, generates per-file analysis (line counts, git history,
+            public symbols) and cross-references related epics.
         link_stories: When True, story stubs link to full story files.
         style: Epic style - "standard" or "comprehensive".
         auto_populate: Enrich from project analyzers (ModuleMap, Metadata, etc).
@@ -1173,6 +1182,11 @@ async def docs_generate_epic(
                 str(exc),
             )
 
+    # Parse files list
+    files_list = (
+        [f.strip() for f in files.split(",") if f.strip()] if files else []
+    )
+
     config = EpicConfig(
         title=title,
         number=number,
@@ -1191,16 +1205,20 @@ async def docs_generate_epic(
         success_metrics=sm_list,
         stakeholders=sh_list,
         references=ref_list,
+        files=files_list,
         link_stories=link_stories,
         style=style,
     )
 
     generator = EpicGenerator()
 
+    # Pass project_root when auto_populate or files are provided
+    needs_root = auto_populate or bool(files_list)
+
     try:
         content = generator.generate(
             config,
-            project_root=root if auto_populate else None,
+            project_root=root if needs_root else None,
             auto_populate=auto_populate,
         )
     except Exception as exc:

@@ -198,3 +198,54 @@ async def docs_check_freshness(
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     return success_response("docs_check_freshness", elapsed_ms, data)
+
+
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
+async def docs_validate_epic(
+    file_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Validate the structure of an epic planning document.
+
+    Checks required sections (Goal, Motivation, Acceptance Criteria, Stories),
+    story completeness (points, size, AC, tasks, files), point/size consistency,
+    dependency cycles in Implementation Order, and Files Affected coverage.
+
+    Args:
+        file_path: Path to the epic markdown file (absolute or relative to
+            project_root). Required.
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_validate_epic")
+    start = time.perf_counter_ns()
+
+    if not file_path.strip():
+        return error_response(
+            "docs_validate_epic",
+            "MISSING_FILE",
+            "Parameter 'file_path' is required.",
+        )
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root.strip() else Path(settings.project_root)
+
+    fp = Path(file_path)
+    if not fp.is_absolute():
+        fp = root / fp
+
+    if not fp.exists():
+        return error_response(
+            "docs_validate_epic",
+            "FILE_NOT_FOUND",
+            f"Epic file does not exist: {fp}",
+        )
+
+    from docs_mcp.validators.epic_validator import EpicValidator
+
+    validator = EpicValidator()
+    report = validator.validate(fp)
+
+    data: dict[str, Any] = report.model_dump()
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    return success_response("docs_validate_epic", elapsed_ms, data)

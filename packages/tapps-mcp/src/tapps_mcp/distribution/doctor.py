@@ -141,6 +141,60 @@ def check_vscode_config(project_root: Path) -> CheckResult:
     )
 
 
+def check_mcp_client_config(
+    project_root: Path,
+    home: Path | None = None,
+) -> CheckResult:
+    """Aggregate check: is tapps-mcp registered in *any* MCP client config?
+
+    Scans project-level and user-level config files for Cursor, VS Code, and
+    Claude Code.  Returns a pass if at least one config references tapps-mcp,
+    otherwise returns a failure with a suggested config snippet.
+
+    Args:
+        project_root: The project root directory.
+        home: Override for home directory (for testing).
+    """
+    base = home or Path.home()
+
+    # (path, servers_key, label) tuples to probe
+    candidates: list[tuple[Path, str, str]] = [
+        (project_root / ".cursor" / "mcp.json", "mcpServers", "Cursor"),
+        (project_root / ".vscode" / "mcp.json", "servers", "VS Code"),
+        (project_root / ".mcp.json", "mcpServers", "Claude Code (project)"),
+        (base / ".claude.json", "mcpServers", "Claude Code (user)"),
+        (base / ".claude" / "settings.json", "mcpServers", "Claude Code (settings)"),
+    ]
+
+    found_in: list[str] = []
+    for path, servers_key, label in candidates:
+        result = check_json_config(path, servers_key, label)
+        if result.ok:
+            found_in.append(label)
+
+    if found_in:
+        return CheckResult(
+            "MCP client config",
+            True,
+            f"tapps-mcp registered in: {', '.join(found_in)}",
+        )
+
+    snippet = (
+        '{\n  "mcpServers": {\n    "tapps-mcp": {\n'
+        '      "command": "uv",\n'
+        '      "args": ["run", "tapps-mcp", "serve"]\n'
+        "    }\n  }\n}"
+    )
+    return CheckResult(
+        "MCP client config",
+        False,
+        "tapps-mcp not found in any MCP client config",
+        f"Add tapps-mcp to your MCP client config. "
+        f"Cursor: .cursor/mcp.json, VS Code: .vscode/mcp.json, "
+        f"Claude Code: .mcp.json. Example:\n{snippet}",
+    )
+
+
 def check_claude_md(project_root: Path) -> CheckResult:
     """Check if CLAUDE.md exists and contains TAPPS reference.
 
@@ -675,6 +729,7 @@ _REQ_CHECK_MAP: dict[int, list[str]] = {
         "Claude Code (user) config",
         "Cursor config",
         "VS Code config",
+        "MCP client config",
     ],
     3: [".claude/settings.json"],
     4: ["AGENTS.md", "Hooks", "CLAUDE.md rules", "Cursor rules"],
@@ -775,6 +830,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_claude_code_project(root))
     checks.append(check_cursor_config(root))
     checks.append(check_vscode_config(root))
+    checks.append(check_mcp_client_config(root))
     checks.append(check_scope_recommendation(root))
     checks.append(check_claude_md(root))
     checks.append(check_cursor_rules(root))

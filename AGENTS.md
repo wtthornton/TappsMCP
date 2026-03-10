@@ -108,4 +108,29 @@ For the full 20-action reference, see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REF
 
 **Doctor timeout:** Use `tapps-mcp doctor --quick` or `tapps_doctor(quick=True)`.
 
+### MCP Server Not Discoverable
+
+If tapps-mcp tools don't appear in your IDE's tool list:
+
+1. Check that your MCP client config includes tapps-mcp:
+   - Cursor: `.cursor/mcp.json`
+   - VS Code: `.vscode/mcp.json`
+   - Claude Code: `.mcp.json` (project) or `~/.claude.json` (user)
+
+2. Run `tapps-mcp doctor` to diagnose configuration issues
+
+3. Example `.cursor/mcp.json`:
+   ```json
+   {
+     "mcpServers": {
+       "tapps-mcp": {
+         "command": "uv",
+         "args": ["run", "tapps-mcp", "serve"]
+       }
+     }
+   }
+   ```
+
+4. After updating config, restart your IDE or reload MCP servers
+
 ---

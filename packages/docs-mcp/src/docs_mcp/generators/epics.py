@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
+import subprocess
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import structlog
@@ -13,6 +15,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = structlog.get_logger(__name__)
+
+_MAX_COMMIT_DISPLAY_LEN = 50
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +55,7 @@ class EpicConfig(BaseModel):
     success_metrics: list[str] = []
     stakeholders: list[str] = []
     references: list[str] = []
+    files: list[str] = []
     link_stories: bool = False
     story_paths: dict[int, str] = {}
 
@@ -126,13 +131,24 @@ class EpicGenerator:
         lines.extend(self._render_technical_notes(config, enrichment))
         lines.extend(self._render_non_goals(config))
 
+        # File hints: render file-specific sections when files are provided
+        if config.files and project_root:
+            lines.extend(
+                self._render_file_hints(config.files, project_root, config)
+            )
+            lines.extend(
+                self._render_related_epics(config.files, project_root)
+            )
+
         if style == "comprehensive":
             lines.extend(self._render_success_metrics(config))
             lines.extend(self._render_stakeholders(config))
             lines.extend(self._render_references(config))
             lines.extend(self._render_implementation_order(config))
             lines.extend(self._render_risk_assessment(config, enrichment))
-            lines.extend(self._render_files_affected(config))
+            if not config.files:
+                # Only render generic files-affected when no file hints given
+                lines.extend(self._render_files_affected(config))
             lines.extend(self._render_performance_targets(enrichment))
 
         return "\n".join(lines)
@@ -619,6 +635,197 @@ class EpicGenerator:
             lines.append("")
 
         lines.extend(["<!-- docsmcp:end:performance-targets -->", ""])
+        return lines
+
+    # -- file hint renderers -------------------------------------------------
+
+    def _render_file_hints(
+        self,
+        files: list[str],
+        project_root: Path,
+        config: EpicConfig,
+    ) -> list[str]:
+        """Render a Files Affected table with per-file analysis.
+
+        For each file that exists, includes line count, recent git commits,
+        and public symbols (for Python files). Also scans story descriptions
+        for additional file paths not in the explicit list.
+        """
+        from pathlib import Path as _Path
+
+        lines = [
+            "<!-- docsmcp:start:files-affected -->",
+            "## Files Affected",
+            "",
+            "| File | Lines | Recent Commits | Public Symbols |",
+            "|------|-------|----------------|----------------|",
+        ]
+
+        # Collect explicit file paths
+        all_paths: list[str] = [f.strip() for f in files if f.strip()]
+
+        # Scan story descriptions for additional file references
+        if config.stories:
+            for story in config.stories:
+                text = story.description
+                for task in story.tasks:
+                    text += " " + task
+                # Match backtick-quoted paths and bare path-like strings
+                found = re.findall(r"`([^`]+\.\w{1,5})`", text)
+                for p in found:
+                    if p not in all_paths:
+                        all_paths.append(p)
+
+        for file_path in all_paths:
+            resolved = _Path(project_root) / file_path
+            if not resolved.is_file():
+                lines.append(f"| `{file_path}` | *(not found)* | - | - |")
+                continue
+
+            info = self._analyze_file(resolved, project_root)
+            lines.append(
+                f"| `{file_path}` "
+                f"| {info['line_count']} "
+                f"| {info['commits_summary']} "
+                f"| {info['symbols_summary']} |"
+            )
+
+        lines.extend(["", "<!-- docsmcp:end:files-affected -->", ""])
+        return lines
+
+    @staticmethod
+    def _analyze_file(
+        file_path: Path,
+        project_root: Path,
+    ) -> dict[str, str]:
+        """Analyze a single file for the file hints table.
+
+        Returns dict with line_count, commits_summary, symbols_summary.
+        """
+        from pathlib import Path as _Path
+
+        info: dict[str, str] = {
+            "line_count": "-",
+            "commits_summary": "-",
+            "symbols_summary": "-",
+        }
+
+        # Line count
+        try:
+            text = _Path(file_path).read_text(encoding="utf-8", errors="replace")
+            line_count = len(text.splitlines())
+            info["line_count"] = str(line_count)
+        except OSError:
+            pass
+
+        # Git log: last 5 commits touching this file
+        try:
+            rel = _Path(file_path).relative_to(project_root)
+            result = subprocess.run(
+                ["git", "log", "-5", "--oneline", "--", str(rel)],
+                capture_output=True,
+                text=True,
+                cwd=str(project_root),
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                commit_lines = result.stdout.strip().splitlines()
+                # Show count + latest commit message
+                latest = commit_lines[0]
+                if len(latest) > _MAX_COMMIT_DISPLAY_LEN:
+                    latest = latest[:_MAX_COMMIT_DISPLAY_LEN - 3] + "..."
+                info["commits_summary"] = (
+                    f"{len(commit_lines)} recent: {latest}"
+                )
+        except (subprocess.TimeoutExpired, OSError, ValueError):
+            pass
+
+        # Public symbols for Python files
+        if str(file_path).endswith(".py"):
+            try:
+                source = _Path(file_path).read_text(
+                    encoding="utf-8", errors="replace",
+                )
+                tree = ast.parse(source)
+                funcs = 0
+                classes = 0
+                for node in ast.iter_child_nodes(tree):
+                    if isinstance(
+                        node, ast.FunctionDef | ast.AsyncFunctionDef,
+                    ) and not node.name.startswith("_"):
+                        funcs += 1
+                    elif isinstance(
+                        node, ast.ClassDef,
+                    ) and not node.name.startswith("_"):
+                        classes += 1
+                parts: list[str] = []
+                if classes:
+                    parts.append(f"{classes} classes")
+                if funcs:
+                    parts.append(f"{funcs} functions")
+                info["symbols_summary"] = ", ".join(parts) if parts else "0"
+            except (SyntaxError, OSError):
+                pass
+
+        return info
+
+    def _render_related_epics(
+        self,
+        files: list[str],
+        project_root: Path,
+    ) -> list[str]:
+        """Scan existing epics for mentions of the same files.
+
+        Looks in ``docs/planning/epics/`` for .md files that reference
+        any of the given file paths.
+        """
+        from pathlib import Path as _Path
+
+        epics_dir = _Path(project_root) / "docs" / "planning" / "epics"
+        if not epics_dir.is_dir():
+            return []
+
+        file_set = {f.strip() for f in files if f.strip()}
+        if not file_set:
+            return []
+
+        related: list[tuple[str, list[str]]] = []
+
+        try:
+            epic_files = sorted(epics_dir.glob("*.md"))
+        except OSError:
+            return []
+
+        for epic_file in epic_files:
+            try:
+                content = epic_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            matched: list[str] = []
+            for fp in file_set:
+                # Check if file path appears in the epic content
+                if fp in content:
+                    matched.append(fp)
+
+            if matched:
+                related.append((epic_file.name, matched))
+
+        if not related:
+            return []
+
+        lines = [
+            "<!-- docsmcp:start:related-epics -->",
+            "## Related Epics",
+            "",
+        ]
+
+        for epic_name, matched_files in related:
+            files_str = ", ".join(f"`{f}`" for f in sorted(matched_files))
+            lines.append(f"- **{epic_name}** -- references {files_str}")
+
+        lines.extend(["", "<!-- docsmcp:end:related-epics -->", ""])
         return lines
 
     # -- auto-populate from analyzers ----------------------------------------

@@ -21,7 +21,6 @@ memory_decay_enabled: true
 # Adaptive learning
 adaptive:
   enabled: true
-  confidence_threshold: 0.4
 
 # Security settings
 security:

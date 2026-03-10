@@ -120,6 +120,36 @@ class TestTappsSessionStart:
         await tapps_session_start()
         assert is_session_initialized() is True
 
+    @pytest.mark.asyncio
+    async def test_includes_timings(self) -> None:
+        """Full session start includes per-phase timings dict (Epic 68.2)."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        result = await tapps_session_start()
+        data = result["data"]
+        assert "timings" in data
+        timings = data["timings"]
+        assert "server_info_ms" in timings
+        assert "memory_status_ms" in timings
+        assert "business_experts_ms" in timings
+        assert "total_ms" in timings
+        # All timings must be non-negative integers
+        for key, val in timings.items():
+            assert isinstance(val, int), f"timings[{key}] should be int"
+            assert val >= 0, f"timings[{key}] should be non-negative"
+
+    @pytest.mark.asyncio
+    async def test_background_maintenance_fields(self) -> None:
+        """Full session start marks maintenance ops as background (Epic 68.2)."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        result = await tapps_session_start()
+        data = result["data"]
+        assert data["memory_gc"] == "background"
+        assert data["memory_consolidation"] == "background"
+        assert data["memory_doc_validation"] == "background"
+        assert data["session_capture"] == "background"
+
 
 # ---------------------------------------------------------------------------
 # tapps_set_engagement_level
@@ -1271,8 +1301,8 @@ class TestMaybeAutoGC:
         assert result["ran"] is True
 
     @pytest.mark.asyncio
-    async def test_session_start_includes_gc_metadata(self) -> None:
-        """tapps_session_start response includes memory_gc when GC runs."""
+    async def test_session_start_defers_gc_to_background(self) -> None:
+        """tapps_session_start defers memory_gc to background task (Epic 68.2)."""
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
         mock_store = MagicMock()
@@ -1302,10 +1332,91 @@ class TestMaybeAutoGC:
             result = await tapps_session_start()
 
         data = result["data"]
-        assert "memory_gc" in data
-        gc_info = data["memory_gc"]
-        assert gc_info is not None
-        assert gc_info["ran"] is True
+        # GC, consolidation, doc validation, and session capture are now
+        # fire-and-forget background tasks (Epic 68.2 optimization).
+        assert data["memory_gc"] == "background"
+        assert data["memory_consolidation"] == "background"
+        assert data["memory_doc_validation"] == "background"
+        assert data["session_capture"] == "background"
+
+
+class TestScheduleBackgroundMaintenance:
+    """Tests for _schedule_background_maintenance (Epic 68.2)."""
+
+    @pytest.mark.asyncio
+    async def test_schedules_all_maintenance_ops(self) -> None:
+        """Background task calls GC, consolidation, doc validation, session capture."""
+        import asyncio
+
+        from tapps_mcp.server_pipeline_tools import _schedule_background_maintenance
+
+        mock_store = MagicMock()
+        mock_snapshot = MagicMock()
+        mock_snapshot.total_count = 100
+        mock_settings = MagicMock()
+        mock_settings.project_root = Path("/fake")
+
+        with (
+            patch(
+                "tapps_mcp.server_pipeline_tools._maybe_auto_gc",
+            ) as mock_gc,
+            patch(
+                "tapps_mcp.server_pipeline_tools._maybe_consolidation_scan",
+            ) as mock_consol,
+            patch(
+                "tapps_mcp.server_pipeline_tools._maybe_validate_memories",
+                new_callable=AsyncMock,
+            ) as mock_doc_val,
+            patch(
+                "tapps_mcp.server_pipeline_tools._process_session_capture",
+            ) as mock_capture,
+        ):
+            _schedule_background_maintenance(mock_store, mock_snapshot, mock_settings)
+            # Allow background task to complete
+            await asyncio.sleep(0.05)
+
+        mock_gc.assert_called_once_with(mock_store, 100, mock_settings)
+        mock_consol.assert_called_once_with(mock_store, mock_settings)
+        mock_doc_val.assert_called_once_with(mock_store, mock_settings)
+        mock_capture.assert_called_once_with(Path("/fake"), mock_store)
+
+    @pytest.mark.asyncio
+    async def test_background_task_tolerates_failures(self) -> None:
+        """Background maintenance continues even if individual ops fail."""
+        import asyncio
+
+        from tapps_mcp.server_pipeline_tools import _schedule_background_maintenance
+
+        mock_store = MagicMock()
+        mock_snapshot = MagicMock()
+        mock_snapshot.total_count = 100
+        mock_settings = MagicMock()
+        mock_settings.project_root = Path("/fake")
+
+        with (
+            patch(
+                "tapps_mcp.server_pipeline_tools._maybe_auto_gc",
+                side_effect=RuntimeError("gc boom"),
+            ),
+            patch(
+                "tapps_mcp.server_pipeline_tools._maybe_consolidation_scan",
+                side_effect=RuntimeError("consol boom"),
+            ),
+            patch(
+                "tapps_mcp.server_pipeline_tools._maybe_validate_memories",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("doc val boom"),
+            ),
+            patch(
+                "tapps_mcp.server_pipeline_tools._process_session_capture",
+            ) as mock_capture,
+        ):
+            _schedule_background_maintenance(mock_store, mock_snapshot, mock_settings)
+            # Allow background task to complete
+            await asyncio.sleep(0.05)
+
+        # Session capture still called despite earlier failures
+        mock_capture.assert_called_once()
 
 
 class TestRegister:

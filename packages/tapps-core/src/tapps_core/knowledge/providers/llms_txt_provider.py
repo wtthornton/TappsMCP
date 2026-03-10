@@ -23,6 +23,12 @@ _KNOWN_LLMS_TXT: dict[str, str] = {
     "cloudflare": "https://developers.cloudflare.com/llms.txt",
     "mintlify": "https://mintlify.com/docs/llms.txt",
     "stripe": "https://docs.stripe.com/llms.txt",
+    "pytest": "https://docs.pytest.org/llms.txt",
+    "github-actions": "https://docs.github.com/llms.txt",
+    "httpx": "https://www.python-httpx.org/llms.txt",
+    "uvicorn": "https://www.uvicorn.org/llms.txt",
+    "ruff": "https://docs.astral.sh/ruff/llms.txt",
+    "uv": "https://docs.astral.sh/uv/llms.txt",
 }
 
 

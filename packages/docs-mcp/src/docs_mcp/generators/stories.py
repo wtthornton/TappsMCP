@@ -46,8 +46,6 @@ class StoryConfig(BaseModel):
     technical_notes: list[str] = []
     criteria_format: str = "checkbox"  # "checkbox" or "gherkin"
     style: str = "standard"  # "standard" or "comprehensive"
-    inherit_context: bool = True
-    epic_path: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -76,10 +74,6 @@ class StoryGenerator:
     VALID_STYLES: ClassVar[frozenset[str]] = frozenset({"standard", "comprehensive"})
     VALID_SIZES: ClassVar[frozenset[str]] = frozenset({"S", "M", "L", "XL", ""})
     VALID_CRITERIA_FORMATS: ClassVar[frozenset[str]] = frozenset({"checkbox", "gherkin"})
-
-    _NO_KNOWLEDGE_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
-        r"no specific knowledge found", re.IGNORECASE,
-    )
 
     def generate(
         self,
@@ -128,7 +122,7 @@ class StoryGenerator:
             lines.extend(self._render_test_cases(config))
             lines.extend(self._render_technical_notes(config, enrichment))
             lines.extend(self._render_dependencies(config))
-            lines.extend(self._render_invest_checklist(config))
+            lines.extend(self._render_invest_checklist())
 
         return "\n".join(lines)
 
@@ -200,27 +194,10 @@ class StoryGenerator:
         else:
             lines.append("Describe what this story delivers and any important context...")
 
-        # Only include tech stack if not inheriting from epic.
-        if not config.inherit_context:
-            tech_stack = enrichment.get("tech_stack")
-            if tech_stack:
-                lines.append("")
-                lines.append(f"**Tech Stack:** {tech_stack}")
-
-        # Add epic reference when inheriting.
-        if config.inherit_context and config.epic_path:
+        tech_stack = enrichment.get("tech_stack")
+        if tech_stack:
             lines.append("")
-            epic_num = config.epic_number
-            if epic_num:
-                lines.append(
-                    f"See [Epic {epic_num}]({config.epic_path}) "
-                    f"for project context and shared definitions."
-                )
-            else:
-                lines.append(
-                    f"See [epic]({config.epic_path}) "
-                    f"for project context and shared definitions."
-                )
+            lines.append(f"**Tech Stack:** {tech_stack}")
 
         lines.extend(["", "<!-- docsmcp:end:description -->", ""])
         return lines
@@ -340,21 +317,6 @@ class StoryGenerator:
             "",
         ]
 
-        # If inheriting from epic, just reference it.
-        if config.inherit_context and config.epic_path:
-            epic_num = config.epic_number
-            if epic_num:
-                lines.append(
-                    f"Definition of Done per [Epic {epic_num}]({config.epic_path})."
-                )
-            else:
-                lines.append(
-                    f"Definition of Done per [epic]({config.epic_path})."
-                )
-            lines.extend(["", "<!-- docsmcp:end:definition-of-done -->", ""])
-            return lines
-
-        # Full DoD checklist.
         if config.tasks:
             lines.append("- [ ] All tasks completed")
         lines.append("- [ ] Code reviewed and approved")
@@ -381,9 +343,9 @@ class StoryGenerator:
     def _render_test_cases(self, config: StoryConfig) -> list[str]:
         """Render the Test Cases section (comprehensive only).
 
-        When explicit test cases are provided, uses them. When only
-        acceptance criteria exist, derives test names from them.
-        When neither exists, omits the section entirely.
+        When explicit ``test_cases`` are provided they are rendered as-is.
+        Otherwise, test case stubs are auto-generated from acceptance criteria
+        using :meth:`generate_test_name`.
         """
         lines = [
             "<!-- docsmcp:start:test-cases -->",
@@ -395,19 +357,13 @@ class StoryGenerator:
             for i, test in enumerate(config.test_cases, 1):
                 lines.append(f"{i}. {test}")
         elif config.acceptance_criteria:
-            # Derive test names from acceptance criteria.
-            from docs_mcp.generators.test_deriver import derive_test_names
-
-            derived = derive_test_names(config.acceptance_criteria)
-            if derived:
-                for i, name in enumerate(derived, 1):
-                    lines.append(f"{i}. `{name}`")
-            else:
-                # Couldn't derive anything useful — omit section.
-                return []
+            for i, ac in enumerate(config.acceptance_criteria, 1):
+                name = self.generate_test_name(ac, index=i)
+                lines.append(f"{i}. `{name}` -- {ac}")
         else:
-            # No test cases and no ACs — omit section entirely.
-            return []
+            lines.append("1. Test happy path...")
+            lines.append("2. Test edge cases...")
+            lines.append("3. Test error handling...")
 
         lines.extend(["", "<!-- docsmcp:end:test-cases -->", ""])
         return lines
@@ -430,21 +386,17 @@ class StoryGenerator:
         else:
             lines.append("- Document implementation hints, API contracts, data formats...")
 
-        # Only include module summary if not inheriting from epic.
-        if not config.inherit_context:
-            module_summary = enrichment.get("module_summary")
-            if module_summary:
-                lines.append("")
-                lines.append(f"**Project Structure:** {module_summary}")
+        module_summary = enrichment.get("module_summary")
+        if module_summary:
+            lines.append("")
+            lines.append(f"**Project Structure:** {module_summary}")
 
         expert_guidance: list[dict[str, str]] = enrichment.get("expert_guidance", [])
-        # Filter expert guidance (Epic 18.3).
-        rendered_guidance = self._filter_expert_guidance(expert_guidance)
-        if rendered_guidance:
+        if expert_guidance:
             lines.append("")
             lines.append("### Expert Recommendations")
             lines.append("")
-            for item in rendered_guidance:
+            for item in expert_guidance:
                 lines.append(
                     f"- **{item['expert']}** ({item['confidence']}): "
                     f"{item['advice']}"
@@ -470,71 +422,22 @@ class StoryGenerator:
         lines.extend(["", "<!-- docsmcp:end:dependencies -->", ""])
         return lines
 
-    def _render_invest_checklist(self, config: StoryConfig) -> list[str]:
-        """Render the INVEST checklist with auto-assessment (comprehensive only)."""
-        from docs_mcp.generators.invest_assessor import assess_invest
-
-        assessment = assess_invest(config)
-
-        def _check(item: str) -> str:
-            return "[x]" if assessment.get(item, False) else "[ ]"
-
+    def _render_invest_checklist(self) -> list[str]:
+        """Render the INVEST checklist (comprehensive only)."""
         return [
             "<!-- docsmcp:start:invest -->",
             "## INVEST Checklist",
             "",
-            f"- {_check('Independent')} **I**ndependent -- Can be developed and delivered independently",
-            f"- {_check('Negotiable')} **N**egotiable -- Details can be refined during implementation",
-            f"- {_check('Valuable')} **V**aluable -- Delivers value to a user or the system",
-            f"- {_check('Estimable')} **E**stimable -- Team can estimate the effort",
-            f"- {_check('Small')} **S**mall -- Completable within one sprint/iteration",
-            f"- {_check('Testable')} **T**estable -- Has clear criteria to verify completion",
+            "- [ ] **I**ndependent -- Can be developed and delivered independently",
+            "- [ ] **N**egotiable -- Details can be refined during implementation",
+            "- [ ] **V**aluable -- Delivers value to a user or the system",
+            "- [ ] **E**stimable -- Team can estimate the effort",
+            "- [ ] **S**mall -- Completable within one sprint/iteration",
+            "- [ ] **T**estable -- Has clear criteria to verify completion",
             "",
             "<!-- docsmcp:end:invest -->",
             "",
         ]
-
-    # -- expert filtering (Epic 18.3) ---------------------------------------
-
-    @classmethod
-    def _filter_expert_guidance(
-        cls,
-        guidance: list[dict[str, str]],
-    ) -> list[dict[str, str]]:
-        """Filter expert guidance based on confidence and content quality."""
-        filtered: list[dict[str, str]] = []
-        for item in guidance:
-            advice = item.get("advice", "").strip()
-            confidence = cls._parse_confidence(item.get("confidence", "0%"))
-
-            # Skip empty or "no knowledge" advice.
-            if not advice or cls._NO_KNOWLEDGE_PATTERN.search(advice):
-                continue
-
-            if confidence < 0.3:
-                continue
-
-            if confidence < 0.5:
-                domain = item.get("domain", "unknown")
-                filtered.append({
-                    **item,
-                    "advice": (
-                        f"Expert review recommended for {domain} "
-                        f"- automated analysis inconclusive"
-                    ),
-                })
-            else:
-                filtered.append(item)
-
-        return filtered
-
-    @staticmethod
-    def _parse_confidence(confidence_str: str) -> float:
-        """Parse a confidence string like '85%' to 0.85."""
-        try:
-            return float(confidence_str.rstrip("%")) / 100
-        except (ValueError, AttributeError):
-            return 0.0
 
     # -- auto-populate from analyzers ----------------------------------------
 
@@ -639,6 +542,14 @@ class StoryGenerator:
 
     # -- helpers -----------------------------------------------------------
 
+    _STOPWORDS: ClassVar[frozenset[str]] = frozenset({
+        "the", "and", "is", "are", "should", "that", "when", "then",
+        "given", "a", "an", "of", "in", "to", "for", "with", "be",
+        "has", "have", "it", "its",
+    })
+
+    _MAX_TEST_NAME_LEN: ClassVar[int] = 80
+
     @staticmethod
     def _slugify(text: str) -> str:
         """Convert text to a URL-friendly slug."""
@@ -647,3 +558,74 @@ class StoryGenerator:
         slug = re.sub(r"[\s_]+", "-", slug)
         slug = re.sub(r"-+", "-", slug)
         return slug.strip("-")
+
+    @classmethod
+    def generate_test_name(cls, criterion: str, *, index: int = 0) -> str:
+        """Generate a valid Python test function name from an acceptance criterion.
+
+        The result follows the pattern ``test_<verb>_<noun>_<qualifier>``
+        (or ``test_ac<N>_<verb>_<noun>_<qualifier>`` when *index* > 0).
+        It is guaranteed to:
+
+        * be at most 80 characters,
+        * never truncate mid-word,
+        * be a valid Python identifier (``test_`` prefix, only ``[a-z0-9_]``),
+        * have common stopwords removed.
+
+        Args:
+            criterion: Acceptance criterion text (e.g. "Validation rejects
+                empty fields when the form is submitted").
+            index: 1-based AC number.  When > 0, the name is prefixed with
+                ``ac<index>_`` (e.g. ``test_ac1_validation_rejects``).
+
+        Returns:
+            A clean test function name such as ``test_validation_rejects_empty_fields``.
+        """
+        if not criterion or not criterion.strip():
+            if index > 0:
+                return f"test_ac{index}_story_acceptance"
+            return "test_story_acceptance"
+
+        # Lowercase and strip non-alphanumeric (keep spaces for splitting).
+        text = criterion.lower().strip()
+        text = re.sub(r"[^a-z0-9\s]", "", text)
+
+        # Split into words, remove stopwords.
+        words = [w for w in text.split() if w and w not in cls._STOPWORDS]
+
+        if not words:
+            if index > 0:
+                return f"test_ac{index}_story_acceptance"
+            return "test_story_acceptance"
+
+        # Build prefix.
+        prefix = f"test_ac{index}_" if index > 0 else "test_"
+
+        # Assemble words into the name, respecting max length.
+        parts: list[str] = []
+        current_len = len(prefix)
+        for word in words:
+            # +1 for the underscore separator between words.
+            needed = len(word) + (1 if parts else 0)
+            if current_len + needed > cls._MAX_TEST_NAME_LEN:
+                break
+            parts.append(word)
+            current_len += needed
+
+        if not parts:
+            # First word alone exceeds limit -- take it truncated to fit.
+            available = cls._MAX_TEST_NAME_LEN - len(prefix)
+            if available > 0:
+                parts.append(words[0][:available])
+            else:
+                return prefix.rstrip("_")
+
+        name = prefix + "_".join(parts)
+
+        # Final safety: ensure valid Python identifier.
+        if not name.isidentifier():
+            name = re.sub(r"[^a-z0-9_]", "", name)
+            if not name.startswith("test_"):
+                name = "test_" + name
+
+        return name

@@ -1,0 +1,577 @@
+"""Structural validator for epic planning documents.
+
+Parses markdown epic files and checks for required sections, story
+completeness, point/size consistency, dependency cycles, and
+files-affected coverage.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path  # noqa: TC003 — used at runtime
+
+import structlog
+from pydantic import BaseModel
+
+logger = structlog.get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+
+_SIZE_POINT_RANGES: dict[str, tuple[int, int]] = {
+    "S": (1, 2),
+    "M": (3, 5),
+    "L": (8, 13),
+    "XL": (13, 40),
+}
+
+# Regex patterns
+_STORY_HEADING_RE = re.compile(
+    r"^###\s+Story\s+(\d+(?:\.\d+)?)\s*:\s*(.+)",
+    re.IGNORECASE,
+)
+_POINTS_RE = re.compile(r"\*\*Points:\*\*\s*(\d+)", re.IGNORECASE)
+_SIZE_RE = re.compile(r"\*\*Size:\*\*\s*(XS|S|M|L|XL)", re.IGNORECASE)
+_PRIORITY_RE = re.compile(r"\*\*Priority:\*\*\s*(P[0-4])", re.IGNORECASE)
+_CHECKBOX_RE = re.compile(r"^\s*-\s*\[[ xX]\]\s+")
+_H2_RE = re.compile(r"^##\s+(.+)")
+_H3_RE = re.compile(r"^###\s+(.+)")
+_H4_RE = re.compile(r"^####\s+(.+)")
+_STORY_REF_RE = re.compile(r"(?:Story\s+)?(\d+\.\d+)", re.IGNORECASE)
+
+
+class EpicIssue(BaseModel):
+    """A single validation finding."""
+
+    severity: str  # "error", "warning", "info"
+    location: str  # e.g., "Story 67.1" or "Files Affected"
+    message: str
+
+
+class StoryInfo(BaseModel):
+    """Extracted metadata for one story."""
+
+    number: str  # e.g., "67.1"
+    title: str
+    points: int | None = None
+    size: str | None = None  # S, M, L, XL
+    priority: str | None = None
+    has_acceptance_criteria: bool = False
+    has_tasks: bool = False
+    has_files: bool = False
+    ac_count: int = 0
+    task_count: int = 0
+
+
+class EpicValidationReport(BaseModel):
+    """Aggregated epic validation results."""
+
+    file_path: str
+    epic_title: str = ""
+    total_stories: int = 0
+    stories: list[StoryInfo] = []
+    issues: list[EpicIssue] = []
+    score: int = 100  # Start at 100, deduct for issues
+    passed: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Parser helpers
+# ---------------------------------------------------------------------------
+
+
+def _split_by_heading(
+    lines: list[str],
+    level: int,
+) -> list[tuple[str, list[str]]]:
+    """Split lines into sections by heading level.
+
+    Returns a list of (heading_text, body_lines) tuples.
+    The first element may have an empty heading if content precedes
+    the first heading of the given level.
+    """
+    prefix = "#" * level
+    sections: list[tuple[str, list[str]]] = []
+    current_heading = ""
+    current_body: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        # Check if this is a heading at exactly the target level
+        if stripped.startswith(prefix + " ") and (
+            len(stripped) == len(prefix) or not stripped[len(prefix)].startswith("#")
+        ):
+            # Avoid matching deeper headings (e.g., ### when looking for ##)
+            raw_heading = stripped[len(prefix) :].strip()
+            # Is this exactly the right level? Check no extra # before content
+            if not stripped.startswith(prefix + "#"):
+                if current_heading or current_body:
+                    sections.append((current_heading, current_body))
+                current_heading = raw_heading
+                current_body = []
+                continue
+        current_body.append(line)
+
+    if current_heading or current_body:
+        sections.append((current_heading, current_body))
+
+    return sections
+
+
+def _extract_story(
+    number: str,
+    title: str,
+    body_lines: list[str],
+) -> StoryInfo:
+    """Extract metadata from a story's body lines."""
+    points: int | None = None
+    size: str | None = None
+    priority: str | None = None
+    has_ac = False
+    has_tasks = False
+    has_files = False
+    ac_count = 0
+    task_count = 0
+
+    in_ac_section = False
+    in_tasks_section = False
+    in_files_section = False
+
+    for line in body_lines:
+        stripped = line.strip()
+
+        # Check points/size/priority on metadata lines
+        pm = _POINTS_RE.search(stripped)
+        if pm:
+            points = int(pm.group(1))
+        sm = _SIZE_RE.search(stripped)
+        if sm:
+            size = sm.group(1).upper()
+        prm = _PRIORITY_RE.search(stripped)
+        if prm:
+            priority = prm.group(1).upper()
+
+        # Detect h4 sub-sections
+        h4_match = _H4_RE.match(stripped)
+        if h4_match:
+            heading_text = h4_match.group(1).strip().lower()
+            in_ac_section = "acceptance criteria" in heading_text
+            in_tasks_section = heading_text.startswith("task")
+            in_files_section = heading_text.startswith("file")
+            if in_ac_section:
+                has_ac = True
+            if in_tasks_section:
+                has_tasks = True
+            continue
+
+        # Detect files section via **Files:** bold marker
+        if stripped.lower().startswith("**files:**") or stripped.lower().startswith("**files**"):
+            has_files = True
+            in_files_section = True
+            in_ac_section = False
+            in_tasks_section = False
+            continue
+
+        # Count checkboxes in AC and Tasks sections
+        if _CHECKBOX_RE.match(stripped):
+            if in_ac_section:
+                ac_count += 1
+            elif in_tasks_section:
+                task_count += 1
+
+        # Detect file list items (indented lines starting with - `)
+        if in_files_section and stripped.startswith("- `"):
+            has_files = True
+
+    return StoryInfo(
+        number=number,
+        title=title.strip(),
+        points=points,
+        size=size,
+        priority=priority,
+        has_acceptance_criteria=has_ac,
+        has_tasks=has_tasks,
+        has_files=has_files,
+        ac_count=ac_count,
+        task_count=task_count,
+    )
+
+
+def _check_point_size_consistency(story: StoryInfo) -> EpicIssue | None:
+    """Check if points and size are consistent."""
+    if story.points is None or story.size is None:
+        return None
+
+    expected = _SIZE_POINT_RANGES.get(story.size)
+    if expected is None:
+        return None
+
+    lo, hi = expected
+    if story.points < lo or story.points > hi:
+        return EpicIssue(
+            severity="warning",
+            location=f"Story {story.number}",
+            message=(
+                f"Points ({story.points}) inconsistent with size {story.size} (expected {lo}-{hi})"
+            ),
+        )
+    return None
+
+
+def _parse_implementation_order(lines: list[str]) -> list[tuple[str, list[str]]]:
+    """Parse Implementation Order section for dependency edges.
+
+    Looks for patterns like:
+    - Story 67.2 depends on Story 67.1
+    - Story 67.3 -> Story 67.1
+    - "67.2 (depends on 67.1)"
+
+    Returns list of (story, [dependencies]) tuples.
+    """
+    edges: dict[str, list[str]] = {}
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        refs = _STORY_REF_RE.findall(stripped)
+        if len(refs) < 2:  # noqa: PLR2004
+            continue
+
+        # Heuristic: if line contains "depends on", "after", "requires",
+        # treat the first ref as dependent on subsequent refs.
+        lower = stripped.lower()
+        if any(kw in lower for kw in ("depends on", "after", "requires", "blocks")):
+            dependent = refs[0]
+            deps = refs[1:]
+            if dependent not in edges:
+                edges[dependent] = []
+            edges[dependent].extend(deps)
+        elif "->" in stripped:
+            # Arrow notation: A -> B means A depends on B
+            dependent = refs[0]
+            deps = refs[1:]
+            if dependent not in edges:
+                edges[dependent] = []
+            edges[dependent].extend(deps)
+
+    return list(edges.items())
+
+
+def _detect_cycle(edges: list[tuple[str, list[str]]]) -> list[str] | None:
+    """Simple topological sort to detect cycles.
+
+    Returns the cycle path if found, or None.
+    """
+    graph: dict[str, list[str]] = {}
+    for node, deps in edges:
+        if node not in graph:
+            graph[node] = []
+        graph[node].extend(deps)
+        for d in deps:
+            if d not in graph:
+                graph[d] = []
+
+    visited: set[str] = set()
+    in_stack: set[str] = set()
+    path: list[str] = []
+
+    def _dfs(node: str) -> bool:
+        visited.add(node)
+        in_stack.add(node)
+        path.append(node)
+
+        for neighbor in graph.get(node, []):
+            if neighbor in in_stack:
+                path.append(neighbor)
+                return True
+            if neighbor not in visited and _dfs(neighbor):
+                return True
+
+        path.pop()
+        in_stack.discard(node)
+        return False
+
+    for node in graph:
+        if node not in visited and _dfs(node):
+            return path
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Validator
+# ---------------------------------------------------------------------------
+
+
+class EpicValidator:
+    """Validate the structure and completeness of epic planning documents."""
+
+    def validate(self, file_path: Path) -> EpicValidationReport:
+        """Validate an epic document.
+
+        Args:
+            file_path: Path to the epic markdown file.
+
+        Returns:
+            An EpicValidationReport with findings and score.
+        """
+        report = EpicValidationReport(
+            file_path=str(file_path),
+        )
+
+        if not file_path.exists():
+            report.issues.append(
+                EpicIssue(
+                    severity="error",
+                    location="File",
+                    message=f"File does not exist: {file_path}",
+                )
+            )
+            report.score = 0
+            report.passed = False
+            return report
+
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            report.issues.append(
+                EpicIssue(
+                    severity="error",
+                    location="File",
+                    message=f"Cannot read file: {exc}",
+                )
+            )
+            report.score = 0
+            report.passed = False
+            return report
+
+        if not content.strip():
+            report.issues.append(
+                EpicIssue(
+                    severity="error",
+                    location="File",
+                    message="File is empty",
+                )
+            )
+            report.score = 0
+            report.passed = False
+            return report
+
+        lines = content.splitlines()
+
+        # Extract epic title from first H1
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("# ") and not stripped.startswith("## "):
+                report.epic_title = stripped[2:].strip()
+                break
+
+        # Parse H2 sections
+        h2_sections = _split_by_heading(lines, 2)
+        h2_names = {name.lower().strip() for name, _ in h2_sections if name}
+
+        # Check required sections
+        self._check_required_sections(h2_names, report)
+
+        # Parse stories
+        stories_body: list[str] = []
+        files_affected_body: list[str] = []
+        impl_order_body: list[str] = []
+
+        for name, body in h2_sections:
+            lower_name = name.lower().strip()
+            if lower_name == "stories":
+                stories_body = body
+            elif "files affected" in lower_name or lower_name == "files":
+                files_affected_body = body
+            elif "implementation order" in lower_name or "order" in lower_name:
+                impl_order_body = body
+
+        # Extract individual stories
+        if stories_body:
+            self._parse_stories(stories_body, report)
+
+        # Check stories for completeness
+        self._check_story_completeness(report)
+
+        # Check point/size consistency
+        self._check_consistency(report)
+
+        # Check implementation order for cycles
+        if impl_order_body:
+            self._check_implementation_order(impl_order_body, report)
+
+        # Check files-affected coverage
+        if files_affected_body and report.stories:
+            self._check_files_affected(files_affected_body, report)
+
+        # Calculate final score
+        self._calculate_score(report)
+
+        return report
+
+    def _check_required_sections(
+        self,
+        h2_names: set[str],
+        report: EpicValidationReport,
+    ) -> None:
+        """Check that required top-level sections exist."""
+        required = {
+            "goal": "Goal",
+            "motivation": "Motivation",
+            "acceptance criteria": "Acceptance Criteria",
+            "stories": "Stories",
+        }
+
+        for key, display_name in required.items():
+            if not any(key in name for name in h2_names):
+                report.issues.append(
+                    EpicIssue(
+                        severity="error",
+                        location="Document",
+                        message=f"Missing required section: {display_name}",
+                    )
+                )
+
+    def _parse_stories(
+        self,
+        stories_body: list[str],
+        report: EpicValidationReport,
+    ) -> None:
+        """Parse story headings and extract metadata."""
+        # Split stories by ### headings
+        current_number = ""
+        current_title = ""
+        current_lines: list[str] = []
+
+        for line in stories_body:
+            stripped = line.strip()
+            match = _STORY_HEADING_RE.match(stripped)
+            if match:
+                # Save previous story
+                if current_number:
+                    story = _extract_story(current_number, current_title, current_lines)
+                    report.stories.append(story)
+
+                current_number = match.group(1)
+                current_title = match.group(2)
+                current_lines = []
+            else:
+                current_lines.append(line)
+
+        # Save last story
+        if current_number:
+            story = _extract_story(current_number, current_title, current_lines)
+            report.stories.append(story)
+
+        report.total_stories = len(report.stories)
+
+    def _check_story_completeness(self, report: EpicValidationReport) -> None:
+        """Check each story for required elements."""
+        for story in report.stories:
+            loc = f"Story {story.number}"
+
+            if not story.has_acceptance_criteria and story.ac_count == 0:
+                report.issues.append(
+                    EpicIssue(
+                        severity="error",
+                        location=loc,
+                        message="Missing acceptance criteria",
+                    )
+                )
+
+            if story.points is None:
+                report.issues.append(
+                    EpicIssue(
+                        severity="warning",
+                        location=loc,
+                        message="Missing story points",
+                    )
+                )
+
+            if story.size is None:
+                report.issues.append(
+                    EpicIssue(
+                        severity="warning",
+                        location=loc,
+                        message="Missing size estimate",
+                    )
+                )
+
+            if not story.has_files:
+                report.issues.append(
+                    EpicIssue(
+                        severity="info",
+                        location=loc,
+                        message="No files listed",
+                    )
+                )
+
+    def _check_consistency(self, report: EpicValidationReport) -> None:
+        """Check point/size consistency for all stories."""
+        for story in report.stories:
+            issue = _check_point_size_consistency(story)
+            if issue:
+                report.issues.append(issue)
+
+    def _check_implementation_order(
+        self,
+        impl_lines: list[str],
+        report: EpicValidationReport,
+    ) -> None:
+        """Check implementation order for dependency cycles."""
+        edges = _parse_implementation_order(impl_lines)
+        if not edges:
+            return
+
+        cycle = _detect_cycle(edges)
+        if cycle:
+            cycle_str = " -> ".join(cycle)
+            report.issues.append(
+                EpicIssue(
+                    severity="error",
+                    location="Implementation Order",
+                    message=f"Dependency cycle detected: {cycle_str}",
+                )
+            )
+
+    def _check_files_affected(
+        self,
+        files_lines: list[str],
+        report: EpicValidationReport,
+    ) -> None:
+        """Check that story files appear in the Files Affected section."""
+        # Collect all file paths mentioned in Files Affected
+        affected_text = "\n".join(files_lines).lower()
+
+        # Collect file paths from stories
+        for story in report.stories:
+            if not story.has_files:
+                continue
+            # This is a best-effort check -- we just verify the story
+            # is referenced in the files-affected section
+            if story.number not in affected_text and story.title.lower() not in affected_text:
+                # Only warn if the section exists but doesn't reference the story
+                report.issues.append(
+                    EpicIssue(
+                        severity="info",
+                        location=f"Story {story.number}",
+                        message="Story files not referenced in Files Affected section",
+                    )
+                )
+
+    def _calculate_score(self, report: EpicValidationReport) -> None:
+        """Calculate score: start at 100, deduct for issues."""
+        score = 100
+        for issue in report.issues:
+            if issue.severity == "error":
+                score -= 15
+            elif issue.severity == "warning":
+                score -= 5
+            # info issues don't deduct
+
+        report.score = max(score, 0)
+        report.passed = report.score >= 50  # noqa: PLR2004

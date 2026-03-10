@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from tapps_core.knowledge.cache import KBCache
 from tapps_core.knowledge.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
-from tapps_core.knowledge.lookup import LookupEngine
+from tapps_core.knowledge.lookup import LookupEngine, _is_toc_only
 from tapps_core.knowledge.models import CacheEntry, LibraryMatch
 
 
@@ -406,3 +406,192 @@ class TestLookupEdgeCases:
         await engine.close()
         # Should be safe to call close twice
         await engine.close()
+
+
+class TestIsTocOnly:
+    """Tests for the _is_toc_only helper."""
+
+    def test_toc_content_detected(self) -> None:
+        """Content dominated by links/headings with little prose is TOC."""
+        toc = "\n".join([
+            "# Documentation",
+            "- [Getting Started](https://example.com/start)",
+            "- [API Reference](https://example.com/api)",
+            "- [Configuration](https://example.com/config)",
+            "## More Links",
+            "- [Deployment](https://example.com/deploy)",
+            "- [Troubleshooting](https://example.com/trouble)",
+            "## Resources",
+            "- [FAQ](https://example.com/faq)",
+        ])
+        assert _is_toc_only(toc) is True
+
+    def test_prose_content_not_detected(self) -> None:
+        """Content with substantial prose is NOT TOC-only."""
+        prose = "\n".join([
+            "# Docker Compose Best Practices",
+            "",
+            "Docker Compose is a tool for defining and running multi-container "
+            "Docker applications. With Compose, you use a YAML file to configure "
+            "your application's services. Then, with a single command, you create "
+            "and start all the services from your configuration.",
+            "",
+            "When working with production deployments, always pin your image "
+            "versions to specific tags rather than using 'latest'. This ensures "
+            "reproducible builds and prevents unexpected breaking changes when "
+            "upstream images are updated.",
+            "",
+            "Use health checks in your services to ensure containers are ready "
+            "before dependent services attempt to connect. This prevents race "
+            "conditions during startup sequences.",
+            "",
+            "Volume mounts should be used for persistent data. Named volumes "
+            "are preferred over bind mounts in production because they are "
+            "managed by Docker and work consistently across different host OSes.",
+        ])
+        assert _is_toc_only(prose) is False
+
+    def test_empty_content_is_toc(self) -> None:
+        """Empty content is considered TOC-only (vacuously)."""
+        assert _is_toc_only("") is True
+
+    def test_mixed_content_below_threshold(self) -> None:
+        """Content with some prose but under threshold is TOC."""
+        mixed = "\n".join([
+            "# Tools",
+            "Some intro.",
+            "- [Tool A](https://a.com)",
+            "- [Tool B](https://b.com)",
+            "- [Tool C](https://c.com)",
+            "## More",
+            "- [Tool D](https://d.com)",
+        ])
+        assert _is_toc_only(mixed) is True
+
+
+class TestTocWarningInLookup:
+    """Test that TOC-only content gets a warning in lookup results."""
+
+    @pytest.mark.asyncio
+    async def test_toc_content_gets_warning(self, tmp_path):
+        """When provider returns TOC-only content, result includes warning."""
+        from tapps_core.knowledge.providers.base import DocumentationProvider
+        from tapps_core.knowledge.providers.registry import ProviderRegistry
+
+        toc_content = "\n".join([
+            "# Docs",
+            "- [A](https://a.com)",
+            "- [B](https://b.com)",
+            "- [C](https://c.com)",
+            "## Links",
+            "- [D](https://d.com)",
+            "- [E](https://e.com)",
+        ])
+
+        class TocProvider(DocumentationProvider):
+            def name(self) -> str:
+                return "toc_provider"
+
+            def is_available(self) -> bool:
+                return True
+
+            async def resolve(self, library: str) -> str | None:
+                return f"{library}-id"
+
+            async def fetch(self, library_id: str, topic: str = "overview") -> str | None:
+                return toc_content
+
+        registry = ProviderRegistry()
+        registry.register(TocProvider())
+        cache = KBCache(cache_dir=tmp_path / "cache")
+        engine = LookupEngine(cache, api_key=None, registry=registry)
+        result = await engine.lookup("some-lib")
+        await engine.close()
+
+        assert result.success is True
+        assert result.warning is not None
+        assert "table-of-contents" in result.warning
+        assert "tapps_consult_expert" in result.warning
+
+
+class TestOpsFirstRouting:
+    """Test that operational libraries try expert system first."""
+
+    @pytest.mark.asyncio
+    async def test_docker_uses_expert_first(self, tmp_path):
+        """Docker lookup tries expert system before Context7."""
+        from unittest.mock import MagicMock
+
+        cache = KBCache(cache_dir=tmp_path / "cache")
+
+        mock_cr = MagicMock()
+        mock_cr.confidence = 0.8
+        mock_cr.answer = "Use multi-stage builds for smaller images."
+        mock_cr.sources = ["docker-best-practices.md"]
+
+        with patch(
+            "tapps_core.knowledge.lookup.asyncio.to_thread",
+            return_value=mock_cr,
+        ):
+            engine = LookupEngine(cache, api_key=None)
+            result = await engine.lookup("docker")
+            await engine.close()
+
+        assert result.success is True
+        assert result.source == "expert_system"
+        assert "multi-stage" in (result.content or "")
+
+    @pytest.mark.asyncio
+    async def test_non_ops_library_skips_expert_first(self, tmp_path):
+        """Non-ops library (e.g. fastapi) does NOT try expert first."""
+        cache = KBCache(cache_dir=tmp_path / "cache")
+
+        with patch(
+            "tapps_core.knowledge.lookup.asyncio.to_thread",
+        ) as mock_thread:
+            engine = LookupEngine(cache, api_key=None)
+            result = await engine.lookup("fastapi")
+            await engine.close()
+
+        # to_thread should NOT be called for non-ops libraries
+        mock_thread.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ops_expert_low_confidence_falls_through(self, tmp_path):
+        """When expert has low confidence for ops library, falls through to providers."""
+        from tapps_core.knowledge.providers.base import DocumentationProvider
+        from tapps_core.knowledge.providers.registry import ProviderRegistry
+        from unittest.mock import MagicMock
+
+        cache = KBCache(cache_dir=tmp_path / "cache")
+
+        mock_cr = MagicMock()
+        mock_cr.confidence = 0.1
+        mock_cr.answer = ""
+
+        class FallbackProvider(DocumentationProvider):
+            def name(self) -> str:
+                return "fallback"
+
+            def is_available(self) -> bool:
+                return True
+
+            async def resolve(self, library: str) -> str | None:
+                return f"{library}-id"
+
+            async def fetch(self, library_id: str, topic: str = "overview") -> str | None:
+                return "# Docker docs from provider"
+
+        registry = ProviderRegistry()
+        registry.register(FallbackProvider())
+
+        with patch(
+            "tapps_core.knowledge.lookup.asyncio.to_thread",
+            return_value=mock_cr,
+        ):
+            engine = LookupEngine(cache, api_key=None, registry=registry)
+            result = await engine.lookup("docker")
+            await engine.close()
+
+        assert result.success is True
+        assert result.source == "fallback"

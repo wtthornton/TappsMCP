@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -401,8 +402,7 @@ class TestStoryGeneratorAutoPopulate:
             ),
         ):
             mock_cls.return_value.extract.return_value = mock_metadata
-            # inherit_context=False to include tech_stack in story output
-            config = _make_config(inherit_context=False)
+            config = _make_config()
             content = self.gen.generate(config, project_root=tmp_path, auto_populate=True)
 
         assert "my-project" in content
@@ -853,176 +853,109 @@ class TestDocsGenerateStoryTool:
 
 
 # ---------------------------------------------------------------------------
-# Epic 18.2: Test case derivation
+# StoryGenerator -- generate_test_name
 # ---------------------------------------------------------------------------
 
-class TestStoryTestCaseDerivation:
-    """Tests for test case name derivation from acceptance criteria."""
 
-    def setup_method(self) -> None:
-        self.gen = StoryGenerator()
+class TestGenerateTestName:
+    """Tests for StoryGenerator.generate_test_name."""
 
-    def test_derived_test_names_from_acs(self) -> None:
+    def test_long_ac_truncated_to_80_chars(self) -> None:
+        long_ac = (
+            "The upgrade pipeline calls generate_all_github_templates and generates "
+            "CI workflows and governance files and security policies for the project"
+        )
+        name = StoryGenerator.generate_test_name(long_ac)
+        assert len(name) <= 80
+
+    def test_no_mid_word_truncation(self) -> None:
+        long_ac = (
+            "Results stored in result components github templates and governance "
+            "files with proper validation and error handling for edge cases"
+        )
+        name = StoryGenerator.generate_test_name(long_ac)
+        # Every segment between underscores should be a complete word.
+        parts = name.split("_")
+        for part in parts:
+            assert part.isalnum(), f"Part {part!r} is not a complete alphanumeric word"
+        assert len(name) <= 80
+
+    def test_valid_python_identifier(self) -> None:
+        name = StoryGenerator.generate_test_name("Validation rejects empty fields!")
+        assert name.isidentifier()
+        assert name.startswith("test_")
+
+    def test_stopwords_removed(self) -> None:
+        name = StoryGenerator.generate_test_name(
+            "The user should be able to login with a valid password"
+        )
+        assert "_the_" not in name
+        assert "_should_" not in name
+        assert "_be_" not in name
+        assert "_a_" not in name
+        # Key content words should survive.
+        assert "user" in name
+        assert "login" in name
+        assert "valid" in name
+        assert "password" in name
+
+    def test_numbered_ac_gets_index_prefix(self) -> None:
+        name = StoryGenerator.generate_test_name("Generates templates", index=1)
+        assert name.startswith("test_ac1_")
+        assert "generates" in name
+        assert "templates" in name
+
+    def test_numbered_ac_index_3(self) -> None:
+        name = StoryGenerator.generate_test_name("Error handling works", index=3)
+        assert name.startswith("test_ac3_")
+
+    def test_empty_ac_fallback(self) -> None:
+        name = StoryGenerator.generate_test_name("")
+        assert name == "test_story_acceptance"
+
+    def test_empty_ac_with_index_fallback(self) -> None:
+        name = StoryGenerator.generate_test_name("", index=2)
+        assert name == "test_ac2_story_acceptance"
+
+    def test_whitespace_only_fallback(self) -> None:
+        name = StoryGenerator.generate_test_name("   ")
+        assert name == "test_story_acceptance"
+
+    def test_all_stopwords_fallback(self) -> None:
+        name = StoryGenerator.generate_test_name("the and is are should")
+        assert name == "test_story_acceptance"
+
+    def test_special_characters_stripped(self) -> None:
+        name = StoryGenerator.generate_test_name("Login (v2) works -- correctly!")
+        assert name.isidentifier()
+        assert "login" in name
+        assert "v2" in name
+        assert "works" in name
+        assert "correctly" in name
+        # No parentheses, dashes, or exclamation marks.
+        assert "(" not in name
+        assert ")" not in name
+        assert "-" not in name
+        assert "!" not in name
+
+    def test_only_lowercase_and_underscores(self) -> None:
+        name = StoryGenerator.generate_test_name("API Returns JSON Response")
+        assert name == name.lower()
+        assert re.match(r"^[a-z0-9_]+$", name)
+
+    def test_short_ac_preserved(self) -> None:
+        name = StoryGenerator.generate_test_name("Login works")
+        assert name == "test_login_works"
+
+    def test_render_test_cases_uses_generate_test_name(self) -> None:
+        """Comprehensive style auto-generates test names from AC."""
+        gen = StoryGenerator()
         config = _make_config(
             style="comprehensive",
             test_cases=[],
-            acceptance_criteria=["User can log in", "Invalid password is rejected"],
+            acceptance_criteria=["Validation rejects empty fields", "Error messages displayed"],
         )
-        content = self.gen.generate(config)
+        content = gen.generate(config)
         assert "## Test Cases" in content
-        assert "test_user_can_log_in" in content
-        assert "test_invalid_password_is_rejected" in content
-        # Should NOT have generic placeholders.
-        assert "Test happy path" not in content
-
-    def test_explicit_test_cases_take_precedence(self) -> None:
-        config = _make_config(
-            style="comprehensive",
-            test_cases=["test_specific_case"],
-            acceptance_criteria=["AC that would derive test"],
-        )
-        content = self.gen.generate(config)
-        assert "test_specific_case" in content
-        assert "test_ac_that_would" not in content
-
-    def test_no_acs_no_tests_section_omitted(self) -> None:
-        config = _make_config(
-            style="comprehensive",
-            test_cases=[],
-            acceptance_criteria=[],
-        )
-        content = self.gen.generate(config)
-        assert "## Test Cases" not in content
-
-
-# ---------------------------------------------------------------------------
-# Epic 18.3: Expert filtering in stories
-# ---------------------------------------------------------------------------
-
-class TestStoryExpertFiltering:
-    """Tests for expert guidance filtering in stories (Epic 18.3)."""
-
-    def test_filter_below_30_suppressed(self) -> None:
-        guidance = [{"domain": "security", "expert": "X", "advice": "Real", "confidence": "25%"}]
-        result = StoryGenerator._filter_expert_guidance(guidance)
-        assert len(result) == 0
-
-    def test_filter_above_50_rendered(self) -> None:
-        guidance = [{"domain": "security", "expert": "X", "advice": "Use validation.", "confidence": "85%"}]
-        result = StoryGenerator._filter_expert_guidance(guidance)
-        assert len(result) == 1
-        assert result[0]["advice"] == "Use validation."
-
-
-# ---------------------------------------------------------------------------
-# Epic 18.4: INVEST auto-assessment
-# ---------------------------------------------------------------------------
-
-class TestStoryINVESTAutoAssessment:
-    """Tests for INVEST checklist auto-assessment."""
-
-    def setup_method(self) -> None:
-        self.gen = StoryGenerator()
-
-    def test_invest_auto_checks(self) -> None:
-        config = _make_config(
-            style="comprehensive",
-            dependencies=[],  # Independent
-            so_that="saves time",  # Valuable
-            points=3,  # Estimable + Small
-            acceptance_criteria=["AC1"],  # Testable
-        )
-        content = self.gen.generate(config)
-        assert "## INVEST Checklist" in content
-        assert "[x] **I**ndependent" in content
-        assert "[x] **V**aluable" in content
-        assert "[x] **E**stimable" in content
-        assert "[x] **S**mall" in content
-        assert "[x] **T**estable" in content
-        # Negotiable is always unchecked.
-        assert "[ ] **N**egotiable" in content
-
-    def test_invest_not_independent_with_deps(self) -> None:
-        config = _make_config(style="comprehensive", dependencies=["Story 1"])
-        content = self.gen.generate(config)
-        assert "[ ] **I**ndependent" in content
-
-
-# ---------------------------------------------------------------------------
-# Epic 20.1: Context inheritance
-# ---------------------------------------------------------------------------
-
-class TestStoryContextInheritance:
-    """Tests for context inheritance from epic (Epic 20.1)."""
-
-    def setup_method(self) -> None:
-        self.gen = StoryGenerator()
-
-    def test_inherit_suppresses_metadata(self, tmp_path: Path) -> None:
-        mock_metadata = MagicMock()
-        mock_metadata.name = "my-project"
-        mock_metadata.python_requires = ">=3.12"
-        mock_metadata.dependencies = ["fastapi"]
-
-        with (
-            patch("docs_mcp.generators.metadata.MetadataExtractor") as mock_cls,
-            patch("docs_mcp.analyzers.module_map.ModuleMapAnalyzer", side_effect=RuntimeError),
-        ):
-            mock_cls.return_value.extract.return_value = mock_metadata
-            config = _make_config(inherit_context=True)
-            content = self.gen.generate(config, project_root=tmp_path, auto_populate=True)
-
-        assert "Tech Stack:" not in content
-
-    def test_inherit_false_preserves_metadata(self, tmp_path: Path) -> None:
-        mock_metadata = MagicMock()
-        mock_metadata.name = "my-project"
-        mock_metadata.python_requires = ">=3.12"
-        mock_metadata.dependencies = ["fastapi"]
-
-        with (
-            patch("docs_mcp.generators.metadata.MetadataExtractor") as mock_cls,
-            patch("docs_mcp.analyzers.module_map.ModuleMapAnalyzer", side_effect=RuntimeError),
-        ):
-            mock_cls.return_value.extract.return_value = mock_metadata
-            config = _make_config(inherit_context=False)
-            content = self.gen.generate(config, project_root=tmp_path, auto_populate=True)
-
-        assert "my-project" in content
-
-    def test_epic_reference_rendered(self) -> None:
-        config = _make_config(inherit_context=True, epic_path="epic-12.md", epic_number=12)
-        content = self.gen.generate(config)
-        assert "See [Epic 12](epic-12.md)" in content
-
-    def test_standalone_story_no_reference(self) -> None:
-        config = _make_config(inherit_context=True, epic_path="")
-        content = self.gen.generate(config)
-        assert "See [Epic" not in content
-
-
-# ---------------------------------------------------------------------------
-# Epic 20.4: DoD deduplication
-# ---------------------------------------------------------------------------
-
-class TestStoryDoDDeduplication:
-    """Tests for Definition of Done deduplication (Epic 20.4)."""
-
-    def setup_method(self) -> None:
-        self.gen = StoryGenerator()
-
-    def test_dod_inherited_from_epic(self) -> None:
-        config = _make_config(inherit_context=True, epic_path="epic-12.md", epic_number=12)
-        content = self.gen.generate(config)
-        assert "Definition of Done per [Epic 12](epic-12.md)" in content
-        assert "Code reviewed and approved" not in content
-
-    def test_dod_standalone_full(self) -> None:
-        config = _make_config(inherit_context=True, epic_path="")
-        content = self.gen.generate(config)
-        assert "Code reviewed and approved" in content
-
-    def test_dod_inherit_false_full(self) -> None:
-        config = _make_config(inherit_context=False, epic_path="epic-12.md")
-        content = self.gen.generate(config)
-        assert "Code reviewed and approved" in content
+        assert "`test_ac1_validation_rejects_empty_fields`" in content
+        assert "`test_ac2_error_messages_displayed`" in content

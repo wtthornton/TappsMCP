@@ -15,6 +15,16 @@ logger = structlog.get_logger(__name__)
 # Captures link text (group 1) and target (group 2).
 _MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
 
+# Match `path/to/file.ext` or `file.ext` where ext is a known extension.
+# Excludes triple-backtick (```) by using negative lookbehind/lookahead.
+_BACKTICK_REF_RE = re.compile(
+    r"(?<!`)`([^`\n]+\.(?:py|md|yaml|yml|toml|json|txt|rst|cfg|ini|sh|ts|js"
+    r"|jsx|tsx|css|html))`(?!`)"
+)
+
+# Fenced code block delimiter (``` with optional language tag).
+_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+
 # Documentation file extensions to scan.
 _DOC_EXTENSIONS: frozenset[str] = frozenset({".md", ".rst", ".txt"})
 
@@ -37,12 +47,27 @@ class BrokenLink(BaseModel):
     reason: str  # "file_not_found", "anchor_not_found", "invalid_path"
 
 
+class BacktickReference(BaseModel):
+    """A backtick-wrapped file reference found in documentation."""
+
+    source_file: str
+    line: int
+    reference: str
+    exists: bool
+    reason: str  # "found", "not_found", "skipped_code_block"
+
+
 class LinkReport(BaseModel):
     """Aggregated link check results."""
 
     total_links: int = 0
     valid_links: int = 0
     broken_links: list[BrokenLink] = []
+    backtick_references: list[BacktickReference] = []
+    total_backtick_refs: int = 0
+    valid_backtick_refs: int = 0
+    missing_backtick_refs: int = 0
+    warnings: list[str] = []
 
 
 def _should_skip_dir(dirname: str) -> bool:
@@ -115,6 +140,89 @@ def _find_doc_files(
                 doc_files.append(fpath)
 
     return doc_files
+
+
+def _find_fenced_blocks(content: str) -> set[int]:
+    """Return set of 1-based line numbers that are inside fenced code blocks."""
+    inside_fence = False
+    fence_char = ""
+    fence_len = 0
+    fenced_lines: set[int] = set()
+
+    for line_num, line in enumerate(content.splitlines(), start=1):
+        m = _FENCE_RE.match(line)
+        if m:
+            delimiter = m.group(1)
+            if not inside_fence:
+                inside_fence = True
+                fence_char = delimiter[0]
+                fence_len = len(delimiter)
+                fenced_lines.add(line_num)
+                continue
+            # Closing fence must use same char and at least same length
+            if delimiter[0] == fence_char and len(delimiter) >= fence_len:
+                fenced_lines.add(line_num)
+                inside_fence = False
+                continue
+        if inside_fence:
+            fenced_lines.add(line_num)
+
+    return fenced_lines
+
+
+def _check_backtick_refs(
+    file_path: Path,
+    project_root: Path,
+    content: str,
+    fenced_lines: set[int],
+) -> list[BacktickReference]:
+    """Find backtick-wrapped file references and check if they exist.
+
+    Returns:
+        List of BacktickReference results.
+    """
+    refs: list[BacktickReference] = []
+    rel_source = str(file_path.relative_to(project_root)).replace("\\", "/")
+    file_dir = file_path.parent
+
+    for line_num, line in enumerate(content.splitlines(), start=1):
+        if line_num in fenced_lines:
+            # Record matches inside fenced blocks as skipped
+            for match in _BACKTICK_REF_RE.finditer(line):
+                refs.append(BacktickReference(
+                    source_file=rel_source,
+                    line=line_num,
+                    reference=match.group(1),
+                    exists=False,
+                    reason="skipped_code_block",
+                ))
+            continue
+
+        for match in _BACKTICK_REF_RE.finditer(line):
+            ref_path = match.group(1)
+
+            # Check relative to project root first, then file directory
+            target_from_root = project_root / ref_path
+            target_from_file = file_dir / ref_path
+
+            if target_from_root.exists() or target_from_file.exists():
+                refs.append(BacktickReference(
+                    source_file=rel_source,
+                    line=line_num,
+                    reference=ref_path,
+                    exists=True,
+                    reason="found",
+                ))
+            else:
+                refs.append(BacktickReference(
+                    source_file=rel_source,
+                    line=line_num,
+                    reference=ref_path,
+                    exists=False,
+                    reason="not_found",
+                ))
+
+    return refs
 
 
 def _check_file_links(
@@ -251,6 +359,11 @@ class LinkChecker:
         total_links = 0
         valid_links = 0
         all_broken: list[BrokenLink] = []
+        all_backtick_refs: list[BacktickReference] = []
+        total_backtick = 0
+        valid_backtick = 0
+        missing_backtick = 0
+        warnings: list[str] = []
 
         for doc_file in doc_files:
             try:
@@ -263,8 +376,41 @@ class LinkChecker:
             valid_links += valid
             all_broken.extend(broken)
 
+            # Check backtick file references
+            fenced_lines = _find_fenced_blocks(content)
+            bt_refs = _check_backtick_refs(
+                doc_file, project_root, content, fenced_lines,
+            )
+            all_backtick_refs.extend(bt_refs)
+            for ref in bt_refs:
+                if ref.reason == "skipped_code_block":
+                    continue
+                total_backtick += 1
+                if ref.exists:
+                    valid_backtick += 1
+                else:
+                    missing_backtick += 1
+
+            # Zero-link warning
+            rel_name = str(
+                doc_file.relative_to(project_root),
+            ).replace("\\", "/")
+            non_skipped_bt = sum(
+                1 for r in bt_refs if r.reason != "skipped_code_block"
+            )
+            if total == 0 and non_skipped_bt == 0:
+                warnings.append(
+                    f"No links or file references found in {rel_name}"
+                    " -- consider adding cross-references."
+                )
+
         return LinkReport(
             total_links=total_links,
             valid_links=valid_links,
             broken_links=all_broken,
+            backtick_references=all_backtick_refs,
+            total_backtick_refs=total_backtick,
+            valid_backtick_refs=valid_backtick,
+            missing_backtick_refs=missing_backtick,
+            warnings=warnings,
         )

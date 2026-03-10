@@ -10,6 +10,7 @@ from tapps_mcp.knowledge.cache import KBCache
 from tapps_mcp.knowledge.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from tapps_mcp.knowledge.lookup import LookupEngine
 from tapps_mcp.knowledge.models import CacheEntry, LibraryMatch
+from tapps_mcp.server import _library_to_domain
 
 
 class TestLookupCacheHit:
@@ -406,3 +407,26 @@ class TestLookupEdgeCases:
         await engine.close()
         # Should be safe to call close twice
         await engine.close()
+
+
+class TestLibraryDomainMap:
+    """Verify _LIBRARY_DOMAIN_MAP includes new operational mappings."""
+
+    @pytest.mark.parametrize(
+        "library,expected_domain",
+        [
+            ("docker-compose", "cloud-infrastructure"),
+            ("github-actions", "development-workflow"),
+            ("ci", "development-workflow"),
+            ("httpx", "api-design-integration"),
+            # Existing mappings still work
+            ("pytest", "testing-strategies"),
+            ("docker", "cloud-infrastructure"),
+            ("fastapi", "api-design-integration"),
+        ],
+    )
+    def test_domain_mapping(self, library: str, expected_domain: str) -> None:
+        assert _library_to_domain(library) == expected_domain
+
+    def test_unknown_library_defaults(self) -> None:
+        assert _library_to_domain("unknown-lib-xyz") == "software-architecture"

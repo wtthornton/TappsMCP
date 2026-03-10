@@ -118,6 +118,20 @@ def _load_yaml_config(project_root: Path) -> dict[str, Any]:
         return {}
 
 
+def _expand_path(raw: str) -> Path:
+    """Expand environment variables and ``~`` in a path string.
+
+    Applies ``os.path.expandvars`` then ``os.path.expanduser`` so that
+    values like ``${DOCS_MCP_PROJECT_ROOT}`` or ``~/projects/foo`` resolve
+    to absolute filesystem paths.
+    """
+    import os
+
+    expanded = os.path.expandvars(raw)
+    expanded = os.path.expanduser(expanded)
+    return Path(expanded)
+
+
 def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
     """Load settings with correct precedence.
 
@@ -138,12 +152,12 @@ def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
 
     # Determine root: explicit arg > env var > CWD
     if project_root:
-        root = Path(project_root)
+        root = _expand_path(str(project_root))
     else:
         import os
 
         env_root = os.environ.get("DOCS_MCP_PROJECT_ROOT")
-        root = Path(env_root) if env_root else Path.cwd()
+        root = _expand_path(env_root) if env_root else Path.cwd()
 
     yaml_data = _load_yaml_config(root)
 
@@ -152,6 +166,20 @@ def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
         yaml_data["project_root"] = str(root)
 
     result = DocsMCPSettings(**yaml_data)
+
+    # Expand env vars / ~ in project_root and output_dir after construction
+    result.project_root = _expand_path(str(result.project_root))
+
+    expanded_output = _expand_path(result.output_dir)
+    result.output_dir = str(expanded_output)
+
+    # Warn if the expanded project_root doesn't exist (it may be created later)
+    if not result.project_root.is_dir():
+        logger.warning(
+            "docs_project_root_missing",
+            path=str(result.project_root),
+            hint="Directory does not exist yet - it may be created later.",
+        )
 
     if project_root is None:
         _cached_settings = result

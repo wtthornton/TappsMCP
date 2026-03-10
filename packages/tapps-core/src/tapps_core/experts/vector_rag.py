@@ -2,8 +2,12 @@
 
 Provides the same interface as :class:`SimpleKnowledgeBase`.  When
 ``faiss-cpu`` is installed, uses semantic search via embeddings.  When
-absent, transparently falls back to keyword-based
-:class:`SimpleKnowledgeBase`.  Zero configuration required.
+absent, transparently falls back to BM25-scored keyword search, then
+to :class:`SimpleKnowledgeBase`.  Zero configuration required.
+
+Index freshness: when loading a persisted index, compares knowledge
+file modification times against the index metadata timestamp.  If any
+knowledge file is newer, the index is rebuilt automatically.
 """
 
 from __future__ import annotations
@@ -19,12 +23,173 @@ from tapps_core.experts.rag import SimpleKnowledgeBase
 logger = structlog.get_logger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Lightweight BM25 fallback for expert knowledge search
+# ---------------------------------------------------------------------------
+
+
+class _ExpertBM25Fallback:
+    """BM25-scored search over knowledge file chunks.
+
+    Used when sentence_transformers/FAISS are unavailable.  Reuses the
+    pure-Python :class:`BM25Scorer` from the memory subsystem.
+    """
+
+    def __init__(self, simple_kb: SimpleKnowledgeBase) -> None:
+        from tapps_core.memory.bm25 import BM25Scorer
+
+        self._simple_kb = simple_kb
+        self._scorer = BM25Scorer()
+        self._chunks: list[KnowledgeChunk] = []
+        self._built = False
+
+    def _build_index(self) -> None:
+        """Build BM25 index from the simple knowledge base's loaded files."""
+        if self._built:
+            return
+
+        from tapps_core.experts.rag import _extract_keywords
+
+        self._chunks = []
+        documents: list[str] = []
+
+        for file_path, content in self._simple_kb.files.items():
+            try:
+                rel = str(file_path.relative_to(self._simple_kb.knowledge_dir))
+            except ValueError:
+                rel = str(file_path)
+
+            # Split into section-based chunks for finer granularity.
+            sections = _split_into_sections(content)
+            line_offset = 1
+            for section_text in sections:
+                section_lines = section_text.count("\n") + 1
+                if section_text.strip():
+                    chunk = KnowledgeChunk(
+                        content=section_text.strip(),
+                        source_file=rel,
+                        line_start=line_offset,
+                        line_end=line_offset + section_lines - 1,
+                        score=0.0,
+                    )
+                    self._chunks.append(chunk)
+                    # Extract keywords to enrich the BM25 document.
+                    kws = _extract_keywords(section_text)
+                    documents.append(f"{section_text} {' '.join(kws)}")
+                line_offset += section_lines
+
+        if documents:
+            self._scorer.build_index(documents)
+
+        self._built = True
+        logger.debug(
+            "expert_bm25_index_built",
+            chunk_count=len(self._chunks),
+            file_count=self._simple_kb.file_count,
+        )
+
+    def search(self, query: str, max_results: int = 5) -> list[KnowledgeChunk]:
+        """Search knowledge chunks using BM25 scoring."""
+        self._build_index()
+
+        if not self._chunks:
+            return []
+
+        scores = self._scorer.score(query)
+
+        # Pair chunks with scores, filter positives, sort descending.
+        scored = [
+            (chunk, score)
+            for chunk, score in zip(self._chunks, scores, strict=False)
+            if score > 0
+        ]
+        scored.sort(key=lambda x: x[1], reverse=True)
+
+        # Normalize scores to 0-1 range.
+        if scored:
+            max_score = scored[0][1]
+            norm_factor = max_score if max_score > 0 else 1.0
+        else:
+            norm_factor = 1.0
+
+        results: list[KnowledgeChunk] = []
+        for chunk, score in scored[:max_results]:
+            normalized = min(score / norm_factor, 1.0) if norm_factor > 0 else 0.0
+            results.append(
+                KnowledgeChunk(
+                    content=chunk.content,
+                    source_file=chunk.source_file,
+                    line_start=chunk.line_start,
+                    line_end=chunk.line_end,
+                    score=round(normalized, 4),
+                )
+            )
+
+        return results
+
+
+def _split_into_sections(content: str, max_section_chars: int = 2000) -> list[str]:
+    """Split markdown content into sections based on headers.
+
+    Respects ``#``-level header boundaries.  Sections exceeding
+    *max_section_chars* are further split at paragraph boundaries.
+    """
+    lines = content.split("\n")
+    sections: list[str] = []
+    current: list[str] = []
+
+    for line in lines:
+        if line.strip().startswith("#") and current:
+            text = "\n".join(current)
+            if len(text) > max_section_chars:
+                sections.extend(_split_by_paragraphs(text, max_section_chars))
+            else:
+                sections.append(text)
+            current = []
+        current.append(line)
+
+    if current:
+        text = "\n".join(current)
+        if len(text) > max_section_chars:
+            sections.extend(_split_by_paragraphs(text, max_section_chars))
+        else:
+            sections.append(text)
+
+    return sections
+
+
+def _split_by_paragraphs(text: str, max_chars: int) -> list[str]:
+    """Split text at double-newline boundaries respecting *max_chars*."""
+    paragraphs = text.split("\n\n")
+    result: list[str] = []
+    current: list[str] = []
+    length = 0
+
+    for para in paragraphs:
+        para_len = len(para) + 2  # +2 for \n\n
+        if length + para_len > max_chars and current:
+            result.append("\n\n".join(current))
+            current = []
+            length = 0
+        current.append(para)
+        length += para_len
+
+    if current:
+        result.append("\n\n".join(current))
+
+    return result
+
+
 class VectorKnowledgeBase:
     """Knowledge base with optional vector search and automatic fallback.
 
     On first search, attempts to initialise the vector backend.  If FAISS
-    or sentence-transformers are unavailable, silently delegates to
-    :class:`SimpleKnowledgeBase`.
+    or sentence-transformers are unavailable, uses BM25-scored search as
+    a middle tier before falling back to simple keyword matching.
+
+    Index freshness is checked when loading a persisted index: if any
+    knowledge file has been modified after the index was saved, the index
+    is rebuilt automatically.
     """
 
     def __init__(
@@ -52,6 +217,7 @@ class VectorKnowledgeBase:
         # Backends (set during _initialise).
         self._simple: SimpleKnowledgeBase | None = None
         self._vector_index: object | None = None  # VectorIndex when available
+        self._bm25_fallback: _ExpertBM25Fallback | None = None
 
     @property
     def backend_type(self) -> str:
@@ -93,6 +259,12 @@ class VectorKnowledgeBase:
                 filtered = [c for c in fused if c.score >= relevance_threshold]
                 return filtered[:max_results]
             return vector_filtered[:max_results]
+
+        # BM25 fallback: better ranking than simple keyword matching.
+        if self._bm25_fallback is not None:
+            bm25_results = self._bm25_fallback.search(query, max_results)
+            if bm25_results:
+                return [c for c in bm25_results if c.score >= relevance_threshold]
 
         if self._simple is not None:
             return self._simple.search(
@@ -159,7 +331,7 @@ class VectorKnowledgeBase:
             self._initialised = True
 
     def _initialise(self) -> None:
-        """Try vector backend, fall back to simple."""
+        """Try vector backend, fall back to BM25, then simple keyword."""
         # Always create the simple backend as fallback.
         self._simple = SimpleKnowledgeBase(self._knowledge_dir, self._domain)
 
@@ -167,10 +339,27 @@ class VectorKnowledgeBase:
             self._try_vector_backend()
         except (ImportError, OSError, RuntimeError, ValueError) as e:
             logger.debug(
-                "vector_rag_fallback_to_simple",
+                "vector_rag_fallback_to_bm25",
                 reason="FAISS or embedder unavailable",
                 error=str(e),
             )
+            self._try_bm25_backend()
+
+    def _try_bm25_backend(self) -> None:
+        """Set up BM25-scored search as middle-tier fallback."""
+        if self._simple is not None and self._simple.file_count > 0:
+            try:
+                self._bm25_fallback = _ExpertBM25Fallback(self._simple)
+                self._backend_type = "bm25"
+                logger.debug(
+                    "vector_rag_bm25_fallback",
+                    domain=self._domain,
+                    file_count=self._simple.file_count,
+                )
+            except Exception as e:
+                logger.debug("bm25_fallback_failed", error=str(e))
+                self._backend_type = "simple"
+        else:
             self._backend_type = "simple"
 
     def _try_vector_backend(self) -> None:
@@ -179,7 +368,8 @@ class VectorKnowledgeBase:
 
         embedder = create_embedder(self._embedding_model)
         if embedder is None:
-            self._backend_type = "simple"
+            # No embedder available — use BM25 fallback instead of simple.
+            self._try_bm25_backend()
             return
 
         from tapps_core.experts.rag_chunker import Chunker
@@ -192,18 +382,24 @@ class VectorKnowledgeBase:
             domain_slug = self._domain or "general"
             idx_dir = self._knowledge_dir.parent / ".tapps-mcp" / "rag_index" / domain_slug
 
-        # Try loading existing index.
+        # Try loading existing index (with freshness check).
         try:
             vi = VectorIndex.load(idx_dir, embedder)
             if vi.is_valid() and vi.chunk_count > 0:
-                self._vector_index = vi
-                self._backend_type = "vector"
+                if not self._is_index_stale(idx_dir):
+                    self._vector_index = vi
+                    self._backend_type = "vector"
+                    logger.info(
+                        "vector_rag_loaded",
+                        domain=self._domain,
+                        chunks=vi.chunk_count,
+                    )
+                    return
                 logger.info(
-                    "vector_rag_loaded",
+                    "vector_rag_index_stale",
                     domain=self._domain,
-                    chunks=vi.chunk_count,
+                    reason="knowledge_files_newer_than_index",
                 )
-                return
         except (FileNotFoundError, ImportError):
             pass
 
@@ -232,6 +428,36 @@ class VectorKnowledgeBase:
             domain=self._domain,
             chunks=len(all_chunks),
         )
+
+    def _is_index_stale(self, index_dir: Path) -> bool:
+        """Check whether knowledge files are newer than the persisted index.
+
+        Compares the modification time of the index metadata file against
+        all knowledge files.  Returns ``True`` if any knowledge file is
+        newer, indicating the index should be rebuilt.
+        """
+        meta_path = index_dir / "metadata.json"
+        if not meta_path.exists():
+            return True
+
+        try:
+            index_mtime = meta_path.stat().st_mtime
+        except OSError:
+            return True
+
+        for md_file in self._knowledge_dir.rglob("*.md"):
+            try:
+                if md_file.stat().st_mtime > index_mtime:
+                    logger.debug(
+                        "index_stale_file_newer",
+                        file=str(md_file),
+                        domain=self._domain,
+                    )
+                    return True
+            except OSError:
+                continue
+
+        return False
 
     # ------------------------------------------------------------------
     # Hybrid fusion + rerank

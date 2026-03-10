@@ -196,9 +196,13 @@ def warm_expert_rag_indices(
             # Trigger index build/load
             vkb.search("overview patterns best practices", max_results=1)
 
-            if vkb.backend_type == "vector":
+            if vkb.backend_type in ("vector", "bm25"):
                 warmed += 1
-                logger.debug("rag_warm_domain", domain=domain)
+                logger.debug(
+                    "rag_warm_domain",
+                    domain=domain,
+                    backend=vkb.backend_type,
+                )
         except (OSError, RuntimeError, ValueError, ImportError) as e:
             failed_domains.append(domain)
             logger.debug("rag_warm_failed", domain=domain, error=str(e))
@@ -208,7 +212,7 @@ def warm_expert_rag_indices(
         "attempted": len(domains),
         "domains": domains,
         "failed_domains": failed_domains,
-        "skipped": None if warmed > 0 else "faiss_unavailable_or_error",
+        "skipped": None if warmed > 0 else "no_backend_available",
     }
 
 
@@ -273,15 +277,19 @@ def warm_business_expert_rag_indices(
             # Trigger index build/load
             vkb.search("overview patterns best practices", max_results=1)
 
-            if vkb.backend_type == "vector":
+            if vkb.backend_type in ("vector", "bm25"):
                 warmed.append(domain)
-                logger.debug("business_rag_warm_domain", domain=domain)
+                logger.debug(
+                    "business_rag_warm_domain",
+                    domain=domain,
+                    backend=vkb.backend_type,
+                )
             else:
                 skipped.append(domain)
                 logger.debug(
                     "business_rag_warm_skip",
                     domain=domain,
-                    reason="faiss_unavailable",
+                    reason="no_backend_available",
                 )
         except (OSError, RuntimeError, ValueError, ImportError) as e:
             errors.append(domain)

@@ -1218,3 +1218,261 @@ class TestParseStoriesJsonExtended:
         raw = json.dumps([{"title": "Auth", "ac_count": 5}])
         stories = EpicGenerator.parse_stories_json(raw)
         assert stories[0].ac_count == 5
+
+
+# ---------------------------------------------------------------------------
+# Story 21.5: File hints in docs_generate_epic
+# ---------------------------------------------------------------------------
+
+
+class TestEpicFileHints:
+    """Tests for file-specific auto-populate with file hints."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_files_with_auto_populate_includes_table(self, tmp_path: Path) -> None:
+        """Files parameter generates a Files Affected table with per-file info."""
+        # Create test files
+        setup_py = tmp_path / "setup.py"
+        setup_py.write_text("def setup():\n    pass\n", encoding="utf-8")
+        readme = tmp_path / "README.md"
+        readme.write_text("# My Project\n", encoding="utf-8")
+
+        config = _make_config(files=["setup.py", "README.md"])
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        assert "## Files Affected" in content
+        assert "`setup.py`" in content
+        assert "`README.md`" in content
+        # Should have the detailed table headers
+        assert "Lines" in content
+        assert "Recent Commits" in content
+        assert "Public Symbols" in content
+
+    def test_files_affected_table_shows_line_count(self, tmp_path: Path) -> None:
+        """File analysis includes line count."""
+        py_file = tmp_path / "module.py"
+        py_file.write_text("line1\nline2\nline3\n", encoding="utf-8")
+
+        config = _make_config(files=["module.py"])
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        assert "## Files Affected" in content
+        assert "`module.py`" in content
+        assert "| 3 " in content  # 3 lines
+
+    def test_files_python_public_symbols(self, tmp_path: Path) -> None:
+        """Python files show public class and function counts."""
+        py_file = tmp_path / "models.py"
+        py_file.write_text(
+            "class MyModel:\n    pass\n\n"
+            "class _Internal:\n    pass\n\n"
+            "def public_func():\n    pass\n\n"
+            "def _private():\n    pass\n",
+            encoding="utf-8",
+        )
+
+        config = _make_config(files=["models.py"])
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        assert "1 classes" in content
+        assert "1 functions" in content
+
+    def test_nonexistent_file_skipped_gracefully(self, tmp_path: Path) -> None:
+        """Non-existent files are listed but marked as not found."""
+        config = _make_config(files=["nonexistent.py"])
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        assert "## Files Affected" in content
+        assert "`nonexistent.py`" in content
+        assert "*(not found)*" in content
+
+    def test_no_files_parameter_generic_metadata(self) -> None:
+        """Without files parameter, existing generic behavior is preserved."""
+        config = _make_config(files=[], style="comprehensive")
+        content = self.gen.generate(config)
+
+        # Should still have the generic files-affected section
+        assert "## Files Affected" in content
+        assert "Files will be determined during story refinement" in content
+
+    def test_files_extracts_paths_from_story_descriptions(
+        self, tmp_path: Path,
+    ) -> None:
+        """Story descriptions are scanned for additional file paths."""
+        # Create the file referenced in story but not in explicit files list
+        extra = tmp_path / "extra.py"
+        extra.write_text("x = 1\n", encoding="utf-8")
+        main = tmp_path / "main.py"
+        main.write_text("# main\n", encoding="utf-8")
+
+        stories = [
+            EpicStoryStub(
+                title="Feature",
+                description="Modify `extra.py` for new feature.",
+            ),
+        ]
+        config = _make_config(files=["main.py"], stories=stories)
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        # Both explicit and discovered files should appear
+        assert "`main.py`" in content
+        assert "`extra.py`" in content
+
+    def test_files_with_git_commits(self, tmp_path: Path) -> None:
+        """Git commit history is included when available."""
+        py_file = tmp_path / "app.py"
+        py_file.write_text("print('hello')\n", encoding="utf-8")
+
+        # Mock subprocess to simulate git output
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "abc1234 Add initial app\ndef5678 Fix bug\n"
+
+        config = _make_config(files=["app.py"])
+        with patch("docs_mcp.generators.epics.subprocess.run", return_value=mock_result):
+            content = self.gen.generate(config, project_root=tmp_path)
+
+        assert "2 recent" in content
+        assert "Add initial app" in content
+
+    def test_docsmcp_markers_present(self, tmp_path: Path) -> None:
+        """Files affected section has docsmcp markers."""
+        f = tmp_path / "a.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        config = _make_config(files=["a.py"])
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        assert "<!-- docsmcp:start:files-affected -->" in content
+        assert "<!-- docsmcp:end:files-affected -->" in content
+
+
+class TestEpicRelatedEpics:
+    """Tests for related epics cross-referencing."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_related_epics_found(self, tmp_path: Path) -> None:
+        """Related epics are listed when they mention the same files."""
+        epics_dir = tmp_path / "docs" / "planning" / "epics"
+        epics_dir.mkdir(parents=True)
+        (epics_dir / "EPIC-10-AUTH.md").write_text(
+            "# Epic 10\nModify `auth.py` for login.\n",
+            encoding="utf-8",
+        )
+        (epics_dir / "EPIC-11-API.md").write_text(
+            "# Epic 11\nUpdate `api.py` routes.\n",
+            encoding="utf-8",
+        )
+
+        config = _make_config(files=["auth.py"])
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        assert "## Related Epics" in content
+        assert "EPIC-10-AUTH.md" in content
+        assert "EPIC-11-API.md" not in content  # doesn't mention auth.py
+
+    def test_no_related_epics_section_omitted(self, tmp_path: Path) -> None:
+        """Related Epics section is omitted when no matches found."""
+        epics_dir = tmp_path / "docs" / "planning" / "epics"
+        epics_dir.mkdir(parents=True)
+        (epics_dir / "EPIC-10-AUTH.md").write_text(
+            "# Epic 10\nSome content.\n",
+            encoding="utf-8",
+        )
+
+        config = _make_config(files=["unrelated.py"])
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        assert "## Related Epics" not in content
+
+    def test_no_epics_dir_no_error(self, tmp_path: Path) -> None:
+        """Missing epics directory doesn't cause errors."""
+        f = tmp_path / "a.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        config = _make_config(files=["a.py"])
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        # Should not have Related Epics but should not error
+        assert "## Related Epics" not in content
+        assert "## Files Affected" in content
+
+    def test_related_epics_markers(self, tmp_path: Path) -> None:
+        """Related epics section has docsmcp markers."""
+        epics_dir = tmp_path / "docs" / "planning" / "epics"
+        epics_dir.mkdir(parents=True)
+        (epics_dir / "EPIC-5.md").write_text(
+            "Modify `target.py`\n", encoding="utf-8",
+        )
+
+        config = _make_config(files=["target.py"])
+        content = self.gen.generate(config, project_root=tmp_path)
+
+        assert "<!-- docsmcp:start:related-epics -->" in content
+        assert "<!-- docsmcp:end:related-epics -->" in content
+
+
+class TestEpicFileHintsMCPTool:
+    """Tests for the docs_generate_epic MCP tool with files parameter."""
+
+    @staticmethod
+    def _call(**kwargs: Any) -> dict[str, Any]:
+        from docs_mcp.server_gen_tools import docs_generate_epic
+        return _run(docs_generate_epic(**kwargs))
+
+    def test_tool_with_files_parameter(self, tmp_path: Path) -> None:
+        """MCP tool accepts files parameter and passes to generator."""
+        setup_py = tmp_path / "setup.py"
+        setup_py.write_text("def setup():\n    pass\n", encoding="utf-8")
+
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(tmp_path),
+        ):
+            result = self._call(
+                title="File Hints Epic",
+                files="setup.py",
+                project_root=str(tmp_path),
+            )
+
+        content = result["data"]["content"]
+        assert "## Files Affected" in content
+        assert "`setup.py`" in content
+
+    def test_tool_without_files_backward_compat(self, tmp_path: Path) -> None:
+        """MCP tool without files parameter preserves existing behavior."""
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(tmp_path),
+        ):
+            result = self._call(
+                title="No Files Epic",
+                project_root=str(tmp_path),
+            )
+
+        # Should not have file-hint style table
+        content = result["data"]["content"]
+        assert "Public Symbols" not in content
+
+    def test_tool_files_without_auto_populate(self, tmp_path: Path) -> None:
+        """Files parameter works even without auto_populate=True."""
+        readme = tmp_path / "README.md"
+        readme.write_text("# Readme\n", encoding="utf-8")
+
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(tmp_path),
+        ):
+            result = self._call(
+                title="Files Only Epic",
+                files="README.md",
+                project_root=str(tmp_path),
+            )
+
+        content = result["data"]["content"]
+        assert "## Files Affected" in content
+        assert "`README.md`" in content

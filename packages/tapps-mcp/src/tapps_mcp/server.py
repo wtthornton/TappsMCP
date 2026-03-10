@@ -114,9 +114,12 @@ def _validate_file_path(file_path: str) -> Path:
 _LIBRARY_DOMAIN_MAP: dict[str, str] = {}
 for _domain, _libs in {
     "testing-strategies": ("pytest", "unittest", "mock", "coverage", "hypothesis"),
-    "api-design-integration": ("fastapi", "flask", "django", "starlette", "httpx", "requests"),
+    "api-design-integration": (
+        "fastapi", "flask", "django", "starlette", "httpx", "requests",
+    ),
     "database-data-management": ("sqlalchemy", "alembic", "psycopg", "redis"),
     "cloud-infrastructure": ("docker", "kubernetes", "docker-compose"),
+    "development-workflow": ("github-actions", "ci"),
     "code-quality-analysis": ("pydantic", "mypy", "ruff"),
     "security": ("security", "cryptography", "pyjwt", "bandit"),
 }.items():

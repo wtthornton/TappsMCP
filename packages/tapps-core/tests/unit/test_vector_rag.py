@@ -37,7 +37,7 @@ class TestVectorKnowledgeBase:
         kd = self._create_knowledge_dir(tmp_path)
         vkb = VectorKnowledgeBase(kd)
         results = vkb.search("security")
-        assert vkb.backend_type in ("simple", "vector")
+        assert vkb.backend_type in ("simple", "vector", "bm25")
         # Should find something.
         assert isinstance(results, list)
 
@@ -49,7 +49,7 @@ class TestVectorKnowledgeBase:
         kd = self._create_knowledge_dir(tmp_path)
         vkb = VectorKnowledgeBase(kd)
         vkb.search("test")  # triggers init
-        assert vkb.backend_type in ("simple", "vector")
+        assert vkb.backend_type in ("simple", "vector", "bm25")
 
     def test_search_returns_knowledge_chunks(self, tmp_path: Path):
         kd = self._create_knowledge_dir(tmp_path)

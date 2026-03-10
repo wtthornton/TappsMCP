@@ -21,6 +21,7 @@ from tapps_mcp.distribution.doctor import (
     check_cursor_rules,
     check_hooks,
     check_json_config,
+    check_mcp_client_config,
     check_scope_recommendation,
     check_stale_exe_backups,
     check_vscode_config,
@@ -656,6 +657,89 @@ class TestCheckScopeRecommendation:
         user_config.write_text("not json!", encoding="utf-8")
         result = check_scope_recommendation(tmp_path, home=tmp_path)
         assert result.ok is True
+
+
+# ---------------------------------------------------------------------------
+# check_mcp_client_config (Story 68.6)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckMcpClientConfig:
+    """Tests for the aggregate MCP client config discoverability check."""
+
+    def test_config_found_in_cursor(self, tmp_path):
+        """Passes when tapps-mcp is in .cursor/mcp.json."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_client_config(tmp_path, home=tmp_path)
+        assert result.ok is True
+        assert "Cursor" in result.message
+
+    def test_config_found_in_vscode(self, tmp_path):
+        """Passes when tapps-mcp is in .vscode/mcp.json."""
+        vscode_dir = tmp_path / ".vscode"
+        vscode_dir.mkdir()
+        config = {"servers": {"tapps-mcp": {"command": "tapps-mcp"}}}
+        (vscode_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_client_config(tmp_path, home=tmp_path)
+        assert result.ok is True
+        assert "VS Code" in result.message
+
+    def test_config_found_in_claude_code_project(self, tmp_path):
+        """Passes when tapps-mcp is in .mcp.json."""
+        config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}
+        (tmp_path / ".mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_client_config(tmp_path, home=tmp_path)
+        assert result.ok is True
+        assert "Claude Code (project)" in result.message
+
+    def test_config_found_in_claude_code_user(self, tmp_path):
+        """Passes when tapps-mcp is in ~/.claude.json."""
+        config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}
+        (tmp_path / ".claude.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_client_config(tmp_path, home=tmp_path)
+        assert result.ok is True
+        assert "Claude Code (user)" in result.message
+
+    def test_config_found_in_multiple(self, tmp_path):
+        """Reports all clients when tapps-mcp is in multiple configs."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        cursor_config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}
+        (cursor_dir / "mcp.json").write_text(json.dumps(cursor_config), encoding="utf-8")
+        project_config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}
+        (tmp_path / ".mcp.json").write_text(json.dumps(project_config), encoding="utf-8")
+        result = check_mcp_client_config(tmp_path, home=tmp_path)
+        assert result.ok is True
+        assert "Cursor" in result.message
+        assert "Claude Code (project)" in result.message
+
+    def test_no_config_files(self, tmp_path):
+        """Fails with suggestion when no config files exist."""
+        result = check_mcp_client_config(tmp_path, home=tmp_path)
+        assert result.ok is False
+        assert "not found in any" in result.message
+        assert ".cursor/mcp.json" in result.detail
+        assert "uv" in result.detail
+
+    def test_config_exists_without_tapps(self, tmp_path):
+        """Fails with suggestion when config exists but lacks tapps-mcp."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {"mcpServers": {"other-server": {"command": "other"}}}
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_client_config(tmp_path, home=tmp_path)
+        assert result.ok is False
+        assert "not found in any" in result.message
+        assert "uv" in result.detail
+
+    def test_included_in_collect_checks(self, tmp_path):
+        """The aggregate check is included in _collect_checks."""
+        checks = _collect_checks(tmp_path, quick=True)
+        names = [c.name for c in checks]
+        assert "MCP client config" in names
 
 
 # ---------------------------------------------------------------------------

@@ -1026,6 +1026,47 @@ async def _maybe_validate_memories(
         return {"ran": False, "error": "doc validation failed"}
 
 
+def _schedule_background_maintenance(
+    mem_store: MemoryStore,
+    snapshot: object,
+    settings: TappsMCPSettings,
+) -> None:
+    """Schedule heavy memory maintenance ops as fire-and-forget background tasks.
+
+    Moves GC, consolidation scan, doc validation, and session capture
+    processing off the critical path so ``tapps_session_start`` returns faster.
+
+    Epic 68.2: Session start performance optimization.
+    """
+
+    async def _run_maintenance() -> None:
+        """Execute all maintenance ops sequentially in the background."""
+        total_count: int = getattr(snapshot, "total_count", 0)
+        try:
+            _maybe_auto_gc(mem_store, total_count, settings)
+        except Exception:
+            _logger.debug("background_auto_gc_failed", exc_info=True)
+
+        try:
+            _maybe_consolidation_scan(mem_store, settings)
+        except Exception:
+            _logger.debug("background_consolidation_scan_failed", exc_info=True)
+
+        try:
+            await _maybe_validate_memories(mem_store, settings)
+        except Exception:
+            _logger.debug("background_doc_validation_failed", exc_info=True)
+
+        try:
+            _process_session_capture(settings.project_root, mem_store)
+        except Exception:
+            _logger.debug("background_session_capture_failed", exc_info=True)
+
+    task = asyncio.create_task(_run_maintenance())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
 async def tapps_session_start(
     project_root: str = "",
     quick: bool = False,
@@ -1053,17 +1094,15 @@ async def tapps_session_start(
 
     from tapps_mcp.server import _server_info_async
 
-    info = await _server_info_async()
+    timings: dict[str, int] = {}
 
-    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_session_start", start)
+    phase_start = time.perf_counter_ns()
+    info = await _server_info_async()
+    timings["server_info_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
 
     # Memory status (lazy, non-blocking)
+    phase_start = time.perf_counter_ns()
     memory_status: dict[str, Any] = {"enabled": False}
-    memory_gc_result: dict[str, Any] | None = None
-    memory_consolidation_result: dict[str, Any] | None = None
-    memory_doc_validation_result: dict[str, Any] | None = None
-    session_capture_result: dict[str, Any] | None = None
     try:
         settings = load_settings()
         if settings.memory.enabled:
@@ -1090,7 +1129,9 @@ async def tapps_session_start(
                     else 0.0
                 )
                 max_mem = settings.memory.max_memories
-                cap_pct = round((snapshot.total_count / max_mem) * 100, 1) if max_mem > 0 else 0.0
+                cap_pct = (
+                    round((snapshot.total_count / max_mem) * 100, 1) if max_mem > 0 else 0.0
+                )
 
                 memory_status = {
                     "enabled": True,
@@ -1105,34 +1146,16 @@ async def tapps_session_start(
                 # Epic 65.1: Consolidation and federation hints when applicable
                 _enrich_memory_status_hints(memory_status, snapshot.entries, settings)
 
-                # Auto-GC: run once per session when usage exceeds threshold
-                memory_gc_result = _maybe_auto_gc(
-                    mem_store,
-                    snapshot.total_count,
-                    settings,
-                )
-
-                # Periodic consolidation scan (Epic 58, Story 58.3)
-                memory_consolidation_result = _maybe_consolidation_scan(
-                    mem_store,
-                    settings,
-                )
-
-                # Doc validation of stale memories (Epic 62, Story 62.6)
-                memory_doc_validation_result = await _maybe_validate_memories(
-                    mem_store,
-                    settings,
-                )
-
-                # Process session capture from previous Stop hook (Epic 34.5)
-                session_capture_result = _process_session_capture(
-                    settings.project_root,
-                    mem_store,
-                )
+                # Fire-and-forget background tasks for heavy maintenance ops
+                # (Epic 68.2: move GC, consolidation, doc validation, session capture
+                # out of the critical path to reduce session start latency)
+                _schedule_background_maintenance(mem_store, snapshot, settings)
     except Exception:
         _logger.debug("memory_status_check_failed", exc_info=True)
+    timings["memory_status_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
 
-    # Business experts (Epic 43) — load from .tapps-mcp/experts.yaml
+    # Business experts (Epic 43) - load from .tapps-mcp/experts.yaml
+    phase_start = time.perf_counter_ns()
     business_experts_result: dict[str, Any] | None = None
     try:
         be_settings = load_settings()
@@ -1150,6 +1173,11 @@ async def tapps_session_start(
                 }
     except Exception:
         _logger.debug("business_experts_load_failed", exc_info=True)
+    timings["business_experts_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_session_start", start)
+    timings["total_ms"] = elapsed_ms
 
     _project_profile_hint = (
         "Call tapps_project_profile when you need project context"
@@ -1164,10 +1192,10 @@ async def tapps_session_start(
         "critical_rules": info["data"].get("critical_rules", []),
         "pipeline": info["data"]["pipeline"],
         "memory_status": memory_status,
-        "memory_gc": memory_gc_result,
-        "memory_consolidation": memory_consolidation_result,
-        "memory_doc_validation": memory_doc_validation_result,
-        "session_capture": session_capture_result,
+        "memory_gc": "background",
+        "memory_consolidation": "background",
+        "memory_doc_validation": "background",
+        "session_capture": "background",
         "business_experts": business_experts_result,
         "project_profile": None,
         "project_profile_hint": _project_profile_hint,
@@ -1175,6 +1203,7 @@ async def tapps_session_start(
             "Call tapps_project_profile when you need project context "
             "(tech stack, type, recommendations). Session start does not include profile."
         ),
+        "timings": timings,
     }
 
     resp = success_response("tapps_session_start", elapsed_ms, data)

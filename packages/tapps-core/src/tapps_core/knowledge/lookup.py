@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 import time
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,56 @@ if TYPE_CHECKING:
     from tapps_core.knowledge.providers.registry import ProviderRegistry
 
 logger = structlog.get_logger(__name__)
+
+# Libraries where expert knowledge is preferred over Context7 for operational topics.
+# These typically return generic API reference from Context7 instead of operational patterns.
+_OPS_FIRST_LIBRARIES: frozenset[str] = frozenset({
+    "docker",
+    "docker-compose",
+    "kubernetes",
+    "github-actions",
+    "ci",
+})
+
+# Minimum prose characters to consider content substantive (not just a TOC).
+_TOC_PROSE_THRESHOLD = 500
+# Minimum ratio of link/heading lines to total lines to be considered TOC-like.
+_TOC_LINK_RATIO_THRESHOLD = 0.5
+
+# Pattern matching markdown links: [text](url) or bare URLs
+_LINK_RE = re.compile(r"\[.*?\]\(.*?\)|https?://\S+")
+# Pattern matching markdown headings
+_HEADING_RE = re.compile(r"^#{1,6}\s+")
+
+
+def _is_toc_only(content: str) -> bool:
+    """Check if content is mostly a table-of-contents with little prose.
+
+    Returns ``True`` when the content is dominated by markdown links and
+    headings with fewer than ``_TOC_PROSE_THRESHOLD`` characters of actual
+    prose text.
+    """
+    lines = content.splitlines()
+    prose_chars = 0
+    link_or_heading_lines = 0
+    total_lines = 0
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        total_lines += 1
+        if _HEADING_RE.match(stripped) or _LINK_RE.search(stripped):
+            link_or_heading_lines += 1
+        else:
+            prose_chars += len(stripped)
+
+    if total_lines == 0:
+        return True
+
+    # Content is TOC-only when prose is thin AND most lines are links/headings
+    link_ratio = link_or_heading_lines / total_lines if total_lines else 0.0
+    return prose_chars < _TOC_PROSE_THRESHOLD and link_ratio > _TOC_LINK_RATIO_THRESHOLD
 
 
 def _build_provider_registry(
@@ -179,6 +230,12 @@ class LookupEngine:
         if custom_result is not None:
             return custom_result
 
+        # 2c. Ops-first routing — for operational libraries, try expert system first
+        if lib_clean in _OPS_FIRST_LIBRARIES:
+            ops_result = await self._try_expert_first(lib_clean, topic, start)
+            if ops_result is not None:
+                return ops_result
+
         # 3. API resolve + fetch — try provider chain first, then legacy Context7
         content: str | None = None
         provider_source: str | None = None
@@ -275,6 +332,16 @@ class LookupEngine:
         # Use sanitised content if available
         safe_content = safety.sanitised_content or content
 
+        # 4b. TOC-only detection — warn when content is thin
+        toc_warning: str | None = safety.warning
+        if _is_toc_only(safe_content):
+            toc_msg = (
+                "Generic table-of-contents only; consider "
+                "tapps_consult_expert for operational questions."
+            )
+            toc_warning = f"{toc_warning} {toc_msg}" if toc_warning else toc_msg
+            logger.info("toc_only_content", library=lib_clean, topic=topic)
+
         # 5. Store in cache
         self._cache.put(
             CacheEntry(
@@ -295,8 +362,56 @@ class LookupEngine:
             topic=topic,
             response_time_ms=round(elapsed, 1),
             cache_hit=False,
-            warning=safety.warning,
+            warning=toc_warning,
         )
+
+    async def _try_expert_first(
+        self,
+        library: str,
+        topic: str,
+        start: float,
+    ) -> LookupResult | None:
+        """Try expert system first for operational libraries.
+
+        For libraries in ``_OPS_FIRST_LIBRARIES``, the expert system often
+        has better operational patterns than Context7's generic API reference.
+        Returns a ``LookupResult`` if the expert provides a confident answer,
+        ``None`` otherwise (falls through to normal provider chain).
+        """
+        try:
+            from tapps_core.experts.engine import consult_expert
+
+            cr = await asyncio.to_thread(
+                consult_expert,
+                question=f"How do I use {library} for {topic}? Best practices and patterns.",
+                domain=None,
+                max_chunks=5,
+                max_context_length=3000,
+            )
+            _min_expert_confidence = 0.4
+            if cr.confidence >= _min_expert_confidence and cr.answer:
+                elapsed = (time.monotonic() - start) * 1000
+                self._cache.put(
+                    CacheEntry(
+                        library=library,
+                        topic=topic,
+                        content=cr.answer,
+                        token_count=len(cr.answer) // 4,
+                        provider_source="expert_system",
+                    )
+                )
+                return LookupResult(
+                    success=True,
+                    content=cr.answer,
+                    source="expert_system",
+                    library=library,
+                    topic=topic,
+                    response_time_ms=round(elapsed, 1),
+                    cache_hit=False,
+                )
+        except Exception:
+            logger.debug("ops_first_expert_failed", library=library, topic=topic, exc_info=True)
+        return None
 
     async def _check_custom_doc_source(
         self,

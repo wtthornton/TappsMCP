@@ -1,4 +1,11 @@
-"""Tests for tools.checklist — session call tracking."""
+"""Tests for tools.checklist — session call tracking and epic validation."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from textwrap import dedent
+
+import pytest
 
 from tapps_mcp.tools.checklist import (
     TASK_TOOL_MAP,
@@ -6,7 +13,10 @@ from tapps_mcp.tools.checklist import (
     TASK_TOOL_MAP_LOW,
     CallTracker,
     ChecklistResult,
+    EpicChecklistResult,
+    EpicValidation,
     ToolCallRecord,
+    validate_epic_markdown,
 )
 
 
@@ -44,8 +54,12 @@ class TestTaskToolMap:
         assert "tapps_quality_gate" in m["required"]
 
     def test_all_task_types_present(self):
-        expected = {"feature", "bugfix", "refactor", "security", "review"}
+        expected = {"feature", "bugfix", "refactor", "security", "review", "epic"}
         assert set(TASK_TOOL_MAP.keys()) == expected
+
+    def test_epic_task(self):
+        m = TASK_TOOL_MAP["epic"]
+        assert "tapps_checklist" in m["required"]
 
 
 class TestCallTracker:
@@ -164,3 +178,452 @@ class TestChecklistResult:
         assert r.total_calls == 5
         assert r.called == []
         assert r.missing_required == []
+
+
+# ---------------------------------------------------------------------------
+# Epic checklist and validation tests
+# ---------------------------------------------------------------------------
+
+_WELL_FORMED_EPIC = dedent("""\
+    # Epic 99: Test Epic
+
+    ## Goal
+
+    Test goal description.
+
+    ## Motivation
+
+    Test motivation.
+
+    ## Acceptance Criteria
+
+    - [ ] First AC
+    - [ ] Second AC
+
+    ## Stories
+
+    ### Story 99.1: First Story
+
+    **Points:** 2 | **Size:** S | **Priority:** P1
+
+    **Files:**
+    - `src/foo.py`
+    - `src/bar.py`
+
+    #### Tasks
+
+    - [ ] Task one
+    - [ ] Task two
+
+    #### Acceptance Criteria
+
+    - [ ] AC one
+    - [ ] AC two
+
+    ---
+
+    ### Story 99.2: Second Story
+
+    **Points:** 5 | **Size:** M | **Priority:** P2
+
+    **Files:**
+    - `src/baz.py`
+
+    #### Tasks
+
+    - [ ] Task A
+
+    #### Acceptance Criteria
+
+    - [ ] AC A
+""")
+
+_EPIC_MISSING_STORIES_SECTION = dedent("""\
+    # Epic 100: No Stories
+
+    ## Goal
+
+    Some goal.
+
+    ## Acceptance Criteria
+
+    - [ ] Something
+""")
+
+_EPIC_STORY_NO_AC = dedent("""\
+    # Epic 101: Story Without AC
+
+    ## Goal
+
+    Some goal.
+
+    ## Acceptance Criteria
+
+    - [ ] Something
+
+    ## Stories
+
+    ### Story 101.1: Missing AC Story
+
+    **Points:** 3 | **Size:** M | **Priority:** P1
+
+    **Files:**
+    - `src/thing.py`
+
+    #### Tasks
+
+    - [ ] Do stuff
+""")
+
+_EPIC_SIZE_POINT_MISMATCH = dedent("""\
+    # Epic 102: Size Mismatch
+
+    ## Goal
+
+    Some goal.
+
+    ## Acceptance Criteria
+
+    - [ ] Something
+
+    ## Stories
+
+    ### Story 102.1: Too Many Points for S
+
+    **Points:** 8 | **Size:** S | **Priority:** P1
+
+    **Files:**
+    - `src/big.py`
+
+    #### Tasks
+
+    - [ ] Do stuff
+
+    #### Acceptance Criteria
+
+    - [ ] AC
+""")
+
+_EPIC_WITH_CYCLE = dedent("""\
+    # Epic 103: Cyclic Dependencies
+
+    ## Goal
+
+    Some goal.
+
+    ## Acceptance Criteria
+
+    - [ ] Something
+
+    ## Stories
+
+    ### Story 103.1: Story A
+
+    **Points:** 2 | **Size:** S | **Priority:** P1
+
+    Dependencies: Story 103.2
+
+    #### Tasks
+
+    - [ ] Do A
+
+    #### Acceptance Criteria
+
+    - [ ] AC A
+
+    ### Story 103.2: Story B
+
+    **Points:** 2 | **Size:** S | **Priority:** P1
+
+    Dependencies: Story 103.1
+
+    #### Tasks
+
+    - [ ] Do B
+
+    #### Acceptance Criteria
+
+    - [ ] AC B
+""")
+
+_EPIC_FILES_TABLE_MISMATCH = dedent("""\
+    # Epic 104: Files Table
+
+    ## Goal
+
+    Some goal.
+
+    ## Acceptance Criteria
+
+    - [ ] Something
+
+    ## Stories
+
+    ### Story 104.1: Has Files
+
+    **Points:** 2 | **Size:** S | **Priority:** P1
+
+    **Files:**
+    - `src/alpha.py`
+    - `src/beta.py`
+
+    #### Tasks
+
+    - [ ] Task
+
+    #### Acceptance Criteria
+
+    - [ ] AC
+
+    ## Files-Affected
+
+    | File | Change |
+    |---|---|
+    | `src/alpha.py` | Modified |
+""")
+
+
+class TestEpicChecklist:
+    """Tests for task_type='epic' in the standard checklist."""
+
+    def setup_method(self) -> None:
+        CallTracker.reset()
+
+    def test_epic_checklist_returns_items(self) -> None:
+        result = CallTracker.evaluate("epic", engagement_level="medium")
+        assert result.task_type == "epic"
+        assert "tapps_checklist" in result.missing_required
+        assert result.complete is False
+
+    def test_epic_checklist_complete(self) -> None:
+        CallTracker.record("tapps_checklist")
+        result = CallTracker.evaluate("epic", engagement_level="medium")
+        assert result.complete is True
+
+    def test_epic_in_high_engagement(self) -> None:
+        assert "epic" in TASK_TOOL_MAP_HIGH
+
+    def test_epic_in_low_engagement(self) -> None:
+        assert "epic" in TASK_TOOL_MAP_LOW
+
+
+class TestValidateEpicMarkdown:
+    """Tests for validate_epic_markdown structural validation."""
+
+    def test_well_formed_epic_validates_clean(self) -> None:
+        result = validate_epic_markdown(_WELL_FORMED_EPIC)
+        assert result.valid is True
+        assert len(result.findings) == 0
+        assert len(result.stories) == 2
+        assert "Goal" in result.sections_found
+        assert "Acceptance Criteria" in result.sections_found
+        assert "Stories" in result.sections_found
+
+    def test_well_formed_story_fields(self) -> None:
+        result = validate_epic_markdown(_WELL_FORMED_EPIC)
+        s1 = result.stories[0]
+        assert s1.story_id == "99.1"
+        assert s1.title == "First Story"
+        assert s1.points == 2
+        assert s1.size == "S"
+        assert s1.priority == "P1"
+        assert s1.has_acceptance_criteria is True
+        assert s1.has_tasks is True
+        assert "src/foo.py" in s1.files
+        assert "src/bar.py" in s1.files
+
+    def test_missing_stories_section_flagged(self) -> None:
+        result = validate_epic_markdown(_EPIC_MISSING_STORIES_SECTION)
+        assert result.valid is False
+        errors = [f for f in result.findings if f.severity == "error"]
+        messages = [f.message for f in errors]
+        assert any("Stories" in m for m in messages)
+        assert any("No stories found" in m for m in messages)
+
+    def test_story_without_ac_flagged(self) -> None:
+        result = validate_epic_markdown(_EPIC_STORY_NO_AC)
+        assert result.valid is False
+        errors = [f for f in result.findings if f.severity == "error"]
+        assert any(
+            "101.1" in f.message and "Acceptance Criteria" in f.message
+            for f in errors
+        )
+
+    def test_point_size_mismatch_warning(self) -> None:
+        result = validate_epic_markdown(_EPIC_SIZE_POINT_MISMATCH)
+        # Mismatch is a warning, not an error
+        warnings = [f for f in result.findings if f.severity == "warning"]
+        assert any(
+            "102.1" in f.message and "expects 1-2 points but has 8" in f.message
+            for f in warnings
+        )
+
+    def test_point_size_mismatch_does_not_fail_valid(self) -> None:
+        result = validate_epic_markdown(_EPIC_SIZE_POINT_MISMATCH)
+        # Only warnings, so still valid
+        assert result.valid is True
+
+    def test_dependency_cycle_detected(self) -> None:
+        result = validate_epic_markdown(_EPIC_WITH_CYCLE)
+        assert result.valid is False
+        errors = [f for f in result.findings if f.severity == "error"]
+        assert any("cycle" in f.message.lower() for f in errors)
+
+    def test_files_table_missing_entry_warning(self) -> None:
+        result = validate_epic_markdown(_EPIC_FILES_TABLE_MISMATCH)
+        warnings = [f for f in result.findings if f.severity == "warning"]
+        assert any("src/beta.py" in f.message for f in warnings)
+
+    def test_files_table_present_entry_no_warning(self) -> None:
+        result = validate_epic_markdown(_EPIC_FILES_TABLE_MISMATCH)
+        warnings = [f for f in result.findings if f.severity == "warning"]
+        assert not any("src/alpha.py" in f.message for f in warnings)
+
+    def test_missing_goal_section(self) -> None:
+        content = dedent("""\
+            # Epic 105: No Goal
+
+            ## Acceptance Criteria
+
+            - [ ] Something
+
+            ## Stories
+
+            ### Story 105.1: A Story
+
+            **Points:** 1 | **Size:** S | **Priority:** P1
+
+            #### Tasks
+
+            - [ ] Task
+
+            #### Acceptance Criteria
+
+            - [ ] AC
+        """)
+        result = validate_epic_markdown(content)
+        assert result.valid is False
+        assert any("Goal" in f.message for f in result.findings)
+
+    def test_missing_acceptance_criteria_section(self) -> None:
+        content = dedent("""\
+            # Epic 106: No AC Section
+
+            ## Goal
+
+            Test goal.
+
+            ## Stories
+
+            ### Story 106.1: A Story
+
+            **Points:** 1 | **Size:** S | **Priority:** P1
+
+            #### Tasks
+
+            - [ ] Task
+
+            #### Acceptance Criteria
+
+            - [ ] AC
+        """)
+        result = validate_epic_markdown(content)
+        assert result.valid is False
+        assert any("Acceptance Criteria" in f.message for f in result.findings)
+
+    def test_story_missing_points_warns(self) -> None:
+        content = dedent("""\
+            # Epic 107: Missing Points
+
+            ## Goal
+
+            Test.
+
+            ## Acceptance Criteria
+
+            - [ ] AC
+
+            ## Stories
+
+            ### Story 107.1: No Points
+
+            **Size:** M | **Priority:** P1
+
+            #### Tasks
+
+            - [ ] Task
+
+            #### Acceptance Criteria
+
+            - [ ] AC
+        """)
+        result = validate_epic_markdown(content)
+        warnings = [f for f in result.findings if f.severity == "warning"]
+        assert any("107.1" in f.message and "Points" in f.message for f in warnings)
+
+
+class TestEvaluateEpic:
+    """Tests for CallTracker.evaluate_epic method."""
+
+    def setup_method(self) -> None:
+        CallTracker.reset()
+
+    def test_evaluate_epic_without_file(self) -> None:
+        result = CallTracker.evaluate_epic(engagement_level="medium")
+        assert isinstance(result, EpicChecklistResult)
+        assert result.task_type == "epic"
+        assert result.epic_validation is None
+        assert "tapps_checklist" in result.missing_required
+
+    def test_evaluate_epic_with_file(self, tmp_path: Path) -> None:
+        epic_file = tmp_path / "EPIC-99.md"
+        epic_file.write_text(_WELL_FORMED_EPIC, encoding="utf-8")
+        result = CallTracker.evaluate_epic(
+            file_path=str(epic_file), engagement_level="medium",
+        )
+        assert result.epic_validation is not None
+        assert result.epic_validation.valid is True
+        assert len(result.epic_validation.stories) == 2
+
+    def test_evaluate_epic_with_bad_file(self, tmp_path: Path) -> None:
+        epic_file = tmp_path / "EPIC-BAD.md"
+        epic_file.write_text(_EPIC_MISSING_STORIES_SECTION, encoding="utf-8")
+        result = CallTracker.evaluate_epic(
+            file_path=str(epic_file), engagement_level="medium",
+        )
+        assert result.epic_validation is not None
+        assert result.epic_validation.valid is False
+
+
+class TestEpicWithRealFixtures:
+    """Validate parsing against real epic files from the repository."""
+
+    @pytest.fixture()
+    def epics_dir(self) -> Path:
+        """Return the epics directory, skip if not found."""
+        candidates = [
+            Path(__file__).resolve().parents[4] / "docs" / "planning" / "epics",
+        ]
+        for d in candidates:
+            if d.is_dir():
+                return d
+        pytest.skip("epics directory not found")
+        return Path()  # unreachable but satisfies mypy
+
+    def test_real_epic_parses_without_crash(self, epics_dir: Path) -> None:
+        """Every real epic file should parse without raising."""
+        epic_files = sorted(epics_dir.glob("EPIC-*.md"))
+        assert len(epic_files) > 0, "Expected at least one epic file"
+        for ef in epic_files[:5]:  # sample first 5 to keep fast
+            content = ef.read_text(encoding="utf-8")
+            result = validate_epic_markdown(content)
+            assert isinstance(result, EpicValidation)
+
+    def test_epic_1_has_stories(self, epics_dir: Path) -> None:
+        """EPIC-1 should have multiple stories detected."""
+        ep1 = epics_dir / "EPIC-1-CORE-QUALITY-MVP.md"
+        if not ep1.exists():
+            pytest.skip("EPIC-1 not found")
+        content = ep1.read_text(encoding="utf-8")
+        result = validate_epic_markdown(content)
+        assert len(result.stories) > 0, "Expected stories in EPIC-1"
