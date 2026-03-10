@@ -13,6 +13,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from tapps_mcp import __version__
+from tapps_mcp.pipeline.platform_generators import _add_version_marker, _check_version_marker
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -356,8 +359,14 @@ def generate_pr_template(project_root: Path) -> dict[str, Any]:
     github_dir = project_root / ".github"
     github_dir.mkdir(parents=True, exist_ok=True)
     target = github_dir / "PULL_REQUEST_TEMPLATE.md"
-    target.write_text(_PR_TEMPLATE, encoding="utf-8")
-    return {"file": str(target.relative_to(project_root)), "action": "created"}
+
+    existing_version = _check_version_marker(target)
+    if existing_version == __version__:
+        return {"file": str(target.relative_to(project_root)), "action": "up-to-date"}
+
+    action = "updated" if target.exists() else "created"
+    target.write_text(_add_version_marker(_PR_TEMPLATE), encoding="utf-8")
+    return {"file": str(target.relative_to(project_root)), "action": action}
 
 
 def generate_dependabot_config(project_root: Path) -> dict[str, Any]:

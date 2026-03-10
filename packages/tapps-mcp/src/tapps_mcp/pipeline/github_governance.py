@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from tapps_mcp import __version__
+from tapps_mcp.pipeline.platform_generators import _add_version_marker, _check_version_marker
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -363,11 +366,18 @@ def generate_security_policy(project_root: Path) -> dict[str, Any]:
     Returns a summary dict with ``file`` and ``action``.
     """
     target = project_root / "SECURITY.md"
-    existed = target.exists()
-    if existed:
+
+    existing_version = _check_version_marker(target)
+    if existing_version == __version__:
+        return {"file": "SECURITY.md", "action": "up-to-date"}
+
+    # Preserve existing non-tapps SECURITY.md files
+    if target.exists() and existing_version is None:
         return {"file": "SECURITY.md", "action": "skipped", "reason": "already_exists"}
-    target.write_text(_SECURITY_POLICY, encoding="utf-8")
-    return {"file": "SECURITY.md", "action": "created"}
+
+    action = "updated" if target.exists() else "created"
+    target.write_text(_add_version_marker(_SECURITY_POLICY), encoding="utf-8")
+    return {"file": "SECURITY.md", "action": action}
 
 
 def generate_codeowners(project_root: Path) -> dict[str, Any]:
@@ -422,8 +432,14 @@ def generate_setup_guide(project_root: Path) -> dict[str, Any]:
     docs_dir = project_root / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
     target = docs_dir / "GITHUB_SETUP_GUIDE.md"
-    target.write_text(_SETUP_GUIDE, encoding="utf-8")
-    return {"file": str(target.relative_to(project_root)), "action": "created"}
+
+    existing_version = _check_version_marker(target)
+    if existing_version == __version__:
+        return {"file": str(target.relative_to(project_root)), "action": "up-to-date"}
+
+    action = "updated" if target.exists() else "created"
+    target.write_text(_add_version_marker(_SETUP_GUIDE), encoding="utf-8")
+    return {"file": str(target.relative_to(project_root)), "action": action}
 
 
 def generate_all_governance(project_root: Path) -> dict[str, Any]:
