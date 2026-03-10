@@ -1,5 +1,7 @@
 ---
 name: tapps-validate
+user-invocable: true
+model: claude-haiku-4-5-20251001
 description: Validate all changed files meet quality thresholds before declaring work complete.
 allowed-tools: mcp__tapps-mcp__tapps_validate_changed
 disable-model-invocation: true

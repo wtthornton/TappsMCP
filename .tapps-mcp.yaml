@@ -1,2 +1,36 @@
+# TappsMCP Project Configuration
+# See: https://github.com/anthropics/tapps-mcp for full reference
+
+# Engagement level: high | medium | low
+# Controls enforcement intensity of quality pipeline
 llm_engagement_level: medium
+
+# Quality preset: strict | standard | lenient
 quality_preset: standard
+
+# Quality thresholds
+thresholds:
+  overall: 70
+  security_floor: 50
+
+# Memory configuration
+max_memories: 1500
+gc_auto_threshold: 0.8
+memory_decay_enabled: true
+
+# Adaptive learning
+adaptive:
+  enabled: true
+  confidence_threshold: 0.4
+
+# Security settings
+security:
+  content_safety: true
+  secret_scanning: true
+
+# Expert system
+experts:
+  auto_generate: true
+
+# Knowledge cache
+cache_max_mb: 100

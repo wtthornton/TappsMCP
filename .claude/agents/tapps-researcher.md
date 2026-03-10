@@ -4,7 +4,7 @@ description: >-
   Look up documentation, consult domain experts, and research best practices
   for the technologies used in this project.
 tools: Read, Glob, Grep
-model: haiku
+model: claude-sonnet-4-6
 maxTurns: 15
 permissionMode: plan
 memory: project

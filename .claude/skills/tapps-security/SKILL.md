@@ -1,5 +1,7 @@
 ---
 name: tapps-security
+user-invocable: true
+model: claude-sonnet-4-6
 description: >-
   Run a comprehensive security audit including vulnerability scanning,
   dependency CVE checks, and expert security consultation.

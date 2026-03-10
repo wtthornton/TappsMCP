@@ -10,8 +10,10 @@ from __future__ import annotations
 import json
 
 from tapps_mcp.pipeline.init import (
+    _CLAUDE_DENY_RULES,
     _CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS,
     _CLAUDE_PERMISSION_ENTRIES,
+    _CLAUDE_SETTINGS_SCHEMA,
     _bootstrap_claude_settings,
     generate_permission_settings,
 )
@@ -52,7 +54,9 @@ class TestGeneratePermissionSettings:
         )
         assert result["theme"] == "dark"
         assert "Bash(*)" in result["permissions"]["allow"]
-        assert result["permissions"]["deny"] == ["rm -rf /"]
+        assert "rm -rf /" in result["permissions"]["deny"]
+        # Our standard deny rules should also be present
+        assert "Bash(rm -rf *)" in result["permissions"]["deny"]
         for entry in _CLAUDE_PERMISSION_ENTRIES:
             assert entry in result["permissions"]["allow"]
 
@@ -135,7 +139,15 @@ class TestBootstrapClaudeSettingsEngagement:
         all_entries = list(_CLAUDE_PERMISSION_ENTRIES) + list(
             _CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS
         )
-        config = {"permissions": {"allow": all_entries}}
+        config = {
+            "$schema": _CLAUDE_SETTINGS_SCHEMA,
+            "enableAllProjectMcpServers": True,
+            "env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
+            "permissions": {
+                "allow": all_entries,
+                "deny": list(_CLAUDE_DENY_RULES),
+            },
+        }
         (settings_dir / "settings.json").write_text(
             json.dumps(config, indent=2) + "\n", encoding="utf-8"
         )

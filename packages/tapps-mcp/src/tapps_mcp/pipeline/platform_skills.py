@@ -19,6 +19,8 @@ CLAUDE_SKILLS: dict[str, str] = {
     "tapps-score": """\
 ---
 name: tapps-score
+user-invocable: true
+model: claude-haiku-4-5-20251001
 description: Score a Python file across 7 quality categories and display a structured report.
 allowed-tools: mcp__tapps-mcp__tapps_score_file, mcp__tapps-mcp__tapps_quick_check
 argument-hint: "[file-path]"
@@ -35,6 +37,8 @@ Score the specified Python file using TappsMCP:
     "tapps-gate": """\
 ---
 name: tapps-gate
+user-invocable: true
+model: claude-haiku-4-5-20251001
 description: Run a quality gate check and report pass/fail with blocking issues.
 allowed-tools: mcp__tapps-mcp__tapps_quality_gate
 argument-hint: "[file-path]"
@@ -52,6 +56,8 @@ Run a quality gate check using TappsMCP:
     "tapps-validate": """\
 ---
 name: tapps-validate
+user-invocable: true
+model: claude-haiku-4-5-20251001
 description: Validate all changed files meet quality thresholds before declaring work complete.
 allowed-tools: mcp__tapps-mcp__tapps_validate_changed
 disable-model-invocation: true
@@ -69,6 +75,8 @@ Validate changed files using TappsMCP:
     "tapps-report": """\
 ---
 name: tapps-report
+user-invocable: true
+model: claude-haiku-4-5-20251001
 description: >-
   Generate a quality report across Python files in the project.
   Scores multiple files and presents an aggregate summary.
@@ -87,6 +95,8 @@ Generate a quality report using TappsMCP:
     "tapps-review-pipeline": """\
 ---
 name: tapps-review-pipeline
+user-invocable: true
+model: claude-sonnet-4-6
 description: >-
   Orchestrate a parallel review-fix-validate pipeline across multiple changed files.
   Spawns tapps-review-fixer agents in worktrees for parallel processing.
@@ -111,6 +121,7 @@ Run a parallel review-fix-validate pipeline on changed Python files:
     "tapps-research": """\
 ---
 name: tapps-research
+user-invocable: true
 description: >-
   Research a technical question using domain experts and library docs.
   Combines expert consultation with docs lookup for comprehensive answers.
@@ -120,7 +131,7 @@ allowed-tools: >-
   mcp__tapps-mcp__tapps_lookup_docs
 argument-hint: "[question]"
 context: fork
-model: haiku
+model: claude-sonnet-4-6
 ---
 
 Research a technical question using TappsMCP:
@@ -134,6 +145,8 @@ Research a technical question using TappsMCP:
     "tapps-security": """\
 ---
 name: tapps-security
+user-invocable: true
+model: claude-sonnet-4-6
 description: >-
   Run a comprehensive security audit including vulnerability scanning,
   dependency CVE checks, and expert security consultation.
@@ -155,6 +168,8 @@ Run a comprehensive security audit using TappsMCP:
     "tapps-memory": """\
 ---
 name: tapps-memory
+user-invocable: true
+model: claude-sonnet-4-6
 description: >-
   Manage shared project memory for cross-session knowledge persistence.
   20 actions: save, search, consolidate, federation, and more.
@@ -182,6 +197,8 @@ Steps:
     "tapps-tool-reference": """\
 ---
 name: tapps-tool-reference
+user-invocable: true
+model: claude-haiku-4-5-20251001
 description: >-
   Look up when to use each TappsMCP tool. Full tool reference with per-tool
   guidance for session start, scoring, validation, checklist, docs, experts, and more.
@@ -246,6 +263,8 @@ Use `tapps_server_info` for the latest recommended workflow string.
     "tapps-init": """\
 ---
 name: tapps-init
+user-invocable: true
+model: claude-sonnet-4-6
 description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
   platform rules, hooks, agents, skills, and MCP config.
@@ -269,6 +288,8 @@ Bootstrap TappsMCP in a new or existing project:
     "tapps-engagement": """\
 ---
 name: tapps-engagement
+user-invocable: true
+model: claude-haiku-4-5-20251001
 description: >-
   Change the TappsMCP enforcement intensity (high, medium, or low).
   Controls which quality tools are mandatory vs optional.

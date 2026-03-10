@@ -23,6 +23,7 @@ log = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 _TAPPS_SERVER_ENTRY: dict[str, Any] = {
+    "type": "stdio",
     "command": "tapps-mcp",
     "args": ["serve"],
     "env": {
@@ -93,6 +94,7 @@ def _build_server_entry(host: str) -> dict[str, Any]:
     # Claude Code CWD == project root; VS Code/Cursor resolve ${workspaceFolder}
     project_root_value = "." if host == "claude-code" else "${workspaceFolder}"
     entry: dict[str, Any] = {
+        "type": "stdio",
         "command": command,
         "args": ["serve"],
         "env": {"TAPPS_MCP_PROJECT_ROOT": project_root_value},

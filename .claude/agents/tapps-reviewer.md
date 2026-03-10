@@ -3,8 +3,8 @@ name: tapps-reviewer
 description: >-
   Use proactively to review code quality and enforce quality gates
   after editing Python files.
-tools: Read, Glob, Grep
-model: sonnet
+tools: Read, Glob, Grep, Write, Edit
+model: claude-sonnet-4-6
 maxTurns: 20
 permissionMode: acceptEdits
 memory: project

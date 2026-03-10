@@ -1,5 +1,7 @@
 ---
 name: tapps-memory
+user-invocable: true
+model: claude-sonnet-4-6
 description: >-
   Manage shared project memory for cross-session knowledge persistence.
   20 actions: save, search, consolidate, federation, and more.

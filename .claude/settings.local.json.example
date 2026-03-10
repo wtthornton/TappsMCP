@@ -1,4 +1,7 @@
 {
+  "// NOTE": "Copy this file to settings.local.json and customize for your dev environment",
+  "// NOTE2": "settings.local.json is gitignored and overrides settings.json locally",
+
   "permissions": {
     "allow": [
       "Bash(*)",
@@ -13,8 +16,7 @@
       "Read(.env)"
     ],
     "additionalDirectories": [
-      "c:\\Users\\tappt",
-      "c:\\cursor"
+      "/path/to/other/projects"
     ]
   },
   "enableAllProjectMcpServers": true,

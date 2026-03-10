@@ -1,5 +1,7 @@
 ---
 name: tapps-engagement
+user-invocable: true
+model: claude-haiku-4-5-20251001
 description: >-
   Change the TappsMCP enforcement intensity (high, medium, or low).
   Controls which quality tools are mandatory vs optional.

@@ -1171,6 +1171,16 @@ _CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS = [
     "Bash(uv run mypy *)",
 ]
 
+_CLAUDE_DENY_RULES: list[str] = [
+    "Bash(rm -rf *)",
+    "Bash(git push --force *)",
+    "Bash(git reset --hard *)",
+    "Read(.env)",
+    "Read(.env.*)",
+]
+
+_CLAUDE_SETTINGS_SCHEMA = "https://json.schemastore.org/claude-code-settings.json"
+
 
 def generate_permission_settings(
     project_root: Path,
@@ -1201,6 +1211,19 @@ def generate_permission_settings(
     import copy
 
     config: dict[str, Any] = copy.deepcopy(existing_settings) if existing_settings else {}
+
+    # 2026 best practice: JSON schema reference
+    config.setdefault("$schema", _CLAUDE_SETTINGS_SCHEMA)
+
+    # 2026 best practice: enable project MCP servers
+    config.setdefault("enableAllProjectMcpServers", True)
+
+    # 2026 best practice: agent teams at high engagement
+    if engagement_level == "high":
+        env: dict[str, str] = config.setdefault("env", {})
+        env.setdefault("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
+
+    # Permissions: allow list
     permissions: dict[str, Any] = config.setdefault("permissions", {})
     allow_list: list[str] = permissions.setdefault("allow", [])
 
@@ -1214,6 +1237,12 @@ def generate_permission_settings(
     for entry in desired:
         if entry not in allow_list:
             allow_list.append(entry)
+
+    # Permissions: deny list (safety guardrails)
+    deny_list: list[str] = permissions.setdefault("deny", [])
+    for entry in _CLAUDE_DENY_RULES:
+        if entry not in deny_list:
+            deny_list.append(entry)
 
     return config
 

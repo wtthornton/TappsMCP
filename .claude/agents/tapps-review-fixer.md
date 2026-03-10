@@ -5,7 +5,7 @@ description: >-
   and validates the result passes the quality gate. Use in worktrees for
   parallel multi-file review pipelines.
 tools: Read, Glob, Grep, Write, Edit, Bash
-model: sonnet
+model: claude-sonnet-4-6
 maxTurns: 25
 permissionMode: acceptEdits
 memory: project

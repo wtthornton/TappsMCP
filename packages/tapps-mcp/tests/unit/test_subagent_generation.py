@@ -29,7 +29,7 @@ class TestClaudeAgents:
     def test_reviewer_has_model_sonnet(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
-        assert "model: sonnet" in content
+        assert "model: claude-sonnet-4-6" in content
 
     def test_reviewer_has_permission_mode_accept_edits(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -59,10 +59,10 @@ class TestClaudeAgents:
         assert "mcpServers:" in content
         assert "  tapps-mcp: {}" in content
 
-    def test_researcher_has_model_haiku(self, tmp_path):
+    def test_researcher_has_model_sonnet(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-researcher.md").read_text()
-        assert "model: haiku" in content
+        assert "model: claude-sonnet-4-6" in content
 
     def test_researcher_has_memory_project(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -88,7 +88,7 @@ class TestClaudeAgents:
     def test_validator_has_model_haiku(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-validator.md").read_text()
-        assert "model: haiku" in content
+        assert "model: claude-haiku-4-5-20251001" in content
 
     def test_validator_has_permission_mode_plan(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -145,7 +145,7 @@ class TestClaudeAgents:
     def test_review_fixer_has_model_sonnet(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
-        assert "model: sonnet" in content
+        assert "model: claude-sonnet-4-6" in content
 
     def test_review_fixer_has_max_turns_25(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")

@@ -1,5 +1,7 @@
 ---
 name: tapps-tool-reference
+user-invocable: true
+model: claude-haiku-4-5-20251001
 description: >-
   Look up when to use each TappsMCP tool. Full tool reference with per-tool
   guidance for session start, scoring, validation, checklist, docs, experts, and more.

@@ -1,5 +1,7 @@
 ---
 name: tapps-init
+user-invocable: true
+model: claude-sonnet-4-6
 description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
   platform rules, hooks, agents, skills, and MCP config.

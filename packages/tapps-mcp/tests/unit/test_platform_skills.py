@@ -140,20 +140,26 @@ class TestClaudeContext:
 
 
 class TestClaudeModel:
-    """Research skill should use haiku model."""
+    """All skills should use full model IDs."""
 
-    def test_research_has_model_haiku(self) -> None:
+    def test_research_has_model_sonnet(self) -> None:
         fm = _get_frontmatter(CLAUDE_SKILLS["tapps-research"])
-        assert "model: haiku" in fm
+        assert "model: claude-sonnet-4-6" in fm
 
     @pytest.mark.parametrize(
-        "skill_name",
-        ["tapps-score", "tapps-gate", "tapps-validate",
-         "tapps-review-pipeline", "tapps-security", "tapps-memory"],
+        "skill_name,expected_model",
+        [
+            ("tapps-score", "claude-haiku-4-5-20251001"),
+            ("tapps-gate", "claude-haiku-4-5-20251001"),
+            ("tapps-validate", "claude-haiku-4-5-20251001"),
+            ("tapps-review-pipeline", "claude-sonnet-4-6"),
+            ("tapps-security", "claude-sonnet-4-6"),
+            ("tapps-memory", "claude-sonnet-4-6"),
+        ],
     )
-    def test_model_absent(self, skill_name: str) -> None:
+    def test_model_present(self, skill_name: str, expected_model: str) -> None:
         fm = _get_frontmatter(CLAUDE_SKILLS[skill_name])
-        assert "model:" not in fm
+        assert f"model: {expected_model}" in fm
 
 
 # ---------------------------------------------------------------------------
@@ -232,4 +238,4 @@ class TestGenerateSkills:
             tmp_path / ".claude" / "skills" / "tapps-research" / "SKILL.md"
         ).read_text(encoding="utf-8")
         assert "context: fork" in content
-        assert "model: haiku" in content
+        assert "model: claude-sonnet-4-6" in content

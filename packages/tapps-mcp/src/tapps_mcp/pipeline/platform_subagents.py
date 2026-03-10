@@ -22,8 +22,8 @@ name: tapps-reviewer
 description: >-
   Use proactively to review code quality, run security scans, and enforce
   quality gates after editing Python files.
-tools: Read, Glob, Grep
-model: sonnet
+tools: Read, Glob, Grep, Write, Edit
+model: claude-sonnet-4-6
 maxTurns: 20
 permissionMode: acceptEdits
 memory: project
@@ -51,7 +51,7 @@ description: >-
   Look up documentation, consult domain experts, and research best practices
   for the technologies used in this project.
 tools: Read, Glob, Grep
-model: haiku
+model: claude-sonnet-4-6
 maxTurns: 15
 permissionMode: plan
 memory: project
@@ -77,7 +77,7 @@ description: >-
   Run pre-completion validation on all changed files to confirm they meet
   quality thresholds before declaring work complete.
 tools: Read, Glob, Grep
-model: haiku
+model: claude-haiku-4-5-20251001
 maxTurns: 10
 permissionMode: plan
 memory: project
@@ -102,7 +102,7 @@ description: >-
   and validates the result passes the quality gate. Use in worktrees for
   parallel multi-file review pipelines.
 tools: Read, Glob, Grep, Write, Edit, Bash
-model: sonnet
+model: claude-sonnet-4-6
 maxTurns: 25
 permissionMode: acceptEdits
 memory: project
