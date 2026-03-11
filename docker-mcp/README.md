@@ -46,9 +46,9 @@ docker mcp gateway run --profile tapps-standard
 docker mcp catalog import docker-mcp/catalog.yaml
 ```
 
-### Cursor: show tapps-mcp and docs-mcp with new versions (1.3.0)
+### Cursor: show tapps-mcp and docs-mcp with new versions (1.3.1)
 
-1. **Import the catalog** (so the Toolkit uses the pinned 1.3.0 images):
+1. **Import the catalog** (so the Toolkit uses the pinned 1.3.1 images):
    ```bash
    docker mcp catalog import docker-mcp/catalog.yaml
    ```
@@ -59,7 +59,7 @@ docker mcp catalog import docker-mcp/catalog.yaml
    docker mcp gateway run --profile tapps-standard
    ```
 4. In **Cursor → Settings → Tools → Installed MCP Servers**, ensure **MCP_DOCKER** (or the Docker MCP gateway) is **enabled**. Enable **docs-mcp** there too if you want it as a separate server.
-5. To use **1.3.0** you need the images: pull from GHCR after publish (`docker pull ghcr.io/wtthornton/tapps-mcp:1.3.0` and `docs-mcp:1.3.0`) or use your locally built images (tag them so the catalog/gateway can find them).
+5. To use **1.3.1** you need the images: pull from GHCR after publish (`docker pull ghcr.io/wtthornton/tapps-mcp:1.3.1` and `docs-mcp:1.3.1`) or use your locally built images (tag as `tapps-mcp:1.3.1` and `docs-mcp:1.3.1` and run `docker mcp catalog import docker-mcp/catalog.yaml`).
 
 ### Build locally
 

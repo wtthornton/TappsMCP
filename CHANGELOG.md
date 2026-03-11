@@ -16,7 +16,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Dockerfile.platform** — Fixed missing README references for docs-mcp wheel build
-- **PyInstaller bundle** — Rebuilt exe to include all engagement-level template files (agents_template_medium.md, platform_cursor_medium.md, etc.)
+- **PyInstaller bundle** — Rebuilt exe to include all engagement-level template files
+
+## [1.3.1] - 2026-03-11
+
+### Fixed
+
+- **tapps-core**
+  - `test_schema_version_persists` — Avoid calling `get_schema_version()` on closed DB; capture version before close
+  - `test_no_weights_when_adaptive_disabled`, `test_apply_adaptive_weights_disabled` — Patch `load_settings` so project `.tapps-mcp.yaml` (adaptive.enabled) does not override test expectations
+- **tapps-mcp**
+  - `test_secret_scanner_still_runs`, `test_security_combines_bandit_and_secrets` — Set `mock_scorer.language = "python"` so security branch runs; secret scanner now invoked correctly
+  - `test_claude_hooks_merge::test_result_dict`, `test_claude_hooks_scripts_windows::test_result_dict` — Expect 10 scripts (includes memory hooks tapps-memory-capture.sh, tapps-memory-auto-capture.sh)
+- **docs-mcp**
+  - `test_enabled_tools_config` — Bump expected tool count 23 → 24 for `docs_generate_prompt`
+  - `test_output_dir_env_var_resolves` — Skip on Windows (Unix `${VAR}` expansion)
+  - `test_dockerfile_has_entrypoint` — Accept CMD or ENTRYPOINT; `test_dockerfile_has_healthcheck` — Accept CMD as alternative to HEALTHCHECK
+
+### Changed
+
+- Version bump: tapps-core 1.1.0 → 1.2.0, tapps-mcp 1.3.0 → 1.3.1, docs-mcp 1.3.0 → 1.3.1
 
 ## [1.3.0] - 2026-03-11
 

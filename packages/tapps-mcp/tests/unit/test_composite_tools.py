@@ -687,6 +687,7 @@ class TestTappsValidateChanged:
             security_issues=[],
         )
         mock_scorer = MagicMock()
+        mock_scorer.language = "python"
         mock_scorer.score_file = AsyncMock(return_value=mock_score)
 
         mock_gate = MagicMock(passed=True, failures=[])
@@ -793,6 +794,7 @@ class TestTappsValidateChanged:
             security_issues=[bandit_issue],
         )
         mock_scorer = MagicMock()
+        mock_scorer.language = "python"
         mock_scorer.score_file = AsyncMock(return_value=mock_score)
 
         mock_gate = MagicMock(passed=True, failures=[])

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from tapps_core.experts.domain_detector import DomainDetector
 
@@ -193,10 +196,16 @@ class TestAdaptiveWeightDelegation:
 
     def test_no_weights_when_adaptive_disabled(self, tmp_path: Path) -> None:
         """When adaptive is disabled, no weight signals should appear."""
-        results = DomainDetector.detect_from_question_merged(
-            "How to handle security authentication?"
-        )
-        # Should return results without weight signals (adaptive disabled by default).
+        # Patch so project .tapps-mcp.yaml (adaptive.enabled: true) doesn't override
+        settings = MagicMock()
+        settings.adaptive.enabled = False
+        with patch(
+            "tapps_core.config.settings.load_settings",
+            return_value=settings,
+        ):
+            results = DomainDetector.detect_from_question_merged(
+                "How to handle security authentication?"
+            )
         assert results
         for r in results:
             assert not any("weight:" in s for s in r.signals)
@@ -282,6 +291,8 @@ class TestAdaptiveWeightDelegation:
         """When adaptive is disabled, results should pass through unchanged."""
         from tapps_core.experts.models import DomainMapping
 
+        settings = MagicMock()
+        settings.adaptive.enabled = False
         original = [
             DomainMapping(
                 domain="security",
@@ -290,9 +301,12 @@ class TestAdaptiveWeightDelegation:
                 reasoning="Test",
             )
         ]
-        results = DomainDetector._apply_adaptive_weights(original)
+        with patch(
+            "tapps_core.config.settings.load_settings",
+            return_value=settings,
+        ):
+            results = DomainDetector._apply_adaptive_weights(original)
 
-        # When disabled, should return the same results (no weight signals).
         assert len(results) == 1
         assert results[0].domain == "security"
         assert not any("weight:" in s for s in results[0].signals)

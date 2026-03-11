@@ -236,7 +236,7 @@ class TestClaudeHooksMerge:
         """Returns a summary dict with scripts_created and hooks_action."""
         result = generate_claude_hooks(tmp_path, force_windows=False)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 9  # medium engagement
+        assert len(result["scripts_created"]) == 10  # medium engagement (includes memory hooks)
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0
 
@@ -309,7 +309,7 @@ class TestClaudeHooksScriptsWindows:
     def test_result_dict(self, tmp_path):
         result = generate_claude_hooks(tmp_path, force_windows=True)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 9  # medium engagement
+        assert len(result["scripts_created"]) == 10  # medium engagement (includes memory hooks)
         assert all(n.endswith(".ps1") for n in result["scripts_created"])
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0

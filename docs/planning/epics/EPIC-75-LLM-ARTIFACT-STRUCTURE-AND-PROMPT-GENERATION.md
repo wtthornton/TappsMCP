@@ -1,7 +1,7 @@
 # Epic 75: LLM Artifact Structure & Prompt Generation
 
 <!-- docsmcp:start:metadata -->
-- **Status:** Proposed
+- **Status:** Complete (2026-03-11)
 - **Priority:** P2
 - **Estimated LOE:** ~3–4 weeks (1 developer)
 - **Dependencies:** DocsMCP epics (generate_epic, generate_story), design doc LLM-ARTIFACT-STRUCTURE-COMMON-EPIC-STORY-PROMPT.md

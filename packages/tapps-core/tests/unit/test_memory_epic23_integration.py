@@ -198,11 +198,12 @@ class TestPersistenceEdgeCases:
 
     def test_schema_version_persists(self, tmp_path: Path) -> None:
         p1 = MemoryPersistence(tmp_path)
-        assert p1.get_schema_version() >= 1  # Migrations run on init
+        v1 = p1.get_schema_version()
+        assert v1 >= 1  # Migrations run on init
         p1.close()
 
         p2 = MemoryPersistence(tmp_path)
-        assert p2.get_schema_version() == p1.get_schema_version()
+        assert p2.get_schema_version() == v1
         p2.close()
 
     def test_fts_special_chars_no_crash(self, tmp_path: Path) -> None:

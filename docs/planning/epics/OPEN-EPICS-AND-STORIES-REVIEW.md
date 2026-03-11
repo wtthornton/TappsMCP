@@ -15,7 +15,7 @@ This document reviews all epics and stories that are **Proposed**, **Draft**, or
 | **79** | MCP Tool Count & Curation | P1–P2 | ~2–3 wk | 6 | **Complete** (2026-03-11) |
 | **65** | Memory 2026 Best Practices (parent) | P1 | ~12–16 wk | 17 sub-epics | Many 65.x marked Complete in docs; README still "Proposed" |
 | **66** | Tool UX Improvements | P2–P3 | 2–5 days | 2 | Proposed; 66.2 doc says Complete |
-| **75** | LLM Artifact Structure & Prompt Generation | P2 | ~3–4 wk | 4 | Proposed |
+| **75** | LLM Artifact Structure & Prompt Generation | P2 | ~3–4 wk | 4 | **Complete** (2026-03-11) |
 | **76** | Skills Spec Compliance & Validation | P2 | ~1.5–2 wk | 4 | Proposed |
 | **77** | Agency-Agents Integration | P3 | ~2–4 days | 2 | Proposed |
 | **78** | Canonical Persona Injection (Prompt-Injection Defense) | P2 | ~1–2 wk | 4 | Proposed |
@@ -109,17 +109,17 @@ Many sub-epic markdown files list **Status: Complete** (e.g. 65.1, 65.2, 65.3, 6
 
 ## Epic 75: LLM Artifact Structure & Prompt Generation
 
-- **Status:** Proposed  
+- **Status:** **Complete** (2026-03-11)  
 - **Goal:** Unified schema (Common, Epic, Story, Prompt); PromptConfig and prompt generator; `docs_generate_prompt`; optional compact LLM view.
 - **Priority:** P2 | **LOE:** ~3–4 weeks  
 - **Dependencies:** DocsMCP epic/story generators; design doc LLM-ARTIFACT-STRUCTURE-COMMON-EPIC-STORY-PROMPT.md
 
 | Story | Title | Priority | LOE | Status |
 |-------|--------|----------|-----|--------|
-| 75.1 | PromptConfig and prompt schema | P2 | 2–3 days | Open |
-| 75.2 | PromptGenerator and docs_generate_prompt | P2 | 3–4 days | Open |
-| 75.3 | Common schema docs and epic/story alignment | P2 | 1–2 days | Open |
-| 75.4 | Optional compact LLM view | P3 | 2–3 days | Open |
+| 75.1 | PromptConfig and prompt schema | P2 | 2–3 days | **Complete** |
+| 75.2 | PromptGenerator and docs_generate_prompt | P2 | 3–4 days | **Complete** |
+| 75.3 | Common schema docs and epic/story alignment | P2 | 1–2 days | **Complete** — LLM-ARTIFACT-COMMON-SCHEMA.md, AGENTS.md reference |
+| 75.4 | Optional compact LLM view | P3 | 2–3 days | **Complete** — `generate_compact()`, `docs_generate_prompt(compact_llm_view=True)`, tests |
 
 ---
 
@@ -189,7 +189,7 @@ Many sub-epic markdown files list **Status: Complete** (e.g. 65.1, 65.2, 65.3, 6
 2. **Epic 79:** Mark 79.1, 79.2, 79.3 Complete in story docs; implement 79.4 (doc), 79.5 (role presets), 79.6 (Docker role profiles).
 3. **Epic 65:** Complete (17/17). All sub-epics reconciled Complete.
 4. **Epic 66:** Confirm 66.2 implementation; implement 66.1 if still desired.
-5. **Epics 75, 76, 77, 78, 70–73:** Prioritize by product roadmap (75/76 for artifacts/skills; 77/78 for agency/persona). **70–73:** All Complete. See [2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md](../research/2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md).
+5. **Epics 75, 76, 77, 78, 70–73:** **75, 76, 77, 70–73:** All Complete. **78:** Canonical Persona Injection still Proposed. See [2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md](../research/2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md).
 
 ---
 

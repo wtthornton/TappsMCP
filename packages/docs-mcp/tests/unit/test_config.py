@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import platform
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from docs_mcp.config.settings import (
     DocsMCPSettings,
@@ -159,8 +162,12 @@ class TestEnvVarResolution:
         result = load_docs_settings(project_root=Path("~/myproject"))
         assert "~" not in str(result.project_root)
 
+    @pytest.mark.skipif(
+        platform.system() == "Windows",
+        reason="${VAR} expansion is Unix-style; use %USERPROFILE% on Windows",
+    )
     def test_output_dir_env_var_resolves(self, tmp_path: Path) -> None:
-        """output_dir with env vars should resolve."""
+        """output_dir with env vars should resolve (Unix ${HOME})."""
         project_dir = tmp_path / "proj"
         project_dir.mkdir()
         (project_dir / ".docsmcp.yaml").write_text(
