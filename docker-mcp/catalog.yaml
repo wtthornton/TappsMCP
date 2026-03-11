@@ -4,7 +4,7 @@
 servers:
   tapps-mcp:
     name: tapps-mcp
-    description: "Code quality MCP server (28 tools)"
+    description: "Code quality MCP server (29 tools)"
     image: ghcr.io/wtthornton/tapps-mcp:latest
     transport: stdio
     environment:

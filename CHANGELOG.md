@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dockerfile.platform** — Fixed missing README references for docs-mcp wheel build
 - **PyInstaller bundle** — Rebuilt exe to include all engagement-level template files (agents_template_medium.md, platform_cursor_medium.md, etc.)
 
+## [1.3.0] - 2026-03-11
+
+### Fixed
+
+- **Claude Code settings** — Init and upgrade now write only schema-supported hook keys to `.claude/settings.json`; unsupported keys (e.g. `PostCompact`) are stripped so the file is not skipped by Claude Code. Added `SUPPORTED_CLAUDE_HOOK_KEYS` from the official schema.
+- **Cursor settings** — Init and upgrade filter `.cursor/hooks.json` to only supported event keys; added `SUPPORTED_CURSOR_HOOK_KEYS` from the Cursor hooks schema. Unsupported keys are removed on merge.
+- **Doctor** — `check_claude_settings` validates hook keys in `.claude/settings.json`; `check_hooks` validates `.cursor/hooks.json` keys and requires the file when Cursor hook scripts exist. Fix hints aligned (`upgrade --host claude-code` / `upgrade --host cursor`).
+
+### Changed
+
+- Version bump: tapps-mcp 1.2.0 → 1.3.0, docs-mcp 1.2.0 → 1.3.0.
+
 ## [1.0.0] - 2026-03-06
 
 ### Highlights
