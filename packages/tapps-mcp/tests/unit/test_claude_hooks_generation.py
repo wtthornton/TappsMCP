@@ -456,3 +456,22 @@ class TestClaudeHooksPlatformMigration:
 
         assert result["hooks_migrated"] == 0
         assert result["hooks_action"] == "skipped"
+
+    def test_unsupported_hook_keys_stripped_on_write(self, tmp_path):
+        """Existing settings with unsupported hook key (e.g. PostCompact) are stripped on write."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir(parents=True)
+        config = {
+            "permissions": {"allow": ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]},
+            "hooks": {
+                "SessionStart": [],
+                "PostCompact": [{"matcher": "*", "hooks": [{"type": "command", "command": "echo x"}]}],
+            },
+        }
+        (claude_dir / "settings.json").write_text(
+            json.dumps(config, indent=2), encoding="utf-8"
+        )
+        generate_claude_hooks(tmp_path, force_windows=False)
+        data = json.loads((claude_dir / "settings.json").read_text())
+        assert "PostCompact" not in data.get("hooks", {})
+        assert "SessionStart" in data.get("hooks", {})

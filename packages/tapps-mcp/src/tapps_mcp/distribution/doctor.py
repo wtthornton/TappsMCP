@@ -11,6 +11,10 @@ from typing import Any
 import click
 
 from tapps_core.common.logging import get_logger
+from tapps_mcp.pipeline.platform_hook_templates import (
+    SUPPORTED_CLAUDE_HOOK_KEYS,
+    SUPPORTED_CURSOR_HOOK_KEYS,
+)
 
 log = get_logger(__name__)
 
@@ -286,11 +290,13 @@ def check_agents_md(project_root: Path) -> CheckResult:
 
 
 def check_claude_settings(project_root: Path) -> CheckResult:
-    """Check ``.claude/settings.json`` for TappsMCP permission entries.
+    """Check ``.claude/settings.json`` for permissions and hook schema validity.
 
-    Both ``mcp__tapps-mcp`` (bare server match) and ``mcp__tapps-mcp__*``
-    (wildcard) are needed to work around known Claude Code permission bugs
-    (issues #3107, #13077, #27139).
+    Verifies:
+    - Permission entries: both ``mcp__tapps-mcp`` and ``mcp__tapps-mcp__*``
+      (work around Claude Code permission bugs #3107, #13077, #27139).
+    - Hook keys: only schema-supported keys (e.g. no PostCompact); invalid
+      keys cause Claude Code to skip the entire settings file.
     """
     settings_file = project_root / ".claude" / "settings.json"
     if not settings_file.exists():
@@ -312,22 +318,39 @@ def check_claude_settings(project_root: Path) -> CheckResult:
     allow_list = data.get("permissions", {}).get("allow", [])
     required = ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
     missing = [e for e in required if e not in allow_list]
-    if not missing:
+    if missing:
         return CheckResult(
             ".claude/settings.json",
-            True,
-            "TappsMCP permission entries present (bare + wildcard)",
+            False,
+            f"Missing permission entries: {', '.join(missing)}",
+            "Run: tapps-mcp upgrade --host claude-code",
         )
+    # Invalid hook keys (e.g. PostCompact) cause Claude Code to skip the entire file
+    hooks_obj = data.get("hooks") or {}
+    if isinstance(hooks_obj, dict):
+        invalid = [k for k in hooks_obj if k not in SUPPORTED_CLAUDE_HOOK_KEYS]
+        if invalid:
+            return CheckResult(
+                ".claude/settings.json",
+                False,
+                f"Unsupported hook keys (Claude Code will skip file): {', '.join(sorted(invalid))}",
+                "Run: tapps-mcp upgrade --host claude-code to write only supported hooks.",
+            )
     return CheckResult(
         ".claude/settings.json",
-        False,
-        f"Missing permission entries: {', '.join(missing)}",
-        "Run: tapps-mcp upgrade --host claude-code",
+        True,
+        "TappsMCP permission entries present (bare + wildcard), hooks schema valid",
     )
 
 
 def check_hooks(project_root: Path) -> CheckResult:
-    """Check if TappsMCP hooks directory exists with session-start hook."""
+    """Check TappsMCP hooks: directory, session-start script, and config validity.
+
+    For Claude Code, hook keys are validated in check_claude_settings.
+    For Cursor, requires .cursor/hooks.json when scripts exist and validates
+    that only supported hook event keys are present (unsupported keys can
+    cause the file to be ignored).
+    """
     claude_hooks = project_root / ".claude" / "hooks"
     cursor_hooks = project_root / ".cursor" / "hooks"
     found: list[str] = []
@@ -361,11 +384,20 @@ def check_hooks(project_root: Path) -> CheckResult:
             False,
             f"TappsMCP hooks found for: {', '.join(found)}, "
             f"but session-start hook missing for: {', '.join(missing_session_start)}",
-            "Run: tapps-mcp upgrade --force to regenerate hooks",
+            "Run: tapps-mcp upgrade --force (or upgrade --host cursor)",
+        )
+
+    # When Cursor hook scripts exist, .cursor/hooks.json must exist (parity with Claude settings)
+    cursor_hooks_json = project_root / ".cursor" / "hooks.json"
+    if "Cursor" in found and not cursor_hooks_json.exists():
+        return CheckResult(
+            "Hooks",
+            False,
+            f"TappsMCP hooks found for: {', '.join(found)}, but .cursor/hooks.json missing",
+            "Run: tapps-mcp upgrade --host cursor or upgrade --force",
         )
 
     # Validate .cursor/hooks.json format (Cursor requires version + object hooks)
-    cursor_hooks_json = project_root / ".cursor" / "hooks.json"
     if cursor_hooks_json.exists():
         format_errors: list[str] = []
         try:
@@ -376,6 +408,13 @@ def check_hooks(project_root: Path) -> CheckResult:
                 format_errors.append("'hooks' is an array (should be an object)")
             elif not isinstance(data.get("hooks"), dict):
                 format_errors.append("'hooks' is not an object")
+            else:
+                hooks_obj = data.get("hooks", {})
+                invalid = [k for k in hooks_obj if k not in SUPPORTED_CURSOR_HOOK_KEYS]
+                if invalid:
+                    format_errors.append(
+                        f"unsupported hook keys (Cursor may ignore file): {', '.join(sorted(invalid))}"
+                    )
         except (json.JSONDecodeError, OSError) as exc:
             format_errors.append(f"could not parse: {exc}")
 
@@ -385,7 +424,7 @@ def check_hooks(project_root: Path) -> CheckResult:
                 False,
                 f"TappsMCP hooks found for: {', '.join(found)}, "
                 f"but .cursor/hooks.json has invalid format: {'; '.join(format_errors)}",
-                "Run: tapps-mcp upgrade --force to regenerate hooks",
+                "Run: tapps-mcp upgrade --host cursor or upgrade --force to write only supported hooks",
             )
 
     return CheckResult(

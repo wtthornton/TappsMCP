@@ -1070,6 +1070,13 @@ exit 0
 
 PS1_PREFIX = "powershell -NoProfile -ExecutionPolicy Bypass -File "
 
+# Supported Cursor hooks.json event keys (schema: cursor-hooks/schema/hooks.schema.json).
+# Only these keys are valid under "hooks"; invalid keys can cause the file to be ignored.
+SUPPORTED_CURSOR_HOOK_KEYS: frozenset[str] = frozenset({
+    "beforeShellExecution", "beforeMCPExecution", "afterFileEdit",
+    "beforeReadFile", "beforeSubmitPrompt", "stop",
+})
+
 CURSOR_HOOKS_CONFIG: dict[str, list[dict[str, str]]] = {
     "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
     "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
@@ -1614,6 +1621,20 @@ PROMPT_HOOK_CONFIG: dict[str, list[dict[str, Any]]] = {
         },
     ],
 }
+
+# ---------------------------------------------------------------------------
+# Supported Claude Code lifecycle hooks (schema: claude-code-settings.json)
+# ---------------------------------------------------------------------------
+# Only these keys are valid under "hooks" in .claude/settings.json.
+# PostCompact is NOT supported; invalid keys cause the entire settings file
+# to be skipped by Claude Code. Used by init/upgrade to avoid writing or
+# retaining unsupported keys.
+SUPPORTED_CLAUDE_HOOK_KEYS: frozenset[str] = frozenset({
+    "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest",
+    "Notification", "UserPromptSubmit", "Stop", "SubagentStart", "SubagentStop",
+    "PreCompact", "TeammateIdle", "TaskCompleted", "Setup", "InstructionsLoaded",
+    "ConfigChange", "WorktreeCreate", "WorktreeRemove", "SessionStart", "SessionEnd",
+})
 
 # ---------------------------------------------------------------------------
 # Engagement-level hook event sets (Epic 36.6)

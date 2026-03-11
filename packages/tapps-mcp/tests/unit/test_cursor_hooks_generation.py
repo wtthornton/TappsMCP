@@ -390,3 +390,22 @@ class TestCursorHooksPlatformMigration:
 
         assert result["hooks_migrated"] == 0
         assert result["hooks_action"] == "skipped"
+
+    def test_unsupported_hook_keys_stripped_on_write(self, tmp_path):
+        """Existing hooks.json with unsupported hook key is stripped on write."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        config = {
+            "version": 1,
+            "hooks": {
+                "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                "postCompact": [{"command": "echo x"}],  # not in Cursor schema
+            },
+        }
+        (cursor_dir / "hooks.json").write_text(
+            json.dumps(config, indent=2), encoding="utf-8"
+        )
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        data = json.loads((cursor_dir / "hooks.json").read_text())
+        assert "postCompact" not in data.get("hooks", {})
+        assert "beforeMCPExecution" in data.get("hooks", {})

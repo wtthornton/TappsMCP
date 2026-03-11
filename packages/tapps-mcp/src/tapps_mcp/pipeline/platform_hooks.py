@@ -42,6 +42,9 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     CURSOR_HOOKS_CONFIG_PS as _CURSOR_HOOKS_CONFIG_PS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    SUPPORTED_CURSOR_HOOK_KEYS as _SUPPORTED_CURSOR_HOOK_KEYS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     DESTRUCTIVE_GUARD_HOOKS_CONFIG as _DESTRUCTIVE_GUARD_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -49,6 +52,9 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     ENGAGEMENT_HOOK_EVENTS as _ENGAGEMENT_HOOK_EVENTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    SUPPORTED_CLAUDE_HOOK_KEYS as _SUPPORTED_CLAUDE_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_AUTO_CAPTURE_HOOKS_CONFIG as _MEMORY_AUTO_CAPTURE_HOOKS_CONFIG,
@@ -343,6 +349,11 @@ def generate_claude_hooks(
         win=win,
     )
 
+    # Only write hook keys supported by Claude Code schema (e.g. no PostCompact)
+    config["hooks"] = {
+        k: v for k, v in config["hooks"].items() if k in _SUPPORTED_CLAUDE_HOOK_KEYS
+    }
+
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(
         json.dumps(config, indent=2) + "\n",
@@ -452,8 +463,11 @@ def generate_cursor_hooks(
                 existing_hooks[event][i] = hooks_config[event][0]
                 hooks_migrated += 1
 
+    # Only write hook keys supported by Cursor schema (invalid keys can break loading)
+    config["hooks"] = {
+        k: v for k, v in existing_hooks.items() if k in _SUPPORTED_CURSOR_HOOK_KEYS
+    }
     config["version"] = 1
-    config["hooks"] = existing_hooks
     hooks_file.parent.mkdir(parents=True, exist_ok=True)
     hooks_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
@@ -536,6 +550,9 @@ def generate_memory_capture_hook(
                     existing_hooks[event].append(entry)
                     hooks_added += 1
 
+    config["hooks"] = {
+        k: v for k, v in config["hooks"].items() if k in _SUPPORTED_CLAUDE_HOOK_KEYS
+    }
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
@@ -630,6 +647,9 @@ def generate_memory_auto_recall_hook(
                     existing_hooks[event].append(entry)
                     hooks_added += 1
 
+    config["hooks"] = {
+        k: v for k, v in config["hooks"].items() if k in _SUPPORTED_CLAUDE_HOOK_KEYS
+    }
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
@@ -707,6 +727,9 @@ def generate_memory_auto_capture_hook(
                     existing_hooks[event].append(entry)
                     hooks_added += 1
 
+    config["hooks"] = {
+        k: v for k, v in config["hooks"].items() if k in _SUPPORTED_CLAUDE_HOOK_KEYS
+    }
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 

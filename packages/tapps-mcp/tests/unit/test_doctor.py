@@ -461,6 +461,22 @@ class TestCheckClaudeSettings:
         assert result.ok is False
         assert "mcp__tapps-mcp" in result.message
 
+    def test_settings_with_unsupported_hook_key_fails(self, tmp_path):
+        """Unsupported hook keys (e.g. PostCompact) cause check to fail."""
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir()
+        config = {
+            "permissions": {"allow": ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]},
+            "hooks": {"PostCompact": [{"matcher": "*", "hooks": [{"type": "command", "command": "true"}]}]},
+        }
+        (settings_dir / "settings.json").write_text(
+            json.dumps(config, indent=2), encoding="utf-8"
+        )
+        result = check_claude_settings(tmp_path)
+        assert result.ok is False
+        assert "PostCompact" in result.message
+        assert "Unsupported" in result.message or "skip" in result.message.lower()
+
 
 # ---------------------------------------------------------------------------
 # check_hooks
@@ -481,22 +497,43 @@ class TestCheckHooks:
         assert "session-start" in result.message
 
     def test_cursor_hooks_with_before_mcp(self, tmp_path):
-        """Cursor hooks directory with before-mcp hook passes."""
+        """Cursor hooks directory with before-mcp hook and valid hooks.json passes."""
         hooks_dir = tmp_path / ".cursor" / "hooks"
         hooks_dir.mkdir(parents=True)
         (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-after-edit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / ".cursor" / "hooks.json").write_text(
+            json.dumps({
+                "version": 1,
+                "hooks": {
+                    "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                    "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+                },
+            }, indent=2),
+            encoding="utf-8",
+        )
         result = check_hooks(tmp_path)
         assert result.ok is True
         assert "Cursor" in result.message
 
     def test_both_hooks_present(self, tmp_path):
-        """Both Claude and Cursor hooks with session-start hooks passes."""
+        """Both Claude and Cursor hooks with session-start hooks and valid config passes."""
         claude_hooks = tmp_path / ".claude" / "hooks"
         claude_hooks.mkdir(parents=True)
         (claude_hooks / "tapps-session-start.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         cursor_hooks = tmp_path / ".cursor" / "hooks"
         cursor_hooks.mkdir(parents=True)
         (cursor_hooks / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / ".cursor" / "hooks.json").write_text(
+            json.dumps({
+                "version": 1,
+                "hooks": {
+                    "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                    "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+                },
+            }, indent=2),
+            encoding="utf-8",
+        )
         result = check_hooks(tmp_path)
         assert result.ok is True
         assert "Claude Code" in result.message
@@ -548,6 +585,38 @@ class TestCheckHooks:
         hooks_dir.mkdir(parents=True)
         result = check_hooks(tmp_path)
         assert result.ok is False
+
+    def test_cursor_hooks_scripts_without_hooks_json_fails(self, tmp_path):
+        """Cursor hook scripts present but .cursor/hooks.json missing fails."""
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-after-edit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        # No .cursor/hooks.json
+        result = check_hooks(tmp_path)
+        assert result.ok is False
+        assert ".cursor/hooks.json missing" in result.message
+        assert "upgrade" in result.detail.lower()
+
+    def test_cursor_hooks_json_unsupported_key_fails(self, tmp_path):
+        """Cursor hooks.json with unsupported hook key fails check."""
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-after-edit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / ".cursor" / "hooks.json").write_text(
+            json.dumps({
+                "version": 1,
+                "hooks": {
+                    "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                    "postCompact": [{"command": "echo x"}],
+                },
+            }, indent=2),
+            encoding="utf-8",
+        )
+        result = check_hooks(tmp_path)
+        assert result.ok is False
+        assert "postCompact" in result.message or "unsupported" in result.message.lower()
 
 
 # ---------------------------------------------------------------------------
