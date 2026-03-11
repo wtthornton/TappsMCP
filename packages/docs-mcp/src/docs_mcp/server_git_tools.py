@@ -15,7 +15,6 @@ from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call, mcp
 from docs_mcp.server_helpers import _get_settings, error_response, success_response
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_git_summary(
     limit: int = 50,
     since: str = "",
@@ -118,3 +117,14 @@ async def docs_git_summary(
     }
 
     return success_response("docs_git_summary", elapsed_ms, data)
+
+
+# ---------------------------------------------------------------------------
+# Registration (Epic 79.2: conditional)
+# ---------------------------------------------------------------------------
+
+
+def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
+    """Register git tools on the shared mcp instance (Epic 79.2: conditional)."""
+    if "docs_git_summary" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_git_summary)

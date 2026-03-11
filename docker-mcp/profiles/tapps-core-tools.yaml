@@ -1,0 +1,8 @@
+# Core-tools profile: TappsMCP + DocsMCP with curated tool set (~11–23 tools).
+# Use with example tools.yaml to expose only Tier 1 (or Tier 1 + Tier 2) tools
+# and stay under the ~30-tool recommendation. See docker-mcp/README.md.
+name: tapps-core-tools
+description: "TappsMCP + DocsMCP with Tier 1 (or Tier 1+2) tools only — optimal tool count"
+servers:
+  - catalog://tapps-mcp
+  - catalog://docs-mcp

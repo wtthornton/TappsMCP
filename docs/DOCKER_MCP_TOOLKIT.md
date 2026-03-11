@@ -209,6 +209,16 @@ gh pr create --title "Add tapps-mcp and docs-mcp servers" \
 | `mcp/` namespace | Pursue later | Requires Docker team approval, not blocking for initial listing |
 | Combined platform image | Not submitted | Keep for power users, not needed in catalog |
 
+## Tool count and core-tools profile (Epic 79.3)
+
+To keep active tool count in the optimal range (~30 tools), the repo ships a **core-tools** profile and example `tools.yaml` for the Docker MCP Gateway:
+
+- **Profile:** `docker-mcp/profiles/tapps-core-tools.yaml` (TappsMCP + DocsMCP).
+- **Example allowlists:** `docker-mcp/examples/tools-core-tier1.yaml` (Tier 1 only, ~11 tools) and `docker-mcp/examples/tools-core-tier1-tier2.yaml` (Tier 1+2, ~23 tools). Copy to `~/.docker/mcp/tools.yaml` or use the profile Tools tab / `docker mcp profile tools` to enable only these tools.
+- **Server-side preset:** Catalog entry `tapps-mcp-core` runs the same image with `TAPPS_MCP_TOOL_PRESET=core` so the server exposes only 7 Tier 1 tools without gateway filtering.
+
+See `docker-mcp/README.md` § "Core tools profile and tool count" and [TOOL-TIER-RANKING.md](planning/TOOL-TIER-RANKING.md).
+
 ## Timeline
 
 | Phase | Estimated |

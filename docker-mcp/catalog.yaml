@@ -1,20 +1,33 @@
 # Self-hosted Docker MCP catalog for TappsMCP/DocsMCP
 # Use for pre-catalog-approval or enterprise deployments:
 #   docker mcp catalog import --file docker-mcp/catalog.yaml
+# Pin to 1.3.0 so Cursor/MCP Toolkit uses the new versions.
 servers:
   tapps-mcp:
     name: tapps-mcp
-    description: "Code quality MCP server (29 tools)"
-    image: ghcr.io/wtthornton/tapps-mcp:latest
+    description: "Code quality MCP server (29 tools) v1.3.0"
+    image: ghcr.io/wtthornton/tapps-mcp:1.3.0
     transport: stdio
     environment:
       - name: TAPPS_MCP_PROJECT_ROOT
         value: /workspace
         mount: true
+  # Core preset: same image, exposes only Tier 1 tools (7). Use for optimal tool count.
+  tapps-mcp-core:
+    name: tapps-mcp-core
+    description: "TappsMCP Tier 1 tools only (7 tools) v1.3.0 — session_start, quick_check, validate_changed, quality_gate, checklist, lookup_docs, security_scan"
+    image: ghcr.io/wtthornton/tapps-mcp:1.3.0
+    transport: stdio
+    environment:
+      - name: TAPPS_MCP_PROJECT_ROOT
+        value: /workspace
+        mount: true
+      - name: TAPPS_MCP_TOOL_PRESET
+        value: core
   docs-mcp:
     name: docs-mcp
-    description: "Documentation MCP server (22 tools)"
-    image: ghcr.io/wtthornton/docs-mcp:latest
+    description: "Documentation MCP server (22 tools) v1.3.0"
+    image: ghcr.io/wtthornton/docs-mcp:1.3.0
     transport: stdio
     environment:
       - name: TAPPS_MCP_PROJECT_ROOT

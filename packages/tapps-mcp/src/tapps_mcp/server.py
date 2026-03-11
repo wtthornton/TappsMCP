@@ -8,6 +8,7 @@ Tool handlers are split across modules for maintainability:
   - ``server_pipeline_tools``: tapps_validate_changed, tapps_session_start, tapps_init
   - ``server_metrics_tools``: tapps_dashboard, tapps_stats, tapps_feedback, tapps_research
   - ``server_memory_tools``: tapps_memory
+  - ``server_persona_tools``: tapps_get_canonical_persona (Epic 78)
   - ``server_expert_tools``: tapps_manage_experts
   - ``server_analysis_tools``: tapps_session_notes, tapps_impact_analysis, tapps_report,
     tapps_dead_code, tapps_dependency_scan, tapps_dependency_graph
@@ -171,7 +172,8 @@ _EXPERT_FALLBACK_MIN_CONFIDENCE = 0.3
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
-_FALLBACK_TOOL_LIST: list[str] = [
+# Canonical list of all TappsMCP tools (29). Used for filtering and fallback.
+ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_server_info",
     "tapps_session_start",
     "tapps_score_file",
@@ -199,7 +201,58 @@ _FALLBACK_TOOL_LIST: list[str] = [
     "tapps_dead_code",
     "tapps_dependency_scan",
     "tapps_dependency_graph",
-]
+    "tapps_memory",
+    "tapps_manage_experts",
+    "tapps_get_canonical_persona",
+})
+
+# Tier 1 from TOOL-TIER-RANKING (Epic 79.1)
+TOOL_PRESET_CORE: frozenset[str] = frozenset({
+    "tapps_session_start",
+    "tapps_quick_check",
+    "tapps_validate_changed",
+    "tapps_quality_gate",
+    "tapps_checklist",
+    "tapps_lookup_docs",
+    "tapps_security_scan",
+})
+
+# Tier 1 + Tier 2
+TOOL_PRESET_PIPELINE: frozenset[str] = TOOL_PRESET_CORE | frozenset({
+    "tapps_score_file",
+    "tapps_consult_expert",
+    "tapps_research",
+    "tapps_memory",
+    "tapps_project_profile",
+    "tapps_impact_analysis",
+    "tapps_validate_config",
+})
+
+# Role presets Phase 1 (Epic 79.5) — from ROLE-PRESETS-IMPLEMENT-FIRST.md
+TOOL_PRESET_REVIEWER: frozenset[str] = frozenset({
+    "tapps_session_start", "tapps_quick_check", "tapps_validate_changed",
+    "tapps_quality_gate", "tapps_checklist", "tapps_security_scan",
+    "tapps_score_file", "tapps_dead_code", "tapps_dependency_scan",
+    "tapps_project_profile",
+})
+TOOL_PRESET_PLANNER: frozenset[str] = frozenset({
+    "tapps_session_start", "tapps_checklist", "tapps_validate_changed",
+    "tapps_quality_gate", "tapps_score_file", "tapps_memory",
+    "tapps_consult_expert", "tapps_project_profile",
+})
+TOOL_PRESET_FRONTEND: frozenset[str] = frozenset({
+    "tapps_session_start", "tapps_quick_check", "tapps_score_file",
+    "tapps_lookup_docs", "tapps_consult_expert", "tapps_quality_gate",
+    "tapps_project_profile",
+})
+TOOL_PRESET_DEVELOPER: frozenset[str] = frozenset({
+    "tapps_session_start", "tapps_quick_check", "tapps_validate_changed",
+    "tapps_quality_gate", "tapps_checklist", "tapps_score_file",
+    "tapps_security_scan", "tapps_lookup_docs", "tapps_memory",
+    "tapps_consult_expert", "tapps_project_profile", "tapps_impact_analysis",
+})
+
+_FALLBACK_TOOL_LIST: list[str] = sorted(ALL_TOOL_NAMES)
 
 _SECURITY_SCAN_FINDING_LIMIT: int = 50
 
@@ -215,6 +268,42 @@ _VALID_CONFIG_TYPES: frozenset[str] = frozenset({
 _MAX_CONFIG_FILE_SIZE: int = 1_048_576  # 1 MB
 
 _VALID_LOOKUP_MODES: frozenset[str] = frozenset({"code", "info"})
+
+
+def _resolve_allowed_tools(settings: TappsMCPSettings) -> frozenset[str]:
+    """Compute the set of tool names to register from config (Epic 79.1).
+
+    Precedence: enabled_tools (if non-empty) > tool_preset > full set; then
+    subtract disabled_tools. Invalid names in enabled_tools are ignored and logged.
+    """
+    allowed: set[str]
+    if settings.enabled_tools:
+        allowed = set(settings.enabled_tools) & ALL_TOOL_NAMES
+        invalid = set(settings.enabled_tools) - ALL_TOOL_NAMES
+        if invalid:
+            logger.debug(
+                "enabled_tools_invalid_ignored",
+                invalid=sorted(invalid),
+                valid_count=len(allowed),
+            )
+    elif settings.tool_preset == "core":
+        allowed = set(TOOL_PRESET_CORE)
+    elif settings.tool_preset == "pipeline":
+        allowed = set(TOOL_PRESET_PIPELINE)
+    elif settings.tool_preset == "reviewer":
+        allowed = set(TOOL_PRESET_REVIEWER)
+    elif settings.tool_preset == "planner":
+        allowed = set(TOOL_PRESET_PLANNER)
+    elif settings.tool_preset == "frontend":
+        allowed = set(TOOL_PRESET_FRONTEND)
+    elif settings.tool_preset == "developer":
+        allowed = set(TOOL_PRESET_DEVELOPER)
+    elif settings.tool_preset == "full":
+        allowed = set(ALL_TOOL_NAMES)
+    else:
+        allowed = set(ALL_TOOL_NAMES)
+    allowed -= set(settings.disabled_tools)
+    return frozenset(allowed)
 
 
 def _get_available_tools() -> list[str]:
@@ -355,7 +444,11 @@ def _with_nudges(
     workflow = compute_suggested_workflow(tool_name, context)
     data = response.get("data", {})
     if steps:
-        data["next_steps"] = steps
+        # Story 74.2: preserve checklist next_steps for json/compact (CI) output
+        if tool_name == "tapps_checklist" and data.get("next_steps"):
+            pass  # keep machine-readable next_steps from _checklist_*_format
+        else:
+            data["next_steps"] = steps
     if progress:
         data["pipeline_progress"] = progress
     if workflow:
@@ -364,11 +457,11 @@ def _with_nudges(
 
 
 # ---------------------------------------------------------------------------
-# Core tools (kept in server.py — simple, few dependencies)
+# Core tools (kept in server.py — simple, few dependencies).
+# Registered conditionally in register_core_tools() (Epic 79.1).
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def tapps_server_info() -> dict[str, Any]:
     """Discovers server version, available tools, installed checkers (ruff, mypy,
     bandit, radon), and configuration. Side effects: none (read-only).
@@ -441,7 +534,6 @@ async def _server_info_async() -> dict[str, Any]:
     return _with_nudges("tapps_server_info", resp)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, Any]:
     """REQUIRED when changes touch security-sensitive code. Runs bandit and
     secret detection on a Python file.
@@ -615,7 +707,6 @@ async def _attach_expert_fallback(
         )
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)
 async def tapps_lookup_docs(
     library: str,
     topic: str = "overview",
@@ -778,7 +869,6 @@ def _attach_config_structured_output(resp: dict[str, Any], result: Any) -> None:
         logger.warning("structured_output_failed", tool="tapps_validate_config", exc_info=True)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str, Any]:
     """REQUIRED when changing Dockerfile, docker-compose, or infra config.
 
@@ -820,7 +910,6 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
     return _with_nudges("tapps_validate_config", resp)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     """REQUIRED for domain-specific decisions. Routes to one of 17+ built-in
     experts or user-defined business experts and returns RAG-backed guidance
@@ -946,7 +1035,6 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     )
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_list_experts() -> dict[str, Any]:
     """Returns built-in and business experts with domain, description, and knowledge-base status.
 
@@ -984,7 +1072,7 @@ def _checklist_json_format(
     result: ChecklistResult,
     auto_run_results: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build structured JSON output with computed counts for checklist."""
+    """Build structured JSON output with computed counts and next_steps for checklist."""
     required_called = [t for t in result.called if t not in result.missing_required]
     recommended_missing = result.missing_recommended
     recommended_called = [
@@ -992,6 +1080,9 @@ def _checklist_json_format(
     ]
     optional_missing = result.missing_optional
     optional_called = [t for t in result.called if t not in result.missing_optional]
+
+    next_steps: list[str] = [h.reason for h in result.missing_required_hints]
+    next_steps.extend(h.reason for h in result.missing_recommended_hints)
 
     data: dict[str, Any] = {
         "task_type": result.task_type,
@@ -1004,6 +1095,8 @@ def _checklist_json_format(
         "optional_called": optional_called,
         "optional_missing": optional_missing,
         "priority_actions": result.missing_required[:3] if result.missing_required else [],
+        "next_steps": next_steps,
+        "full": result.model_dump(),
     }
     if auto_run_results:
         data["auto_run_results"] = auto_run_results
@@ -1031,18 +1124,22 @@ def _checklist_compact_format(
 
     summary = f"Checklist {result.task_type}: {', '.join(parts)}"
 
+    next_steps: list[str] = [h.reason for h in result.missing_required_hints]
+    next_steps.extend(h.reason for h in result.missing_recommended_hints)
+
     data: dict[str, Any] = {
         "summary": summary,
         "complete": result.complete,
         "task_type": result.task_type,
         "total_calls": result.total_calls,
+        "next_steps": next_steps,
+        "full": result.model_dump(),
     }
     if auto_run_results:
         data["auto_run_results"] = auto_run_results
     return data
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def tapps_checklist(
     task_type: str = "review",
     auto_run: bool = False,
@@ -1139,7 +1236,7 @@ async def tapps_checklist(
         elif output_format == "compact":
             resp_data = _checklist_compact_format(result, auto_run_results)
 
-        resp = success_response("tapps_checklist", elapsed_ms, resp_data)
+        resp_data["git_context"] = git_context
 
         # Epic 66.2: Surface validation_note in next_steps
         if auto_run_results.get("validate_changed", {}).get("validation_note"):
@@ -1151,6 +1248,8 @@ async def tapps_checklist(
                 "Use tapps_quick_check on individual changed files as fallback."
             )
             resp_data["next_steps"] = next_steps
+
+        resp = success_response("tapps_checklist", elapsed_ms, resp_data)
 
         # Attach structured output (markdown/json only - compact is already minimal)
         if output_format != "compact":
@@ -1195,7 +1294,6 @@ async def tapps_checklist(
         return _with_nudges("tapps_checklist", resp, {"complete": False})
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
     """Call when you need project context. Detects tech stack, type, CI, Docker,
     test frameworks, and package managers. Session start does NOT include profile;
@@ -1279,29 +1377,55 @@ def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+    """Register core tools (server.py) when their name is in allowed_tools (Epic 79.1)."""
+    if "tapps_server_info" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_server_info)
+    if "tapps_security_scan" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_security_scan)
+    if "tapps_lookup_docs" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_lookup_docs)
+    if "tapps_validate_config" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_config)
+    if "tapps_consult_expert" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_consult_expert)
+    if "tapps_list_experts" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_list_experts)
+    if "tapps_checklist" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_checklist)
+    if "tapps_project_profile" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_project_profile)
+
+
 def _register_tool_modules() -> None:
     """Import and register tools from extracted server modules.
 
-    Wrapped in a function to avoid E402 (module-level import not at top).
-    The modules register their ``@mcp.tool()`` handlers on the shared ``mcp``
-    instance when ``.register(mcp)`` is called.
+    Loads settings, resolves allowed_tools (Epic 79.1), registers core tools
+    conditionally, then each module's register(mcp, allowed_tools).
     """
+    settings = load_settings()
+    allowed_tools = _resolve_allowed_tools(settings)
+
+    _register_core_tools(mcp, allowed_tools)
+
     from tapps_mcp import (
         server_analysis_tools,
         server_expert_tools,
         server_memory_tools,
         server_metrics_tools,
+        server_persona_tools,
         server_pipeline_tools,
         server_resources,
         server_scoring_tools,
     )
 
-    server_scoring_tools.register(mcp)
-    server_pipeline_tools.register(mcp)
-    server_metrics_tools.register(mcp)
-    server_memory_tools.register(mcp)
-    server_expert_tools.register(mcp)
-    server_analysis_tools.register(mcp)
+    server_scoring_tools.register(mcp, allowed_tools)
+    server_pipeline_tools.register(mcp, allowed_tools)
+    server_metrics_tools.register(mcp, allowed_tools)
+    server_memory_tools.register(mcp, allowed_tools)
+    server_persona_tools.register(mcp, allowed_tools)
+    server_expert_tools.register(mcp, allowed_tools)
+    server_analysis_tools.register(mcp, allowed_tools)
     server_resources.register(mcp)
 
 
@@ -1348,6 +1472,8 @@ tapps_dead_code = _analysis.tapps_dead_code
 tapps_dependency_scan = _analysis.tapps_dependency_scan
 tapps_dependency_graph = _analysis.tapps_dependency_graph
 _promote_note_to_memory = _analysis._promote_note_to_memory
+_persona = sys.modules["tapps_mcp.server_persona_tools"]
+tapps_get_canonical_persona = _persona.tapps_get_canonical_persona
 
 
 # ---------------------------------------------------------------------------

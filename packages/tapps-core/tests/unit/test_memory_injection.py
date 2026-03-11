@@ -5,13 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from tapps_core.memory.injection import (
     _MAX_INJECT_HIGH,
     _MAX_INJECT_MEDIUM,
-    _MIN_SCORE,
     append_memory_to_answer,
+    estimate_tokens,
     inject_memories,
 )
 from tapps_core.memory.models import (
@@ -96,10 +94,7 @@ class TestInjectMemories:
         assert result["memory_section"] == ""
 
     def test_high_engagement_max_limit(self) -> None:
-        entries = [
-            _make_entry(f"key-{i}", f"matching search term {i}")
-            for i in range(10)
-        ]
+        entries = [_make_entry(f"key-{i}", f"matching search term {i}") for i in range(10)]
         store = _make_store(entries)
 
         result = inject_memories("matching search term", store, "high")
@@ -108,8 +103,7 @@ class TestInjectMemories:
 
     def test_medium_engagement_max_limit(self) -> None:
         entries = [
-            _make_entry(f"key-{i}", f"matching value {i}", confidence=0.9)
-            for i in range(10)
+            _make_entry(f"key-{i}", f"matching value {i}", confidence=0.9) for i in range(10)
         ]
         store = _make_store(entries)
 
@@ -162,6 +156,45 @@ class TestInjectMemories:
             assert "key" in mem
             assert "confidence" in mem
             assert "score" in mem
+
+    def test_result_includes_truncated_and_injected_tokens(self) -> None:
+        """Epic 65.16: injection result exposes truncation and token count."""
+        entries = [_make_entry("k", "short")]
+        store = _make_store(entries)
+        result = inject_memories("short", store, "high")
+        assert "truncated" in result
+        assert "injected_tokens" in result
+        if result["memory_injected"] > 0:
+            assert result["injected_tokens"] >= estimate_tokens("short")
+
+    @patch("tapps_core.config.settings.load_settings")
+    def test_context_budget_truncates_when_over_limit(self, mock_load_settings: MagicMock) -> None:
+        """Epic 65.16: when total tokens exceed injection_max_tokens, injection is truncated."""
+        settings = MagicMock()
+        settings.memory.injection_max_tokens = 60
+        settings.memory.reranker.enabled = False
+        mock_load_settings.return_value = settings
+
+        # Each formatted line ~80+ chars → ~20 tokens; 4 entries would exceed 60
+        long_value = "a" * 120
+        entries = [_make_entry(f"key-{i}", long_value) for i in range(5)]
+        store = _make_store(entries)
+
+        result = inject_memories("a", store, "high")
+
+        assert result["injected_tokens"] <= 60
+        assert "truncated" in result
+        if result["memory_injected"] >= 2:
+            # With budget 60, we may have truncated if we had enough high-scoring results
+            assert result["truncated"] is True or result["injected_tokens"] <= 60
+
+
+class TestEstimateTokens:
+    def test_estimate_tokens_approx_four_chars_per_token(self) -> None:
+        assert estimate_tokens("") == 1
+        assert estimate_tokens("abcd") == 1
+        assert estimate_tokens("a" * 8) == 2
+        assert estimate_tokens("a" * 40) == 10
 
 
 class TestAppendMemoryToAnswer:

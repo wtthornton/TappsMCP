@@ -2,7 +2,8 @@
 
 Verifies that all Claude Code skill templates use the correct 2026
 frontmatter fields: allowed-tools, argument-hint, disable-model-invocation,
-context, model, and agent.
+context, model, and agent. Epic 76: description length 1-1024 chars,
+allowed-tools space-delimited, skills spec validator.
 """
 
 from __future__ import annotations
@@ -10,11 +11,16 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from tapps_mcp.pipeline.platform_skills import (
     CLAUDE_SKILLS,
     CURSOR_SKILLS,
     generate_skills,
+)
+from tapps_mcp.pipeline.skills_validator import (
+    validate_skill_frontmatter,
+    get_description_from_frontmatter_raw,
 )
 
 
@@ -201,6 +207,69 @@ class TestCursorSkillsUnchanged:
             assert "allowed-tools:" not in fm, (
                 f"Cursor {name} should NOT use 'allowed-tools:'"
             )
+
+
+# ---------------------------------------------------------------------------
+# Generation tests
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Epic 76.1: Description length 1-1024 chars (agentskills.io)
+# ---------------------------------------------------------------------------
+
+
+class TestSkillDescriptionLength:
+    """All skills must have description length 1-1024 per Agent Skills spec."""
+
+    @pytest.mark.parametrize("skill_name", list(CLAUDE_SKILLS))
+    def test_claude_skill_description_length(self, skill_name: str) -> None:
+        content = CLAUDE_SKILLS[skill_name]
+        fm = _get_frontmatter(content)
+        desc = get_description_from_frontmatter_raw(fm)
+        assert len(desc) >= 1, f"{skill_name}: description empty"
+        assert len(desc) <= 1024, (
+            f"{skill_name}: description exceeds 1024 chars (got {len(desc)})"
+        )
+
+    @pytest.mark.parametrize("skill_name", list(CURSOR_SKILLS))
+    def test_cursor_skill_description_length(self, skill_name: str) -> None:
+        content = CURSOR_SKILLS[skill_name]
+        fm = _get_frontmatter(content)
+        desc = get_description_from_frontmatter_raw(fm)
+        assert len(desc) >= 1, f"{skill_name}: description empty"
+        assert len(desc) <= 1024, (
+            f"{skill_name}: description exceeds 1024 chars (got {len(desc)})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Epic 76.4: Skills spec validator
+# ---------------------------------------------------------------------------
+
+
+class TestSkillsSpecValidator:
+    """All built-in skills pass the spec validator."""
+
+    def _parse_fm(self, content: str) -> dict:
+        fm = _get_frontmatter(content)
+        return yaml.safe_load(fm) or {}
+
+    @pytest.mark.parametrize("skill_name", list(CLAUDE_SKILLS))
+    def test_claude_skills_pass_validator(self, skill_name: str) -> None:
+        content = CLAUDE_SKILLS[skill_name]
+        fm = self._parse_fm(content)
+        errors = validate_skill_frontmatter(skill_name, fm)
+        assert not errors, f"{skill_name}: {errors}"
+
+    @pytest.mark.parametrize("skill_name", list(CURSOR_SKILLS))
+    def test_cursor_skills_pass_validator(self, skill_name: str) -> None:
+        content = CURSOR_SKILLS[skill_name]
+        fm = self._parse_fm(content)
+        errors = validate_skill_frontmatter(
+            skill_name, fm, check_allowed_tools_format=False
+        )
+        assert not errors, f"{skill_name}: {errors}"
 
 
 # ---------------------------------------------------------------------------

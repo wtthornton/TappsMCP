@@ -1629,6 +1629,7 @@ def _record_call(tool_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def register(mcp_instance: FastMCP) -> None:
-    """Register memory tools on the shared *mcp_instance*."""
-    mcp_instance.tool(annotations=_ANNOTATIONS_MEMORY)(tapps_memory)
+def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+    """Register memory tools on the shared *mcp_instance* (Epic 79.1: conditional)."""
+    if "tapps_memory" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_MEMORY)(tapps_memory)

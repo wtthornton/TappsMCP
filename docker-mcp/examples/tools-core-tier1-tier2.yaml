@@ -1,0 +1,36 @@
+# Example: Tier 1 + Tier 2 tools — ~23 tools total (still under ~30).
+# Copy to ~/.docker/mcp/tools.yaml or apply via docker mcp profile tools.
+# Reference: docs/planning/TOOL-TIER-RANKING.md
+#
+# TappsMCP: 7 Tier 1 + 7 Tier 2 (score_file, consult_expert, research, memory,
+#   project_profile, impact_analysis, validate_config)
+# DocsMCP: 4 Tier 1 + 8 Tier 2 (generate_changelog, generate_api, check_completeness,
+#   module_map, api_surface, git_summary, check_links, check_freshness)
+tapps-mcp:
+  - tapps_session_start
+  - tapps_quick_check
+  - tapps_validate_changed
+  - tapps_quality_gate
+  - tapps_checklist
+  - tapps_lookup_docs
+  - tapps_security_scan
+  - tapps_score_file
+  - tapps_consult_expert
+  - tapps_research
+  - tapps_memory
+  - tapps_project_profile
+  - tapps_impact_analysis
+  - tapps_validate_config
+docs-mcp:
+  - docs_session_start
+  - docs_check_drift
+  - docs_generate_readme
+  - docs_project_scan
+  - docs_generate_changelog
+  - docs_generate_api
+  - docs_check_completeness
+  - docs_module_map
+  - docs_api_surface
+  - docs_git_summary
+  - docs_check_links
+  - docs_check_freshness

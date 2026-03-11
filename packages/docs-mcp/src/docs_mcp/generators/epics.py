@@ -39,6 +39,7 @@ class EpicConfig(BaseModel):
 
     title: str
     number: int = 0
+    purpose_and_intent: str = ""  # Required per design doc §2 (Epic 75.3)
     goal: str = ""
     motivation: str = ""
     status: str = "Proposed"
@@ -124,6 +125,7 @@ class EpicGenerator:
 
         lines.extend(self._render_title(config))
         lines.extend(self._render_metadata(config))
+        lines.extend(self._render_purpose_and_intent(config))
         lines.extend(self._render_goal(config, enrichment))
         lines.extend(self._render_motivation(config))
         lines.extend(self._render_acceptance_criteria(config))
@@ -182,6 +184,24 @@ class EpicGenerator:
             lines.append(f"**Blocks:** {', '.join(config.blocks)}")
 
         lines.extend(["", "<!-- docsmcp:end:metadata -->", "", "---", ""])
+        return lines
+
+    def _render_purpose_and_intent(self, config: EpicConfig) -> list[str]:
+        """Render the Purpose & Intent section (required per design doc §2, Epic 75.3)."""
+        lines = [
+            "<!-- docsmcp:start:purpose-intent -->",
+            "## Purpose & Intent",
+            "",
+        ]
+        if config.purpose_and_intent and config.purpose_and_intent.strip():
+            lines.append(config.purpose_and_intent.strip())
+        else:
+            lines.append(
+                "We are doing this so that the goals below are achieved and "
+                "acceptance criteria are met. Refine this paragraph to state "
+                "the strategic intent and outcomes."
+            )
+        lines.extend(["", "<!-- docsmcp:end:purpose-intent -->", ""])
         return lines
 
     def _render_goal(

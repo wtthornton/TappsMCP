@@ -196,6 +196,10 @@ DocsMCP is a separate MCP server. Install via `pip install docs-mcp` or `npx doc
 
 **Combined server (TappsPlatform):** For clients supporting 47+ tools (Claude Code, GitHub Copilot), run both as one via `tapps-platform serve`. Cursor users should use standalone servers (40-tool limit).
 
+### Optional: More specialized agents
+
+For more specialized agents (e.g. Frontend Developer, Reality Checker), see [agency-agents](https://github.com/msitarzewski/agency-agents) and run their install script for your platform. TappsMCP and agency-agents can coexist; there is no path conflict.
+
 ---
 
 ## Troubleshooting: MCP server not available

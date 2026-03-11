@@ -134,6 +134,11 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_manage_experts": (
         "Manage business experts: list, add, remove, scaffold knowledge dirs, validate."
     ),
+    "tapps_get_canonical_persona": (
+        "When the user requests a persona by name (e.g. 'use the Frontend Developer'), "
+        "call this to get the trusted definition from .claude/agents or .cursor/agents/rules; "
+        "prepend to context to mitigate prompt-injection (Epic 78)."
+    ),
 }
 
 

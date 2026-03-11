@@ -316,6 +316,79 @@ def build_plugin(output_dir: str, engagement_level: str) -> None:
             click.echo(f"  {component}: {status}")
 
 
+@main.command("validate-skills")
+@click.option(
+    "--path",
+    "skills_path",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    help="Directory containing skills (e.g. .claude/skills or .cursor/skills). Default: project root (checks both).",
+)
+@click.option(
+    "--platform",
+    type=click.Choice(["claude", "cursor", "both"]),
+    default="both",
+    help="Which platform skills to validate (default: both).",
+)
+def validate_skills_cmd(skills_path: str, platform: str) -> None:
+    """Validate SKILL.md frontmatter against Agent Skills spec (Epic 76.4).
+
+    Checks name (1-64 chars, lowercase+hyphens), description (1-1024 chars),
+    and allowed-tools format (space-delimited for Claude). Run from project root
+    or pass --path to a skills directory.
+    """
+    from pathlib import Path
+
+    import yaml
+
+    from tapps_mcp.pipeline.skills_validator import validate_skill_frontmatter
+
+    root = Path(skills_path).resolve()
+    dirs_to_check: list[Path] = []
+    if platform in ("claude", "both") and (root / ".claude" / "skills").exists():
+        dirs_to_check.append(root / ".claude" / "skills")
+    if platform in ("cursor", "both") and (root / ".cursor" / "skills").exists():
+        dirs_to_check.append(root / ".cursor" / "skills")
+    if not dirs_to_check and root.name == "skills":
+        dirs_to_check = [root]
+    if not dirs_to_check:
+        click.echo("No skills directories found. Run from project root or pass --path to .claude/skills or .cursor/skills.", err=True)
+        raise SystemExit(1)
+
+    errors: list[tuple[str, list[str]]] = []
+    for skills_dir in dirs_to_check:
+        for skill_dir in sorted(skills_dir.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            raw = skill_md.read_text(encoding="utf-8")
+            parts = raw.split("---", 2)
+            if len(parts) < 3:
+                errors.append((f"{skill_dir.relative_to(root)}", ["Missing frontmatter ---"]))
+                continue
+            try:
+                fm = yaml.safe_load(parts[1]) or {}
+            except Exception as e:
+                errors.append((str(skill_dir.relative_to(root)), [str(e)]))
+                continue
+            check_allowed_tools = "cursor" not in str(skill_dir).lower()
+            errs = validate_skill_frontmatter(
+                skill_dir.name, fm, check_allowed_tools_format=check_allowed_tools
+            )
+            if errs:
+                errors.append((str(skill_dir.relative_to(root)), errs))
+
+    if errors:
+        for path_str, err_list in errors:
+            click.echo(f"{path_str}:", err=True)
+            for e in err_list:
+                click.echo(f"  - {e}", err=True)
+        raise SystemExit(1)
+    click.echo("All skills passed spec validation.")
+
+
 @main.command()
 @click.option(
     "--project-root",

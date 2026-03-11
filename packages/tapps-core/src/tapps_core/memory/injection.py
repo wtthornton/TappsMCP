@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from tapps_core.security.content_safety import check_content_safety
 from tapps_core.memory.retrieval import MemoryRetriever
+from tapps_core.security.content_safety import check_content_safety
 
 if TYPE_CHECKING:
     from tapps_core.memory.decay import DecayConfig
@@ -156,13 +156,15 @@ def inject_memories(
             f"- **{entry.key}** (confidence: {scored.effective_confidence:.2f}, "
             f"tier: {tier}): {entry.value}"
         )
-        summaries.append({
-            "key": entry.key,
-            "confidence": scored.effective_confidence,
-            "tier": tier,
-            "score": scored.score,
-            "stale": scored.stale,
-        })
+        summaries.append(
+            {
+                "key": entry.key,
+                "confidence": scored.effective_confidence,
+                "tier": tier,
+                "score": scored.score,
+                "stale": scored.stale,
+            }
+        )
 
     return {
         "memory_section": "\n".join(lines),

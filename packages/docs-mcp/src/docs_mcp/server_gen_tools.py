@@ -21,7 +21,6 @@ from docs_mcp.server import (
 from docs_mcp.server_helpers import _get_settings, error_response, success_response
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_changelog(
     format: str = "keep-a-changelog",
     include_unreleased: bool = True,
@@ -129,7 +128,6 @@ async def docs_generate_changelog(
     return success_response("docs_generate_changelog", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_generate_release_notes(
     version: str = "",
     project_root: str = "",
@@ -207,7 +205,6 @@ async def docs_generate_release_notes(
     return success_response("docs_generate_release_notes", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_readme(  # noqa: PLR0911
     style: str = "standard",
     output_path: str = "",
@@ -335,7 +332,6 @@ async def docs_generate_readme(  # noqa: PLR0911
     )
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_api(
     source_path: str = "",
     format: str = "markdown",
@@ -439,7 +435,6 @@ async def docs_generate_api(
     return success_response("docs_generate_api", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_adr(
     title: str,
     template: str = "madr",
@@ -539,7 +534,6 @@ async def docs_generate_adr(
     return success_response("docs_generate_adr", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_onboarding(
     output_path: str = "",
     project_root: str = "",
@@ -614,7 +608,6 @@ async def docs_generate_onboarding(
     return success_response("docs_generate_onboarding", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_contributing(
     output_path: str = "",
     project_root: str = "",
@@ -689,7 +682,6 @@ async def docs_generate_contributing(
     return success_response("docs_generate_contributing", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_prd(
     title: str,
     problem: str = "",
@@ -860,7 +852,6 @@ async def docs_generate_prd(
     )
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_generate_diagram(
     diagram_type: str = "dependency",
     scope: str = "project",
@@ -942,7 +933,6 @@ async def docs_generate_diagram(
     return success_response("docs_generate_diagram", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_architecture(
     title: str = "",
     subtitle: str = "",
@@ -1047,10 +1037,10 @@ async def docs_generate_architecture(
     )
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_epic(
     title: str,
     number: int = 0,
+    purpose_and_intent: str = "",
     goal: str = "",
     motivation: str = "",
     status: str = "Proposed",
@@ -1094,6 +1084,7 @@ async def docs_generate_epic(
     Args:
         title: Epic title (e.g. "User Authentication System").
         number: Epic number for story numbering (e.g. 23 gives stories 23.1, 23.2).
+        purpose_and_intent: Required per Epic 75.3. One paragraph: "We are doing this so that …".
         goal: One-paragraph description of what the epic achieves.
         motivation: Why this work matters.
         status: Epic status - "Proposed", "In Progress", "Complete",
@@ -1190,6 +1181,7 @@ async def docs_generate_epic(
     config = EpicConfig(
         title=title,
         number=number,
+        purpose_and_intent=purpose_and_intent.strip(),
         goal=goal,
         motivation=motivation,
         status=status,
@@ -1272,11 +1264,11 @@ async def docs_generate_epic(
     )
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
 async def docs_generate_story(
     title: str,
     epic_number: int = 0,
     story_number: int = 0,
+    purpose_and_intent: str = "",
     role: str = "",
     want: str = "",
     so_that: str = "",
@@ -1315,6 +1307,7 @@ async def docs_generate_story(
         title: Story title (e.g. "Add login form validation").
         epic_number: Parent epic number (e.g. 23 for story numbering as 23.1).
         story_number: Story number within the epic (e.g. 1 for 23.1).
+        purpose_and_intent: Required per Epic 75.3. One paragraph: "This story exists so that …".
         role: User role for the story statement (e.g. "developer").
         want: Desired capability (e.g. "to validate login credentials").
         so_that: Benefit/reason (e.g. "invalid logins are rejected").
@@ -1401,6 +1394,7 @@ async def docs_generate_story(
         title=title,
         epic_number=epic_number,
         story_number=story_number,
+        purpose_and_intent=purpose_and_intent.strip(),
         role=role,
         want=want,
         so_that=so_that,
@@ -1478,3 +1472,198 @@ async def docs_generate_story(
             "Human-written sections (without docsmcp markers) will be preserved on re-generation.",
         ],
     )
+
+
+async def docs_generate_prompt(
+    name: str,
+    when_to_use: str = "",
+    purpose_and_intent: str = "",
+    task: str = "",
+    success_criteria: str = "",
+    context_files: str = "",
+    reference_notes: str = "",
+    rules: str = "",
+    conversation_first: bool = False,
+    plan_steps: int = 0,
+    alignment_required: bool = False,
+    allowed_tools: str = "",
+    output_format: str = "",
+    dont: str = "",
+    style: str = "standard",
+    compact_llm_view: bool = False,
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate a prompt artifact (Epic 75). LLM-facing prompt doc with docsmcp markers.
+
+    Creates a structured prompt with Purpose & Intent (required), task, context files,
+    success brief, rules, optional conversation/plan/alignment, allowed tools, output format.
+    When compact_llm_view=True, emits a token-efficient view (goal + criteria + steps + rules)
+    targeting ≤~1.5K tokens (Epic 75.4).
+
+    Args:
+        name: Prompt name (e.g. "quality-gate-workflow").
+        when_to_use: When and why this prompt is used.
+        purpose_and_intent: Required. One paragraph: "This prompt is for … so that …".
+        task: "I want to [TASK] so that [SUCCESS CRITERIA]."
+        success_criteria: Definition of success.
+        context_files: JSON array of {"path": "...", "description": "..."}.
+        reference_notes: Optional reference / blueprint notes.
+        rules: Standards, constraints, landmines.
+        conversation_first: If True, add "ask clarifying questions first" section.
+        plan_steps: Number of plan steps (0 = omit plan section).
+        alignment_required: If True, add "Only begin once we've aligned" section.
+        allowed_tools: Comma-separated list of MCP tool names.
+        output_format: Expected output format (e.g. JSON schema, markdown structure).
+        dont: Comma-separated list of "don't" items.
+        style: "standard" or "comprehensive".
+        compact_llm_view: When True, generate compact view only (≤~1.5K tokens) for LLM context.
+        output_path: File path to write (relative to project root). Empty = docs/prompts/{name}.md.
+        project_root: Override project root.
+    """
+    _record_call("docs_generate_prompt")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_prompt",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    import json as json_mod
+
+    from docs_mcp.generators.prompts import (
+        ContextFileEntry,
+        PromptConfig,
+        PromptGenerator,
+    )
+
+    if not name.strip():
+        return error_response(
+            "docs_generate_prompt",
+            "INVALID_NAME",
+            "name is required",
+        )
+
+    purpose = purpose_and_intent.strip() or "This prompt is for the given task so that success criteria are met."
+
+    cf_list: list[ContextFileEntry] = []
+    if context_files:
+        try:
+            raw = json_mod.loads(context_files) if isinstance(context_files, str) else context_files
+            if isinstance(raw, list):
+                for item in raw:
+                    if isinstance(item, dict):
+                        cf_list.append(ContextFileEntry(path=item.get("path", ""), description=item.get("description", "")))
+                    else:
+                        cf_list.append(ContextFileEntry(path=str(item), description=""))
+        except (json_mod.JSONDecodeError, TypeError):
+            pass
+
+    tools_list = [t.strip() for t in allowed_tools.split(",") if t.strip()] if allowed_tools else []
+    dont_list = [d.strip() for d in dont.split(",") if d.strip()] if dont else []
+
+    config = PromptConfig(
+        name=name.strip(),
+        when_to_use=when_to_use.strip(),
+        purpose_and_intent=purpose,
+        task=task.strip(),
+        success_criteria=success_criteria.strip(),
+        context_files=cf_list,
+        reference_notes=reference_notes.strip(),
+        success_brief=None,
+        rules=rules.strip(),
+        conversation_first=conversation_first,
+        plan_steps=plan_steps if plan_steps else False,
+        alignment_required=alignment_required,
+        allowed_tools=tools_list,
+        output_format=output_format.strip(),
+        dont=dont_list,
+        style=style if style in ("standard", "comprehensive") else "standard",
+    )
+
+    gen = PromptGenerator()
+    content = (
+        gen.generate_compact(config) if compact_llm_view else gen.generate(config)
+    )
+
+    written_path = ""
+    slug = name.strip().replace(" ", "-").lower()
+    if not slug.endswith(".md"):
+        slug += ".md"
+    rel = output_path.strip() or f"docs/prompts/{slug}"
+    if not rel.endswith(".md"):
+        rel += ".md"
+        try:
+            from tapps_core.security.path_validator import PathValidator
+
+            validator = PathValidator(root)
+            write_path = validator.validate_write_path(rel)
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(content, encoding="utf-8")
+            written_path = str(write_path.relative_to(root)).replace("\\", "/")
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            return error_response(
+                "docs_generate_prompt",
+                "WRITE_ERROR",
+                f"Failed to write prompt: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    data: dict[str, Any] = {
+        "name": name,
+        "style": style,
+        "content_length": len(content),
+        "content": content,
+    }
+    if written_path:
+        data["written_to"] = written_path
+
+    return success_response(
+        "docs_generate_prompt",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Review the generated prompt and refine Purpose & Intent and rules.",
+            "Use as context for the LLM or register as an MCP prompt template.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Registration (Epic 79.2: conditional)
+# ---------------------------------------------------------------------------
+
+
+def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
+    """Register generation tools on the shared mcp instance (Epic 79.2: conditional)."""
+    if "docs_generate_changelog" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_changelog)
+    if "docs_generate_release_notes" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_generate_release_notes)
+    if "docs_generate_readme" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_readme)
+    if "docs_generate_api" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_api)
+    if "docs_generate_adr" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_adr)
+    if "docs_generate_onboarding" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_onboarding)
+    if "docs_generate_contributing" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_contributing)
+    if "docs_generate_prd" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_prd)
+    if "docs_generate_diagram" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_generate_diagram)
+    if "docs_generate_architecture" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_architecture)
+    if "docs_generate_epic" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_epic)
+    if "docs_generate_story" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_story)
+    if "docs_generate_prompt" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_prompt)

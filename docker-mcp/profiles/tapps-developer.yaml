@@ -1,0 +1,6 @@
+# Role profile: Daily feature/bugfix development (Epic 79.6 Phase 1).
+# Use with tools.yaml to expose developer tools (~12 TappsMCP). See docker-mcp/README.md.
+name: tapps-developer
+description: "Daily dev — quick_check, validate_changed, checklist, quality_gate, score_file, security_scan, lookup_docs, memory, impact_analysis"
+servers:
+  - catalog://tapps-mcp

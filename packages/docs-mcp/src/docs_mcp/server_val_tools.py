@@ -15,7 +15,6 @@ from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call, mcp
 from docs_mcp.server_helpers import _get_settings, error_response, success_response
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_check_drift(
     since: str = "",
     doc_dirs: str = "",
@@ -134,7 +133,6 @@ async def docs_check_drift(
     return success_response("docs_check_drift", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_check_completeness(
     project_root: str = "",
 ) -> dict[str, Any]:
@@ -170,7 +168,6 @@ async def docs_check_completeness(
     return success_response("docs_check_completeness", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_check_links(
     files: str = "",
     project_root: str = "",
@@ -212,7 +209,6 @@ async def docs_check_links(
     return success_response("docs_check_links", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_check_freshness(
     project_root: str = "",
 ) -> dict[str, Any]:
@@ -248,7 +244,6 @@ async def docs_check_freshness(
     return success_response("docs_check_freshness", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_validate_epic(
     file_path: str = "",
     project_root: str = "",
@@ -297,3 +292,22 @@ async def docs_validate_epic(
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     return success_response("docs_validate_epic", elapsed_ms, data)
+
+
+# ---------------------------------------------------------------------------
+# Registration (Epic 79.2: conditional)
+# ---------------------------------------------------------------------------
+
+
+def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
+    """Register validation tools on the shared mcp instance (Epic 79.2: conditional)."""
+    if "docs_check_drift" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_drift)
+    if "docs_check_completeness" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_completeness)
+    if "docs_check_links" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_links)
+    if "docs_check_freshness" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_freshness)
+    if "docs_validate_epic" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_validate_epic)

@@ -1680,6 +1680,10 @@ async def tapps_init(
             "See docs/MCP_COMPOSITION.md for guidance on adding GitHub, "
             "YouTube, Sentry, and other MCPs alongside TappsMCP."
         )
+    result["agency_agents_hint"] = (
+        "Optional: For more specialized agents (e.g. Frontend Developer, Reality Checker), "
+        "see https://github.com/msitarzewski/agency-agents and run their install script for your platform."
+    )
     result["consumer_requirements"] = (
         "For a full checklist of what you need to use most tools "
         "(server visibility, permissions, CLI fallback), "
@@ -1887,11 +1891,17 @@ def tapps_doctor(
     return _with_nudges("tapps_doctor", resp)
 
 
-def register(mcp_instance: FastMCP) -> None:
-    """Register pipeline/validation tools on *mcp_instance*."""
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_changed)
-    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_session_start)
-    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_init)
-    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_set_engagement_level)
-    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_upgrade)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_doctor)
+def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+    """Register pipeline/validation tools on *mcp_instance* (Epic 79.1: conditional)."""
+    if "tapps_validate_changed" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_changed)
+    if "tapps_session_start" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_session_start)
+    if "tapps_init" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_init)
+    if "tapps_set_engagement_level" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_set_engagement_level)
+    if "tapps_upgrade" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_upgrade)
+    if "tapps_doctor" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_doctor)

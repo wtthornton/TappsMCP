@@ -1,12 +1,15 @@
 # Epic 71: Expert Critical Rules & Default Stance (Agency-Personas Leverage)
 
 <!-- docsmcp:start:metadata -->
-**Status:** Draft
+**Status:** Complete
 **Priority:** P2
-**Estimated LOE:** ~1 week (1 developer)
+**Estimated LOE:** 0 (optional: add critical_rules to 2–3 more experts, ~0.5 day)
 **Dependencies:** Epic 69 (Expert Personas), optionally Epic 70 (Persona Completion)
 **Source:** [TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md](../../reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md)
+**2026 Research:** [2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md](../research/2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md)
 <!-- docsmcp:end:metadata -->
+
+## Should we do it? **Yes — done.** ExpertConfig has `critical_rules`; engine prepends it after persona; Security, Testing, and Accessibility have pilot rules. Improves domain-appropriate stance for `tapps_consult_expert` / `tapps_research` (MCP_DOCKER unchanged; no Context7 changes).
 
 ---
 
@@ -25,11 +28,11 @@ Agency-agents define "Critical Rules You Must Follow" per persona (e.g. Reality 
 <!-- docsmcp:start:acceptance-criteria -->
 ## Acceptance Criteria
 
-- [ ] ExpertConfig (and business expert config) support an optional `critical_rules` or `default_stance` field (string or list of strings)
-- [ ] Engine prepends critical rules/stance to the answer-assembly prompt when set (after persona, before "Based on domain knowledge…")
-- [ ] At least 3 pilot experts (e.g. Security, Testing, Accessibility) have non-empty critical rules defined in registry
-- [ ] Documentation updated (ExpertConfig, knowledge README or EXPERT_CONFIG_GUIDE)
-- [ ] All existing tests pass; new tests cover rules in answer assembly and optional field behavior
+- [x] ExpertConfig (and business expert config) support an optional `critical_rules` field (string) — **Done** (models.py)
+- [x] Engine prepends critical rules to the answer-assembly prompt when set (after persona) — **Done** (engine.py: `**Critical rules:** {expert.critical_rules}`)
+- [x] At least 3 pilot experts (Security, Testing, Accessibility) have non-empty critical_rules in registry — **Done**
+- [x] Documentation updated (ExpertConfig, knowledge README or EXPERT_CONFIG_GUIDE)
+- [x] All existing tests pass; new tests cover rules in answer assembly and optional field behavior
 <!-- docsmcp:end:acceptance-criteria -->
 
 ---
@@ -55,9 +58,9 @@ Agency-agents define "Critical Rules You Must Follow" per persona (e.g. Reality 
 - [ ] Add unit tests for config with and without the field
 
 **Acceptance Criteria:**
-- [ ] ExpertConfig and business expert entry support the new optional field
-- [ ] Default is empty string; existing experts unchanged
-- [ ] Tests pass
+- [x] ExpertConfig and business expert entry support the new optional field
+- [x] Default is empty string; existing experts unchanged
+- [x] Tests pass
 
 **Definition of Done:**
 - [ ] Schema updated, backward compatible, tests pass
@@ -80,9 +83,9 @@ Agency-agents define "Critical Rules You Must Follow" per persona (e.g. Reality 
 - [ ] Ensure ConsultationResult or answer metadata does not require changes (rules are prompt-only)
 
 **Acceptance Criteria:**
-- [ ] When critical_rules/default_stance is set, it appears in the assembly prompt after persona
-- [ ] When empty, behavior unchanged from current (persona-only) behavior
-- [ ] Tests cover all combinations above
+- [x] When critical_rules is set, it appears in the assembly prompt after persona
+- [x] When empty, behavior unchanged from current (persona-only) behavior
+- [x] Tests cover all combinations above
 
 **Definition of Done:**
 - [ ] Engine updated, tests pass, no regression in consultation output schema
@@ -105,9 +108,9 @@ Agency-agents define "Critical Rules You Must Follow" per persona (e.g. Reality 
 - [ ] Keep each rule to 1–2 sentences; avoid markdown in the field
 
 **Acceptance Criteria:**
-- [ ] At least these three experts have non-empty critical_rules (or default_stance) in BUILTIN_EXPERTS
-- [ ] Rules are concise and domain-appropriate
-- [ ] Documentation (knowledge README or EXPERT_CONFIG_GUIDE) updated with examples and guidance on writing rules
+- [x] At least these three experts have non-empty critical_rules in BUILTIN_EXPERTS (Security, Testing, Accessibility)
+- [x] Rules are concise and domain-appropriate
+- [x] Documentation (knowledge README or EXPERT_CONFIG_GUIDE) updated with examples and guidance on writing rules
 
 **Definition of Done:**
 - [ ] Registry updated, docs updated, tests pass
@@ -118,9 +121,9 @@ Agency-agents define "Critical Rules You Must Follow" per persona (e.g. Reality 
 <!-- docsmcp:start:technical-notes -->
 ## Technical Notes
 
-- **ExpertConfig:** `tapps_core/experts/models.py` — add optional `critical_rules: str = ""` (or `default_stance`; choose one name and stick to it)
-- **Engine:** `tapps_core/experts/engine.py` — `_build_answer` builds prompt; today it prepends `*{persona}*\n\n`; extend to prepend rules when set
-- **Agency-agents reference:** Reality Checker uses "Default to NEEDS WORK," "require overwhelming evidence"; Security could use "assume breach"
+- **ExpertConfig:** `tapps_core/experts/models.py` — `critical_rules: str = ""` (optional).
+- **Engine:** `tapps_core/experts/engine.py` — `_build_answer` prepends `**Critical rules:** {expert.critical_rules}\n\n` when set (after persona).
+- **Context7 / MCP_DOCKER:** No contract changes. Critical rules improve expert answer framing for `tapps_consult_expert` and `tapps_research` via any transport.
 <!-- docsmcp:end:technical-notes -->
 
 <!-- docsmcp:start:non-goals -->

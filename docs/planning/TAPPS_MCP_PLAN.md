@@ -1,6 +1,6 @@
 # TappsMCP: Standalone MCP Server for LLM Code Quality
 
-**Status:** All Epics Complete (v0.2.1 — Epics 0-11 shipped)
+**Status:** All Epics 0–64 + Platform Epics 12–13 complete. See [ROADMAP.md](ROADMAP.md) and [epics/README.md](epics/README.md) for current state and future work.
 **Created:** 2026-02-07
 **Revised:** 2026-02-21
 **Source:** TappsCodingAgents (`C:\cursor\TappsCodingAgents`) — extracting the highest-value components into a standalone MCP server

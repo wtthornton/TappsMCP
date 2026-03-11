@@ -93,3 +93,68 @@ class TestAdaptiveSettings:
         assert a.enabled is False
         assert 0.0 <= a.learning_rate <= 1.0
         assert a.min_outcomes >= 1
+
+
+class TestToolCurationSettings:
+    """Epic 79.1: enabled_tools, disabled_tools, tool_preset."""
+
+    def test_defaults_all_tools(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings()
+        assert s.enabled_tools is None
+        assert s.disabled_tools == []
+        assert s.tool_preset is None
+
+    def test_enabled_tools_from_list(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(enabled_tools=["tapps_session_start", "tapps_quick_check"])
+        assert s.enabled_tools == ["tapps_session_start", "tapps_quick_check"]
+
+    def test_enabled_tools_from_comma_separated_string(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(enabled_tools="tapps_session_start, tapps_quick_check")
+        assert s.enabled_tools == ["tapps_session_start", "tapps_quick_check"]
+
+    def test_enabled_tools_empty_string_becomes_none(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(enabled_tools="")
+        assert s.enabled_tools is None
+
+    def test_disabled_tools_from_list(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(disabled_tools=["tapps_doctor", "tapps_dashboard"])
+        assert s.disabled_tools == ["tapps_doctor", "tapps_dashboard"]
+
+    def test_disabled_tools_from_comma_separated_string(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(disabled_tools="tapps_doctor, tapps_dashboard")
+        assert s.disabled_tools == ["tapps_doctor", "tapps_dashboard"]
+
+    def test_tool_preset_values(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        for preset in ("full", "core", "pipeline", "reviewer", "planner", "frontend", "developer"):
+            s = TappsMCPSettings(tool_preset=preset)
+            assert s.tool_preset == preset
+
+    def test_tool_preset_env(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        with mock.patch.dict(os.environ, {"TAPPS_MCP_TOOL_PRESET": "core"}):
+            s = TappsMCPSettings()
+            assert s.tool_preset == "core"
+
+    def test_enabled_tools_env_comma_separated(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        with mock.patch.dict(
+            os.environ, {"TAPPS_MCP_ENABLED_TOOLS": "tapps_session_start,tapps_quick_check"}
+        ):
+            s = TappsMCPSettings()
+            assert s.enabled_tools == ["tapps_session_start", "tapps_quick_check"]

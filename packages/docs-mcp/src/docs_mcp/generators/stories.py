@@ -32,6 +32,7 @@ class StoryConfig(BaseModel):
     title: str
     epic_number: int = 0
     story_number: int = 0
+    purpose_and_intent: str = ""  # Required per design doc §2 (Epic 75.3)
     role: str = ""
     want: str = ""
     so_that: str = ""
@@ -114,6 +115,7 @@ class StoryGenerator:
         lines.extend(self._render_title(config))
         lines.extend(self._render_user_story_statement(config))
         lines.extend(self._render_sizing(config))
+        lines.extend(self._render_purpose_and_intent(config))
         lines.extend(self._render_description(config, enrichment))
         lines.extend(self._render_files(config))
         lines.extend(self._render_tasks(config))
@@ -177,6 +179,24 @@ class StoryGenerator:
             lines.append("**Points:** TBD")
 
         lines.extend(["", "<!-- docsmcp:end:sizing -->", ""])
+        return lines
+
+    def _render_purpose_and_intent(self, config: StoryConfig) -> list[str]:
+        """Render the Purpose & Intent section (required per design doc §2, Epic 75.3)."""
+        lines = [
+            "<!-- docsmcp:start:purpose-intent -->",
+            "## Purpose & Intent",
+            "",
+        ]
+        if config.purpose_and_intent and config.purpose_and_intent.strip():
+            lines.append(config.purpose_and_intent.strip())
+        else:
+            lines.append(
+                "This story exists so that the acceptance criteria below are met "
+                "and the feature is delivered. Refine this paragraph to state "
+                "why this story exists and what it enables."
+            )
+        lines.extend(["", "<!-- docsmcp:end:purpose-intent -->", ""])
         return lines
 
     def _render_description(

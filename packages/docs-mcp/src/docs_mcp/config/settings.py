@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 import structlog
 import yaml
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = structlog.get_logger(__name__)
@@ -88,6 +88,55 @@ class DocsMCPSettings(BaseSettings):
         ge=1,
         description="Maximum number of git commits to analyze.",
     )
+
+    # Tool curation (Epic 79.2): server-side allow/deny list and presets
+    enabled_tools: list[str] | None = Field(
+        default=None,
+        description=(
+            "Allow list: when non-empty, only these tools are exposed. "
+            "Empty/missing = all tools (backward compatible). "
+            "Env: DOCS_MCP_ENABLED_TOOLS (comma-separated)."
+        ),
+    )
+    disabled_tools: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Deny list: excluded from the exposed set. "
+            "Applied when enabled_tools is empty; ignored when enabled_tools is set. "
+            "Env: DOCS_MCP_DISABLED_TOOLS (comma-separated)."
+        ),
+    )
+    tool_preset: Literal["full", "core"] | None = Field(
+        default=None,
+        description=(
+            "Predefined tool set: 'full' = all tools, 'core' = session_start, "
+            "project_scan, check_drift, generate_readme, check_completeness, check_links. "
+            "Used when enabled_tools is not set. Env: DOCS_MCP_TOOL_PRESET."
+        ),
+    )
+
+    @field_validator("enabled_tools", mode="before")
+    @classmethod
+    def _parse_enabled_tools(cls, v: Any) -> list[str] | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            v = [s.strip() for s in v.split(",") if s.strip()]
+            return v if v else None
+        if isinstance(v, list):
+            return v if v else None
+        return None
+
+    @field_validator("disabled_tools", mode="before")
+    @classmethod
+    def _parse_disabled_tools(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        if isinstance(v, list):
+            return list(v)
+        return []
 
 
 # Settings cache - only the no-arg (default) case is cached.

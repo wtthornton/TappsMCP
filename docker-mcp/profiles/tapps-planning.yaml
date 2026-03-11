@@ -1,0 +1,7 @@
+# Role profile: Epics, stories & planning (Epic 79.6 Phase 1).
+# TappsMCP + DocsMCP; use tools.yaml to expose planner tools. See docker-mcp/README.md.
+name: tapps-planning
+description: "Epics, stories & planning — checklist, validate_changed, memory, consult_expert + DocsMCP epic/story/readme"
+servers:
+  - catalog://tapps-mcp
+  - catalog://docs-mcp

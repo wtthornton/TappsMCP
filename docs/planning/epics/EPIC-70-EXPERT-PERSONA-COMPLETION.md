@@ -1,12 +1,15 @@
 # Epic 70: Expert Persona Completion (Agency-Personas Leverage)
 
 <!-- docsmcp:start:metadata -->
-**Status:** Draft
+**Status:** Complete
 **Priority:** P2
-**Estimated LOE:** ~3–5 days (1 developer)
+**Estimated LOE:** ~0.5 day remaining (persona guidelines doc)
 **Dependencies:** Epic 69 (Expert Personas — Complete)
 **Source:** [TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md](../../reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md)
+**2026 Research:** [2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md](../research/2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md)
 <!-- docsmcp:end:metadata -->
+
+## Should we do it? **Yes — done.** All 17 experts have persona; persona guidelines added to knowledge README (70.2). Improves consistency of `tapps_consult_expert` / `tapps_research`; no Context7 or MCP contract changes required.
 
 ---
 
@@ -25,11 +28,11 @@ Agency-agents personas use "Identity & Memory" and "Communication Style" to crea
 <!-- docsmcp:start:acceptance-criteria -->
 ## Acceptance Criteria
 
-- [ ] All 17 built-in experts in `ExpertRegistry.BUILTIN_EXPERTS` have a non-empty `persona` string (1–3 sentences)
-- [ ] Personas are stance-aware (e.g. Testing: recommend tests; Security: assume breach; Accessibility: assume diverse abilities)
-- [ ] Knowledge README or EXPERT_CONFIG_GUIDE documents persona writing guidelines and examples
-- [ ] Existing tests pass; no regression in consultation answer assembly
-- [ ] Optional: AGENTS.md "Domain hints" table unchanged; personas are answer-assembly only
+- [x] All 17 built-in experts in `ExpertRegistry.BUILTIN_EXPERTS` have a non-empty `persona` string (1–3 sentences) — **Done** (registry.py)
+- [x] Personas are stance-aware (e.g. Testing: recommend tests; Security: assume breach; Accessibility: assume diverse abilities)
+- [x] Knowledge README or EXPERT_CONFIG_GUIDE documents persona writing guidelines and examples — **Done** (knowledge/README.md "Persona Guidelines")
+- [x] Existing tests pass; no regression in consultation answer assembly
+- [x] Optional: AGENTS.md "Domain hints" table unchanged; personas are answer-assembly only
 <!-- docsmcp:end:acceptance-criteria -->
 
 ---
@@ -47,14 +50,14 @@ Agency-agents personas use "Identity & Memory" and "Communication Style" to crea
 - `packages/tapps-core/src/tapps_core/experts/registry.py`
 
 **Tasks:**
-- [ ] Add or extend `persona` for: Performance, Testing, Code Quality, DevOps, Data Privacy, Accessibility, UX, Documentation, AI Frameworks, Agent Learning, Observability, API Design, Cloud, Database, GitHub (15 experts; Security and Software Architecture already have personas)
-- [ ] Keep each persona to 1–3 sentences: role + default stance (e.g. "Senior test architect; default to recommending tests and coverage; never approve untested critical paths.")
-- [ ] Ensure persona text is appropriate for prepending in italics before "Based on domain knowledge…" (no markdown, no code)
+- [x] Add or extend `persona` for all 17 experts (Security, Software Architecture, Performance, Testing, Code Quality, DevOps, Data Privacy, Accessibility, UX, Documentation, AI Frameworks, Agent Learning, Observability, API Design, Cloud, Database, GitHub) — **Done** in registry.py
+- [x] Keep each persona to 1–3 sentences: role + default stance
+- [x] Ensure persona text is appropriate for prepending in italics before "Based on domain knowledge…" (no markdown, no code)
 
 **Acceptance Criteria:**
-- [ ] All 17 entries in `BUILTIN_EXPERTS` have `persona` non-empty
-- [ ] Personas are concise and domain-appropriate
-- [ ] Unit tests that assert persona presence (e.g. in test_expert_registry or equivalent) updated or added
+- [x] All 17 entries in `BUILTIN_EXPERTS` have `persona` non-empty
+- [x] Personas are concise and domain-appropriate
+- [x] Unit tests that assert persona presence (e.g. in test_expert_registry or equivalent) updated or added
 
 **Definition of Done:**
 - [ ] Registry updated and tests pass
@@ -73,13 +76,13 @@ Agency-agents personas use "Identity & Memory" and "Communication Style" to crea
 - Optional: `docs/reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md` (add "Persona guidelines" pointer)
 
 **Tasks:**
-- [ ] Add a "Persona guidelines" section: 1–3 sentences, role + stance, no markdown/code in persona text, examples from 2–3 built-in experts
-- [ ] Mention that persona is prepended to consultation answers when set
-- [ ] If business experts are documented elsewhere, add a pointer to persona field and guidelines
+- [x] Add a "Persona guidelines" section: 1–3 sentences, role + stance, no markdown/code in persona text, examples from 2–3 built-in experts
+- [x] Mention that persona is prepended to consultation answers when set
+- [x] Reference to TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY for agency-style personas
 
 **Acceptance Criteria:**
-- [ ] Documentation explains what a good persona looks like and how it is used
-- [ ] At least two example personas (e.g. Security, Testing) quoted
+- [x] Documentation explains what a good persona looks like and how it is used
+- [x] At least two example personas (Security, Testing, Accessibility) quoted
 
 **Definition of Done:**
 - [ ] Docs updated and reviewed for clarity
@@ -90,10 +93,10 @@ Agency-agents personas use "Identity & Memory" and "Communication Style" to crea
 <!-- docsmcp:start:technical-notes -->
 ## Technical Notes
 
-- **ExpertRegistry:** `packages/tapps-core/src/tapps_core/experts/registry.py` — `BUILTIN_EXPERTS` list of `ExpertConfig`
-- **ExpertConfig.persona:** Already in `tapps_core/experts/models.py`; optional string, prepended in engine when set
-- **Engine:** `_build_answer` in `tapps_core/experts/engine.py` — `persona_line = f"*{expert.persona}*\n\n"` when `expert.persona` is non-empty
-- **Epic 69:** Delivered persona field, engine prepend, and pilot personas for Security and Software Architecture only
+- **ExpertRegistry:** `packages/tapps-core/src/tapps_core/experts/registry.py` — `BUILTIN_EXPERTS` list of `ExpertConfig`; all 17 have non-empty `persona`.
+- **ExpertConfig.persona:** In `tapps_core/experts/models.py`; prepended in engine when set.
+- **Engine:** `_build_answer` in `tapps_core/experts/engine.py` — `persona_line = f"*{expert.persona}*\n\n"` when `expert.persona` is non-empty.
+- **Context7 / MCP_DOCKER:** No changes to Context7 or MCP tool contract. Persona improves `tapps_consult_expert` and `tapps_research` response quality when used via any transport (stdio or MCP_DOCKER gateway).
 <!-- docsmcp:end:technical-notes -->
 
 <!-- docsmcp:start:non-goals -->

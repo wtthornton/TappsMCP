@@ -2,6 +2,9 @@
 
 Contains SKILL.md templates and the ``generate_skills`` function.
 Extracted from ``platform_generators.py`` to reduce file size.
+
+Epic 76: Claude skills use space-delimited ``allowed-tools`` per agentskills.io spec.
+Cursor skills use ``mcp_tools`` (YAML list); Cursor applies tool restrictions via mcp_tools.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ name: tapps-score
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Score a Python file across 7 quality categories and display a structured report.
-allowed-tools: mcp__tapps-mcp__tapps_score_file, mcp__tapps-mcp__tapps_quick_check
+allowed-tools: mcp__tapps-mcp__tapps_score_file mcp__tapps-mcp__tapps_quick_check
 argument-hint: "[file-path]"
 ---
 
@@ -100,7 +103,7 @@ model: claude-sonnet-4-6
 description: >-
   Orchestrate a parallel review-fix-validate pipeline across multiple changed files.
   Spawns tapps-review-fixer agents in worktrees for parallel processing.
-allowed-tools: mcp__tapps-mcp__tapps_validate_changed, mcp__tapps-mcp__tapps_checklist
+allowed-tools: mcp__tapps-mcp__tapps_validate_changed mcp__tapps-mcp__tapps_checklist
 context: fork
 agent: general-purpose
 ---
@@ -126,8 +129,8 @@ description: >-
   Research a technical question using domain experts and library docs.
   Combines expert consultation with docs lookup for comprehensive answers.
 allowed-tools: >-
-  mcp__tapps-mcp__tapps_research,
-  mcp__tapps-mcp__tapps_consult_expert,
+  mcp__tapps-mcp__tapps_research
+  mcp__tapps-mcp__tapps_consult_expert
   mcp__tapps-mcp__tapps_lookup_docs
 argument-hint: "[question]"
 context: fork
@@ -151,8 +154,8 @@ description: >-
   Run a comprehensive security audit including vulnerability scanning,
   dependency CVE checks, and expert security consultation.
 allowed-tools: >-
-  mcp__tapps-mcp__tapps_security_scan,
-  mcp__tapps-mcp__tapps_dependency_scan,
+  mcp__tapps-mcp__tapps_security_scan
+  mcp__tapps-mcp__tapps_dependency_scan
   mcp__tapps-mcp__tapps_consult_expert
 argument-hint: "[file-path]"
 ---
@@ -173,7 +176,7 @@ model: claude-sonnet-4-6
 description: >-
   Manage shared project memory for cross-session knowledge persistence.
   20 actions: save, search, consolidate, federation, and more.
-allowed-tools: mcp__tapps-mcp__tapps_memory, mcp__tapps-mcp__tapps_session_notes
+allowed-tools: mcp__tapps-mcp__tapps_memory mcp__tapps-mcp__tapps_session_notes
 argument-hint: "[action] [key]"
 ---
 
@@ -268,7 +271,7 @@ model: claude-sonnet-4-6
 description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
   platform rules, hooks, agents, skills, and MCP config.
-allowed-tools: mcp__tapps-mcp__tapps_init, mcp__tapps-mcp__tapps_doctor
+allowed-tools: mcp__tapps-mcp__tapps_init mcp__tapps-mcp__tapps_doctor
 argument-hint: "[project-root]"
 ---
 

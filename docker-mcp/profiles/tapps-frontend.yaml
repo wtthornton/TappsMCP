@@ -1,0 +1,6 @@
+# Role profile: Frontend / UX work (Epic 79.6 Phase 1).
+# Use with tools.yaml to expose only frontend tools (~7 TappsMCP). See docker-mcp/README.md.
+name: tapps-frontend
+description: "Frontend / UX — quick_check, score_file, lookup_docs, consult_expert, quality_gate, project_profile"
+servers:
+  - catalog://tapps-mcp

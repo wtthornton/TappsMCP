@@ -160,7 +160,7 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 
 ### Subagents (auto-generated)
 
-Three agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
+Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 - **tapps-reviewer** (sonnet) - Reviews code quality and runs security scans after edits
 - **tapps-researcher** (haiku) - Looks up documentation and consults domain experts
 - **tapps-validator** (sonnet) - Runs pre-completion validation on all changed files
@@ -227,6 +227,10 @@ When the **DocsMCP** MCP server is also configured, you have access to documenta
 DocsMCP is a separate MCP server. Install via `pip install docs-mcp` or `npx docs-mcp serve`.
 
 **Combined server (TappsPlatform):** For clients that support 47+ tools (Claude Code, GitHub Copilot), run both servers as one via `tapps-platform serve`. Note: Cursor has a 40-tool limit, so use standalone servers there.
+
+### Optional: More specialized agents
+
+For more specialized agents (e.g. Frontend Developer, Reality Checker), see [agency-agents](https://github.com/msitarzewski/agency-agents) and run their install script for your platform. TappsMCP and agency-agents can coexist; there is no path conflict.
 
 ---
 

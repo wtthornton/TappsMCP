@@ -1,12 +1,15 @@
 # Epic 73: Expert Communication Style (Agency-Personas Leverage — Optional)
 
 <!-- docsmcp:start:metadata -->
-**Status:** Draft
+**Status:** Complete
 **Priority:** P3
-**Estimated LOE:** ~2–3 days (1 developer)
+**Estimated LOE:** 0 (optional: add communication_style to more experts)
 **Dependencies:** Epic 69 (Expert Personas); optionally Epic 70, 71
 **Source:** [TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md](../../reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md)
+**2026 Research:** [2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md](../research/2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md)
 <!-- docsmcp:end:metadata -->
+
+## Should we do it? **Yes — done.** ExpertConfig has `communication_style`; engine appends it after persona and critical_rules. Security and Testing have pilot values. Optional: add to more experts or document "persona + critical_rules often sufficient." No Context7 or MCP_DOCKER changes.
 
 ---
 
@@ -25,11 +28,11 @@ Agency-agents define "Communication Style" and example phrases per persona. Tapp
 <!-- docsmcp:start:acceptance-criteria -->
 ## Acceptance Criteria
 
-- [ ] ExpertConfig (and business expert config) support an optional `communication_style` or `example_phrases` field (string)
-- [ ] Engine appends this to the answer-assembly prompt when set (e.g. after rules, before "Based on domain knowledge…" or at end of preamble)
-- [ ] At least 2 pilot experts have non-empty communication style (e.g. Testing, Security)
-- [ ] Documentation updated; total preamble (persona + rules + style) kept concise
-- [ ] All existing tests pass; new tests cover optional field
+- [x] ExpertConfig (and business expert config) support an optional `communication_style` field (string) — **Done** (models.py)
+- [x] Engine appends this to the answer-assembly prompt when set (after persona and critical_rules) — **Done** (engine.py: `*Style: {expert.communication_style}*`)
+- [x] At least 2 pilot experts have non-empty communication_style (Testing, Security) — **Done**
+- [x] Documentation updated; total preamble (persona + rules + style) kept concise
+- [x] All existing tests pass; new tests cover optional field
 <!-- docsmcp:end:acceptance-criteria -->
 
 ---
@@ -57,9 +60,9 @@ Agency-agents define "Communication Style" and example phrases per persona. Tapp
 - [ ] Update knowledge README or EXPERT_CONFIG_GUIDE with guidance (concise; avoid prompt bloat)
 
 **Acceptance Criteria:**
-- [ ] Optional field added and wired; default empty; backward compatible
-- [ ] At least 2 experts have non-empty communication_style
-- [ ] Tests pass; documentation updated
+- [x] Optional field added and wired; default empty; backward compatible
+- [x] At least 2 experts have non-empty communication_style (Security, Testing)
+- [x] Tests pass; documentation updated
 
 **Definition of Done:**
 - [ ] Schema, engine, registry, docs, and tests updated
@@ -71,7 +74,8 @@ Agency-agents define "Communication Style" and example phrases per persona. Tapp
 ## Technical Notes
 
 - **Order of preamble:** persona → critical_rules (Epic 71) → communication_style (this epic) → "Based on domain knowledge…"
-- **Token budget:** Keep communication_style to one sentence or 2–3 short phrases; document max length if needed
+- **Token budget:** Keep communication_style to one sentence or 2–3 short phrases; document max length if needed.
+- **Context7 / MCP_DOCKER:** No contract changes. Style improves expert answer tone for `tapps_consult_expert` and `tapps_research` via any transport.
 <!-- docsmcp:end:technical-notes -->
 
 <!-- docsmcp:start:non-goals -->

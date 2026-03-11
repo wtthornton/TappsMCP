@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 import structlog
 import yaml
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = structlog.get_logger(__name__)
@@ -657,6 +657,58 @@ class TappsMCPSettings(BaseSettings):
 
     # Docker MCP distribution (Epic 46)
     docker: DockerSettings = Field(default_factory=DockerSettings)
+
+    # Tool curation (Epic 79.1): server-side allow/deny list and presets
+    enabled_tools: list[str] | None = Field(
+        default=None,
+        description=(
+            "Allow list: when non-empty, only these tools are exposed. "
+            "Empty/missing = all tools (backward compatible). "
+            "Env: TAPPS_MCP_ENABLED_TOOLS (comma-separated)."
+        ),
+    )
+    disabled_tools: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Deny list: excluded from the exposed set. "
+            "Applied when enabled_tools is empty; ignored when enabled_tools is set. "
+            "Env: TAPPS_MCP_DISABLED_TOOLS (comma-separated)."
+        ),
+    )
+    tool_preset: Literal[
+        "full", "core", "pipeline",
+        "reviewer", "planner", "frontend", "developer",
+    ] | None = Field(
+        default=None,
+        description=(
+            "Predefined tool set: 'full' = all tools, 'core' = Tier 1 (7 tools), "
+            "'pipeline' = Tier 1 + Tier 2; 'reviewer'|'planner'|'frontend'|'developer' = role presets (Epic 79.5). "
+            "Used when enabled_tools is not set. Env: TAPPS_MCP_TOOL_PRESET."
+        ),
+    )
+
+    @field_validator("enabled_tools", mode="before")
+    @classmethod
+    def _parse_enabled_tools(cls, v: Any) -> list[str] | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            v = [s.strip() for s in v.split(",") if s.strip()]
+            return v if v else None
+        if isinstance(v, list):
+            return v if v else None
+        return None
+
+    @field_validator("disabled_tools", mode="before")
+    @classmethod
+    def _parse_disabled_tools(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        if isinstance(v, list):
+            return list(v)
+        return []
 
 
 # Settings cache - only the no-arg (default) case is cached.

@@ -25,6 +25,7 @@ memory:
   gc_enabled: true
   contradiction_check_on_start: true
   max_memories: 1500
+  injection_max_tokens: 2000  # Epic 65.16: cap injected memory context (~4 chars/token)
   inject_into_experts: true
   semantic_search:
     enabled: false

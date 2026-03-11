@@ -1,0 +1,20 @@
+# Example: Tier 1 (critical) tools only — ~11 tools total.
+# Copy to ~/.docker/mcp/tools.yaml or apply via: docker mcp profile tools <profile> --enable ...
+# Reference: docs/planning/TOOL-TIER-RANKING.md
+#
+# TappsMCP Tier 1 (7): session_start, quick_check, validate_changed, quality_gate,
+#   checklist, lookup_docs, security_scan
+# DocsMCP Tier 1 (4): session_start, check_drift, generate_readme, project_scan
+tapps-mcp:
+  - tapps_session_start
+  - tapps_quick_check
+  - tapps_validate_changed
+  - tapps_quality_gate
+  - tapps_checklist
+  - tapps_lookup_docs
+  - tapps_security_scan
+docs-mcp:
+  - docs_session_start
+  - docs_check_drift
+  - docs_generate_readme
+  - docs_project_scan

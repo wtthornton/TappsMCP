@@ -14,7 +14,6 @@ from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call, mcp
 from docs_mcp.server_helpers import _get_settings, error_response, success_response
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_module_map(
     depth: int = 10,
     include_private: bool = False,
@@ -92,7 +91,6 @@ async def docs_module_map(
     return success_response("docs_module_map", elapsed_ms, data)
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_api_surface(
     source_path: str,
     include_types: bool = True,
@@ -189,3 +187,16 @@ async def docs_api_surface(
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     return success_response("docs_api_surface", elapsed_ms, data)
+
+
+# ---------------------------------------------------------------------------
+# Registration (Epic 79.2: conditional)
+# ---------------------------------------------------------------------------
+
+
+def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
+    """Register analysis tools on the shared mcp instance (Epic 79.2: conditional)."""
+    if "docs_module_map" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_module_map)
+    if "docs_api_surface" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_api_surface)

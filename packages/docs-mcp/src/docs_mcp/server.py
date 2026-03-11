@@ -62,6 +62,89 @@ def _reset_tool_calls() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tool curation (Epic 79.2): allowed tool names and presets
+# ---------------------------------------------------------------------------
+
+# Canonical list of all DocsMCP tools (23). Used for filtering.
+ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset({
+    "docs_session_start",
+    "docs_project_scan",
+    "docs_config",
+    "docs_module_map",
+    "docs_api_surface",
+    "docs_git_summary",
+    "docs_generate_changelog",
+    "docs_generate_release_notes",
+    "docs_generate_readme",
+    "docs_generate_api",
+    "docs_generate_adr",
+    "docs_generate_onboarding",
+    "docs_generate_contributing",
+    "docs_generate_prd",
+    "docs_generate_diagram",
+    "docs_generate_architecture",
+    "docs_generate_epic",
+    "docs_generate_story",
+    "docs_generate_prompt",
+    "docs_check_drift",
+    "docs_check_completeness",
+    "docs_check_links",
+    "docs_check_freshness",
+    "docs_validate_epic",
+})
+
+# Core preset (Epic 79.2): session start, project scan, drift, readme, completeness, links.
+DOCS_TOOL_PRESET_CORE: frozenset[str] = frozenset({
+    "docs_session_start",
+    "docs_project_scan",
+    "docs_check_drift",
+    "docs_generate_readme",
+    "docs_check_completeness",
+    "docs_check_links",
+})
+
+
+def _resolve_allowed_tools(
+    enabled_tools: list[str] | None,
+    disabled_tools: list[str],
+    tool_preset: str | None,
+) -> frozenset[str]:
+    """Compute the set of tool names to register from config (Epic 79.2).
+
+    Precedence: enabled_tools (if non-empty) > tool_preset > full set; then
+    subtract disabled_tools. Invalid names in enabled_tools are ignored and logged.
+    """
+    allowed: set[str]
+    if enabled_tools:
+        allowed = set(enabled_tools) & ALL_DOCS_TOOL_NAMES
+        invalid = set(enabled_tools) - ALL_DOCS_TOOL_NAMES
+        if invalid:
+            logger.debug(
+                "docs_enabled_tools_invalid_ignored",
+                invalid=sorted(invalid),
+                valid_count=len(allowed),
+            )
+    elif tool_preset == "core":
+        allowed = set(DOCS_TOOL_PRESET_CORE)
+    elif tool_preset == "full":
+        allowed = set(ALL_DOCS_TOOL_NAMES)
+    else:
+        allowed = set(ALL_DOCS_TOOL_NAMES)
+    allowed -= set(disabled_tools)
+    return frozenset(allowed)
+
+
+def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+    """Register core tools (server.py) when their name is in allowed_tools (Epic 79.2)."""
+    if "docs_session_start" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_session_start)
+    if "docs_project_scan" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_project_scan)
+    if "docs_config" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_config)
+
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -263,11 +346,10 @@ def _detect_project_name(project_root: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool: docs_session_start
+# Tool: docs_session_start (registered conditionally in _register_core_tools)
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_session_start(
     project_root: str = "",
 ) -> dict[str, Any]:
@@ -357,11 +439,10 @@ async def docs_session_start(
 
 
 # ---------------------------------------------------------------------------
-# Tool: docs_project_scan
+# Tool: docs_project_scan (registered conditionally in _register_core_tools)
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def docs_project_scan(
     project_root: str = "",
 ) -> dict[str, Any]:
@@ -586,7 +667,7 @@ def _parse_config_value(key: str, value: str) -> str | bool | int:
     return value
 
 
-@mcp.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)
+# Registered conditionally in _register_core_tools (Epic 79.2).
 async def docs_config(
     action: str = "view",
     key: str = "",
@@ -781,12 +862,41 @@ def run_server(
 
 
 # ---------------------------------------------------------------------------
-# Import tool modules that register on the shared ``mcp`` instance.
-# Must be at the bottom to avoid circular imports.
+# Register tools from modules (Epic 79.2: conditional registration)
+# Must be at the bottom so handlers above are defined; loads settings and
+# registers only tools that pass the enabled_tools / disabled_tools / preset filter.
 # ---------------------------------------------------------------------------
 
-import docs_mcp.server_analysis as _server_analysis  # noqa: E402, F401
-import docs_mcp.server_gen_tools as _server_gen_tools  # noqa: E402, F401
-import docs_mcp.server_git_tools as _server_git_tools  # noqa: E402, F401
-import docs_mcp.server_resources as _server_resources  # noqa: E402, F401
-import docs_mcp.server_val_tools as _server_val_tools  # noqa: E402, F401
+
+def _register_tool_modules() -> None:
+    """Load settings, resolve allowed_tools (Epic 79.2), register core tools
+    conditionally, then each module's register(mcp, allowed_tools).
+    """
+    from docs_mcp.config.settings import load_docs_settings
+
+    settings = load_docs_settings()
+    allowed_tools = _resolve_allowed_tools(
+        settings.enabled_tools,
+        settings.disabled_tools,
+        settings.tool_preset,
+    )
+
+    _register_core_tools(mcp, allowed_tools)
+
+    from docs_mcp import (
+        server_analysis,
+        server_gen_tools,
+        server_git_tools,
+        server_val_tools,
+    )
+
+    server_analysis.register(mcp, allowed_tools)
+    server_git_tools.register(mcp, allowed_tools)
+    server_gen_tools.register(mcp, allowed_tools)
+    server_val_tools.register(mcp, allowed_tools)
+
+    # Resources and prompts (no tool filtering)
+    import docs_mcp.server_resources as _  # noqa: F401  # register resources on mcp
+
+
+_register_tool_modules()

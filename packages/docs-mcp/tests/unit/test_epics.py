@@ -297,6 +297,7 @@ class TestEpicGeneratorMarkers:
 
         expected = [
             "metadata",
+            "purpose-intent",
             "goal",
             "motivation",
             "acceptance-criteria",

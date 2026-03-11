@@ -184,3 +184,65 @@ class TestEnvVarResolution:
         with patch.dict(os.environ, {"MY_ROOT": str(tmp_path)}):
             result = load_docs_settings(project_root=Path("${MY_ROOT}/real"))
         assert result.project_root == project_dir
+
+
+class TestToolCurationSettings:
+    """Epic 79.2: enabled_tools, disabled_tools, tool_preset."""
+
+    def test_default_none_empty(self) -> None:
+        settings = DocsMCPSettings()
+        assert settings.enabled_tools is None
+        assert settings.disabled_tools == []
+        assert settings.tool_preset is None
+
+    def test_enabled_tools_from_list(self) -> None:
+        settings = DocsMCPSettings(
+            enabled_tools=["docs_session_start", "docs_project_scan"],
+        )
+        assert settings.enabled_tools == ["docs_session_start", "docs_project_scan"]
+
+    def test_enabled_tools_from_comma_separated_string(self) -> None:
+        settings = DocsMCPSettings(enabled_tools="docs_session_start, docs_project_scan")
+        assert settings.enabled_tools == ["docs_session_start", "docs_project_scan"]
+
+    def test_enabled_tools_empty_string_becomes_none(self) -> None:
+        settings = DocsMCPSettings(enabled_tools="")
+        assert settings.enabled_tools is None
+
+    def test_disabled_tools_from_list(self) -> None:
+        settings = DocsMCPSettings(
+            disabled_tools=["docs_generate_diagram", "docs_validate_epic"],
+        )
+        assert settings.disabled_tools == ["docs_generate_diagram", "docs_validate_epic"]
+
+    def test_disabled_tools_from_comma_separated_string(self) -> None:
+        settings = DocsMCPSettings(disabled_tools="docs_generate_diagram, docs_validate_epic")
+        assert settings.disabled_tools == ["docs_generate_diagram", "docs_validate_epic"]
+
+    def test_tool_preset_values(self) -> None:
+        for preset in ("full", "core"):
+            settings = DocsMCPSettings(tool_preset=preset)
+            assert settings.tool_preset == preset
+
+    def test_tool_preset_env(self) -> None:
+        with patch.dict(os.environ, {"DOCS_MCP_TOOL_PRESET": "core"}):
+            _reset_docs_settings_cache()
+            settings = load_docs_settings()
+            assert settings.tool_preset == "core"
+
+    def test_enabled_tools_env_comma_separated(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"DOCS_MCP_ENABLED_TOOLS": "docs_session_start, docs_project_scan"},
+        ):
+            _reset_docs_settings_cache()
+            settings = load_docs_settings()
+            assert settings.enabled_tools == ["docs_session_start", "docs_project_scan"]
+
+    def test_yaml_enabled_tools(self, tmp_path: Path) -> None:
+        (tmp_path / ".docsmcp.yaml").write_text(
+            "enabled_tools:\n  - docs_session_start\n  - docs_check_drift\n",
+            encoding="utf-8",
+        )
+        result = load_docs_settings(project_root=tmp_path)
+        assert result.enabled_tools == ["docs_session_start", "docs_check_drift"]

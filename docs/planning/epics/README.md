@@ -63,58 +63,108 @@
 | [Epic 63](EPIC-63-AUTO-EXPERT-GENERATOR.md) | Auto Expert Generator | P2 | ~1-2 weeks | Epic 43-45 | **Complete** — 49 tests, gap analysis, config generation, knowledge scaffolding |
 | [Epic 64](EPIC-64-CROSS-PROJECT-MEMORY-FEDERATION.md) | Cross-Project Memory Federation | P2 | ~2 weeks | Epic 23-25, 34, 42 | **Complete** — 56 tests, federated hub, publish/subscribe/search actions |
 
-### Epic 65: Memory 2026 Best Practices (Proposed)
+### Epic 65: Memory 2026 Best Practices — **Complete** (17/17)
 
 | Epic | Name | Priority | LOE | Dependencies | Status |
 |---|---|---|---|---|---|
-| [Epic 65](EPIC-65-MEMORY-2026-BEST-PRACTICES.md) | Memory 2026 Best Practices (Parent Plan) | P1 | ~12-16 weeks | Epic 23, 24, 25, 34, 58, 64 | **Proposed** |
-| [Epic 65.1](EPIC-65.1-MEMORY-STATS-DASHBOARD.md) | Memory Stats in Dashboard | P1 | 3-5 days | Epic 23, 55 | **Proposed** |
-| [Epic 65.2](EPIC-65.2-MARKDOWN-EXPORT.md) | Markdown Export & Curation | P1 | 3-5 days | Epic 23, 42 | **Proposed** |
-| [Epic 65.3](EPIC-65.3-CONFIGURABLE-CAPTURE-PROMPT.md) | Configurable Capture Prompt & Write Rules | P1 | 4-6 days | Epic 23 | **Proposed** |
-| [Epic 65.4](EPIC-65.4-AUTO-RECALL-HOOK.md) | Auto-Recall Hook | P1 | 1-1.5 weeks | Epic 23, 25, 34, 36 | **Proposed** |
-| [Epic 65.5](EPIC-65.5-AUTO-CAPTURE-HOOK.md) | Auto-Capture Hook | P1 | 1.5-2 weeks | Epic 23, 36, 55, 65.3 | **Proposed** |
-| [Epic 65.6](EPIC-65.6-HOOK-INTEGRATION.md) | Hook Integration in tapps_init | P1 | 2-3 days | Epic 65.4, 65.5 | **Proposed** |
-| [Epic 65.7](EPIC-65.7-OPTIONAL-VECTOR-PROVIDER.md) | Optional Vector/Embedding Provider | P1 | 1.5-2 weeks | Epic 23, 25, 34 | **Proposed** |
-| [Epic 65.8](EPIC-65.8-HYBRID-SEARCH-RRF.md) | Hybrid Search with RRF | P1 | 2-2.5 weeks | Epic 23, 25, 34, 65.7 | **Proposed** |
-| [Epic 65.9](EPIC-65.9-OPTIONAL-RERANKING.md) | Optional Reranking | P2 | 1 week | Epic 65.8 | **Proposed** |
-| [Epic 65.10](EPIC-65.10-SESSION-INDEXING.md) | Session Indexing | P2 | 1.5-2 weeks | Epic 23, 25, 34 | **Proposed** |
-| [Epic 65.11](EPIC-65.11-PROCEDURAL-MEMORY-TIER.md) | Procedural Memory Tier | P2 | 1 week | Epic 23, 24, 25, 58 | **Proposed** |
-| [Epic 65.12](EPIC-65.12-ENTITY-RELATIONSHIP-EXTRACTION.md) | Entity/Relationship Extraction | P2 | 2-2.5 weeks | Epic 58 | **Proposed** |
-| [Epic 65.13](EPIC-65.13-RELATIONSHIP-AWARE-RETRIEVAL.md) | Relationship-Aware Retrieval | P2 | 1-1.5 weeks | Epic 65.12 | **Proposed** |
-| [Epic 65.14](EPIC-65.14-MEMORY-RETRIEVAL-POLICY.md) | Memory Retrieval Policy | P2 | 3-5 days | Epic 23, 25 | **Proposed** |
-| [Epic 65.15](EPIC-65.15-MEMORY-MAINTENANCE-SCHEDULE.md) | Memory Maintenance Schedule | P2 | 3-5 days | Epic 23, 24, 58 | **Proposed** |
-| [Epic 65.16](EPIC-65.16-CONTEXT-BUDGET.md) | Context Budget for Memory Injection | P2 | 2-3 days | Epic 25 | **Proposed** |
-| [Epic 65.17](EPIC-65.17-WRITE-RULES-VALIDATION.md) | Optional Write Rules Validation | P2 | 2-3 days | Epic 23, 65.3 | **Proposed** |
+| [Epic 65](EPIC-65-MEMORY-2026-BEST-PRACTICES.md) | Memory 2026 Best Practices (Parent Plan) | P1 | ~12-16 weeks | Epic 23, 24, 25, 34, 58, 64 | **Complete** |
+| [Epic 65.1](EPIC-65.1-MEMORY-STATS-DASHBOARD.md) | Memory Stats in Dashboard | P1 | 3-5 days | Epic 23, 55 | **Complete** |
+| [Epic 65.2](EPIC-65.2-MARKDOWN-EXPORT.md) | Markdown Export & Curation | P1 | 3-5 days | Epic 23, 42 | **Complete** |
+| [Epic 65.3](EPIC-65.3-CONFIGURABLE-CAPTURE-PROMPT.md) | Configurable Capture Prompt & Write Rules | P1 | 4-6 days | Epic 23 | **Complete** |
+| [Epic 65.4](EPIC-65.4-AUTO-RECALL-HOOK.md) | Auto-Recall Hook | P1 | 1-1.5 weeks | Epic 23, 25, 34, 36 | **Complete** |
+| [Epic 65.5](EPIC-65.5-AUTO-CAPTURE-HOOK.md) | Auto-Capture Hook | P1 | 1.5-2 weeks | Epic 23, 36, 55, 65.3 | **Complete** |
+| [Epic 65.6](EPIC-65.6-HOOK-INTEGRATION.md) | Hook Integration in tapps_init | P1 | 2-3 days | Epic 65.4, 65.5 | **Complete** |
+| [Epic 65.7](EPIC-65.7-OPTIONAL-VECTOR-PROVIDER.md) | Optional Vector/Embedding Provider | P1 | 1.5-2 weeks | Epic 23, 25, 34 | **Complete** |
+| [Epic 65.8](EPIC-65.8-HYBRID-SEARCH-RRF.md) | Hybrid Search with RRF | P1 | 2-2.5 weeks | Epic 23, 25, 34, 65.7 | **Complete** |
+| [Epic 65.9](EPIC-65.9-OPTIONAL-RERANKING.md) | Optional Reranking | P2 | 1 week | Epic 65.8 | **Complete** |
+| [Epic 65.10](EPIC-65.10-SESSION-INDEXING.md) | Session Indexing | P2 | 1.5-2 weeks | Epic 23, 25, 34 | **Complete** |
+| [Epic 65.11](EPIC-65.11-PROCEDURAL-MEMORY-TIER.md) | Procedural Memory Tier | P2 | 1 week | Epic 23, 24, 25, 58 | **Complete** |
+| [Epic 65.12](EPIC-65.12-ENTITY-RELATIONSHIP-EXTRACTION.md) | Entity/Relationship Extraction | P2 | 2-2.5 weeks | Epic 58 | **Complete** |
+| [Epic 65.13](EPIC-65.13-RELATIONSHIP-AWARE-RETRIEVAL.md) | Relationship-Aware Retrieval | P2 | 1-1.5 weeks | Epic 65.12 | **Complete** |
+| [Epic 65.14](EPIC-65.14-MEMORY-RETRIEVAL-POLICY.md) | Memory Retrieval Policy | P2 | 3-5 days | Epic 23, 25 | **Complete** |
+| [Epic 65.15](EPIC-65.15-MEMORY-MAINTENANCE-SCHEDULE.md) | Memory Maintenance Schedule | P2 | 3-5 days | Epic 23, 24, 58 | **Complete** |
+| [Epic 65.16](EPIC-65.16-CONTEXT-BUDGET.md) | Context Budget for Memory Injection | P2 | 2-3 days | Epic 25 | **Complete** |
+| [Epic 65.17](EPIC-65.17-WRITE-RULES-VALIDATION.md) | Optional Write Rules Validation | P2 | 2-3 days | Epic 23, 65.3 | **Complete** |
 
-### Epic 66: Tool UX Improvements (Proposed)
+### Epic 66: Tool UX Improvements — **Complete**
 
 | Epic | Name | Priority | LOE | Dependencies | Status |
 |---|---|---|---|---|---|
-| [Epic 66.1](EPIC-66.1-VALIDATE-CHANGED-PATH-HINTS.md) | validate_changed Path Mapping Hints | P2 | 2-3 days | Epic 1, 8 | **Proposed** |
-| [Epic 66.2](EPIC-66.2-CHECKLIST-VALIDATION-NOTE.md) | Checklist Validation Note for 0 Files | P3 | 1-2 days | Epic 8 | **Proposed** |
+| [Epic 66.1](EPIC-66.1-VALIDATE-CHANGED-PATH-HINTS.md) | validate_changed Path Mapping Hints | P2 | 2-3 days | Epic 1, 8 | **Complete** — path_hint + next_steps in _handle_no_changed_files |
+| [Epic 66.2](EPIC-66.2-CHECKLIST-VALIDATION-NOTE.md) | Checklist Validation Note for 0 Files | P3 | 1-2 days | Epic 8 | **Complete** |
 
 *Source: [TAPPS_MCP_TOOL_UX_REVIEW](../TAPPS_MCP_TOOL_UX_REVIEW.md)*
 
-### Epic 74: Consumer Feedback — Automation & Pipeline UX (Proposed)
+### Epic 74: Consumer Feedback — Automation & Pipeline UX — **Complete** (2026-03-11)
 
 *Source: HomeIQ `docs/tapps-feedback` (feedback-2026-03-10)*
 
 | Epic | Name | Priority | LOE | Dependencies | Status |
 |---|---|---|---|---|---|
-| [Epic 74](EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX.md) | Consumer Feedback — Automation & Pipeline UX | P1–P2 | ~2–3 weeks | Epic 1, 8 | **Proposed** |
+| [Epic 74](EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX.md) | Consumer Feedback — Automation & Pipeline UX | P1–P2 | ~2–3 weeks | Epic 1, 8 | **Complete** — 5/5 stories |
 
-Stories: [74.1](EPIC-74/story-74.1-quick-check-batch-mode.md) quick_check batch, [74.2](EPIC-74/story-74.2-checklist-compact-json-output.md) checklist compact/JSON, [74.3](EPIC-74/story-74.3-validate-changed-base-ref-warning.md) validate_changed base_ref warning, [74.4](EPIC-74/story-74.4-validate-changed-traceability.md) validate_changed traceability, [74.5](EPIC-74/story-74.5-mcp-config-validation.md) MCP config validation.
+Stories: [74.1](EPIC-74/story-74.1-quick-check-batch-mode.md) quick_check batch, [74.2](EPIC-74/story-74.2-checklist-compact-json-output.md) checklist compact/JSON, [74.3](EPIC-74/story-74.3-validate-changed-base-ref-warning.md) validate_changed base_ref warning, [74.4](EPIC-74/story-74.4-validate-changed-traceability.md) validate_changed traceability, [74.5](EPIC-74/story-74.5-mcp-config-validation.md) MCP config validation — all complete.
 
-### Epic 70–73: Expert Agency-Personas Leverage (Proposed)
+### Epic 75: LLM Artifact Structure & Prompt Generation — **Complete** (2026-03-11)
+
+*Source: docs/planning/LLM-ARTIFACT-STRUCTURE-COMMON-EPIC-STORY-PROMPT.md, 2026 prompt/context research*
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 75](EPIC-75-LLM-ARTIFACT-STRUCTURE-AND-PROMPT-GENERATION.md) | LLM Artifact Structure & Prompt Generation | P2 | ~3–4 weeks | DocsMCP (epic/story generators) | **Complete** — 4/4 stories |
+
+Stories: [75.1](EPIC-75/story-75.1-prompt-config-and-schema.md) PromptConfig and schema ✓, [75.2](EPIC-75/story-75.2-prompt-generator-and-docs-generate-prompt.md) PromptGenerator and docs_generate_prompt ✓, [75.3](EPIC-75/story-75.3-common-schema-docs-and-alignment.md) Common schema docs and alignment ✓, [75.4](EPIC-75/story-75.4-compact-llm-view.md) Optional compact LLM view ✓.
+
+### Epic 76: Skills Spec Compliance & Validation — **Complete** (2026-03-11)
+
+*Source: docs/planning/research/2026-SKILLS-RESEARCH-TAPPSMCP.md*
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 76](EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION.md) | Skills Spec Compliance & Validation | P2 | ~1.5–2 weeks | Epic 36 | **Complete** — 4/4 stories |
+
+Stories: [76.1](EPIC-76/story-76.1-description-length-validation.md) description ≤1024 chars, [76.2](EPIC-76/story-76.2-claude-allowed-tools-format.md) Claude allowed-tools space-delimited, [76.3](EPIC-76/story-76.3-cursor-allowed-tools-vs-mcp-tools.md) Cursor mcp_tools documented, [76.4](EPIC-76/story-76.4-skills-spec-validator.md) skills spec validator + `tapps-mcp validate-skills` — all complete.
+
+### Epic 77: Agency-Agents Integration — **Complete** (2026-03-11)
+
+*Source: docs/planning/research/2026-AGENTS-RESEARCH-CLAUDE-CURSOR-AGENCY-AGENTS.md, docs/reviews/AGENCY-AGENTS-REPO-DEEP-DIVE.md*
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 77](EPIC-77-AGENCY-AGENTS-INTEGRATION.md) | Agency-Agents Integration (Documentation & Optional Hint) | P3 | ~2–4 days | Epic 12 | **Complete** — 2/2 stories |
+
+Stories: [77.1](EPIC-77/story-77.1-document-tappsmcp-agency-agents-coexistence.md), [77.2](EPIC-77/story-77.2-optional-init-agents-md-hint-agency-agents.md) — both complete.
+
+### Epic 78: Canonical Persona Injection — Prompt-Injection Defense — **Complete**
+
+*Source: docs/planning/research/2026-AGENTS-RESEARCH-CLAUDE-CURSOR-AGENCY-AGENTS.md §7*
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 78](EPIC-78-CANONICAL-PERSONA-INJECTION-PROMPT-INJECTION-DEFENSE.md) | Canonical Persona Injection (Prompt-Injection Defense) | P2 | ~1–2 weeks | Epic 12 | **Complete** — 78.1 tool, 78.2 rule+prompts+subagents, 78.3 docs, 78.4 audit |
+
+Stories: [78.1](EPIC-78/story-78.1-tool-tapps-get-canonical-persona.md), [78.2](EPIC-78/story-78.2-rule-instruction-prepend-canonical-persona.md), [78.3](EPIC-78/story-78.3-document-canonical-persona-injection.md), [78.4](EPIC-78/story-78.4-optional-audit-log-persona-request-risk-pattern.md).
+
+### Epic 79: MCP Tool Count & Curation — 2026 Best Practices — **Complete** (2026-03-11)
+
+*Source: docs/planning/research/2026-MCP-TOOLS-BEST-PRACTICES-OPTIMAL-COUNT.md, TOOL-TIER-RANKING.md, Docker MCP Toolkit*
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 79](EPIC-79-MCP-TOOL-COUNT-CURATION.md) | MCP Tool Count & Curation (2026 Best Practices) | P1–P2 | ~2–3 weeks | Epic 1, 8, 46 | **Complete** — 6/6 stories |
+
+Stories: [79.1](EPIC-79/story-79.1-tappsmcp-enabled-tools-config.md) TappsMCP enabled_tools, [79.2](EPIC-79/story-79.2-docsmcp-enabled-tools-config.md) DocsMCP enabled_tools, [79.3](EPIC-79/story-79.3-docker-mcp-core-tools-profile.md) Docker core-tools profile + tools.yaml, [79.4](EPIC-79/story-79.4-document-recommended-tool-subsets.md) Document tool subsets (TOOL-SUBSETS-AND-DOCKER-FILTERING.md), [79.5](EPIC-79/story-79.5-role-presets-server-config.md) Role presets (reviewer/planner/frontend/developer), [79.6](EPIC-79/story-79.6-docker-mcp-role-named-profiles.md) Docker role-named profiles — all complete.
+
+### Epic 70–73: Expert Agency-Personas Leverage
 
 *Source: [TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md](../../reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md)*
 
 | Epic | Name | Priority | LOE | Dependencies | Status |
 |---|---|---|---|---|---|
-| [Epic 70](EPIC-70-EXPERT-PERSONA-COMPLETION.md) | Expert Persona Completion | P2 | 3–5 days | Epic 69 | **Draft** |
-| [Epic 71](EPIC-71-EXPERT-CRITICAL-RULES-AND-STANCE.md) | Expert Critical Rules & Default Stance | P2 | ~1 week | Epic 69, opt. 70 | **Draft** |
-| [Epic 72](EPIC-72-EXPERT-KNOWLEDGE-ENRICHMENT.md) | Expert Knowledge Enrichment (metrics, workflow, templates) | P2 | 1–2 weeks | None | **Draft** |
-| [Epic 73](EPIC-73-EXPERT-COMMUNICATION-STYLE.md) | Expert Communication Style (optional) | P3 | 2–3 days | Epic 69, opt. 70–71 | **Draft** |
+| [Epic 70](EPIC-70-EXPERT-PERSONA-COMPLETION.md) | Expert Persona Completion | P2 | 0 | Epic 69 | **Complete** |
+| [Epic 71](EPIC-71-EXPERT-CRITICAL-RULES-AND-STANCE.md) | Expert Critical Rules & Default Stance | P2 | 0 | Epic 69, opt. 70 | **Complete** |
+| [Epic 72](EPIC-72-EXPERT-KNOWLEDGE-ENRICHMENT.md) | Expert Knowledge Enrichment (metrics, workflow, templates) | P2 | 0 | None | **Complete** |
+| [Epic 73](EPIC-73-EXPERT-COMMUNICATION-STYLE.md) | Expert Communication Style (optional) | P3 | 0 | Epic 69, opt. 70–71 | **Complete** |
 
 ### Proposed Future Epics
 

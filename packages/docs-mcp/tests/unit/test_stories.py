@@ -317,6 +317,7 @@ class TestStoryGeneratorMarkers:
         expected = [
             "user-story",
             "sizing",
+            "purpose-intent",
             "description",
             "files",
             "tasks",

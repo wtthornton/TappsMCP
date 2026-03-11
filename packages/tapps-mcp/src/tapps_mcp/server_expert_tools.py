@@ -480,6 +480,7 @@ async def tapps_manage_experts(
 # ---------------------------------------------------------------------------
 
 
-def register(mcp_instance: FastMCP) -> None:
-    """Register expert management tools on the shared *mcp_instance*."""
-    mcp_instance.tool(annotations=_ANNOTATIONS_EXPERTS)(tapps_manage_experts)
+def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+    """Register expert management tools on the shared *mcp_instance* (Epic 79.1: conditional)."""
+    if "tapps_manage_experts" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_EXPERTS)(tapps_manage_experts)

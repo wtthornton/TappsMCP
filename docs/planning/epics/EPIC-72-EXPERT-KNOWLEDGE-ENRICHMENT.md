@@ -1,12 +1,15 @@
 # Epic 72: Expert Knowledge Enrichment (Agency-Personas Leverage)
 
 <!-- docsmcp:start:metadata -->
-**Status:** Draft
+**Status:** Complete
 **Priority:** P2
-**Estimated LOE:** ~1–2 weeks (1 developer, content-heavy)
+**Estimated LOE:** ~1–1.5 weeks (content-heavy; no code change)
 **Dependencies:** None (knowledge content only; no schema change)
 **Source:** [TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md](../../reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md)
+**2026 Research:** [2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md](../research/2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md)
 <!-- docsmcp:end:metadata -->
+
+## Should we do it? **Yes — done.** Enrichment makes RAG-retrieved content more actionable. Content audit ([story-72-content-plan.md](EPIC-72/story-72-content-plan.md)) confirms: 72.1–72.4 meet acceptance criteria (5 domains Success metrics, 5 Typical steps, 3 Checklist, README patterns). No Context7 or MCP_DOCKER changes.
 
 ---
 
@@ -25,12 +28,12 @@ Agency-agents define Success Metrics ("Page load <3s," "Lighthouse >90"), Workfl
 <!-- docsmcp:start:acceptance-criteria -->
 ## Acceptance Criteria
 
-- [ ] At least 5 domains have a "Success metrics" or "Definition of done" section in at least one key knowledge file
-- [ ] At least 5 domains have "Typical steps" or "Recommended process" (workflow hints) in at least one knowledge file
-- [ ] At least 3 domains have a deliverable template (report, checklist, or snippet) in knowledge (new or existing file, e.g. `_templates.md`)
-- [ ] Knowledge README documents the enrichment pattern (success metrics, workflow hints, templates) for maintainers
-- [ ] RAG index rebuild picks up changes (no code change to ingestion; existing behavior)
-- [ ] All existing expert tests pass
+- [x] At least 5 domains have a "Success metrics" or "Definition of done" section in at least one key knowledge file — **Done** (testing, code-quality, security, performance, accessibility)
+- [x] At least 5 domains have "Typical steps" or "Recommended process" (workflow hints) in at least one knowledge file — **Done** (api-design, database, security, development-workflow, testing)
+- [x] At least 3 domains have a deliverable template (report, checklist, or snippet) in knowledge — **Done** (security, testing, accessibility)
+- [x] Knowledge README documents the enrichment pattern (success metrics, workflow hints, templates) for maintainers — **Done** (knowledge/README.md "Knowledge Enrichment Patterns")
+- [x] RAG index rebuild picks up changes (no code change to ingestion; existing behavior)
+- [x] All existing expert tests pass
 <!-- docsmcp:end:acceptance-criteria -->
 
 ---
@@ -146,6 +149,7 @@ Agency-agents define Success Metrics ("Page load <3s," "Lighthouse >90"), Workfl
 - **No schema or engine changes.** All work is additive Markdown in `tapps_core/experts/knowledge/<domain>/`.
 - **RAG:** Existing chunking and indexing; rebuild index after content changes (delete `.tapps-mcp/rag_index/<domain>/` or full `rag_index/` as per ARCHITECTURE_CACHE_AND_RAG.md).
 - **AGENTS.md:** "Domain hints for tapps_consult_expert" already maps context → domain; optional "when to use this expert" in knowledge is for RAG retrieval when user query is ambiguous.
+- **Context7 / MCP_DOCKER:** No changes. Enriched knowledge improves RAG retrieval used by `tapps_consult_expert` and `tapps_research`; Context7 supplies library docs when RAG is empty. Both flows benefit from better domain content.
 <!-- docsmcp:end:technical-notes -->
 
 <!-- docsmcp:start:non-goals -->

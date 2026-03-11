@@ -1,0 +1,6 @@
+# Role profile: Code review & security (Epic 79.6 Phase 1).
+# Use with tools.yaml to expose only reviewer tools (~10 TappsMCP). See docker-mcp/README.md.
+name: tapps-reviewer
+description: "Code review & security — quick_check, validate_changed, quality_gate, checklist, security_scan, score_file, dead_code, dependency_scan"
+servers:
+  - catalog://tapps-mcp

@@ -1,9 +1,9 @@
 # Tapps Platform PRD — Monorepo + Shared Core + DocsMCP
 
-**Version:** 1.0.0-draft
+**Version:** 1.0.0
 **Date:** 2026-02-28
 **Author:** TappsMCP Team
-**Status:** Draft
+**Status:** Implemented — monorepo (tapps-core, tapps-mcp, docs-mcp) and FastMCP composition are in place.
 **Depends on:** [DOCSMCP_PRD.md](DOCSMCP_PRD.md) (DocsMCP feature specification)
 
 ---

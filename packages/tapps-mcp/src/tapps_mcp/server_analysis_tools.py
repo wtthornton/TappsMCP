@@ -901,11 +901,17 @@ async def tapps_dependency_graph(
 # ---------------------------------------------------------------------------
 
 
-def register(mcp_instance: FastMCP) -> None:
-    """Register analysis tools on the shared *mcp_instance*."""
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_session_notes)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_impact_analysis)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_report)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dead_code)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_dependency_scan)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dependency_graph)
+def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+    """Register analysis tools on the shared *mcp_instance* (Epic 79.1: conditional)."""
+    if "tapps_session_notes" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_session_notes)
+    if "tapps_impact_analysis" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_impact_analysis)
+    if "tapps_report" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_report)
+    if "tapps_dead_code" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dead_code)
+    if "tapps_dependency_scan" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_dependency_scan)
+    if "tapps_dependency_graph" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dependency_graph)

@@ -876,8 +876,11 @@ def ast_quick_complexity(code: str) -> int | None:
     return max_cc
 
 
-def register(mcp_instance: FastMCP) -> None:
-    """Register scoring/gate tools on the shared *mcp_instance*."""
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_score_file)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quality_gate)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quick_check)
+def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+    """Register scoring/gate tools on the shared *mcp_instance* (Epic 79.1: conditional)."""
+    if "tapps_score_file" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_score_file)
+    if "tapps_quality_gate" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quality_gate)
+    if "tapps_quick_check" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quick_check)

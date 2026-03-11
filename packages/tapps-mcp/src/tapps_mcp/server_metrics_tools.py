@@ -792,9 +792,13 @@ async def tapps_research(
         )
 
 
-def register(mcp_instance: FastMCP) -> None:
-    """Register metrics/feedback/research tools on *mcp_instance*."""
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dashboard)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_stats)
-    mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT)(tapps_feedback)
-    mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_research)
+def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+    """Register metrics/feedback/research tools on *mcp_instance* (Epic 79.1: conditional)."""
+    if "tapps_dashboard" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dashboard)
+    if "tapps_stats" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_stats)
+    if "tapps_feedback" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT)(tapps_feedback)
+    if "tapps_research" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_research)

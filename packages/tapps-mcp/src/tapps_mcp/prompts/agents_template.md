@@ -244,6 +244,10 @@ the user interactively:
 
 On unsupported clients, tools fall back to default behavior silently.
 
+### Optional: More specialized agents
+
+For more specialized agents (e.g. Frontend Developer, Reality Checker), see [agency-agents](https://github.com/msitarzewski/agency-agents) and run their install script for your platform. TappsMCP and agency-agents can coexist; there is no path conflict.
+
 ---
 
 ## Troubleshooting: MCP tool permissions
