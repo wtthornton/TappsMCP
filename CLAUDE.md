@@ -14,7 +14,7 @@ This is a **uv workspace monorepo** with three packages:
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, memory, experts, metrics, adaptive) |
 | **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools, 31 actions) |
-| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (22 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (24 tools) |
 
 tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
 
@@ -27,9 +27,9 @@ For detailed module maps and internal architecture, see [docs/ARCHITECTURE.md](d
 uv sync --all-packages
 
 # Run tests per package (recommended -- avoids conftest collisions)
-uv run pytest packages/tapps-core/tests/ -v      # 1,700+ tests
-uv run pytest packages/tapps-mcp/tests/ -v        # 4,200+ tests
-uv run pytest packages/docs-mcp/tests/ -v         # 1,300+ tests
+uv run pytest packages/tapps-core/tests/ -v      # 2,000+ tests
+uv run pytest packages/tapps-mcp/tests/ -v        # 4,700+ tests
+uv run pytest packages/docs-mcp/tests/ -v         # 1,500+ tests
 
 # Run a single test file or by name
 uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v

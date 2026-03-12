@@ -162,7 +162,7 @@ docker run -d --rm \
 
 ## Available Tools
 
-DocsMCP provides 22 MCP tools across these categories:
+DocsMCP provides 24 MCP tools across these categories:
 
 ### Session
 - `docs_session_start` - Initialize session and detect project context
@@ -187,8 +187,10 @@ DocsMCP provides 22 MCP tools across these categories:
 - `docs_generate_architecture` - Self-contained HTML architecture report with SVG
 - `docs_generate_epic` - Generate epic planning docs with expert enrichment
 - `docs_generate_story` - Generate user story docs with expert enrichment
+- `docs_generate_prompt` - Generate reusable prompt templates from project context
 
 ### Validation
+- `docs_validate_epic` - Validate epic documents for completeness and consistency
 - `docs_check_drift` - Detect code changes not reflected in docs
 - `docs_check_completeness` - Score documentation completeness (0-100)
 - `docs_check_links` - Validate internal links in markdown files

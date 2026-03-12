@@ -10,8 +10,8 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-5%2C900%2B_passing-brightgreen.svg)](#development)
-[![Tools](https://img.shields.io/badge/MCP_tools-29-blue.svg)](#tools-reference)
+[![Tests](https://img.shields.io/badge/tests-8%2C400%2B_passing-brightgreen.svg)](#development)
+[![Tools](https://img.shields.io/badge/MCP_tools-54-blue.svg)](#tools-reference)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
@@ -26,12 +26,12 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 | Package | PyPI Name | Purpose | Tools |
 |---|---|---|---|
 | **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics) | 0 (library) |
-| **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 29 |
-| **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 22 |
+| **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 30 |
+| **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 24 |
 
 ### Key highlights
 
-- **29 deterministic MCP tools** — no LLM calls in the tool chain; same input always produces same output
+- **54 deterministic MCP tools** (30 TappsMCP + 24 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** — Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **17 domain experts** with 171 curated knowledge files and RAG-backed answers
 - **Persistent shared memory** — project decisions survive across sessions (SQLite + BM25 retrieval)
@@ -39,7 +39,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 - **Platform generation** — auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** — `tapps_init` sets up quality infrastructure in any project with one call
 - **Docker MCP Toolkit** — publish to Docker MCP Catalog with curated companion profiles
-- **5,900+ tests** across 3 packages with strict mypy and ruff enforcement
+- **8,400+ tests** across 3 packages with strict mypy and ruff enforcement
 - **Benchmark infrastructure** — AGENTBench evaluation, template optimization, tool effectiveness measurement
 
 ---
@@ -77,7 +77,7 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 
 ## Features
 
-TappsMCP exposes **29 MCP tools** plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
+TappsMCP exposes **30 MCP tools** plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
 
 ### Code quality & scoring
 
@@ -277,7 +277,7 @@ The server listens at **http://localhost:8000** (MCP at `/mcp`). See [Docker](#d
 
 ## What you need
 
-TappsMCP requires an MCP config in your project, a connected MCP host, and (for scoring tools) Python. For the full checklist covering server visibility, permissions, bootstrap, and CLI fallback, see **[docs/TAPPS_MCP_REQUIREMENTS.md](docs/TAPPS_MCP_REQUIREMENTS.md)**. Run `tapps-mcp doctor` to verify your setup.
+TappsMCP requires an MCP config in your project, a connected MCP host, and (for scoring tools) Python. Run `tapps-mcp doctor` to verify your setup. See [docs/ONBOARDING.md](docs/ONBOARDING.md) for the full getting-started checklist.
 
 ---
 
@@ -343,7 +343,7 @@ Run `tapps-mcp init --host claude-code` or manually add to `~/.claude.json`:
 }
 ```
 
-For project-level config, use `tapps-mcp init --host claude-code --scope project` to create `.mcp.json` in the project root. For full access without permission prompts, see [docs/CLAUDE_FULL_ACCESS_SETUP.md](docs/CLAUDE_FULL_ACCESS_SETUP.md).
+For project-level config, use `tapps-mcp init --host claude-code --scope project` to create `.mcp.json` in the project root.
 
 ### Cursor
 
@@ -522,7 +522,7 @@ Quick index:
 | **tapps_checklist** | See which tools were called this session and what is still missing. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure for context-aware analysis. |
 | **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. Promotable to shared memory. |
-| **tapps_memory** | Persistent shared memory: save, get, list, delete, search, reinforce, contradictions, gc, reseed, import, export, consolidate, unconsolidate. |
+| **tapps_memory** | Persistent shared memory with 23 actions: save, save_bulk, get, list, delete, search, reinforce, contradictions, gc, reseed, import, export, consolidate, unconsolidate, federate_register, federate_publish, federate_subscribe, federate_sync, federate_search, federate_status, index_session, validate, maintain. |
 | **tapps_impact_analysis** | Analyze the impact of changes on the codebase (imports, dependents). |
 | **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
 | **tapps_dashboard** | View metrics dashboard with execution stats, expert performance, and trends. |
@@ -661,7 +661,7 @@ Quick index:
 
 ### tapps_memory
 
-**What it does:** Persistent, project-scoped shared memory accessible to all MCP-connected agents. Memories are typed by tier (`architectural`, `pattern`, `context`), carry confidence scores (0.0-1.0 with source-based defaults), and persist across sessions in SQLite with WAL mode and FTS5 full-text search at `{project_root}/.tapps-mcp/memory/memory.db`. Supports 20 actions: **save** (with RAG safety filtering), **get** (with scope resolution: session > branch > project; includes provenance for consolidated entries), **list** (filtered by tier/scope/tags), **delete**, **search** (FTS5 ranked retrieval with composite scoring), **reinforce** (reset decay clock, optional confidence boost), **contradictions** (detect memories that contradict current project state), **gc** (archive decayed memories), **reseed** (re-populate from project profile), **import** and **export** (JSON format with path validation), **consolidate** (merge related entries into a summary with provenance tracking; supports explicit entry_ids, query-based discovery, or auto-discovery; use dry_run=True to preview), **unconsolidate** (undo a consolidation by restoring source entries and removing the consolidated entry), **save_bulk** (batch-save multiple entries), **federate_register** (register project in federation hub), **federate_publish** (publish shared-scope entries to hub), **federate_subscribe** (subscribe to another project's memories), **federate_sync** (pull subscribed entries from hub), **federate_search** (search across federated projects with local boost), and **federate_status** (view federation config and sync state). Search and list filter out source entries of consolidated memories by default (pass `include_sources=True` to show all). Time-based exponential decay with tier-specific half-lives (architectural: 180 days, pattern: 60 days, context: 14 days). Contradiction detection compares memories against `tapps_project_profile` for tech stack drift, missing files, and deleted branches. Relevant memories are auto-injected into `tapps_consult_expert` and `tapps_research` responses (configurable by engagement level). Max 500 memories per project with lowest-confidence eviction.
+**What it does:** Persistent, project-scoped shared memory accessible to all MCP-connected agents. Memories are typed by tier (`architectural`, `pattern`, `context`), carry confidence scores (0.0-1.0 with source-based defaults), and persist across sessions in SQLite with WAL mode and FTS5 full-text search at `{project_root}/.tapps-mcp/memory/memory.db`. Supports 23 actions: **save** (with RAG safety filtering), **get** (with scope resolution: session > branch > project; includes provenance for consolidated entries), **list** (filtered by tier/scope/tags), **delete**, **search** (FTS5 ranked retrieval with composite scoring), **reinforce** (reset decay clock, optional confidence boost), **contradictions** (detect memories that contradict current project state), **gc** (archive decayed memories), **reseed** (re-populate from project profile), **import** and **export** (JSON format with path validation), **consolidate** (merge related entries into a summary with provenance tracking; supports explicit entry_ids, query-based discovery, or auto-discovery; use dry_run=True to preview), **unconsolidate** (undo a consolidation by restoring source entries and removing the consolidated entry), **save_bulk** (batch-save multiple entries), **federate_register** (register project in federation hub), **federate_publish** (publish shared-scope entries to hub), **federate_subscribe** (subscribe to another project's memories), **federate_sync** (pull subscribed entries from hub), **federate_search** (search across federated projects with local boost), and **federate_status** (view federation config and sync state). Search and list filter out source entries of consolidated memories by default (pass `include_sources=True` to show all). Time-based exponential decay with tier-specific half-lives (architectural: 180 days, pattern: 60 days, context: 14 days). Contradiction detection compares memories against `tapps_project_profile` for tech stack drift, missing files, and deleted branches. Relevant memories are auto-injected into `tapps_consult_expert` and `tapps_research` responses (configurable by engagement level). Max 500 memories per project with lowest-confidence eviction.
 
 **Why use it:** Agents start every session amnesiac about the project. Shared memory means the project remembers things, not the developer's tool. Save architectural decisions ("we use JWT with RS256"), patterns ("always mock the DB in unit tests"), and context ("current sprint focuses on auth"). Memories decay naturally so stale information loses trust. Contradiction detection catches drift (e.g., memory says "we use SQLAlchemy" after migrating to Prisma). Expert injection means `tapps_consult_expert` automatically includes relevant project memory in its response.
 
@@ -995,9 +995,9 @@ This is a **uv workspace monorepo** with three packages. All commands run from t
 uv sync --all-packages
 
 # Run tests per package (recommended — avoids conftest collisions)
-uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1,269 tests)
-uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (3,737 tests)
-uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (107 tests)
+uv run pytest packages/tapps-core/tests/ -v      # tapps-core (2,000+ tests)
+uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (4,700+ tests)
+uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (1,500+ tests)
 
 # Run a single test file
 uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v
@@ -1034,12 +1034,12 @@ packages/
 │       ├── prompts/                   # Workflow prompt templates
 │       ├── knowledge/                 # Context7 client, cache, lookup, warming, RAG safety,
 │       │                              #   Context7 + LlmsTxt providers (providers/)
-│       ├── experts/                   # Domain detector, engine, RAG, 139 knowledge files
+│       ├── experts/                   # Domain detector, engine, RAG, 171 knowledge files
 │       ├── memory/                    # Shared memory: SQLite persistence, decay, retrieval
 │       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export
 │       └── adaptive/                  # Adaptive scoring, expert voting, weight distribution
 │
-├── tapps-mcp/                         # Code quality MCP server (29 tools)
+├── tapps-mcp/                         # Code quality MCP server (30 tools)
 │   └── src/tapps_mcp/
 │       ├── server.py, cli.py          # Entry points and MCP server
 │       ├── server_*.py                # Tool modules (scoring, pipeline, metrics, memory, analysis)
@@ -1053,11 +1053,16 @@ packages/
 │       ├── pipeline/                  # Pipeline orchestration, platform generators
 │       └── (re-exports)              # Backward-compatible re-exports from tapps-core
 │
-└── docs-mcp/                          # Documentation MCP server (3 tools, MVP)
+└── docs-mcp/                          # Documentation MCP server (24 tools)
     └── src/docs_mcp/
         ├── server.py, cli.py          # Entry points and MCP server
-        ├── server_helpers.py          # Response builders, singletons
-        └── config/                    # DocsMCP-specific settings, default.yaml
+        ├── server_*.py                # Tool modules (helpers, analysis, git, validation, generation)
+        ├── config/                    # DocsMCP-specific settings, default.yaml
+        ├── extractors/               # Python, generic, docstring, type annotation extractors
+        ├── analyzers/                # Module map, API surface, dependency, git history
+        ├── validators/               # Drift, completeness, link checker, freshness
+        ├── generators/               # README, changelog, release notes, API docs, ADR, guides, specs, diagrams
+        └── integrations/             # TappsMCP integration
 
 plugin/
 └── cursor/                            # Ready-to-publish Cursor marketplace plugin
@@ -1073,13 +1078,34 @@ examples/
 
 DocsMCP is a companion MCP server for documentation generation, drift detection, and maintenance. It shares infrastructure with TappsMCP via `tapps-core`.
 
-### Current tools (MVP)
+### Tools (24)
 
 | Tool | Description |
 |------|-------------|
-| `docs_session_start` | Initialize session, detect project context, scan existing documentation |
-| `docs_project_scan` | Comprehensive documentation state audit with completeness scoring |
+| `docs_session_start` | Initialize session, detect project context |
+| `docs_project_scan` | Documentation state audit with completeness scoring |
 | `docs_config` | View/update DocsMCP configuration (`.docsmcp.yaml`) |
+| `docs_module_map` | Generate module dependency maps |
+| `docs_api_surface` | Extract public API surface from code |
+| `docs_git_summary` | Summarize git history for documentation |
+| `docs_generate_readme` | Generate or update README.md |
+| `docs_generate_api` | Generate API reference documentation |
+| `docs_generate_changelog` | Generate CHANGELOG from git history |
+| `docs_generate_release_notes` | Generate release notes for a version |
+| `docs_generate_diagram` | Generate architecture/dependency diagrams (Mermaid/PlantUML) |
+| `docs_generate_adr` | Generate Architecture Decision Records |
+| `docs_generate_onboarding` | Generate onboarding guide |
+| `docs_generate_contributing` | Generate CONTRIBUTING.md |
+| `docs_generate_prd` | Generate Product Requirements Document |
+| `docs_generate_prompt` | Generate LLM prompt artifacts |
+| `docs_generate_epic` | Generate epic planning documents |
+| `docs_generate_story` | Generate user story documents |
+| `docs_generate_architecture` | Generate architecture documentation |
+| `docs_check_drift` | Detect documentation drift from code |
+| `docs_check_completeness` | Check documentation completeness |
+| `docs_check_links` | Validate links in documentation |
+| `docs_check_freshness` | Check documentation freshness |
+| `docs_validate_epic` | Validate epic document structure |
 
 ### CLI
 
@@ -1109,7 +1135,7 @@ git_log_limit: 500
 
 ### Roadmap
 
-DocsMCP is feature-complete with 22 MCP tools covering README generation, API documentation, changelog generation, release notes, ADRs, onboarding/contributing guides, PRD generation, Mermaid/PlantUML diagrams, drift detection, completeness validation, link checking, and freshness analysis. See [docs/planning/DOCSMCP_PRD.md](docs/planning/DOCSMCP_PRD.md) for the full specification.
+DocsMCP is feature-complete with 24 MCP tools covering README generation, API documentation, changelog generation, release notes, ADRs, onboarding/contributing guides, PRD generation, Mermaid/PlantUML diagrams, drift detection, completeness validation, link checking, and freshness analysis. See [docs/archive/planning/DOCSMCP_PRD.md](docs/archive/planning/DOCSMCP_PRD.md) for the original specification.
 
 ---
 
@@ -1120,14 +1146,11 @@ DocsMCP is feature-complete with 22 MCP tools covering README generation, API do
 | Doc | Description |
 |-----|-------------|
 | [AGENTS.md](AGENTS.md) | AI assistant workflow guide - when to use each tool, recommended workflow, troubleshooting. |
-| [addenda.md](addenda.md) | Best practices for Claude Code, Cursor, consuming projects, troubleshooting. |
-| [docs/TAPPS_MCP_SETUP_AND_USE.md](docs/TAPPS_MCP_SETUP_AND_USE.md) | Detailed setup and use guide (Cursor, Claude, tools workflow). |
 | [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) | Upgrade guide for projects that install TappsMCP. |
 | [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md) | Init and upgrade: `tapps_init` vs `tapps-mcp init`, overwrite flags, upgrade path. |
-| [docs/CLAUDE_FULL_ACCESS_SETUP.md](docs/CLAUDE_FULL_ACCESS_SETUP.md) | Grant Claude Code full access (no permission prompts). |
-| [docs/MIGRATION_FROM_TAPPS_AGENTS.md](docs/MIGRATION_FROM_TAPPS_AGENTS.md) | Migrating from tapps-agents: what to remove, keep, configure. |
-| [docs/ci-integration.md](docs/ci-integration.md) | CI/CD integration: GitHub Actions, headless mode, direct CLI invocation. |
-| [docs/MCP_CLIENT_TIMEOUTS.md](docs/MCP_CLIENT_TIMEOUTS.md) | Handling long-running tool timeouts in MCP clients. |
+| [docs/ONBOARDING.md](docs/ONBOARDING.md) | Getting started guide for new developers. |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and solutions. |
+| [docs/CONFIG_REFERENCE.md](docs/CONFIG_REFERENCE.md) | Full configuration reference. |
 
 ### For TappsMCP developers
 
@@ -1135,12 +1158,10 @@ DocsMCP is feature-complete with 22 MCP tools covering README generation, API do
 |-----|-------------|
 | [CLAUDE.md](CLAUDE.md) | Instructions for AI assistants working on the TappsMCP codebase itself. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, coding standards, and how to submit changes. |
-| [docs/ARCHITECTURE_CACHE_AND_RAG.md](docs/ARCHITECTURE_CACHE_AND_RAG.md) | Context7 cache SWR behavior and expert RAG index architecture. |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full architecture documentation. |
 | [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) | Docker build, run, env vars, and client connection. |
-| [docs/planning/TAPPS_MCP_PLAN.md](docs/planning/TAPPS_MCP_PLAN.md) | Architecture and design rationale. |
-| [docs/planning/TAPPS_PLATFORM_PRD.md](docs/planning/TAPPS_PLATFORM_PRD.md) | Platform restructure PRD (monorepo, extraction, composition). |
-| [docs/planning/DOCSMCP_PRD.md](docs/planning/DOCSMCP_PRD.md) | DocsMCP feature specification (18 tools, 12 epics). |
-| [docs/planning/epics/README.md](docs/planning/epics/README.md) | Epic index, dependency graph, tool delivery timeline. |
+| [docs/DOCKER_MCP_TOOLKIT.md](docs/DOCKER_MCP_TOOLKIT.md) | Docker MCP Toolkit integration. |
+| [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) | Full memory system reference (23 actions). |
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 

@@ -1,6 +1,6 @@
 # TappsMCP Memory Reference
 
-Complete reference for the `tapps_memory` tool's 20 actions.
+Complete reference for the `tapps_memory` tool's 23 actions.
 
 ## Memory tiers
 
@@ -69,6 +69,14 @@ Complete reference for the `tapps_memory` tool's 20 actions.
 | **federate_sync** | -- | Pull subscribed memories |
 | **federate_search** | `query` | Search local + federated (local boost) |
 | **federate_status** | -- | Hub status: projects, subscriptions, counts |
+
+## Session & maintenance
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **index_session** | `session_id` | Index session transcript chunks into memory for later retrieval |
+| **validate** | `key` | Validate a memory entry against current project state |
+| **maintain** | -- | Run full maintenance cycle (gc + contradictions + reseed) |
 
 ## Configuration (.tapps-mcp.yaml)
 

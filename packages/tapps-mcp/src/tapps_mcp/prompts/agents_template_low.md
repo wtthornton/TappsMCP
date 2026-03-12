@@ -16,7 +16,7 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (29 tools), invoke the **tapps-tool-reference** skill when asked about tools.
+**For full tool reference** (30 tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
 ---
 
@@ -101,7 +101,7 @@ The checklist uses this to decide which tools are required vs recommended vs opt
 Your project may have two complementary memory systems:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, cross-agent knowledge. 20 actions: save, get, list, search, delete, reinforce, gc, contradictions, reseed, import, export, consolidate, unconsolidate, and 6 federation actions for cross-project sharing.
+- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, cross-agent knowledge. 23 actions: save, get, list, search, delete, reinforce, gc, contradictions, reseed, import, export, consolidate, unconsolidate, and 6 federation actions for cross-project sharing.
 
 OPTIONAL: Consider using `tapps_memory` for important architecture decisions.
 

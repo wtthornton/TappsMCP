@@ -122,8 +122,8 @@ The MCP server is split across five tool files sharing the same `mcp` FastMCP in
 - **`server.py`** -- Creates `FastMCP("DocsMCP")` and registers `docs_session_start`, `docs_project_scan`, `docs_config`. Imports the other four modules at the bottom.
 - **`server_analysis.py`** -- `docs_module_map`, `docs_api_surface`
 - **`server_git_tools.py`** -- `docs_git_summary`
-- **`server_gen_tools.py`** -- `docs_generate_readme`, `docs_generate_changelog`, `docs_generate_release_notes`, `docs_generate_api`, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing`, `docs_generate_prd`, `docs_generate_diagram`, `docs_generate_architecture`, `docs_generate_epic`, `docs_generate_story`
-- **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`
+- **`server_gen_tools.py`** -- `docs_generate_readme`, `docs_generate_changelog`, `docs_generate_release_notes`, `docs_generate_api`, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing`, `docs_generate_prd`, `docs_generate_diagram`, `docs_generate_architecture`, `docs_generate_epic`, `docs_generate_story`, `docs_generate_prompt`
+- **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`, `docs_validate_epic`
 - **`server_helpers.py`** -- Response builders (`error_response`, `success_response`), settings singleton (`_get_settings`)
 
 ### Configuration
@@ -148,7 +148,7 @@ To add a new MCP tool:
 4. Use `error_response()` and `success_response()` for return values
 5. Add tests in `packages/docs-mcp/tests/unit/`
 
-## The 22 MCP tools
+## The 24 MCP tools
 
 | Category | Tool | Description |
 |---|---|---|
@@ -170,6 +170,8 @@ To add a new MCP tool:
 | Generation | `docs_generate_architecture` | Self-contained HTML architecture report with SVG diagrams |
 | Generation | `docs_generate_epic` | Epic planning docs with stories, AC, expert enrichment |
 | Generation | `docs_generate_story` | User story docs with tasks, AC, expert enrichment |
+| Generation | `docs_generate_prompt` | Generate reusable prompt templates from project context |
+| Validation | `docs_validate_epic` | Validate epic documents for completeness and consistency |
 | Validation | `docs_check_drift` | Detect code changes not reflected in docs |
 | Validation | `docs_check_completeness` | Score documentation completeness (0-100) |
 | Validation | `docs_check_links` | Validate internal links in markdown files |

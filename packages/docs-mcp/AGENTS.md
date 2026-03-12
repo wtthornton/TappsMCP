@@ -6,7 +6,7 @@ When the **DocsMCP** MCP server is configured in your host (Claude Code, Cursor,
 
 ## What DocsMCP is
 
-DocsMCP is an MCP server that provides 18 tools for:
+DocsMCP is an MCP server that provides 24 tools for:
 
 - **Code analysis** -- module maps, API surface extraction, dependency analysis via AST parsing
 - **Git analysis** -- commit history with conventional commit parsing, version detection from tags
@@ -40,6 +40,11 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_generate_contributing** | Generate CONTRIBUTING.md with dev setup and PR workflow |
 | **docs_generate_prd** | Generate Product Requirements Documents (standard/comprehensive, auto-populate, SmartMerger) |
 | **docs_generate_diagram** | Generate Mermaid/PlantUML diagrams (dependency/class/module/ER) |
+| **docs_generate_architecture** | Self-contained HTML architecture report with SVG diagrams |
+| **docs_generate_epic** | Epic planning docs with stories, AC, expert enrichment |
+| **docs_generate_story** | User story docs with tasks, AC, expert enrichment |
+| **docs_generate_prompt** | Generate reusable prompt templates from project context |
+| **docs_validate_epic** | Validate epic documents for completeness and consistency |
 | **docs_check_drift** | Detect documentation drift -- code changes not reflected in docs |
 | **docs_check_completeness** | Check documentation completeness across multiple categories |
 | **docs_check_links** | Validate internal links in markdown documentation files |
@@ -66,6 +71,11 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_generate_contributing** | When a project **needs contribution guidelines**. |
 | **docs_generate_prd** | When planning a **new feature or product** -- generates structured PRD with phased requirements and Gherkin acceptance criteria. |
 | **docs_generate_diagram** | When you need a **visual overview** of dependencies, class hierarchies, module structure, or data models. |
+| **docs_generate_architecture** | When you need a **self-contained HTML architecture report** with SVG diagrams. |
+| **docs_generate_epic** | When **planning a new epic** -- generates structured epic docs with stories, acceptance criteria, and expert enrichment. |
+| **docs_generate_story** | When **writing user stories** -- generates structured story docs with tasks, acceptance criteria, and expert enrichment. |
+| **docs_generate_prompt** | When you need to **create reusable prompt templates** from project context. |
+| **docs_validate_epic** | When **reviewing an epic document** -- validates completeness and consistency. |
 | **docs_check_drift** | After **code changes** -- detects public API names missing from documentation. |
 | **docs_check_completeness** | During **documentation review** -- scores completeness across critical docs, API docs, guides, ADRs. |
 | **docs_check_links** | Before **publishing or merging** -- catches broken internal links. |
@@ -101,11 +111,16 @@ Generate or update documentation based on analysis:
 - `docs_generate_contributing` -- contribution guidelines
 - `docs_generate_prd` -- product requirements documents
 - `docs_generate_diagram` -- visual diagrams
+- `docs_generate_architecture` -- HTML architecture report
+- `docs_generate_epic` -- epic planning docs
+- `docs_generate_story` -- user story docs
+- `docs_generate_prompt` -- reusable prompt templates
 
 ### 4. Validate (validation tools)
 
 Check documentation quality after generation or code changes:
 
+- `docs_validate_epic` -- validate epic completeness and consistency
 - `docs_check_drift` -- code changes not reflected in docs
 - `docs_check_completeness` -- documentation coverage score
 - `docs_check_links` -- broken internal links
@@ -200,7 +215,7 @@ Settings can be viewed/changed via `docs_config` or set in `.docsmcp.yaml`:
 | `git_log_limit` | `500` | Maximum git commits to analyze |
 | `enabled_tools` | *(none)* | Allow list: only these tools are exposed. Empty/missing = all tools. Env: `DOCS_MCP_ENABLED_TOOLS` (comma-separated). |
 | `disabled_tools` | `[]` | Deny list: excluded from the exposed set. Ignored when `enabled_tools` is set. Env: `DOCS_MCP_DISABLED_TOOLS`. |
-| `tool_preset` | *(none)* | Preset: `full` (all 23 tools) or `core` (6 tools: session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). Env: `DOCS_MCP_TOOL_PRESET`. |
+| `tool_preset` | *(none)* | Preset: `full` (all 24 tools) or `core` (6 tools: session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). Env: `DOCS_MCP_TOOL_PRESET`. |
 
 Environment variables use the `DOCS_MCP_` prefix (e.g., `DOCS_MCP_OUTPUT_DIR`).
 
@@ -212,4 +227,4 @@ When using DocsMCP with TappsMCP or in environments where the combined tool coun
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `DOCS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools, default when unset) or `core` (6 essential tools). Env: `DOCS_MCP_TOOL_PRESET=core`.
 
-Empty or missing = all 23 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. See tool-count best practices in the repo planning docs (Epic 79).
+Empty or missing = all 24 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. See tool-count best practices in the repo planning docs (Epic 79).

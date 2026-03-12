@@ -6,23 +6,24 @@ For quick-start guidance, see [CLAUDE.md](../CLAUDE.md).
 ## Package dependency graph
 
 ```
-tapps-core (library)  <──  tapps-mcp (29 tools)
-                      <──  docs-mcp  (22 tools)
+tapps-core (library)  <──  tapps-mcp (30 tools)
+                      <──  docs-mcp  (24 tools)
 ```
 
 Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics, adaptive) lives in `tapps-core`. Both MCP servers depend on it. Server files in tapps-mcp import from `tapps_core` directly for extracted packages.
 
 ## Server module split (tapps-mcp)
 
-The MCP server is split across eight tool files plus a shared helpers module and a resources module. All share the same `mcp` FastMCP instance created in `server.py`:
+The MCP server is split across ten files (server.py + 9 server_*.py) plus a shared helpers module. All share the same `mcp` FastMCP instance created in `server.py`:
 
-- **`server.py`** -- Creates the `FastMCP("TappsMCP")` instance and 8 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`). Imports the other seven modules which register their tools/resources on the shared `mcp` object.
+- **`server.py`** -- Creates the `FastMCP("TappsMCP")` instance and 8 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`). Imports the other nine modules which register their tools/resources on the shared `mcp` object.
 - **`server_scoring_tools.py`** -- `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** -- `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`
 - **`server_metrics_tools.py`** -- `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`
-- **`server_memory_tools.py`** -- `tapps_memory` (20 actions)
+- **`server_memory_tools.py`** -- `tapps_memory` (24 actions)
 - **`server_analysis_tools.py`** -- `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`
 - **`server_expert_tools.py`** -- `tapps_manage_experts` (6 actions)
+- **`server_persona_tools.py`** -- `tapps_get_canonical_persona`
 - **`server_resources.py`** -- MCP resources (knowledge, config) and prompts (pipeline, workflow)
 - **`server_helpers.py`** -- Shared utilities: `emit_ctx_info()`, response builders, singleton caches
 
@@ -33,7 +34,7 @@ src/tapps_mcp/
 ├── __init__.py, cli.py, diagnostics.py, server.py, server_helpers.py, py.typed
 ├── server_scoring_tools.py, server_pipeline_tools.py, server_metrics_tools.py
 ├── server_memory_tools.py, server_analysis_tools.py, server_expert_tools.py
-├── server_resources.py
+├── server_persona_tools.py, server_resources.py
 ├── common/     constants.py, developer_workflow.py, elicitation.py,
 │               exceptions.py, logging.py, models.py, nudges.py,
 │               output_schemas.py, pipeline_models.py, utils.py

@@ -96,7 +96,7 @@ docker run --rm -v $(pwd):/workspace docs-mcp docsmcp --version
 
 ### Core tools profile and tool count
 
-Research recommends keeping the **active tool count under ~30** for best LLM accuracy. TappsMCP has 29 tools and DocsMCP 22; together that exceeds the optimal range. Use the **core-tools** profile and example tool allowlists to expose only Tier 1 (or Tier 1 + Tier 2) tools.
+Research recommends keeping the **active tool count under ~30** for best LLM accuracy. TappsMCP has 30 tools and DocsMCP 24; together that exceeds the optimal range. Use the **core-tools** profile and example tool allowlists to expose only Tier 1 (or Tier 1 + Tier 2) tools.
 
 **Option A — Gateway tool filtering (profile + example tools.yaml):**
 
@@ -118,7 +118,7 @@ Research recommends keeping the **active tool count under ~30** for best LLM acc
 
 Use the **tapps-mcp-core** catalog entry so the server exposes only 7 Tier 1 tools (no gateway tools.yaml needed). After importing the catalog, add **tapps-mcp-core** (not tapps-mcp) to your profile; you get `session_start`, `quick_check`, `validate_changed`, `quality_gate`, `checklist`, `lookup_docs`, `security_scan` only.
 
-Tier lists are defined in [TOOL-TIER-RANKING.md](../docs/planning/TOOL-TIER-RANKING.md).
+Tier lists are defined in [TOOL-TIER-RANKING.md](../docs/archive/planning/TOOL-TIER-RANKING.md).
 
 ## Docker path mapping (Story 75.1)
 

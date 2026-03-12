@@ -30,7 +30,7 @@ This project uses **TappsMCP** (Code Quality MCP Server) and **DocsMCP** (Docume
 - Run `tapps_quality_gate` for pass/fail verdict
 - Run `tapps_checklist` to confirm all steps were completed
 
-## Tool Reference (29 tools)
+## Tool Reference (30 tools)
 
 | Category | Tools |
 |----------|-------|

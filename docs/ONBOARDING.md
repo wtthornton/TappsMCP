@@ -91,14 +91,14 @@ uv sync --all-packages
 ```
 packages/
   tapps-core/     # Shared library (config, security, logging, knowledge, memory, experts)
-  tapps-mcp/      # Code quality MCP server (28 tools)
-  docs-mcp/       # Documentation MCP server (19 tools)
+  tapps-mcp/      # Code quality MCP server (30 tools)
+  docs-mcp/       # Documentation MCP server (24 tools)
 ```
 
 **Dependency graph:**
 ```
-tapps-core (library)  <--  tapps-mcp (28 tools)
-                      <--  docs-mcp  (19 tools)
+tapps-core (library)  <--  tapps-mcp (30 tools)
+                      <--  docs-mcp  (24 tools)
 ```
 
 ### Key Directories in tapps-mcp

@@ -45,7 +45,7 @@ tapps-mcp doctor
 
 ## MCP Tools
 
-TappsMCP provides 29 MCP tools for code quality automation. See the [main README](../../README.md) for the complete tool reference.
+TappsMCP provides 30 MCP tools for code quality automation. See the [main README](../../README.md) for the complete tool reference.
 
 ## Documentation
 

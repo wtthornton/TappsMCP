@@ -131,7 +131,7 @@ Epic 10 and Epic 11 added tighter coupling between expert consultation and doc l
 | Context7 code-reference normalization | `knowledge/content_normalizer.py` | ✅ Shipped |
 | Retrieval evaluation harness + quality gates | `experts/retrieval_eval.py` | ✅ Shipped |
 
-**To get Epic 10+11 content in your project:** After upgrading TappsMCP, run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` so AGENTS.md and platform rules include the new workflow. See [TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md).
+**To get Epic 10+11 content in your project:** After upgrading TappsMCP, run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` so AGENTS.md and platform rules include the new workflow. See [TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](archive/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md).
 
 ---
 

@@ -29,8 +29,8 @@ This is a **uv workspace monorepo** with three packages:
 | Package | Path | Purpose |
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (28 tools) |
-| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (19 tools) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (24 tools) |
 
 ## Running Tests
 
@@ -38,9 +38,9 @@ Run tests per-package to avoid conftest collisions:
 
 ```bash
 # All tests per package
-uv run pytest packages/tapps-core/tests/ -v      # ~1,269 tests
-uv run pytest packages/tapps-mcp/tests/ -v        # ~3,420 tests
-uv run pytest packages/docs-mcp/tests/ -v         # ~107 tests
+uv run pytest packages/tapps-core/tests/ -v      # ~2,000+ tests
+uv run pytest packages/tapps-mcp/tests/ -v        # ~4,700+ tests
+uv run pytest packages/docs-mcp/tests/ -v         # ~1,500+ tests
 
 # Single test file
 uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v

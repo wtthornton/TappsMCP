@@ -138,7 +138,7 @@ about:
   description: >
     Deterministic code quality MCP server. Scores Python files across 7
     categories, runs security scans, enforces quality gates, looks up library
-    docs, and consults 17 domain experts. 28 tools, zero LLM calls.
+    docs, and consults 17 domain experts. 30 tools, zero LLM calls.
   icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:
   project: https://github.com/wtthornton/TappsMCP
@@ -164,7 +164,7 @@ about:
   description: >
     Documentation MCP server for automated generation, validation, and
     maintenance. Generates READMEs, API references, changelogs, ADRs,
-    onboarding guides, and diagrams. 22 tools grounded in AST parsing
+    onboarding guides, and diagrams. 24 tools grounded in AST parsing
     and git history analysis.
   icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:
@@ -191,7 +191,7 @@ task build && task catalog
 
 # Submit PR
 gh pr create --title "Add tapps-mcp and docs-mcp servers" \
-  --body "Adds TappsMCP (code quality, 28 tools) and DocsMCP (documentation, 22 tools)"
+  --body "Adds TappsMCP (code quality, 30 tools) and DocsMCP (documentation, 24 tools)"
 ```
 
 ### Phase 5 — Post-Merge
@@ -217,7 +217,7 @@ To keep active tool count in the optimal range (~30 tools), the repo ships a **c
 - **Example allowlists:** `docker-mcp/examples/tools-core-tier1.yaml` (Tier 1 only, ~11 tools) and `docker-mcp/examples/tools-core-tier1-tier2.yaml` (Tier 1+2, ~23 tools). Copy to `~/.docker/mcp/tools.yaml` or use the profile Tools tab / `docker mcp profile tools` to enable only these tools.
 - **Server-side preset:** Catalog entry `tapps-mcp-core` runs the same image with `TAPPS_MCP_TOOL_PRESET=core` so the server exposes only 7 Tier 1 tools without gateway filtering.
 
-See `docker-mcp/README.md` § "Core tools profile and tool count" and [TOOL-TIER-RANKING.md](planning/TOOL-TIER-RANKING.md).
+See `docker-mcp/README.md` § "Core tools profile and tool count" and [TOOL-TIER-RANKING.md](archive/planning/TOOL-TIER-RANKING.md).
 
 ## Timeline
 
