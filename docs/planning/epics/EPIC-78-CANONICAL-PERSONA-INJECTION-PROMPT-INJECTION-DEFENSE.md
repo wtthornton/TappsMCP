@@ -1,7 +1,7 @@
 # Epic 78: Canonical Persona Injection (Prompt-Injection Defense)
 
 <!-- docsmcp:start:metadata -->
-- **Status:** Proposed
+- **Status:** Complete (2026-03-12)
 - **Priority:** P2
 - **Estimated LOE:** ~1–2 weeks (tool + path resolution + rule/instruction + docs)
 - **Dependencies:** Epic 12 (Platform Integration), path validator / security; docs/planning/research/2026-AGENTS-RESEARCH-CLAUDE-CURSOR-AGENCY-AGENTS.md §7

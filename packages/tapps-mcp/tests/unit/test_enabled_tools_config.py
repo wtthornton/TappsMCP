@@ -17,7 +17,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = None
         allowed = _resolve_allowed_tools(settings)
         assert allowed == ALL_TOOL_NAMES
-        assert len(allowed) == 29
+        assert len(allowed) == 30
 
     def test_enabled_tools_subset(self) -> None:
         from tapps_mcp.server import _resolve_allowed_tools
@@ -213,4 +213,4 @@ class TestToolPresetConstants:
     def test_all_tool_names_count(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES
 
-        assert len(ALL_TOOL_NAMES) == 29
+        assert len(ALL_TOOL_NAMES) == 30

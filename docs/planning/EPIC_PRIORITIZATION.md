@@ -1,6 +1,6 @@
 # Epic Prioritization & Story Ranking
 
-**Date:** 2026-03-06
+**Date:** 2026-03-12 (updated)
 **Scope:** TappsMCP + Platform + DocsMCP — ALL COMPLETE
 **Method:** Prioritized by value delivery, dependency readiness, risk reduction, and effort efficiency
 
@@ -8,10 +8,10 @@
 
 ## Executive Summary
 
-**All epics are COMPLETE.** TappsMCP (55 epics), DocsMCP (17 epics), Platform Epics (12-13), and promotion tiers (P0-P4) are all finished, delivering:
+**All epics are COMPLETE.** TappsMCP (Epics 0–79 including Docker Pipeline and Canonical Persona), DocsMCP (Epics 0–21), Platform Epics (12-13), and promotion tiers (P0-P4) are all finished, delivering:
 
-- **48 combined MCP tools** (29 TappsMCP + 19 DocsMCP)
-- **5,995+ tests passing**
+- **49 combined MCP tools** (30 TappsMCP + 19 DocsMCP)
+- **7,400+ tests passing**
 - **Comprehensive code quality + documentation pipeline**
 
 See [ROADMAP.md](ROADMAP.md) for future enhancement opportunities.

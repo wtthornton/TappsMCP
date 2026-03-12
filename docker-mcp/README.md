@@ -46,20 +46,27 @@ docker mcp gateway run --profile tapps-standard
 docker mcp catalog import docker-mcp/catalog.yaml
 ```
 
-### Cursor: show tapps-mcp and docs-mcp with new versions (1.3.1)
+### Cursor: use TappsMCP 1.3.1 via MCP_DOCKER
 
-1. **Import the catalog** (so the Toolkit uses the pinned 1.3.1 images):
+1. **Build and tag local images** (if not already done):
    ```bash
-   docker mcp catalog import docker-mcp/catalog.yaml
+   docker build -t tapps-mcp:1.3.1 .
+   docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:1.3.1 .
    ```
-2. **Add servers to "My servers"** in MCP Toolkit: open **Catalog**, search for **tapps-mcp** and **docs-mcp**, and install/add each so they appear under My servers.
-3. **Use the tapps-standard profile** (includes tapps-mcp + docs-mcp + Context7):
-   ```bash
-   docker mcp profile import tapps-standard
-   docker mcp gateway run --profile tapps-standard
+
+2. **Update Cursor's MCP config** (`~/.cursor/mcp.json`) so MCP_DOCKER uses the 1.3.1 catalog. Change the MCP_DOCKER server args from:
+   ```json
+   "args": ["mcp", "gateway", "run"]
    ```
-4. In **Cursor → Settings → Tools → Installed MCP Servers**, ensure **MCP_DOCKER** (or the Docker MCP gateway) is **enabled**. Enable **docs-mcp** there too if you want it as a separate server.
-5. To use **1.3.1** you need the images: pull from GHCR after publish (`docker pull ghcr.io/wtthornton/tapps-mcp:1.3.1` and `docs-mcp:1.3.1`) or use your locally built images (tag as `tapps-mcp:1.3.1` and `docs-mcp:1.3.1` and run `docker mcp catalog import docker-mcp/catalog.yaml`).
+   to:
+   ```json
+   "args": ["mcp", "gateway", "run", "--catalog", "<path>/docker-mcp/catalog.yaml", "--additional-catalog", "docker-mcp", "--servers", "tapps-mcp,docs-mcp,context7"]
+   ```
+   Use the **absolute path** to `docker-mcp/catalog.yaml` (e.g. `C:\\cursor\\TappMCP\\docker-mcp\\catalog.yaml` on Windows).
+
+3. **Restart Cursor** (or reload MCP servers) so the gateway restarts with the new args.
+
+4. **Verify** by calling `tapps_session_start` — the response should show `version: "1.3.1"`.
 
 ### Build locally
 
@@ -77,6 +84,7 @@ docker run --rm -v $(pwd):/workspace docs-mcp docsmcp --version
 
 | Profile | Servers | Use Case |
 |---------|---------|----------|
+| `tapps-standard-131` | tapps-mcp, docs-mcp, context7 @ 1.3.1 | Same as tapps-standard but pinned to 1.3.1 (use after `docker mcp catalog import docker-mcp/catalog.yaml`) |
 | `tapps-minimal` | tapps-mcp | Code quality only |
 | `tapps-standard` | tapps-mcp, docs-mcp, context7 | Quality + docs + library lookup |
 | `tapps-full` | tapps-mcp, docs-mcp, context7, github, filesystem | Full developer workflow |
@@ -112,6 +120,35 @@ Use the **tapps-mcp-core** catalog entry so the server exposes only 7 Tier 1 too
 
 Tier lists are defined in [TOOL-TIER-RANKING.md](../docs/planning/TOOL-TIER-RANKING.md).
 
+## Docker path mapping (Story 75.1)
+
+When running TappsMCP inside a container, `tapps_session_start` resolves paths
+relative to the container mount (e.g. `/workspace`). To enable host-path
+translation in automated pipelines, set the `TAPPS_HOST_ROOT` environment
+variable to the **host-side** project root:
+
+```bash
+docker run --rm \
+  -v "$(pwd):/workspace" \
+  -e TAPPS_HOST_ROOT="$(pwd)" \
+  -e TAPPS_DOCKER=1 \
+  tapps-mcp tapps-mcp serve
+```
+
+When `TAPPS_HOST_ROOT` is set, the `tapps_session_start` response includes a
+`path_mapping` object:
+
+```json
+{
+  "container_root": "/workspace",
+  "host_root": "C:\\cursor\\HomeIQ",
+  "mapping_available": true
+}
+```
+
+If the variable is absent, `mapping_available` is `false` and a warning is
+surfaced so callers can adapt.
+
 ## Submitting to Docker MCP Catalog
 
 The `tapps-mcp/` and `docs-mcp/` directories each contain a single `server.yaml`
@@ -133,10 +170,10 @@ gh pr create --title "Add tapps-mcp and docs-mcp servers"
 
 ## Images
 
-| Server | Image (pinned 1.3.0) | Dockerfile |
+| Server | Image (pinned 1.3.1) | Dockerfile |
 |--------|----------------------|------------|
-| tapps-mcp | `ghcr.io/wtthornton/tapps-mcp:1.3.0` | `Dockerfile` |
-| docs-mcp | `ghcr.io/wtthornton/docs-mcp:1.3.0` | `packages/docs-mcp/Dockerfile` |
+| tapps-mcp | `ghcr.io/wtthornton/tapps-mcp:1.3.1` | `Dockerfile` |
+| docs-mcp | `ghcr.io/wtthornton/docs-mcp:1.3.1` | `packages/docs-mcp/Dockerfile` |
 | combined | `ghcr.io/wtthornton/tapps-platform` | `Dockerfile.platform` |
 
-The catalog and server.yaml entries pin to **1.3.0** so the MCP Toolkit and Cursor use the new versions.
+The catalog and server.yaml entries pin to **1.3.1**. Use `tapps-standard-131` profile after importing the catalog to run the gateway with 1.3.1 images.

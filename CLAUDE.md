@@ -13,7 +13,7 @@ This is a **uv workspace monorepo** with three packages:
 | Package | Path | Purpose |
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, memory, experts, metrics, adaptive) |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (29 tools, 31 actions) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools, 31 actions) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (22 tools) |
 
 tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).

@@ -1,9 +1,9 @@
 # Open Epics and Stories — Review
 
-**Date:** 2026-03-11  
+**Date:** 2026-03-12
 **Source:** `docs/planning/epics/README.md`, epic metadata, and implementation verification.
 
-This document reviews all epics and stories that are **Proposed**, **Draft**, or **Open** in the roadmap, with story-level status where known.
+**ALL EPICS AND STORIES ARE COMPLETE.** No open work remains.
 
 ---
 
@@ -13,12 +13,13 @@ This document reviews all epics and stories that are **Proposed**, **Draft**, or
 |------|------|----------|-----|---------|------------------------|
 | **74** | Consumer Feedback — Automation & Pipeline UX | P1–P2 | ~2–3 wk | 5 | **Complete** (2026-03-11) |
 | **79** | MCP Tool Count & Curation | P1–P2 | ~2–3 wk | 6 | **Complete** (2026-03-11) |
-| **65** | Memory 2026 Best Practices (parent) | P1 | ~12–16 wk | 17 sub-epics | Many 65.x marked Complete in docs; README still "Proposed" |
-| **66** | Tool UX Improvements | P2–P3 | 2–5 days | 2 | Proposed; 66.2 doc says Complete |
+| **65** | Memory 2026 Best Practices (parent) | P1 | ~12–16 wk | 17 sub-epics | **Complete** (17/17, reconciled 2026-03-11) |
+| **66** | Tool UX Improvements | P2–P3 | 2–5 days | 2 | **Complete** (both stories implemented) |
 | **75** | LLM Artifact Structure & Prompt Generation | P2 | ~3–4 wk | 4 | **Complete** (2026-03-11) |
-| **76** | Skills Spec Compliance & Validation | P2 | ~1.5–2 wk | 4 | Proposed |
-| **77** | Agency-Agents Integration | P3 | ~2–4 days | 2 | Proposed |
-| **78** | Canonical Persona Injection (Prompt-Injection Defense) | P2 | ~1–2 wk | 4 | Proposed |
+| **75-Docker** | Docker Pipeline Reliability & Tool Output UX | P1–P2 | ~2–3 wk | 5 | **Complete** (2026-03-12) |
+| **76** | Skills Spec Compliance & Validation | P2 | ~1.5–2 wk | 4 | **Complete** (2026-03-11) |
+| **77** | Agency-Agents Integration | P3 | ~2–4 days | 2 | **Complete** (2026-03-11) |
+| **78** | Canonical Persona Injection (Prompt-Injection Defense) | P2 | ~1–2 wk | 4 | **Complete** (2026-03-12) |
 | **70–73** | Expert Personas / Critical Rules / Enrichment / Communication | P2–P3 | 0 | **Complete** (all four) | See research doc |
 
 ---
@@ -183,13 +184,16 @@ Many sub-epic markdown files list **Status: Complete** (e.g. 65.1, 65.2, 65.3, 6
 
 ---
 
-## Suggested next actions
+## Status (2026-03-12)
 
-1. **Epic 74:** Mark epic and all five stories **Complete** in README and epic doc; close epic.
-2. **Epic 79:** Mark 79.1, 79.2, 79.3 Complete in story docs; implement 79.4 (doc), 79.5 (role presets), 79.6 (Docker role profiles).
-3. **Epic 65:** Complete (17/17). All sub-epics reconciled Complete.
-4. **Epic 66:** Confirm 66.2 implementation; implement 66.1 if still desired.
-5. **Epics 75, 76, 77, 78, 70–73:** **75, 76, 77, 70–73:** All Complete. **78:** Canonical Persona Injection still Proposed. See [2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md](../research/2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md).
+**All epics and stories are complete.** No remaining open work.
+
+- **Epics 0–79 (TappsMCP):** All complete, including Docker Pipeline Reliability (75-Docker) and Canonical Persona Injection (78) completed 2026-03-12.
+- **Epics 0–21 (DocsMCP):** All complete.
+- **Platform Epics 12–13:** All complete.
+- **Promotion tiers P0–P4:** All complete.
+- **Epic 65 sub-epics (17/17):** All reconciled Complete.
+- See [ROADMAP.md](../ROADMAP.md) for future enhancement opportunities.
 
 ---
 

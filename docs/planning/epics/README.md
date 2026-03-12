@@ -135,7 +135,17 @@ Stories: [76.1](EPIC-76/story-76.1-description-length-validation.md) description
 
 Stories: [77.1](EPIC-77/story-77.1-document-tappsmcp-agency-agents-coexistence.md), [77.2](EPIC-77/story-77.2-optional-init-agents-md-hint-agency-agents.md) — both complete.
 
-### Epic 78: Canonical Persona Injection — Prompt-Injection Defense — **Complete**
+### Epic 75 (Docker): Docker Pipeline Reliability & Tool Output UX — **Complete** (2026-03-12)
+
+*Source: HomeIQ `docs/tapps-feedback` (feedback-2026-03-10)*
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 75-Docker](EPIC-75-DOCKER-PIPELINE-RELIABILITY.md) | Docker Pipeline Reliability & Tool Output UX | P1–P2 | ~2–3 weeks | Epic 46, 52, 74 | **Complete** — 5/5 stories |
+
+Stories: [75.1](EPIC-75/story-75.1-docker-path-mismatch.md) Docker path mismatch resolution (is_running_in_container, get_path_mapping, translate_path) ✓, [75.2](EPIC-75/story-75.2-cross-file-type-detection.md) Cross-file type error detection (AST cross-ref) ✓, [75.3](EPIC-75/story-75.3-session-cache-bootstrap.md) Session cache bootstrap ✓, [75.4](EPIC-75/story-75.4-validate-changed-per-file-rows.md) validate_changed per-file rows ✓, [75.5](EPIC-75/story-75.5-checklist-git-metadata.md) Checklist git metadata ✓.
+
+### Epic 78: Canonical Persona Injection — Prompt-Injection Defense — **Complete** (2026-03-12)
 
 *Source: docs/planning/research/2026-AGENTS-RESEARCH-CLAUDE-CURSOR-AGENCY-AGENTS.md §7*
 
@@ -172,7 +182,7 @@ Stories: [79.1](EPIC-79/story-79.1-tappsmcp-enabled-tools-config.md) TappsMCP en
 |---|---|---|---|---|---|
 | [Epic 62](EPIC-62-CONTEXT7-MEMORY-VALIDATION.md) | Context7-Assisted Memory Validation & Enrichment | P2 | ~3 weeks | Epic 2, 23-25, 34, 58 | **Complete** — 7 stories, validate memories against authoritative docs, 67 tests |
 
-**Total LOE:** ~65-85 weeks — All TappsMCP Epics (0-64) + Platform Epics 12-13 complete (P0-P4), all DocsMCP Epics (0-17) complete. 7,200+ tests passing.
+**Total LOE:** ~65-85 weeks — All TappsMCP Epics (0-79) + Platform Epics 12-13 complete (P0-P4), all DocsMCP Epics (0-21) complete. 7,400+ tests passing.
 
 > **Epic 10+11** implements enhancements from [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md): auto-fallback to Context7 when expert RAG is empty, structured lookup hints, workflow coupling, broader testing KB, `tapps_research` tool, hybrid fusion + rerank, hot-rank adaptive ranking, fuzzy matcher v2, content normalization, and retrieval eval harness. All 10 stories shipped and tested (230 tests passing).
 

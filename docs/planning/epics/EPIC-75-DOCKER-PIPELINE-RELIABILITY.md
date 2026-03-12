@@ -1,7 +1,7 @@
 # Epic 75: Docker Pipeline Reliability & Tool Output UX
 
 <!-- docsmcp:start:metadata -->
-- **Status:** Proposed
+- **Status:** Complete (2026-03-12)
 - **Priority:** P1–P2 (mix by story)
 - **Estimated LOE:** ~2–3 weeks (1 developer)
 - **Dependencies:** Epic 46 (Docker MCP), Epic 52 (Session Startup Performance), Epic 74 (Pipeline UX)
