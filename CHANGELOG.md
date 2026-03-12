@@ -7,11 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-03-12
+
+### Fixed
+
+- **Read-only filesystem detection** - `tapps_upgrade` and `tapps_init` now detect read-only filesystems (common in Docker containers with read-only workspace mounts) and return a clear error with actionable remediation options instead of cascading permission-denied errors on every component
+- Version bump: tapps-mcp 1.4.0 -> 1.4.1, docs-mcp 1.4.0 -> 1.4.1
+
+## [1.4.0] - 2026-03-12
+
+### Added
+
+- **Container detection** — `tapps_core.common.utils.is_running_in_container()` detects Docker/OCI environments via env var, sentinel file, and cgroup inspection
+- **Docker pipeline** — Epic 75 (Docker reliability), Epic 78 (profiles), Epic 79 (catalog) complete
+
 ### Changed
 
 - **Memory cap** — Increased default `max_memories` from 500 to 1500 per project
 - **Memory documentation** — Comprehensive 20-action reference added to AGENTS.md templates (high/medium/low), all 6 platform rules, and skill templates
 - **Memory system docs** — All templates now document 4 tiers, 4 scopes, federation, consolidation, and configuration examples
+- **Docs archive** — Archived 200+ historical docs, fixed all stale counts to match code truth
+- Version bump: tapps-core 1.2.0 → 1.3.0, tapps-mcp 1.3.1 → 1.4.0, docs-mcp 1.3.1 → 1.4.0
 
 ### Fixed
 

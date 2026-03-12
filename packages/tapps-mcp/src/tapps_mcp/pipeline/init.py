@@ -206,6 +206,35 @@ def bootstrap_pipeline(
         )
     state = _BootstrapState(project_root=project_root.resolve(), dry_run=cfg.dry_run)
 
+    # Early detection of read-only filesystem (common in Docker containers)
+    if not cfg.dry_run and not cfg.verify_only:
+        import tempfile
+
+        import structlog
+
+        _log = structlog.get_logger(__name__)
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=project_root, prefix=".tapps-write-test-", delete=True
+            ):
+                pass  # File is created and immediately deleted
+        except OSError:
+            _log.warning(
+                "read_only_filesystem",
+                project_root=str(project_root),
+            )
+            state.errors.append(
+                "Filesystem is read-only — cannot write init files. "
+                "This typically happens when TappsMCP runs inside a Docker "
+                "container with the workspace mounted read-only. Options: "
+                "(1) Re-run with dry_run=True to preview what would be created, "
+                "(2) Run 'tapps-mcp init' locally (outside Docker) via "
+                "'uvx tapps-mcp init' or 'npx @anthropic/tapps-mcp init', "
+                "(3) Remount the workspace read-write in your Docker/MCP config."
+            )
+            state.result["read_only"] = True
+            return state.finalize()
+
     _verify_server(cfg, state)
     if cfg.verify_only:
         return state.finalize()

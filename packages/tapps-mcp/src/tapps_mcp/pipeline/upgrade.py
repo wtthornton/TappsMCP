@@ -254,6 +254,8 @@ def upgrade_pipeline(
     Returns:
         Structured dict with per-component upgrade results.
     """
+    import tempfile
+
     from tapps_mcp import __version__
 
     log.info(
@@ -263,6 +265,35 @@ def upgrade_pipeline(
         force=force,
         dry_run=dry_run,
     )
+
+    # Early detection of read-only filesystem (common in Docker containers)
+    if not dry_run:
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=project_root, prefix=".tapps-write-test-", delete=True
+            ):
+                pass  # File is created and immediately deleted
+        except OSError:
+            log.warning(
+                "read_only_filesystem",
+                project_root=str(project_root),
+            )
+            return {
+                "version": __version__,
+                "dry_run": False,
+                "components": {},
+                "errors": [
+                    "Filesystem is read-only — cannot write upgrade files. "
+                    "This typically happens when TappsMCP runs inside a Docker "
+                    "container with the workspace mounted read-only. Options: "
+                    "(1) Re-run with dry_run=True to preview changes, "
+                    "(2) Run 'tapps-mcp upgrade' locally (outside Docker) via "
+                    "'uvx tapps-mcp upgrade' or 'npx @anthropic/tapps-mcp upgrade', "
+                    "(3) Remount the workspace read-write in your Docker/MCP config.",
+                ],
+                "success": False,
+                "read_only": True,
+            }
 
     result: dict[str, Any] = {
         "version": __version__,

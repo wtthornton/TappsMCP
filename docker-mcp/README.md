@@ -8,9 +8,9 @@ See [docs/DOCKER_MCP_TOOLKIT.md](../docs/DOCKER_MCP_TOOLKIT.md) for the full sub
 ```
 docker-mcp/
   tapps-mcp/
-    server.yaml    # Registry entry for Docker MCP Catalog
+    server.yaml    # Registry entry for Docker MCP Catalog (docker/mcp-registry format)
   docs-mcp/
-    server.yaml    # Registry entry for Docker MCP Catalog
+    server.yaml    # Registry entry for Docker MCP Catalog (docker/mcp-registry format)
   profiles/
     tapps-minimal.yaml      # TappsMCP only
     tapps-standard.yaml     # TappsMCP + DocsMCP + Context7
@@ -20,55 +20,74 @@ docker-mcp/
     tapps-planning.yaml     # Role: epics, stories & planning (TappsMCP + DocsMCP)
     tapps-frontend.yaml     # Role: frontend / UX work
     tapps-developer.yaml    # Role: daily feature/bugfix development
+    tapps-standard-141.yaml # Pinned to 1.4.1 (Toolkit profile)
   examples/
     tools-core-tier1.yaml       # Gateway tools.yaml: Tier 1 only (~11 tools)
     tools-core-tier1-tier2.yaml # Gateway tools.yaml: Tier 1+2 (~23 tools)
-  catalog.yaml    # Self-hosted catalog (GHCR images; includes tapps-mcp-core preset)
+  catalog.yaml          # Gateway-format catalog (for docker mcp gateway run --catalog)
+  toolkit-catalog.yaml  # Toolkit-native catalog (for docker mcp catalog import)
 ```
 
-## Quick Start
+## Quick Start (Docker MCP Toolkit)
 
-### Install from Docker MCP Catalog
+The Docker MCP Toolkit (v0.40+) is the recommended way to run TappsMCP via Docker.
+It manages catalogs, server lifecycle, and client connections natively.
+
+### 1. Build local images
 
 ```bash
-# Single server
-docker mcp catalog install tapps-mcp
-
-# Curated profile (recommended)
-docker mcp profile import tapps-standard
-docker mcp gateway run --profile tapps-standard
+docker build -t tapps-mcp:1.4.1 -t tapps-mcp:latest .
+docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:1.4.1 -t docs-mcp:latest .
 ```
 
-### Install from self-hosted catalog (pre-approval or enterprise)
+### 2. Import the Toolkit catalog
 
 ```bash
-# From repo root
-docker mcp catalog import docker-mcp/catalog.yaml
+docker mcp catalog import docker-mcp/toolkit-catalog.yaml
 ```
 
-### Cursor: use TappsMCP 1.3.1 via MCP_DOCKER
+### 3. Enable servers
 
-1. **Build and tag local images** (if not already done):
-   ```bash
-   docker build -t tapps-mcp:1.3.1 .
-   docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:1.3.1 .
-   ```
+```bash
+docker mcp server enable tapps-mcp
+docker mcp server enable docs-mcp
+```
 
-2. **Update Cursor's MCP config** (`~/.cursor/mcp.json`) so MCP_DOCKER uses the 1.3.1 catalog. Change the MCP_DOCKER server args from:
-   ```json
-   "args": ["mcp", "gateway", "run"]
-   ```
-   to:
-   ```json
-   "args": ["mcp", "gateway", "run", "--catalog", "<path>/docker-mcp/catalog.yaml", "--additional-catalog", "docker-mcp", "--servers", "tapps-mcp,docs-mcp,context7"]
-   ```
-   Use the **absolute path** to `docker-mcp/catalog.yaml` (e.g. `C:\\cursor\\TappMCP\\docker-mcp\\catalog.yaml` on Windows).
+### 4. Connect clients
 
-3. **Restart Cursor** (or reload MCP servers) so the gateway restarts with the new args.
+```bash
+docker mcp client connect cursor
+docker mcp client connect claude-code
+```
 
-4. **Verify** by calling `tapps_session_start` — the response should show `version: "1.3.1"`.
+This adds an `MCP_DOCKER` gateway entry to each client's MCP config automatically.
+The gateway exposes all enabled servers (tapps-mcp, docs-mcp, plus any others like
+context7, fetch, playwright).
 
-### Build locally
+### 5. Verify
+
+```bash
+docker mcp tools ls          # should list 54+ tools (30 tapps + 24 docs)
+docker mcp server ls          # should show tapps-mcp, docs-mcp enabled
+docker mcp client ls          # should show cursor, claude-code connected
+```
+
+Call `tapps_session_start` from your client -- response should show `version: "1.4.1"`.
+
+### Alternative: Gateway with custom catalog (legacy)
+
+If you prefer manual gateway configuration instead of the Toolkit:
+
+```bash
+# In ~/.cursor/mcp.json or .mcp.json:
+"MCP_DOCKER": {
+  "command": "docker",
+  "args": ["mcp", "gateway", "run", "--catalog", "<path>/docker-mcp/catalog.yaml",
+           "--additional-catalog", "docker-mcp", "--servers", "tapps-mcp,docs-mcp,context7"]
+}
+```
+
+### Build locally (without Toolkit)
 
 ```bash
 # TappsMCP
@@ -84,7 +103,7 @@ docker run --rm -v $(pwd):/workspace docs-mcp docsmcp --version
 
 | Profile | Servers | Use Case |
 |---------|---------|----------|
-| `tapps-standard-131` | tapps-mcp, docs-mcp, context7 @ 1.3.1 | Same as tapps-standard but pinned to 1.3.1 (use after `docker mcp catalog import docker-mcp/catalog.yaml`) |
+| `tapps-standard-141` | tapps-mcp, docs-mcp, context7 @ 1.4.1 | Same as tapps-standard but pinned to 1.4.1 |
 | `tapps-minimal` | tapps-mcp | Code quality only |
 | `tapps-standard` | tapps-mcp, docs-mcp, context7 | Quality + docs + library lookup |
 | `tapps-full` | tapps-mcp, docs-mcp, context7, github, filesystem | Full developer workflow |
@@ -170,10 +189,10 @@ gh pr create --title "Add tapps-mcp and docs-mcp servers"
 
 ## Images
 
-| Server | Image (pinned 1.3.1) | Dockerfile |
+| Server | Image (pinned 1.4.1) | Dockerfile |
 |--------|----------------------|------------|
-| tapps-mcp | `ghcr.io/wtthornton/tapps-mcp:1.3.1` | `Dockerfile` |
-| docs-mcp | `ghcr.io/wtthornton/docs-mcp:1.3.1` | `packages/docs-mcp/Dockerfile` |
+| tapps-mcp | `ghcr.io/wtthornton/tapps-mcp:1.4.1` | `Dockerfile` |
+| docs-mcp | `ghcr.io/wtthornton/docs-mcp:1.4.1` | `packages/docs-mcp/Dockerfile` |
 | combined | `ghcr.io/wtthornton/tapps-platform` | `Dockerfile.platform` |
 
-The catalog and server.yaml entries pin to **1.3.1**. Use `tapps-standard-131` profile after importing the catalog to run the gateway with 1.3.1 images.
+The catalog and server.yaml entries pin to **1.4.1**. Use `tapps-standard-141` profile or the Toolkit-native approach (`docker mcp catalog import` + `docker mcp server enable`).

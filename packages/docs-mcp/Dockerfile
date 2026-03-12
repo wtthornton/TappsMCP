@@ -33,7 +33,7 @@ LABEL org.opencontainers.image.description="MCP server for documentation generat
 LABEL org.opencontainers.image.source="https://github.com/tapps-mcp/tapps-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="TappsMCP"
-LABEL org.opencontainers.image.version="1.3.1"
+LABEL org.opencontainers.image.version="1.4.1"
 
 WORKDIR /app
 

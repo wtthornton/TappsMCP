@@ -505,6 +505,42 @@ class TestUpgradePipeline:
         assert "agents_md" in result["components"]
         assert "github_templates" in result["components"]
 
+    def test_read_only_filesystem_returns_early(self, tmp_path: Path) -> None:
+        """Upgrade on read-only filesystem returns clear error immediately."""
+        from unittest.mock import patch as mock_patch
+
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        with mock_patch(
+            "tempfile.NamedTemporaryFile",
+            side_effect=OSError("Read-only file system"),
+        ):
+            result = upgrade_pipeline(tmp_path)
+
+        assert result["success"] is False
+        assert result.get("read_only") is True
+        assert len(result["errors"]) == 1
+        assert "read-only" in result["errors"][0].lower()
+        # No components should have been attempted
+        assert result["components"] == {}
+
+    def test_read_only_filesystem_dry_run_still_works(self, tmp_path: Path) -> None:
+        """Dry run should work even on read-only filesystem."""
+        from unittest.mock import patch as mock_patch
+
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        with mock_patch(
+            "tempfile.NamedTemporaryFile",
+            side_effect=OSError("Read-only file system"),
+        ):
+            # dry_run=True should skip the write check entirely
+            result = upgrade_pipeline(tmp_path, dry_run=True)
+
+        # dry_run should succeed — it never tries to write
+        assert result["dry_run"] is True
+        assert "agents_md" in result["components"]
+
 
 # ---------------------------------------------------------------------------
 # Story 7: EXPECTED_TOOLS count

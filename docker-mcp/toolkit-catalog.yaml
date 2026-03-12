@@ -1,0 +1,105 @@
+# Docker MCP Toolkit catalog for TappsMCP + DocsMCP
+# Import: docker mcp catalog import --file docker-mcp/toolkit-catalog.yaml
+# This is the Toolkit-native format (not the gateway catalog format).
+name: tapps
+displayName: TappsMCP
+registry:
+  tapps-mcp:
+    title: TappsMCP
+    description: >-
+      Deterministic code quality MCP server. Scores Python files across 7
+      categories, runs security scans, enforces quality gates, looks up
+      library docs, and consults 17 domain experts (171 knowledge files).
+      30 tools, zero LLM calls in the tool chain.
+    image: tapps-mcp:1.4.1
+    command:
+      - tapps-mcp
+      - serve
+    type: server
+    metadata:
+      category: devops
+      license: MIT
+      owner: wtthornton
+      tags:
+        - code-quality
+        - python
+        - security
+        - mcp
+    source: https://github.com/wtthornton/TappsMCP
+    tools:
+      - name: tapps_server_info
+      - name: tapps_session_start
+      - name: tapps_project_profile
+      - name: tapps_score_file
+      - name: tapps_quality_gate
+      - name: tapps_quick_check
+      - name: tapps_validate_changed
+      - name: tapps_security_scan
+      - name: tapps_lookup_docs
+      - name: tapps_validate_config
+      - name: tapps_consult_expert
+      - name: tapps_list_experts
+      - name: tapps_research
+      - name: tapps_checklist
+      - name: tapps_init
+      - name: tapps_upgrade
+      - name: tapps_doctor
+      - name: tapps_set_engagement_level
+      - name: tapps_dashboard
+      - name: tapps_stats
+      - name: tapps_feedback
+      - name: tapps_memory
+      - name: tapps_session_notes
+      - name: tapps_impact_analysis
+      - name: tapps_report
+      - name: tapps_dead_code
+      - name: tapps_dependency_scan
+      - name: tapps_dependency_graph
+      - name: tapps_manage_experts
+      - name: tapps_get_canonical_persona
+  docs-mcp:
+    title: DocsMCP
+    description: >-
+      Documentation MCP server for generation, validation, and analysis.
+      Generates READMEs, changelogs, API docs, ADRs, guides, and diagrams.
+      Validates drift, completeness, links, and freshness. 24 tools.
+    image: docs-mcp:1.4.1
+    command:
+      - docsmcp
+      - serve
+    type: server
+    metadata:
+      category: devops
+      license: MIT
+      owner: wtthornton
+      tags:
+        - documentation
+        - python
+        - generation
+        - validation
+    source: https://github.com/wtthornton/TappsMCP
+    tools:
+      - name: docs_session_start
+      - name: docs_project_scan
+      - name: docs_config
+      - name: docs_module_map
+      - name: docs_api_surface
+      - name: docs_git_summary
+      - name: docs_generate_readme
+      - name: docs_generate_changelog
+      - name: docs_generate_release_notes
+      - name: docs_generate_api
+      - name: docs_generate_adr
+      - name: docs_generate_onboarding
+      - name: docs_generate_contributing
+      - name: docs_generate_prd
+      - name: docs_generate_diagram
+      - name: docs_generate_architecture
+      - name: docs_generate_epic
+      - name: docs_generate_story
+      - name: docs_generate_prompt
+      - name: docs_validate_epic
+      - name: docs_check_drift
+      - name: docs_check_completeness
+      - name: docs_check_links
+      - name: docs_check_freshness
