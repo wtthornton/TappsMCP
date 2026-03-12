@@ -16,6 +16,21 @@ registry:
       - tapps-mcp
       - serve
     type: server
+    volumes:
+      - '{{tapps-mcp.workspace_path|volume-target}}:/workspace'
+    env:
+      - name: TAPPS_MCP_PROJECT_ROOT
+        value: /workspace
+    config:
+      - name: tapps-mcp
+        description: Configure the project directory for TappsMCP to analyze.
+        type: object
+        properties:
+          workspace_path:
+            type: string
+            description: Path to the project directory to mount into the container
+        required:
+          - workspace_path
     metadata:
       category: devops
       license: MIT
@@ -68,6 +83,21 @@ registry:
       - docsmcp
       - serve
     type: server
+    volumes:
+      - '{{docs-mcp.workspace_path|volume-target}}:/workspace'
+    env:
+      - name: TAPPS_MCP_PROJECT_ROOT
+        value: /workspace
+    config:
+      - name: docs-mcp
+        description: Configure the project directory for DocsMCP to analyze.
+        type: object
+        properties:
+          workspace_path:
+            type: string
+            description: Path to the project directory to mount into the container
+        required:
+          - workspace_path
     metadata:
       category: devops
       license: MIT
