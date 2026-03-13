@@ -6,8 +6,7 @@
       "Edit(*)",
       "Write(*)",
       "mcp__tapps-mcp__*",
-      "mcp__docs-mcp__*",
-      "mcp__MCP_DOCKER__*"
+      "mcp__docs-mcp__*"
     ],
     "deny": [
       "Bash(rm -rf /)",
@@ -21,8 +20,7 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "tapps-mcp",
-    "docs-mcp",
-    "MCP_DOCKER"
+    "docs-mcp"
   ],
   "defaultMode": "acceptEdits"
 }
