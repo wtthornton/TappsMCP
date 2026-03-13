@@ -108,6 +108,28 @@ class TestIsValidTappsCommand:
     def test_similar_but_wrong_name(self) -> None:
         assert _is_valid_tapps_command("tapps-mcp-old") is False
 
+    def test_uv_with_tapps_serve_args(self) -> None:
+        args = ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"]
+        assert _is_valid_tapps_command("uv", args) is True
+
+    def test_uv_minimal_args(self) -> None:
+        assert _is_valid_tapps_command("uv", ["run", "tapps-mcp", "serve"]) is True
+
+    def test_npx_with_tapps_serve_args(self) -> None:
+        assert _is_valid_tapps_command("npx", ["tapps-mcp", "serve"]) is True
+
+    def test_uv_without_serve_arg(self) -> None:
+        assert _is_valid_tapps_command("uv", ["run", "tapps-mcp"]) is False
+
+    def test_uv_without_tapps_arg(self) -> None:
+        assert _is_valid_tapps_command("uv", ["run", "other-tool", "serve"]) is False
+
+    def test_uv_without_args(self) -> None:
+        assert _is_valid_tapps_command("uv") is False
+
+    def test_uv_with_none_args(self) -> None:
+        assert _is_valid_tapps_command("uv", None) is False
+
 
 # ---------------------------------------------------------------------------
 # Story 1: upgrade_mode in _merge_config

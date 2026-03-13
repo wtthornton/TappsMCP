@@ -18,8 +18,8 @@ provide the full tool reference from this skill.
 |------|----------------|
 | **tapps_session_start** | **FIRST call in every session** - returns server info only |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security |
-| **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files |
-| **tapps_checklist** | **Before declaring work complete** - reports which tools were called and missing |
+| **tapps_validate_changed** | **Before multi-file complete** - score + gate on changed files. Always pass explicit `file_paths`. Default is quick; `quick=false` is a last resort. |
+| **tapps_checklist** | **Before declaring complete** - reports which tools were called |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
 ## Scoring & quality
@@ -53,22 +53,12 @@ provide the full tool reference from this skill.
 | **tapps_dependency_scan** | Check for CVEs before releases |
 | **tapps_dependency_graph** | Understand module dependencies, circular imports |
 
-## Metrics & reporting
-| Tool | When to use it |
-|------|----------------|
-| **tapps_report** | Generate quality reports across multiple Python files |
-| **tapps_dashboard** | Generate metrics dashboard for TappsMCP performance trends |
-| **tapps_stats** | View tool usage statistics and call counts |
-| **tapps_feedback** | Provide feedback on tool effectiveness for adaptive learning |
-
 ## Pipeline & init
 | Tool | When to use it |
 |------|----------------|
-| **tapps_init** | Pipeline bootstrap (once per project) - creates AGENTS.md, rules, hooks |
+| **tapps_init** | Pipeline bootstrap (once per project) - creates AGENTS.md, rules, hooks. **CLI fallback:** `tapps-mcp upgrade --force --host auto` then `tapps-mcp doctor` |
 | **tapps_upgrade** | After TappsMCP version update - refreshes generated files |
 | **tapps_doctor** | Diagnose configuration issues |
 | **tapps_set_engagement_level** | Change enforcement intensity (high/medium/low) |
 
 Use `tapps_server_info` for the latest recommended workflow string.
-
-For first-time setup and troubleshooting (server visibility, permissions, CLI fallback), see docs/TAPPS_MCP_REQUIREMENTS.md

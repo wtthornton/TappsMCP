@@ -409,17 +409,21 @@ def _is_docker_entry(entry: dict[str, Any]) -> bool:
     return isinstance(entry, dict) and entry.get("command") == "docker"
 
 
-def _is_valid_tapps_command(command: str) -> bool:
-    """Return ``True`` if *command* looks like a valid tapps-mcp command.
+def _is_valid_tapps_command(command: str, args: list[str] | None = None) -> bool:
+    """Return ``True`` if *command* (+ *args*) launches tapps-mcp.
 
     Accepts:
     - ``"tapps-mcp"`` (bare name, on PATH)
     - ``"docker"`` (Docker MCP gateway transport)
+    - ``"uv"`` / ``"npx"`` when *args* contain ``"tapps-mcp"`` and ``"serve"``
     - Any absolute or relative path whose filename is ``tapps-mcp`` or
       ``tapps-mcp.exe`` (PyInstaller / standalone binary).
     """
     if command in ("tapps-mcp", "docker"):
         return True
+    # uv / npx are valid launchers when args route to tapps-mcp serve
+    if command in ("uv", "npx") and args is not None:
+        return "tapps-mcp" in args and "serve" in args
     # Check if the filename portion matches
     name = Path(command).name.lower()
     return name in ("tapps-mcp", "tapps-mcp.exe")
@@ -445,10 +449,11 @@ def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
         return f"tapps-mcp entry not found in {config_path} under '{servers_key}'"
 
     command = entry.get("command", "")
+    args = entry.get("args", [])
     return (
         f"Unexpected command in tapps-mcp config: '{command}'"
-        f" (expected 'tapps-mcp' or path to tapps-mcp.exe)"
-        if not _is_valid_tapps_command(command)
+        f" (expected 'tapps-mcp', 'uv run tapps-mcp serve', or path to tapps-mcp.exe)"
+        if not _is_valid_tapps_command(command, args if isinstance(args, list) else None)
         else None
     )
 

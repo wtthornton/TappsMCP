@@ -109,9 +109,11 @@ def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
         return f"tapps-mcp not in {config_path}"
 
     command = entry.get("command", "")
+    args = entry.get("args", [])
     return (
-        f"Unexpected command: '{command}' (expected 'tapps-mcp' or path to tapps-mcp.exe)"
-        if not _is_valid_tapps_command(command)
+        f"Unexpected command: '{command}' (expected 'tapps-mcp', 'uv run tapps-mcp serve',"
+        " or path to tapps-mcp.exe)"
+        if not _is_valid_tapps_command(command, args if isinstance(args, list) else None)
         else None
     )
 

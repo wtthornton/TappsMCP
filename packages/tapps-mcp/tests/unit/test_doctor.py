@@ -145,6 +145,37 @@ class TestCheckJsonConfig:
         assert result.ok is False
         assert "Unexpected command" in result.message
 
+    def test_uv_launcher_valid(self, tmp_path):
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "uv",
+                    "args": [
+                        "--directory", "C:\\cursor\\TappMCP",
+                        "run", "--no-sync", "tapps-mcp", "serve",
+                    ],
+                }
+            }
+        }
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(config), encoding="utf-8")
+        result = check_json_config(path, "mcpServers", "Test")
+        assert result.ok is True
+
+    def test_uv_without_serve_invalid(self, tmp_path):
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "uv",
+                    "args": ["run", "tapps-mcp"],
+                }
+            }
+        }
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(config), encoding="utf-8")
+        result = check_json_config(path, "mcpServers", "Test")
+        assert result.ok is False
+
     def test_empty_file(self, tmp_path):
         path = tmp_path / "empty.json"
         path.write_text("", encoding="utf-8")

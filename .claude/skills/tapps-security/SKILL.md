@@ -6,8 +6,8 @@ description: >-
   Run a comprehensive security audit including vulnerability scanning,
   dependency CVE checks, and expert security consultation.
 allowed-tools: >-
-  mcp__tapps-mcp__tapps_security_scan,
-  mcp__tapps-mcp__tapps_dependency_scan,
+  mcp__tapps-mcp__tapps_security_scan
+  mcp__tapps-mcp__tapps_dependency_scan
   mcp__tapps-mcp__tapps_consult_expert
 argument-hint: "[file-path]"
 ---

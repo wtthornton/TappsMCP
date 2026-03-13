@@ -1,3 +1,4 @@
+<!-- tapps-generated: v1.5.0 -->
 ---
 applyTo: "**/*.py"
 ---
