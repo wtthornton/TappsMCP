@@ -1,0 +1,9 @@
+# Profile for TappsMCP 1.6.0 + DocsMCP 1.6.0 + Context7
+# Note: --profile is supported in newer Docker MCP versions. For older versions,
+# use Cursor mcp.json args directly (see docker-mcp/README.md § "Cursor: use TappsMCP 1.6.0 via MCP_DOCKER").
+name: tapps-standard-150
+description: "TappsMCP 1.6.0 + DocsMCP 1.6.0 + Context7"
+servers:
+  - catalog://tappsmcp-local/tapps-mcp
+  - catalog://tappsmcp-local/docs-mcp
+  - catalog://context7

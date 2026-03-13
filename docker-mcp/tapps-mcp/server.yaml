@@ -1,5 +1,5 @@
 name: tapps-mcp
-image: ghcr.io/wtthornton/tapps-mcp:1.5.0
+image: ghcr.io/wtthornton/tapps-mcp:1.6.0
 type: server
 meta:
   category: devops
