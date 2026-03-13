@@ -199,6 +199,8 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Doctor timeout:** Use `tapps-mcp doctor --quick` or `tapps_doctor(quick=True)`.
 
+**Cursor hooks on Windows:** If hook scripts (e.g. `tapps-before-mcp.sh`) open in the editor instead of running, run `tapps-mcp upgrade --host cursor` from Windows so hooks are regenerated as PowerShell (`.ps1`). See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#cursor-hooks-on-windows).
+
 ### MCP Server Not Discoverable
 
 If tapps-mcp tools don't appear in your IDE's tool list:

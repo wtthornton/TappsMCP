@@ -528,7 +528,7 @@ class TestCheckHooks:
         assert "session-start" in result.message
 
     def test_cursor_hooks_with_before_mcp(self, tmp_path):
-        """Cursor hooks directory with before-mcp hook and valid hooks.json passes."""
+        """Cursor hooks directory with before-mcp hook and valid hooks.json passes (Unix: .sh)."""
         hooks_dir = tmp_path / ".cursor" / "hooks"
         hooks_dir.mkdir(parents=True)
         (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
@@ -543,12 +543,13 @@ class TestCheckHooks:
             }, indent=2),
             encoding="utf-8",
         )
-        result = check_hooks(tmp_path)
+        with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
+            result = check_hooks(tmp_path)
         assert result.ok is True
         assert "Cursor" in result.message
 
     def test_both_hooks_present(self, tmp_path):
-        """Both Claude and Cursor hooks with session-start hooks and valid config passes."""
+        """Both Claude and Cursor hooks with session-start hooks and valid config passes (Unix: .sh)."""
         claude_hooks = tmp_path / ".claude" / "hooks"
         claude_hooks.mkdir(parents=True)
         (claude_hooks / "tapps-session-start.sh").write_text("#!/bin/bash\n", encoding="utf-8")
@@ -565,7 +566,8 @@ class TestCheckHooks:
             }, indent=2),
             encoding="utf-8",
         )
-        result = check_hooks(tmp_path)
+        with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
+            result = check_hooks(tmp_path)
         assert result.ok is True
         assert "Claude Code" in result.message
         assert "Cursor" in result.message
@@ -630,7 +632,7 @@ class TestCheckHooks:
         assert "upgrade" in result.detail.lower()
 
     def test_cursor_hooks_json_unsupported_key_fails(self, tmp_path):
-        """Cursor hooks.json with unsupported hook key fails check."""
+        """Cursor hooks.json with unsupported hook key fails check (Unix so .sh is valid)."""
         hooks_dir = tmp_path / ".cursor" / "hooks"
         hooks_dir.mkdir(parents=True)
         (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
@@ -645,9 +647,32 @@ class TestCheckHooks:
             }, indent=2),
             encoding="utf-8",
         )
-        result = check_hooks(tmp_path)
+        with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
+            result = check_hooks(tmp_path)
         assert result.ok is False
         assert "postCompact" in result.message or "unsupported" in result.message.lower()
+
+    def test_cursor_hooks_windows_sh_fails(self, tmp_path):
+        """On Windows, Cursor hooks configured as .sh fail (open in editor instead of running)."""
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-after-edit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / ".cursor" / "hooks.json").write_text(
+            json.dumps({
+                "version": 1,
+                "hooks": {
+                    "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                    "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+                },
+            }, indent=2),
+            encoding="utf-8",
+        )
+        with patch("tapps_mcp.distribution.doctor.sys.platform", "win32"):
+            result = check_hooks(tmp_path)
+        assert result.ok is False
+        assert "Windows" in result.message or ".sh" in result.message
+        assert "upgrade" in result.detail.lower()
 
 
 # ---------------------------------------------------------------------------

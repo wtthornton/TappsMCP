@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -428,6 +429,26 @@ def check_hooks(project_root: Path) -> CheckResult:
                 f"but .cursor/hooks.json has invalid format: {'; '.join(format_errors)}",
                 "Run: tapps-mcp upgrade --host cursor or upgrade --force to write only supported hooks",
             )
+
+        # On Windows, .sh hook commands open in the editor instead of running (no bash).
+        # Detect and suggest upgrade so hooks use PowerShell (.ps1).
+        if sys.platform == "win32" and "Cursor" in found:
+            hooks_obj = data.get("hooks", {})
+            for entries in hooks_obj.values():
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    cmd = entry.get("command", "")
+                    if "tapps-" in cmd and cmd.rstrip().endswith(".sh"):
+                        return CheckResult(
+                            "Hooks",
+                            False,
+                            "On Windows, Cursor hooks are configured as .sh (Bash); "
+                            "they open in the editor instead of running. Use PowerShell (.ps1) hooks.",
+                            "Run: tapps-mcp upgrade --host cursor (or uv run tapps-mcp upgrade --host cursor)",
+                        )
 
     return CheckResult(
         "Hooks",

@@ -77,3 +77,29 @@ Low confidence results indicate the question may not match the expert's knowledg
 1. Use `--domain` to explicitly route to the correct expert domain
 2. Rephrase the question with domain-specific terminology
 3. Supplement with `tapps-mcp lookup-docs` for library-specific documentation
+
+## Cursor hooks on Windows
+
+**Problem:** On Windows, when Cursor runs TappsMCP hooks, the `.sh` script files open in the editor instead of executing. The hook does not run; you see the script source (e.g. `tapps-before-mcp.sh`) in a new tab.
+
+**Cause:** TappsMCP generates Bash (`.sh`) hooks when init/upgrade runs on a non-Windows environment (e.g. WSL, CI, or older behavior). On Windows, the default association for `.sh` is often “open in editor,” and there is no system Bash unless you use Git Bash or WSL. So Cursor’s hook “command” is treated as a file to open, not a script to run.
+
+**Fix:** Run upgrade from **native Windows** (PowerShell or cmd) so TappsMCP detects `sys.platform == "win32"` and generates PowerShell (`.ps1`) hooks and updates `.cursor/hooks.json` to invoke them explicitly (e.g. `powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/tapps-before-mcp.ps1`).
+
+From the project root:
+
+```powershell
+tapps-mcp upgrade --host cursor
+```
+
+Or with uv:
+
+```powershell
+uv run tapps-mcp upgrade --host cursor
+```
+
+After that, `.cursor/hooks/` will contain `tapps-before-mcp.ps1` and `tapps-after-edit.ps1`, and `hooks.json` will reference them with the `powershell -File ...` form. Hooks will then run instead of opening in the editor.
+
+**Doctor:** If you run `tapps-mcp doctor` on Windows and your hooks are still configured as `.sh`, the Hooks check will fail with a message telling you to run `tapps-mcp upgrade --host cursor`.
+
+**Workaround (if you cannot run upgrade):** Disable hooks by removing or clearing the `hooks` entries in `.cursor/hooks.json`, or add Bash to PATH (e.g. Git Bash) and change the command to `bash .cursor/hooks/tapps-before-mcp.sh` (and similarly for the other hook).
