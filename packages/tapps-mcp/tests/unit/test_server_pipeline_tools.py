@@ -473,7 +473,10 @@ class TestTappsInit:
 
         await tapps_init(dry_run=True, platform="claude")
         call_kwargs = mock_bootstrap.call_args[1]
-        assert call_kwargs["platform"] == "claude"
+        # bootstrap_pipeline is now called with config=BootstrapConfig(...)
+        cfg = call_kwargs.get("config")
+        assert cfg is not None
+        assert cfg.platform == "claude"
 
 
 # ---------------------------------------------------------------------------
@@ -1436,6 +1439,15 @@ class TestRegister:
         # Make the tool() call return a callable that accepts a function
         mock_mcp.tool.return_value = lambda fn: fn
 
-        register(mock_mcp)
+        # register() now requires allowed_tools; pass all pipeline tool names
+        all_tools = frozenset({
+            "tapps_validate_changed",
+            "tapps_session_start",
+            "tapps_init",
+            "tapps_set_engagement_level",
+            "tapps_upgrade",
+            "tapps_doctor",
+        })
+        register(mock_mcp, all_tools)
         # 6 tools should be registered
         assert mock_mcp.tool.call_count == 6

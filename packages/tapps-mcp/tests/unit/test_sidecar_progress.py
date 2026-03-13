@@ -213,7 +213,7 @@ class TestValidateSingleFileCtxInfo:
             return_value=mock_gate,
         ):
             result = await _validate_single_file(
-                Path("test.py"), mock_scorer, "standard", True, False, sem,
+                Path("test.py"), "standard", True, False, sem,
                 tracker, ctx,
             )
 

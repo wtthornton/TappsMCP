@@ -29,7 +29,11 @@ class TestBootstrapClaudeSettings:
         """Skips when both permission entries already exist."""
         settings_dir = tmp_path / ".claude"
         settings_dir.mkdir()
-        config = {"permissions": {"allow": ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]}}
+        # Must include all fields that generate_permission_settings adds
+        # (schema, enableAllProjectMcpServers, deny rules) for it to be a no-op.
+        from tapps_mcp.pipeline.init import generate_permission_settings
+
+        config = generate_permission_settings(tmp_path)
         (settings_dir / "settings.json").write_text(
             json.dumps(config, indent=2) + "\n", encoding="utf-8"
         )
@@ -122,7 +126,7 @@ class TestBootstrapClaudeSettings:
         data = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
         assert data["theme"] == "dark"
         assert data["editor"]["fontSize"] == 14
-        assert data["permissions"]["deny"] == ["rm -rf"]
+        assert "rm -rf" in data["permissions"]["deny"]
         assert "Bash(*)" in data["permissions"]["allow"]
         assert "mcp__tapps-mcp" in data["permissions"]["allow"]
         assert "mcp__tapps-mcp__*" in data["permissions"]["allow"]

@@ -203,7 +203,7 @@ Three agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 
 ### Skills (auto-generated)
 
-Seven SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
+Twelve SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
 - **tapps-score** - Score a Python file across 7 quality categories
 - **tapps-gate** - Run a quality gate check and report pass/fail
 - **tapps-validate** - Validate all changed files before declaring work complete
@@ -247,6 +247,29 @@ On unsupported clients, tools fall back to default behavior silently.
 ### Optional: More specialized agents
 
 For more specialized agents (e.g. Frontend Developer, Reality Checker), see [agency-agents](https://github.com/msitarzewski/agency-agents) and run their install script for your platform. TappsMCP and agency-agents can coexist; there is no path conflict.
+
+---
+
+## Content-return pattern (Docker / read-only environments)
+
+When TappsMCP or DocsMCP runs inside a Docker container with a read-only workspace
+mount, tools **cannot write files directly**.  Instead they return a `file_manifest`
+in the response with the file contents and instructions for you to apply.
+
+**How to detect:** Check for `content_return: true` in the tool response `data`.
+
+**How to apply:**
+1. Read `file_manifest.agent_instructions` for persona, tool preference, and warnings
+2. For each file in `file_manifest.files[]` (sorted by `priority`, lowest first):
+   - `mode: "create"` or `"overwrite"` → Use the **Write** tool with the `content` verbatim
+   - `mode: "merge"` → The content is the pre-computed merge result; write it with the **Write** tool
+3. Create parent directories as needed
+4. Follow `verification_steps` after all files are written
+5. **Never modify the content** — write it exactly as provided
+
+**Tools that support content-return:** `tapps_init`, `tapps_upgrade`, `tapps_set_engagement_level`, `tapps_manage_experts`, `tapps_memory` (export), `docs_config`, and all `docs_generate_*` generators.
+
+**Force content-return:** Pass `output_mode: "content_return"` to `tapps_init` or `tapps_upgrade`.
 
 ---
 

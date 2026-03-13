@@ -278,10 +278,13 @@ argument-hint: "[project-root]"
 Bootstrap TappsMCP in a new or existing project:
 
 1. Call `mcp__tapps-mcp__tapps_init` to run the full bootstrap pipeline
-2. Review the created files (AGENTS.md, TECH_STACK.md, platform rules, hooks)
-3. If any issues are reported, call `mcp__tapps-mcp__tapps_doctor` to diagnose
-4. Verify that `.claude/settings.json` has MCP tool auto-approval rules
-5. Confirm the project is ready for the TappsMCP quality workflow
+2. Check the response for `content_return: true` — if present, the server could not
+   write files directly (Docker / read-only mount).  Apply the files from
+   `file_manifest.files[]` using the Write tool.  See `/tapps-apply-files` for details.
+3. If files were written directly, review the created files (AGENTS.md, TECH_STACK.md, platform rules, hooks)
+4. If any issues are reported, call `mcp__tapps-mcp__tapps_doctor` to diagnose
+5. Verify that `.claude/settings.json` has MCP tool auto-approval rules
+6. Confirm the project is ready for the TappsMCP quality workflow
 
 **If `tapps_init` is not available** (server not in available MCP servers), use the CLI:
 1. Run from the project root: `tapps-mcp upgrade --force --host auto`
@@ -308,6 +311,57 @@ Set the TappsMCP LLM engagement level:
 3. **medium** - Balanced enforcement; core tools required, advanced tools recommended
 4. **low** - Optional guidance; quality tools are suggestions, not requirements
 5. Confirm the level was saved to `.tapps-mcp.yaml`
+6. If `content_return: true`, write `.tapps-mcp.yaml` from `file_manifest` using the Write tool
+""",
+    "tapps-apply-files": """\
+---
+name: tapps-apply-files
+user-invocable: false
+model: claude-haiku-4-5-20251001
+description: >-
+  Apply file operations from a TappsMCP content-return response.
+  Used when the MCP server runs in Docker and cannot write files directly.
+allowed-tools: ""
+---
+
+When a TappsMCP or DocsMCP tool returns `content_return: true` with a `file_manifest`,
+the server could not write files (Docker / read-only filesystem).  Apply the files:
+
+1. Read `file_manifest.agent_instructions.persona` — adopt that role
+2. If `backup_recommended` is true, warn the user that existing files may be overwritten
+3. Sort files by `priority` (lowest first) — config files before content files
+4. For each file in `file_manifest.files[]`:
+   - **mode "create"**: Use the Write tool.  Create parent directories as needed.
+   - **mode "overwrite"**: Use the Write tool to replace the file entirely.
+   - **mode "merge"**: Read the existing file first, then apply the `content` as a
+     replacement for the managed section.  The content is the pre-computed merge result;
+     write it with the Write tool (the merge was already done server-side).
+5. Write the `content` field **verbatim** — do not modify, reformat, or add comments
+6. Follow `agent_instructions.verification_steps` after all files are written
+7. Communicate any `agent_instructions.warnings` to the user
+
+**Response structure:**
+```
+{
+  "content_return": true,
+  "file_manifest": {
+    "mode": "content_return",
+    "reason": "...",
+    "summary": "...",
+    "file_count": N,
+    "files": [
+      {"path": "relative/path", "content": "...", "mode": "create|overwrite|merge",
+       "encoding": "utf-8", "description": "...", "priority": 5}
+    ],
+    "agent_instructions": {
+      "persona": "...",
+      "tool_preference": "...",
+      "verification_steps": ["..."],
+      "warnings": ["..."]
+    }
+  }
+}
+```
 """,
 }
 
@@ -499,10 +553,13 @@ mcp_tools:
 Bootstrap TappsMCP in a new or existing project:
 
 1. Call `tapps_init` to run the full bootstrap pipeline
-2. Review the created files (AGENTS.md, TECH_STACK.md, platform rules, hooks)
-3. If any issues are reported, call `tapps_doctor` to diagnose
-4. Verify that MCP config has tool auto-approval rules
-5. Confirm the project is ready for the TappsMCP quality workflow
+2. Check the response for `content_return: true` — if present, the server could not
+   write files directly (Docker / read-only mount).  Apply the files from
+   `file_manifest.files[]` using the Write tool.  See `/tapps-apply-files` for details.
+3. If files were written directly, review the created files (AGENTS.md, TECH_STACK.md, platform rules, hooks)
+4. If any issues are reported, call `tapps_doctor` to diagnose
+5. Verify that MCP config has tool auto-approval rules
+6. Confirm the project is ready for the TappsMCP quality workflow
 
 **If `tapps_init` is not available** (server not in available MCP servers), use the CLI:
 1. Run from the project root: `tapps-mcp upgrade --force --host auto`
@@ -526,6 +583,32 @@ Set the TappsMCP LLM engagement level:
 3. **medium** - Balanced enforcement; core tools required, advanced tools recommended
 4. **low** - Optional guidance; quality tools are suggestions, not requirements
 5. Confirm the level was saved to `.tapps-mcp.yaml`
+6. If `content_return: true`, write `.tapps-mcp.yaml` from `file_manifest` using the Write tool
+""",
+    "tapps-apply-files": """\
+---
+name: tapps-apply-files
+description: >-
+  Apply file operations from a TappsMCP content-return response.
+  Used when the MCP server runs in Docker and cannot write files directly.
+mcp_tools: []
+---
+
+When a TappsMCP or DocsMCP tool returns `content_return: true` with a `file_manifest`,
+the server could not write files (Docker / read-only filesystem).  Apply the files:
+
+1. Read `file_manifest.agent_instructions.persona` — adopt that role
+2. If `backup_recommended` is true, warn the user that existing files may be overwritten
+3. Sort files by `priority` (lowest first) — config files before content files
+4. For each file in `file_manifest.files[]`:
+   - **mode "create"**: Use the Write tool.  Create parent directories as needed.
+   - **mode "overwrite"**: Use the Write tool to replace the file entirely.
+   - **mode "merge"**: Read the existing file first, then apply the `content` as a
+     replacement for the managed section.  The content is the pre-computed merge result;
+     write it with the Write tool (the merge was already done server-side).
+5. Write the `content` field **verbatim** — do not modify, reformat, or add comments
+6. Follow `agent_instructions.verification_steps` after all files are written
+7. Communicate any `agent_instructions.warnings` to the user
 """,
 }
 
@@ -539,7 +622,7 @@ def generate_skills(
 ) -> dict[str, Any]:
     """Generate SKILL.md files for the given platform.
 
-    Creates 11 skill directories with ``SKILL.md`` in
+    Creates 12 skill directories with ``SKILL.md`` in
     ``.claude/skills/`` or ``.cursor/skills/`` depending on the platform.
     Existing files are skipped to preserve user customizations unless
     *overwrite* is ``True`` (used by the upgrade path to refresh

@@ -171,7 +171,7 @@ class TestMemoryPersistence:
     def test_schema_version(
         self, persistence: MemoryPersistence
     ) -> None:
-        assert persistence.get_schema_version() == 1
+        assert persistence.get_schema_version() == 4
 
     def test_wal_mode_enabled(self, tmp_path: Path) -> None:
         p = MemoryPersistence(tmp_path)

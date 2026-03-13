@@ -199,7 +199,14 @@ def _handle_add(
         entry["knowledge_dir"] = knowledge_dir
 
     data["experts"].append(entry)
-    _atomic_write_yaml(yaml_path, data)
+
+    # Epic 87: content-return mode for Docker/read-only
+    from tapps_core.common.file_operations import WriteMode, detect_write_mode
+
+    write_mode = detect_write_mode(project_root)
+
+    if write_mode == WriteMode.DIRECT_WRITE:
+        _atomic_write_yaml(yaml_path, data)
 
     logger.info(
         "business_expert.added",
@@ -209,7 +216,7 @@ def _handle_add(
 
     # Optionally scaffold knowledge directory
     scaffolded_path: str | None = None
-    if knowledge_dir or primary_domain:
+    if (knowledge_dir or primary_domain) and write_mode == WriteMode.DIRECT_WRITE:
         from tapps_core.experts.business_knowledge import scaffold_knowledge_directory
         from tapps_core.experts.models import ExpertConfig
 
@@ -226,12 +233,45 @@ def _handle_add(
         scaffolded = scaffold_knowledge_directory(project_root, config)
         scaffolded_path = str(scaffolded)
 
-    return {
+    result: dict[str, Any] = {
         "action": "add",
         "expert_id": expert_id,
         "yaml_path": str(yaml_path),
         "scaffolded_path": scaffolded_path,
     }
+
+    if write_mode == WriteMode.CONTENT_RETURN:
+        import yaml as _yaml
+
+        from tapps_core.common.file_operations import (
+            AgentInstructions,
+            FileManifest,
+            FileOperation,
+        )
+
+        yaml_content = _yaml.dump(data, default_flow_style=False, sort_keys=False)
+        manifest = FileManifest(
+            summary=f"Add business expert: {expert_id}",
+            files=[
+                FileOperation(
+                    path=".tapps-mcp/experts.yaml",
+                    content=yaml_content,
+                    mode="overwrite",
+                    description="Business experts config with new expert entry.",
+                    priority=1,
+                ),
+            ],
+            agent_instructions=AgentInstructions(
+                persona="You are a configuration assistant. Write the config file exactly.",
+                tool_preference="Use the Write tool to overwrite .tapps-mcp/experts.yaml.",
+                verification_steps=["Verify .tapps-mcp/experts.yaml contains the new expert."],
+                warnings=["Config changes affect expert consultation behavior."],
+            ),
+        )
+        result["content_return"] = True
+        result["file_manifest"] = manifest.to_full_response_data()
+
+    return result
 
 
 def _handle_remove(project_root: Path, expert_id: str) -> dict[str, Any]:
@@ -295,12 +335,61 @@ def _handle_scaffold(project_root: Path, expert_id: str) -> dict[str, Any]:
             "message": f"expert_id '{expert_id}' not found in experts.yaml.",
         }
 
-    knowledge_path = scaffold_knowledge_directory(project_root, target)
+    # Epic 87: content-return mode for Docker/read-only
+    from tapps_core.common.file_operations import WriteMode, detect_write_mode
 
+    write_mode = detect_write_mode(project_root)
+
+    if write_mode == WriteMode.DIRECT_WRITE:
+        knowledge_path = scaffold_knowledge_directory(project_root, target)
+        return {
+            "action": "scaffold",
+            "expert_id": expert_id,
+            "knowledge_path": str(knowledge_path),
+        }
+
+    # Content-return: generate knowledge file templates as FileOps
+    from tapps_core.common.file_operations import (
+        AgentInstructions,
+        FileManifest,
+        FileOperation,
+    )
+
+    kdir = target.knowledge_dir or target.primary_domain
+    base = f".tapps-mcp/experts/knowledge/{kdir}"
+    manifest = FileManifest(
+        summary=f"Scaffold knowledge directory for expert: {expert_id}",
+        files=[
+            FileOperation(
+                path=f"{base}/README.md",
+                content=f"# {target.expert_name}\n\n{target.description or ''}\n",
+                mode="create",
+                description=f"Knowledge directory README for {expert_id}.",
+                priority=5,
+            ),
+            FileOperation(
+                path=f"{base}/overview.md",
+                content=(
+                    f"# {target.primary_domain} Overview\n\n"
+                    "Add domain-specific knowledge here.\n"
+                ),
+                mode="create",
+                description=f"Domain overview for {expert_id}.",
+                priority=5,
+            ),
+        ],
+        agent_instructions=AgentInstructions(
+            persona="You are a knowledge scaffolding assistant. Create the files as provided.",
+            tool_preference="Use the Write tool. Create parent directories as needed.",
+            verification_steps=[f"Verify {base}/ directory structure was created."],
+            warnings=[],
+        ),
+    )
     return {
         "action": "scaffold",
         "expert_id": expert_id,
-        "knowledge_path": str(knowledge_path),
+        "content_return": True,
+        "file_manifest": manifest.to_full_response_data(),
     }
 
 

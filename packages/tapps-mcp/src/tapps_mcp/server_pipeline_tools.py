@@ -1484,6 +1484,7 @@ async def tapps_init(
     llm_engagement_level: str | None = None,
     scaffold_experts: bool = False,
     mcp_config: bool = False,
+    output_mode: str = "auto",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstrap TAPPS pipeline in the current project.
@@ -1556,6 +1557,12 @@ async def tapps_init(
             (creates README.md and overview.md starter files).
         mcp_config: When ``True``, write project-scoped MCP server config after
             bootstrap completes. Always uses ``scope="project"`` (never user).
+        output_mode: Controls file writing behavior (Epic 87).
+            ``"auto"`` (default): detect automatically — writes files directly
+            when the filesystem is writable, returns file contents as structured
+            output when read-only (e.g. Docker container).
+            ``"content_return"``: always return file contents without writing.
+            ``"direct_write"``: always write files directly (error if read-only).
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
@@ -1632,13 +1639,30 @@ async def tapps_init(
         scaffold_experts=scaffold_experts,
     )
 
+    # Epic 87: Set TAPPS_WRITE_MODE for content-return override
+    import os as _os
+
+    _prev_write_mode = _os.environ.get("TAPPS_WRITE_MODE", "")
+    if output_mode == "content_return":
+        _os.environ["TAPPS_WRITE_MODE"] = "content"
+    elif output_mode == "direct_write":
+        _os.environ["TAPPS_WRITE_MODE"] = "direct"
+    # "auto" leaves the env var unchanged — detect_write_mode() probes the fs
+
     # Run in thread to avoid blocking the event loop - bootstrap_pipeline
     # is sync and may run subprocesses, file I/O, and cache warming.
-    result = await asyncio.to_thread(
-        bootstrap_pipeline,
-        settings.project_root,
-        config=cfg,
-    )
+    try:
+        result = await asyncio.to_thread(
+            bootstrap_pipeline,
+            settings.project_root,
+            config=cfg,
+        )
+    finally:
+        # Restore env var
+        if _prev_write_mode:
+            _os.environ["TAPPS_WRITE_MODE"] = _prev_write_mode
+        else:
+            _os.environ.pop("TAPPS_WRITE_MODE", None)
 
     # Optional: write project-scoped MCP config (Epic 47.2)
     if mcp_config and not dry_run:
@@ -1701,6 +1725,7 @@ async def tapps_upgrade(
     platform: str = "",
     force: bool = False,
     dry_run: bool = False,
+    output_mode: str = "auto",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Upgrade all TappsMCP-generated files after a version update.
@@ -1724,6 +1749,12 @@ async def tapps_upgrade(
         platform: Target platform - "claude", "cursor", "both", or "" for auto-detection.
         force: If True, overwrite all generated files without prompting.
         dry_run: If True, show what would be updated without making changes.
+        output_mode: Controls file writing behavior (Epic 87).
+            ``"auto"`` (default): detect automatically — writes files directly
+            when the filesystem is writable, returns file contents as structured
+            output when read-only (e.g. Docker container).
+            ``"content_return"``: always return file contents without writing.
+            ``"direct_write"``: always write files directly (error if read-only).
     """
     from tapps_mcp.pipeline.upgrade import upgrade_pipeline
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
@@ -1736,12 +1767,29 @@ async def tapps_upgrade(
     if not dry_run:
         await emit_ctx_info(ctx, "Creating backup...")
 
-    result = upgrade_pipeline(
-        settings.project_root,
-        platform=platform,
-        force=force,
-        dry_run=dry_run,
-    )
+    # Epic 87: Set TAPPS_WRITE_MODE for content-return override
+    import os as _os
+
+    _prev_write_mode = _os.environ.get("TAPPS_WRITE_MODE", "")
+    if output_mode == "content_return":
+        _os.environ["TAPPS_WRITE_MODE"] = "content"
+    elif output_mode == "direct_write":
+        _os.environ["TAPPS_WRITE_MODE"] = "direct"
+    # "auto" leaves the env var unchanged — detect_write_mode() probes the fs
+
+    try:
+        result = upgrade_pipeline(
+            settings.project_root,
+            platform=platform,
+            force=force,
+            dry_run=dry_run,
+        )
+    finally:
+        # Restore env var
+        if _prev_write_mode:
+            _os.environ["TAPPS_WRITE_MODE"] = _prev_write_mode
+        else:
+            _os.environ.pop("TAPPS_WRITE_MODE", None)
 
     # Emit ctx.info for upgraded components (skip in dry_run mode)
     if not dry_run:
@@ -1828,18 +1876,26 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
         data = {}
 
     data["llm_engagement_level"] = level
-    try:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        with config_path.open("w", encoding="utf-8") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-    except OSError as e:
-        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-        _record_execution("tapps_set_engagement_level", start, status="failed")
-        return error_response(
-            "tapps_set_engagement_level",
-            elapsed_ms,
-            f"Could not write .tapps-mcp.yaml: {e}",
-        )
+
+    # Epic 87: content-return mode for Docker/read-only
+    from tapps_core.common.file_operations import detect_write_mode, WriteMode
+
+    write_mode = detect_write_mode(root)
+    yaml_content = yaml.dump(data, default_flow_style=False, sort_keys=False)
+
+    if write_mode == WriteMode.DIRECT_WRITE:
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with config_path.open("w", encoding="utf-8") as f:
+                f.write(yaml_content)
+        except OSError as e:
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+            _record_execution("tapps_set_engagement_level", start, status="failed")
+            return error_response(
+                "tapps_set_engagement_level",
+                elapsed_ms,
+                f"Could not write .tapps-mcp.yaml: {e}",
+            )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_set_engagement_level", start)
@@ -1849,10 +1905,48 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
         "to regenerate AGENTS.md and platform rules with the new level."
     )
     msg = f"Engagement level set to {level!r}. {next_step}"
+    result_data: dict[str, Any] = {"level": level, "message": msg}
+
+    if write_mode == WriteMode.CONTENT_RETURN:
+        from tapps_core.common.file_operations import (
+            AgentInstructions,
+            FileManifest,
+            FileOperation,
+        )
+
+        manifest = FileManifest(
+            summary=f"Set engagement level to {level}",
+            source_version=settings.version if hasattr(settings, "version") else "",
+            files=[
+                FileOperation(
+                    path=".tapps-mcp.yaml",
+                    content=yaml_content,
+                    mode="overwrite",
+                    description="TappsMCP config with updated engagement level.",
+                    priority=1,
+                ),
+            ],
+            agent_instructions=AgentInstructions(
+                persona=(
+                    "You are a configuration assistant. Write the config "
+                    "file exactly as provided."
+                ),
+                tool_preference="Use the Write tool to overwrite .tapps-mcp.yaml.",
+                verification_steps=[
+                    "Verify .tapps-mcp.yaml contains the expected engagement level.",
+                ],
+                warnings=[
+                    "Config changes affect all subsequent tool behavior.",
+                ],
+            ),
+        )
+        result_data["content_return"] = True
+        result_data["file_manifest"] = manifest.to_full_response_data()
+
     resp = success_response(
         "tapps_set_engagement_level",
         elapsed_ms,
-        {"level": level, "message": msg},
+        result_data,
     )
     return _with_nudges("tapps_set_engagement_level", resp)
 

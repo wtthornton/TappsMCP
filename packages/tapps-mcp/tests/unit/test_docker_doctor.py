@@ -293,8 +293,8 @@ class TestCollectDockerChecks:
                     profile="tapps-standard",
                 )
             )
-        # All 5 checks should run
-        assert len(results) == 5
+        # All 6 checks should run
+        assert len(results) == 6
         names = [r.name for r in results]
         assert "Docker daemon" in names
         assert "Docker MCP Toolkit" in names

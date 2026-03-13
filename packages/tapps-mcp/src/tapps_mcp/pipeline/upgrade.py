@@ -12,6 +12,13 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
+from tapps_core.common.file_operations import (
+    AgentInstructions,
+    FileManifest,
+    FileOperation,
+    WriteMode,
+    detect_write_mode,
+)
 from tapps_core.common.logging import get_logger
 
 log = get_logger(__name__)
@@ -176,6 +183,238 @@ def _upgrade_platform(
     return result
 
 
+def _upgrade_agents_md_content_return(
+    project_root: Path,
+) -> tuple[FileOperation, dict[str, Any]]:
+    """Generate a FileOperation for AGENTS.md upgrade in content-return mode.
+
+    Returns ``(file_op, result_dict)`` with the appropriate mode
+    (``"create"`` or ``"merge"``) depending on whether AGENTS.md exists.
+    """
+    from tapps_mcp.pipeline.agents_md import AgentsValidation, merge_agents_md
+    from tapps_mcp.prompts.prompt_loader import load_agents_template
+
+    agents_path = project_root / "AGENTS.md"
+    template_content = load_agents_template()
+
+    if not agents_path.exists():
+        op = FileOperation(
+            path="AGENTS.md",
+            content=template_content,
+            mode="create",
+            description="AGENTS.md — AI assistant workflow and tool reference.",
+            priority=1,
+        )
+        return op, {"action": "created"}
+
+    existing = agents_path.read_text(encoding="utf-8")
+    validation = AgentsValidation(existing)
+
+    if validation.is_up_to_date:
+        # Still return the file op so the agent has full context
+        op = FileOperation(
+            path="AGENTS.md",
+            content=existing,
+            mode="overwrite",
+            description="AGENTS.md is already up-to-date (no changes needed).",
+            priority=1,
+        )
+        return op, {"action": "up-to-date"}
+
+    # Smart merge — produce merged content for the agent to write
+    merged, changes = merge_agents_md(existing, template_content)
+    op = FileOperation(
+        path="AGENTS.md",
+        content=merged,
+        mode="merge",
+        description=(
+            "AGENTS.md — merged with latest template. "
+            "User customizations are preserved; only managed sections updated."
+        ),
+        priority=1,
+    )
+    issues: list[str] = []
+    if validation.sections_missing:
+        issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
+    if validation.tools_missing:
+        issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
+    detail = "; ".join(issues) or "version mismatch"
+    return op, {"action": "merged", "detail": detail, "changes": changes}
+
+
+def _upgrade_platform_content_return(
+    host: str,
+    project_root: Path,
+    *,
+    force: bool = False,
+    engagement_level: str = "medium",
+) -> tuple[list[FileOperation], dict[str, Any]]:
+    """Generate FileOperations for platform upgrade in content-return mode.
+
+    Returns ``(file_ops, result_dict)`` with platform-specific file operations.
+    """
+    from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_cursor
+    from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+    ops: list[FileOperation] = []
+    result: dict[str, Any] = {"host": host, "components": {}}
+
+    if host == "claude-code":
+        content = load_platform_rules("claude", engagement_level=engagement_level)
+        claude_md_path = project_root / "CLAUDE.md"
+        mode = "overwrite" if (claude_md_path.exists() or force) else "create"
+        ops.append(FileOperation(
+            path="CLAUDE.md",
+            content=content,
+            mode=mode,
+            description="Claude Code platform rules with TappsMCP pipeline.",
+            priority=2,
+        ))
+        result["components"]["claude_md"] = "content_return"
+
+    elif host == "cursor":
+        content = load_platform_rules("cursor", engagement_level=engagement_level)
+        cursor_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+        mode = "overwrite" if (cursor_path.exists() or force) else "create"
+        ops.append(FileOperation(
+            path=".cursor/rules/tapps-pipeline.md",
+            content=content,
+            mode=mode,
+            description="Cursor platform rules with TappsMCP pipeline.",
+            priority=2,
+        ))
+        result["components"]["cursor_rules"] = "content_return"
+
+    elif host == "vscode":
+        result["components"]["note"] = "no platform rules to upgrade"
+
+    # Hooks, skills, agents, CI are skipped in content-return mode
+    result["components"]["generators_skipped"] = {
+        "reason": "content_return",
+        "skipped": ["hooks", "skills", "agents", "mcp_config", "settings"],
+        "hint": "Run 'tapps_upgrade' locally to generate these components.",
+    }
+
+    return ops, result
+
+
+def _build_upgrade_manifest(
+    file_ops: list[FileOperation],
+    version: str,
+) -> FileManifest:
+    """Build a :class:`FileManifest` for the upgrade pipeline."""
+    return FileManifest(
+        summary=(
+            f"TappsMCP upgrade v{version}: "
+            f"{len(file_ops)} file(s) to write"
+        ),
+        source_version=version,
+        files=file_ops,
+        agent_instructions=AgentInstructions(
+            persona=(
+                "You are a project upgrade assistant updating TappsMCP "
+                "scaffolding to the latest version.  Write each file "
+                "exactly as provided — do not modify content, add "
+                "comments, or reformat."
+            ),
+            tool_preference=(
+                "Use Write for files with mode 'create' or 'overwrite'.  "
+                "For files with mode 'merge', read the existing file first, "
+                "then replace the entire content with the merged version "
+                "provided (merge has already been computed)."
+            ),
+            verification_steps=[
+                "After writing all files, run 'git diff' to review changes.",
+                "Verify AGENTS.md exists and has the expected sections.",
+                "Check that no user customizations were lost in merged files.",
+                "Run 'git status' to show the user what changed.",
+            ],
+            warnings=[
+                "Backup your project before applying (git stash or git commit).",
+                "AGENTS.md merge preserves user customizations — review the diff.",
+                "Hooks, skills, and agents are not included — run "
+                "'tapps_upgrade' locally to generate those.",
+            ],
+        ),
+    )
+
+
+def _upgrade_content_return(
+    project_root: Path,
+    *,
+    platform: str = "",
+    force: bool = False,
+) -> dict[str, Any]:
+    """Run upgrade pipeline in content-return mode (Epic 87.3).
+
+    Instead of writing files, accumulates :class:`FileOperation` objects
+    and returns a :class:`FileManifest` the AI client can apply.
+    """
+    from tapps_core.config.settings import load_settings
+
+    from tapps_mcp import __version__
+
+    file_ops: list[FileOperation] = []
+    result: dict[str, Any] = {
+        "version": __version__,
+        "dry_run": False,
+        "content_return": True,
+        "components": {},
+        "errors": [],
+    }
+
+    # AGENTS.md
+    try:
+        agents_op, agents_result = _upgrade_agents_md_content_return(project_root)
+        file_ops.append(agents_op)
+        result["components"]["agents_md"] = agents_result
+    except Exception as exc:
+        result["errors"].append(f"AGENTS.md: {exc}")
+        result["components"]["agents_md"] = {"action": "error", "detail": str(exc)}
+
+    # Detect platform
+    detected = platform or _detect_platform(project_root)
+    result["detected_platform"] = detected
+
+    hosts: list[str] = []
+    if detected in ("claude", "both"):
+        hosts.append("claude-code")
+    if detected in ("cursor", "both"):
+        hosts.append("cursor")
+
+    settings = load_settings()
+    engagement_level = settings.llm_engagement_level
+
+    # Per-host platform files
+    platform_results: list[dict[str, Any]] = []
+    for host in hosts:
+        try:
+            host_ops, host_result = _upgrade_platform_content_return(
+                host,
+                project_root,
+                force=force,
+                engagement_level=engagement_level,
+            )
+            file_ops.extend(host_ops)
+            platform_results.append(host_result)
+        except Exception as exc:
+            result["errors"].append(f"{host}: {exc}")
+            platform_results.append({"host": host, "error": str(exc)})
+
+    result["components"]["platforms"] = platform_results
+
+    # GitHub artifacts skipped in content-return mode
+    for component in ("ci_workflows", "github_copilot", "github_templates", "governance"):
+        result["components"][component] = {"action": "skipped", "reason": "content_return"}
+
+    # Build manifest
+    manifest = _build_upgrade_manifest(file_ops, __version__)
+    result["file_manifest"] = manifest.to_full_response_data()
+    result["success"] = len(result["errors"]) == 0
+
+    return result
+
+
 def _detect_platform(project_root: Path) -> str:
     """Detect the platform from existing config files."""
     claude_dir = project_root / ".claude"
@@ -254,8 +493,6 @@ def upgrade_pipeline(
     Returns:
         Structured dict with per-component upgrade results.
     """
-    import tempfile
-
     from tapps_mcp import __version__
 
     log.info(
@@ -266,34 +503,21 @@ def upgrade_pipeline(
         dry_run=dry_run,
     )
 
-    # Early detection of read-only filesystem (common in Docker containers)
-    if not dry_run:
-        try:
-            with tempfile.NamedTemporaryFile(
-                dir=project_root, prefix=".tapps-write-test-", delete=True
-            ):
-                pass  # File is created and immediately deleted
-        except OSError:
-            log.warning(
-                "read_only_filesystem",
-                project_root=str(project_root),
-            )
-            return {
-                "version": __version__,
-                "dry_run": False,
-                "components": {},
-                "errors": [
-                    "Filesystem is read-only — cannot write upgrade files. "
-                    "This typically happens when TappsMCP runs inside a Docker "
-                    "container with the workspace mounted read-only. Options: "
-                    "(1) Re-run with dry_run=True to preview changes, "
-                    "(2) Run 'tapps-mcp upgrade' locally (outside Docker) via "
-                    "'uvx tapps-mcp upgrade' or 'npx @anthropic/tapps-mcp upgrade', "
-                    "(3) Remount the workspace read-write in your Docker/MCP config.",
-                ],
-                "success": False,
-                "read_only": True,
-            }
+    # Epic 87: Detect write mode (content-return for Docker/read-only)
+    write_mode = WriteMode.DIRECT_WRITE if dry_run else detect_write_mode(project_root)
+    content_return = write_mode == WriteMode.CONTENT_RETURN
+
+    if content_return:
+        log.info(
+            "content_return_mode",
+            project_root=str(project_root),
+            reason="read-only filesystem or TAPPS_WRITE_MODE=content",
+        )
+        return _upgrade_content_return(
+            project_root,
+            platform=platform,
+            force=force,
+        )
 
     result: dict[str, Any] = {
         "version": __version__,

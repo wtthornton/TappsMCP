@@ -681,7 +681,6 @@ def _handle_import(store: MemoryStore, p: _Params) -> dict[str, Any]:
 def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
     """Export memories to JSON or Markdown (Epic 65.2)."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.io import export_memories
     from tapps_core.security.path_validator import PathValidator
 
     fmt = (p.export_format or "json").lower()
@@ -701,19 +700,96 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
     default_name = "memory-export.md" if fmt == "markdown" else "memory-export.json"
     output = Path(p.file_path) if p.file_path else settings.project_root / default_name
 
-    result = export_memories(
-        store,
-        output,
-        validator,
-        tier=p.tier if p.tier != "pattern" else None,
-        scope=p.scope if p.scope != "project" else None,
-        min_confidence=p.confidence if p.confidence >= 0 else None,
-        export_format=fmt,
-        include_frontmatter=p.include_frontmatter,
-        group_by=group_by_val,
+    # Epic 87: content-return mode for Docker/read-only
+    from tapps_core.common.file_operations import WriteMode, detect_write_mode
+
+    write_mode = detect_write_mode(settings.project_root)
+
+    if write_mode == WriteMode.DIRECT_WRITE:
+        from tapps_core.memory.io import export_memories
+
+        result = export_memories(
+            store,
+            output,
+            validator,
+            tier=p.tier if p.tier != "pattern" else None,
+            scope=p.scope if p.scope != "project" else None,
+            min_confidence=p.confidence if p.confidence >= 0 else None,
+            export_format=fmt,
+            include_frontmatter=p.include_frontmatter,
+            group_by=group_by_val,
+        )
+        return {"action": "export", **result, "store_metadata": _store_metadata(store)}
+
+    # Content-return: generate export content without writing
+    import json as json_mod
+    from datetime import UTC, datetime
+
+    from tapps_core.common.file_operations import (
+        AgentInstructions,
+        FileManifest,
+        FileOperation,
+    )
+    from tapps_core.memory.io import export_to_markdown
+
+    snapshot = store.snapshot()
+    entries = snapshot.entries
+    if p.tier and p.tier != "pattern":
+        entries = [e for e in entries if e.tier.value == p.tier]
+    if p.scope and p.scope != "project":
+        entries = [e for e in entries if e.scope.value == p.scope]
+    if p.confidence >= 0:
+        entries = [e for e in entries if e.confidence >= p.confidence]
+
+    exported_at = datetime.now(tz=UTC).isoformat()
+
+    if fmt == "markdown":
+        content = export_to_markdown(
+            entries,
+            include_frontmatter=p.include_frontmatter,
+            group_by=group_by_val,
+        )
+    else:
+        from tapps_mcp import __version__
+
+        payload = {
+            "memories": [e.model_dump(mode="json") for e in entries],
+            "exported_at": exported_at,
+            "source_project": snapshot.project_root,
+            "entry_count": len(entries),
+            "tapps_version": __version__,
+        }
+        content = json_mod.dumps(payload, indent=2)
+
+    rel_path = str(output.relative_to(settings.project_root)).replace("\\", "/")
+    manifest = FileManifest(
+        summary=f"Memory export: {len(entries)} entries ({fmt})",
+        files=[
+            FileOperation(
+                path=rel_path,
+                content=content,
+                mode="create",
+                description=f"Memory export in {fmt} format.",
+                priority=5,
+            ),
+        ],
+        agent_instructions=AgentInstructions(
+            persona="You are an export assistant. Write the file exactly as provided.",
+            tool_preference="Use the Write tool to create the export file.",
+            verification_steps=[f"Verify {rel_path} was written."],
+            warnings=[],
+        ),
     )
 
-    return {"action": "export", **result, "store_metadata": _store_metadata(store)}
+    return {
+        "action": "export",
+        "exported_count": len(entries),
+        "exported_at": exported_at,
+        "format": fmt,
+        "content_return": True,
+        "file_manifest": manifest.to_full_response_data(),
+        "store_metadata": _store_metadata(store),
+    }
 
 
 def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:

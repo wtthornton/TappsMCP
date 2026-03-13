@@ -20,7 +20,7 @@ docker-mcp/
     tapps-planning.yaml     # Role: epics, stories & planning (TappsMCP + DocsMCP)
     tapps-frontend.yaml     # Role: frontend / UX work
     tapps-developer.yaml    # Role: daily feature/bugfix development
-    tapps-standard-141.yaml # Pinned to 1.4.1 (Toolkit profile)
+    tapps-standard-150.yaml # Pinned to 1.5.0 (Toolkit profile)
   examples/
     tools-core-tier1.yaml       # Gateway tools.yaml: Tier 1 only (~11 tools)
     tools-core-tier1-tier2.yaml # Gateway tools.yaml: Tier 1+2 (~23 tools)
@@ -36,8 +36,8 @@ It manages catalogs, server lifecycle, and client connections natively.
 ### 1. Build local images
 
 ```bash
-docker build -t tapps-mcp:1.4.1 -t tapps-mcp:latest .
-docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:1.4.1 -t docs-mcp:latest .
+docker build -t tapps-mcp:1.5.0 -t tapps-mcp:latest .
+docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:1.5.0 -t docs-mcp:latest .
 ```
 
 ### 2. Import the Toolkit catalog
@@ -72,7 +72,7 @@ docker mcp server ls          # should show tapps-mcp, docs-mcp enabled
 docker mcp client ls          # should show cursor, claude-code connected
 ```
 
-Call `tapps_session_start` from your client -- response should show `version: "1.4.1"`.
+Call `tapps_session_start` from your client -- response should show `version: "1.5.0"`.
 
 ### Alternative: Gateway with custom catalog (legacy)
 
@@ -103,7 +103,7 @@ docker run --rm -v $(pwd):/workspace docs-mcp docsmcp --version
 
 | Profile | Servers | Use Case |
 |---------|---------|----------|
-| `tapps-standard-141` | tapps-mcp, docs-mcp, context7 @ 1.4.1 | Same as tapps-standard but pinned to 1.4.1 |
+| `tapps-standard-150` | tapps-mcp, docs-mcp, context7 @ 1.5.0 | Same as tapps-standard but pinned to 1.5.0 |
 | `tapps-minimal` | tapps-mcp | Code quality only |
 | `tapps-standard` | tapps-mcp, docs-mcp, context7 | Quality + docs + library lookup |
 | `tapps-full` | tapps-mcp, docs-mcp, context7, github, filesystem | Full developer workflow |
@@ -138,6 +138,57 @@ Research recommends keeping the **active tool count under ~30** for best LLM acc
 Use the **tapps-mcp-core** catalog entry so the server exposes only 7 Tier 1 tools (no gateway tools.yaml needed). After importing the catalog, add **tapps-mcp-core** (not tapps-mcp) to your profile; you get `session_start`, `quick_check`, `validate_changed`, `quality_gate`, `checklist`, `lookup_docs`, `security_scan` only.
 
 Tier lists are defined in [TOOL-TIER-RANKING.md](../docs/archive/planning/TOOL-TIER-RANKING.md).
+
+## Content-return pattern (Epic 87)
+
+When running inside Docker with a **read-only workspace mount** (the default for
+Docker MCP Toolkit), TappsMCP tools cannot write files directly to your project.
+Instead, tools that would normally create or modify files return a **`FileManifest`**
+with the file contents and instructions, so the AI client applies the writes
+using its own native capabilities (Write/Edit tools).
+
+### How it works
+
+1. Tool detects read-only filesystem (or `TAPPS_WRITE_MODE=content` env var)
+2. Instead of writing, the tool returns `content_return: true` with a `file_manifest`
+3. The AI agent reads the manifest and writes each file using its native tools
+4. The agent follows `agent_instructions` for verification and warnings
+
+### Environment variables
+
+| Variable | Values | Effect |
+|----------|--------|--------|
+| `TAPPS_WRITE_MODE` | `direct` | Force direct file writes (writable mount required) |
+| `TAPPS_WRITE_MODE` | `content` | Force content-return mode |
+| *(unset)* | | Auto-detect via filesystem probe |
+
+### Tools that support content-return
+
+- `tapps_init` / `tapps_upgrade` (pass `output_mode: "content_return"` to force)
+- `tapps_set_engagement_level`
+- `tapps_manage_experts` (add/scaffold)
+- `tapps_memory` (export)
+- `docs_config` (set action)
+- All `docs_generate_*` generators
+
+### Forcing content-return for testing
+
+```bash
+# Via env var
+docker run --rm -v "$(pwd):/workspace:ro" -e TAPPS_WRITE_MODE=content tapps-mcp serve
+
+# Via tool parameter
+tapps_init(output_mode="content_return")
+tapps_upgrade(output_mode="content_return")
+```
+
+### Verifying write mode with doctor
+
+```bash
+tapps-mcp doctor  # includes "Write mode" check in Docker section
+```
+
+---
 
 ## Docker path mapping (Story 75.1)
 
@@ -189,10 +240,10 @@ gh pr create --title "Add tapps-mcp and docs-mcp servers"
 
 ## Images
 
-| Server | Image (pinned 1.4.1) | Dockerfile |
+| Server | Image (pinned 1.5.0) | Dockerfile |
 |--------|----------------------|------------|
-| tapps-mcp | `ghcr.io/wtthornton/tapps-mcp:1.4.1` | `Dockerfile` |
-| docs-mcp | `ghcr.io/wtthornton/docs-mcp:1.4.1` | `packages/docs-mcp/Dockerfile` |
+| tapps-mcp | `ghcr.io/wtthornton/tapps-mcp:1.5.0` | `Dockerfile` |
+| docs-mcp | `ghcr.io/wtthornton/docs-mcp:1.5.0` | `packages/docs-mcp/Dockerfile` |
 | combined | `ghcr.io/wtthornton/tapps-platform` | `Dockerfile.platform` |
 
-The catalog and server.yaml entries pin to **1.4.1**. Use `tapps-standard-141` profile or the Toolkit-native approach (`docker mcp catalog import` + `docker mcp server enable`).
+The catalog and server.yaml entries pin to **1.5.0**. Use `tapps-standard-150` profile or the Toolkit-native approach (`docker mcp catalog import` + `docker mcp server enable`).

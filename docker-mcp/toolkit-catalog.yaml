@@ -11,7 +11,7 @@ registry:
       categories, runs security scans, enforces quality gates, looks up
       library docs, and consults 17 domain experts (171 knowledge files).
       30 tools, zero LLM calls in the tool chain.
-    image: tapps-mcp:1.4.1
+    image: tapps-mcp:1.5.0
     command:
       - tapps-mcp
       - serve
@@ -78,7 +78,7 @@ registry:
       Documentation MCP server for generation, validation, and analysis.
       Generates READMEs, changelogs, API docs, ADRs, guides, and diagrams.
       Validates drift, completeness, links, and freshness. 24 tools.
-    image: docs-mcp:1.4.1
+    image: docs-mcp:1.5.0
     command:
       - docsmcp
       - serve

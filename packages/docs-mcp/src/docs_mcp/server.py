@@ -793,34 +793,53 @@ async def docs_config(
 
     existing_data[key] = parsed_value
 
-    # Write back
-    try:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        with config_path.open("w", encoding="utf-8") as f:
-            yaml.dump(existing_data, f, default_flow_style=False, sort_keys=False)
-    except OSError as exc:
-        return error_response(
-            "docs_config",
-            "WRITE_ERROR",
-            f"Could not write .docsmcp.yaml: {exc}",
-        )
+    # Epic 87: content-return mode for Docker/read-only
+    from docs_mcp.server_helpers import can_write_to_project
 
-    # Reset settings cache so next call picks up the change
-    from docs_mcp.config.settings import _reset_docs_settings_cache
+    yaml_content = yaml.dump(existing_data, default_flow_style=False, sort_keys=False)
 
-    _reset_docs_settings_cache()
+    if can_write_to_project(root):
+        # Write back
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with config_path.open("w", encoding="utf-8") as f:
+                f.write(yaml_content)
+        except OSError as exc:
+            return error_response(
+                "docs_config",
+                "WRITE_ERROR",
+                f"Could not write .docsmcp.yaml: {exc}",
+            )
+
+        # Reset settings cache so next call picks up the change
+        from docs_mcp.config.settings import _reset_docs_settings_cache
+
+        _reset_docs_settings_cache()
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    result_data: dict[str, Any] = {
+        "key": key,
+        "old_value": old_value,
+        "new_value": parsed_value,
+        "config_file": ".docsmcp.yaml",
+    }
+
+    if not can_write_to_project(root):
+        from docs_mcp.server_helpers import build_generator_manifest
+
+        result_data["content_return"] = True
+        result_data["file_manifest"] = build_generator_manifest(
+            "docs_config",
+            yaml_content,
+            ".docsmcp.yaml",
+            description="DocsMCP configuration with updated settings.",
+        )
 
     return success_response(
         "docs_config",
         elapsed_ms,
-        {
-            "key": key,
-            "old_value": old_value,
-            "new_value": parsed_value,
-            "config_file": ".docsmcp.yaml",
-        },
+        result_data,
     )
 
 

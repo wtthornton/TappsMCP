@@ -85,7 +85,7 @@ def _make_security_scan_result(
 
 # Standard patches — _record_call, _record_execution, _validate_file_path, _with_nudges
 # are imported inside function bodies from tapps_mcp.server, so we patch at source.
-# ensure_session_initialized and _get_scorer are imported at module level from server_helpers.
+# ensure_session_initialized and _get_scorer_for_file are imported at module level from server_helpers.
 _PATCH_RECORD_CALL = patch(
     "tapps_mcp.server._record_call", side_effect=lambda _: None
 )
@@ -116,6 +116,7 @@ class TestTappsScoreFile:
         score = _make_score_result(file_path=str(f))
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file = AsyncMock(return_value=score)
 
         with (
@@ -124,7 +125,7 @@ class TestTappsScoreFile:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
         ):
             result = await tapps_score_file(str(f))
 
@@ -155,6 +156,7 @@ class TestTappsScoreFile:
         score = _make_score_result(file_path=str(f))
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file_quick = MagicMock(return_value=score)
 
         with (
@@ -163,7 +165,7 @@ class TestTappsScoreFile:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
         ):
             result = await tapps_score_file(str(f), quick=True)
 
@@ -176,6 +178,7 @@ class TestTappsScoreFile:
         score = _make_score_result(file_path=str(f))
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file_quick = MagicMock(return_value=score)
 
         with (
@@ -184,7 +187,7 @@ class TestTappsScoreFile:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.tools.ruff.run_ruff_fix", return_value=3),
         ):
             result = await tapps_score_file(str(f), quick=True, fix=True)
@@ -200,6 +203,7 @@ class TestTappsScoreFile:
         score = _make_score_result(file_path=str(f), lint_issues=issues)
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file = AsyncMock(return_value=score)
 
         with (
@@ -208,7 +212,7 @@ class TestTappsScoreFile:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
         ):
             result = await tapps_score_file(str(f))
 
@@ -221,6 +225,7 @@ class TestTappsScoreFile:
         f.write_text("x = 1\n", encoding="utf-8")
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file = AsyncMock(side_effect=RuntimeError("boom"))
 
         with (
@@ -230,7 +235,7 @@ class TestTappsScoreFile:
             _PATCH_SESSION,
             _PATCH_LOGGER,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
         ):
             result = await tapps_score_file(str(f))
 
@@ -244,6 +249,7 @@ class TestTappsScoreFile:
         score = _make_score_result(file_path=str(f), degraded=True)
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file = AsyncMock(return_value=score)
 
         with (
@@ -252,7 +258,7 @@ class TestTappsScoreFile:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
         ):
             result = await tapps_score_file(str(f))
 
@@ -274,6 +280,7 @@ class TestTappsQualityGate:
         gate = _make_gate_result(passed=True)
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file = AsyncMock(return_value=score)
 
         with (
@@ -282,7 +289,7 @@ class TestTappsQualityGate:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
         ):
             result = await tapps_quality_gate(str(f), preset="standard")
@@ -298,6 +305,7 @@ class TestTappsQualityGate:
         gate = _make_gate_result(passed=False)
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file = AsyncMock(return_value=score)
 
         with (
@@ -306,7 +314,7 @@ class TestTappsQualityGate:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
         ):
             result = await tapps_quality_gate(str(f), preset="standard")
@@ -338,6 +346,7 @@ class TestTappsQualityGate:
         f.write_text("x = 1\n", encoding="utf-8")
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file = AsyncMock(side_effect=RuntimeError("scorer crash"))
 
         with (
@@ -347,7 +356,7 @@ class TestTappsQualityGate:
             _PATCH_SESSION,
             _PATCH_LOGGER,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
         ):
             result = await tapps_quality_gate(str(f), preset="standard")
 
@@ -363,6 +372,7 @@ class TestTappsQualityGate:
         gate = _make_gate_result(passed=True, preset="standard")
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file = AsyncMock(return_value=score)
 
         with (
@@ -371,7 +381,7 @@ class TestTappsQualityGate:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
         ):
             result = await tapps_quality_gate(str(f), preset="")
@@ -394,6 +404,7 @@ class TestTappsQuickCheck:
         sec = _make_security_scan_result()
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file_quick_enriched = MagicMock(return_value=score)
 
         with (
@@ -402,7 +413,7 @@ class TestTappsQuickCheck:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.server_scoring_tools.load_settings") as mock_settings,
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
             patch(
@@ -427,6 +438,7 @@ class TestTappsQuickCheck:
         sec = _make_security_scan_result()
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file_quick_enriched = MagicMock(return_value=score)
 
         with (
@@ -435,7 +447,7 @@ class TestTappsQuickCheck:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.server_scoring_tools.load_settings") as mock_settings,
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
             patch(
@@ -474,6 +486,7 @@ class TestTappsQuickCheck:
         f.write_text("x = 1\n", encoding="utf-8")
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file_quick_enriched = MagicMock(side_effect=RuntimeError("boom"))
 
         with (
@@ -483,7 +496,7 @@ class TestTappsQuickCheck:
             _PATCH_SESSION,
             _PATCH_LOGGER,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.server_scoring_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.security.security_scanner.run_security_scan",
@@ -507,6 +520,7 @@ class TestTappsQuickCheck:
         sec = _make_security_scan_result()
 
         scorer_mock = MagicMock()
+        scorer_mock.language = "python"
         scorer_mock.score_file_quick_enriched = MagicMock(return_value=score)
 
         with (
@@ -515,7 +529,7 @@ class TestTappsQuickCheck:
             _PATCH_WITH_NUDGES,
             _PATCH_SESSION,
             patch(_PATCH_VALIDATE, return_value=f),
-            patch("tapps_mcp.server_scoring_tools._get_scorer", return_value=scorer_mock),
+            patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.server_scoring_tools.load_settings") as mock_settings,
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
             patch(

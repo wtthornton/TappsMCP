@@ -80,7 +80,8 @@ class TestBootstrapPipeline:
             verify_server=False,
             warm_cache_from_tech_stack=False,
         )
-        assert result["created"] == []
+        # docs/TAPPS_WORKFLOW.md is always created (not gated by flags)
+        assert result["created"] == ["docs/TAPPS_WORKFLOW.md"]
         assert result["skipped"] == []
 
     def test_claude_platform_creates_file(self, tmp_path):

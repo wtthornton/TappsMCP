@@ -45,9 +45,11 @@ class TestRunInitWizard:
         responses = [
             _ElicitResult("accept", MagicMock(preset="strict")),
             _ElicitResult("accept", MagicMock(level="high")),
+            _ElicitResult("accept", MagicMock(scope="project")),   # config scope
             _ElicitResult("accept", MagicMock(enabled=True)),
             _ElicitResult("accept", MagicMock(tier="core")),
             _ElicitResult("accept", MagicMock(enabled=True)),
+            _ElicitResult("accept", MagicMock(enabled=False)),     # other MCPs
         ]
         ctx = _make_ctx(responses)
         result = await run_init_wizard(ctx)
@@ -97,9 +99,11 @@ class TestRunInitWizard:
         responses = [
             _ElicitResult("accept", MagicMock(preset="standard")),
             _ElicitResult("accept", MagicMock(level="low")),
+            _ElicitResult("accept", MagicMock(scope="project")),   # config scope
             _ElicitResult("accept", MagicMock(enabled=False)),
             _ElicitResult("accept", MagicMock(tier="full")),
             _ElicitResult("accept", MagicMock(enabled=False)),
+            _ElicitResult("accept", MagicMock(enabled=False)),     # other MCPs
         ]
         ctx = _make_ctx(responses)
         result = await run_init_wizard(ctx)
@@ -165,9 +169,11 @@ class TestMaybeRunWizard:
         responses = [
             _ElicitResult("accept", MagicMock(preset="strict")),
             _ElicitResult("accept", MagicMock(level="high")),
+            _ElicitResult("accept", MagicMock(scope="project")),   # config scope
             _ElicitResult("accept", MagicMock(enabled=False)),
             _ElicitResult("accept", MagicMock(tier="full")),
             _ElicitResult("accept", MagicMock(enabled=False)),
+            _ElicitResult("accept", MagicMock(enabled=False)),     # other MCPs
         ]
         ctx = _make_ctx(responses)
 
@@ -193,9 +199,11 @@ class TestMaybeRunWizard:
         responses = [
             _ElicitResult("accept", MagicMock(preset="framework")),
             _ElicitResult("accept", MagicMock(level="low")),
+            _ElicitResult("accept", MagicMock(scope="project")),   # config scope
             _ElicitResult("accept", MagicMock(enabled=True)),
             _ElicitResult("accept", MagicMock(tier="core")),
             _ElicitResult("accept", MagicMock(enabled=True)),
+            _ElicitResult("accept", MagicMock(enabled=False)),     # other MCPs
         ]
         ctx = _make_ctx(responses)
 

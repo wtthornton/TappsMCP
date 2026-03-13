@@ -505,8 +505,8 @@ class TestUpgradePipeline:
         assert "agents_md" in result["components"]
         assert "github_templates" in result["components"]
 
-    def test_read_only_filesystem_returns_early(self, tmp_path: Path) -> None:
-        """Upgrade on read-only filesystem returns clear error immediately."""
+    def test_read_only_filesystem_uses_content_return(self, tmp_path: Path) -> None:
+        """Upgrade on read-only filesystem uses content-return mode (Epic 87)."""
         from unittest.mock import patch as mock_patch
 
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline
@@ -517,12 +517,11 @@ class TestUpgradePipeline:
         ):
             result = upgrade_pipeline(tmp_path)
 
-        assert result["success"] is False
-        assert result.get("read_only") is True
-        assert len(result["errors"]) == 1
-        assert "read-only" in result["errors"][0].lower()
-        # No components should have been attempted
-        assert result["components"] == {}
+        # Epic 87: read-only now triggers content-return instead of error
+        assert result["success"] is True
+        assert result.get("content_return") is True
+        assert "file_manifest" in result
+        assert result["file_manifest"]["file_count"] > 0
 
     def test_read_only_filesystem_dry_run_still_works(self, tmp_path: Path) -> None:
         """Dry run should work even on read-only filesystem."""

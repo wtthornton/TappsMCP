@@ -85,11 +85,11 @@ class TestHookTemplates:
 
     def test_claude_sh_scripts_count(self) -> None:
         # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) + 1 post-validate + 1 post-report
-        assert len(_CLAUDE_HOOK_SCRIPTS) == 14
+        assert len(_CLAUDE_HOOK_SCRIPTS) == 15
 
     def test_claude_ps1_scripts_count(self) -> None:
         # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) + 1 post-validate + 1 post-report
-        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 14
+        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 15
 
     def test_cursor_sh_scripts_count(self) -> None:
         assert len(_CURSOR_HOOK_SCRIPTS) == 2
@@ -173,14 +173,14 @@ class TestSkillTemplates:
     """Verify skill template dicts and generation."""
 
     def test_claude_skills_count(self) -> None:
-        assert len(CLAUDE_SKILLS) == 11  # 11 skills including tapps-report
+        assert len(CLAUDE_SKILLS) == 12  # 12 skills including tapps-apply-files
 
     def test_cursor_skills_count(self) -> None:
-        assert len(CURSOR_SKILLS) == 11  # 11 skills including tapps-report
+        assert len(CURSOR_SKILLS) == 12  # 12 skills including tapps-apply-files
 
     def test_generate_claude_skills(self, tmp_path: Path) -> None:
         result = generate_skills(tmp_path, "claude")
-        assert len(result["created"]) == 11
+        assert len(result["created"]) == 12
         assert (tmp_path / ".claude" / "skills" / "tapps-score" / "SKILL.md").exists()
 
     def test_generate_skills_high_engagement(self, tmp_path: Path) -> None:
@@ -198,7 +198,7 @@ class TestSkillTemplates:
     def test_generate_skills_skips_existing(self, tmp_path: Path) -> None:
         generate_skills(tmp_path, "claude")
         result = generate_skills(tmp_path, "claude")
-        assert len(result["skipped"]) == 11  # 11 skills including tapps-report
+        assert len(result["skipped"]) == 12  # 12 skills including tapps-apply-files
         assert len(result["created"]) == 0
 
 
@@ -275,7 +275,7 @@ class TestMiscGenerators:
         # Medium engagement (default): 7 events, 9 scripts
         # (SessionStart has 2 scripts: start + compact, SubagentStop added)
         result = generate_claude_hooks(tmp_path, force_windows=False)
-        assert len(result["scripts_created"]) == 9
+        assert len(result["scripts_created"]) == 10
         assert result["engagement_level"] == "medium"
 
     def test_cursor_hooks_creates_scripts(self, tmp_path: Path) -> None:

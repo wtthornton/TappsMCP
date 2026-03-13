@@ -222,7 +222,7 @@ class TestTappsValidateChanged:
         mock_settings.return_value.tool_timeout = 30
 
         with patch(
-            "tapps_mcp.tools.batch_validator.detect_changed_python_files",
+            "tapps_mcp.tools.batch_validator.detect_changed_scorable_files",
             return_value=[],
         ):
             result = await tapps_validate_changed()

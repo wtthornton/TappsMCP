@@ -13,6 +13,13 @@ if TYPE_CHECKING:
 
     from tapps_mcp.project.models import ProjectProfile, TechStack
 
+from tapps_core.common.file_operations import (
+    AgentInstructions,
+    FileManifest,
+    FileOperation,
+    WriteMode,
+    detect_write_mode,
+)
 from tapps_core.prompts.prompt_loader import (
     load_handoff_template,
     load_runlog_template,
@@ -85,12 +92,19 @@ class _BootstrapState:
 
     project_root: Path
     dry_run: bool = False
+    write_mode: WriteMode = WriteMode.DIRECT_WRITE
     created: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     result: dict[str, Any] = field(default_factory=dict)
     profile: ProjectProfile | None = None
+    file_ops: list[FileOperation] = field(default_factory=list)
+
+    @property
+    def content_return(self) -> bool:
+        """Whether this run is in content-return mode (Epic 87)."""
+        return self.write_mode == WriteMode.CONTENT_RETURN
 
     def safe_write(self, rel_path: str, content: str) -> None:
         """Write *content* to *rel_path* under project_root, safely."""
@@ -99,6 +113,15 @@ class _BootstrapState:
             target.relative_to(self.project_root)
         except ValueError:
             self.errors.append(f"{rel_path}: path escapes project root")
+            return
+        if self.content_return:
+            self.file_ops.append(FileOperation(
+                path=rel_path,
+                content=content,
+                mode="create",
+                description=f"Template file: {rel_path}",
+            ))
+            self.created.append(rel_path)
             return
         if target.exists():
             self.skipped.append(rel_path)
@@ -116,6 +139,17 @@ class _BootstrapState:
         except ValueError:
             self.errors.append(f"{rel_path}: path escapes project root")
             return "skipped"
+        if self.content_return:
+            mode = "overwrite" if target.exists() else "create"
+            self.file_ops.append(FileOperation(
+                path=rel_path,
+                content=content,
+                mode=mode,
+                description=f"Template file: {rel_path}",
+            ))
+            if mode == "create":
+                self.created.append(rel_path)
+            return "created" if mode == "create" else "updated"
         existed = target.exists()
         if not self.dry_run:
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -133,6 +167,44 @@ class _BootstrapState:
         self.result["warnings"] = self.warnings
         self.result["success"] = len(self.errors) == 0
         return self.result
+
+    def build_manifest(self) -> FileManifest:
+        """Build a :class:`FileManifest` from accumulated file operations.
+
+        Called when ``content_return`` is ``True`` to package all generated
+        files into a structured response the AI client can apply.
+        """
+        return FileManifest(
+            summary=(
+                f"TappsMCP init v{__version__}: "
+                f"{len(self.file_ops)} file(s) to write"
+            ),
+            source_version=__version__,
+            files=self.file_ops,
+            agent_instructions=AgentInstructions(
+                persona=(
+                    "You are a project scaffolding assistant setting up TappsMCP "
+                    "for the first time.  Write each file exactly as provided — "
+                    "do not modify content, add comments, or reformat."
+                ),
+                tool_preference=(
+                    "Use the Write tool for all files.  These are new files in a "
+                    "fresh project setup.  Create parent directories as needed."
+                ),
+                verification_steps=[
+                    "After writing all files, run 'git status' to show the user what changed.",
+                    "Verify AGENTS.md exists at the project root.",
+                    "If .tapps-mcp.yaml was written, confirm it contains the expected preset.",
+                    "On Unix/macOS: remind the user to run 'chmod +x' on any .sh files.",
+                ],
+                warnings=[
+                    "CLAUDE.md and AGENTS.md may need project-specific "
+                    "customization after writing.",
+                    "Hook scripts (.sh) require execute permission on Unix.",
+                    "Review generated CI workflows before committing.",
+                ],
+            ),
+        )
 
 
 def bootstrap_pipeline(
@@ -204,36 +276,25 @@ def bootstrap_pipeline(
             llm_engagement_level=llm_engagement_level,
             scaffold_experts=scaffold_experts,
         )
-    state = _BootstrapState(project_root=project_root.resolve(), dry_run=cfg.dry_run)
+    # Determine write mode: direct (local) or content-return (Docker/read-only)
+    resolved_root = project_root.resolve()
+    write_mode = detect_write_mode(resolved_root) if not cfg.dry_run else WriteMode.DIRECT_WRITE
 
-    # Early detection of read-only filesystem (common in Docker containers)
-    if not cfg.dry_run and not cfg.verify_only:
-        import tempfile
+    state = _BootstrapState(
+        project_root=resolved_root,
+        dry_run=cfg.dry_run,
+        write_mode=write_mode,
+    )
 
+    # Content-return mode: generate files without writing (Epic 87)
+    if state.content_return and not cfg.verify_only:
         import structlog
 
-        _log = structlog.get_logger(__name__)
-        try:
-            with tempfile.NamedTemporaryFile(
-                dir=project_root, prefix=".tapps-write-test-", delete=True
-            ):
-                pass  # File is created and immediately deleted
-        except OSError:
-            _log.warning(
-                "read_only_filesystem",
-                project_root=str(project_root),
-            )
-            state.errors.append(
-                "Filesystem is read-only — cannot write init files. "
-                "This typically happens when TappsMCP runs inside a Docker "
-                "container with the workspace mounted read-only. Options: "
-                "(1) Re-run with dry_run=True to preview what would be created, "
-                "(2) Run 'tapps-mcp init' locally (outside Docker) via "
-                "'uvx tapps-mcp init' or 'npx @anthropic/tapps-mcp init', "
-                "(3) Remount the workspace read-write in your Docker/MCP config."
-            )
-            state.result["read_only"] = True
-            return state.finalize()
+        structlog.get_logger(__name__).info(
+            "content_return_mode",
+            project_root=str(project_root),
+            reason="read-only filesystem or TAPPS_WRITE_MODE=content",
+        )
 
     _verify_server(cfg, state)
     if cfg.verify_only:
@@ -242,7 +303,25 @@ def bootstrap_pipeline(
     _detect_docker_environment(state)
     _detect_docsmcp(state)
     _create_templates(cfg, state)
-    if not cfg.dry_run:
+    if state.content_return:
+        # Content-return mode (Epic 87): generate platform files as
+        # FileOperations instead of writing them directly.  Platform
+        # generators write to disk, so we generate the key files from
+        # template loaders and skip side-effects (cache warming, etc.).
+        _generate_platform_file_ops(cfg, state)
+        state.result["cache_warming"] = {
+            "warmed": 0,
+            "attempted": 0,
+            "skipped": "content_return",
+            "libraries": [],
+        }
+        state.result["expert_rag_warming"] = {
+            "warmed": 0,
+            "attempted": 0,
+            "skipped": "content_return",
+            "domains": [],
+        }
+    elif not cfg.dry_run:
         _setup_platform(cfg, state)
         # Ensure Claude Code permissions even when platform != "claude",
         # if the .claude/ directory already exists (user is in Claude Code).
@@ -290,6 +369,13 @@ def bootstrap_pipeline(
         }
 
     _load_business_experts(cfg, state)
+
+    if state.content_return:
+        manifest = state.build_manifest()
+        result = state.finalize()
+        result["file_manifest"] = manifest.to_full_response_data()
+        result["content_return"] = True
+        return result
 
     return state.finalize()
 
@@ -703,6 +789,76 @@ def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     else:
         state.safe_write("AGENTS.md", template_content)
         state.result["agents_md"] = {"action": "created", "version": __version__}
+
+
+def _generate_platform_file_ops(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Generate platform files as FileOperations for content-return mode (Epic 87).
+
+    Instead of writing files directly (which requires filesystem access),
+    generate the key platform files from template loaders and add them as
+    :class:`FileOperation` entries in ``state.file_ops``.
+
+    This covers the essential files; hooks, skills, sub-agents, CI, and
+    GitHub templates are generated from platform_generators which write
+    directly.  A future story will refactor those generators to also support
+    content-return mode.
+    """
+    engagement = cfg.llm_engagement_level
+    platform = cfg.platform
+
+    if not platform:
+        state.result["platform_rules"] = {
+            "platform": "(none)",
+            "action": "content_return",
+        }
+        return
+
+    # CLAUDE.md or Cursor rules
+    if platform == "claude":
+        content = load_platform_rules("claude", engagement_level=engagement)
+        state.file_ops.append(FileOperation(
+            path="CLAUDE.md",
+            content=content,
+            mode="create",
+            description="Claude Code platform rules with TappsMCP pipeline reference.",
+            priority=2,
+        ))
+        state.created.append("CLAUDE.md")
+    elif platform == "cursor":
+        content = load_platform_rules("cursor", engagement_level=engagement)
+        state.file_ops.append(FileOperation(
+            path=".cursor/rules/tapps-pipeline.md",
+            content=content,
+            mode="create",
+            description="Cursor platform rules with TappsMCP pipeline reference.",
+            priority=2,
+        ))
+        state.created.append(".cursor/rules/tapps-pipeline.md")
+
+    state.result["platform_rules"] = {
+        "platform": platform,
+        "action": "content_return",
+    }
+
+    # Note: hooks, skills, sub-agents, CI workflows, and GitHub templates
+    # are generated by platform_generators which write files directly.
+    # These will be added to content-return mode in a future story.
+    state.result["platform_generators_skipped"] = {
+        "reason": "content_return",
+        "skipped_components": [
+            "hooks",
+            "skills",
+            "sub-agents",
+            "ci_workflows",
+            "github_templates",
+            "copilot_config",
+            "governance",
+        ],
+        "hint": (
+            "Run 'tapps_upgrade' after writing these files to generate "
+            "hooks, skills, and CI configuration."
+        ),
+    }
 
 
 def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:

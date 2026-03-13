@@ -718,6 +718,29 @@ def check_docker_mcp_config(project_root: Path, profile: str) -> CheckResult:
     )
 
 
+def check_docker_write_mode(project_root: Path) -> CheckResult:
+    """Detect workspace write mode (direct vs content-return).
+
+    Reports whether tools can write files directly or must use the
+    content-return pattern (Epic 87).
+    """
+    from tapps_core.common.file_operations import WriteMode, detect_write_mode
+
+    write_mode = detect_write_mode(project_root)
+    if write_mode == WriteMode.DIRECT_WRITE:
+        return CheckResult(
+            "Write mode",
+            True,
+            "Direct write - tools can write files to workspace",
+        )
+    return CheckResult(
+        "Write mode",
+        True,  # content-return is not a failure, just informational
+        "Content-return mode - tools return file contents for client-side application",
+        "Set TAPPS_WRITE_MODE=direct to override if workspace is writable",
+    )
+
+
 async def _collect_docker_checks(
     project_root: Path,
     image: str,
@@ -746,6 +769,9 @@ async def _collect_docker_checks(
 
     config_result = check_docker_mcp_config(project_root, profile)
     results.append(config_result)
+
+    write_mode_result = check_docker_write_mode(project_root)
+    results.append(write_mode_result)
 
     return results
 

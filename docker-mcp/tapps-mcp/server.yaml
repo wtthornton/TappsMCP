@@ -1,5 +1,5 @@
 name: tapps-mcp
-image: ghcr.io/wtthornton/tapps-mcp:1.4.1
+image: ghcr.io/wtthornton/tapps-mcp:1.5.0
 type: server
 meta:
   category: devops
@@ -14,7 +14,7 @@ about:
     Deterministic code quality MCP server. Scores Python files across 7
     categories, runs security scans, enforces quality gates, looks up
     library docs, and consults 17 domain experts (171 knowledge files).
-    29 tools, zero LLM calls in the tool chain.
+    30 tools, zero LLM calls in the tool chain.
   icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:
   project: https://github.com/wtthornton/TappsMCP

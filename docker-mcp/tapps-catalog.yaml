@@ -1,7 +1,7 @@
 registry:
     tapps-mcp:
         title: TappsMCP
-        description: "Deterministic code quality MCP server. Scores Python files across 7 categories, runs security scans, enforces quality gates, looks up library docs, and consults 17 domain experts (171 knowledge files). 29 tools, zero LLM calls."
+        description: "Deterministic code quality MCP server. Scores Python files across 7 categories, runs security scans, enforces quality gates, looks up library docs, and consults 17 domain experts (171 knowledge files). 30 tools, zero LLM calls."
         image: tapps-mcp:latest
         command:
             - tapps-mcp
@@ -47,11 +47,12 @@ registry:
             - name: tapps_dependency_scan
             - name: tapps_dependency_graph
             - name: tapps_manage_experts
+            - name: tapps_get_canonical_persona
         prompts: 0
         resources: {}
     docs-mcp:
         title: DocsMCP
-        description: "Documentation MCP server for generation, validation, and analysis. Generates READMEs, changelogs, API docs, ADRs, guides, and diagrams. Validates drift, completeness, links, and freshness. 22 tools."
+        description: "Documentation MCP server for generation, validation, and analysis. Generates READMEs, changelogs, API docs, ADRs, guides, and diagrams. Validates drift, completeness, links, and freshness. 24 tools."
         image: docs-mcp:latest
         command:
             - docsmcp
@@ -86,6 +87,8 @@ registry:
             - name: docs_generate_architecture
             - name: docs_generate_epic
             - name: docs_generate_story
+            - name: docs_generate_prompt
+            - name: docs_validate_epic
             - name: docs_check_drift
             - name: docs_check_completeness
             - name: docs_check_links

@@ -23,6 +23,7 @@ def _mock_score() -> ScoreResult:
 
 def _mock_scorer(quick: bool = True) -> MagicMock:
     scorer = MagicMock()
+    scorer.language = "python"
     score = _mock_score()
     scorer.score_file = AsyncMock(return_value=score)
     scorer.score_file_quick = MagicMock(return_value=score)
@@ -114,7 +115,10 @@ class TestValidateChangedP0:
         with (
             patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch("tapps_mcp.server._validate_file_path", side_effect=Path),
-            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=scorer),
+            patch(
+                "tapps_mcp.server_helpers._get_scorer_for_file",
+                return_value=scorer,
+            ),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
             patch(
                 "tapps_mcp.security.secret_scanner.SecretScanner"
