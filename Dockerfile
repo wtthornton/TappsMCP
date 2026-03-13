@@ -7,7 +7,7 @@
 # HTTP:   docker run -p 8000:8000 -v $(pwd):/workspace tapps-mcp tapps-mcp serve --transport http --host 0.0.0.0 --port 8000
 
 # ---- Builder ----
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /build
 
@@ -25,7 +25,7 @@ COPY packages/tapps-mcp/src packages/tapps-mcp/src
 RUN pip wheel --no-deps --wheel-dir /wheels packages/tapps-mcp/
 
 # ---- Production ----
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 LABEL org.opencontainers.image.title="TappsMCP"
 LABEL org.opencontainers.image.description="MCP server providing code quality tools"

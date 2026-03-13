@@ -10,7 +10,7 @@
 # Run DocsMCP only:   docker run -v $(pwd):/workspace tapps-platform docsmcp serve
 
 # ---- Builder ----
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /build
 
@@ -34,7 +34,7 @@ COPY packages/docs-mcp/src packages/docs-mcp/src
 RUN pip wheel --no-deps --wheel-dir /wheels packages/docs-mcp/
 
 # ---- Production ----
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 LABEL org.opencontainers.image.title="TappsPlatform"
 LABEL org.opencontainers.image.description="Combined MCP server: TappsMCP (code quality) + DocsMCP (documentation)"
