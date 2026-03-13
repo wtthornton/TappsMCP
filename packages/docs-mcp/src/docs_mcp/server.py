@@ -65,7 +65,7 @@ def _reset_tool_calls() -> None:
 # Tool curation (Epic 79.2): allowed tool names and presets
 # ---------------------------------------------------------------------------
 
-# Canonical list of all DocsMCP tools (23). Used for filtering.
+# Canonical list of all DocsMCP tools (31). Used for filtering.
 ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset({
     "docs_session_start",
     "docs_project_scan",
@@ -91,6 +91,13 @@ ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset({
     "docs_check_links",
     "docs_check_freshness",
     "docs_validate_epic",
+    "docs_generate_llms_txt",
+    "docs_generate_frontmatter",
+    "docs_check_diataxis",
+    "docs_generate_interactive_diagrams",
+    "docs_generate_purpose",
+    "docs_generate_doc_index",
+    "docs_check_cross_refs",
 })
 
 # Core preset (Epic 79.2): session start, project scan, drift, readme, completeness, links.

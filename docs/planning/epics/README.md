@@ -1,57 +1,68 @@
 # TappsMCP Epics
 
-## Documentation Excellence Series (Epics 80-86)
+## Documentation Excellence Series (Epics 80-87)
 
 Goal: Elevate DocsMCP from B+ to A+ -- the best documentation tooling for AI-assisted development.
 
 | Epic | Title | Priority | LOE | Stories | Status |
 |------|-------|----------|-----|---------|--------|
-| [80](EPIC-80-C4-MODEL-SEQUENCE-DIAGRAM-SUPPORT.md) | C4 Model & Sequence Diagram Support | P1 | ~2-3 weeks | 5 (26 pts) | Proposed |
-| [81](EPIC-81-D2-FORMAT-INTERACTIVE-HTML-DIAGRAMS.md) | D2 Format & Interactive HTML Diagrams | P1 | ~2 weeks | 4 (24 pts) | Proposed |
+| [83](EPIC-83-LLMS-TXT-MACHINE-READABLE-DOCS.md) | llms.txt & Machine-Readable Documentation | P1 | ~1.5 weeks | 3 (13 pts) | In Progress |
 | [82](EPIC-82-DIATAXIS-CONTENT-CLASSIFICATION.md) | Diataxis Content Classification & Validation | P1 | ~2 weeks | 3 (16 pts) | Proposed |
-| [83](EPIC-83-LLMS-TXT-MACHINE-READABLE-DOCS.md) | llms.txt & Machine-Readable Documentation | P1 | ~1.5 weeks | 3 (13 pts) | Proposed |
-| [84](EPIC-84-DOC-STYLE-TONE-VALIDATION.md) | Doc Style & Tone Validation (Vale Integration) | P2 | ~2 weeks | 4 (18 pts) | Proposed |
-| [85](EPIC-85-PURPOSE-INTENT-TEMPLATES-DOC-INDEX.md) | Purpose/Intent Architecture Templates & Doc Index | P2 | ~2 weeks | 4 (21 pts) | Proposed |
 | [86](EPIC-86-DOCUMENTATION-PLATFORM-INIT-INTEGRATION.md) | Documentation Platform Init & Upgrade Integration | P1 | ~2 weeks | 5 (21 pts) | Proposed |
+| [80](EPIC-80-C4-MODEL-SEQUENCE-DIAGRAM-SUPPORT.md) | C4 Model & Sequence Diagram Support (C4 only) | P1 | ~2 weeks | 4 (18 pts) | Proposed |
+| [81](EPIC-81-D2-FORMAT-INTERACTIVE-HTML-DIAGRAMS.md) | Interactive HTML Diagrams (81.3 only) | P2 | ~1 week | 1 (8 pts) | Proposed |
+| [85](EPIC-85-PURPOSE-INTENT-TEMPLATES-DOC-INDEX.md) | Architecture Templates & Doc Index (reduced) | P2 | ~1.5 weeks | 3 (16 pts) | Proposed |
+| [84](EPIC-84-DOC-STYLE-TONE-VALIDATION.md) | Doc Style & Tone Validation (Vale Integration) | P3 | ~2 weeks | 4 (18 pts) | Deferred |
+| [87](EPIC-87-CONTENT-RETURN-PATTERN-DOCKER-FILE-WRITES.md) | Content-Return Pattern for Docker File Writes | P0 | ~3-4 weeks | 7 (39 pts) | **Complete** |
 
-**Total: 7 epics, 28 stories, 139 story points, ~14 weeks estimated**
+**Active: 6 epics, 19 stories, ~92 story points, ~10 weeks estimated**
 
-### Recommended Implementation Order
+### Revised Implementation Order (2026-03-13)
+
+Reprioritized for maximum value per effort, shipping quick wins first.
 
 ```
-Phase 1 (Foundation):  Epic 80 (C4/Sequence) --> Epic 81 (D2/Interactive)
-Phase 2 (Intelligence): Epic 82 (Diataxis) --> Epic 83 (llms.txt)
-Phase 3 (Quality):      Epic 84 (Style) --> Epic 85 (Architecture Templates)
-Phase 4 (Integration):  Epic 86 (Init/Upgrade) -- depends on 82, 83
+Phase 1 (Quick wins):     Epic 83 (llms.txt)                    ─── 1.5 weeks
+Phase 2 (Intelligence):   Epic 82 (Diataxis)                    ─── 2 weeks
+Phase 3 (Integration):    Epic 86 (Init/Upgrade)                ─── 2 weeks
+Phase 4 (Diagrams):       Epic 80 (C4 only) + 81.3 (interactive HTML) ─── 2.5 weeks
+Phase 5 (Templates):      Epic 85 (reduced: no series bootstrap) ─── 1.5 weeks
+Deferred:                 Epic 84 (Style), 81.1/81.2/81.4 (D2), 80.4 (Sequence)
 ```
+
+### Scope Adjustments
+
+| Epic | Change | Rationale |
+|------|--------|-----------|
+| 80 | Defer Story 80.4 (Sequence Diagrams) | 8-point story with noisy call-graph risk; ship C4 first, add sequence after user feedback |
+| 81 | Extract Story 81.3 only; defer 81.1/81.2/81.4 (D2 format) | D2 is niche; interactive HTML is independently valuable |
+| 85 | Cut Story 85.3 (Architecture Series Bootstrap) | Auto-generating 25+ files produces heavy manual editing; ship building blocks instead |
+| 84 | Defer entirely | P2 style checking is noisy for terse technical docs; English-only limits adoption |
 
 ### Dependency Graph
 
 ```
-Epic 80 (C4/Sequence)
+Epic 83 (llms.txt)
   |
   v
-Epic 81 (D2/Interactive) --> Epic 85 (Architecture Templates)
+Epic 82 (Diataxis) ────────> Epic 86 (Init Integration)
                                 |
-Epic 82 (Diataxis) ----------->|
-  |                             v
-  v                       Epic 86 (Init Integration)
-Epic 83 (llms.txt) ----------->|
-                                |
-Epic 84 (Style) -------------->|
+Epic 80 (C4 diagrams) ────> Epic 85 (Architecture Templates)
+  |
+  v
+Epic 81.3 (Interactive HTML)
 ```
 
 ### What This Achieves (Before vs After)
 
 | Category | Current Grade | Target Grade | Key Additions |
 |----------|--------------|--------------|---------------|
-| Diagram Quality | B | A | C4 model, sequence, D2 format, interactive HTML |
-| Content Organization | B+ | A | Diataxis classification, balance validation |
 | AI Readiness | B+ | A+ | llms.txt, structured frontmatter |
-| Validation Suite | A | A+ | Style/tone checking, Diataxis validation |
-| Architecture Templates | B- | A | Purpose/Intent template, series bootstrap, doc index |
+| Content Organization | B+ | A | Diataxis classification, balance validation |
 | Init Automation | D (docs) | A | Doc agents, skills, hooks in init/upgrade |
-| **Overall** | **B+** | **A+** | |
+| Diagram Quality | B | A- | C4 model diagrams, interactive HTML |
+| Architecture Templates | B- | A- | Purpose/Intent template, doc index |
+| **Overall** | **B+** | **A** | |
 
 ## Previous Epics (0-79)
 

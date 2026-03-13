@@ -13,7 +13,7 @@ class TestResolveAllowedTools:
 
         allowed = _resolve_allowed_tools(None, [], None)
         assert allowed == ALL_DOCS_TOOL_NAMES
-        assert len(allowed) == 24
+        assert len(allowed) == 31
 
     def test_enabled_tools_subset(self) -> None:
         from docs_mcp.server import _resolve_allowed_tools
@@ -133,4 +133,4 @@ class TestToolPresetConstants:
     def test_all_tool_names_count(self) -> None:
         from docs_mcp.server import ALL_DOCS_TOOL_NAMES
 
-        assert len(ALL_DOCS_TOOL_NAMES) == 24
+        assert len(ALL_DOCS_TOOL_NAMES) == 31

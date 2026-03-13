@@ -933,10 +933,14 @@ async def docs_generate_diagram(
     - "class_hierarchy": Class inheritance diagram
     - "module_map": Package/module architecture overview
     - "er_diagram": Entity-relationship diagram from Pydantic/dataclass models
+    - "c4_context": C4 System Context diagram showing external actors
+    - "c4_container": C4 Container diagram showing high-level building blocks
+    - "c4_component": C4 Component diagram showing internal components
 
     Args:
         diagram_type: Type of diagram to generate.
         scope: "project" for full project, or a file path for single-file scope.
+            For c4_component, scope can be a package path to focus on.
         depth: Max traversal depth for dependency/module diagrams (default: 2).
         format: Output format - "mermaid" or "plantuml" (default: from config).
         direction: Graph direction - "TD" (top-down) or "LR" (left-right).
@@ -1725,6 +1729,558 @@ async def docs_generate_prompt(
 
 
 # ---------------------------------------------------------------------------
+# Epic 83: llms.txt & Frontmatter tools
+# ---------------------------------------------------------------------------
+
+
+async def docs_generate_llms_txt(
+    mode: str = "compact",
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate an llms.txt file for AI-readable project documentation.
+
+    Produces a structured machine-readable summary of the project including
+    tech stack, entry points, key files, and documentation map. Follows the
+    emerging llms.txt standard for AI coding assistant consumption.
+
+    Args:
+        mode: Output mode - "compact" (default) or "full" (includes API summary
+            and project structure).
+        output_path: File path to write (relative to project root). Typically
+            "llms.txt" or "llms-full.txt". When empty, returns content only.
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_generate_llms_txt")
+    start = time.perf_counter_ns()
+
+    if mode not in ("compact", "full"):
+        return error_response(
+            "docs_generate_llms_txt",
+            "INVALID_MODE",
+            f"Invalid mode {mode!r}. Use 'compact' or 'full'.",
+        )
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_llms_txt",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.generators.llms_txt import LlmsTxtGenerator
+
+    try:
+        # Optionally get module map for full mode
+        module_map = None
+        if mode == "full":
+            try:
+                from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
+
+                analyzer = ModuleMapAnalyzer()
+                module_map = analyzer.analyze(root)
+            except Exception:
+                pass  # Degrade gracefully
+
+        generator = LlmsTxtGenerator(mode=mode)
+        result = generator.generate(root, module_map=module_map)
+        content = result.content
+    except Exception as exc:
+        return error_response(
+            "docs_generate_llms_txt",
+            "GENERATION_ERROR",
+            f"Failed to generate llms.txt: {exc}",
+        )
+
+    # Optionally write to file
+    written_path = ""
+    if output_path and can_write_to_project(root):
+        try:
+            from tapps_core.security.path_validator import PathValidator
+
+            validator = PathValidator(root)
+            write_path = validator.validate_write_path(output_path)
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(content, encoding="utf-8")
+            written_path = str(write_path.relative_to(root)).replace("\\", "/")
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            return error_response(
+                "docs_generate_llms_txt",
+                "WRITE_ERROR",
+                f"Failed to write llms.txt: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "mode": result.mode,
+        "section_count": result.section_count,
+        "project_name": result.project_name,
+        "content": content,
+    }
+    if written_path:
+        data["written_to"] = written_path
+    elif output_path:
+        data["content_return"] = True
+        data["file_manifest"] = build_generator_manifest(
+            "docs_generate_llms_txt", content, output_path,
+            description="Machine-readable llms.txt project summary for AI assistants.",
+        )
+
+    return success_response(
+        "docs_generate_llms_txt",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Review the generated llms.txt and verify project details are accurate.",
+            "Commit llms.txt to the repository root for AI assistant discovery.",
+        ],
+    )
+
+
+async def docs_generate_frontmatter(
+    file_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Add or update YAML frontmatter in a markdown file.
+
+    Auto-detects title, description, tags, and Diataxis content type from the
+    document content. Preserves existing frontmatter fields while merging new
+    auto-detected values.
+
+    Args:
+        file_path: Path to the markdown file (relative to project root).
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_generate_frontmatter")
+    start = time.perf_counter_ns()
+
+    if not file_path:
+        return error_response(
+            "docs_generate_frontmatter",
+            "MISSING_PATH",
+            "file_path is required.",
+        )
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_frontmatter",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    target = (root / file_path).resolve()
+    if not target.exists():
+        return error_response(
+            "docs_generate_frontmatter",
+            "FILE_NOT_FOUND",
+            f"File not found: {file_path}",
+        )
+
+    if target.suffix.lower() not in (".md", ".mdx", ".markdown"):
+        return error_response(
+            "docs_generate_frontmatter",
+            "INVALID_FILE_TYPE",
+            "Only markdown files (.md, .mdx, .markdown) are supported.",
+        )
+
+    from docs_mcp.generators.frontmatter import FrontmatterGenerator
+
+    try:
+        original = target.read_text(encoding="utf-8")
+        generator = FrontmatterGenerator()
+        result = generator.generate(original, file_path=target)
+        content = result.content
+    except Exception as exc:
+        return error_response(
+            "docs_generate_frontmatter",
+            "GENERATION_ERROR",
+            f"Failed to generate frontmatter: {exc}",
+        )
+
+    # Write back if we can
+    written_path = ""
+    if can_write_to_project(root):
+        try:
+            target.write_text(content, encoding="utf-8")
+            written_path = str(target.relative_to(root)).replace("\\", "/")
+        except OSError as exc:
+            return error_response(
+                "docs_generate_frontmatter",
+                "WRITE_ERROR",
+                f"Failed to write frontmatter: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "file_path": file_path,
+        "fields_added": result.fields_added,
+        "fields_preserved": result.fields_preserved,
+        "had_existing": result.had_existing,
+        "content": content,
+    }
+    if written_path:
+        data["written_to"] = written_path
+    elif not can_write_to_project(root):
+        data["content_return"] = True
+        data["file_manifest"] = build_generator_manifest(
+            "docs_generate_frontmatter", content, file_path,
+            description=f"Markdown file with updated YAML frontmatter: {file_path}",
+        )
+
+    return success_response(
+        "docs_generate_frontmatter",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Review the generated frontmatter fields for accuracy.",
+            "Run docs_check_completeness to see improved documentation scoring.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Epic 81.3: Interactive HTML diagrams
+# ---------------------------------------------------------------------------
+
+
+async def docs_generate_interactive_diagrams(
+    diagram_types: str = "dependency,module_map",
+    title: str = "",
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate an interactive HTML page with Mermaid.js diagrams.
+
+    Creates a self-contained HTML file with pan/zoom controls, diagram
+    toggling, and a table of contents. Each requested diagram type is
+    generated in Mermaid format and embedded in the interactive viewer.
+
+    Args:
+        diagram_types: Comma-separated diagram types to include.
+            Valid types: dependency, class_hierarchy, module_map, er_diagram,
+            c4_context, c4_container, c4_component.
+        title: Page title (default: project name + " Architecture").
+        output_path: File path to write HTML (relative to project root).
+            When empty, returns content only.
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_generate_interactive_diagrams")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_interactive_diagrams",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.generators.diagrams import DiagramGenerator
+    from docs_mcp.generators.interactive_html import InteractiveHtmlGenerator
+
+    types_list = [t.strip() for t in diagram_types.split(",") if t.strip()]
+    if not types_list:
+        return error_response(
+            "docs_generate_interactive_diagrams",
+            "NO_TYPES",
+            "At least one diagram_type is required.",
+        )
+
+    # Generate each diagram in Mermaid format
+    diagram_gen = DiagramGenerator()
+    diagrams: list[tuple[str, str]] = []
+    type_labels = {
+        "dependency": "Dependency Graph",
+        "class_hierarchy": "Class Hierarchy",
+        "module_map": "Module Map",
+        "er_diagram": "ER Diagram",
+        "c4_context": "C4 System Context",
+        "c4_container": "C4 Container",
+        "c4_component": "C4 Component",
+    }
+
+    for dt in types_list:
+        if dt not in DiagramGenerator.VALID_TYPES:
+            continue
+        try:
+            result = diagram_gen.generate(
+                root, diagram_type=dt, output_format="mermaid"
+            )
+            if result.content:
+                label = type_labels.get(dt, dt.replace("_", " ").title())
+                diagrams.append((label, result.content))
+        except Exception:
+            logger.debug("interactive_diagram_failed", diagram_type=dt)
+
+    if not diagrams:
+        return error_response(
+            "docs_generate_interactive_diagrams",
+            "NO_DIAGRAMS",
+            "No diagrams could be generated for the requested types.",
+        )
+
+    # Build interactive HTML
+    page_title = title or f"{root.name} Architecture"
+    html_gen = InteractiveHtmlGenerator()
+    html_result = html_gen.generate(
+        diagrams, title=page_title, subtitle=f"Generated from {root.name}"
+    )
+    content = html_result.content
+
+    # Optionally write to file
+    written_path = ""
+    if output_path and can_write_to_project(root):
+        try:
+            from tapps_core.security.path_validator import PathValidator
+
+            validator = PathValidator(root)
+            write_path = validator.validate_write_path(output_path)
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(content, encoding="utf-8")
+            written_path = str(write_path.relative_to(root)).replace("\\", "/")
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            return error_response(
+                "docs_generate_interactive_diagrams",
+                "WRITE_ERROR",
+                f"Failed to write interactive diagrams: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "diagram_count": html_result.diagram_count,
+        "title": html_result.title,
+        "content_length": len(content),
+        "content": content,
+    }
+    if written_path:
+        data["written_to"] = written_path
+    elif output_path:
+        data["content_return"] = True
+        data["file_manifest"] = build_generator_manifest(
+            "docs_generate_interactive_diagrams", content, output_path,
+            description="Interactive HTML architecture diagrams with Mermaid.js.",
+        )
+
+    return success_response(
+        "docs_generate_interactive_diagrams",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Open the HTML file in a browser to explore the interactive diagrams.",
+            "Use the zoom and toggle controls to navigate complex architectures.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# docs_generate_purpose (Epic 85.1)
+# ---------------------------------------------------------------------------
+
+
+async def docs_generate_purpose(
+    project_root: str = "",
+    output_path: str = "",
+    project_name: str = "",
+) -> dict[str, Any]:
+    """Generate a purpose/intent architecture template for a project.
+
+    Produces a structured markdown template covering project purpose,
+    design principles, key architectural decisions, intended audience,
+    and quality attributes. Principles and decisions are inferred from
+    project dependencies and structure.
+
+    Args:
+        project_root: Path to the project root. Defaults to configured root.
+        output_path: Optional output file path (relative to project root).
+            When empty, content is returned without writing.
+        project_name: Override the project name in the template.
+    """
+    _record_call("docs_generate_purpose")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else settings.project_root
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_purpose",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.generators.purpose import PurposeGenerator
+
+    try:
+        gen = PurposeGenerator()
+        result = gen.generate(root, project_name=project_name)
+    except Exception as exc:
+        return error_response(
+            "docs_generate_purpose",
+            "GENERATION_ERROR",
+            f"Failed to generate purpose template: {exc}",
+        )
+
+    if not result.content:
+        return error_response(
+            "docs_generate_purpose",
+            "NO_CONTENT",
+            "No content generated for purpose template.",
+        )
+
+    content = result.content
+    written_path = ""
+
+    if output_path and can_write_to_project():
+        write_path = root / output_path
+        try:
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(content, encoding="utf-8")
+            written_path = str(write_path.relative_to(root)).replace("\\", "/")
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            return error_response(
+                "docs_generate_purpose",
+                "WRITE_ERROR",
+                f"Failed to write purpose template: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "sections": result.sections,
+        "degraded": result.degraded,
+        "content_length": len(content),
+        "content": content,
+    }
+    if written_path:
+        data["written_to"] = written_path
+    elif output_path:
+        data["content_return"] = True
+        data["file_manifest"] = build_generator_manifest(
+            "docs_generate_purpose", content, output_path,
+            description="Architecture purpose/intent template.",
+        )
+
+    return success_response(
+        "docs_generate_purpose",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Fill in the [placeholder] sections with project-specific details.",
+            "Generate ADRs with docs_generate_adr for key decisions.",
+            "Run docs_check_completeness to verify documentation coverage.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# docs_generate_doc_index (Epic 85.2)
+# ---------------------------------------------------------------------------
+
+
+async def docs_generate_doc_index(
+    doc_dirs: str = "",
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate a documentation index/map for a project.
+
+    Scans for documentation files, extracts titles and descriptions,
+    categorizes them, and produces a structured markdown index with
+    category groupings and freshness indicators.
+
+    Args:
+        doc_dirs: Comma-separated list of directories to scan.
+            When empty, scans the entire project.
+        output_path: Optional output file path (relative to project root).
+            When empty, content is returned without writing.
+        project_root: Path to the project root. Defaults to configured root.
+    """
+    _record_call("docs_generate_doc_index")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else settings.project_root
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_doc_index",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.generators.doc_index import DocIndexGenerator
+
+    dirs_list: list[str] | None = None
+    if doc_dirs:
+        dirs_list = [d.strip() for d in doc_dirs.split(",") if d.strip()]
+
+    try:
+        gen = DocIndexGenerator()
+        result = gen.generate(root, doc_dirs=dirs_list)
+    except Exception as exc:
+        return error_response(
+            "docs_generate_doc_index",
+            "GENERATION_ERROR",
+            f"Failed to generate doc index: {exc}",
+        )
+
+    content = result.content
+    written_path = ""
+
+    if output_path and can_write_to_project():
+        write_path = root / output_path
+        try:
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(content, encoding="utf-8")
+            written_path = str(write_path.relative_to(root)).replace("\\", "/")
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            return error_response(
+                "docs_generate_doc_index",
+                "WRITE_ERROR",
+                f"Failed to write doc index: {exc}",
+            )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "total_files": result.total_files,
+        "categories": result.categories,
+        "content_length": len(content),
+        "content": content,
+    }
+    if written_path:
+        data["written_to"] = written_path
+    elif output_path:
+        data["content_return"] = True
+        data["file_manifest"] = build_generator_manifest(
+            "docs_generate_doc_index", content, output_path,
+            description="Documentation index/map.",
+        )
+
+    return success_response(
+        "docs_generate_doc_index",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Review the index for orphan or uncategorized documents.",
+            "Run docs_check_cross_refs to validate cross-references between documents.",
+            "Use docs_check_completeness for a broader documentation health check.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registration (Epic 79.2: conditional)
 # ---------------------------------------------------------------------------
 
@@ -1757,3 +2313,13 @@ def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_story)
     if "docs_generate_prompt" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_prompt)
+    if "docs_generate_llms_txt" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_llms_txt)
+    if "docs_generate_frontmatter" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_frontmatter)
+    if "docs_generate_interactive_diagrams" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_interactive_diagrams)
+    if "docs_generate_purpose" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_purpose)
+    if "docs_generate_doc_index" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_doc_index)

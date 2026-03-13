@@ -69,6 +69,9 @@ class DiagramGenerator:
             "class_hierarchy",
             "module_map",
             "er_diagram",
+            "c4_context",
+            "c4_container",
+            "c4_component",
         }
     )
     VALID_FORMATS: ClassVar[frozenset[str]] = frozenset({"mermaid", "plantuml"})
@@ -127,6 +130,15 @@ class DiagramGenerator:
                 project_root, depth, direction, output_format
             ),
             "er_diagram": lambda: self._generate_er_diagram(
+                project_root, scope, output_format
+            ),
+            "c4_context": lambda: self._generate_c4_context(
+                project_root, output_format
+            ),
+            "c4_container": lambda: self._generate_c4_container(
+                project_root, output_format
+            ),
+            "c4_component": lambda: self._generate_c4_component(
                 project_root, scope, output_format
             ),
         }
@@ -951,3 +963,359 @@ class DiagramGenerator:
         lines.append("@enduml")
         content = "\n".join(lines) + "\n"
         return content, len(models), edge_count
+
+    # ------------------------------------------------------------------
+    # C4 System Context diagram (Epic 80.1)
+    # ------------------------------------------------------------------
+
+    def _generate_c4_context(
+        self,
+        project_root: Path,
+        output_format: str,
+    ) -> DiagramResult:
+        """Generate a C4 System Context diagram."""
+        from docs_mcp.generators.metadata import MetadataExtractor
+
+        extractor = MetadataExtractor()
+        metadata = extractor.extract(project_root)
+        project_name = metadata.name or project_root.name
+        description = metadata.description or "Software system"
+
+        # Detect external actors from common patterns
+        actors: list[tuple[str, str]] = []  # (name, description)
+        deps = [d.split("[")[0].split(">")[0].split("=")[0].strip().lower()
+                for d in metadata.dependencies]
+
+        if any(d in deps for d in ("fastapi", "flask", "django", "starlette")):
+            actors.append(("User", "End user interacting via web browser or API client"))
+        if any(d in deps for d in ("sqlalchemy", "psycopg2", "pymongo", "redis")):
+            actors.append(("Database", "Persistent data store"))
+        if any(d in deps for d in ("httpx", "requests", "aiohttp")):
+            actors.append(("ExternalAPI", "Third-party API service"))
+        if any("mcp" in d for d in deps):
+            actors.append(("MCPClient", "MCP-capable AI coding assistant"))
+
+        if not actors:
+            actors.append(("User", "Primary system user"))
+
+        if output_format == "mermaid":
+            content, nodes, edges = self._c4_context_mermaid(
+                project_name, description, actors
+            )
+        else:
+            content, nodes, edges = self._c4_context_plantuml(
+                project_name, description, actors
+            )
+
+        return DiagramResult(
+            diagram_type="c4_context",
+            format=output_format,
+            content=content,
+            node_count=nodes,
+            edge_count=edges,
+        )
+
+    def _c4_context_mermaid(
+        self,
+        name: str,
+        description: str,
+        actors: list[tuple[str, str]],
+    ) -> tuple[str, int, int]:
+        lines = ["C4Context"]
+        lines.append(f'    title System Context diagram for {name}')
+        lines.append("")
+
+        node_count = 1 + len(actors)
+        edge_count = len(actors)
+
+        # System boundary
+        lines.append(f'    System({self._sanitize_id(name)}, "{name}", "{description}")')
+        lines.append("")
+
+        # External actors
+        for actor_name, actor_desc in actors:
+            aid = self._sanitize_id(actor_name)
+            if actor_name in ("Database",):
+                lines.append(f'    SystemDb({aid}, "{actor_name}", "{actor_desc}")')
+            elif actor_name in ("ExternalAPI",):
+                lines.append(f'    System_Ext({aid}, "{actor_name}", "{actor_desc}")')
+            else:
+                lines.append(f'    Person({aid}, "{actor_name}", "{actor_desc}")')
+
+        lines.append("")
+
+        # Relationships
+        sys_id = self._sanitize_id(name)
+        for actor_name, _ in actors:
+            aid = self._sanitize_id(actor_name)
+            lines.append(f'    Rel({aid}, {sys_id}, "Uses")')
+
+        lines.append("")
+        return "\n".join(lines) + "\n", node_count, edge_count
+
+    def _c4_context_plantuml(
+        self,
+        name: str,
+        description: str,
+        actors: list[tuple[str, str]],
+    ) -> tuple[str, int, int]:
+        lines = ["@startuml"]
+        lines.append("!include <C4/C4_Context>")
+        lines.append("")
+        lines.append(f"title System Context diagram for {name}")
+        lines.append("")
+
+        node_count = 1 + len(actors)
+        edge_count = len(actors)
+
+        sys_id = self._sanitize_id(name)
+        lines.append(f'System({sys_id}, "{name}", "{description}")')
+        lines.append("")
+
+        for actor_name, actor_desc in actors:
+            aid = self._sanitize_id(actor_name)
+            if actor_name in ("Database",):
+                lines.append(f'SystemDb({aid}, "{actor_name}", "{actor_desc}")')
+            elif actor_name in ("ExternalAPI",):
+                lines.append(f'System_Ext({aid}, "{actor_name}", "{actor_desc}")')
+            else:
+                lines.append(f'Person({aid}, "{actor_name}", "{actor_desc}")')
+
+        lines.append("")
+        for actor_name, _ in actors:
+            aid = self._sanitize_id(actor_name)
+            lines.append(f'Rel({aid}, {sys_id}, "Uses")')
+
+        lines.append("")
+        lines.append("@enduml")
+        return "\n".join(lines) + "\n", node_count, edge_count
+
+    # ------------------------------------------------------------------
+    # C4 Container diagram (Epic 80.2)
+    # ------------------------------------------------------------------
+
+    def _generate_c4_container(
+        self,
+        project_root: Path,
+        output_format: str,
+    ) -> DiagramResult:
+        """Generate a C4 Container diagram from package structure."""
+        from docs_mcp.generators.metadata import MetadataExtractor
+
+        extractor = MetadataExtractor()
+        metadata = extractor.extract(project_root)
+        project_name = metadata.name or project_root.name
+
+        # Detect containers from package structure
+        containers: list[tuple[str, str, str]] = []  # (name, tech, description)
+
+        # Check for workspace packages
+        packages_dir = project_root / "packages"
+        if packages_dir.is_dir():
+            for pkg_dir in sorted(packages_dir.iterdir()):
+                if pkg_dir.is_dir() and (pkg_dir / "pyproject.toml").exists():
+                    pkg_meta = extractor.extract(pkg_dir)
+                    containers.append((
+                        pkg_meta.name or pkg_dir.name,
+                        "Python",
+                        pkg_meta.description or f"Package: {pkg_dir.name}",
+                    ))
+
+        # Check for src layout
+        if not containers:
+            src_dir = project_root / "src"
+            if src_dir.is_dir():
+                for pkg_dir in sorted(src_dir.iterdir()):
+                    if pkg_dir.is_dir() and (pkg_dir / "__init__.py").exists():
+                        containers.append((
+                            pkg_dir.name, "Python", f"Python package: {pkg_dir.name}"
+                        ))
+
+        # Fallback: top-level Python packages
+        if not containers:
+            for d in sorted(project_root.iterdir()):
+                if (d.is_dir() and (d / "__init__.py").exists()
+                        and not self._should_skip_dir(d)):
+                    containers.append((d.name, "Python", f"Package: {d.name}"))
+
+        # Detect infrastructure containers
+        if (project_root / "Dockerfile").exists():
+            containers.append(("Docker", "Docker", "Container runtime"))
+        if (project_root / "docker-compose.yml").exists() or (
+            project_root / "docker-compose.yaml"
+        ).exists():
+            containers.append(("DockerCompose", "Docker Compose", "Service orchestration"))
+
+        if not containers:
+            containers.append((project_name, "Python", "Main application"))
+
+        if output_format == "mermaid":
+            content, nodes, edges = self._c4_container_mermaid(project_name, containers)
+        else:
+            content, nodes, edges = self._c4_container_plantuml(project_name, containers)
+
+        return DiagramResult(
+            diagram_type="c4_container",
+            format=output_format,
+            content=content,
+            node_count=nodes,
+            edge_count=edges,
+        )
+
+    def _c4_container_mermaid(
+        self,
+        name: str,
+        containers: list[tuple[str, str, str]],
+    ) -> tuple[str, int, int]:
+        lines = ["C4Container"]
+        lines.append(f'    title Container diagram for {name}')
+        lines.append("")
+        lines.append(f'    System_Boundary({self._sanitize_id(name)}, "{name}") {{')
+
+        edges = 0
+        for cname, tech, desc in containers:
+            cid = self._sanitize_id(cname)
+            lines.append(f'        Container({cid}, "{cname}", "{tech}", "{desc}")')
+
+        lines.append("    }")
+        lines.append("")
+
+        # Add relationships between containers
+        if len(containers) > 1:
+            first_id = self._sanitize_id(containers[0][0])
+            for i in range(1, min(len(containers), 5)):
+                cid = self._sanitize_id(containers[i][0])
+                lines.append(f'    Rel({first_id}, {cid}, "Uses")')
+                edges += 1
+
+        lines.append("")
+        return "\n".join(lines) + "\n", len(containers), edges
+
+    def _c4_container_plantuml(
+        self,
+        name: str,
+        containers: list[tuple[str, str, str]],
+    ) -> tuple[str, int, int]:
+        lines = ["@startuml"]
+        lines.append("!include <C4/C4_Container>")
+        lines.append("")
+        lines.append(f"title Container diagram for {name}")
+        lines.append("")
+        lines.append(f'System_Boundary({self._sanitize_id(name)}, "{name}") {{')
+
+        edges = 0
+        for cname, tech, desc in containers:
+            cid = self._sanitize_id(cname)
+            lines.append(f'    Container({cid}, "{cname}", "{tech}", "{desc}")')
+
+        lines.append("}")
+        lines.append("")
+
+        if len(containers) > 1:
+            first_id = self._sanitize_id(containers[0][0])
+            for i in range(1, min(len(containers), 5)):
+                cid = self._sanitize_id(containers[i][0])
+                lines.append(f'Rel({first_id}, {cid}, "Uses")')
+                edges += 1
+
+        lines.append("")
+        lines.append("@enduml")
+        return "\n".join(lines) + "\n", len(containers), edges
+
+    # ------------------------------------------------------------------
+    # C4 Component diagram (Epic 80.3)
+    # ------------------------------------------------------------------
+
+    def _generate_c4_component(
+        self,
+        project_root: Path,
+        scope: str,
+        output_format: str,
+    ) -> DiagramResult:
+        """Generate a C4 Component diagram for a specific package."""
+        from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
+
+        analyzer = ModuleMapAnalyzer()
+
+        # Determine scope directory
+        if scope and scope != "project":
+            scope_dir = project_root / scope
+            if not scope_dir.is_dir():
+                scope_dir = project_root
+        else:
+            scope_dir = project_root
+
+        module_map = analyzer.analyze(scope_dir, depth=3)
+
+        # Extract components from module tree
+        components: list[tuple[str, str, int]] = []  # (name, path, func_count)
+        if module_map.module_tree:
+            for sub in module_map.module_tree[:_MAX_DEPENDENCY_NODES]:
+                func_count = sub.function_count or 0
+                class_count = sub.class_count or 0
+                desc = f"{func_count} functions, {class_count} classes"
+                components.append((sub.name, desc, func_count + class_count))
+
+        if not components:
+            return DiagramResult(
+                diagram_type="c4_component",
+                format=output_format,
+                content="",
+                degraded=True,
+            )
+
+        container_name = module_map.project_name or scope_dir.name
+
+        if output_format == "mermaid":
+            content, nodes, edges = self._c4_component_mermaid(container_name, components)
+        else:
+            content, nodes, edges = self._c4_component_plantuml(container_name, components)
+
+        return DiagramResult(
+            diagram_type="c4_component",
+            format=output_format,
+            content=content,
+            node_count=nodes,
+            edge_count=edges,
+        )
+
+    def _c4_component_mermaid(
+        self,
+        container_name: str,
+        components: list[tuple[str, str, int]],
+    ) -> tuple[str, int, int]:
+        lines = ["C4Component"]
+        lines.append(f'    title Component diagram for {container_name}')
+        lines.append("")
+        cid = self._sanitize_id(container_name)
+        lines.append(f'    Container_Boundary({cid}, "{container_name}") {{')
+
+        for cname, desc, _ in components[:_MAX_DEPENDENCY_NODES]:
+            comp_id = self._sanitize_id(cname)
+            lines.append(f'        Component({comp_id}, "{cname}", "Python", "{desc}")')
+
+        lines.append("    }")
+        lines.append("")
+        return "\n".join(lines) + "\n", len(components), 0
+
+    def _c4_component_plantuml(
+        self,
+        container_name: str,
+        components: list[tuple[str, str, int]],
+    ) -> tuple[str, int, int]:
+        lines = ["@startuml"]
+        lines.append("!include <C4/C4_Component>")
+        lines.append("")
+        lines.append(f"title Component diagram for {container_name}")
+        lines.append("")
+        cid = self._sanitize_id(container_name)
+        lines.append(f'Container_Boundary({cid}, "{container_name}") {{')
+
+        for cname, desc, _ in components[:_MAX_DEPENDENCY_NODES]:
+            comp_id = self._sanitize_id(cname)
+            lines.append(f'    Component({comp_id}, "{cname}", "Python", "{desc}")')
+
+        lines.append("}")
+        lines.append("")
+        lines.append("@enduml")
+        return "\n".join(lines) + "\n", len(components), 0

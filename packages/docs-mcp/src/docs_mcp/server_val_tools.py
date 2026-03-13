@@ -295,6 +295,155 @@ async def docs_validate_epic(
 
 
 # ---------------------------------------------------------------------------
+# Epic 82: Diataxis balance validation
+# ---------------------------------------------------------------------------
+
+
+async def docs_check_diataxis(
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Check Diataxis content balance across project documentation.
+
+    Classifies all markdown files into the four Diataxis quadrants (Tutorial,
+    How-to, Reference, Explanation) and scores the overall balance. Returns
+    per-file classifications, coverage percentages, and recommendations for
+    underrepresented quadrants.
+
+    Args:
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_check_diataxis")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_check_diataxis",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.validators.diataxis import DiataxisValidator
+
+    try:
+        validator = DiataxisValidator()
+        coverage = validator.validate(root)
+    except Exception as exc:
+        return error_response(
+            "docs_check_diataxis",
+            "VALIDATION_ERROR",
+            f"Failed to check Diataxis balance: {exc}",
+        )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "balance_score": coverage.balance_score,
+        "coverage": {
+            "tutorial": coverage.tutorial_pct,
+            "how_to": coverage.howto_pct,
+            "reference": coverage.reference_pct,
+            "explanation": coverage.explanation_pct,
+        },
+        "total_files": coverage.total_files,
+        "classified_files": coverage.classified_files,
+        "per_file": [r.model_dump() for r in coverage.per_file[:50]],
+        "recommendations": coverage.recommendations,
+    }
+
+    return success_response(
+        "docs_check_diataxis",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Address missing content types identified in recommendations.",
+            "Use docs_generate_readme or docs_generate_adr to fill gaps.",
+            "Run docs_check_completeness for a broader documentation health check.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# docs_check_cross_refs (Epic 85.4)
+# ---------------------------------------------------------------------------
+
+
+async def docs_check_cross_refs(
+    doc_dirs: str = "",
+    check_backlinks: bool = True,
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Validate cross-references between documentation files.
+
+    Checks for orphan documents (not linked from any other doc),
+    broken references (links to non-existent files), and missing
+    backlinks (A links to B but B does not link back).
+
+    Args:
+        doc_dirs: Comma-separated list of directories to scan.
+            When empty, scans the entire project.
+        check_backlinks: Whether to check for missing backlinks.
+            Defaults to True.
+        project_root: Path to the project root. Defaults to configured root.
+    """
+    _record_call("docs_check_cross_refs")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else settings.project_root
+
+    if not root.is_dir():
+        return error_response(
+            "docs_check_cross_refs",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.validators.cross_ref import CrossRefValidator
+
+    dirs_list: list[str] | None = None
+    if doc_dirs:
+        dirs_list = [d.strip() for d in doc_dirs.split(",") if d.strip()]
+
+    try:
+        validator = CrossRefValidator()
+        report = validator.validate(
+            root, doc_dirs=dirs_list, check_backlinks=check_backlinks
+        )
+    except Exception as exc:
+        return error_response(
+            "docs_check_cross_refs",
+            "VALIDATION_ERROR",
+            f"Failed to validate cross-references: {exc}",
+        )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    data: dict[str, Any] = {
+        "score": report.score,
+        "total_files": report.total_files,
+        "total_refs": report.total_refs,
+        "orphan_count": report.orphan_count,
+        "broken_count": report.broken_count,
+        "missing_backlink_count": report.missing_backlink_count,
+        "issues": [i.model_dump() for i in report.issues[:50]],
+    }
+
+    return success_response(
+        "docs_check_cross_refs",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Fix broken references to improve documentation navigation.",
+            "Add links to orphan documents from relevant parent docs.",
+            "Run docs_generate_doc_index to create a documentation map.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registration (Epic 79.2: conditional)
 # ---------------------------------------------------------------------------
 
@@ -311,3 +460,7 @@ def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_freshness)
     if "docs_validate_epic" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_validate_epic)
+    if "docs_check_diataxis" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_diataxis)
+    if "docs_check_cross_refs" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_cross_refs)

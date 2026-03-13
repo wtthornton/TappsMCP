@@ -65,6 +65,7 @@ class BootstrapConfig:
     verify_only: bool = False
     llm_engagement_level: str = "medium"
     scaffold_experts: bool = False
+    docs_automation: bool = True
 
     @classmethod
     def from_params(
@@ -909,6 +910,15 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             state.result["python_quality_rule"] = generate_claude_python_quality_rule(
                 state.project_root, engagement_level=engagement
             )
+            # Epic 86: Doc automation when DocsMCP is detected
+            if cfg.docs_automation and state.result.get("docsmcp_detected", False):
+                from tapps_mcp.pipeline.platform_docs_automation import (
+                    generate_docs_automation,
+                )
+
+                state.result["docs_automation"] = generate_docs_automation(
+                    state.project_root, "claude"
+                )
             if cfg.agent_teams:
                 state.result["agent_teams"] = generate_agent_teams_hooks(state.project_root)
             if cfg.memory_capture:
@@ -972,6 +982,15 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             state.result["skills"] = generate_skills(
                 state.project_root, "cursor", engagement_level=engagement
             )
+            # Epic 86: Doc automation when DocsMCP is detected
+            if cfg.docs_automation and state.result.get("docsmcp_detected", False):
+                from tapps_mcp.pipeline.platform_docs_automation import (
+                    generate_docs_automation,
+                )
+
+                state.result["docs_automation"] = generate_docs_automation(
+                    state.project_root, "cursor"
+                )
             state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
             state.result["bugbot_rules"] = generate_bugbot_rules(state.project_root)
             state.result["ci_workflow"] = generate_ci_workflow(state.project_root)

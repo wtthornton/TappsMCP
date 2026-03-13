@@ -21,8 +21,8 @@ packages/docs-mcp/
 │   ├── server_helpers.py      # Response builders, settings singleton
 │   ├── server_analysis.py     # docs_module_map, docs_api_surface
 │   ├── server_git_tools.py    # docs_git_summary
-│   ├── server_gen_tools.py    # docs_generate_readme, _changelog, _release_notes, _api, _adr, _onboarding, _contributing, _diagram, _prd
-│   ├── server_val_tools.py    # docs_check_drift, _completeness, _links, _freshness
+│   ├── server_gen_tools.py    # docs_generate_readme, _changelog, _release_notes, _api, _adr, _onboarding, _contributing, _diagram, _prd, _purpose, _doc_index, _llms_txt, _frontmatter, _interactive_diagrams
+│   ├── server_val_tools.py    # docs_check_drift, _completeness, _links, _freshness, _diataxis, _cross_refs
 │   ├── config/
 │   │   ├── settings.py        # DocsMCPSettings (Pydantic), load_docs_settings()
 │   │   └── default.yaml
@@ -47,15 +47,24 @@ packages/docs-mcp/
 │   │   ├── adr.py             # Architecture Decision Records (MADR/Nygard)
 │   │   ├── guides.py          # Onboarding + contributing guides
 │   │   ├── specs.py           # Product Requirements Documents (PRD)
-│   │   ├── diagrams.py        # Mermaid/PlantUML diagrams (4 types)
+│   │   ├── diagrams.py        # Mermaid/PlantUML diagrams (7 types incl. C4)
+│   │   ├── interactive_html.py # Interactive HTML viewer with Mermaid.js
 │   │   ├── architecture.py    # Self-contained HTML architecture report with SVG
 │   │   ├── epics.py           # Epic planning docs with expert enrichment
-│   │   └── stories.py         # User story docs with expert enrichment
+│   │   ├── stories.py         # User story docs with expert enrichment
+│   │   ├── llms_txt.py        # llms.txt machine-readable project summary
+│   │   ├── frontmatter.py     # YAML frontmatter injection/update
+│   │   ├── purpose.py         # Purpose/intent architecture template
+│   │   └── doc_index.py       # Documentation index/map generator
+│   ├── analyzers/             # Code and git analysis (continued)
+│   │   └── diataxis.py        # Diataxis content classifier
 │   ├── validators/            # Documentation quality checks
 │   │   ├── drift.py           # Code-vs-docs drift detection
 │   │   ├── completeness.py    # Documentation completeness scoring
 │   │   ├── link_checker.py    # Internal link validation
-│   │   └── freshness.py       # File age classification
+│   │   ├── freshness.py       # File age classification
+│   │   ├── diataxis.py        # Diataxis coverage validation
+│   │   └── cross_ref.py       # Cross-reference validation
 │   └── integrations/
 │       └── tapps.py           # Optional TappsMCP enrichment reader
 └── tests/
@@ -122,8 +131,8 @@ The MCP server is split across five tool files sharing the same `mcp` FastMCP in
 - **`server.py`** -- Creates `FastMCP("DocsMCP")` and registers `docs_session_start`, `docs_project_scan`, `docs_config`. Imports the other four modules at the bottom.
 - **`server_analysis.py`** -- `docs_module_map`, `docs_api_surface`
 - **`server_git_tools.py`** -- `docs_git_summary`
-- **`server_gen_tools.py`** -- `docs_generate_readme`, `docs_generate_changelog`, `docs_generate_release_notes`, `docs_generate_api`, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing`, `docs_generate_prd`, `docs_generate_diagram`, `docs_generate_architecture`, `docs_generate_epic`, `docs_generate_story`, `docs_generate_prompt`
-- **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`, `docs_validate_epic`
+- **`server_gen_tools.py`** -- `docs_generate_readme`, `docs_generate_changelog`, `docs_generate_release_notes`, `docs_generate_api`, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing`, `docs_generate_prd`, `docs_generate_diagram`, `docs_generate_architecture`, `docs_generate_epic`, `docs_generate_story`, `docs_generate_prompt`, `docs_generate_llms_txt`, `docs_generate_frontmatter`, `docs_generate_interactive_diagrams`, `docs_generate_purpose`, `docs_generate_doc_index`
+- **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`, `docs_validate_epic`, `docs_check_diataxis`, `docs_check_cross_refs`
 - **`server_helpers.py`** -- Response builders (`error_response`, `success_response`), settings singleton (`_get_settings`)
 
 ### Configuration
@@ -148,7 +157,7 @@ To add a new MCP tool:
 4. Use `error_response()` and `success_response()` for return values
 5. Add tests in `packages/docs-mcp/tests/unit/`
 
-## The 24 MCP tools
+## The 31 MCP tools
 
 | Category | Tool | Description |
 |---|---|---|
@@ -166,16 +175,23 @@ To add a new MCP tool:
 | Generation | `docs_generate_onboarding` | Getting-started guide |
 | Generation | `docs_generate_contributing` | CONTRIBUTING.md |
 | Generation | `docs_generate_prd` | Product Requirements Document (standard/comprehensive, auto-populate, SmartMerger) |
-| Generation | `docs_generate_diagram` | Mermaid/PlantUML diagrams (dependency/class/module/ER) |
+| Generation | `docs_generate_diagram` | Mermaid/PlantUML diagrams (dependency/class/module/ER/C4) |
 | Generation | `docs_generate_architecture` | Self-contained HTML architecture report with SVG diagrams |
 | Generation | `docs_generate_epic` | Epic planning docs with stories, AC, expert enrichment |
 | Generation | `docs_generate_story` | User story docs with tasks, AC, expert enrichment |
 | Generation | `docs_generate_prompt` | Generate reusable prompt templates from project context |
+| Generation | `docs_generate_llms_txt` | Machine-readable llms.txt project summary (compact/full) |
+| Generation | `docs_generate_frontmatter` | YAML frontmatter injection/update for markdown files |
+| Generation | `docs_generate_interactive_diagrams` | Interactive HTML viewer with pan/zoom for Mermaid diagrams |
+| Generation | `docs_generate_purpose` | Purpose/intent architecture template with inferred principles |
+| Generation | `docs_generate_doc_index` | Documentation index/map with auto-categorization |
 | Validation | `docs_validate_epic` | Validate epic documents for completeness and consistency |
 | Validation | `docs_check_drift` | Detect code changes not reflected in docs |
 | Validation | `docs_check_completeness` | Score documentation completeness (0-100) |
 | Validation | `docs_check_links` | Validate internal links in markdown files |
 | Validation | `docs_check_freshness` | Score documentation freshness (fresh/aging/stale/ancient) |
+| Validation | `docs_check_diataxis` | Diataxis quadrant coverage analysis and balance scoring |
+| Validation | `docs_check_cross_refs` | Cross-reference validation (orphans, broken refs, backlinks) |
 
 ## Code conventions
 
