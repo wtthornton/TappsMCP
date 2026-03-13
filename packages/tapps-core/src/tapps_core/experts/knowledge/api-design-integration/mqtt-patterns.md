@@ -29,6 +29,10 @@ MQTT (Message Queuing Telemetry Transport) is a lightweight publish-subscribe me
 
 ### Pattern 1: Basic MQTT Client (paho-mqtt)
 
+> **Note:** paho-mqtt v2.x changed the `Client()` constructor. Use
+> `mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)` for v2, or
+> `mqtt.Client()` for paho-mqtt v1.x.
+
 ```python
 import paho.mqtt.client as mqtt
 import json
@@ -37,7 +41,7 @@ class MQTTClient:
     def __init__(self, broker: str, port: int = 1883):
         self.broker = broker
         self.port = port
-        self.client = mqtt.Client()
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
     
@@ -71,11 +75,13 @@ class MQTTClient:
         self.client.disconnect()
 ```
 
-### Pattern 2: Async MQTT Client (asyncio-mqtt)
+### Pattern 2: Async MQTT Client (aiomqtt)
+
+> **Note:** `asyncio-mqtt` was renamed to `aiomqtt` in 2023. Use `pip install aiomqtt`.
 
 ```python
 import asyncio
-from asyncio_mqtt import Client
+from aiomqtt import Client
 import json
 
 class AsyncMQTTClient:
@@ -450,6 +456,6 @@ client.tls_set(ca_certs="ca.crt")
 ## References
 
 - [paho-mqtt Documentation](https://www.eclipse.org/paho/index.php?page=clients/python/docs/index.php)
-- [asyncio-mqtt](https://github.com/sbtinstruments/asyncio-mqtt)
+- [aiomqtt (formerly asyncio-mqtt)](https://github.com/empicano/aiomqtt)
 - [MQTT Specification](https://mqtt.org/mqtt-specification/)
 

@@ -4,6 +4,38 @@
 
 This guide covers modern testing patterns including async testing, property-based testing with Hypothesis, snapshot testing, and mutation testing. These patterns complement traditional unit and integration testing for more robust test suites.
 
+## pytest 9.0 Changes (November 2025)
+
+pytest 9.0 introduced several significant changes:
+
+- **Python 3.10+ required**: Dropped support for Python 3.8 and 3.9.
+- **Subtests merged into core**: The `pytest-subtests` plugin functionality is now built-in. Use `subtests` fixture directly without installing the plugin.
+- **Native TOML configuration**: Supports `[tool.pytest]` table directly (not just `[tool.pytest.ini_options]`). The `ini_options` form still works but `[tool.pytest]` is now the preferred form.
+- **Terminal progress**: New terminal progress indicator (disabled by default except on Windows).
+- **Unified strict mode**: `--strict` now combines `--strict-markers` and `--strict-config` into a single flag.
+
+**Subtests example (built-in since pytest 9.0):**
+```python
+def test_multiple_cases(subtests):
+    cases = [("a", 1), ("b", 2), ("c", 3)]
+    for name, value in cases:
+        with subtests.test(msg=name):
+            assert len(name) == 1
+            assert value > 0
+```
+
+**Native TOML config (pytest 9.0+):**
+```toml
+# pyproject.toml - preferred form
+[tool.pytest]
+asyncio_mode = "auto"
+markers = ["slow: marks tests as slow"]
+
+# Legacy form (still works)
+# [tool.pytest.ini_options]
+# asyncio_mode = "auto"
+```
+
 ## Async Testing
 
 ### pytest-asyncio

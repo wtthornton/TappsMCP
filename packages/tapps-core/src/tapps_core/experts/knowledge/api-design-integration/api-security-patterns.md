@@ -40,7 +40,7 @@ Client → Exchange Code + code_verifier → Access Token
 Client → API (with Access Token)
 ```
 
-> **Note:** OAuth 2.1 (finalized 2024) deprecates the Implicit flow and
+> **Note:** OAuth 2.1 (RFC 9700, published 2024) deprecates the Implicit flow and
 > requires PKCE for all public clients. Always use Authorization Code + PKCE.
 
 **Implementation:**

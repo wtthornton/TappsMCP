@@ -143,9 +143,16 @@ if __name__ == "__main__":
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
-| 2024-11-05 | Nov 2024 | Initial release by Anthropic |
-| 2025-06-18 | Jun 2025 | Structured tool outputs, OAuth, elicitation, `MCP-Protocol-Version` header |
-| 2025-11-25 | Nov 2025 | Tasks primitive (experimental), OpenID Connect, icons metadata, extension framework |
+| 2024-11-05 | Nov 2024 | Initial release by Anthropic - core primitives (tools, resources, prompts), stdio transport |
+| 2025-06-18 | Jun 2025 | Auth spec update (OAuth 2.1 based), structured tool outputs, elicitation, `MCP-Protocol-Version` header |
+| 2025-11-25 | Nov 2025 | Major spec release (current latest). Tasks primitive for async/long-running ops, enhanced OAuth 2.1 authorization, Protected Resource Metadata discovery, Streamable HTTP (replacing SSE), OpenID Connect, icons metadata, extension framework |
+
+### 2026 Roadmap
+
+- **Streamable HTTP improvements**: Performance tuning, reconnection semantics
+- **Tasks lifecycle**: Retry policies, expiry/TTL, cancellation improvements
+- **Enterprise readiness**: Audit trails, SSO integration, API gateways
+- **SEP process improvements**: Streamlined spec evolution proposals under AAIF governance
 
 In December 2025, MCP governance was donated to the **Agentic AI Foundation (AAIF)** under the Linux Foundation.
 

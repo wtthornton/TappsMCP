@@ -1,4 +1,4 @@
-# GitHub Agentic Workflows (Technical Preview 2026)
+# GitHub Agentic Workflows (GA 2026)
 
 ## Overview
 
@@ -7,13 +7,17 @@ Actions. Written in Markdown instead of YAML, they are compiled to `.lock.yml`
 files for execution. This guide covers authoring, compilation, security model,
 agent capabilities, and production patterns.
 
+Agentic Workflows moved from technical preview to general availability in
+early 2026, with expanded agent support and MCP integration.
+
 ## Supported Agents
 
 | Agent | Provider | Capabilities |
 |---|---|---|
-| GitHub Copilot | GitHub | Code review, issue triage, docs |
+| GitHub Copilot | GitHub | Code review, issue triage, docs, coding |
 | Claude Code | Anthropic | Complex reasoning, multi-step tasks |
 | OpenAI Codex | OpenAI | Code generation, analysis |
+| Custom MCP agents | Any | Domain-specific tools via MCP servers |
 
 ## Workflow Authoring
 
@@ -354,6 +358,53 @@ mcp_servers:
    - Post a summary of quality scores
 ```
 
+## Multi-Agent Coordination
+
+Agentic workflows support chaining multiple agents in a single pipeline:
+
+```markdown
+---
+trigger: pull_request
+agents:
+  - name: quality
+    agent: copilot
+    tools: [code_search, file_read, pr_comment]
+  - name: security
+    agent: claude-code
+    tools: [code_search, file_read, pr_review]
+---
+
+# Multi-Agent PR Review
+
+## Agent: quality
+Review code quality, style, and test coverage.
+Post findings as PR comments.
+
+## Agent: security
+Review for security vulnerabilities and supply chain risks.
+Submit a PR review with security findings.
+```
+
+## Self-Review Pattern
+
+Agents can review their own output before finalizing:
+
+```markdown
+---
+trigger: issues.labeled
+agent: copilot
+self_review: true
+---
+
+# Implement Feature
+
+1. Read the issue description
+2. Implement the requested feature
+3. Write tests for the new code
+4. Run linters and type checkers
+5. Self-review: verify all checks pass before opening PR
+```
+
 ## Best Practices
 
 1. **Keep prompts focused** - one clear objective per workflow
@@ -366,6 +417,8 @@ mcp_servers:
 8. **Gate behind feature flags** - use conditional triggers until stable
 9. **Version lock files** - commit `.lock.yml` files for reproducibility
 10. **Review agent outputs** - do not blindly trust agent-generated content
+11. **Use self-review** - enable self-review for code-generating agents
+12. **Chain agents** - use multi-agent coordination for complex workflows
 
 ## Anti-Patterns
 

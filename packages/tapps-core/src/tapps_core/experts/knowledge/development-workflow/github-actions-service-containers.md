@@ -457,10 +457,6 @@ strategy:
   matrix:
     os: [ubuntu-latest, windows-latest, macos-latest]
     python-version: ["3.12", "3.13"]
-    exclude:
-      # Skip Python 3.13 on Windows (known issue)
-      - os: windows-latest
-        python-version: "3.13"
     include:
       # Add a specific combo with extra env
       - os: ubuntu-latest

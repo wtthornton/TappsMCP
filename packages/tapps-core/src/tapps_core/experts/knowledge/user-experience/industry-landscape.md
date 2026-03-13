@@ -165,7 +165,7 @@ San Francisco-based, senior-led teams trusted by Meta, Google, and Amazon.
 
 ### Google Material Design 3
 
-The most widely adopted design system globally. Material 3 (2024-2025) introduced:
+The most widely adopted design system globally. Material 3 (2024-2026) introduced:
 - Dynamic color theming — colors derived from user wallpaper or brand palette
 - Adaptive components that respond to screen size and input method
 - Motion system with emphasis tokens (standard, emphasized, spring)
@@ -184,7 +184,7 @@ Not a component library but a comprehensive design philosophy. Updated continuou
 Enterprise-grade, open-source, deeply accessible. Frequently cited as the most well-documented design system.
 
 **Strengths:**
-- WCAG 2.1 AA compliant across all components
+- WCAG 2.2 AA compliant across all components
 - Extensive data visualization component library
 - Framework-agnostic (React, Angular, Vue, Web Components)
 - Design kit for Figma with 1:1 component parity
@@ -205,7 +205,7 @@ Commerce-focused design system powering Shopify's admin, apps, and merchant expe
 
 ### shadcn/ui
 
-The breakout design system of 2024-2025. Not a traditional component library — components are copied into your codebase, giving full ownership and customization.
+The breakout design system of 2024-2026. Not a traditional component library — components are copied into your codebase, giving full ownership and customization.
 
 **Why it dominates in 2025-2026:**
 - Built on Radix UI primitives (accessibility guaranteed)

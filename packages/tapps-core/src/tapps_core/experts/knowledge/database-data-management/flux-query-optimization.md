@@ -336,7 +336,11 @@ from(bucket: "homeiq")
 
 ## References
 
-- [Flux Query Optimization](https://docs.influxdata.com/flux/v0.x/optimize-queries/)
-- [Flux Performance Best Practices](https://docs.influxdata.com/influxdb/v2.7/query-data/flux/optimize-queries/)
-- [Flux Language Guide](https://docs.influxdata.com/flux/v0.x/)
+- [InfluxDB 3.0 Documentation](https://docs.influxdata.com/influxdb3/)
+- [Flux Query Optimization (v2.x legacy)](https://docs.influxdata.com/flux/v0.x/optimize-queries/)
+- [Flux Language Guide (v2.x legacy)](https://docs.influxdata.com/flux/v0.x/)
+
+> **Note (2026):** InfluxDB 3.0 uses SQL and Apache Arrow/DataFusion instead of Flux.
+> Flux remains supported for InfluxDB 2.x deployments. New projects should evaluate
+> InfluxDB 3.0 with SQL queries for improved performance and ecosystem compatibility.
 

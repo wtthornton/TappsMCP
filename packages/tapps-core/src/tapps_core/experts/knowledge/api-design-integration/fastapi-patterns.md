@@ -2,7 +2,20 @@
 
 ## Overview
 
-FastAPI is a modern Python web framework for building APIs. This guide covers FastAPI patterns for HomeIQ and similar microservices applications.
+FastAPI is a modern Python web framework for building APIs. This guide covers FastAPI patterns for production microservices applications.
+
+## Version & Compatibility (as of early 2026)
+
+- **Latest:** FastAPI 0.135.x (install via `pip install "fastapi[standard]"`)
+- **`fastapi-slim` is deprecated** - use `"fastapi[standard]"` for the full install
+- **Python:** 3.9+ minimum; recommend 3.12 or 3.13 for best performance
+- **Pydantic:** v2.12+ required (v1 compatibility shims removed)
+- **Starlette:** 1.0.0+ (stable API, no more 0.x breaking changes)
+- **Key additions in 2025-2026:**
+  - Server-Sent Events (SSE) support via `EventSourceResponse`
+  - Streaming JSON Lines and binary data with `yield` in `StreamingResponse`
+  - Strict Content-Type checking enabled by default (disable with `strict_content_type=False` on route)
+  - `datetime.utcnow()` deprecated in Python 3.12+ - use `datetime.now(UTC)` instead
 
 ## Core Patterns
 
@@ -13,8 +26,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
-    title="HomeIQ API",
-    description="Home automation API",
+    title="My API",
+    description="Application API",
     version="1.0.0"
 )
 
@@ -29,7 +42,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "HomeIQ API"}
+    return {"message": "API is running"}
 
 @app.get("/health")
 async def health():
@@ -88,7 +101,7 @@ async def send_command(device_id: str, command: dict):
 ### Pattern 4: Request/Response Models (Pydantic v2)
 
 ```python
-from datetime import datetime
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -98,7 +111,7 @@ class SensorReading(BaseModel):
     device_id: str = Field(..., description="Device identifier", min_length=1)
     value: float = Field(..., description="Sensor value")
     unit: str = Field(..., description="Unit of measurement")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @field_validator("unit")
     @classmethod
@@ -227,7 +240,81 @@ async def add_process_time_header(request: Request, call_next):
     return response
 ```
 
-## HomeIQ-Specific Patterns
+### Pattern 5: Server-Sent Events (SSE)
+
+```python
+from fastapi import FastAPI
+from sse_starlette.sse import EventSourceResponse
+
+app = FastAPI()
+
+async def event_generator():
+    """Yield events as Server-Sent Events."""
+    while True:
+        data = await get_next_event()
+        yield {
+            "event": "update",
+            "data": json.dumps(data),
+        }
+
+@app.get("/stream/events")
+async def stream_events():
+    """Stream events via SSE."""
+    return EventSourceResponse(event_generator())
+```
+
+### Pattern 6: Streaming Responses (JSON Lines & Binary)
+
+```python
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+
+app = FastAPI()
+
+async def jsonl_generator():
+    """Yield newline-delimited JSON (JSON Lines)."""
+    async for record in fetch_records():
+        yield json.dumps(record) + "\n"
+
+@app.get("/export/data")
+async def export_data():
+    """Stream JSON Lines response."""
+    return StreamingResponse(
+        jsonl_generator(),
+        media_type="application/x-ndjson",
+    )
+
+async def binary_generator():
+    """Yield binary chunks for file download."""
+    async for chunk in read_file_chunks(path):
+        yield chunk
+
+@app.get("/download/{file_id}")
+async def download_file(file_id: str):
+    """Stream binary file download."""
+    return StreamingResponse(
+        binary_generator(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename={file_id}"},
+    )
+```
+
+### Pattern 7: Strict Content-Type Checking
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+# FastAPI 0.135+ enables strict Content-Type checking by default.
+# Clients MUST send Content-Type: application/json for JSON bodies.
+# To disable (e.g., for legacy clients):
+@app.post("/legacy/endpoint", strict_content_type=False)
+async def legacy_endpoint(data: dict):
+    return data
+```
+
+## Domain-Specific Patterns
 
 ### Pattern 1: Sensor Data Endpoint
 
@@ -366,5 +453,6 @@ async def create_sensor(reading: SensorReading):
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [FastAPI Best Practices](https://fastapi.tiangolo.com/tutorial/)
-- [Pydantic Models](https://docs.pydantic.dev/)
+- [Pydantic v2 Documentation](https://docs.pydantic.dev/latest/)
+- [Starlette SSE](https://github.com/sysid/sse-starlette)
 

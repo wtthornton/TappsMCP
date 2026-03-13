@@ -2,10 +2,10 @@
 
 ## Overview
 
-Testing MCP (Model Context Protocol) servers requires specialized patterns for
-async tool handlers, fixture-based mocking, cache isolation, schema validation,
-subprocess mocking, and CI integration. This guide covers pytest-based patterns
-proven in the TappsMCP codebase (2700+ tests).
+Testing MCP (Model Context Protocol, spec version 2025-11-25) servers requires
+specialized patterns for async tool handlers, fixture-based mocking, cache
+isolation, schema validation, subprocess mocking, and CI integration. This guide
+covers pytest-based patterns proven in the TappsMCP codebase (7400+ tests).
 
 ## pytest-asyncio Patterns
 

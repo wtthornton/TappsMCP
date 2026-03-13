@@ -2,7 +2,17 @@
 
 ## Overview
 
-This guide covers Dockerfile best practices, security patterns, and optimization techniques for HomeIQ and similar production applications.
+This guide covers Dockerfile best practices, security patterns, and optimization techniques for production applications.
+
+## Docker Ecosystem Status (2026)
+
+- **Docker Engine v29** - Latest stable release
+- **Containerd image store** - Now the DEFAULT storage backend (replaces classic overlay2 storage driver)
+- **Docker Compose v5** - Rewritten with Go SDK for better performance and Docker Desktop integration
+- **Docker Model Runner** - Run AI/ML models locally via Docker Desktop (inference endpoint from container images)
+- **BuildKit** - Default build engine; provenance attestation switched to SLSA v1.0 by default
+- **Docker Agent** - AI-powered assistant available through Docker Desktop for Dockerfile generation and debugging
+- **Docker Debug** - Interactive container debugging tool, now free for all Docker users (no paid plan required)
 
 ## Best Practices
 
@@ -102,8 +112,9 @@ ENV API_KEY=secret123
 ### Pattern 2: Scan for Vulnerabilities
 
 ```bash
-# Scan image for vulnerabilities
-docker scan myimage:latest
+# Scan image for vulnerabilities (Docker Scout, replaces deprecated `docker scan`)
+docker scout cves myimage:latest
+docker scout recommendations myimage:latest
 ```
 
 ### Pattern 3: Use Specific Tags
@@ -163,7 +174,7 @@ RUN apt-get update && \
 ### Pattern 3: Use BuildKit Cache
 
 ```dockerfile
-# syntax=docker/dockerfile:1.4
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim
 
 # Cache mount for pip

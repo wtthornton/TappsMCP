@@ -111,7 +111,7 @@ UserRoles (UserID, RoleID)
 
 **Types:**
 - Auto-increment integers
-- UUIDs (for distributed systems)
+- UUIDs (for distributed systems) - prefer `uuidv7()` (PostgreSQL 18+) for time-sortable IDs with better index locality than UUIDv4
 - Natural keys (if stable)
 
 ### Foreign Keys
@@ -171,6 +171,26 @@ CREATE TABLE Orders (
 - BOOLEAN (where supported)
 - TINYINT(1) alternative
 - Avoid strings ('true', 'false')
+
+## PostgreSQL Recent Releases
+
+### PostgreSQL 18 (2025)
+
+The latest major release introduces significant performance and feature improvements:
+
+- **Async I/O subsystem:** Kernel-level asynchronous I/O for reads, delivering up to 3x throughput improvement on I/O-bound workloads
+- **Skip scan for multicolumn B-tree indexes:** The planner can now skip leading columns in composite indexes, improving queries that filter on non-leading columns
+- **Virtual generated columns:** Computed columns that are calculated on read (no storage cost), complementing the existing stored generated columns
+- **`uuidv7()` function:** Built-in generation of time-sortable UUIDs (RFC 9562), ideal for distributed primary keys with better index locality than UUIDv4
+- **OAuth 2.0 authentication:** Native OAuth/OIDC support for token-based client authentication
+- **Temporal constraints:** `WITHOUT OVERLAPS` clause for PRIMARY KEY, UNIQUE, and FOREIGN KEY constraints, enabling native support for temporal (time-range) data without application-level overlap checks
+- **OLD/NEW in RETURNING clauses:** DML statements (`UPDATE`, `DELETE`) can return both the old and new row values in a single operation
+
+### PostgreSQL 17 (2024)
+
+- **`JSON_TABLE`:** SQL/JSON function to decompose JSON data into relational rows and columns
+- **Overhauled vacuum memory management:** Significantly reduced memory usage during vacuum operations on large tables
+- **Enhanced logical replication:** Failover support, subscriber-side apply parallelism, and improved conflict handling
 
 ## Best Practices
 

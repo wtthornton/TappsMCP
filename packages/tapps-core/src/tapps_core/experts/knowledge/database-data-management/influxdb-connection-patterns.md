@@ -4,6 +4,8 @@
 
 This guide covers InfluxDB connection management, pooling, retry logic, and error handling patterns for HomeIQ and similar production applications.
 
+> **InfluxDB 3.0 note:** InfluxDB 3.0 (latest generation) is rebuilt on Apache Arrow, DataFusion, and Parquet. It replaces Flux with SQL and InfluxQL, uses a new `influxdb3-python` client library, and offers significantly faster queries. The v2.x `influxdb-client` patterns below remain valid for InfluxDB 2.x/OSS deployments. For new projects, evaluate InfluxDB 3.0 Cloud or the open-source InfluxDB 3 Community Edition.
+
 ## Connection Management
 
 ### Basic Connection Pattern
@@ -430,7 +432,9 @@ def influxdb_client():
 
 ## References
 
-- [InfluxDB Python Client](https://github.com/influxdata/influxdb-client-python)
-- [InfluxDB Connection Management](https://docs.influxdata.com/influxdb/v2.7/api-guide/client-libraries/python/)
-- [Error Handling Best Practices](https://docs.influxdata.com/influxdb/v2.7/write-data/best-practices/)
+- [InfluxDB Python Client (v2.x)](https://github.com/influxdata/influxdb-client-python)
+- [InfluxDB 3.0 Python Client](https://github.com/InfluxCommunity/influxdb3-python)
+- [InfluxDB Connection Management](https://docs.influxdata.com/influxdb/v2/api-guide/client-libraries/python/)
+- [Error Handling Best Practices](https://docs.influxdata.com/influxdb/v2/write-data/best-practices/)
+- [InfluxDB 3.0 Documentation](https://docs.influxdata.com/influxdb3/)
 

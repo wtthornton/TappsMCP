@@ -286,7 +286,7 @@ Polaris includes UX writing standards alongside component specs:
 ### IBM Carbon — Accessibility First
 
 Carbon proves enterprise-grade accessibility is achievable:
-- WCAG 2.1 AA compliant across every component
+- WCAG 2.2 AA compliant across every component
 - Extensive data visualization accessibility (patterns, not just color)
 - Framework-agnostic (React, Angular, Vue, Web Components)
 - 1:1 parity between Figma kit and code components

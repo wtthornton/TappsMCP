@@ -4,9 +4,25 @@
 
 GitHub provides an official MCP (Model Context Protocol) server with 50+ tools
 for repository management, issue tracking, pull request operations, and project
-management. This guide covers configuration, toolset selection, security
-considerations, prompt injection protection, and building custom MCP servers
-that interact with GitHub.
+management. The server implements the **MCP 2025-11-25** specification, which
+is the latest stable protocol version.
+
+This guide covers configuration, toolset selection, security considerations,
+prompt injection protection, and building custom MCP servers that interact
+with GitHub.
+
+### MCP Protocol Version
+
+The MCP 2025-11-25 specification introduces:
+
+- **Streamable HTTP transport** - replaces deprecated SSE transport
+- **Structured tool outputs** - typed return schemas for tool results
+- **Tool annotations** - metadata hints (readOnlyHint, destructiveHint, etc.)
+- **Elicitation** - servers can request additional input from users
+- **Audio content support** - expanded content types
+
+GitHub's MCP server supports Streamable HTTP and stdio transports.
+SSE transport is deprecated and should not be used for new integrations.
 
 ## GitHub's Official MCP Server
 
@@ -68,6 +84,35 @@ that interact with GitHub.
     }
   }
 }
+```
+
+### Streamable HTTP Transport
+
+For remote MCP server configurations (e.g., CI/CD or server environments),
+use Streamable HTTP instead of the deprecated SSE transport:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "streamable-http",
+      "url": "https://mcp.github.com/v1",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+For local development, stdio transport remains the simplest option:
+
+```bash
+# stdio transport (local, recommended for development)
+gh mcp serve
+
+# Streamable HTTP transport (remote, recommended for production)
+gh mcp serve --transport streamable-http --port 8080
 ```
 
 ## Toolset Selection

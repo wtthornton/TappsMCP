@@ -227,6 +227,30 @@ The California Consumer Privacy Act (CCPA) is a comprehensive privacy law that g
 - [ ] Monitor for security incidents
 - [ ] Develop incident response procedures
 
+## CPRA Enforcement Update (2025-2026)
+
+The California Privacy Rights Act (CPRA), which amended and expanded CCPA, is in active enforcement by the California Privacy Protection Agency (CPPA).
+
+### Key CPRA Enhancements (Now in Effect)
+- **Right to Correct**: Consumers can request correction of inaccurate personal information
+- **Right to Limit Use of Sensitive Personal Information**: New category of "sensitive personal information" with opt-out rights for secondary uses
+- **Expanded opt-out scope**: "Do Not Sell or Share" now covers both sale and cross-context behavioral advertising ("sharing")
+- **Automated decision-making**: Right to opt out of automated decision-making technology, with access to information about the logic involved
+- **Risk assessments**: Businesses conducting high-risk processing must perform cybersecurity audits and risk assessments (regulations finalized 2025)
+- **Data broker registration**: Enhanced registration requirements and penalties for non-compliant data brokers (Delete Act, SB 362)
+
+### Enforcement Activity
+- CPPA conducting formal investigations and issuing enforcement actions since July 2023
+- Focus areas: dark patterns in opt-out mechanisms, inadequate privacy notices, failure to honor Global Privacy Control (GPC) signals
+- Private right of action for data breaches remains under the original CCPA framework
+
+### Compliance Checklist Additions
+- [ ] Honor Global Privacy Control (GPC) browser signals as valid opt-out requests
+- [ ] Implement "Do Not Sell or Share" (updated from "Do Not Sell" alone)
+- [ ] Classify and protect sensitive personal information separately
+- [ ] Conduct risk assessments for high-risk processing activities
+- [ ] Implement right to correct procedures
+
 ## Best Practices
 
 1. **Map Personal Information**: Understand what personal information you collect

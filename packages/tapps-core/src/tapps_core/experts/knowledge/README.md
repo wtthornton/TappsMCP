@@ -219,7 +219,7 @@ The next `tapps_consult_expert` call for that domain will rebuild the index from
 - **Examples:**
   - **Security Expert:** "Senior application security architect specializing in OWASP, threat modeling, and secure-by-default design."
   - **Testing Expert:** "Senior test architect focused on comprehensive test strategies and quality assurance. Default to recommending tests for critical paths; never approve untested behavior in production code."
-  - **Accessibility Expert:** "Senior accessibility specialist focused on WCAG 2.1 AA compliance and inclusive design. Default to assuming diverse abilities and assistive technology usage; never approve inaccessible interfaces."
+  - **Accessibility Expert:** "Senior accessibility specialist focused on WCAG 2.2 AA compliance and inclusive design. Default to assuming diverse abilities and assistive technology usage; never approve inaccessible interfaces."
 - **Reference:** See `ExpertRegistry.BUILTIN_EXPERTS` in `packages/tapps-core/src/tapps_core/experts/registry.py`. For agency-style personas, see [TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md](../../../../../../docs/reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md).
 
 ## Knowledge Base Best Practices

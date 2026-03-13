@@ -30,13 +30,25 @@ SQL optimization improves query performance through proper indexing, query struc
 **Composite Indexes:**
 ```sql
 -- Multi-column index
-CREATE INDEX idx_user_status_created 
+CREATE INDEX idx_user_status_created
 ON users(status, created_at);
 
 -- Can use for:
 -- WHERE status = ? AND created_at > ?
 -- WHERE status = ?
 -- Not: WHERE created_at > ? (unless status also filtered)
+--   Exception: PostgreSQL 18+ skip scan can use this index
+--   for WHERE created_at > ? by skipping over distinct status values
+```
+
+**Skip Scan (PostgreSQL 18+):**
+```sql
+-- Previously required a separate index on created_at
+-- PostgreSQL 18 can skip scan the composite index above
+-- for queries filtering only on non-leading columns:
+SELECT * FROM users WHERE created_at > '2026-01-01';
+-- The planner skips through distinct values of status,
+-- useful when the leading column has low cardinality
 ```
 
 **Covering Indexes:**

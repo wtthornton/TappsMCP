@@ -609,6 +609,79 @@ def safe_save(store: object, key: str, value: str) -> dict:
     return store.save(key=key, value=value)
 ```
 
+## MCP-Native Memory Patterns (2025-2026)
+
+### Cross-Session Persistence via MCP Tools
+
+Modern AI agents use MCP tool calls for structured memory operations,
+replacing ad-hoc file-based persistence. The MCP server manages storage,
+decay, and retrieval centrally, ensuring all connected clients share a
+consistent memory state.
+
+```python
+# MCP-native memory pattern: agent persists learnings via tool calls
+# No direct file I/O needed - the MCP server handles persistence
+
+# Save a cross-session memory
+await tapps_memory(
+    action="save",
+    key="architecture.auth-pattern",
+    value="Project uses OAuth2 with PKCE flow for all public clients",
+    tier="architectural",
+    scope="project",
+    tags=["auth", "security", "oauth"],
+)
+
+# Auto-recall: memories injected before each turn via memory_hooks config
+# In .tapps-mcp.yaml:
+# memory_hooks:
+#   auto_recall: true
+#   auto_capture: true
+#   recall_top_k: 5
+#   recall_min_confidence: 0.5
+```
+
+### Memory Federation Across Projects
+
+Shared-scope memories enable knowledge transfer between related projects
+without manual export/import:
+
+```python
+# Save a memory visible to all projects in the workspace
+await tapps_memory(
+    action="save",
+    key="convention.error-handling",
+    value="All services use structured error responses with error code, message, and trace_id",
+    tier="pattern",
+    scope="shared",
+    tags=["error-handling", "conventions"],
+)
+
+# Consolidate duplicate and overlapping memories
+await tapps_memory(action="consolidate")
+```
+
+### Agent Team Memory Coordination
+
+When multiple agents collaborate (via Claude Code Agent Teams), memory
+coordination prevents conflicting decisions:
+
+```python
+# Agent 1 saves a decision
+await tapps_memory(
+    action="save",
+    key="decision.api-versioning",
+    value="Using URL-based versioning (/api/v2/) per team consensus",
+    tier="architectural",
+    source="agent",
+    source_agent="architect-agent",
+)
+
+# Agent 2 queries before making related decisions
+result = await tapps_memory(action="search", query="api versioning strategy")
+# Uses the existing decision rather than making a conflicting one
+```
+
 ## Anti-Patterns
 
 ### Unbounded Memory Growth

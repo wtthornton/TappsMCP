@@ -8,13 +8,16 @@ complexity metrics, vulture for dead code detection, and pre-commit integration.
 All tools are used by TappsMCP's scoring pipeline to produce deterministic
 quality assessments.
 
-## Ruff (v0.15+)
+## Ruff (v0.11+)
 
 ### What is Ruff?
 
 Ruff is an extremely fast Python linter and formatter written in Rust. It
 replaces flake8, isort, pyflakes, pycodestyle, pydocstyle, and more with
-a single tool that runs 10-100x faster than alternatives.
+a single tool that runs 10-100x faster than alternatives. As of v0.11+,
+Ruff supports Python 3.13 and 3.14 syntax, including template strings
+(t-strings). Ruff is planning a transition to calendar versioning
+(2026.x) in a future release.
 
 ### Basic Configuration
 
@@ -22,7 +25,7 @@ a single tool that runs 10-100x faster than alternatives.
 # pyproject.toml
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"  # or "py314" for Python 3.14 projects
 
 [tool.ruff.lint]
 select = [
@@ -135,12 +138,18 @@ steps:
 
 ## mypy (v1.19+ Strict Mode)
 
+mypy 1.19.1 is the latest stable release (Dec 2025). Notable improvements
+in recent versions: ~40% speedup in type checking (introduced in 1.18+),
+Python 3.14 free-threading support, and improved generics handling.
+A binary cache format is expected in 1.20, further improving incremental
+check times.
+
 ### Strict Configuration
 
 ```toml
 # pyproject.toml
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"  # or "3.14" for Python 3.14 projects
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -239,6 +248,11 @@ import faiss  # type: ignore[import-untyped]
 ```
 
 ## Bandit (v1.9+ Security Scanning)
+
+Bandit 1.9.3 is the latest stable release (Jan 2026). It includes 47
+built-in security checks and supports Python 3.13 and 3.14 (including
+free-threaded mode). Recent additions include B614/B615 rules for AI/ML
+model loading and prompt injection risks.
 
 ### Configuration
 
@@ -421,7 +435,7 @@ async def scan_dead_code(file_path: str, min_confidence: int = 80) -> dict:
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.0
+    rev: v0.11.0
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -466,7 +480,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - uses: pre-commit/action@v3.0.1
 ```
 
@@ -603,7 +617,7 @@ Pin tool versions in CI and pre-commit to avoid surprise failures:
 
 # GOOD
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.0  # pinned version
+  rev: v0.11.0  # pinned version
 ```
 
 ### Running Tools Sequentially
@@ -622,3 +636,42 @@ CI time and developer patience.
 | vulture | Dead code | Fast | pyproject.toml |
 | pip-audit | Dependency CVEs | Moderate | N/A |
 | pre-commit | Git hook runner | Varies | .pre-commit-config.yaml |
+| uv | Package manager | Very fast | pyproject.toml |
+
+## Python Version Support
+
+| Version | Status | Key Features |
+|---|---|---|
+| Python 3.12 | Stable (Oct 2023) | Improved error messages, f-string improvements |
+| Python 3.13 | Stable (Oct 2024) | Improved REPL, experimental free-threading, JIT |
+| Python 3.14 | Stable (Oct 2025) | Template strings (t-strings), free-threaded mode improvements, Zstandard compression, remote pdb debugging |
+
+## Package Management with uv
+
+`uv` (v0.10.x) is the recommended Python package manager, replacing pip,
+poetry, and pipx. Written in Rust, it is 10-100x faster than pip for
+dependency resolution and installation.
+
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create and sync a project
+uv init myproject
+uv sync
+
+# Run tools without installing globally
+uv run ruff check src/
+uv run mypy --strict src/
+
+# Manage Python versions
+uv python install 3.14
+uv python pin 3.14
+
+# Workspace monorepo support
+uv sync --all-packages
+```
+
+`uv` is developed by Astral (the same team behind Ruff) and supports
+PEP 621 pyproject.toml natively, lockfiles, workspaces, and inline
+script dependencies.

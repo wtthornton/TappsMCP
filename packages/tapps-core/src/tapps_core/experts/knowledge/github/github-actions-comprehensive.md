@@ -11,15 +11,27 @@ practices.
 
 ### Action Version Pinning
 
-Always SHA-pin third-party actions to prevent supply chain attacks:
+Always SHA-pin third-party actions to prevent supply chain attacks.
+GitHub recommends **immutable actions** -- pinning to full SHA ensures
+the action code cannot change after you reference it:
 
 ```yaml
 # Bad - mutable tag can be redirected to malicious code
 - uses: actions/checkout@v4
 
-# Good - SHA-pinned to specific release
-- uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+# Good - SHA-pinned to specific release (actions/checkout v4.2.2)
+- uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 ```
+
+Key SHA pins for common actions (as of early 2026):
+
+| Action | Version | SHA |
+|---|---|---|
+| actions/checkout | v4.2.2 | `11bd71901bbe5b1630ceea73d27597364c9af683` |
+| actions/setup-python | v5.4.0 | `a26af69be951a213d495a4c3e4e4022e16d87065` |
+| actions/upload-artifact | v4.6.0 | `65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08` |
+| actions/download-artifact | v4.3.0 | `fa0a91b85d4f404e444e00e005971372dc801d16` |
+| actions/cache | v4.2.0 | `1bd1e32a3bdc45362d1e726936510720a7c30a57` |
 
 Use Dependabot to auto-update SHA pins:
 
@@ -494,7 +506,55 @@ steps:
     run: pytest tests/ -m slow -v
 ```
 
-## Arm64 Runners
+## Runner Updates
+
+### Ubuntu 24.04 as Default
+
+As of late 2025, `ubuntu-latest` maps to **Ubuntu 24.04 (Noble Numbat)**.
+Ubuntu 22.04 remains available as `ubuntu-22.04` but will be deprecated.
+Update workflows that depend on specific OS packages or library versions.
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest  # Ubuntu 24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: pytest tests/ -v
+
+  # Pin to specific version if needed
+  legacy:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+```
+
+### Larger Runners (GA)
+
+GitHub-hosted larger runners are generally available for all plans.
+Available in 4, 8, 16, 32, and 64 vCPU configurations:
+
+```yaml
+jobs:
+  heavy-test:
+    runs-on: ubuntu-latest-16-cores  # 16 vCPU, 64 GB RAM
+    steps:
+      - uses: actions/checkout@v4
+      - run: pytest tests/ -n 16 -v
+
+  # GPU runners for ML workloads
+  ml-test:
+    runs-on: ubuntu-gpu-nc4as-t4  # NVIDIA T4 GPU
+    steps:
+      - run: python -m pytest tests/gpu/ -v
+```
+
+Larger runner labels:
+- `ubuntu-latest-4-cores`, `ubuntu-latest-8-cores`, `ubuntu-latest-16-cores`
+- `ubuntu-latest-32-cores`, `ubuntu-latest-64-cores`
+- GPU variants available for ML workloads
+
+### Arm64 Runners
 
 GitHub Arm64 runners (GA 2025) are 37% cheaper and free for public repos:
 
@@ -517,6 +577,8 @@ strategy:
         arch: x64
       - runner: ubuntu-24.04-arm
         arch: arm64
+      - runner: ubuntu-latest-16-cores
+        arch: x64-large
 ```
 
 ## Release Automation
@@ -594,7 +656,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v6
         with:
           push: true
           tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
@@ -698,6 +760,56 @@ steps:
 - name: Run expensive checks
   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
   run: uv run pytest tests/ -m slow -v
+```
+
+## SLSA Provenance Generation
+
+GitHub Actions has built-in support for SLSA (Supply-chain Levels for
+Software Artifacts) provenance generation, providing verifiable build
+attestations:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m build
+      - name: Generate SLSA provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
+
+  # For container images
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      packages: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/build-push-action@v6
+        id: push
+        with:
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+```
+
+Verify provenance:
+
+```bash
+gh attestation verify dist/package.whl --owner org-name
+gh attestation verify oci://ghcr.io/org/image:tag --owner org-name
 ```
 
 ## Anti-Patterns

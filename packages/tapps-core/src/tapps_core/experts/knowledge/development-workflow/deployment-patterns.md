@@ -233,7 +233,7 @@ pip install tapps-mcp
 uv add tapps-mcp
 ```
 
-Requires Python 3.12+. Best for developers already in a Python environment.
+Requires Python 3.12+ (supports 3.13 and 3.14). Best for developers already in a Python environment.
 
 ### PyInstaller Executables
 

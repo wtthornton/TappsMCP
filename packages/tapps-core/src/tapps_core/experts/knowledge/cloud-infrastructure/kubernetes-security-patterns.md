@@ -466,6 +466,20 @@ spec:
     pods: "50"
 ```
 
+## Policy Engines
+
+Use a policy engine to enforce security standards cluster-wide. PSP (PodSecurityPolicy) was removed in K8s 1.25; Pod Security Admission handles basic enforcement, but policy engines provide more flexibility.
+
+**Kyverno** (Kubernetes-native, YAML policies):
+- Easier learning curve, no new language
+- Mutate, validate, generate, and cleanup resources
+- Image verification with Sigstore/cosign
+
+**OPA Gatekeeper** (Rego-based):
+- More powerful policy language (Rego)
+- Shared policy library (Gatekeeper Library)
+- Better for complex cross-resource policies
+
 ## Security Checklist
 
 1. **Pod Security Standards**: Enforce `restricted` on all application namespaces
@@ -478,6 +492,7 @@ spec:
 8. **Seccomp**: RuntimeDefault at minimum
 9. **automountServiceAccountToken: false**: Unless actually needed
 10. **Read-only root filesystem**: With emptyDir for /tmp if needed
+11. **Policy engine**: Deploy Kyverno or OPA Gatekeeper for admission control
 
 ## References
 
@@ -485,6 +500,7 @@ spec:
 - [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/)
 - [PodDisruptionBudget Documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
 - [NetworkPolicy Documentation](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
-- [NSA/CISA Kubernetes Hardening Guide](https://media.defense.gov/2022/Aug/29/2003066362/-1/-1/0/CTR_KUBERNETES_HARDENING_GUIDANCE_1.2_20220829.PDF)
-- [Kyverno Policy Engine](https://kyverno.io/)
+- [NSA/CISA Kubernetes Hardening Guide v1.2](https://media.defense.gov/2022/Aug/29/2003066362/-1/-1/0/CTR_KUBERNETES_HARDENING_GUIDANCE_1.2_20220829.PDF) (Aug 2022 - check for newer versions at nsa.gov)
+- [Kyverno Policy Engine](https://kyverno.io/) - Kubernetes-native policy engine (YAML-based policies)
+- [OPA Gatekeeper](https://open-policy-agent.github.io/gatekeeper/) - Alternative policy engine using Rego language
 - [External Secrets Operator](https://external-secrets.io/)

@@ -197,8 +197,89 @@ class ExpertAwareOrchestrator:
 
 ---
 
+## Agent Framework Landscape (2025-2026)
+
+### Major Frameworks
+
+| Framework | Status (2026) | Key Characteristics |
+|---|---|---|
+| **LangGraph** | v1.0 (late 2025) | Graph-based orchestration, default runtime for LangChain agents. Nodes = agent steps, edges = transitions. |
+| **CrewAI** | 44k+ GitHub stars | Role-based multi-agent orchestration. Agents have roles, goals, backstories. Strong for team simulations. |
+| **AutoGen** | Maintenance mode | Microsoft shifted focus to Microsoft Agent Framework (formerly Semantic Kernel Agents). Legacy codebases only. |
+| **Claude Agent SDK** | New entrant (2025) | Anthropic's official agent SDK. Tool use, agent loops, MCP integration built-in. |
+| **GitHub Copilot Coding Agent** | New entrant (2025) | Autonomous coding agent triggered from GitHub Issues. Runs in sandboxed environment. |
+
+### Key Trends
+
+1. **Graph-based orchestration convergence**: LangGraph's success drove most frameworks toward directed graph models (nodes = steps, edges = transitions/conditions). This replaces the earlier "prompt chain" pattern.
+
+2. **Model Context Protocol (MCP) as standard tool layer**: MCP is emerging as the universal standard for tool integration across agent frameworks. Agents use MCP servers for tools rather than framework-specific tool definitions.
+
+3. **Role-based multi-agent patterns**: CrewAI popularized assigning distinct personas/roles to agents. Other frameworks adopted similar patterns (LangGraph's multi-agent, AutoGen's group chat).
+
+4. **Single-agent with tools vs. multi-agent**: Industry split between powerful single agents with rich tool access (Claude Agent SDK, Copilot Coding Agent) and multi-agent collaboration (CrewAI, LangGraph multi-agent).
+
+5. **Agent-native IDEs**: Cursor, Windsurf, and VS Code Copilot agent mode blur the line between IDE and agent orchestrator. The IDE itself becomes the orchestration layer.
+
+### Pattern 6: Graph-Based Orchestration (LangGraph Style)
+
+```python
+from typing import TypedDict
+
+class AgentState(TypedDict):
+    messages: list[dict]
+    current_step: str
+    results: dict
+
+def build_agent_graph():
+    """Build a graph-based agent workflow."""
+    # Define nodes (agent steps)
+    nodes = {
+        "plan": plan_step,
+        "implement": implement_step,
+        "review": review_step,
+        "test": test_step,
+    }
+
+    # Define edges (transitions)
+    edges = {
+        "plan": "implement",
+        "implement": "review",
+        "review": lambda state: "test" if state["results"]["score"] >= 70 else "implement",
+        "test": "END",
+    }
+
+    return nodes, edges
+```
+
+### Pattern 7: MCP-Integrated Agent
+
+```python
+class MCPAgent:
+    """Agent that uses MCP servers for tool access."""
+
+    def __init__(self, mcp_servers: list[str]):
+        self.tools = {}
+        for server in mcp_servers:
+            self.tools.update(discover_mcp_tools(server))
+
+    async def execute(self, task: str) -> str:
+        """Execute task using MCP tools."""
+        plan = await self.plan(task, available_tools=list(self.tools.keys()))
+        for step in plan:
+            result = await self.tools[step.tool_name].call(step.arguments)
+            self.context.update(result)
+        return self.summarize()
+```
+
+---
+
 ## References
 
 - TappsCodingAgents Workflow System
 - Simple Mode Documentation
 - Adaptive Learning System
+- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
+- [CrewAI Documentation](https://docs.crewai.com/)
+- [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents)
+- [Model Context Protocol](https://modelcontextprotocol.io/)

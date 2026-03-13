@@ -228,7 +228,7 @@ def __repr__(self):  # Often excluded
     coverage xml
 
 - name: Upload coverage
-  uses: codecov/codecov-action@v2
+  uses: codecov/codecov-action@v4
 ```
 
 ## Coverage Best Practices

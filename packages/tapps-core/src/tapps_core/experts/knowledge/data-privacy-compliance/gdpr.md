@@ -316,6 +316,28 @@ The General Data Protection Regulation (GDPR) is a comprehensive data protection
 - [ ] Manage sub-processors
 - [ ] Assess international transfers
 
+## Recent Developments (2025-2026)
+
+### EU Digital Omnibus Package (November 2025)
+The European Commission proposed the Digital Omnibus Package in November 2025, which amends GDPR in several significant ways. Expected trilogue adoption by mid-2026.
+
+**Key changes:**
+- **AI processing as legitimate interest**: New explicit recognition of AI model training and inference as a legitimate interest under Article 6(1)(f), subject to a balancing test and appropriate safeguards (transparency, opt-out for data subjects, DPIA required)
+- **SME relief on record-keeping**: The threshold for mandatory Records of Processing Activities (Article 30) expanded from organizations with 250+ employees to 750+ employees, reducing compliance burden on small and medium enterprises
+- **Breach notification threshold raised**: Supervisory authority notification (Article 33) now requires "high risk" to data subjects, replacing the previous "any risk" threshold. Data subject notification (Article 34) threshold unchanged
+- **Simplified cross-border enforcement**: Streamlined cooperation procedures between supervisory authorities for cross-border cases
+
+### EU AI Act Integration
+- **High-risk AI system deadlines postponed**: Originally August 2026, now extended to December 2027 for compliance with Chapter III obligations (high-risk AI classification and conformity assessment)
+- **AI literacy requirements**: Responsibility shifted from individual organizations to the European Commission and Member States to provide guidance, training resources, and sandboxes
+- **Interplay with GDPR**: AI systems processing personal data must comply with both GDPR and the AI Act. DPIAs under GDPR should incorporate AI-specific risk factors from the AI Act
+
+### EU Cyber Resilience Act (CRA)
+- Mandates Software Bills of Materials (SBOMs) for products with digital elements
+- Requires vulnerability handling and disclosure procedures
+- Applies to manufacturers, importers, and distributors of connected products
+- Relevant to GDPR compliance: security-by-design obligations overlap with GDPR's Article 25 (data protection by design)
+
 ## Best Practices
 
 1. **Start with Data Minimization**: Collect only what you need

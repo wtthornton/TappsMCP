@@ -51,7 +51,7 @@ async def get_structured_review(client: LLMClient, code: str) -> CodeReview:
     messages = [
         {"role": "user", "content": f"Review this code and respond in JSON:\n{code}"},
     ]
-    raw = await client.complete(messages, model="claude-sonnet-4-5-20250929")
+    raw = await client.complete(messages, model="claude-sonnet-4-6-20250514")
     return CodeReview.model_validate_json(raw)
 ```
 
@@ -148,7 +148,7 @@ async def complete_with_fallback(
 ) -> str:
     """Try primary model, fall back to secondary on failure."""
     try:
-        return await primary.complete(messages, model="claude-sonnet-4-5-20250929")
+        return await primary.complete(messages, model="claude-sonnet-4-6-20250514")
     except (httpx.HTTPStatusError, httpx.TimeoutException):
         return await fallback.complete(messages, model="claude-haiku-4-5-20251001")
 ```
@@ -222,8 +222,52 @@ def build_safe_prompt(system: str, user_input: str) -> list[dict]:
     ]
 ```
 
+## Claude Model Lineup (2025-2026)
+
+| Model | Release | Highlights |
+|---|---|---|
+| **Claude Opus 4.6** | Feb 2026 | Flagship model. Best reasoning, analysis, and complex coding tasks. |
+| **Claude Sonnet 4.6** | Feb 2026 | First Sonnet to be preferred over previous Opus in coding benchmarks. Best balance of speed and quality. |
+| **Claude Opus 4.5** | Nov 2025 | Previous flagship. Strong multi-step reasoning. |
+| **Claude Haiku 4.5** | Oct 2025 | Fast, cost-effective. Good for high-volume, lower-complexity tasks. |
+
+### Key Capabilities (2026)
+
+- **1M token context window**: All Claude models support up to 1 million tokens of context
+- **Extended thinking**: Models can reason step-by-step before responding (budget_tokens parameter)
+- **Tool use**: Native function calling with parallel tool execution
+- **Vision**: Image understanding across all model tiers
+- **Prompt caching**: System prompts cached server-side for cost reduction
+
+### Pydantic AI for Structured Outputs
+
+Pydantic AI is an emerging framework for type-safe, structured LLM outputs:
+
+```python
+from pydantic_ai import Agent
+from pydantic import BaseModel
+
+class CodeReviewResult(BaseModel):
+    score: int
+    issues: list[str]
+    suggestions: list[str]
+
+agent = Agent(
+    "anthropic:claude-sonnet-4-6-20260201",
+    result_type=CodeReviewResult,
+    system_prompt="You are a code review expert.",
+)
+
+result = await agent.run("Review this Python function: ...")
+# result.data is a validated CodeReviewResult instance
+```
+
+Pydantic AI provides model-agnostic structured output with automatic retry on validation failure, type safety, and dependency injection for tools.
+
 ## References
 
 - [Anthropic API Documentation](https://docs.anthropic.com/)
+- [Anthropic Model Overview](https://docs.anthropic.com/en/docs/about-claude/models)
 - [OpenAI API Documentation](https://platform.openai.com/docs/)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Pydantic AI Documentation](https://ai.pydantic.dev/)

@@ -368,6 +368,60 @@ accuracy after quantization on a representative test set.
 
 Single-item inference wastes GPU compute. Always batch requests when possible.
 
+## LLM-Specific Optimization (2025-2026)
+
+### Speculative Decoding
+
+Use a small draft model to propose tokens, verified by the large model in parallel:
+
+```python
+def speculative_decode(
+    draft_model,
+    target_model,
+    prompt_tokens: list[int],
+    num_speculative: int = 5,
+) -> list[int]:
+    """Generate tokens faster using speculative decoding."""
+    output = list(prompt_tokens)
+    while not is_done(output):
+        # Draft model proposes N tokens quickly
+        draft_tokens = draft_model.generate(output, n=num_speculative)
+
+        # Target model verifies all at once (single forward pass)
+        accepted = target_model.verify(output, draft_tokens)
+        output.extend(accepted)
+    return output
+```
+
+Speedup: 2-3x with no quality loss. Effective when draft and target models share vocabulary.
+
+### KV-Cache Optimization
+
+Key-value cache management is critical for long-context LLM serving:
+
+- **PagedAttention** (vLLM): Manages KV-cache like virtual memory pages, reducing waste by 60-80%
+- **Sliding window attention**: Fixed cache size for streaming/chat workloads
+- **Multi-query attention (MQA) / Grouped-query attention (GQA)**: Reduce KV-cache memory by sharing key/value heads
+
+### Serving Frameworks (2026)
+
+| Framework | Key Feature | Best For |
+|---|---|---|
+| **vLLM** | PagedAttention, continuous batching | High-throughput LLM serving |
+| **TensorRT-LLM** | NVIDIA-optimized kernels | Maximum GPU performance |
+| **llama.cpp** | CPU/Metal/CUDA, GGUF format | Local/edge deployment |
+| **Ollama** | One-command local serving | Developer prototyping |
+| **SGLang** | Structured generation, RadixAttention | Constrained output (JSON, code) |
+
+### Mixture of Experts (MoE) Considerations
+
+MoE models (e.g., Mixtral, DBRX) activate only a subset of parameters per token:
+
+- **Inference speedup**: Only 2-4 experts active per token vs. full model
+- **Memory challenge**: All expert weights must be in memory even if unused
+- **Expert offloading**: Load inactive experts from disk/CPU on demand
+- **Quantization**: Particularly effective for MoE since unused experts don't affect quality
+
 ## Quick Reference
 
 | Technique | Speedup | Quality Impact | Complexity |
@@ -379,3 +433,6 @@ Single-item inference wastes GPU compute. Always batch requests when possible.
 | torch.compile | 1.5-3x | None | Low |
 | ONNX Runtime | 1.5-2x | None | Medium |
 | Batching | 2-8x | None | Low |
+| Speculative decoding | 2-3x | None | Medium |
+| PagedAttention (vLLM) | 2-4x throughput | None | Low (use vLLM) |
+| KV-cache quantization | 1.5-2x memory | Minimal | Medium |

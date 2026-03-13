@@ -4,6 +4,10 @@
 
 This guide covers testing patterns for FastAPI applications, including unit tests, integration tests, and API testing.
 
+> **Note (2025+):** `httpx.AsyncClient` is the recommended async test client.
+> `TestClient` (sync, based on `requests`) remains valid for synchronous tests.
+> Use `pytest-asyncio` with `@pytest.mark.asyncio` for async test functions.
+
 ## Testing Patterns
 
 ### Pattern 1: Basic Test Client
@@ -17,7 +21,7 @@ client = TestClient(app)
 def test_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "HomeIQ API"}
+    assert response.json() == {"message": "API is running"}
 
 def test_health():
     response = client.get("/health")

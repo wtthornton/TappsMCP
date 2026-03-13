@@ -475,7 +475,7 @@ def redact_sensitive(message: str) -> str:
 - Honeycomb (traces)
 - Splunk (logs)
 - CloudWatch (AWS)
-- Stackdriver (GCP)
+- Google Cloud Monitoring (GCP)
 
 ## Summary
 

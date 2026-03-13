@@ -14,9 +14,11 @@ Infrastructure as Code (IaC) manages infrastructure through machine-readable def
 
 ## Tools
 
-### Terraform
+### Terraform / OpenTofu
 
-**Declarative IaC:**
+> **Important licensing note (2024+):** HashiCorp changed Terraform to BSL (Business Source License) in August 2023. **OpenTofu** is the community-maintained MPL-licensed fork. Both share the same HCL syntax and provider ecosystem. Choose based on licensing needs.
+
+**Declarative IaC (syntax works for both Terraform and OpenTofu):**
 ```hcl
 provider "aws" {
   region = "us-west-2"
@@ -25,7 +27,7 @@ provider "aws" {
 resource "aws_instance" "web" {
   ami           = "ami-0c55b159cbfafe1f0"
   instance_type = "t3.micro"
-  
+
   tags = {
     Name = "WebServer"
   }
@@ -36,11 +38,22 @@ output "instance_ip" {
 }
 ```
 
-**Key Features:**
-- Multi-cloud support
-- State management
-- Plan and apply workflow
-- Modules for reuse
+**Terraform (HashiCorp) - BSL Licensed:**
+- Multi-cloud support, state management, plan/apply workflow, modules
+- Focus shifting to HCP (HashiCorp Cloud Platform) AI Ecosystem
+- Terraform Stacks GA for multi-deployment orchestration
+- Project Infragraph for infrastructure visualization
+- Paid features increasingly tied to HCP
+
+**OpenTofu v1.11 (Dec 2025) - MPL Open-Source:**
+- Drop-in replacement for Terraform (same HCL syntax, same providers)
+- **Native state encryption** (since v1.7, refined in v1.11) - encrypts state files at rest without external tools
+- **Ephemeral values** - sensitive values that exist only during plan/apply, never written to state
+- **Conditional resources** - `count` and `for_each` with improved conditional logic
+- Maintains MPL open-source commitment under Linux Foundation
+- Growing provider and module ecosystem parity
+
+**Key decision factor:** If open-source licensing matters (compliance, redistribution, avoiding vendor lock-in), use OpenTofu. If you need HCP integrations or commercial support from HashiCorp, use Terraform.
 
 ### CloudFormation (AWS)
 

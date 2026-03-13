@@ -72,7 +72,8 @@ USER nodejs
 
 **Scan for Vulnerabilities:**
 ```bash
-docker scan myimage:latest
+# Docker Scout (replaces deprecated `docker scan` since Docker Desktop 4.17+)
+docker scout cves myimage:latest
 ```
 
 ## Container Patterns

@@ -82,11 +82,21 @@ services:
 - Quick setup
 - Service mesh integration
 
-**Instrumentation:**
+**Instrumentation (via OpenTelemetry -- py_zipkin is legacy):**
 ```python
-from py_zipkin.zipkin import zipkin_span
+from opentelemetry import trace
+from opentelemetry.exporter.zipkin.json import ZipkinExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-@zipkin_span(service_name='my-service', span_name='operation')
+exporter = ZipkinExporter(endpoint="http://zipkin:9411/api/v2/spans")
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(exporter))
+trace.set_tracer_provider(provider)
+
+tracer = trace.get_tracer(__name__)
+
+@tracer.start_as_current_span("operation")
 def my_function():
     # Your code
     pass
@@ -246,13 +256,23 @@ newrelic.agent.record_custom_metric('Custom/Metric', value)
 - Query flexibility
 - Developer-friendly
 
-**Integration:**
+**Integration (via OpenTelemetry -- Honeycomb's beeline SDK is deprecated):**
 ```python
-import beeline
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-beeline.init(writekey='your-key', dataset='my-app')
+exporter = OTLPSpanExporter(
+    endpoint="https://api.honeycomb.io/v1/traces",
+    headers={"x-honeycomb-team": "your-api-key"},
+)
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(exporter))
+trace.set_tracer_provider(provider)
 
-with beeline.tracer("operation"):
+tracer = trace.get_tracer(__name__)
+with tracer.start_as_current_span("operation"):
     # Your code
     pass
 ```

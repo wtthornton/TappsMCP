@@ -6,11 +6,11 @@ Docker Compose orchestrates multi-container applications. This guide covers Dock
 
 ## Basic Patterns
 
+**Note:** The top-level `version` field (e.g., `version: '3.8'`) is obsolete as of Docker Compose v2.20+ (2023) and is now ignored. Omit it from new Compose files.
+
 ### Pattern 1: Service Definition
 
 ```yaml
-version: '3.8'
-
 services:
   api-gateway:
     build: ./services/api-gateway
@@ -92,8 +92,6 @@ services:
 ### Pattern 1: 30-Service Architecture
 
 ```yaml
-version: '3.8'
-
 services:
   # Core Services
   api-gateway:

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Web accessibility ensures that people with disabilities can perceive, understand, navigate, and interact with websites and applications. WCAG 2.2 (published October 2023, enforced 2025+) adds new success criteria focused on cognitive accessibility, mobile interactions, and authentication. Building accessible interfaces is both a legal requirement and a competitive advantage.
+Web accessibility ensures that people with disabilities can perceive, understand, navigate, and interact with websites and applications. WCAG 2.2 (published October 2023, with enforcement expanding since 2025 including the EU Accessibility Act in force since June 2025) adds new success criteria focused on cognitive accessibility, mobile interactions, and authentication. Building accessible interfaces is both a legal requirement and a competitive advantage.
 
 ## WCAG 2.2 Conformance Levels
 

@@ -191,6 +191,124 @@ async def generate_with_citations(
 6. **Embedding models**: Use task-specific models (e.g., retrieval-optimized)
 7. **Context window**: Don't exceed 30-50% of the LLM's context with retrieved content
 
+## Advanced RAG Patterns (2025-2026)
+
+### GraphRAG and Knowledge Graphs
+
+GraphRAG combines vector retrieval with knowledge graph traversal for richer context:
+
+```python
+class GraphRAGPipeline:
+    """RAG pipeline augmented with knowledge graph relationships."""
+
+    def __init__(self, vector_store, knowledge_graph, llm_client):
+        self.vector_store = vector_store
+        self.kg = knowledge_graph
+        self.llm = llm_client
+
+    async def query(self, question: str, top_k: int = 5) -> str:
+        # 1. Retrieve relevant chunks via vector search
+        chunks = await self.vector_store.search(question, top_k=top_k)
+
+        # 2. Extract entities from chunks and traverse graph
+        entities = extract_entities(chunks)
+        related = await self.kg.get_neighbors(entities, hops=2)
+
+        # 3. Combine vector context with graph context
+        graph_context = format_graph_relations(related)
+        vector_context = "\n\n".join(c.content for c in chunks)
+
+        prompt = (
+            f"Knowledge graph context:\n{graph_context}\n\n"
+            f"Retrieved passages:\n{vector_context}\n\n"
+            f"Question: {question}"
+        )
+        return await self.llm.complete(prompt)
+```
+
+**When to use GraphRAG:**
+- Multi-hop reasoning ("How does X relate to Y through Z?")
+- Entity-centric queries (people, products, concepts)
+- Domain-specific knowledge bases with structured relationships
+
+### Agentic RAG
+
+Agents that dynamically decide when and how to retrieve, rather than always retrieving:
+
+```python
+class AgenticRAGAgent:
+    """Agent that decides retrieval strategy dynamically."""
+
+    async def answer(self, question: str) -> str:
+        # Agent decides: retrieve, decompose, or answer directly
+        plan = await self.plan_retrieval(question)
+
+        if plan.strategy == "direct":
+            return await self.llm.complete(question)
+
+        if plan.strategy == "decompose":
+            # Break complex question into sub-queries
+            sub_questions = plan.sub_queries
+            sub_answers = []
+            for sq in sub_questions:
+                chunks = await self.retrieve(sq)
+                sub_answers.append(await self.answer_with_context(sq, chunks))
+            return await self.synthesize(question, sub_answers)
+
+        if plan.strategy == "iterative":
+            # Retrieve, evaluate, retrieve more if needed
+            context = []
+            for _ in range(plan.max_iterations):
+                chunks = await self.retrieve(question, exclude=context)
+                context.extend(chunks)
+                if await self.has_sufficient_context(question, context):
+                    break
+            return await self.answer_with_context(question, context)
+```
+
+### Hybrid Search as Standard Practice
+
+Hybrid search (dense vectors + sparse/keyword) is now the default recommendation:
+
+- **Dense vectors** (embeddings): Capture semantic similarity
+- **Sparse vectors** (BM25/SPLADE): Capture exact keyword matches
+- **Reciprocal Rank Fusion (RRF)**: Standard method to combine ranked lists
+- Most vector databases (Qdrant, Weaviate, Pinecone) now support hybrid search natively
+
+### ColBERT and Late Interaction Models
+
+ColBERT-style models gaining traction for high-quality retrieval:
+
+```python
+class ColBERTRetriever:
+    """Late interaction retrieval using per-token embeddings."""
+
+    async def search(self, query: str, top_k: int = 10) -> list[RetrievedChunk]:
+        # Encode query into per-token embeddings
+        query_embeddings = self.model.encode_query(query)  # (num_query_tokens, dim)
+
+        # MaxSim: for each query token, find max similarity with any doc token
+        # Score = sum of MaxSim across query tokens
+        candidates = await self.index.search(query_embeddings, top_k=top_k)
+        return candidates
+```
+
+**Advantages over bi-encoder (single-vector) retrieval:**
+- Per-token interaction captures fine-grained matching
+- Better handling of multi-aspect queries
+- ~2-5x better recall on complex queries, with moderate latency increase
+
+### Contextual Retrieval (Anthropic)
+
+Prepend document-level context to each chunk before embedding:
+
+```
+Original chunk: "Revenue grew 15% year-over-year."
+Contextualized: "From Acme Corp Q3 2025 earnings report: Revenue grew 15% year-over-year."
+```
+
+This simple technique reduces retrieval failures by 49% (per Anthropic benchmarks) by disambiguating chunks that lack standalone context.
+
 ## Anti-Patterns
 
 1. **Stuffing entire documents** into context instead of relevant chunks
@@ -198,9 +316,14 @@ async def generate_with_citations(
 3. **Ignoring chunk boundaries** - splitting mid-sentence or mid-code-block
 4. **Stale indexes** - not refreshing embeddings when source content changes
 5. **No fallback** - failing silently when retrieval returns no relevant results
+6. **Vector-only retrieval** - not using hybrid search; misses exact keyword matches
+7. **Static retrieval strategy** - always retrieving the same way regardless of query type
 
 ## References
 
 - [LangChain RAG Documentation](https://python.langchain.com/docs/tutorials/rag/)
 - [LlamaIndex Documentation](https://docs.llamaindex.ai/)
 - [Anthropic Contextual Retrieval](https://docs.anthropic.com/en/docs/build-with-claude/retrieval-augmented-generation)
+- [Microsoft GraphRAG](https://github.com/microsoft/graphrag)
+- [ColBERT Documentation](https://github.com/stanford-futuredata/ColBERT)
+- [RAGAs Evaluation Framework](https://docs.ragas.io/)

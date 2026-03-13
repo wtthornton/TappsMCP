@@ -4,6 +4,8 @@
 
 Time-series data modeling requires different patterns than traditional relational databases. This guide covers time-series data architecture, schema design, and optimization strategies for HomeIQ and similar IoT/home automation systems.
 
+> **InfluxDB 3.0 note:** InfluxDB 3.0 (latest generation) is built on Apache Arrow and DataFusion, replacing Flux with SQL and InfluxQL. The data modeling concepts (tags, fields, measurements, cardinality management) remain the same, but query syntax changes from Flux to SQL. The Flux examples below apply to InfluxDB 2.x deployments. For InfluxDB 3.0, use SQL queries with the same schema design principles.
+
 ## Time-Series Data Characteristics
 
 ### Key Properties
@@ -438,7 +440,11 @@ tags: location="kitchen", device_id="sensor_001"
 
 ## References
 
-- [InfluxDB Data Modeling](https://docs.influxdata.com/influxdb/v2.7/write-data/best-practices/)
+- [InfluxDB Data Modeling (v2.x)](https://docs.influxdata.com/influxdb/v2/write-data/best-practices/)
+- [InfluxDB 3.0 Documentation](https://docs.influxdata.com/influxdb3/)
 - [Time-Series Database Design](https://www.influxdata.com/time-series-database/)
-- [Flux Query Optimization](https://docs.influxdata.com/flux/v0.x/optimize-queries/)
+- [Flux Query Optimization (v2.x legacy)](https://docs.influxdata.com/flux/v0.x/optimize-queries/)
+
+> **Note (2026):** InfluxDB 3.0 replaces Flux with SQL (Apache Arrow/DataFusion).
+> New time-series projects should evaluate InfluxDB 3.0 for better SQL ecosystem integration.
 

@@ -225,9 +225,9 @@ spy.get_data.assert_called_once_with(1)
 
 ## Async Mocking
 
-### AsyncMock (Python 3.8+)
+### AsyncMock (Python 3.8+, note: pytest 9.0 requires Python 3.10+)
 
-**Mock async functions:**
+**Mock async functions (AsyncMock available since Python 3.8, but pytest 9.0+ requires 3.10+):**
 ```python
 from unittest.mock import AsyncMock, patch
 

@@ -61,8 +61,8 @@ class ExpertRegistry:
             critical_rules="Assume an attacker is present; require explicit justification "
             "for any exception to secure-by-default. Never approve security-sensitive code "
             "without threat analysis.",
-            communication_style="Cite specific vulnerability types (e.g. CWE-79, OWASP A03). "
-            "Provide remediation code examples alongside findings.",
+            communication_style="Cite specific vulnerability types (e.g. CWE-79, OWASP A03:2025). "
+            "Provide remediation code examples alongside findings. Reference OWASP Top 10:2025.",
         ),
         ExpertConfig(
             expert_id="expert-performance",
@@ -119,21 +119,23 @@ class ExpertRegistry:
             expert_id="expert-data-privacy",
             expert_name="Data Privacy & Compliance Expert",
             primary_domain="data-privacy-compliance",
-            description="GDPR, HIPAA, data protection, compliance requirements.",
-            persona="Senior privacy engineer focused on GDPR, HIPAA, and data protection "
-            "regulation compliance. Default to minimal data collection; require explicit "
-            "justification for storing personal data.",
+            description="GDPR, HIPAA, EU AI Act, data protection, compliance requirements.",
+            persona="Senior privacy engineer focused on GDPR, HIPAA, EU AI Act, and data "
+            "protection regulation compliance. Default to minimal data collection; require "
+            "explicit justification for storing personal data.",
         ),
         ExpertConfig(
             expert_id="expert-accessibility",
             expert_name="Accessibility Expert",
             primary_domain="accessibility",
             description="WCAG compliance, assistive technology, inclusive design.",
-            persona="Senior accessibility specialist focused on WCAG 2.1 AA compliance and "
+            persona="Senior accessibility specialist focused on WCAG 2.2 AA compliance and "
             "inclusive design. Default to assuming diverse abilities and assistive technology "
             "usage; never approve inaccessible interfaces.",
-            critical_rules="WCAG 2.1 AA as baseline; assume diverse abilities and assistive "
-            "technology. Recommend testing with real assistive technology when possible.",
+            critical_rules="WCAG 2.2 AA as baseline (EU Accessibility Act enforced June 2025); "
+            "assume diverse abilities and assistive technology. Recommend testing with real "
+            "assistive technology when possible. WCAG 3.0 is in Working Draft (not for "
+            "compliance yet).",
         ),
         ExpertConfig(
             expert_id="expert-user-experience",

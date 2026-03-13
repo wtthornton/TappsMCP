@@ -4,6 +4,16 @@
 
 GraphQL is a query language for APIs that allows clients to request exactly the data they need. Unlike REST, GraphQL provides a single endpoint and gives clients control over the shape and size of responses.
 
+## Specification Status (as of early 2026)
+
+- **GraphQL Spec:** September 2025 edition (first update since October 2021)
+  - **Schema Coordinates:** Formal syntax for referencing schema members (e.g., `User.email`, `Query.user(id:)`)
+  - **OneOf Input Objects:** Polymorphic inputs where exactly one field must be set (`@oneOf` directive)
+  - **Executable-document descriptions:** Descriptions allowed on operations and fragments
+  - **Full Unicode grammar:** Spec grammar now supports full Unicode identifiers
+- **GraphQL over HTTP spec:** Finalized (standardizes `POST /graphql` with `application/graphql-response+json`)
+- **Pagination:** Relay-style cursor pagination remains the standard pattern
+
 ## Core Concepts
 
 ### Schema Definition
@@ -32,6 +42,43 @@ type Query {
   post(id: ID!): Post
 }
 ```
+
+### OneOf Input Objects (September 2025 Spec)
+
+**Polymorphic inputs - exactly one field must be set:**
+```graphql
+input UserIdentifier @oneOf {
+  id: ID
+  email: String
+  username: String
+}
+
+type Query {
+  user(by: UserIdentifier!): User
+}
+```
+
+**Query usage:**
+```graphql
+query {
+  user(by: { email: "jane@example.com" }) {
+    id
+    name
+  }
+}
+```
+
+### Schema Coordinates (September 2025 Spec)
+
+**Formal way to reference schema members:**
+```
+User            # type
+User.email      # field
+Query.user(id:) # field argument
+@deprecated     # directive
+```
+
+Schema coordinates are useful for tooling, documentation, and error messages.
 
 ### Queries
 
@@ -579,4 +626,10 @@ type Query {
   users: [User!]!  # Could return millions
 }
 ```
+
+## References
+
+- [GraphQL Specification (September 2025)](https://spec.graphql.org/)
+- [GraphQL over HTTP Specification](https://graphql.github.io/graphql-over-http/)
+- [Relay Cursor Connections Spec](https://relay.dev/graphql/connections.htm)
 

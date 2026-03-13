@@ -193,6 +193,56 @@ for update in updates:
     enhancer.apply_update(update)
 ```
 
+### Pattern 7: Agentic Feedback Loops (2025-2026)
+
+**Closed-Loop Learning via MCP Tool Chains:**
+
+Modern agentic systems create tight feedback loops where tool outcomes
+drive immediate weight adjustments without human intervention:
+
+```python
+# Agentic feedback loop pattern:
+# 1. Agent writes code
+# 2. Agent calls quality tools (tapps_quick_check)
+# 3. Tool returns scores + next_steps
+# 4. Agent follows next_steps to fix issues
+# 5. Agent re-checks, scores improve
+# 6. Outcome tracked automatically via tapps_feedback
+
+# The feedback tool closes the loop:
+await tapps_feedback(
+    file_path="src/auth.py",
+    action="report",
+    initial_score=62,
+    final_score=89,
+    iterations=2,
+    tools_used=["tapps_score_file", "tapps_security_scan", "tapps_consult_expert"],
+)
+
+# Adaptive weights adjust automatically:
+# - Categories where scores improved most get higher weight
+# - Expert domains that contributed to success get priority
+# - Patterns from successful fixes are extracted and stored
+```
+
+**Multi-Agent Feedback Aggregation:**
+
+When agent teams collaborate, feedback from all agents is aggregated
+to build a shared understanding of what works:
+
+```python
+# Each agent reports its outcomes independently
+# The adaptive system aggregates across agents:
+# - Implementer agent: tracks code generation success rates
+# - Reviewer agent: tracks which review criteria catch real issues
+# - Security agent: tracks vulnerability detection accuracy
+#
+# Aggregated metrics inform:
+# - Scoring weight adjustments (which metrics predict quality)
+# - Expert routing (which experts help most per domain)
+# - Pipeline ordering (which tool sequence produces best results)
+```
+
 ---
 
 ## Integration Patterns

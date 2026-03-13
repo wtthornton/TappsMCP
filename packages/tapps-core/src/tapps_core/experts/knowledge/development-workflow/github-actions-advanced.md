@@ -241,7 +241,7 @@ strategy:
   fail-fast: false  # CI: run all cells for full visibility
   matrix:
     os: [ubuntu-latest, windows-latest, macos-latest]
-    python-version: ["3.12", "3.13"]
+    python-version: ["3.12", "3.13", "3.14"]
 ```
 
 | Setting | When to Use |
@@ -271,7 +271,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@v3.2.1
         with:
           dockerfile: Dockerfile
 ```
@@ -345,7 +345,7 @@ Use GitHub Actions cache for fast incremental Docker builds.
 Generate multiple tags from a single version tag push.
 
 ```yaml
-- uses: docker/metadata-action@v5
+- uses: docker/metadata-action@v6
   id: meta
   with:
     images: ghcr.io/${{ github.repository }}

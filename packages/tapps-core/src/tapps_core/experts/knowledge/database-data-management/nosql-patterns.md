@@ -45,7 +45,7 @@ NoSQL databases provide flexible data models for specific use cases. This guide 
 - Fast lookups
 - Minimal querying
 
-**Examples:** Redis, Memcached, DynamoDB
+**Examples:** Redis, Valkey, Memcached, DynamoDB
 
 **Use Cases:**
 - Caching
@@ -61,6 +61,28 @@ value: {"name": "John", "email": "john@example.com"}
 key: "session:abc123"
 value: {"userId": "123", "expires": "2026-01-16"}
 ```
+
+#### Redis and Valkey Ecosystem (2024-2025)
+
+**Redis licensing changes:**
+- March 2024: Redis Ltd changed from BSD-3 to dual RSALv2/SSPLv1 (non-open-source)
+- May 2025: Redis 8.0 added AGPLv3 as a third license option, making Redis open-source again under AGPL terms
+- Antirez (original creator) returned to the project
+
+**Valkey (Linux Foundation fork):**
+- Forked from Redis 7.2.4 under BSD-3-Clause license after the 2024 license change
+- Maintained by the Linux Foundation with contributors from AWS, Google, Oracle, Ericsson, and others
+- Latest: Valkey 8.1.x
+- Performance: 37% higher SET throughput, 16% higher GET throughput vs Redis 8.0 on Graviton instances (per AWS benchmarks)
+- AWS ElastiCache prices Valkey 20-33% below Redis OSS nodes
+
+**Choosing between them:**
+- **Valkey:** Fully open-source (BSD-3), strong community governance, better raw performance on benchmarks, preferred for new projects avoiding license risk
+- **Redis 8+:** AGPLv3 option (copyleft), original ecosystem and brand, Redis Stack modules (search, JSON, time-series), commercial support from Redis Ltd
+- **Dragonfly:** Multi-threaded, drop-in Redis replacement, claims 25x throughput on single node (BSL license)
+- **KeyDB:** Multi-threaded Redis fork (BSD-3), Snap-acquired, less active community
+
+**Migration note:** Valkey and Redis remain wire-protocol compatible. Most Redis client libraries (redis-py, ioredis, Jedis) work with Valkey without code changes.
 
 ### Column-Family Stores
 

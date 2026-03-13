@@ -183,6 +183,39 @@ Web Content Accessibility Guidelines (WCAG) 2.2 extends WCAG 2.1 with additional
 - [ ] Live regions implemented
 - [ ] Screen reader tested
 
+## Regulatory Adoption
+
+### EU Accessibility Act (EAA) - Effective June 2025
+- The European Accessibility Act (Directive 2019/882) became enforceable across EU member states on June 28, 2025
+- Mandates WCAG 2.2 Level AA as the compliance baseline for digital products and services in the EU
+- Applies to: e-commerce, banking services, e-books, transport services, telecommunications, and consumer hardware/software
+- Businesses serving EU consumers must ensure their digital products meet WCAG 2.2 AA, regardless of where the business is headquartered
+- Enforcement varies by member state but includes fines and market restrictions for non-compliance
+
+### WCAG 2.2 as Global Compliance Baseline
+- WCAG 2.2 (published October 2023) is now the recommended compliance target worldwide
+- Replaces WCAG 2.1 as the reference standard in most regulatory frameworks
+- US Section 508 and ADA enforcement increasingly references WCAG 2.2
+- EN 301 549 (EU harmonized standard) updated to align with WCAG 2.2
+
+## WCAG 3.0 Status (Working Draft)
+
+WCAG 3.0 (W3C Accessibility Guidelines) is under active development but is **not ready for compliance use**. Current compliance should target WCAG 2.2 AA.
+
+### Key Changes in WCAG 3.0
+- **New conformance model**: Replaces the AAA/AA/A level system with Gold/Silver/Bronze ratings
+- **Outcomes-based approach**: Shifts from binary pass/fail criteria to a scoring model that measures how well outcomes are achieved
+- **174 new outcomes defined**: Covering a broader range of disabilities and interaction patterns than WCAG 2.x success criteria
+- **Broader scope**: Covers web, native apps, documents, XR/VR, and emerging technologies (not just "web content")
+- **New testing methodology**: Combines automated testing, manual evaluation, and user testing into a unified framework
+
+### Timeline and Adoption
+- Latest Working Draft: March 2026
+- **Not a W3C Recommendation yet** - still in Working Draft stage with significant changes expected
+- Estimated final Recommendation: 2028 or later
+- Will **not immediately replace WCAG 2.x** - both will coexist for years during transition
+- **Current recommendation**: Build to WCAG 2.2 AA now; monitor WCAG 3.0 development for future planning
+
 ## Best Practices
 
 1. **Enhanced Focus Indicators**: Make focus highly visible

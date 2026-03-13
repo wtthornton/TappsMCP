@@ -287,6 +287,94 @@ modifications = [
 ]
 ```
 
+## Modern Prompt Engineering Patterns (2025-2026)
+
+### Structured Output Prompting
+
+**Best Practice:** Use structured output schemas to get deterministic, parseable responses.
+
+```python
+# Structured output via JSON schema constraints
+# Models like Claude and GPT-4o support structured outputs natively
+
+prompt = """
+Analyze this code and return your assessment as JSON matching this schema:
+{
+  "quality_score": <float 0-100>,
+  "issues": [{"severity": "high|medium|low", "description": "..."}],
+  "suggestions": ["..."]
+}
+"""
+
+# MCP tools return structured JSON by default - the schema is defined
+# by the tool's type annotations and Pydantic models, not by the prompt.
+# This eliminates parsing failures and hallucinated response formats.
+```
+
+### Tool-Use Prompting
+
+**Best Practice:** Design prompts that guide models to use available tools effectively.
+
+```python
+# Instead of asking the model to "check code quality", prompt it to
+# call specific tools in sequence:
+
+system_prompt = """
+When asked to validate code quality, follow this sequence:
+1. Call tapps_quick_check(file_path) for each changed file
+2. If any file scores below 70, call tapps_consult_expert(question)
+   with the specific quality issue
+3. Call tapps_checklist(task_type="feature") before declaring done
+
+Never skip steps. Each tool returns next_steps - follow them.
+"""
+
+# Tool-use prompting reduces hallucination because the model delegates
+# factual queries to deterministic tools rather than generating answers.
+```
+
+### Chain-of-Thought with Verification
+
+**Best Practice:** Combine chain-of-thought reasoning with tool-based verification.
+
+```python
+# Modern pattern: think-then-verify
+# The model reasons about the approach, then verifies with tools
+
+prompt = """
+Before implementing, reason through your approach:
+1. What patterns does this codebase use? (check tapps_memory)
+2. What does the library API look like? (check tapps_lookup_docs)
+3. What security considerations apply? (check tapps_consult_expert)
+
+After implementing, verify:
+1. Run tapps_quick_check on every changed file
+2. Run tapps_validate_changed before declaring complete
+"""
+
+# This pattern reduces iterations by front-loading research
+# and catching issues immediately rather than in review.
+```
+
+### Engagement-Level Prompting
+
+**Best Practice:** Adjust prompt verbosity based on context and user preferences.
+
+```python
+# High engagement: detailed guidance, strict validation
+high_engagement = """
+You MUST call tapps_session_start first.
+You MUST call tapps_lookup_docs before using any library.
+You MUST call tapps_quick_check after every file edit.
+"""
+
+# Low engagement: minimal overhead, trust the developer
+low_engagement = """
+Use tapps_quick_check when you want quality feedback.
+Other tools available on request.
+"""
+```
+
 ## Anti-Patterns
 
 ### ❌ Testing Too Few Times

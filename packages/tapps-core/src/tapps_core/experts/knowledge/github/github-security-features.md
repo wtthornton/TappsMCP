@@ -81,8 +81,34 @@ gh attestation verify dist/package.whl --owner org
 Organization-level view of all security alerts across repositories.
 Available on GitHub Enterprise Cloud.
 
+## Copilot Security Integration
+
+Copilot's coding agent includes built-in security checks:
+
+- **Self-review security**: Agent runs CodeQL, secret scanning, and dependency
+  checks before opening PRs
+- **Copilot Autofix**: Automatically generates fix suggestions for CodeQL
+  findings, Dependabot alerts, and secret scanning alerts
+- **Security campaign mode**: Organization-wide Copilot Autofix campaigns
+  to remediate vulnerability classes at scale
+
 ## GitHub Secret Protection and Code Security
 
 Standalone products (2026) for organizations:
 - **Secret Protection** — secret scanning + push protection
 - **Code Security** — CodeQL + Dependabot + security overview
+
+## SLSA Provenance (Built-in)
+
+GitHub Actions now has built-in SLSA provenance generation:
+
+```yaml
+- uses: actions/attest-build-provenance@v2
+  with:
+    subject-path: dist/*.whl
+```
+
+- SLSA Level 2-3 attestations generated automatically
+- Verify with `gh attestation verify`
+- Supports both file artifacts and container images
+- Provenance stored in GitHub's attestation API

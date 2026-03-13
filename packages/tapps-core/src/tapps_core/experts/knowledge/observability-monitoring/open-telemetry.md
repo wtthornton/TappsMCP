@@ -439,10 +439,8 @@ processors:
 **Exporters:**
 ```yaml
 exporters:
-  jaeger:
-    endpoint: jaeger:14250
-    tls:
-      insecure: true
+  otlphttp:
+    endpoint: http://jaeger:4318   # Jaeger OTLP HTTP endpoint
   prometheus:
     endpoint: "0.0.0.0:8889"
 ```
@@ -454,7 +452,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [jaeger]
+      exporters: [otlphttp]
     metrics:
       receivers: [otlp]
       processors: [batch, resource]
@@ -520,13 +518,18 @@ span.set_attribute("business.payment_amount", amount)
 
 ### Jaeger
 
-**Exporter:**
-```python
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+**Exporter (via OTLP):**
 
-jaeger_exporter = JaegerExporter(
-    agent_host_name="jaeger",
-    agent_port=6831,
+The dedicated Jaeger exporter packages (`opentelemetry-exporter-jaeger`) were removed in
+OpenTelemetry Python SDK 1.21+. Jaeger natively supports OTLP ingestion since Jaeger v1.35,
+so use the standard OTLP exporter:
+
+```python
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+# Jaeger accepts OTLP on port 4317 (gRPC) or 4318 (HTTP)
+jaeger_exporter = OTLPSpanExporter(
+    endpoint="http://jaeger:4317",
 )
 ```
 

@@ -4,6 +4,17 @@
 
 gRPC is a high-performance RPC (Remote Procedure Call) framework that uses HTTP/2 and Protocol Buffers. It's ideal for microservices communication, streaming, and high-performance APIs.
 
+## Version & Release Info (as of early 2026)
+
+- **gRPC Core:** v1.78.x (latest, February 2026)
+- **Release cadence:** 6-week cycle with regular patch releases
+- **gRPC-Web:** GA (Generally Available) for browser clients - enables gRPC from JavaScript/TypeScript
+  - Supports unary and server-streaming RPCs from the browser
+  - Requires an Envoy proxy or grpc-web proxy to translate HTTP/1.1 to HTTP/2
+  - Client libraries: `@grpc/grpc-js` (Node.js), `grpc-web` (browser)
+- **Python:** `grpcio` and `grpcio-tools` packages on PyPI
+- **Protocol Buffers:** Use `proto3` syntax (proto2 is legacy)
+
 ## Core Concepts
 
 ### Protocol Buffers
@@ -482,6 +493,75 @@ class RetryInterceptor(grpc.UnaryUnaryClientInterceptor):
                     time.sleep(2 ** attempt)
                     continue
                 raise
+```
+
+## gRPC-Web (Browser Clients)
+
+### Basic gRPC-Web Client (JavaScript)
+
+```javascript
+const { UserServiceClient } = require('./user_grpc_web_pb');
+const { GetUserRequest } = require('./user_pb');
+
+const client = new UserServiceClient('http://localhost:8080');
+
+const request = new GetUserRequest();
+request.setId(123);
+
+client.getUser(request, {}, (err, response) => {
+  if (err) {
+    console.error('Error:', err.message);
+    return;
+  }
+  console.log('User:', response.getName());
+});
+```
+
+### Envoy Proxy Configuration for gRPC-Web
+
+```yaml
+# envoy.yaml - minimal gRPC-Web proxy config
+static_resources:
+  listeners:
+    - address:
+        socket_address: { address: 0.0.0.0, port_value: 8080 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                codec_type: auto
+                stat_prefix: ingress_http
+                http_filters:
+                  - name: envoy.filters.http.grpc_web
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
+                  - name: envoy.filters.http.cors
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                route_config:
+                  name: local_route
+                  virtual_hosts:
+                    - name: local_service
+                      domains: ["*"]
+                      routes:
+                        - match: { prefix: "/" }
+                          route: { cluster: grpc_service }
+  clusters:
+    - name: grpc_service
+      type: logical_dns
+      lb_policy: round_robin
+      http2_protocol_options: {}
+      load_assignment:
+        cluster_name: grpc_service
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: localhost, port_value: 50051 }
 ```
 
 ## Best Practices Summary

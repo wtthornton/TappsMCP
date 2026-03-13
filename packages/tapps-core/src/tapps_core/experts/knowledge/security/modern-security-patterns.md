@@ -230,9 +230,19 @@ def verify_auth(credential):
 
 ### Software Bill of Materials (SBOM)
 
-**Generate SBOM in CycloneDX format:**
+SBOM generation is now a regulatory and compliance requirement:
+- **SPDX 3.0** released (ISO/IEC 5962:2024) - unified format for software, AI/ML, and datasets
+- **CycloneDX 1.6** released - adds support for attestations, cryptographic assets, and ML/AI BOMs
+- **EU Cyber Resilience Act (CRA)**: Mandates SBOMs for all products with digital elements sold in the EU market (enforcement begins 2027)
+- **U.S. CISA 2025**: Expanded required SBOM metadata fields including end-of-life dates, known-unknowns declaration, and component relationships
+
+**Generate SBOM with Syft (recommended) or CycloneDX:**
 ```bash
-# Python
+# Syft (Anchore) - multi-format, multi-ecosystem
+syft packages dir:. -o cyclonedx-json=sbom.cdx.json
+syft packages dir:. -o spdx-json=sbom.spdx.json
+
+# Python-specific
 pip install cyclonedx-bom
 cyclonedx-py environment -o sbom.json --format json
 
@@ -245,7 +255,7 @@ npx @cyclonedx/cyclonedx-npm --output-file sbom.json
 
 **SBOM in CI/CD pipeline:**
 ```yaml
-# GitHub Actions
+# GitHub Actions - generate and attest
 - name: Generate SBOM
   uses: anchore/sbom-action@v0
   with:
@@ -257,6 +267,14 @@ npx @cyclonedx/cyclonedx-npm --output-file sbom.json
   with:
     name: sbom
     path: sbom.json
+```
+
+**Validate and query SBOMs with GUAC:**
+```bash
+# GUAC (Graph for Understanding Artifact Composition)
+# Ingests SBOMs, SLSA attestations, and vulnerability data into a unified graph
+guacone collect files sbom.cdx.json
+guacone query known package "pkg:pypi/requests"
 ```
 
 ### Dependency Scanning
@@ -294,23 +312,63 @@ requests==2.31.0 \
 
 ### Container Image Signing
 
-**Sign with cosign (Sigstore):**
+**Sign with cosign (Sigstore) - keyless signing is the default:**
+
+Sigstore keyless signing via OIDC is now mature and widely adopted. cosign uses
+ephemeral keys backed by certificate transparency logs (Rekor), eliminating the
+need to manage long-lived signing keys.
+
 ```bash
-# Sign container image
-cosign sign --key cosign.key ghcr.io/org/app:v1.0.0
-
-# Verify signature
-cosign verify --key cosign.pub ghcr.io/org/app:v1.0.0
-
-# Keyless signing (uses OIDC identity)
+# Keyless signing (recommended - uses OIDC identity from CI or interactive login)
 cosign sign ghcr.io/org/app:v1.0.0
 cosign verify \
   --certificate-identity user@example.com \
   --certificate-oidc-issuer https://accounts.google.com \
   ghcr.io/org/app:v1.0.0
+
+# GitHub Actions OIDC keyless signing (zero secrets needed)
+cosign sign \
+  --certificate-identity https://github.com/org/repo/.github/workflows/release.yml@refs/tags/v1.0.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/org/app:v1.0.0
+
+# Key-based signing (legacy, still supported)
+cosign sign --key cosign.key ghcr.io/org/app:v1.0.0
+cosign verify --key cosign.pub ghcr.io/org/app:v1.0.0
+```
+
+**Enforce image signatures with Kyverno:**
+```yaml
+# Kubernetes admission policy - reject unsigned images
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signature
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: verify-cosign-signature
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      verifyImages:
+        - imageReferences: ["ghcr.io/org/*"]
+          attestors:
+            - entries:
+                - keyless:
+                    subject: "https://github.com/org/*"
+                    issuer: "https://token.actions.githubusercontent.com"
 ```
 
 ### SLSA (Supply-chain Levels for Software Artifacts)
+
+**SLSA v1.0 specification** was released by the Linux Foundation (late 2025, building
+on the v1.0 RC published in 2023). Key changes from the draft levels:
+
+- Levels simplified to **Build L0-L3** (build provenance) and **Source L0-L3** (source integrity) tracks
+- BuildKit now generates provenance in **SLSA v1.0 format by default**
+- SLSA v1.0 provenance uses the `in-toto` attestation framework
 
 **Generate SLSA provenance in CI:**
 ```yaml
@@ -320,11 +378,17 @@ cosign verify \
     base64-subjects: ${{ needs.build.outputs.digest }}
 ```
 
-**SLSA Levels:**
-- **Level 1**: Documentation of the build process
-- **Level 2**: Tamper resistance of the build service
-- **Level 3**: Hardened builds with non-falsifiable provenance
-- **Level 4**: Two-person review of all changes
+**SLSA Build Levels (v1.0):**
+- **Build L0**: No provenance guarantees
+- **Build L1**: Provenance exists, showing how the package was built
+- **Build L2**: Hosted build platform, signed provenance
+- **Build L3**: Hardened build platform, non-falsifiable provenance
+
+**SLSA Source Levels (v1.0):**
+- **Source L0**: No source guarantees
+- **Source L1**: Version controlled with verified history retention
+- **Source L2**: Tamper-proof change history (branch protection, verified commits)
+- **Source L3**: Two-person review of all changes
 
 ## Container Security
 
@@ -427,18 +491,24 @@ SECURITY_HEADERS = {
 
 1. **Zero trust**: Verify every request, enforce least privilege, assume breach
 2. **Passkeys over passwords**: FIDO2/WebAuthn is phishing-resistant by design
-3. **SBOM for every release**: Know your dependency tree, scan continuously
-4. **Sign artifacts**: Use Sigstore/cosign for container images and binaries
-5. **Distroless containers**: Minimize attack surface in production
-6. **mTLS for services**: Encrypt and authenticate all internal communication
-7. **Rotate secrets automatically**: Use Vault or cloud secret managers
-8. **Scan early and often**: Shift security left with CI/CD integration
+3. **SBOM for every release**: Required by EU CRA and U.S. CISA - use Syft or CycloneDX
+4. **Sign artifacts**: Use Sigstore/cosign keyless signing (OIDC-based, no key management)
+5. **SLSA provenance**: Generate build provenance at L2+ for all release artifacts
+6. **Enforce signatures**: Use Kyverno or other admission controllers to reject unsigned images
+7. **Distroless containers**: Minimize attack surface in production
+8. **mTLS for services**: Encrypt and authenticate all internal communication
+9. **Rotate secrets automatically**: Use Vault or cloud secret managers
+10. **Scan early and often**: Shift security left with CI/CD integration
 
 ## References
 
 - [NIST Zero Trust Architecture (SP 800-207)](https://csrc.nist.gov/publications/detail/sp/800-207/final)
 - [WebAuthn Specification (W3C)](https://www.w3.org/TR/webauthn-3/)
-- [SLSA Framework](https://slsa.dev/)
-- [CycloneDX SBOM Standard](https://cyclonedx.org/)
+- [SLSA Framework v1.0](https://slsa.dev/)
+- [SPDX 3.0 Specification](https://spdx.dev/)
+- [CycloneDX 1.6 SBOM Standard](https://cyclonedx.org/)
 - [Sigstore / cosign](https://docs.sigstore.dev/)
+- [GUAC - Graph for Understanding Artifact Composition](https://guac.sh/)
+- [Kyverno Policy Engine](https://kyverno.io/)
+- [EU Cyber Resilience Act](https://digital-strategy.ec.europa.eu/en/policies/cyber-resilience-act)
 - [py-webauthn Library](https://github.com/duo-labs/py_webauthn)

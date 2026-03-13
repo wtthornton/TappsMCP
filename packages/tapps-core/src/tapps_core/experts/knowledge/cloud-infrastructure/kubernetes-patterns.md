@@ -4,6 +4,14 @@
 
 Kubernetes is a container orchestration platform that automates deployment, scaling, and management of containerized applications. This guide covers deployment patterns, services, ingress, and operational patterns.
 
+## Version Status (as of 2026)
+
+- **Kubernetes 1.35** - Current latest release
+- **Kubernetes 1.34** - Maintained
+- **Kubernetes 1.33** - Maintained (sidecar containers GA)
+- **Kubernetes 1.32** (Dec 2024) - Memory Manager GA, StatefulSet PVC auto-cleanup, Custom Resource Field Selectors
+- Containerd is the default container runtime (dockershim removed since 1.24)
+
 ## Core Concepts
 
 ### Pods
@@ -79,9 +87,9 @@ spec:
       targetPort: 8080
 ```
 
-### Ingress
+### Ingress (Legacy) and Gateway API
 
-**HTTP/HTTPS Routing:**
+**Ingress (legacy - still supported but being superseded):**
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -100,6 +108,71 @@ spec:
                 port:
                   number: 80
 ```
+
+**Gateway API v1.2+ (recommended replacement for Ingress):**
+
+Gateway API provides more expressive, role-oriented routing. It is the successor to the Ingress resource and supports advanced traffic management including header-based routing, traffic splitting, and cross-namespace references.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: myapp-gateway
+spec:
+  gatewayClassName: istio  # or nginx, envoy, etc.
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: myapp-route
+spec:
+  parentRefs:
+    - name: myapp-gateway
+  hostnames:
+    - "myapp.example.com"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: myapp-service
+          port: 80
+```
+
+**When to use Gateway API vs Ingress:**
+- New clusters: Use Gateway API
+- Existing clusters: Ingress still works; migrate to Gateway API when convenient
+- Advanced routing (header matching, traffic splitting, gRPC): Gateway API required
+
+## Sidecar Containers (GA in 1.33+)
+
+Native sidecar containers are init containers with `restartPolicy: Always`. They start before main containers and run alongside them, solving lifecycle ordering issues with the traditional multi-container pod pattern.
+
+```yaml
+spec:
+  initContainers:
+    - name: log-collector
+      image: fluentbit:latest
+      restartPolicy: Always  # Makes it a native sidecar
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+  containers:
+    - name: app
+      image: myapp:1.0.0
+```
+
+**Benefits over traditional sidecars:**
+- Guaranteed startup order (sidecar starts before main container)
+- Sidecar survives main container restarts
+- Clean shutdown ordering (sidecar stops after main container)
+- Proper Job completion (Jobs complete when main container finishes, not sidecar)
 
 ## Deployment Patterns
 

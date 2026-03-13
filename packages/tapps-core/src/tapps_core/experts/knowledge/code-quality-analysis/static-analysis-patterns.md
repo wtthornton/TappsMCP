@@ -51,14 +51,16 @@ strategies, and integration patterns.
 
 ### Ruff - Unified Linter and Formatter
 
-Ruff (v0.15+) is the recommended single-tool solution for Python linting and
-formatting, replacing flake8, isort, pyflakes, and more:
+Ruff (v0.11+) is the recommended single-tool solution for Python linting and
+formatting, replacing flake8, isort, pyflakes, and more. Supports Python 3.13
+and 3.14 syntax including template strings. Developed by Astral, the same team
+behind the `uv` package manager:
 
 ```toml
 # pyproject.toml
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [
@@ -111,12 +113,15 @@ pytest style rules.
 
 ### mypy - Static Type Checking
 
-mypy (v1.19+) provides static type checking for Python:
+mypy (v1.19+) provides static type checking for Python. Version 1.19.1
+(Dec 2025) is the latest stable. Key recent improvements: ~40% speedup
+in 1.18+, Python 3.14 free-threading support, and improved generics.
+Binary cache format expected in 1.20 for faster incremental checks.
 
 ```toml
 # pyproject.toml
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -144,7 +149,8 @@ Key principle: when `ignore_missing_imports = true` is set, do NOT add
 
 ### Bandit - Security Scanner
 
-Bandit (v1.9+) specializes in Python security analysis:
+Bandit (v1.9+) specializes in Python security analysis. Version 1.9.3
+(Jan 2026) includes 47 built-in checks with Python 3.13/3.14 support:
 
 ```toml
 # pyproject.toml
@@ -179,7 +185,7 @@ Target: all functions at A or B grade (CC < 10).
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.0
+    rev: v0.11.0
     hooks:
       - id: ruff
         args: [--fix]
@@ -215,9 +221,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: Install tools
-        run: pip install ruff mypy bandit radon
+        run: uv pip install ruff mypy bandit radon
       - name: Ruff lint
         run: ruff check src/ --output-format=github
       - name: Ruff format
@@ -396,3 +402,28 @@ or configurations causes confusion. Centralize in pyproject.toml.
 
 When a tool is missing and fallback analysis runs, the results are
 less accurate. Track and report degraded status clearly.
+
+## Python Version Compatibility
+
+All tools in this guide support Python 3.12, 3.13 (stable Oct 2024),
+and 3.14 (stable Oct 2025). Python 3.14 key features relevant to
+static analysis:
+
+- **Template strings (t-strings)**: New string prefix `t"..."` for
+  deferred interpolation; Ruff v0.11+ parses these correctly
+- **Free-threaded mode**: No GIL builds are improving; mypy 1.19+ and
+  Bandit 1.9.3+ support free-threaded Python
+- **Zstandard compression**: stdlib `compression.zstd` module
+- **Remote pdb debugging**: Built-in `pdb.remote()` for remote attach
+
+## Package Management
+
+Use `uv` (v0.10.x) as the recommended Python package manager. It replaces
+pip, poetry, and pipx with a single Rust-based tool that is 10-100x faster:
+
+```bash
+# Install and run tools via uv
+uv run ruff check src/
+uv run mypy --strict src/
+uv sync --all-packages  # workspace monorepo support
+```
