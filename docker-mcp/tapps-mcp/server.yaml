@@ -1,5 +1,5 @@
 name: tapps-mcp
-image: ghcr.io/wtthornton/tapps-mcp:1.6.0
+image: ghcr.io/wtthornton/tapps-mcp:1.7.0
 type: server
 meta:
   category: devops
@@ -18,6 +18,6 @@ about:
   icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:
   project: https://github.com/wtthornton/TappsMCP
-  commit: 9dc4bf0
+  commit: 7d6fbe8
 config:
   description: "Mount your project directory to /workspace."
