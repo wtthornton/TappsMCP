@@ -924,6 +924,7 @@ async def docs_generate_diagram(
     format: str = "",
     direction: str = "TD",
     show_external: bool = False,
+    flow_spec: str = "",
     project_root: str = "",
 ) -> dict[str, Any]:
     """Generate Mermaid or PlantUML diagrams from code analysis.
@@ -936,15 +937,20 @@ async def docs_generate_diagram(
     - "c4_context": C4 System Context diagram showing external actors
     - "c4_container": C4 Container diagram showing high-level building blocks
     - "c4_component": C4 Component diagram showing internal components
+    - "sequence": Sequence diagram showing request flows and call chains
 
     Args:
         diagram_type: Type of diagram to generate.
         scope: "project" for full project, or a file path for single-file scope.
             For c4_component, scope can be a package path to focus on.
-        depth: Max traversal depth for dependency/module diagrams (default: 2).
+        depth: Max traversal depth for dependency/module/sequence diagrams (default: 2).
         format: Output format - "mermaid" or "plantuml" (default: from config).
         direction: Graph direction - "TD" (top-down) or "LR" (left-right).
         show_external: Include external dependencies in dependency diagrams.
+        flow_spec: JSON string defining a manual sequence flow. When provided with
+            diagram_type="sequence", uses this spec instead of auto-detection.
+            Expected: {"participants": [...], "messages": [{"from": ..., "to": ...,
+            "label": ...}]}. Optional fields: "title", "notes", "groups".
         project_root: Override project root path (default: configured root).
     """
     _record_call("docs_generate_diagram")
@@ -974,6 +980,7 @@ async def docs_generate_diagram(
             depth=depth,
             direction=direction,
             show_external=show_external,
+            flow_spec=flow_spec,
         )
     except Exception as exc:
         return error_response(

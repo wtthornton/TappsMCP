@@ -1,7 +1,7 @@
 # Epic 81: D2 Diagram Format & Interactive HTML Diagrams
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Complete (Story 81.3 Interactive HTML; Stories 81.1/81.2/81.4 D2 format deferred)
 **Priority:** P1 - High
 **Estimated LOE:** ~2 weeks (1 developer)
 **Dependencies:** Epic 6, Epic 80

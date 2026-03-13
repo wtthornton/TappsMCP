@@ -1,7 +1,7 @@
 # Epic 84: Doc Style & Tone Validation (Vale Integration)
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Deferred
 **Priority:** P2 - Medium
 **Estimated LOE:** ~2 weeks (1 developer)
 **Dependencies:** Epic 7 (Doc Validation)

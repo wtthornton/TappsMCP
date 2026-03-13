@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -61,8 +62,11 @@ class TestDiagramTypes:
         assert "module_map" in DiagramGenerator.VALID_TYPES
         assert "er_diagram" in DiagramGenerator.VALID_TYPES
 
+    def test_sequence_type_in_valid_types(self) -> None:
+        assert "sequence" in DiagramGenerator.VALID_TYPES
+
     def test_total_type_count(self) -> None:
-        assert len(DiagramGenerator.VALID_TYPES) == 7
+        assert len(DiagramGenerator.VALID_TYPES) == 8
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +216,289 @@ class TestC4Component:
 
         # Empty package should degrade gracefully
         assert result.content == "" or result.degraded
+
+
+# ---------------------------------------------------------------------------
+# Sequence Diagram - Manual flow_spec (Epic 80.4)
+# ---------------------------------------------------------------------------
+
+
+class TestSequenceManual:
+    """Tests for sequence diagrams driven by a JSON flow_spec."""
+
+    BASIC_SPEC = json.dumps({
+        "title": "Login Flow",
+        "participants": ["Client", "Server", "Database"],
+        "messages": [
+            {"from": "Client", "to": "Server", "label": "POST /login"},
+            {"from": "Server", "to": "Database", "label": "SELECT user"},
+            {"from": "Database", "to": "Server", "label": "user row", "type": "reply"},
+            {"from": "Server", "to": "Client", "label": "200 OK", "type": "reply"},
+        ],
+    })
+
+    def test_mermaid_format(self, tmp_path: Path) -> None:
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            flow_spec=self.BASIC_SPEC,
+        )
+
+        assert result.diagram_type == "sequence"
+        assert result.format == "mermaid"
+        assert "sequenceDiagram" in result.content
+        assert "Login Flow" in result.content
+        assert result.node_count == 3
+        assert result.edge_count == 4
+
+    def test_plantuml_format(self, tmp_path: Path) -> None:
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="plantuml",
+            flow_spec=self.BASIC_SPEC,
+        )
+
+        assert "@startuml" in result.content
+        assert "@enduml" in result.content
+        assert "Login Flow" in result.content
+        assert result.node_count == 3
+
+    def test_participants_declared(self, tmp_path: Path) -> None:
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            flow_spec=self.BASIC_SPEC,
+        )
+
+        assert "participant" in result.content
+        assert "Client" in result.content
+        assert "Server" in result.content
+        assert "Database" in result.content
+
+    def test_async_arrow(self, tmp_path: Path) -> None:
+        spec = json.dumps({
+            "participants": ["A", "B"],
+            "messages": [{"from": "A", "to": "B", "label": "fire", "type": "async"}],
+        })
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            flow_spec=spec,
+        )
+
+        assert "->>+" in result.content
+
+    def test_reply_arrow_mermaid(self, tmp_path: Path) -> None:
+        spec = json.dumps({
+            "participants": ["A", "B"],
+            "messages": [{"from": "A", "to": "B", "label": "resp", "type": "reply"}],
+        })
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            flow_spec=spec,
+        )
+
+        assert "-->>+" in result.content
+
+    def test_reply_arrow_plantuml(self, tmp_path: Path) -> None:
+        spec = json.dumps({
+            "participants": ["A", "B"],
+            "messages": [{"from": "A", "to": "B", "label": "resp", "type": "reply"}],
+        })
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="plantuml",
+            flow_spec=spec,
+        )
+
+        assert "A --> B" in result.content
+
+    def test_notes(self, tmp_path: Path) -> None:
+        spec = json.dumps({
+            "participants": ["A", "B"],
+            "messages": [{"from": "A", "to": "B", "label": "call"}],
+            "notes": [{"over": "B", "text": "Validates input"}],
+        })
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            flow_spec=spec,
+        )
+
+        assert "Note over" in result.content
+        assert "Validates input" in result.content
+
+    def test_groups_alt(self, tmp_path: Path) -> None:
+        spec = json.dumps({
+            "participants": ["A", "B"],
+            "messages": [
+                {"from": "A", "to": "B", "label": "try"},
+                {"from": "B", "to": "A", "label": "ok", "type": "reply"},
+            ],
+            "groups": [{"type": "alt", "label": "success", "start": 0, "end": 1}],
+        })
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            flow_spec=spec,
+        )
+
+        assert "alt success" in result.content
+        assert "end" in result.content
+
+    def test_invalid_json_returns_empty(self, tmp_path: Path) -> None:
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            flow_spec="not json",
+        )
+
+        assert result.content == ""
+
+    def test_empty_participants_returns_empty(self, tmp_path: Path) -> None:
+        spec = json.dumps({"participants": [], "messages": []})
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            flow_spec=spec,
+        )
+
+        assert result.content == ""
+
+    def test_filters_unknown_participants(self, tmp_path: Path) -> None:
+        spec = json.dumps({
+            "participants": ["A", "B"],
+            "messages": [
+                {"from": "A", "to": "B", "label": "valid"},
+                {"from": "A", "to": "Unknown", "label": "invalid"},
+            ],
+        })
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            flow_spec=spec,
+        )
+
+        assert result.edge_count == 1
+        assert "Unknown" not in result.content
+
+
+# ---------------------------------------------------------------------------
+# Sequence Diagram - Auto-detection (Epic 80.4)
+# ---------------------------------------------------------------------------
+
+
+class TestSequenceAutoDetect:
+    """Tests for auto-generated sequence diagrams from import graphs."""
+
+    def test_auto_from_imports(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "myapp"
+        _write(pkg / "__init__.py", "")
+        _write(pkg / "main.py", "from myapp import service\n")
+        _write(pkg / "service.py", "from myapp import db\n")
+        _write(pkg / "db.py", "x = 1\n")
+
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+        )
+
+        assert result.diagram_type == "sequence"
+        assert "sequenceDiagram" in result.content
+        assert result.node_count >= 2
+        assert result.edge_count >= 1
+
+    def test_auto_plantuml(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "myapp"
+        _write(pkg / "__init__.py", "")
+        _write(pkg / "main.py", "from myapp import utils\n")
+        _write(pkg / "utils.py", "x = 1\n")
+
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="plantuml",
+        )
+
+        assert "@startuml" in result.content
+        assert "@enduml" in result.content
+
+    def test_empty_project_degraded(self, tmp_path: Path) -> None:
+        gen = DiagramGenerator()
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+        )
+
+        assert result.content == ""
+        assert result.degraded
+
+    def test_depth_limits_traversal(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "myapp"
+        _write(pkg / "__init__.py", "")
+        _write(pkg / "a.py", "from myapp import b\n")
+        _write(pkg / "b.py", "from myapp import c\n")
+        _write(pkg / "c.py", "from myapp import d\n")
+        _write(pkg / "d.py", "x = 1\n")
+
+        gen = DiagramGenerator()
+        # depth=1 should only see a->b
+        result = gen.generate(
+            tmp_path, diagram_type="sequence", output_format="mermaid",
+            depth=1,
+        )
+
+        assert result.edge_count <= 2  # at most shallow edges
+
+
+# ---------------------------------------------------------------------------
+# Sequence Diagram - MCP tool handler (Epic 80.4)
+# ---------------------------------------------------------------------------
+
+
+class TestDocsGenerateDiagramSequenceTool:
+    def _make_settings(self, root: Path) -> MagicMock:
+        settings = MagicMock()
+        settings.project_root = root
+        settings.diagram_format = "mermaid"
+        return settings
+
+    def test_manual_flow_spec(self, tmp_path: Path) -> None:
+        from docs_mcp.server_gen_tools import docs_generate_diagram
+
+        spec = json.dumps({
+            "participants": ["Client", "API"],
+            "messages": [{"from": "Client", "to": "API", "label": "GET /health"}],
+        })
+
+        with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
+            mock_settings.return_value = self._make_settings(tmp_path)
+            result = _run(docs_generate_diagram(
+                diagram_type="sequence",
+                flow_spec=spec,
+                project_root=str(tmp_path),
+            ))
+
+        assert result["success"] is True
+        assert result["data"]["diagram_type"] == "sequence"
+        assert "sequenceDiagram" in result["data"]["content"]
+
+    def test_auto_detect(self, tmp_path: Path) -> None:
+        from docs_mcp.server_gen_tools import docs_generate_diagram
+
+        pkg = tmp_path / "src" / "svc"
+        _write(pkg / "__init__.py", "")
+        _write(pkg / "api.py", "from svc import logic\n")
+        _write(pkg / "logic.py", "x = 1\n")
+
+        with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
+            mock_settings.return_value = self._make_settings(tmp_path)
+            result = _run(docs_generate_diagram(
+                diagram_type="sequence",
+                project_root=str(tmp_path),
+            ))
+
+        assert result["success"] is True
+        assert result["data"]["diagram_type"] == "sequence"
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ including dependency graphs, class hierarchies, module maps, and ER diagrams.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -24,6 +25,12 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)  # type: i
 
 # Maximum number of nodes before truncation in dependency/module diagrams.
 _MAX_DEPENDENCY_NODES = 50
+# Maximum depth for auto-generated sequence diagrams to avoid explosion.
+_MAX_SEQUENCE_DEPTH = 3
+# Maximum number of participants in a sequence diagram.
+_MAX_SEQUENCE_PARTICIPANTS = 15
+# Maximum number of messages in a sequence diagram.
+_MAX_SEQUENCE_MESSAGES = 40
 # Maximum number of classes rendered in class/ER diagrams.
 _MAX_CLASS_NODES = 30
 # Maximum number of files to scan when extracting classes project-wide.
@@ -59,8 +66,9 @@ class DiagramResult(BaseModel):
 class DiagramGenerator:
     """Generates visual diagrams from project analysis data.
 
-    Supports four diagram types (dependency, class_hierarchy, module_map,
-    er_diagram) in two output formats (mermaid, plantuml).
+    Supports eight diagram types (dependency, class_hierarchy, module_map,
+    er_diagram, c4_context, c4_container, c4_component, sequence) in two
+    output formats (mermaid, plantuml).
     """
 
     VALID_TYPES: ClassVar[frozenset[str]] = frozenset(
@@ -72,6 +80,7 @@ class DiagramGenerator:
             "c4_context",
             "c4_container",
             "c4_component",
+            "sequence",
         }
     )
     VALID_FORMATS: ClassVar[frozenset[str]] = frozenset({"mermaid", "plantuml"})
@@ -90,6 +99,7 @@ class DiagramGenerator:
         depth: int = 2,
         direction: str = "TD",
         show_external: bool = False,
+        flow_spec: str = "",
     ) -> DiagramResult:
         """Generate a diagram for a project.
 
@@ -103,6 +113,10 @@ class DiagramGenerator:
             depth: Depth limit for module map / dependency diagrams.
             direction: Graph direction (``TD``, ``LR``, etc.).
             show_external: Whether to include external dependencies.
+            flow_spec: JSON string defining a manual sequence flow.
+                Expected format: ``{"participants": ["A", "B"],
+                "messages": [{"from": "A", "to": "B", "label": "call"}]}``.
+                When empty, auto-detects from import graph entry points.
 
         Returns:
             A :class:`DiagramResult` with the rendered content.
@@ -140,6 +154,9 @@ class DiagramGenerator:
             ),
             "c4_component": lambda: self._generate_c4_component(
                 project_root, scope, output_format
+            ),
+            "sequence": lambda: self._generate_sequence(
+                project_root, output_format, depth, flow_spec
             ),
         }
 
@@ -1319,3 +1336,348 @@ class DiagramGenerator:
         lines.append("")
         lines.append("@enduml")
         return "\n".join(lines) + "\n", len(components), 0
+
+    # ------------------------------------------------------------------
+    # Sequence diagram (Epic 80.4)
+    # ------------------------------------------------------------------
+
+    def _generate_sequence(
+        self,
+        project_root: Path,
+        output_format: str,
+        depth: int,
+        flow_spec: str,
+    ) -> DiagramResult:
+        """Generate a sequence diagram.
+
+        When *flow_spec* is provided, it is parsed as JSON describing
+        participants and messages.  Otherwise, an auto-detected flow is
+        built from the project's import graph entry points.
+        """
+        if flow_spec:
+            return self._sequence_from_spec(flow_spec, output_format)
+        return self._sequence_from_imports(project_root, output_format, depth)
+
+    # -- manual mode (flow_spec JSON) -----------------------------------
+
+    def _sequence_from_spec(
+        self,
+        flow_spec: str,
+        output_format: str,
+    ) -> DiagramResult:
+        """Build a sequence diagram from a user-provided JSON spec.
+
+        Expected JSON schema::
+
+            {
+                "title": "optional title",
+                "participants": ["Client", "Server", "Database"],
+                "messages": [
+                    {"from": "Client", "to": "Server", "label": "POST /api"},
+                    {"from": "Server", "to": "Database", "label": "INSERT",
+                     "type": "async"},
+                    {"from": "Database", "to": "Server", "label": "result",
+                     "type": "reply"},
+                    {"from": "Server", "to": "Client", "label": "200 OK",
+                     "type": "reply"}
+                ],
+                "notes": [
+                    {"over": "Server", "text": "Validates JWT token"}
+                ],
+                "groups": [
+                    {"type": "alt", "label": "success",
+                     "start": 0, "end": 3}
+                ]
+            }
+        """
+        try:
+            spec = json.loads(flow_spec)
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("invalid_flow_spec", error=str(exc))
+            return DiagramResult(
+                diagram_type="sequence", format=output_format, content=""
+            )
+
+        participants: list[str] = spec.get("participants", [])
+        messages: list[dict[str, str]] = spec.get("messages", [])
+        title: str = spec.get("title", "")
+        notes: list[dict[str, str]] = spec.get("notes", [])
+        groups: list[dict[str, object]] = spec.get("groups", [])
+
+        if not participants or not messages:
+            logger.warning("empty_flow_spec")
+            return DiagramResult(
+                diagram_type="sequence", format=output_format, content=""
+            )
+
+        # Enforce limits
+        participants = participants[:_MAX_SEQUENCE_PARTICIPANTS]
+        messages = messages[:_MAX_SEQUENCE_MESSAGES]
+        participant_set = frozenset(participants)
+
+        # Filter messages to only reference known participants
+        valid_messages = [
+            m for m in messages
+            if m.get("from") in participant_set and m.get("to") in participant_set
+        ]
+
+        if output_format == "mermaid":
+            content = self._sequence_mermaid(
+                title, participants, valid_messages, notes, groups
+            )
+        else:
+            content = self._sequence_plantuml(
+                title, participants, valid_messages, notes, groups
+            )
+
+        return DiagramResult(
+            diagram_type="sequence",
+            format=output_format,
+            content=content,
+            node_count=len(participants),
+            edge_count=len(valid_messages),
+        )
+
+    # -- auto-detect mode (import graph) --------------------------------
+
+    def _sequence_from_imports(
+        self,
+        project_root: Path,
+        output_format: str,
+        depth: int,
+    ) -> DiagramResult:
+        """Auto-generate a sequence diagram from the import graph.
+
+        Walks from each entry-point module along import edges up to
+        *depth* levels, producing a message for each import relationship.
+        """
+        from docs_mcp.analyzers.dependency import ImportGraphBuilder
+
+        builder = ImportGraphBuilder()
+        graph = builder.build(project_root)
+
+        if not graph.edges:
+            return DiagramResult(
+                diagram_type="sequence",
+                format=output_format,
+                content="",
+                degraded=True,
+            )
+
+        # Build adjacency list
+        adjacency: dict[str, list[str]] = {}
+        for edge in graph.edges:
+            adjacency.setdefault(edge.source, []).append(edge.target)
+
+        # Walk from entry points (modules with no incoming edges)
+        entry_points = graph.entry_points or list(adjacency.keys())[:3]
+        effective_depth = min(depth, _MAX_SEQUENCE_DEPTH)
+
+        # Collect (from, to) message pairs via BFS from entry points
+        visited_edges: list[tuple[str, str]] = []
+        visited_modules: set[str] = set()
+
+        for ep in entry_points[:5]:
+            self._walk_imports(
+                ep, adjacency, effective_depth, 0, visited_modules, visited_edges
+            )
+
+        if not visited_edges:
+            return DiagramResult(
+                diagram_type="sequence",
+                format=output_format,
+                content="",
+                degraded=True,
+            )
+
+        # Derive participants from visited edges, preserving order
+        participants: list[str] = []
+        seen: set[str] = set()
+        for src, tgt in visited_edges:
+            for mod in (src, tgt):
+                if mod not in seen:
+                    participants.append(mod)
+                    seen.add(mod)
+
+        participants = participants[:_MAX_SEQUENCE_PARTICIPANTS]
+        participant_set = frozenset(participants)
+        messages = [
+            {"from": src, "to": tgt, "label": "imports"}
+            for src, tgt in visited_edges
+            if src in participant_set and tgt in participant_set
+        ][:_MAX_SEQUENCE_MESSAGES]
+
+        title = f"Import flow from {project_root.name}"
+
+        if output_format == "mermaid":
+            content = self._sequence_mermaid(title, participants, messages, [], [])
+        else:
+            content = self._sequence_plantuml(title, participants, messages, [], [])
+
+        return DiagramResult(
+            diagram_type="sequence",
+            format=output_format,
+            content=content,
+            node_count=len(participants),
+            edge_count=len(messages),
+        )
+
+    def _walk_imports(
+        self,
+        module: str,
+        adjacency: dict[str, list[str]],
+        max_depth: int,
+        current_depth: int,
+        visited_modules: set[str],
+        visited_edges: list[tuple[str, str]],
+    ) -> None:
+        """Recursively walk import edges collecting sequence messages."""
+        if current_depth >= max_depth or module in visited_modules:
+            return
+        visited_modules.add(module)
+        for target in adjacency.get(module, []):
+            edge = (module, target)
+            if edge not in visited_edges:
+                visited_edges.append(edge)
+                if len(visited_edges) >= _MAX_SEQUENCE_MESSAGES:
+                    return
+            self._walk_imports(
+                target, adjacency, max_depth, current_depth + 1,
+                visited_modules, visited_edges,
+            )
+
+    # -- Mermaid renderer -----------------------------------------------
+
+    def _sequence_mermaid(
+        self,
+        title: str,
+        participants: list[str],
+        messages: list[dict[str, str]],
+        notes: list[dict[str, str]],
+        groups: list[dict[str, object]],
+    ) -> str:
+        """Render a Mermaid sequenceDiagram block."""
+        lines = ["sequenceDiagram"]
+        if title:
+            lines.append(f"    title {title}")
+        lines.append("")
+
+        # Declare participants
+        for p in participants:
+            alias = self._sanitize_id(p)
+            # Use short name (last segment) for display
+            display = p.rsplit(".", 1)[-1] if "." in p else p
+            lines.append(f"    participant {alias} as {display}")
+        lines.append("")
+
+        # Track which group indices are active
+        group_starts: dict[int, dict[str, object]] = {
+            int(g.get("start", -1)): g for g in groups  # type: ignore[arg-type]
+        }
+        group_ends: set[int] = {
+            int(g.get("end", -1)) for g in groups  # type: ignore[arg-type]
+        }
+
+        # Render messages with interleaved notes and groups
+        note_map: dict[str, str] = {
+            str(n.get("over", "")): str(n.get("text", "")) for n in notes
+        }
+        for idx, msg in enumerate(messages):
+            # Open group if one starts at this index
+            if idx in group_starts:
+                grp = group_starts[idx]
+                gtype = str(grp.get("type", "alt"))
+                glabel = str(grp.get("label", ""))
+                lines.append(f"    {gtype} {glabel}")
+
+            src = self._sanitize_id(msg["from"])
+            tgt = self._sanitize_id(msg["to"])
+            label = msg.get("label", "")
+            msg_type = msg.get("type", "sync")
+
+            if msg_type == "reply":
+                lines.append(f"    {src}-->>+{tgt}: {label}")
+            elif msg_type == "async":
+                lines.append(f"    {src}->>+{tgt}: {label}")
+            else:
+                lines.append(f"    {src}->>>{tgt}: {label}")
+
+            # Insert note if one references the target
+            target_name = msg["to"]
+            if target_name in note_map:
+                note_alias = self._sanitize_id(target_name)
+                lines.append(
+                    f"    Note over {note_alias}: {note_map.pop(target_name)}"
+                )
+
+            # Close group if one ends at this index
+            if idx in group_ends:
+                lines.append("    end")
+
+        lines.append("")
+        return "\n".join(lines) + "\n"
+
+    # -- PlantUML renderer ----------------------------------------------
+
+    def _sequence_plantuml(
+        self,
+        title: str,
+        participants: list[str],
+        messages: list[dict[str, str]],
+        notes: list[dict[str, str]],
+        groups: list[dict[str, object]],
+    ) -> str:
+        """Render a PlantUML @startuml/@enduml sequence block."""
+        lines = ["@startuml"]
+        if title:
+            lines.append(f"title {title}")
+        lines.append("")
+
+        # Declare participants
+        for p in participants:
+            alias = self._sanitize_id(p)
+            display = p.rsplit(".", 1)[-1] if "." in p else p
+            lines.append(f'participant "{display}" as {alias}')
+        lines.append("")
+
+        group_starts: dict[int, dict[str, object]] = {
+            int(g.get("start", -1)): g for g in groups  # type: ignore[arg-type]
+        }
+        group_ends: set[int] = {
+            int(g.get("end", -1)) for g in groups  # type: ignore[arg-type]
+        }
+
+        note_map: dict[str, str] = {
+            str(n.get("over", "")): str(n.get("text", "")) for n in notes
+        }
+
+        for idx, msg in enumerate(messages):
+            if idx in group_starts:
+                grp = group_starts[idx]
+                gtype = str(grp.get("type", "alt"))
+                glabel = str(grp.get("label", ""))
+                lines.append(f"{gtype} {glabel}")
+
+            src = self._sanitize_id(msg["from"])
+            tgt = self._sanitize_id(msg["to"])
+            label = msg.get("label", "")
+            msg_type = msg.get("type", "sync")
+
+            if msg_type == "reply":
+                lines.append(f"{src} --> {tgt}: {label}")
+            elif msg_type == "async":
+                lines.append(f"{src} ->> {tgt}: {label}")
+            else:
+                lines.append(f"{src} -> {tgt}: {label}")
+
+            target_name = msg["to"]
+            if target_name in note_map:
+                note_alias = self._sanitize_id(target_name)
+                lines.append(f'note over {note_alias}: {note_map.pop(target_name)}')
+
+            if idx in group_ends:
+                lines.append("end")
+
+        lines.append("")
+        lines.append("@enduml")
+        return "\n".join(lines) + "\n"

@@ -1,7 +1,7 @@
 # Epic 85: Purpose/Intent Architecture Templates & Doc Index Generation
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Complete (Stories 85.1-85.2; Story 85.3 Architecture Series Bootstrap cut)
 **Priority:** P2 - Medium
 **Estimated LOE:** ~2 weeks (1 developer)
 **Dependencies:** Epic 8 (ADR and Guides), Epic 80 (C4 Diagrams)

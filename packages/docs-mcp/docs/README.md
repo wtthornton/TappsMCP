@@ -6,7 +6,7 @@ MCP server for automated documentation generation, validation, and maintenance.
 
 ## Overview
 
-DocsMCP is part of the [TappsMCP](https://github.com/tapps-mcp/tapps-mcp) platform. It provides 24 MCP tools that help AI coding assistants generate, validate, and maintain project documentation.
+DocsMCP is part of the [TappsMCP](https://github.com/tapps-mcp/tapps-mcp) platform. It provides 31 MCP tools that help AI coding assistants generate, validate, and maintain project documentation.
 
 ## Features
 
@@ -17,7 +17,7 @@ DocsMCP is part of the [TappsMCP](https://github.com/tapps-mcp/tapps-mcp) platfo
 - **Release notes** - Generate release notes for specific versions
 - **Architecture Decision Records** - Generate ADRs from context and rationale
 - **Onboarding and contributing guides** - Generate developer guides
-- **Diagram generation** - Generate architecture diagrams (dependency, module, class, sequence)
+- **Diagram generation** - Generate architecture diagrams (dependency, module, class, ER, C4 context/container/component, sequence)
 - **Drift detection** - Identify when documentation falls out of sync with code
 - **Completeness analysis** - Assess documentation coverage gaps
 - **Link validation** - Check for broken documentation links

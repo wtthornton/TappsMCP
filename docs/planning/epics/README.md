@@ -6,16 +6,16 @@ Goal: Elevate DocsMCP from B+ to A+ -- the best documentation tooling for AI-ass
 
 | Epic | Title | Priority | LOE | Stories | Status |
 |------|-------|----------|-----|---------|--------|
-| [83](EPIC-83-LLMS-TXT-MACHINE-READABLE-DOCS.md) | llms.txt & Machine-Readable Documentation | P1 | ~1.5 weeks | 3 (13 pts) | In Progress |
-| [82](EPIC-82-DIATAXIS-CONTENT-CLASSIFICATION.md) | Diataxis Content Classification & Validation | P1 | ~2 weeks | 3 (16 pts) | Proposed |
-| [86](EPIC-86-DOCUMENTATION-PLATFORM-INIT-INTEGRATION.md) | Documentation Platform Init & Upgrade Integration | P1 | ~2 weeks | 5 (21 pts) | Proposed |
-| [80](EPIC-80-C4-MODEL-SEQUENCE-DIAGRAM-SUPPORT.md) | C4 Model & Sequence Diagram Support (C4 only) | P1 | ~2 weeks | 4 (18 pts) | Proposed |
-| [81](EPIC-81-D2-FORMAT-INTERACTIVE-HTML-DIAGRAMS.md) | Interactive HTML Diagrams (81.3 only) | P2 | ~1 week | 1 (8 pts) | Proposed |
-| [85](EPIC-85-PURPOSE-INTENT-TEMPLATES-DOC-INDEX.md) | Architecture Templates & Doc Index (reduced) | P2 | ~1.5 weeks | 3 (16 pts) | Proposed |
+| [83](EPIC-83-LLMS-TXT-MACHINE-READABLE-DOCS.md) | llms.txt & Machine-Readable Documentation | P1 | ~1.5 weeks | 3 (13 pts) | **Complete** |
+| [82](EPIC-82-DIATAXIS-CONTENT-CLASSIFICATION.md) | Diataxis Content Classification & Validation | P1 | ~2 weeks | 3 (16 pts) | **Complete** |
+| [86](EPIC-86-DOCUMENTATION-PLATFORM-INIT-INTEGRATION.md) | Documentation Platform Init & Upgrade Integration | P1 | ~2 weeks | 5 (21 pts) | **Complete** |
+| [80](EPIC-80-C4-MODEL-SEQUENCE-DIAGRAM-SUPPORT.md) | C4 Model & Sequence Diagram Support | P1 | ~2 weeks | 4 (18 pts) | **Complete** |
+| [81](EPIC-81-D2-FORMAT-INTERACTIVE-HTML-DIAGRAMS.md) | Interactive HTML Diagrams (81.3 only) | P2 | ~1 week | 1 (8 pts) | **Complete** (D2 deferred) |
+| [85](EPIC-85-PURPOSE-INTENT-TEMPLATES-DOC-INDEX.md) | Architecture Templates & Doc Index (reduced) | P2 | ~1.5 weeks | 3 (16 pts) | **Complete** (85.3 cut) |
 | [84](EPIC-84-DOC-STYLE-TONE-VALIDATION.md) | Doc Style & Tone Validation (Vale Integration) | P3 | ~2 weeks | 4 (18 pts) | Deferred |
 | [87](EPIC-87-CONTENT-RETURN-PATTERN-DOCKER-FILE-WRITES.md) | Content-Return Pattern for Docker File Writes | P0 | ~3-4 weeks | 7 (39 pts) | **Complete** |
 
-**Active: 6 epics, 19 stories, ~92 story points, ~10 weeks estimated**
+**7 of 8 epics complete. 1 deferred (Epic 84). 2 individual stories deferred (81.1/2/4, 85.3).**
 
 ### Revised Implementation Order (2026-03-13)
 
