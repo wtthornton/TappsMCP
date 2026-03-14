@@ -6,12 +6,12 @@ When the **DocsMCP** MCP server is configured in your host (Claude Code, Cursor,
 
 ## What DocsMCP is
 
-DocsMCP is an MCP server that provides 24 tools for:
+DocsMCP is an MCP server that provides 31 tools for:
 
 - **Code analysis** -- module maps, API surface extraction, dependency analysis via AST parsing
 - **Git analysis** -- commit history with conventional commit parsing, version detection from tags
-- **Documentation generation** -- README, CHANGELOG, release notes, API reference, ADRs, onboarding guides, contributing guides, and diagrams (Mermaid/PlantUML)
-- **Documentation validation** -- drift detection (code changes not reflected in docs), completeness scoring, internal link checking, freshness classification
+- **Documentation generation** -- README, CHANGELOG, release notes, API reference, ADRs, onboarding guides, contributing guides, PRDs, epics, stories, prompt templates, diagrams (Mermaid/PlantUML/D2), interactive HTML diagrams, llms.txt, frontmatter, architecture templates, doc index
+- **Documentation validation** -- drift detection, completeness scoring, link checking, freshness classification, Diataxis coverage analysis, cross-reference validation, epic validation
 - **Configuration** -- view and update DocsMCP settings per-project
 - **TappsMCP integration** -- optional quality score enrichment when TappsMCP is also available
 
@@ -39,16 +39,23 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_generate_onboarding** | Generate getting-started / onboarding guide |
 | **docs_generate_contributing** | Generate CONTRIBUTING.md with dev setup and PR workflow |
 | **docs_generate_prd** | Generate Product Requirements Documents (standard/comprehensive, auto-populate, SmartMerger) |
-| **docs_generate_diagram** | Generate Mermaid/PlantUML diagrams (dependency/class/module/ER) |
+| **docs_generate_diagram** | Generate Mermaid/PlantUML/D2 diagrams (dependency/class/module/ER/C4/sequence, D2 themes) |
 | **docs_generate_architecture** | Self-contained HTML architecture report with SVG diagrams |
 | **docs_generate_epic** | Epic planning docs with stories, AC, expert enrichment |
 | **docs_generate_story** | User story docs with tasks, AC, expert enrichment |
 | **docs_generate_prompt** | Generate reusable prompt templates from project context |
+| **docs_generate_llms_txt** | Machine-readable llms.txt project summary (compact/full) |
+| **docs_generate_frontmatter** | YAML frontmatter injection/update for markdown files |
+| **docs_generate_interactive_diagrams** | Interactive HTML viewer with pan/zoom for Mermaid diagrams |
+| **docs_generate_purpose** | Purpose/intent architecture template with inferred principles |
+| **docs_generate_doc_index** | Documentation index/map with auto-categorization |
 | **docs_validate_epic** | Validate epic documents for completeness and consistency |
 | **docs_check_drift** | Detect documentation drift -- code changes not reflected in docs |
 | **docs_check_completeness** | Check documentation completeness across multiple categories |
 | **docs_check_links** | Validate internal links in markdown documentation files |
 | **docs_check_freshness** | Score documentation freshness (fresh/aging/stale/ancient) |
+| **docs_check_diataxis** | Diataxis quadrant coverage analysis and balance scoring |
+| **docs_check_cross_refs** | Cross-reference validation (orphans, broken refs, backlinks) |
 
 ---
 
@@ -70,16 +77,23 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_generate_onboarding** | When a project **needs a getting-started guide** for new developers. |
 | **docs_generate_contributing** | When a project **needs contribution guidelines**. |
 | **docs_generate_prd** | When planning a **new feature or product** -- generates structured PRD with phased requirements and Gherkin acceptance criteria. |
-| **docs_generate_diagram** | When you need a **visual overview** of dependencies, class hierarchies, module structure, or data models. |
+| **docs_generate_diagram** | When you need a **visual overview** of dependencies, class hierarchies, module structure, data models, C4 architecture, or sequence flows. Supports Mermaid, PlantUML, and D2 formats. |
 | **docs_generate_architecture** | When you need a **self-contained HTML architecture report** with SVG diagrams. |
 | **docs_generate_epic** | When **planning a new epic** -- generates structured epic docs with stories, acceptance criteria, and expert enrichment. |
 | **docs_generate_story** | When **writing user stories** -- generates structured story docs with tasks, acceptance criteria, and expert enrichment. |
 | **docs_generate_prompt** | When you need to **create reusable prompt templates** from project context. |
+| **docs_generate_llms_txt** | When creating **machine-readable project summaries** for LLMs (llms.txt format). |
+| **docs_generate_frontmatter** | When **injecting or updating YAML frontmatter** in markdown files. |
+| **docs_generate_interactive_diagrams** | When you need **interactive, zoomable diagrams** in an HTML viewer with Mermaid.js. |
+| **docs_generate_purpose** | When you need a **purpose/intent architecture template** with auto-inferred principles. |
+| **docs_generate_doc_index** | When you need a **documentation index/map** with auto-categorization. |
 | **docs_validate_epic** | When **reviewing an epic document** -- validates completeness and consistency. |
 | **docs_check_drift** | After **code changes** -- detects public API names missing from documentation. |
 | **docs_check_completeness** | During **documentation review** -- scores completeness across critical docs, API docs, guides, ADRs. |
 | **docs_check_links** | Before **publishing or merging** -- catches broken internal links. |
 | **docs_check_freshness** | During **documentation audit** -- identifies stale docs that may need updating. |
+| **docs_check_diataxis** | When assessing **documentation balance** across Diataxis quadrants (tutorials, how-to, reference, explanation). |
+| **docs_check_cross_refs** | When validating **cross-references** between documentation files -- finds orphans and broken refs. |
 
 ---
 
@@ -110,11 +124,16 @@ Generate or update documentation based on analysis:
 - `docs_generate_onboarding` -- developer onboarding guide
 - `docs_generate_contributing` -- contribution guidelines
 - `docs_generate_prd` -- product requirements documents
-- `docs_generate_diagram` -- visual diagrams
+- `docs_generate_diagram` -- visual diagrams (Mermaid/PlantUML/D2, 8 types, D2 themes)
 - `docs_generate_architecture` -- HTML architecture report
+- `docs_generate_interactive_diagrams` -- interactive HTML viewer with pan/zoom
 - `docs_generate_epic` -- epic planning docs
 - `docs_generate_story` -- user story docs
 - `docs_generate_prompt` -- reusable prompt templates
+- `docs_generate_llms_txt` -- machine-readable llms.txt
+- `docs_generate_frontmatter` -- YAML frontmatter injection
+- `docs_generate_purpose` -- architecture purpose/intent template
+- `docs_generate_doc_index` -- documentation index/map
 
 ### 4. Validate (validation tools)
 
@@ -125,6 +144,8 @@ Check documentation quality after generation or code changes:
 - `docs_check_completeness` -- documentation coverage score
 - `docs_check_links` -- broken internal links
 - `docs_check_freshness` -- stale documentation files
+- `docs_check_diataxis` -- Diataxis quadrant coverage analysis
+- `docs_check_cross_refs` -- cross-reference validation
 
 ### 5. Configure
 
@@ -181,8 +202,12 @@ Use `docs_config` to adjust settings:
 - `docs_generate_diagram(diagram_type="class_hierarchy")` -- class inheritance
 - `docs_generate_diagram(diagram_type="module_map")` -- package architecture
 - `docs_generate_diagram(diagram_type="er_diagram")` -- entity-relationship from models
+- `docs_generate_diagram(diagram_type="c4_context")` -- C4 System Context diagram
+- `docs_generate_diagram(diagram_type="c4_container")` -- C4 Container diagram
+- `docs_generate_diagram(diagram_type="c4_component")` -- C4 Component diagram
+- `docs_generate_diagram(diagram_type="sequence")` -- sequence diagram (auto-detect or manual flow_spec)
 
-Use `format="mermaid"` (default) for GitHub-rendered diagrams or `format="plantuml"` for PlantUML toolchains.
+Use `format="mermaid"` (default) for GitHub-rendered diagrams, `format="plantuml"` for PlantUML toolchains, or `format="d2"` for D2 diagrams. D2 supports themes: `theme="default"`, `theme="sketch"`, or `theme="terminal"`.
 
 ---
 
@@ -211,11 +236,11 @@ Settings can be viewed/changed via `docs_config` or set in `.docsmcp.yaml`:
 | `include_badges` | `true` | Include badges in README |
 | `changelog_format` | `keep-a-changelog` | Changelog format: keep-a-changelog, conventional |
 | `adr_format` | `madr` | ADR template: madr, nygard |
-| `diagram_format` | `mermaid` | Diagram format: mermaid, plantuml |
+| `diagram_format` | `mermaid` | Diagram format: mermaid, plantuml, d2 |
 | `git_log_limit` | `500` | Maximum git commits to analyze |
 | `enabled_tools` | *(none)* | Allow list: only these tools are exposed. Empty/missing = all tools. Env: `DOCS_MCP_ENABLED_TOOLS` (comma-separated). |
 | `disabled_tools` | `[]` | Deny list: excluded from the exposed set. Ignored when `enabled_tools` is set. Env: `DOCS_MCP_DISABLED_TOOLS`. |
-| `tool_preset` | *(none)* | Preset: `full` (all 24 tools) or `core` (6 tools: session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). Env: `DOCS_MCP_TOOL_PRESET`. |
+| `tool_preset` | *(none)* | Preset: `full` (all 31 tools, default) or `core` (6 tools: session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). Env: `DOCS_MCP_TOOL_PRESET`. |
 
 Environment variables use the `DOCS_MCP_` prefix (e.g., `DOCS_MCP_OUTPUT_DIR`).
 
@@ -227,4 +252,4 @@ When using DocsMCP with TappsMCP or in environments where the combined tool coun
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `DOCS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools, default when unset) or `core` (6 essential tools). Env: `DOCS_MCP_TOOL_PRESET=core`.
 
-Empty or missing = all 24 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. See tool-count best practices in the repo planning docs (Epic 79).
+Empty or missing = all 31 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. See tool-count best practices in the repo planning docs (Epic 79).

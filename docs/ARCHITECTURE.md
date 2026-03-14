@@ -7,7 +7,7 @@ For quick-start guidance, see [CLAUDE.md](../CLAUDE.md).
 
 ```
 tapps-core (library)  <──  tapps-mcp (30 tools)
-                      <──  docs-mcp  (24 tools)
+                      <──  docs-mcp  (31 tools)
 ```
 
 Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics, adaptive) lives in `tapps-core`. Both MCP servers depend on it. Server files in tapps-mcp import from `tapps_core` directly for extracted packages.
@@ -168,9 +168,9 @@ Split across `pipeline/` modules: hooks, rules, skills, subagents, bundles. AGEN
 
 Default is `"project"` scope (`.mcp.json` in project root). The `doctor` command warns when tapps-mcp is in user-scope `~/.claude.json`.
 
-## Docker MCP Toolkit (Epic 46)
+## Docker Distribution (Epic 46)
 
-Docker MCP Catalog artifacts in `docker-mcp/`. DockerSettings in `tapps_core/config/settings.py`. 5 Docker health checks in `doctor.py`.
+Docker images and registry artifacts in `docker-mcp/`. Servers are registered as `tapps-mcp` and `docs-mcp` using direct stdio transport.
 
 ## MCP Context progress notifications (Epics 39-41)
 

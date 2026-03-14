@@ -183,11 +183,16 @@ DocsMCP provides 24 MCP tools across these categories:
 - `docs_generate_onboarding` - Generate getting-started guide
 - `docs_generate_contributing` - Generate CONTRIBUTING.md
 - `docs_generate_prd` - Generate Product Requirements Document
-- `docs_generate_diagram` - Generate Mermaid/PlantUML diagrams (dependency/class/module/ER)
+- `docs_generate_diagram` - Generate Mermaid/PlantUML/D2 diagrams (8 types: dependency/class/module/ER/C4/sequence, D2 themes)
 - `docs_generate_architecture` - Self-contained HTML architecture report with SVG
+- `docs_generate_interactive_diagrams` - Interactive HTML viewer with pan/zoom for Mermaid diagrams
 - `docs_generate_epic` - Generate epic planning docs with expert enrichment
 - `docs_generate_story` - Generate user story docs with expert enrichment
 - `docs_generate_prompt` - Generate reusable prompt templates from project context
+- `docs_generate_llms_txt` - Machine-readable llms.txt project summary
+- `docs_generate_frontmatter` - YAML frontmatter injection/update for markdown files
+- `docs_generate_purpose` - Purpose/intent architecture template
+- `docs_generate_doc_index` - Documentation index/map with auto-categorization
 
 ### Validation
 - `docs_validate_epic` - Validate epic documents for completeness and consistency
@@ -195,6 +200,8 @@ DocsMCP provides 24 MCP tools across these categories:
 - `docs_check_completeness` - Score documentation completeness (0-100)
 - `docs_check_links` - Validate internal links in markdown files
 - `docs_check_freshness` - Score documentation freshness (fresh/aging/stale/ancient)
+- `docs_check_diataxis` - Diataxis quadrant coverage analysis and balance scoring
+- `docs_check_cross_refs` - Cross-reference validation (orphans, broken refs, backlinks)
 
 ## Environment Variables
 

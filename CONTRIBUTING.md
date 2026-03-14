@@ -30,7 +30,7 @@ This is a **uv workspace monorepo** with three packages:
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library |
 | **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools) |
-| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (24 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (31 tools) |
 
 ## Running Tests
 

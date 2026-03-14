@@ -8,7 +8,7 @@ include_toc: true
 include_badges: true
 changelog_format: keep-a-changelog
 adr_format: madr
-diagram_format: mermaid
+diagram_format: mermaid  # mermaid | plantuml | d2
 git_log_limit: 500
 log_level: INFO
 log_json: false

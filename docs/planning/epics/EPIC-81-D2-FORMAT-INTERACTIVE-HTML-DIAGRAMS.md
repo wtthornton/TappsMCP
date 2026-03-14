@@ -1,7 +1,7 @@
 # Epic 81: D2 Diagram Format & Interactive HTML Diagrams
 
 <!-- docsmcp:start:metadata -->
-**Status:** Complete (Story 81.3 Interactive HTML; Stories 81.1/81.2/81.4 D2 format deferred)
+**Status:** Complete (all stories: 81.1 D2 existing types, 81.2 D2 C4+sequence, 81.3 Interactive HTML, 81.4 D2 themes)
 **Priority:** P1 - High
 **Estimated LOE:** ~2 weeks (1 developer)
 **Dependencies:** Epic 6, Epic 80
@@ -34,15 +34,15 @@ D2 produces significantly better layout and aesthetics than Mermaid for complex 
 <!-- docsmcp:start:acceptance-criteria -->
 ## Acceptance Criteria
 
-- [ ] D2 format added to DiagramGenerator.VALID_FORMATS
-- [ ] All 8 diagram types generate valid D2 output
-- [ ] docs_generate_diagram accepts format=d2
-- [ ] D2 output uses idiomatic syntax with shapes/connections/containers
-- [ ] docs_generate_architecture embeds Mermaid.js for interactive rendering
-- [ ] Interactive diagrams support click-to-zoom and pan
-- [ ] Architecture report includes diagram toggle controls
-- [ ] Unit tests validate D2 output for all types
-- [ ] D2 includes theme support (default and sketch modes)
+- [x] D2 format added to DiagramGenerator.VALID_FORMATS
+- [x] All 8 diagram types generate valid D2 output
+- [x] docs_generate_diagram accepts format=d2
+- [x] D2 output uses idiomatic syntax with shapes/connections/containers
+- [x] docs_generate_architecture embeds Mermaid.js for interactive rendering
+- [x] Interactive diagrams support click-to-zoom and pan
+- [x] Architecture report includes diagram toggle controls
+- [x] Unit tests validate D2 output for all types
+- [x] D2 includes theme support (default and sketch modes)
 
 <!-- docsmcp:end:acceptance-criteria -->
 
@@ -56,13 +56,13 @@ D2 produces significantly better layout and aesthetics than Mermaid for complex 
 Add D2 as a third output format for existing 4 diagram types using D2 shape, connection, container, and label primitives.
 
 **Tasks:**
-- [ ] Add d2 to DiagramGenerator.VALID_FORMATS
-- [ ] Implement _generate_dependency_d2()
-- [ ] Implement _generate_class_hierarchy_d2()
-- [ ] Implement _generate_module_map_d2() with containers
-- [ ] Implement _generate_er_diagram_d2() with sql_table shapes
-- [ ] Add D2 theme support (default, sketch, terminal)
-- [ ] Add tests for all 4 types in D2 format
+- [x] Add d2 to DiagramGenerator.VALID_FORMATS
+- [x] Implement _generate_dependency_d2()
+- [x] Implement _generate_class_hierarchy_d2()
+- [x] Implement _generate_module_map_d2() with containers
+- [x] Implement _generate_er_diagram_d2() with sql_table shapes
+- [x] Add D2 theme support (default, sketch, terminal)
+- [x] Add tests for all 4 types in D2 format
 
 **Definition of Done:** D2 Output Format for Existing Diagram Types is implemented, tests pass, and documentation is updated.
 
@@ -75,9 +75,9 @@ Add D2 as a third output format for existing 4 diagram types using D2 shape, con
 Extend D2 support to C4 and sequence diagram types from Epic 80.
 
 **Tasks:**
-- [ ] Implement C4 context/container/component in D2
-- [ ] Implement sequence diagrams in D2
-- [ ] Add tests for all new types in D2 format
+- [x] Implement C4 context/container/component in D2
+- [x] Implement sequence diagrams in D2
+- [x] Add tests for all new types in D2 format
 
 **Definition of Done:** D2 Output for C4 and Sequence Diagrams is implemented, tests pass, and documentation is updated.
 
@@ -90,14 +90,14 @@ Extend D2 support to C4 and sequence diagram types from Epic 80.
 Replace static SVGs in docs_generate_architecture HTML with interactive Mermaid.js rendering with pan/zoom controls.
 
 **Tasks:**
-- [ ] Embed Mermaid.js in architecture HTML template
-- [ ] Replace static SVGs with mermaid code blocks
-- [ ] Add pan/zoom wrapper using SVG panZoom library
-- [ ] Add diagram toggle controls (show/hide per section)
-- [ ] Add diagram table of contents with anchor links
-- [ ] Ensure self-contained HTML (all JS/CSS inlined)
-- [ ] Add print-friendly CSS for static rendering
-- [ ] Add tests for interactive HTML output
+- [x] Embed Mermaid.js in architecture HTML template
+- [x] Replace static SVGs with mermaid code blocks
+- [x] Add pan/zoom wrapper using SVG panZoom library
+- [x] Add diagram toggle controls (show/hide per section)
+- [x] Add diagram table of contents with anchor links
+- [x] Ensure self-contained HTML (all JS/CSS inlined)
+- [x] Add print-friendly CSS for static rendering
+- [x] Add tests for interactive HTML output
 
 **Definition of Done:** Interactive Mermaid.js in Architecture Reports is implemented, tests pass, and documentation is updated.
 
@@ -110,11 +110,11 @@ Replace static SVGs in docs_generate_architecture HTML with interactive Mermaid.
 Configurable theming for D2 output including color schemes, sketch mode, and terminal mode.
 
 **Tasks:**
-- [ ] Add theme parameter to DiagramGenerator.generate()
-- [ ] Implement D2 theme blocks (vars, style) for each theme
-- [ ] Support sketch mode via D2's `sketch: true` directive
-- [ ] Add theme parameter to docs_generate_diagram MCP tool
-- [ ] Add tests for themed output
+- [x] Add theme parameter to DiagramGenerator.generate()
+- [x] Implement D2 theme blocks (vars, style) for each theme
+- [x] Support sketch mode via D2's `sketch: true` directive
+- [x] Add theme parameter to docs_generate_diagram MCP tool
+- [x] Add tests for themed output
 
 **Definition of Done:** D2 Theme and Style System is implemented, tests pass, and documentation is updated.
 

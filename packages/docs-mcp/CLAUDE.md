@@ -47,7 +47,7 @@ packages/docs-mcp/
 │   │   ├── adr.py             # Architecture Decision Records (MADR/Nygard)
 │   │   ├── guides.py          # Onboarding + contributing guides
 │   │   ├── specs.py           # Product Requirements Documents (PRD)
-│   │   ├── diagrams.py        # Mermaid/PlantUML diagrams (8 types incl. C4, sequence)
+│   │   ├── diagrams.py        # Mermaid/PlantUML/D2 diagrams (8 types, 3 formats, 3 D2 themes)
 │   │   ├── interactive_html.py # Interactive HTML viewer with Mermaid.js
 │   │   ├── architecture.py    # Self-contained HTML architecture report with SVG
 │   │   ├── epics.py           # Epic planning docs with expert enrichment
@@ -175,7 +175,7 @@ To add a new MCP tool:
 | Generation | `docs_generate_onboarding` | Getting-started guide |
 | Generation | `docs_generate_contributing` | CONTRIBUTING.md |
 | Generation | `docs_generate_prd` | Product Requirements Document (standard/comprehensive, auto-populate, SmartMerger) |
-| Generation | `docs_generate_diagram` | Mermaid/PlantUML diagrams (dependency/class/module/ER/C4/sequence) |
+| Generation | `docs_generate_diagram` | Mermaid/PlantUML/D2 diagrams (8 types, 3 formats, D2 themes) |
 | Generation | `docs_generate_architecture` | Self-contained HTML architecture report with SVG diagrams |
 | Generation | `docs_generate_epic` | Epic planning docs with stories, AC, expert enrichment |
 | Generation | `docs_generate_story` | User story docs with tasks, AC, expert enrichment |

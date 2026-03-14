@@ -38,7 +38,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 - **Unified feature flags** — optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** — auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** — `tapps_init` sets up quality infrastructure in any project with one call
-- **Docker MCP Toolkit** — publish to Docker MCP Catalog with curated companion profiles
+- **Docker distribution** — Docker images for external distribution and CI/CD
 - **8,400+ tests** across 3 packages with strict mypy and ruff enforcement
 - **Benchmark infrastructure** — AGENTBench evaluation, template optimization, tool effectiveness measurement
 
@@ -173,7 +173,6 @@ Choose one of the following. After installing, see [Quick start](#quick-start) t
 | Method | Requirements | Use when |
 |--------|--------------|----------|
 | **MCP Registry** | MCP-compatible client | One-click install from the official MCP server registry. |
-| **Docker MCP Toolkit** | Docker Desktop | Zero-dependency, cross-platform install with companion profiles. **Recommended.** |
 | **PyPI** | Python 3.12+, pip | You want a global or venv install and will run from any project. |
 | **npx** | Node.js 18+ | You prefer not to touch Python; runs on demand. |
 | **From source** | Python 3.12+, [uv](https://docs.astral.sh/uv/) or pip | You are developing TappsMCP or want the latest code. |
@@ -187,28 +186,6 @@ The official [MCP Registry](https://registry.modelcontextprotocol.io) provides o
 - **docs-mcp**: [`io.github.wtthornton/docs-mcp`](https://registry.modelcontextprotocol.io/servers/io.github.wtthornton/docs-mcp) — Documentation tools
 
 Search for "tapps" or "docs-mcp" in your MCP client's server browser.
-
-### Install with Docker MCP Toolkit (recommended)
-
-Zero dependencies — no Python install needed. Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) with MCP Toolkit.
-
-```bash
-# Single server
-docker mcp catalog install tapps-mcp
-
-# Curated profile (TappsMCP + DocsMCP + Context7 docs)
-docker mcp profile import tapps-standard
-```
-
-Three profiles available:
-
-| Profile | Servers | Use Case |
-|---------|---------|----------|
-| `tapps-minimal` | tapps-mcp | Code quality only |
-| `tapps-standard` | tapps-mcp, docs-mcp, context7 | Quality + docs + library lookup |
-| `tapps-full` | tapps-mcp, docs-mcp, context7, github, filesystem | Full developer workflow |
-
-See [docker-mcp/README.md](docker-mcp/README.md) for self-hosted catalogs and profile sharing.
 
 ### Install from PyPI
 
@@ -956,16 +933,6 @@ This adds `faiss-cpu`, `sentence-transformers`, and `numpy`. When not installed,
 
 ## Docker
 
-### Docker MCP Toolkit (recommended)
-
-The easiest way to run TappsMCP in Docker. See [Install with Docker MCP Toolkit](#install-with-docker-mcp-toolkit-recommended) above.
-
-```bash
-docker mcp profile import tapps-standard
-```
-
-`tapps_init` auto-detects Docker MCP Toolkit and generates gateway-based client configs. `tapps_doctor` validates the full Docker stack (daemon, toolkit, images, gateway, companions).
-
 ### Docker Compose (HTTP transport)
 
 Run TappsMCP as a local HTTP MCP server:
@@ -1002,7 +969,7 @@ docker run -v ${PWD}:/workspace ghcr.io/wtthornton/tapps-mcp:latest           # 
 docker run -p 8000:8000 -v $(pwd):/workspace ghcr.io/wtthornton/tapps-mcp:latest tapps-mcp serve --transport http --host 0.0.0.0 --port 8000
 ```
 
-See [docs/DOCKER_MCP_TOOLKIT.md](docs/DOCKER_MCP_TOOLKIT.md) for the full Docker MCP Toolkit submission plan.
+See [docs/DOCKER_MCP_TOOLKIT.md](docs/DOCKER_MCP_TOOLKIT.md) for Docker image distribution details.
 
 ---
 
@@ -1212,7 +1179,7 @@ DocsMCP is a companion MCP server for documentation generation, drift detection,
 | `docs_generate_api` | Generate API reference from Python source. Formats: markdown, mkdocs, sphinx_rst. Includes usage examples from tests. |
 | `docs_generate_changelog` | Generate CHANGELOG.md from git history. Formats: keep-a-changelog, conventional. |
 | `docs_generate_release_notes` | Generate release notes for a specific version (or latest) with highlights, breaking changes, contributors. |
-| `docs_generate_diagram` | Generate Mermaid or PlantUML diagrams. Types: dependency, class_hierarchy, module_map, er_diagram, c4_context, c4_container, c4_component, sequence. |
+| `docs_generate_diagram` | Generate Mermaid, PlantUML, or D2 diagrams. Types: dependency, class_hierarchy, module_map, er_diagram, c4_context, c4_container, c4_component, sequence. D2 supports themes: default, sketch, terminal. |
 | `docs_generate_architecture` | Generate comprehensive self-contained HTML architecture report with embedded SVG diagrams. |
 | `docs_generate_adr` | Create Architecture Decision Records. Templates: MADR, Nygard. Auto-numbers from existing records. |
 | `docs_generate_onboarding` | Generate developer onboarding guide with prerequisites, installation, project structure. |
@@ -1264,7 +1231,7 @@ include_toc: true                     # Include table of contents
 include_badges: true                  # Include badges in README
 changelog_format: keep-a-changelog    # keep-a-changelog | conventional
 adr_format: madr                      # madr | nygard
-diagram_format: mermaid               # mermaid | plantuml
+diagram_format: mermaid               # mermaid | plantuml | d2
 git_log_limit: 500                    # Max git commits to analyze
 
 # Tool filtering (optional)
@@ -1275,7 +1242,7 @@ disabled_tools: []                    # Deny list — excluded from the exposed 
 
 ### Roadmap
 
-DocsMCP is feature-complete with 31 MCP tools covering README generation, API documentation, changelog/release notes, ADRs, onboarding/contributing guides, PRD/epic/story generation, LLM prompt artifacts, Mermaid/PlantUML/C4/sequence diagrams, interactive HTML diagrams, llms.txt generation, frontmatter management, Diataxis classification, drift detection, completeness validation, link/cross-ref checking, freshness analysis, purpose/intent templates, and documentation indexing. See [docs/archive/planning/DOCSMCP_PRD.md](docs/archive/planning/DOCSMCP_PRD.md) for the original specification.
+DocsMCP is feature-complete with 31 MCP tools covering README generation, API documentation, changelog/release notes, ADRs, onboarding/contributing guides, PRD/epic/story generation, LLM prompt artifacts, Mermaid/PlantUML/D2 diagrams (8 types, 3 formats, D2 themes), interactive HTML diagrams, llms.txt generation, frontmatter management, Diataxis classification, drift detection, completeness validation, link/cross-ref checking, freshness analysis, purpose/intent templates, and documentation indexing. See [docs/archive/planning/DOCSMCP_PRD.md](docs/archive/planning/DOCSMCP_PRD.md) for the original specification.
 
 ---
 
@@ -1300,7 +1267,7 @@ DocsMCP is feature-complete with 31 MCP tools covering README generation, API do
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, coding standards, and how to submit changes. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full architecture documentation. |
 | [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) | Docker build, run, env vars, and client connection. |
-| [docs/DOCKER_MCP_TOOLKIT.md](docs/DOCKER_MCP_TOOLKIT.md) | Docker MCP Toolkit integration. |
+| [docs/DOCKER_MCP_TOOLKIT.md](docs/DOCKER_MCP_TOOLKIT.md) | Docker image distribution. |
 | [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) | Full memory system reference (23 actions). |
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |

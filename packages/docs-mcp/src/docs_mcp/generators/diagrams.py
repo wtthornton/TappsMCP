@@ -67,8 +67,8 @@ class DiagramGenerator:
     """Generates visual diagrams from project analysis data.
 
     Supports eight diagram types (dependency, class_hierarchy, module_map,
-    er_diagram, c4_context, c4_container, c4_component, sequence) in two
-    output formats (mermaid, plantuml).
+    er_diagram, c4_context, c4_container, c4_component, sequence) in three
+    output formats (mermaid, plantuml, d2).
     """
 
     VALID_TYPES: ClassVar[frozenset[str]] = frozenset(
@@ -83,7 +83,8 @@ class DiagramGenerator:
             "sequence",
         }
     )
-    VALID_FORMATS: ClassVar[frozenset[str]] = frozenset({"mermaid", "plantuml"})
+    VALID_FORMATS: ClassVar[frozenset[str]] = frozenset({"mermaid", "plantuml", "d2"})
+    VALID_THEMES: ClassVar[frozenset[str]] = frozenset({"default", "sketch", "terminal"})
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -100,14 +101,17 @@ class DiagramGenerator:
         direction: str = "TD",
         show_external: bool = False,
         flow_spec: str = "",
+        theme: str = "default",
     ) -> DiagramResult:
         """Generate a diagram for a project.
 
         Args:
             project_root: Root directory of the project.
             diagram_type: One of ``dependency``, ``class_hierarchy``,
-                ``module_map``, or ``er_diagram``.
-            output_format: Output format -- ``mermaid`` or ``plantuml``.
+                ``module_map``, ``er_diagram``, ``c4_context``,
+                ``c4_container``, ``c4_component``, or ``sequence``.
+            output_format: Output format -- ``mermaid``, ``plantuml``,
+                or ``d2``.
             scope: Scope of the diagram; ``project`` for the whole project
                 or a file path for a single file (class/ER diagrams).
             depth: Depth limit for module map / dependency diagrams.
@@ -117,6 +121,8 @@ class DiagramGenerator:
                 Expected format: ``{"participants": ["A", "B"],
                 "messages": [{"from": "A", "to": "B", "label": "call"}]}``.
                 When empty, auto-detects from import graph entry points.
+            theme: D2 theme -- ``default``, ``sketch``, or ``terminal``.
+                Ignored for mermaid and plantuml formats.
 
         Returns:
             A :class:`DiagramResult` with the rendered content.
@@ -132,6 +138,9 @@ class DiagramGenerator:
             return DiagramResult(
                 diagram_type=diagram_type, format=output_format, content=""
             )
+
+        # Store theme for D2 renderers to access.
+        self._d2_theme = theme if theme in self.VALID_THEMES else "default"
 
         dispatch = {
             "dependency": lambda: self._generate_dependency(
@@ -240,6 +249,10 @@ class DiagramGenerator:
         try:
             if output_format == "mermaid":
                 content, nodes, edges = self._dependency_to_mermaid(
+                    graph, direction, show_external
+                )
+            elif output_format == "d2":
+                content, nodes, edges = self._dependency_to_d2(
                     graph, direction, show_external
                 )
             else:
@@ -481,6 +494,8 @@ class DiagramGenerator:
         try:
             if output_format == "mermaid":
                 content, nodes, edges = self._classes_to_mermaid(classes)
+            elif output_format == "d2":
+                content, nodes, edges = self._classes_to_d2(classes)
             else:
                 content, nodes, edges = self._classes_to_plantuml(classes)
         except Exception:
@@ -688,6 +703,10 @@ class DiagramGenerator:
                 content, nodes, edges = self._module_map_to_mermaid(
                     result, direction
                 )
+            elif output_format == "d2":
+                content, nodes, edges = self._module_map_to_d2(
+                    result, direction
+                )
             else:
                 content, nodes, edges = self._module_map_to_plantuml(
                     result, direction
@@ -865,6 +884,8 @@ class DiagramGenerator:
         try:
             if output_format == "mermaid":
                 content, nodes, edges = self._models_to_mermaid_er(models)
+            elif output_format == "d2":
+                content, nodes, edges = self._models_to_d2_er(models)
             else:
                 content, nodes, edges = self._models_to_plantuml_er(models)
         except Exception:
@@ -1019,6 +1040,10 @@ class DiagramGenerator:
             content, nodes, edges = self._c4_context_mermaid(
                 project_name, description, actors
             )
+        elif output_format == "d2":
+            content, nodes, edges = self._c4_context_d2(
+                project_name, description, actors
+            )
         else:
             content, nodes, edges = self._c4_context_plantuml(
                 project_name, description, actors
@@ -1168,6 +1193,8 @@ class DiagramGenerator:
 
         if output_format == "mermaid":
             content, nodes, edges = self._c4_container_mermaid(project_name, containers)
+        elif output_format == "d2":
+            content, nodes, edges = self._c4_container_d2(project_name, containers)
         else:
             content, nodes, edges = self._c4_container_plantuml(project_name, containers)
 
@@ -1285,6 +1312,8 @@ class DiagramGenerator:
 
         if output_format == "mermaid":
             content, nodes, edges = self._c4_component_mermaid(container_name, components)
+        elif output_format == "d2":
+            content, nodes, edges = self._c4_component_d2(container_name, components)
         else:
             content, nodes, edges = self._c4_component_plantuml(container_name, components)
 
@@ -1425,6 +1454,10 @@ class DiagramGenerator:
             content = self._sequence_mermaid(
                 title, participants, valid_messages, notes, groups
             )
+        elif output_format == "d2":
+            content = self._sequence_d2(
+                title, participants, valid_messages, notes, groups
+            )
         else:
             content = self._sequence_plantuml(
                 title, participants, valid_messages, notes, groups
@@ -1511,6 +1544,8 @@ class DiagramGenerator:
 
         if output_format == "mermaid":
             content = self._sequence_mermaid(title, participants, messages, [], [])
+        elif output_format == "d2":
+            content = self._sequence_d2(title, participants, messages, [], [])
         else:
             content = self._sequence_plantuml(title, participants, messages, [], [])
 
@@ -1680,4 +1715,435 @@ class DiagramGenerator:
 
         lines.append("")
         lines.append("@enduml")
+        return "\n".join(lines) + "\n"
+
+    # ==================================================================
+    # D2 format renderers (Epic 81.1, 81.2, 81.4)
+    # ==================================================================
+
+    def _d2_theme_block(self) -> list[str]:
+        """Return D2 directives for the active theme.
+
+        Supports ``default``, ``sketch``, and ``terminal`` themes.
+        """
+        theme = getattr(self, "_d2_theme", "default")
+        if theme == "sketch":
+            return ["vars: {", "  d2-config: {", "    sketch: true", "  }", "}"]
+        if theme == "terminal":
+            return [
+                "vars: {",
+                "  d2-config: {",
+                "    theme-id: 200",
+                "  }",
+                "}",
+            ]
+        return []
+
+    # -- D2: dependency -------------------------------------------------
+
+    def _dependency_to_d2(
+        self,
+        graph: ImportGraph,
+        direction: str,
+        show_external: bool,
+    ) -> tuple[str, int, int]:
+        """Render an import graph as a D2 diagram.
+
+        Returns:
+            A tuple of ``(content, node_count, edge_count)``.
+        """
+        modules = list(graph.modules)
+        truncated = len(modules) > _MAX_DEPENDENCY_NODES
+        if truncated:
+            modules = modules[:_MAX_DEPENDENCY_NODES]
+        module_set = set(modules)
+
+        packages: dict[str, list[str]] = {}
+        for mod in modules:
+            parts = mod.split("/")
+            pkg = parts[0] if len(parts) > 1 else ""
+            packages.setdefault(pkg, []).append(mod)
+
+        d2_direction = "right" if direction == "LR" else "down"
+        lines: list[str] = [f"direction: {d2_direction}"]
+        lines.extend(self._d2_theme_block())
+        lines.append("")
+
+        node_count = 0
+        for pkg, pkg_modules in sorted(packages.items()):
+            if pkg:
+                pkg_id = self._sanitize_id(pkg)
+                lines.append(f"{pkg_id}: {pkg} {{")
+                for mod in sorted(pkg_modules):
+                    mod_id = self._sanitize_id(mod)
+                    label = mod.split("/")[-1]
+                    lines.append(f"  {mod_id}: {label}")
+                    node_count += 1
+                lines.append("}")
+            else:
+                for mod in sorted(pkg_modules):
+                    mod_id = self._sanitize_id(mod)
+                    label = mod.split("/")[-1]
+                    lines.append(f"{mod_id}: {label}")
+                    node_count += 1
+
+        lines.append("")
+
+        edge_count = 0
+        for edge in graph.edges:
+            if edge.source not in module_set or edge.target not in module_set:
+                continue
+            src_id = self._sanitize_id(edge.source)
+            tgt_id = self._sanitize_id(edge.target)
+            if edge.import_type in ("type_checking", "conditional", "lazy"):
+                lines.append(f"{src_id} -> {tgt_id}: {{style.stroke-dash: 3}}")
+            else:
+                lines.append(f"{src_id} -> {tgt_id}")
+            edge_count += 1
+
+        if show_external:
+            external_ids: set[str] = set()
+            for mod_path, ext_list in graph.external_imports.items():
+                if mod_path not in module_set:
+                    continue
+                src_id = self._sanitize_id(mod_path)
+                for ext_name in ext_list:
+                    ext_top = ext_name.split(".")[0]
+                    ext_id = self._sanitize_id(ext_top)
+                    if ext_id not in external_ids:
+                        lines.append(f"{ext_id}: {ext_top} {{shape: cloud}}")
+                        external_ids.add(ext_id)
+                        node_count += 1
+                    lines.append(
+                        f"{src_id} -> {ext_id}: {{style.stroke-dash: 3}}"
+                    )
+                    edge_count += 1
+
+        if truncated:
+            lines.append(
+                f"# Truncated: showing {_MAX_DEPENDENCY_NODES}"
+                f" of {len(graph.modules)} modules"
+            )
+
+        content = "\n".join(lines) + "\n"
+        return content, node_count, edge_count
+
+    # -- D2: class hierarchy --------------------------------------------
+
+    def _classes_to_d2(
+        self,
+        classes: list[tuple[str, ClassInfo]],
+    ) -> tuple[str, int, int]:
+        """Render classes as a D2 class diagram.
+
+        Returns:
+            A tuple of ``(content, node_count, edge_count)``.
+        """
+        classes = classes[:_MAX_CLASS_NODES]
+        class_names = {cls.name for _, cls in classes}
+
+        lines: list[str] = list(self._d2_theme_block())
+        if lines:
+            lines.append("")
+        edge_count = 0
+
+        for _module, cls in classes:
+            cls_id = self._sanitize_id(cls.name)
+            lines.append(f"{cls_id}: {cls.name} {{")
+            lines.append("  shape: class")
+
+            for var in cls.class_variables:
+                annotation = var.annotation or ""
+                if annotation:
+                    lines.append(f"  +{var.name}: {annotation}")
+                else:
+                    lines.append(f"  +{var.name}")
+
+            for method in cls.methods:
+                prefix = "-" if method.name.startswith("_") else "+"
+                ret = ""
+                if method.return_annotation:
+                    ret = f" {method.return_annotation}"
+                lines.append(f"  {prefix}{method.name}(){ret}")
+
+            lines.append("}")
+            lines.append("")
+
+        for _module, cls in classes:
+            cls_id = self._sanitize_id(cls.name)
+            for base in cls.bases:
+                base_simple = base.split(".")[-1]
+                if base_simple in class_names:
+                    base_id = self._sanitize_id(base_simple)
+                    lines.append(
+                        f"{cls_id} -> {base_id}: {{style.stroke-dash: 3}}"
+                    )
+                    edge_count += 1
+
+        content = "\n".join(lines) + "\n"
+        return content, len(classes), edge_count
+
+    # -- D2: module map -------------------------------------------------
+
+    def _module_map_to_d2(
+        self,
+        module_map: ModuleMap,
+        direction: str,
+    ) -> tuple[str, int, int]:
+        """Render a module map as a D2 diagram with nested containers.
+
+        Returns:
+            A tuple of ``(content, node_count, edge_count)``.
+        """
+        d2_direction = "right" if direction == "LR" else "down"
+        lines: list[str] = [f"direction: {d2_direction}"]
+        lines.extend(self._d2_theme_block())
+        lines.append("")
+
+        project_id = self._sanitize_id(module_map.project_name)
+        lines.append(f"{project_id}: {module_map.project_name} {{")
+        node_count = self._emit_module_nodes_d2(
+            module_map.module_tree, lines, indent=2
+        )
+        lines.append("}")
+
+        content = "\n".join(lines) + "\n"
+        return content, node_count, 0
+
+    def _emit_module_nodes_d2(
+        self,
+        nodes: list[ModuleNode],
+        lines: list[str],
+        indent: int,
+    ) -> int:
+        """Recursively emit D2 nodes for a module tree.
+
+        Returns:
+            The number of nodes emitted.
+        """
+        pad = " " * indent
+        count = 0
+
+        for node in nodes:
+            node_id = self._sanitize_id(node.path or node.name)
+            if node.is_package:
+                label = f"{node.name}/"
+                lines.append(f"{pad}{node_id}: {label} {{")
+                count += self._emit_module_nodes_d2(
+                    node.submodules, lines, indent + 2
+                )
+                lines.append(f"{pad}}}")
+            else:
+                label_parts: list[str] = [node.name]
+                stats: list[str] = []
+                if node.function_count:
+                    stats.append(f"{node.function_count}F")
+                if node.class_count:
+                    stats.append(f"{node.class_count}C")
+                if stats:
+                    label_parts.append(f" ({', '.join(stats)})")
+                label = "".join(label_parts)
+                lines.append(f"{pad}{node_id}: {label}")
+                count += 1
+
+        return count
+
+    # -- D2: ER diagram -------------------------------------------------
+
+    def _models_to_d2_er(
+        self,
+        models: list[tuple[str, ClassInfo]],
+    ) -> tuple[str, int, int]:
+        """Render model classes as a D2 ER diagram using sql_table shapes.
+
+        Returns:
+            A tuple of ``(content, node_count, edge_count)``.
+        """
+        models = models[:_MAX_CLASS_NODES]
+        model_names = {cls.name for _, cls in models}
+
+        lines: list[str] = list(self._d2_theme_block())
+        if lines:
+            lines.append("")
+        edge_count = 0
+
+        for _module, cls in models:
+            cls_id = self._sanitize_id(cls.name)
+            lines.append(f"{cls_id}: {cls.name} {{")
+            lines.append("  shape: sql_table")
+            for var in cls.class_variables:
+                er_type = self._map_python_type(var.annotation or "")
+                lines.append(f"  {var.name}: {er_type}")
+            lines.append("}")
+            lines.append("")
+
+        for _module, cls in models:
+            cls_id = self._sanitize_id(cls.name)
+            for var in cls.class_variables:
+                annotation = var.annotation or ""
+                for other_name in model_names:
+                    if other_name == cls.name:
+                        continue
+                    if other_name in annotation:
+                        other_id = self._sanitize_id(other_name)
+                        lines.append(f"{cls_id} -> {other_id}: has")
+                        edge_count += 1
+
+        content = "\n".join(lines) + "\n"
+        return content, len(models), edge_count
+
+    # -- D2: C4 context -------------------------------------------------
+
+    def _c4_context_d2(
+        self,
+        name: str,
+        description: str,
+        actors: list[tuple[str, str]],
+    ) -> tuple[str, int, int]:
+        """Render a C4 System Context as a D2 diagram."""
+        lines: list[str] = list(self._d2_theme_block())
+        if lines:
+            lines.append("")
+
+        node_count = 1 + len(actors)
+        edge_count = len(actors)
+
+        sys_id = self._sanitize_id(name)
+        lines.append(f"{sys_id}: {name} {{")
+        lines.append(f"  tooltip: {description}")
+        lines.append("}")
+        lines.append("")
+
+        for actor_name, actor_desc in actors:
+            aid = self._sanitize_id(actor_name)
+            if actor_name in ("Database",):
+                lines.append(f"{aid}: {actor_name} {{shape: cylinder}}")
+            elif actor_name in ("ExternalAPI",):
+                lines.append(f"{aid}: {actor_name} {{shape: cloud}}")
+            else:
+                lines.append(f"{aid}: {actor_name} {{shape: person}}")
+
+        lines.append("")
+        for actor_name, _ in actors:
+            aid = self._sanitize_id(actor_name)
+            lines.append(f"{aid} -> {sys_id}: Uses")
+
+        lines.append("")
+        return "\n".join(lines) + "\n", node_count, edge_count
+
+    # -- D2: C4 container -----------------------------------------------
+
+    def _c4_container_d2(
+        self,
+        name: str,
+        containers: list[tuple[str, str, str]],
+    ) -> tuple[str, int, int]:
+        """Render a C4 Container diagram as D2 with nested containers."""
+        lines: list[str] = list(self._d2_theme_block())
+        if lines:
+            lines.append("")
+
+        sys_id = self._sanitize_id(name)
+        lines.append(f"{sys_id}: {name} {{")
+
+        edges = 0
+        for cname, tech, desc in containers:
+            cid = self._sanitize_id(cname)
+            lines.append(f"  {cid}: {cname} {{")
+            lines.append(f"    tooltip: \"{tech} - {desc}\"")
+            lines.append("  }")
+
+        lines.append("}")
+        lines.append("")
+
+        if len(containers) > 1:
+            first_id = self._sanitize_id(containers[0][0])
+            for i in range(1, min(len(containers), 5)):
+                cid = self._sanitize_id(containers[i][0])
+                lines.append(f"{sys_id}.{first_id} -> {sys_id}.{cid}: Uses")
+                edges += 1
+
+        lines.append("")
+        return "\n".join(lines) + "\n", len(containers), edges
+
+    # -- D2: C4 component -----------------------------------------------
+
+    def _c4_component_d2(
+        self,
+        container_name: str,
+        components: list[tuple[str, str, int]],
+    ) -> tuple[str, int, int]:
+        """Render a C4 Component diagram as D2."""
+        lines: list[str] = list(self._d2_theme_block())
+        if lines:
+            lines.append("")
+
+        cid = self._sanitize_id(container_name)
+        lines.append(f"{cid}: {container_name} {{")
+
+        for cname, desc, _ in components[:_MAX_DEPENDENCY_NODES]:
+            comp_id = self._sanitize_id(cname)
+            lines.append(f"  {comp_id}: {cname} {{")
+            lines.append(f"    tooltip: \"{desc}\"")
+            lines.append("  }")
+
+        lines.append("}")
+        lines.append("")
+        return "\n".join(lines) + "\n", len(components), 0
+
+    # -- D2: sequence diagram -------------------------------------------
+
+    def _sequence_d2(
+        self,
+        title: str,
+        participants: list[str],
+        messages: list[dict[str, str]],
+        notes: list[dict[str, str]],
+        groups: list[dict[str, object]],
+    ) -> str:
+        """Render a D2 sequence diagram."""
+        lines: list[str] = list(self._d2_theme_block())
+        if lines:
+            lines.append("")
+
+        lines.append("shape: sequence_diagram")
+        if title:
+            lines.append(f"# {title}")
+        lines.append("")
+
+        for p in participants:
+            alias = self._sanitize_id(p)
+            display = p.rsplit(".", 1)[-1] if "." in p else p
+            lines.append(f"{alias}: {display}")
+        lines.append("")
+
+        note_map: dict[str, str] = {
+            str(n.get("over", "")): str(n.get("text", "")) for n in notes
+        }
+
+        for msg in messages:
+            src = self._sanitize_id(msg["from"])
+            tgt = self._sanitize_id(msg["to"])
+            label = msg.get("label", "")
+            msg_type = msg.get("type", "sync")
+
+            if msg_type == "reply":
+                lines.append(
+                    f"{src} -> {tgt}: {label} {{style.stroke-dash: 3}}"
+                )
+            elif msg_type == "async":
+                lines.append(
+                    f"{src} -> {tgt}: {label} {{style.stroke-dash: 5}}"
+                )
+            else:
+                lines.append(f"{src} -> {tgt}: {label}")
+
+            target_name = msg["to"]
+            if target_name in note_map:
+                note_alias = self._sanitize_id(target_name)
+                lines.append(
+                    f"{note_alias}.\"note\": {note_map.pop(target_name)}"
+                )
+
+        lines.append("")
         return "\n".join(lines) + "\n"
