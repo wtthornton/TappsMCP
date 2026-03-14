@@ -1,5 +1,5 @@
 name: docs-mcp
-image: ghcr.io/wtthornton/docs-mcp:1.7.0
+image: ghcr.io/wtthornton/docs-mcp:1.8.0
 type: server
 meta:
   category: devops
