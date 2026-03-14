@@ -402,36 +402,14 @@ if __name__ == "__main__":
     mcp.run(transport="streamable-http", host="0.0.0.0", port=8080)
 ```
 
-### Docker MCP Gateway Transport
+### Docker MCP Registry
 
-The Docker MCP Gateway introduces a third transport topology. The client connects
-to the gateway via stdio, and the gateway manages container lifecycle internally:
+To publish an MCP server to the Docker MCP Registry:
 
-```
-Client --stdio--> Docker MCP Gateway --container stdio--> MCP Server Container
-```
-
-From the client's perspective, this is a single stdio connection. The gateway
-multiplexes tool calls to the correct container based on tool name routing.
-This means a profile with 3 servers still appears as one MCP connection to the
-client, keeping configuration minimal.
-
-### Docker MCP Catalog Publishing Workflow
-
-To publish an MCP server to the Docker MCP Catalog:
-
-1. **Prepare** `server.yaml` (metadata, image, config, secrets) and `tools.json`
-   (static tool definitions for build-time validation)
+1. **Prepare** `server.yaml` (metadata, image, config)
 2. **Fork** `docker/mcp-registry` and create `servers/<name>/`
-3. **Build and test** locally: `task build -- --tools <name>`
-4. **Import** to Docker Desktop: `docker mcp catalog import $PWD/catalogs/<name>/catalog.yaml`
-5. **Submit PR** -- approved entries available within 24 hours
-6. Docker builds, signs, and publishes the image to `mcp/<name>` on Docker Hub
-   with cryptographic signatures, SBOM, and provenance tracking
-
-Self-built images (hosted on GHCR/ACR) skip Docker's build pipeline but still
-get a catalog entry. See `cloud-infrastructure/docker-mcp-toolkit.md` for full
-`server.yaml` and `tools.json` format reference.
+3. **Build and test** locally
+4. **Submit PR** - approved entries available within 24 hours
 
 ### Transport Selection Guidelines
 
@@ -439,7 +417,6 @@ get a catalog entry. See `cloud-infrastructure/docker-mcp-toolkit.md` for full
 |---|---|---|---|
 | stdio | Local IDE integration | Lowest | Simplest |
 | Streamable HTTP | Remote servers, multi-client | Medium | Moderate |
-| Docker MCP Gateway | Managed multi-server profiles | Low (container overhead) | Simplest for users |
 
 ## Dual CLI / MCP Tool Pattern
 
@@ -495,10 +472,9 @@ requires-python = ">=3.12"
 tapps-mcp = "tapps_mcp.cli:main"
 ```
 
-### Docker MCP Toolkit (Recommended)
+### Docker Distribution
 
-The Docker MCP Toolkit provides managed distribution via Docker Desktop. Servers
-are packaged as container images and published to the Docker MCP Catalog:
+Docker images provide zero-dependency distribution for external users and CI/CD:
 
 ```dockerfile
 FROM python:3.12-slim AS builder
@@ -510,18 +486,19 @@ FROM python:3.12-slim
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
 USER nonroot
-# stdio default for Docker MCP Gateway compatibility
 ENTRYPOINT ["tapps-mcp", "serve"]
 ```
 
-Client configuration uses a single gateway entry:
+Client configuration uses direct stdio:
 
 ```json
 {
   "mcpServers": {
-    "tapps-platform": {
-      "command": "docker",
-      "args": ["mcp", "gateway", "run", "--profile", "tapps-platform"]
+    "tapps-mcp": {
+      "type": "stdio",
+      "command": "tapps-mcp",
+      "args": ["serve"],
+      "env": { "TAPPS_MCP_PROJECT_ROOT": "." }
     }
   }
 }

@@ -301,7 +301,6 @@ def bootstrap_pipeline(
     if cfg.verify_only:
         return state.finalize()
     _detect_profile(cfg, state)
-    _detect_docker_environment(state)
     _detect_docsmcp(state)
     _create_templates(cfg, state)
     if state.content_return:
@@ -379,76 +378,6 @@ def bootstrap_pipeline(
         return result
 
     return state.finalize()
-
-
-async def _detect_docker() -> dict[str, Any]:
-    """Detect Docker Desktop and MCP Toolkit availability."""
-    import shutil
-
-    result: dict[str, Any] = {
-        "docker_available": False,
-        "docker_mcp_available": False,
-        "docker_version": None,
-        "installed_servers": [],
-    }
-
-    # Check docker CLI
-    if not shutil.which("docker"):
-        return result
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "docker",
-            "info",
-            "--format",
-            "{{.ServerVersion}}",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
-        if proc.returncode == 0 and stdout:
-            result["docker_available"] = True
-            result["docker_version"] = stdout.decode().strip()
-    except (asyncio.TimeoutError, OSError):
-        return result
-
-    # Check docker mcp subcommand
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "docker",
-            "mcp",
-            "version",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
-        if proc.returncode == 0:
-            result["docker_mcp_available"] = True
-    except (asyncio.TimeoutError, OSError):
-        pass
-
-    return result
-
-
-def _recommend_companions(
-    docker_result: dict[str, Any],
-    companions: list[str],
-) -> dict[str, Any]:
-    """Report companion MCP servers as configured.
-
-    Actual runtime availability depends on Docker Desktop -- we cannot
-    verify installation from here, so we report them honestly as
-    ``"configured"`` rather than ``"installed"``.
-    """
-    return {
-        "configured": sorted(companions),
-        "status": "configured",
-        "note": "runtime availability depends on Docker Desktop",
-        "install_commands": [
-            f"docker mcp profile server add tapps-standard --server catalog://{s}"
-            for s in sorted(companions)
-        ],
-    }
 
 
 def _load_business_experts(cfg: BootstrapConfig, state: _BootstrapState) -> None:
@@ -537,35 +466,6 @@ def _suggest_auto_generate(state: _BootstrapState) -> None:
         pass  # Non-critical; don't block init
 
 
-def _detect_docker_environment(state: _BootstrapState) -> None:
-    """Detect Docker and MCP Toolkit, store results in state."""
-    try:
-        docker_result = asyncio.run(_detect_docker())
-    except RuntimeError:
-        # Already in an event loop — skip Docker detection.
-        docker_result = {
-            "docker_available": False,
-            "docker_mcp_available": False,
-            "docker_version": None,
-            "installed_servers": [],
-        }
-    except Exception:
-        docker_result = {
-            "docker_available": False,
-            "docker_mcp_available": False,
-            "docker_version": None,
-            "installed_servers": [],
-        }
-
-    state.result["docker"] = docker_result
-
-    # Recommend companions when Docker MCP is available.
-    if docker_result.get("docker_mcp_available"):
-        from tapps_core.config.settings import load_settings
-
-        settings = load_settings()
-        companions = _recommend_companions(docker_result, settings.docker.companions)
-        state.result["docker_companions"] = companions
 
 
 def _memory_hooks_defaults_for_engagement(engagement_level: str) -> dict[str, Any]:

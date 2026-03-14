@@ -2,10 +2,9 @@
 
 ## Overview
 
-MCP servers are most effective when composed into curated profiles that combine
-complementary capabilities. Rather than configuring each server individually,
-the Docker MCP Toolkit's profile system lets users bundle multiple servers behind
-a single gateway entry -- providing a complete developer toolchain in one step.
+MCP servers are most effective when composed into curated configurations that
+combine complementary capabilities. Each server is registered individually as a
+direct stdio entry (e.g., `tapps-mcp`, `docs-mcp`) in MCP client configs.
 
 This guide covers companion server selection, profile composition patterns,
 the Context7 dual-role architecture, and enterprise catalog curation.
@@ -17,7 +16,7 @@ When selecting companion servers for an MCP profile, evaluate along four axes:
 1. **Workflow coverage** -- Does the companion fill a gap in the primary server's capabilities?
 2. **Data flow** -- Does the companion produce outputs the primary server consumes (or vice versa)?
 3. **Redundancy** -- Does the companion overlap with the primary server? (avoid tool bloat)
-4. **Trust** -- Is the companion in the Docker MCP Catalog (signed, SBOM) or a community image?
+4. **Trust** -- Is the companion from a verified source (signed images, known maintainer)?
 
 ### Anti-pattern: Tool Overload
 
@@ -85,37 +84,26 @@ tapps-full:
   Total: ~69 tools
 ```
 
-### Profile Creation Commands
+### Example Configuration
 
-```bash
-# Create from catalog
-docker mcp profile create --name tapps-standard \
-  --server catalog://tapps-mcp \
-  --server catalog://docs-mcp \
-  --server catalog://context7
-
-# Import from shared profile
-docker mcp profile pull ghcr.io/tapps-mcp/profiles/tapps-standard:v1
-
-# Import from custom catalog
-docker mcp catalog import ./catalog.yaml
+```json
+{
+  "mcpServers": {
+    "tapps-mcp": {
+      "type": "stdio",
+      "command": "tapps-mcp",
+      "args": ["serve"],
+      "env": { "TAPPS_MCP_PROJECT_ROOT": "." }
+    },
+    "docs-mcp": {
+      "type": "stdio",
+      "command": "docsmcp",
+      "args": ["serve"],
+      "env": { "DOCS_MCP_PROJECT_ROOT": "." }
+    }
+  }
+}
 ```
-
-### Profile Sharing
-
-Profiles are OCI artifacts that can be pushed to any container registry:
-
-```bash
-# Share a profile
-docker mcp profile push ghcr.io/your-org/profiles/tapps-standard:v1
-
-# Team member pulls it
-docker mcp profile pull ghcr.io/your-org/profiles/tapps-standard:v1
-```
-
-**Important**: Credentials (API keys, OAuth tokens) are NOT included in shared
-profiles for security. Each team member configures secrets locally via Docker
-Desktop UI.
 
 ## Context7: Dual-Role Architecture
 

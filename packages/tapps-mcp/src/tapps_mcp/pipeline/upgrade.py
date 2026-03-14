@@ -570,26 +570,6 @@ def upgrade_pipeline(
     settings = load_settings()
     engagement_level = settings.llm_engagement_level
 
-    # Include Docker status when Docker transport is configured
-    if settings.docker.enabled:
-        docker_info: dict[str, Any] = {
-            "transport": settings.docker.transport,
-            "profile_preserved": True,
-        }
-        # Report companions as "configured" — actual runtime availability
-        # depends on Docker Desktop and cannot be verified from here.
-        docker_info["companions_status"] = {
-            "configured": list(settings.docker.companions),
-            "status": "configured",
-            "note": "runtime availability depends on Docker Desktop",
-        }
-        result["docker"] = docker_info
-        log.info(
-            "upgrade_docker_config",
-            transport=settings.docker.transport,
-            profile=settings.docker.profile,
-        )
-
     # Per-host upgrades
     platform_results: list[dict[str, Any]] = []
     for host in hosts:

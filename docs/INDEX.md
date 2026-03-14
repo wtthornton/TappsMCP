@@ -22,7 +22,7 @@
 | Document | Description |
 |---|---|
 | [Docker Deployment](DOCKER_DEPLOYMENT.md) | Docker container deployment |
-| [Docker MCP Toolkit](DOCKER_MCP_TOOLKIT.md) | Docker MCP Toolkit setup and profiles |
+| [Docker Distribution](DOCKER_MCP_TOOLKIT.md) | Docker image distribution and registry submission |
 | [Upgrade for Consumers](UPGRADE_FOR_CONSUMERS.md) | Upgrading TappsMCP in consuming projects |
 | [Init & Upgrade Features](INIT_AND_UPGRADE_FEATURE_LIST.md) | Complete feature list for init/upgrade |
 | [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions |

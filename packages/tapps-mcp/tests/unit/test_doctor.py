@@ -902,10 +902,7 @@ class TestDoctorQuickMode:
         """run_doctor_structured with quick=True includes quick_mode flag."""
         with patch(
             "tapps_mcp.distribution.doctor._collect_checks"
-        ) as mock_collect, patch(
-            "tapps_mcp.distribution.doctor._collect_docker_checks_sync",
-            return_value=[],
-        ):
+        ) as mock_collect:
             mock_collect.return_value = [CheckResult("test", True, "ok")]
             result = run_doctor_structured(
                 project_root=str(tmp_path), quick=True
@@ -917,10 +914,7 @@ class TestDoctorQuickMode:
         """run_doctor_structured defaults to quick_mode=False."""
         with patch(
             "tapps_mcp.distribution.doctor._collect_checks"
-        ) as mock_collect, patch(
-            "tapps_mcp.distribution.doctor._collect_docker_checks_sync",
-            return_value=[],
-        ):
+        ) as mock_collect:
             mock_collect.return_value = [CheckResult("test", True, "ok")]
             result = run_doctor_structured(project_root=str(tmp_path))
         assert result["quick_mode"] is False

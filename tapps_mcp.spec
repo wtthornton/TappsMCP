@@ -214,6 +214,7 @@ a = Analysis(
         "tapps_mcp.pipeline.platform_hook_templates",
         "tapps_mcp.pipeline.platform_skills",
         "tapps_mcp.pipeline.platform_subagents",
+        "tapps_mcp.pipeline.platform_docs_automation",
         "tapps_mcp.platform",
         "tapps_mcp.platform.cli",
         "tapps_mcp.platform.combined_server",

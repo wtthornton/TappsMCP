@@ -1,12 +1,12 @@
 # Docker MCP Distribution
 
-Docker images and catalog artifacts for TappsMCP and DocsMCP.
+Docker images for TappsMCP and DocsMCP, used for external distribution, CI/CD,
+and sandboxed environments.
 
-## Recommended Setup: Direct stdio (no Docker MCP Gateway)
+## Setup: Direct stdio with tapps-mcp and docs-mcp
 
-The **recommended** way to use TappsMCP is via direct stdio, using `uv run` from
-the source directory. This avoids Docker MCP Gateway version-pinning issues,
-catalog re-import steps, and container startup latency.
+TappsMCP and DocsMCP use direct stdio transport. Configure them as `tapps-mcp`
+and `docs-mcp` server entries in your MCP client config.
 
 ### Claude Code (.mcp.json)
 
@@ -33,17 +33,6 @@ catalog re-import steps, and container startup latency.
 
 Same as above but use `${workspaceFolder}` instead of `"."` for env values.
 
-### Why not Docker MCP Gateway?
-
-The Docker MCP Toolkit Gateway (`docker mcp gateway run`) adds friction:
-- Image tags are pinned in the catalog -- every release requires `docker build` + `docker mcp catalog import`
-- Stale versions persist silently if you forget to re-import
-- Container startup adds latency to every tool call
-- Extra indirection makes debugging harder
-
-**Use Docker images for**: external distribution, CI/CD, sandboxed environments.
-**Use direct stdio for**: local development, your own projects.
-
 ## Building Docker Images
 
 For external distribution or CI/CD:
@@ -65,31 +54,29 @@ docker run --rm docs-mcp:1.7.0 docsmcp --version
 ```
 docker-mcp/
   tapps-mcp/
-    server.yaml    # Registry entry for Docker MCP Catalog (docker/mcp-registry format)
+    server.yaml    # Registry entry for Docker MCP Catalog
   docs-mcp/
-    server.yaml    # Registry entry for Docker MCP Catalog (docker/mcp-registry format)
+    server.yaml    # Registry entry for Docker MCP Catalog
   profiles/
     tapps-minimal.yaml      # TappsMCP only
     tapps-standard.yaml     # TappsMCP + DocsMCP + Context7
     tapps-full.yaml         # + GitHub + Filesystem
     tapps-core-tools.yaml   # TappsMCP + DocsMCP, use with examples for Tier 1/2 only
-    tapps-reviewer.yaml     # Role: code review & security (Epic 79.6)
+    tapps-reviewer.yaml     # Role: code review & security
     tapps-planning.yaml     # Role: epics, stories & planning (TappsMCP + DocsMCP)
     tapps-frontend.yaml     # Role: frontend / UX work
     tapps-developer.yaml    # Role: daily feature/bugfix development
-    tapps-standard-170.yaml # Pinned to 1.7.0 (Toolkit profile)
+    tapps-standard-170.yaml # Pinned to 1.7.0
   examples/
-    tools-core-tier1.yaml       # Gateway tools.yaml: Tier 1 only (~11 tools)
-    tools-core-tier1-tier2.yaml # Gateway tools.yaml: Tier 1+2 (~23 tools)
-  catalog.yaml          # Gateway-format catalog (for docker mcp gateway run --catalog)
-  toolkit-catalog.yaml  # Toolkit-native catalog (for docker mcp catalog import)
+    tools-core-tier1.yaml       # Tier 1 only (~11 tools)
+    tools-core-tier1-tier2.yaml # Tier 1+2 (~23 tools)
 ```
 
 ## Profiles
 
 | Profile | Servers | Use Case |
 |---------|---------|----------|
-| `tapps-standard-170` | tapps-mcp, docs-mcp, context7 @ 1.7.0 | Same as tapps-standard but pinned to 1.7.0 |
+| `tapps-standard-170` | tapps-mcp, docs-mcp, context7 @ 1.7.0 | Pinned to 1.7.0 |
 | `tapps-minimal` | tapps-mcp | Code quality only |
 | `tapps-standard` | tapps-mcp, docs-mcp, context7 | Quality + docs + library lookup |
 | `tapps-full` | tapps-mcp, docs-mcp, context7, github, filesystem | Full developer workflow |
@@ -130,31 +117,7 @@ using its own native capabilities (Write/Edit tools).
 - `docs_config` (set action)
 - All `docs_generate_*` generators
 
-## Docker MCP Toolkit (legacy/external distribution)
-
-If you need to use the Docker MCP Toolkit for external distribution:
-
-```bash
-# 1. Build images
-docker build -t tapps-mcp:1.7.0 -t tapps-mcp:latest .
-docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:1.7.0 -t docs-mcp:latest .
-
-# 2. Import catalog
-docker mcp catalog import docker-mcp/toolkit-catalog.yaml
-
-# 3. Enable servers
-docker mcp server enable tapps-mcp
-docker mcp server enable docs-mcp
-
-# 4. Connect clients
-docker mcp client connect cursor
-docker mcp client connect claude-code
-```
-
-**Important**: After every release, you must rebuild images AND re-import the
-catalog. The toolkit pins exact image tags.
-
-## Docker path mapping (Story 75.1)
+## Docker path mapping
 
 When running TappsMCP inside a container, set `TAPPS_HOST_ROOT` for host-path
 translation:
@@ -174,17 +137,3 @@ docker run --rm \
 | tapps-mcp | `ghcr.io/wtthornton/tapps-mcp:1.7.0` | `Dockerfile` |
 | docs-mcp | `ghcr.io/wtthornton/docs-mcp:1.7.0` | `packages/docs-mcp/Dockerfile` |
 | combined | `ghcr.io/wtthornton/tapps-platform` | `Dockerfile.platform` |
-
-## Submitting to Docker MCP Catalog
-
-The `tapps-mcp/` and `docs-mcp/` directories each contain a single `server.yaml`
-matching the [docker/mcp-registry](https://github.com/docker/mcp-registry) format.
-
-```bash
-gh repo fork docker/mcp-registry --clone
-cd mcp-registry
-cp -r <repo>/docker-mcp/tapps-mcp servers/tapps-mcp
-cp -r <repo>/docker-mcp/docs-mcp servers/docs-mcp
-task build && task catalog
-gh pr create --title "Add tapps-mcp and docs-mcp servers"
-```

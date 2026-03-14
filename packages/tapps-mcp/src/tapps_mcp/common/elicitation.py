@@ -140,38 +140,6 @@ class WizardConfigScope(BaseModel):
     )
 
 
-class WizardDockerTransport(BaseModel):
-    """Schema for wizard Docker MCP transport selection (Epic 46)."""
-
-    transport: str = Field(
-        description="MCP server transport",
-        json_schema_extra={
-            "enum": ["docker", "exe", "uv"],
-            "enumNames": [
-                "Docker MCP Gateway (recommended - managed lifecycle)",
-                "Local executable (standalone binary)",
-                "uv run (development mode)",
-            ],
-        },
-    )
-
-
-class WizardCompanionProfile(BaseModel):
-    """Schema for wizard companion MCP profile selection (Epic 46)."""
-
-    profile: str = Field(
-        description="Companion profile",
-        json_schema_extra={
-            "enum": ["minimal", "standard", "full"],
-            "enumNames": [
-                "Minimal (TappsMCP only)",
-                "Standard (+ DocsMCP + Context7)",
-                "Full (+ GitHub + Filesystem)",
-            ],
-        },
-    )
-
-
 # ---------------------------------------------------------------------------
 # Elicitation helpers
 # ---------------------------------------------------------------------------
@@ -267,10 +235,8 @@ class WizardResult:
     __slots__ = (
         "add_other_mcps",
         "agent_teams",
-        "companion_profile",
         "completed",
         "config_scope",
-        "docker_transport",
         "engagement_level",
         "prompt_hooks",
         "quality_preset",
@@ -285,15 +251,12 @@ class WizardResult:
         self.skill_tier: str = "full"
         self.prompt_hooks: bool = False
         self.add_other_mcps: bool = False
-        self.docker_transport: str = "auto"
-        self.companion_profile: str = "standard"
         self.completed: bool = False
 
 
 async def run_init_wizard(  # type: ignore[type-arg]
     ctx: Context,
     *,
-    docker_available: bool = False,
     claude_code_detected: bool = True,
 ) -> WizardResult:
     """Run the interactive wizard via MCP elicitation.
@@ -304,8 +267,6 @@ async def run_init_wizard(  # type: ignore[type-arg]
 
     Args:
         ctx: MCP context for elicitation.
-        docker_available: When ``True``, include Docker transport and
-            companion profile questions.
     """
     result = WizardResult()
     if not _client_supports_elicitation(ctx):
@@ -377,25 +338,7 @@ async def run_init_wizard(  # type: ignore[type-arg]
         if r5.action == "accept" and r5.data is not None:
             result.prompt_hooks = r5.data.enabled
 
-        # 6. Docker transport (conditional - Epic 46)
-        if docker_available:
-            r_docker = await _ask(
-                "Docker MCP Toolkit detected. "
-                "How should TappsMCP be delivered to MCP clients?",
-                WizardDockerTransport,
-            )
-            if r_docker.action == "accept" and r_docker.data is not None:
-                result.docker_transport = r_docker.data.transport
-
-            # 7. Companion profile (conditional - Epic 46)
-            r_companion = await _ask(
-                "Which companion MCP servers should be included in the profile?",
-                WizardCompanionProfile,
-            )
-            if r_companion.action == "accept" and r_companion.data is not None:
-                result.companion_profile = r_companion.data.profile
-
-        # 8. Other MCPs
+        # 6. Other MCPs
         r6 = await _ask(
             "Get guidance on adding other MCPs (GitHub, YouTube, Sentry) "
             "alongside TappsMCP? See docs/MCP_COMPOSITION.md for details.",

@@ -136,7 +136,7 @@ class TestShowConfigCli:
         assert result.exit_code == 0
         assert "memory:" in result.output
         assert "adaptive:" in result.output
-        assert "docker:" in result.output
+        assert "scoring_weights:" in result.output
 
 
 class TestInitCliOverwriteTechStack:

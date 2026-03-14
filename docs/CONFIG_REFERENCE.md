@@ -144,19 +144,6 @@ Nested under `memory.decay`.
 | `expert_auto_fallback` | bool | `true` | Automatic Context7 lookup when expert RAG has no matches. |
 | `expert_fallback_max_chars` | int | `1200` | Maximum characters merged from Context7 fallback content. |
 
-### Docker Settings
-
-Nested under `docker`.
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | bool | `false` | Enable Docker MCP transport. |
-| `transport` | string | `"auto"` | MCP transport mode: `auto`, `docker`, `exe`, or `uv`. |
-| `profile` | string | `"tapps-standard"` | Docker MCP Toolkit profile name. |
-| `image` | string | `"ghcr.io/wtthornton/tapps-mcp:latest"` | Docker image for TappsMCP. |
-| `docs_image` | string | `"ghcr.io/wtthornton/docs-mcp:latest"` | Docker image for DocsMCP. |
-| `companions` | list[string] | `["context7"]` | Companion MCP servers to recommend. |
-
 ## Example Configurations
 
 ### Minimal (defaults only)

@@ -201,29 +201,28 @@ MCP servers have unique distribution needs: they must be discoverable by AI clie
 configurable without manual JSON editing, and runnable without installing language
 runtimes. The following channels address these needs:
 
-### Docker MCP Toolkit (Recommended for End Users)
+### Docker Images
 
-The Docker MCP Toolkit provides zero-dependency distribution via Docker Desktop:
+Docker images provide zero-dependency distribution for external users and CI/CD:
 
-- **MCP Catalog**: 300+ verified server images, browsable in Docker Desktop UI
-- **MCP Gateway**: stdio proxy managing container lifecycle -- one config entry per profile
-- **Profiles**: Named server collections (e.g., "tapps-platform" bundles tapps-mcp + docs-mcp)
-- **Dynamic MCP**: Agents discover and add servers mid-conversation
+- Build multi-arch images with multi-stage Dockerfiles
+- Publish to GHCR or Docker Hub
+- Submit to Docker MCP Registry (`docker/mcp-registry`) for catalog listing
 
-Client configuration (single gateway entry):
+Client configuration (direct stdio):
 
 ```json
 {
   "mcpServers": {
-    "tapps-platform": {
-      "command": "docker",
-      "args": ["mcp", "gateway", "run", "--profile", "tapps-platform"]
+    "tapps-mcp": {
+      "type": "stdio",
+      "command": "tapps-mcp",
+      "args": ["serve"],
+      "env": { "TAPPS_MCP_PROJECT_ROOT": "." }
     }
   }
 }
 ```
-
-Publish to catalog via PR to `docker/mcp-registry`. Images are signed with SBOM.
 
 ### PyPI (Standard Python)
 

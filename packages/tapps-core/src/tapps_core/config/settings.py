@@ -464,32 +464,6 @@ class DocSourceConfig(BaseModel):
     format: str = Field(default="markdown", description="Content format: markdown or text.")
 
 
-class DockerSettings(BaseModel):
-    """Docker MCP distribution settings."""
-
-    enabled: bool = Field(default=False, description="Enable Docker MCP transport.")
-    transport: str = Field(
-        default="auto",
-        description="MCP transport mode: 'auto', 'docker', 'exe', or 'uv'.",
-    )
-    profile: str = Field(
-        default="tapps-standard",
-        description="Docker MCP Toolkit profile name.",
-    )
-    image: str = Field(
-        default="ghcr.io/wtthornton/tapps-mcp:latest",
-        description="Docker image for TappsMCP server.",
-    )
-    docs_image: str = Field(
-        default="ghcr.io/wtthornton/docs-mcp:latest",
-        description="Docker image for DocsMCP server.",
-    )
-    companions: list[str] = Field(
-        default_factory=lambda: ["context7"],
-        description="Companion MCP servers to recommend.",
-    )
-
-
 class TappsMCPSettings(BaseSettings):
     """Root settings for TappsMCP server."""
 
@@ -654,9 +628,6 @@ class TappsMCPSettings(BaseSettings):
         le=3.0,
         description="Boost multiplier for RAG chunks matching the project tech stack domains.",
     )
-
-    # Docker MCP distribution (Epic 46)
-    docker: DockerSettings = Field(default_factory=DockerSettings)
 
     # Tool curation (Epic 79.1): server-side allow/deny list and presets
     enabled_tools: list[str] | None = Field(

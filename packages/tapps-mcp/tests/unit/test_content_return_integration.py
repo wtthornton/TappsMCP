@@ -218,33 +218,6 @@ class TestUpgradeContentReturn:
 
 
 # ---------------------------------------------------------------------------
-# Doctor write-mode detection
-# ---------------------------------------------------------------------------
-
-
-class TestDoctorWriteMode:
-    """Test tapps_doctor Docker write-mode check."""
-
-    def test_direct_write_mode(self, tmp_path: Path) -> None:
-        from tapps_mcp.distribution.doctor import check_docker_write_mode
-
-        with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "direct"}):
-            result = check_docker_write_mode(tmp_path)
-        assert result.ok is True
-        assert "Direct write" in result.message
-
-    def test_content_return_mode(self, tmp_path: Path) -> None:
-        from tapps_mcp.distribution.doctor import check_docker_write_mode
-
-        with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
-            result = check_docker_write_mode(tmp_path)
-        assert result.ok is True  # not a failure, just informational
-        assert "Content-return" in result.message
-        assert result.detail is not None
-        assert "TAPPS_WRITE_MODE=direct" in result.detail
-
-
-# ---------------------------------------------------------------------------
 # Content-return file application simulation
 # ---------------------------------------------------------------------------
 
