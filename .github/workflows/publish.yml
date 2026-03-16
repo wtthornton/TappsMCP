@@ -54,7 +54,7 @@ jobs:
         run: |
           ls -la dist/
           python -m zipfile -l dist/*.whl | head -20
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.package.name }}
           path: dist/
@@ -64,11 +64,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-core
           path: dist/
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-mcp
           path: dist/
@@ -84,7 +84,7 @@ jobs:
         run: |
           python -m PyInstaller --onefile -n tapps-mcp --console scripts/run_tapps_mcp.py
       - name: Upload exe artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: exe
           path: dist/tapps-mcp.exe
@@ -97,15 +97,15 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-core
           path: dist/
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-mcp
           path: dist/
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-docs-mcp
           path: dist/
@@ -128,7 +128,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-core
           path: dist/
@@ -143,7 +143,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-core
           path: dist/
@@ -157,7 +157,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-mcp
           path: dist/
@@ -172,7 +172,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-mcp
           path: dist/
@@ -185,7 +185,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-docs-mcp
           path: dist/
@@ -200,7 +200,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-docs-mcp
           path: dist/
@@ -213,19 +213,19 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-core
           path: dist/
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-tapps-mcp
           path: dist/
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist-docs-mcp
           path: dist/
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: exe
           path: exe/
