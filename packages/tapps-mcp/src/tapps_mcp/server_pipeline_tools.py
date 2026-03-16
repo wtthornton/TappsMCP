@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
     from tapps_core.config.settings import TappsMCPSettings
+    from tapps_core.memory.models import MemorySnapshot
     from tapps_core.memory.store import MemoryStore
 
 _logger = structlog.get_logger(__name__)
@@ -1125,7 +1126,7 @@ async def _maybe_validate_memories(
 
 def _schedule_background_maintenance(
     mem_store: MemoryStore,
-    snapshot: object,
+    snapshot: MemorySnapshot,
     settings: TappsMCPSettings,
 ) -> None:
     """Schedule heavy memory maintenance ops as fire-and-forget background tasks.
@@ -1138,7 +1139,7 @@ def _schedule_background_maintenance(
 
     async def _run_maintenance() -> None:
         """Execute all maintenance ops sequentially in the background."""
-        total_count: int = getattr(snapshot, "total_count", 0)
+        total_count: int = snapshot.total_count
         try:
             _maybe_auto_gc(mem_store, total_count, settings)
         except Exception:
@@ -1192,6 +1193,7 @@ async def tapps_session_start(
     from tapps_mcp.server import _server_info_async
 
     timings: dict[str, int] = {}
+    settings = load_settings()
 
     phase_start = time.perf_counter_ns()
     info = await _server_info_async()
@@ -1201,7 +1203,6 @@ async def tapps_session_start(
     phase_start = time.perf_counter_ns()
     memory_status: dict[str, Any] = {"enabled": False}
     try:
-        settings = load_settings()
         if settings.memory.enabled:
             from tapps_mcp.server_helpers import _get_memory_store
 
@@ -1211,7 +1212,9 @@ async def tapps_session_start(
                 contradicted_count = sum(1 for entry in snapshot.entries if entry.contradicted)
 
                 # Tier breakdown
-                by_tier: dict[str, int] = {"architectural": 0, "pattern": 0, "context": 0}
+                by_tier: dict[str, int] = {
+                    "architectural": 0, "pattern": 0, "procedural": 0, "context": 0,
+                }
                 confidences: list[float] = []
                 for entry in snapshot.entries:
                     tier_val = (
@@ -1255,11 +1258,10 @@ async def tapps_session_start(
     phase_start = time.perf_counter_ns()
     business_experts_result: dict[str, Any] | None = None
     try:
-        be_settings = load_settings()
-        if be_settings.business_experts_enabled:
+        if settings.business_experts_enabled:
             from tapps_core.experts.business_loader import load_and_register_business_experts
 
-            be_result = load_and_register_business_experts(be_settings.project_root)
+            be_result = load_and_register_business_experts(settings.project_root)
             if be_result.loaded > 0 or be_result.errors:
                 business_experts_result = {
                     "loaded": be_result.loaded,
@@ -1277,12 +1279,11 @@ async def tapps_session_start(
     # or file-system scan required, just reads the project's detected tech stack.
     phase_start = time.perf_counter_ns()
     try:
-        ts_settings = load_settings()
-        if ts_settings.project_root.is_dir():
+        if settings.project_root.is_dir():
             from tapps_core.experts.engine import set_tech_stack_domains
             from tapps_core.experts.rag_warming import tech_stack_to_expert_domains
 
-            domains = tech_stack_to_expert_domains(ts_settings.project_root)
+            domains = tech_stack_to_expert_domains(settings.project_root)
             if domains:
                 set_tech_stack_domains(domains)
     except Exception:
