@@ -1,6 +1,6 @@
 # TappsMCP Epics
 
-## Documentation Excellence Series (Epics 80-87)
+## Documentation Excellence Series (Epics 80-88)
 
 Goal: Elevate DocsMCP from B+ to A+ -- the best documentation tooling for AI-assisted development.
 
@@ -14,19 +14,22 @@ Goal: Elevate DocsMCP from B+ to A+ -- the best documentation tooling for AI-ass
 | [85](EPIC-85-PURPOSE-INTENT-TEMPLATES-DOC-INDEX.md) | Architecture Templates & Doc Index (reduced) | P2 | ~1.5 weeks | 3 (16 pts) | **Complete** (85.3 cut) |
 | [84](EPIC-84-DOC-STYLE-TONE-VALIDATION.md) | Doc Style & Tone Validation (Vale Integration) | P3 | ~2 weeks | 4 (18 pts) | Deferred |
 | [87](EPIC-87-CONTENT-RETURN-PATTERN-DOCKER-FILE-WRITES.md) | Content-Return Pattern for Docker File Writes | P0 | ~3-4 weeks | 7 (39 pts) | **Complete** |
+| [88](EPIC-88-FRESHNESS-RESPONSE-SIZE-MANAGEMENT.md) | Freshness Tool Response Size Management | P1 | ~1 week | 5 (17 pts) | **Complete** |
 
-**7 of 8 epics complete. 1 deferred (Epic 84). 1 individual story cut (85.3).**
+**8 of 9 epics complete. 1 deferred (Epic 84). 1 individual story cut (85.3).**
 
-### Revised Implementation Order (2026-03-13)
+### Revised Implementation Order (2026-03-17)
 
 Reprioritized for maximum value per effort, shipping quick wins first.
 
 ```
-Phase 1 (Quick wins):     Epic 83 (llms.txt)                    ─── 1.5 weeks
-Phase 2 (Intelligence):   Epic 82 (Diataxis)                    ─── 2 weeks
-Phase 3 (Integration):    Epic 86 (Init/Upgrade)                ─── 2 weeks
-Phase 4 (Diagrams):       Epic 80 (C4 + sequence) + 81 (D2 + interactive HTML) ─── 2.5 weeks
-Phase 5 (Templates):      Epic 85 (reduced: no series bootstrap) ─── 1.5 weeks
+Phase 1 (Quick wins):     Epic 83 (llms.txt)                    ─── 1.5 weeks  ✓
+Phase 2 (Intelligence):   Epic 82 (Diataxis)                    ─── 2 weeks    ✓
+Phase 3 (Integration):    Epic 86 (Init/Upgrade)                ─── 2 weeks    ✓
+Phase 4 (Diagrams):       Epic 80 (C4 + sequence) + 81 (D2 + interactive HTML) ─── 2.5 weeks ✓
+Phase 5 (Templates):      Epic 85 (reduced: no series bootstrap) ─── 1.5 weeks ✓
+Phase 6 (Docker writes):  Epic 87 (Content-return pattern)      ─── 3 weeks    ✓
+Phase 7 (Validation):     Epic 88 (Freshness response size)     ─── 1 week     ✓
 Deferred:                 Epic 84 (Style)
 ```
 
@@ -55,14 +58,15 @@ Epic 81.3 (Interactive HTML)
 
 ### What This Achieves (Before vs After)
 
-| Category | Current Grade | Target Grade | Key Additions |
-|----------|--------------|--------------|---------------|
-| AI Readiness | B+ | A+ | llms.txt, structured frontmatter |
-| Content Organization | B+ | A | Diataxis classification, balance validation |
-| Init Automation | D (docs) | A | Doc agents, skills, hooks in init/upgrade |
-| Diagram Quality | B | A | C4 model diagrams, sequence diagrams, interactive HTML |
-| Architecture Templates | B- | A- | Purpose/Intent template, doc index |
-| **Overall** | **B+** | **A** | |
+| Category | Current Grade | Target Grade | Achieved | Key Additions |
+|----------|--------------|--------------|----------|---------------|
+| AI Readiness | B+ | A+ | A+ | llms.txt, structured frontmatter |
+| Content Organization | B+ | A | A | Diataxis classification, balance validation |
+| Init Automation | D (docs) | A | A | Doc agents, skills, hooks in init/upgrade |
+| Diagram Quality | B | A | A | C4 model diagrams, sequence diagrams, interactive HTML |
+| Architecture Templates | B- | A- | A- | Purpose/Intent template, doc index |
+| Validation Scalability | C (freshness) | A | A | Bounded responses, pagination, progressive disclosure |
+| **Overall** | **B+** | **A** | **A** | |
 
 ## Previous Epics (0-79)
 

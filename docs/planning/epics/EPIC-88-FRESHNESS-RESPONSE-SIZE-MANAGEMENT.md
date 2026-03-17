@@ -1,7 +1,7 @@
 # Epic 88: Freshness Tool Response Size Management
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P1 - High
 **Estimated LOE:** ~1 week (1 developer)
 **Dependencies:** None (docs-mcp validators fully implemented)
@@ -37,17 +37,17 @@ Add response size management to `docs_check_freshness` — including pagination 
 <!-- docsmcp:start:acceptance-criteria -->
 ## Acceptance Criteria
 
-- [ ] `docs_check_freshness` accepts `max_items` parameter (default 50, 0 = unlimited)
-- [ ] `docs_check_freshness` accepts `path` parameter to scope scan to a subdirectory
-- [ ] Response includes `total_items`, `total_unfiltered`, and `showing` metadata fields (matching `docs_check_drift` pattern)
-- [ ] Items are sorted by `age_days` descending (stalest first) before truncation
-- [ ] `docs_check_freshness` accepts `summary_only` parameter that returns only aggregate scores and category counts without per-file items
-- [ ] Response includes `category_counts` breakdown (`{"fresh": N, "aging": N, "stale": N, "ancient": N}`)
-- [ ] Response includes a human-readable `summary` string for LLM consumption
-- [ ] All existing tests pass; new tests cover each new parameter and edge case
-- [ ] `mypy --strict` passes on all changed files
-- [ ] `ruff check` and `ruff format --check` pass on all changed files
-- [ ] HomeIQ-scale projects (500+ doc files) return bounded responses under MCP limits
+- [x] `docs_check_freshness` accepts `max_items` parameter (default 50, 0 = unlimited)
+- [x] `docs_check_freshness` accepts `path` parameter to scope scan to a subdirectory
+- [x] Response includes `total_items`, `total_unfiltered`, and `showing` metadata fields (matching `docs_check_drift` pattern)
+- [x] Items are sorted by `age_days` descending (stalest first) before truncation
+- [x] `docs_check_freshness` accepts `summary_only` parameter that returns only aggregate scores and category counts without per-file items
+- [x] Response includes `category_counts` breakdown (`{"fresh": N, "aging": N, "stale": N, "ancient": N}`)
+- [x] Response includes a human-readable `summary` string for LLM consumption
+- [x] All existing tests pass; new tests cover each new parameter and edge case
+- [x] `mypy --strict` passes on all changed files
+- [x] `ruff check` and `ruff format --check` pass on all changed files
+- [x] HomeIQ-scale projects (500+ doc files) return bounded responses under MCP limits
 
 <!-- docsmcp:end:acceptance-criteria -->
 
@@ -63,11 +63,11 @@ Add response size management to `docs_check_freshness` — including pagination 
 Add staleness-descending sort to `FreshnessChecker.check()` and include a `category_counts` dict in `FreshnessReport`. This is the foundational change — sorting ensures truncation always keeps the most actionable (stalest) items, and category counts provide the aggregate view that survives truncation.
 
 **Tasks:**
-- [ ] Add `category_counts: dict[str, int]` field to `FreshnessReport` model
-- [ ] Compute category counts during the check loop in `FreshnessChecker.check()`
-- [ ] Sort `items` by `age_days` descending before returning the report
-- [ ] Update existing tests to expect sorted order and category counts
-- [ ] Add new tests: empty project, single file, mixed categories
+- [x] Add `category_counts: dict[str, int]` field to `FreshnessReport` model
+- [x] Compute category counts during the check loop in `FreshnessChecker.check()`
+- [x] Sort `items` by `age_days` descending before returning the report
+- [x] Update existing tests to expect sorted order and category counts
+- [x] Add new tests: empty project, single file, mixed categories
 
 **Definition of Done:** `FreshnessReport` always returns items sorted stalest-first with accurate `category_counts`.
 
@@ -80,13 +80,13 @@ Add staleness-descending sort to `FreshnessChecker.check()` and include a `categ
 Add `max_items` parameter to the `docs_check_freshness` tool handler, following the exact pattern from `docs_check_drift`. Apply truncation after sorting, and include `total_items` / `total_unfiltered` / `showing` metadata in the response envelope.
 
 **Tasks:**
-- [ ] Add `max_items: int = 0` parameter to `docs_check_freshness()` in `server_val_tools.py`
-- [ ] Update docstring to document the parameter (0 = default 50, explicit value overrides)
-- [ ] Apply `items[:max_items]` truncation after staleness sort
-- [ ] Add `total_items`, `total_unfiltered`, `showing` fields to response data dict
-- [ ] Default to 50 when `max_items` is 0 (consistent with cross_refs/diataxis hardcoded 50)
-- [ ] Add a `summary` string to the response (e.g., `"47 docs: 12 fresh, 8 aging, 15 stale, 12 ancient (score: 42.3)"`)
-- [ ] Add tests: default truncation at 50, explicit max_items override, max_items=-1 or 0 edge cases, summary string format
+- [x] Add `max_items: int = 0` parameter to `docs_check_freshness()` in `server_val_tools.py`
+- [x] Update docstring to document the parameter (0 = default 50, explicit value overrides)
+- [x] Apply `items[:max_items]` truncation after staleness sort
+- [x] Add `total_items`, `total_unfiltered`, `showing` fields to response data dict
+- [x] Default to 50 when `max_items` is 0 (consistent with cross_refs/diataxis hardcoded 50)
+- [x] Add a `summary` string to the response (e.g., `"47 docs: 12 fresh, 8 aging, 15 stale, 12 ancient (score: 42.3)"`)
+- [x] Add tests: default truncation at 50, explicit max_items override, max_items=-1 or 0 edge cases, summary string format
 
 **Definition of Done:** Response size is bounded by default; callers can override with explicit `max_items`.
 
@@ -99,12 +99,12 @@ Add `max_items` parameter to the `docs_check_freshness` tool handler, following 
 Add a `path` parameter to scope the freshness scan to a specific subdirectory. This lets callers check freshness of `docs/` without scanning the entire project tree.
 
 **Tasks:**
-- [ ] Add `path: str = ""` parameter to `docs_check_freshness()` in `server_val_tools.py`
-- [ ] Update docstring to document path scoping behavior
-- [ ] Resolve `path` relative to `project_root` and validate it exists
-- [ ] Pass scoped root to `FreshnessChecker.check()` (or filter items post-scan)
-- [ ] Ensure `file_path` in items remains relative to `project_root` (not the scoped path)
-- [ ] Add tests: scoped to subdirectory, invalid path error, empty subdirectory
+- [x] Add `path: str = ""` parameter to `docs_check_freshness()` in `server_val_tools.py`
+- [x] Update docstring to document path scoping behavior
+- [x] Resolve `path` relative to `project_root` and validate it exists
+- [x] Pass scoped root to `FreshnessChecker.check()` (or filter items post-scan)
+- [x] Ensure `file_path` in items remains relative to `project_root` (not the scoped path)
+- [x] Add tests: scoped to subdirectory, invalid path error, empty subdirectory
 
 **Definition of Done:** Callers can scope freshness checks to any subdirectory.
 
@@ -117,11 +117,11 @@ Add a `path` parameter to scope the freshness scan to a specific subdirectory. T
 Add a `summary_only` boolean parameter that returns only aggregate metrics (freshness score, average age, category counts) without per-file items. This is ideal for dashboard use cases where the caller only needs the headline numbers.
 
 **Tasks:**
-- [ ] Add `summary_only: bool = False` parameter to `docs_check_freshness()` in `server_val_tools.py`
-- [ ] Update docstring to document summary-only behavior
-- [ ] When `summary_only=True`, set `items` to empty list in response and skip serialization
-- [ ] Always include `total_items` count even in summary mode so caller knows how many files exist
-- [ ] Add tests: summary_only returns no items but has scores and counts
+- [x] Add `summary_only: bool = False` parameter to `docs_check_freshness()` in `server_val_tools.py`
+- [x] Update docstring to document summary-only behavior
+- [x] When `summary_only=True`, set `items` to empty list in response and skip serialization
+- [x] Always include `total_items` count even in summary mode so caller knows how many files exist
+- [x] Add tests: summary_only returns no items but has scores and counts
 
 **Definition of Done:** `summary_only=True` returns a compact response suitable for dashboards.
 
@@ -134,11 +134,11 @@ Add a `summary_only` boolean parameter that returns only aggregate metrics (fres
 Add a `freshness` parameter to filter items by category (e.g., `freshness="stale,ancient"` to see only files needing attention). This complements `max_items` by letting callers focus on specific staleness tiers.
 
 **Tasks:**
-- [ ] Add `freshness: str = ""` parameter to `docs_check_freshness()` in `server_val_tools.py`
-- [ ] Parse comma-separated values, validate against known categories
-- [ ] Filter items after sorting, before truncation
-- [ ] `total_items` reflects filtered count; `total_unfiltered` reflects pre-filter count
-- [ ] Add tests: single category filter, multiple categories, invalid category ignored
+- [x] Add `freshness: str = ""` parameter to `docs_check_freshness()` in `server_val_tools.py`
+- [x] Parse comma-separated values, validate against known categories
+- [x] Filter items after sorting, before truncation
+- [x] `total_items` reflects filtered count; `total_unfiltered` reflects pre-filter count
+- [x] Add tests: single category filter, multiple categories, invalid category ignored
 
 **Definition of Done:** Callers can filter to specific freshness categories for targeted remediation.
 
