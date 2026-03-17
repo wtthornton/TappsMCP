@@ -1105,3 +1105,198 @@ class TestDocsCheckFreshnessTool:
 
         assert result["data"]["freshness_score"] == 42.0
         assert result["data"]["average_age_days"] == 120.5
+
+    # -------------------------------------------------------------------
+    # Epic 88: Response size management tests
+    # -------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_category_counts_in_response(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text("# R\n", encoding="utf-8")
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(project_root=str(tmp_path))
+        cc = result["data"]["category_counts"]
+        assert cc["fresh"] == 1
+        assert cc["aging"] == 0
+
+    @pytest.mark.asyncio
+    async def test_items_sorted_stalest_first(self, tmp_path: Path) -> None:
+        import os as _os
+        import time as _time
+
+        (tmp_path / "new.md").write_text("n\n", encoding="utf-8")
+        old = tmp_path / "old.md"
+        old.write_text("o\n", encoding="utf-8")
+        _os.utime(old, (_time.time() - 86400 * 200, _time.time() - 86400 * 200))
+
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(project_root=str(tmp_path))
+        items = result["data"]["items"]
+        assert len(items) == 2
+        assert items[0]["age_days"] >= items[1]["age_days"]
+
+    @pytest.mark.asyncio
+    async def test_summary_string_present(self, tmp_path: Path) -> None:
+        (tmp_path / "a.md").write_text("a\n", encoding="utf-8")
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(project_root=str(tmp_path))
+        summary = result["data"]["summary"]
+        assert "docs scanned" in summary
+        assert "fresh" in summary
+
+    @pytest.mark.asyncio
+    async def test_total_items_and_showing_metadata(self, tmp_path: Path) -> None:
+        (tmp_path / "a.md").write_text("a\n", encoding="utf-8")
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(project_root=str(tmp_path))
+        data = result["data"]
+        assert data["total_unfiltered"] == 1
+        assert data["total_items"] == 1
+        assert data["showing"] == 1
+
+    @pytest.mark.asyncio
+    async def test_max_items_truncation(self, tmp_path: Path) -> None:
+        for i in range(10):
+            (tmp_path / f"doc{i}.md").write_text(f"d{i}\n", encoding="utf-8")
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(
+            project_root=str(tmp_path), max_items=3,
+        )
+        data = result["data"]
+        assert data["showing"] == 3
+        assert data["total_items"] == 10
+        assert data["total_unfiltered"] == 10
+        assert len(data["items"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_max_items_zero_uses_default(self, tmp_path: Path) -> None:
+        for i in range(60):
+            (tmp_path / f"doc{i}.md").write_text(f"d{i}\n", encoding="utf-8")
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(
+            project_root=str(tmp_path), max_items=0,
+        )
+        data = result["data"]
+        assert data["showing"] == 50  # default
+        assert data["total_items"] == 60
+
+    @pytest.mark.asyncio
+    async def test_path_scoping(self, tmp_path: Path) -> None:
+        sub = tmp_path / "docs"
+        sub.mkdir()
+        (sub / "guide.md").write_text("g\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text("r\n", encoding="utf-8")
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(
+            project_root=str(tmp_path), path="docs",
+        )
+        data = result["data"]
+        assert data["total_unfiltered"] == 1
+        items = data["items"]
+        assert len(items) == 1
+        assert items[0]["file_path"] == "docs/guide.md"
+
+    @pytest.mark.asyncio
+    async def test_path_scoping_invalid_returns_error(self, tmp_path: Path) -> None:
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(
+            project_root=str(tmp_path), path="nonexistent",
+        )
+        assert result["success"] is False
+        assert result["error"]["code"] == "INVALID_PATH"
+
+    @pytest.mark.asyncio
+    async def test_summary_only_mode(self, tmp_path: Path) -> None:
+        (tmp_path / "a.md").write_text("a\n", encoding="utf-8")
+        (tmp_path / "b.md").write_text("b\n", encoding="utf-8")
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(
+            project_root=str(tmp_path), summary_only=True,
+        )
+        data = result["data"]
+        assert data["items"] == []
+        assert data["showing"] == 0
+        assert data["total_items"] == 2
+        assert data["freshness_score"] > 0
+        assert data["category_counts"]["fresh"] == 2
+
+    @pytest.mark.asyncio
+    async def test_freshness_filter_single_category(self, tmp_path: Path) -> None:
+        import os as _os
+        import time as _time
+
+        (tmp_path / "new.md").write_text("n\n", encoding="utf-8")
+        old = tmp_path / "old.md"
+        old.write_text("o\n", encoding="utf-8")
+        _os.utime(old, (_time.time() - 86400 * 200, _time.time() - 86400 * 200))
+
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(
+            project_root=str(tmp_path), freshness="stale",
+        )
+        data = result["data"]
+        assert data["total_unfiltered"] == 2
+        assert data["total_items"] == 1
+        assert data["items"][0]["freshness"] == "stale"
+
+    @pytest.mark.asyncio
+    async def test_freshness_filter_multiple_categories(self, tmp_path: Path) -> None:
+        import os as _os
+        import time as _time
+
+        (tmp_path / "new.md").write_text("n\n", encoding="utf-8")
+        stale = tmp_path / "stale.md"
+        stale.write_text("s\n", encoding="utf-8")
+        _os.utime(stale, (_time.time() - 86400 * 200, _time.time() - 86400 * 200))
+        ancient = tmp_path / "ancient.md"
+        ancient.write_text("a\n", encoding="utf-8")
+        _os.utime(ancient, (_time.time() - 86400 * 400, _time.time() - 86400 * 400))
+
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(
+            project_root=str(tmp_path), freshness="stale,ancient",
+        )
+        data = result["data"]
+        assert data["total_unfiltered"] == 3
+        assert data["total_items"] == 2
+        for item in data["items"]:
+            assert item["freshness"] in {"stale", "ancient"}
+
+    @pytest.mark.asyncio
+    async def test_freshness_filter_invalid_category_ignored(
+        self, tmp_path: Path,
+    ) -> None:
+        (tmp_path / "a.md").write_text("a\n", encoding="utf-8")
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(
+            project_root=str(tmp_path), freshness="invalid,fresh",
+        )
+        data = result["data"]
+        assert data["total_items"] == 1
+
+    @pytest.mark.asyncio
+    async def test_combined_filter_and_max_items(self, tmp_path: Path) -> None:
+        """freshness filter + max_items should filter first, then truncate."""
+        for i in range(10):
+            (tmp_path / f"doc{i}.md").write_text(f"d{i}\n", encoding="utf-8")
+
+        from docs_mcp.server_val_tools import docs_check_freshness
+
+        result = await docs_check_freshness(
+            project_root=str(tmp_path), freshness="fresh", max_items=3,
+        )
+        data = result["data"]
+        assert data["total_items"] == 10  # all fresh
+        assert data["showing"] == 3

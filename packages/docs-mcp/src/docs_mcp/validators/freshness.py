@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 import structlog
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = structlog.get_logger(__name__)
 
@@ -44,6 +44,9 @@ class FreshnessReport(BaseModel):
     items: list[FreshnessItem] = []
     average_age_days: float = 0.0
     freshness_score: float = 0.0  # 0-100, higher is better
+    category_counts: dict[str, int] = Field(
+        default_factory=lambda: {"fresh": 0, "aging": 0, "stale": 0, "ancient": 0},
+    )
 
 
 def _should_skip_dir(dirname: str) -> bool:
@@ -95,17 +98,28 @@ def _find_doc_files(project_root: Path) -> list[Path]:
 class FreshnessChecker:
     """Score documentation freshness based on file modification times."""
 
-    def check(self, project_root: Path) -> FreshnessReport:
+    def check(
+        self,
+        project_root: Path,
+        *,
+        relative_to: Path | None = None,
+    ) -> FreshnessReport:
         """Run freshness check.
 
         Args:
-            project_root: Root of the project to scan.
+            project_root: Root directory to scan for doc files.
+            relative_to: Base path for computing relative file paths.
+                When scanning a subdirectory, pass the true project root
+                here so paths remain project-relative. Defaults to
+                *project_root* when not provided.
 
         Returns:
             A FreshnessReport with per-file freshness and overall score.
         """
         if not project_root.is_dir():
             return FreshnessReport()
+
+        rel_base = relative_to if relative_to is not None else project_root
 
         doc_files = _find_doc_files(project_root)
 
@@ -116,6 +130,7 @@ class FreshnessChecker:
         items: list[FreshnessItem] = []
         total_weight = 0.0
         weight_sum = 0.0
+        counts: dict[str, int] = {"fresh": 0, "aging": 0, "stale": 0, "ancient": 0}
 
         for doc_file in doc_files:
             try:
@@ -130,8 +145,9 @@ class FreshnessChecker:
                 "%Y-%m-%dT%H:%M:%SZ", time.gmtime(mtime),
             )
             freshness_label = _classify_freshness(age_days)
+            counts[freshness_label] += 1
 
-            rel_path = str(doc_file.relative_to(project_root)).replace("\\", "/")
+            rel_path = str(doc_file.relative_to(rel_base)).replace("\\", "/")
 
             items.append(FreshnessItem(
                 file_path=rel_path,
@@ -143,6 +159,9 @@ class FreshnessChecker:
             weight = _freshness_weight(age_days)
             weight_sum += weight
             total_weight += 1.0
+
+        # Sort by age descending (stalest first) for actionable truncation
+        items.sort(key=lambda it: it.age_days, reverse=True)
 
         # Calculate average age
         if items:
@@ -160,4 +179,5 @@ class FreshnessChecker:
             items=items,
             average_age_days=round(average_age, 1),
             freshness_score=round(freshness_score, 1),
+            category_counts=counts,
         )

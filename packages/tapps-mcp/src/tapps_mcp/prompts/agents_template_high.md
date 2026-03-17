@@ -128,6 +128,8 @@ REQUIRED: Use `tapps_memory` for all architecture decisions and quality patterns
 
 **Federation:** `federate_register` (register project in hub), `federate_publish` (publish `shared`-scope entries), `federate_subscribe` (subscribe to other projects), `federate_sync` (pull subscribed entries), `federate_search` (search local + federated), `federate_status` (hub overview)
 
+**Maintenance:** `index_session` (index current session notes into memory), `validate` (check store integrity), `maintain` (run GC + consolidation + contradiction detection in one call)
+
 ### Memory tiers
 
 | Tier | Half-life | Use for |

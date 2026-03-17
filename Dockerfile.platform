@@ -1,5 +1,5 @@
 # TappsPlatform — combined multi-stage Docker build (monorepo-aware)
-# Builds tapps-core + tapps-mcp + docs-mcp into a single image with all 48 tools.
+# Builds tapps-core + tapps-mcp + docs-mcp into a single image with all 61 tools.
 #
 # Build:  docker build -f Dockerfile.platform -t tapps-platform .
 # Run:    docker run -v $(pwd):/workspace tapps-platform
@@ -41,7 +41,7 @@ LABEL org.opencontainers.image.description="Combined MCP server: TappsMCP (code 
 LABEL org.opencontainers.image.source="https://github.com/tapps-mcp/tapps-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="TappsMCP"
-LABEL org.opencontainers.image.version="1.7.0"
+LABEL org.opencontainers.image.version="1.9.0"
 
 WORKDIR /app
 

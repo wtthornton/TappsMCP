@@ -132,3 +132,11 @@ All architectural patterns are solid.
 1. **Immediate**: Run `tapps_init --force` (1 min)
 2. **Sprint 1**: Server tool isolation tests + provider tests (4-6 hrs)
 3. **Sprint 2**: Documentation enhancements + test reliability (4-5 hrs)
+
+## MCP Response Size Research (2026-03-16)
+Full findings in `project_response_size_research.md`.
+- MCP protocol has NO built-in pagination for tool calls (only for resources/tools/prompts list endpoints)
+- Best pattern for tools: cursor-via-tool-param (encode offset+filter as opaque base64 string)
+- Token-budget enforcement pattern: `injection.py` `estimate_tokens()` + budget loop is the reference impl
+- Progressive disclosure: return summary-first, detail-on-demand via separate `detail=true` param
+- Existing truncation patterns in codebase: `serialize_issues(limit=20)`, `cycles[:10]`, `couplings[:10]`

@@ -32,7 +32,7 @@ LABEL org.opencontainers.image.description="MCP server providing code quality to
 LABEL org.opencontainers.image.source="https://github.com/tapps-mcp/tapps-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="TappsMCP"
-LABEL org.opencontainers.image.version="1.7.0"
+LABEL org.opencontainers.image.version="1.9.0"
 
 WORKDIR /app
 

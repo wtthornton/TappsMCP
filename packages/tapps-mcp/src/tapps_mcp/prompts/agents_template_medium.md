@@ -115,7 +115,7 @@ Your project may have two complementary memory systems:
 
 RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
-### Memory actions (20 total)
+### Memory actions (23 total)
 
 **Core:** `save`, `save_bulk`, `get`, `list`, `delete` — CRUD operations with tier/scope/tag classification
 
@@ -128,6 +128,8 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 **Import/export:** `import` (JSON), `export` (JSON or Markdown)
 
 **Federation:** `federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`, `federate_search`, `federate_status` — cross-project memory sharing via central hub
+
+**Maintenance:** `index_session` (index current session notes), `validate` (check store integrity), `maintain` (run GC + consolidation + contradiction detection)
 
 ### Memory tiers and scopes
 

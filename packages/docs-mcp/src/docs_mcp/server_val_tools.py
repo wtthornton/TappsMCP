@@ -209,17 +209,34 @@ async def docs_check_links(
     return success_response("docs_check_links", elapsed_ms, data)
 
 
+_FRESHNESS_DEFAULT_MAX = 50
+_FRESHNESS_VALID_CATEGORIES = frozenset({"fresh", "aging", "stale", "ancient"})
+
+
 async def docs_check_freshness(
     project_root: str = "",
+    path: str = "",
+    max_items: int = 0,
+    summary_only: bool = False,
+    freshness: str = "",
 ) -> dict[str, Any]:
     """Score documentation freshness based on file modification times.
 
     Classifies each doc file as fresh (<30d), aging (30-90d),
     stale (90-365d), or ancient (>365d) and calculates an overall
-    freshness score (0-100).
+    freshness score (0-100). Items are sorted stalest-first.
 
     Args:
         project_root: Override project root path (default: configured root).
+        path: Subdirectory to scope the scan to (relative to project root).
+            When empty, scans the entire project.
+        max_items: Maximum number of items to return. 0 means use default
+            (50). Applies after any freshness category filter.
+        summary_only: When True, return only aggregate scores and category
+            counts without per-file items. Ideal for dashboards.
+        freshness: Comma-separated freshness categories to filter by
+            (e.g. ``"stale,ancient"``). Only items matching one of the
+            listed categories are returned. Empty means all categories.
     """
     _record_call("docs_check_freshness")
     start = time.perf_counter_ns()
@@ -233,12 +250,61 @@ async def docs_check_freshness(
             f"Project root does not exist: {root}",
         )
 
+    # Resolve scoped path
+    scan_root = root
+    if path.strip():
+        scan_root = root / path.strip()
+        if not scan_root.is_dir():
+            return error_response(
+                "docs_check_freshness", "INVALID_PATH",
+                f"Scoped path does not exist: {scan_root}",
+            )
+
     from docs_mcp.validators.freshness import FreshnessChecker
 
     checker = FreshnessChecker()
-    report = checker.check(root)
+    report = checker.check(scan_root, relative_to=root)
 
-    data: dict[str, Any] = report.model_dump()
+    # Items are already sorted stalest-first by the checker
+    items = report.items
+    total_unfiltered = len(items)
+
+    # Apply freshness category filter
+    if freshness.strip():
+        categories = {
+            c.strip().lower()
+            for c in freshness.split(",")
+            if c.strip().lower() in _FRESHNESS_VALID_CATEGORIES
+        }
+        if categories:
+            items = [it for it in items if it.freshness in categories]
+
+    total_filtered = len(items)
+
+    # Apply max_items truncation
+    effective_max = max_items if max_items > 0 else _FRESHNESS_DEFAULT_MAX
+    if not summary_only:
+        items = items[:effective_max]
+
+    # Build summary string
+    cc = report.category_counts
+    summary = (
+        f"{total_unfiltered} docs scanned: "
+        f"{cc.get('fresh', 0)} fresh, {cc.get('aging', 0)} aging, "
+        f"{cc.get('stale', 0)} stale, {cc.get('ancient', 0)} ancient "
+        f"(score: {report.freshness_score}/100)"
+    )
+
+    data: dict[str, Any] = {
+        "summary": summary,
+        "total_unfiltered": total_unfiltered,
+        "total_items": total_filtered,
+        "showing": 0 if summary_only else len(items),
+        "items": [] if summary_only else [it.model_dump() for it in items],
+        "average_age_days": report.average_age_days,
+        "freshness_score": report.freshness_score,
+        "category_counts": report.category_counts,
+    }
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     return success_response("docs_check_freshness", elapsed_ms, data)

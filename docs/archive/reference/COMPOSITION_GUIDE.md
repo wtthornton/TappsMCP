@@ -75,7 +75,7 @@ Add to `.claude/settings.json` or `claude_desktop_config.json`:
 
 ### Cursor — separate servers (required)
 
-Cursor has a **40-tool limit** per MCP server. The combined server has 48 tools, which exceeds this limit. Use separate servers:
+Cursor has a **40-tool limit** per MCP server. The combined server has 61 tools, which exceeds this limit. Use separate servers:
 
 ```json
 {
@@ -225,7 +225,7 @@ Configuration set via environment variables or `.tapps-mcp.yaml` applies uniform
 
 ### Cursor shows fewer tools than expected
 
-Cursor enforces a 40-tool limit per MCP server. The combined TappsPlatform server has 48 tools and will be silently truncated. Use separate servers in Cursor (see configuration above).
+Cursor enforces a 40-tool limit per MCP server. The combined TappsPlatform server has 61 tools and will be silently truncated. Use separate servers in Cursor (see configuration above).
 
 ### Tools not appearing after configuration change
 
