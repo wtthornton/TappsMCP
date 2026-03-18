@@ -41,7 +41,7 @@ LABEL org.opencontainers.image.description="Combined MCP server: TappsMCP (code 
 LABEL org.opencontainers.image.source="https://github.com/tapps-mcp/tapps-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="TappsMCP"
-LABEL org.opencontainers.image.version="1.9.0"
+LABEL org.opencontainers.image.version="1.10.0"
 
 WORKDIR /app
 

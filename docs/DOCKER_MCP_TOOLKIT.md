@@ -45,14 +45,14 @@ Same structure but use `${workspaceFolder}` instead of `"."` for env values.
 
 ```bash
 # TappsMCP
-docker build -t tapps-mcp:1.9.0 -t tapps-mcp:latest .
+docker build -t tapps-mcp:1.10.0 -t tapps-mcp:latest .
 
 # DocsMCP
-docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:1.9.0 -t docs-mcp:latest .
+docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:1.10.0 -t docs-mcp:latest .
 
 # Verify
-docker run --rm tapps-mcp:1.9.0 tapps-mcp --version
-docker run --rm docs-mcp:1.9.0 docsmcp --version
+docker run --rm tapps-mcp:1.10.0 tapps-mcp --version
+docker run --rm docs-mcp:1.10.0 docsmcp --version
 ```
 
 ## Running in Docker

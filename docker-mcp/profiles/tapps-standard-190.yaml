@@ -1,7 +1,0 @@
-# Profile for TappsMCP 1.9.0 + DocsMCP 1.9.0 + Context7
-name: tapps-standard-180
-description: "TappsMCP 1.9.0 + DocsMCP 1.9.0 + Context7"
-servers:
-  - catalog://tappsmcp-local/tapps-mcp
-  - catalog://tappsmcp-local/docs-mcp
-  - catalog://context7
