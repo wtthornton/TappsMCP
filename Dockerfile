@@ -11,10 +11,16 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-# Install build deps
-RUN pip install --no-cache-dir hatchling==1.28.0
+# Install build deps + git for tapps-brain
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && pip install --no-cache-dir hatchling==1.28.0 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Build tapps-core wheel first (dependency)
+# Build tapps-brain wheel from git (tapps-core dependency)
+RUN pip wheel --no-deps --wheel-dir /wheels git+https://github.com/wtthornton/tapps-brain.git@main
+
+# Build tapps-core wheel (dependency)
 COPY packages/tapps-core/pyproject.toml packages/tapps-core/
 COPY packages/tapps-core/src packages/tapps-core/src
 RUN pip wheel --no-deps --wheel-dir /wheels packages/tapps-core/
