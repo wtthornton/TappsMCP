@@ -16,66 +16,85 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9  # v7
         with:
           version: "latest"
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
         with:
           python-version: "3.12"
-      - run: uv sync --dev
+      - run: uv sync --frozen --dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy --strict src/
 
   test:
     needs: lint
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.12", "3.13"]
+        package:
+          - name: tapps-core
+            path: packages/tapps-core
+            cov_source: tapps_core
+          - name: tapps-mcp
+            path: packages/tapps-mcp
+            cov_source: tapps_mcp
+          - name: docs-mcp
+            path: packages/docs-mcp
+            cov_source: docs_mcp
     runs-on: ${{ matrix.os }}
+    name: test (${{ matrix.package.name }}, ${{ matrix.os }}, py${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9  # v7
         with:
           version: "latest"
-      - uses: actions/setup-python@v6
+          enable-cache: true
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --dev
-      - name: Run unit tests
-        run: uv run pytest tests/unit --cov=tapps_mcp --cov-report=xml -v
-      - name: Run integration tests
-        run: uv run pytest tests/integration -v
+      - run: uv sync --frozen --dev
+      - name: Run tests (${{ matrix.package.name }})
+        run: >
+          uv run pytest ${{ matrix.package.path }}/tests/
+          --cov=${{ matrix.package.cov_source }}
+          --cov-report=xml:coverage-${{ matrix.package.name }}.xml
+          -v
       - name: Verify coverage threshold
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: uv run coverage report --fail-under=80
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad  # v5
         with:
-          files: coverage.xml
+          files: coverage-${{ matrix.package.name }}.xml
+          flags: ${{ matrix.package.name }}
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload coverage artifact
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
         with:
-          name: coverage-report
-          path: coverage.xml
+          name: coverage-${{ matrix.package.name }}
+          path: coverage-${{ matrix.package.name }}.xml
 
   build:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9  # v7
         with:
           version: "latest"
-      - uses: actions/setup-python@v6
+          enable-cache: true
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
         with:
           python-version: "3.12"
       - name: Verify version consistency
@@ -88,7 +107,7 @@ jobs:
           pip install dist/*.whl
           tapps-mcp --version
           tapps-mcp --help
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
         with:
           name: dist
           path: dist/

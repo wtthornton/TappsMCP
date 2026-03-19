@@ -9,14 +9,20 @@ permissions:
   contents: read
   packages: write
   id-token: write  # cosign keyless signing
+  security-events: write  # Trivy SARIF upload
 
 env:
   TAPPS_IMAGE: ghcr.io/wtthornton/tapps-mcp
   DOCS_IMAGE: ghcr.io/wtthornton/docs-mcp
 
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         include:
@@ -29,16 +35,16 @@ jobs:
             image_env: DOCS_IMAGE
             expected_tools: 18
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Set up QEMU for multi-arch
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -53,7 +59,7 @@ jobs:
 
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051  # v5
         with:
           images: ${{ matrix.name == 'tapps-mcp' && env.TAPPS_IMAGE || env.DOCS_IMAGE }}
           tags: |
@@ -63,7 +69,7 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -75,7 +81,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
 
       - name: Sign image with cosign (keyless)
         env:
@@ -92,14 +98,48 @@ jobs:
             -o spdx-json > sbom-${{ matrix.name }}.json
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
         with:
           name: sbom-${{ matrix.name }}
           path: sbom-${{ matrix.name }}.json
 
+  scan:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - name: tapps-mcp
+            image_env: TAPPS_IMAGE
+          - name: docs-mcp
+            image_env: DOCS_IMAGE
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - name: Pull published image
+        run: |
+          IMAGE="${{ matrix.name == 'tapps-mcp' && env.TAPPS_IMAGE || env.DOCS_IMAGE }}:latest"
+          docker pull "$IMAGE"
+          docker tag "$IMAGE" "${{ matrix.name }}:scan"
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@ab6606b76e5a054be08cab3d07da323e90e751e8  # 0.34.0
+        with:
+          image-ref: ${{ matrix.name }}:scan
+          format: sarif
+          output: trivy-results-${{ matrix.name }}.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@a60c4df7a135c7317c1e9ddf9b5a9b07a910dda9  # v4
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: trivy-results-${{ matrix.name }}.sarif
+          category: trivy-${{ matrix.name }}
+
   smoke-test:
     needs: build-and-push
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     strategy:
       matrix:
         include:

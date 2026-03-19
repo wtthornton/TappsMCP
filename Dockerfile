@@ -6,6 +6,13 @@
 # Run:    docker run -v $(pwd):/workspace tapps-mcp
 # HTTP:   docker run -p 8000:8000 -v $(pwd):/workspace tapps-mcp tapps-mcp serve --transport http --host 0.0.0.0 --port 8000
 
+# Tool versions — keep in sync with pyproject.toml dev-dependencies
+ARG TAPPS_VERSION=1.10.0
+ARG RUFF_VERSION=0.15.2
+ARG MYPY_VERSION=1.19.1
+ARG BANDIT_VERSION=1.9.3
+ARG RADON_VERSION=6.0.1
+
 # ---- Builder ----
 FROM python:3.12-slim AS builder
 
@@ -48,14 +55,14 @@ LABEL org.opencontainers.image.description="MCP server providing code quality to
 LABEL org.opencontainers.image.source="https://github.com/tapps-mcp/tapps-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="TappsMCP"
-LABEL org.opencontainers.image.version="1.10.0"
+LABEL org.opencontainers.image.version="${TAPPS_VERSION}"
 
 WORKDIR /app
 
 # Install system deps and external checkers
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
-    && pip install --no-cache-dir ruff==0.15.0 mypy==1.19.1 bandit==1.9.3 radon==6.0.1 \
+    && pip install --no-cache-dir ruff==${RUFF_VERSION} mypy==${MYPY_VERSION} bandit==${BANDIT_VERSION} radon==${RADON_VERSION} \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -rf /var/lib/apt/lists/*
 
