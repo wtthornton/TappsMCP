@@ -75,7 +75,7 @@ class TestGetReranker:
 
     def test_provider_cohere_unavailable_returns_noop(self) -> None:
         with patch(
-            "tapps_core.memory.reranker._create_cohere_reranker",
+            "tapps_brain.reranker._create_cohere_reranker",
             return_value=None,
         ):
             r = get_reranker(

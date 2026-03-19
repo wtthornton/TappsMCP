@@ -106,7 +106,7 @@ class TestSeedingRealStore:
         assert entry is not None
         assert "auto-seeded" in entry.tags
         assert entry.source == MemorySource.system
-        assert entry.source_agent == "tapps-mcp"
+        assert entry.source_agent == "tapps-brain"
 
     def test_seed_seeded_from_field(
         self, store: MemoryStore, profile: ProjectProfile

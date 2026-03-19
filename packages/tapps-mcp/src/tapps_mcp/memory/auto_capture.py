@@ -92,6 +92,7 @@ def run_auto_capture(
     try:
         store = MemoryStore(
             project_root,
+            store_dir=".tapps-mcp",
             consolidation_config=ConsolidationConfig(enabled=False),
         )
     except Exception as exc:

@@ -193,9 +193,9 @@ class TestMemoryStoreRAGSafety:
     def test_blocked_content_returns_error(self, store: MemoryStore) -> None:
         # Simulate content that triggers heavy RAG safety flags
         with patch(
-            "tapps_core.memory.store.check_content_safety"
+            "tapps_brain.store.check_content_safety"
         ) as mock_safety:
-            from tapps_mcp.knowledge.rag_safety import SafetyCheckResult
+            from tapps_brain.safety import SafetyCheckResult
 
             mock_safety.return_value = SafetyCheckResult(
                 safe=False,

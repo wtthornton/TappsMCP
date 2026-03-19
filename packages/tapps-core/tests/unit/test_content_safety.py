@@ -185,11 +185,11 @@ class TestEpic28bDecoupling:
         This confirms the decoupling: the memory subsystem should no longer
         depend on the knowledge layer for content safety.
         """
-        import tapps_core.memory.store as store_mod
+        import tapps_brain.store as brain_store_mod
 
-        source = inspect.getsource(store_mod)
-        # Must import from security.content_safety
-        assert "from tapps_core.security.content_safety import" in source
+        source = inspect.getsource(brain_store_mod)
+        # tapps-brain store uses its own safety module (extracted from content_safety)
+        assert "from tapps_brain.safety import" in source
         # Must NOT import from knowledge.rag_safety
         assert "from tapps_core.knowledge.rag_safety" not in source
 

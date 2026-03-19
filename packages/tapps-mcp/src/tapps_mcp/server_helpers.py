@@ -150,6 +150,7 @@ def _get_memory_store() -> _MemoryStoreType:
 
         _memory_store = MemoryStore(
             settings.project_root,
+            store_dir=".tapps-mcp",
             consolidation_config=consolidation_config,
             embedding_provider=embedding_provider,
         )

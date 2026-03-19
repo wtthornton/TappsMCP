@@ -505,7 +505,7 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
 
     from tapps_core.memory.store import MemoryStore
 
-    store = MemoryStore(_get_project_root())
+    store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
         entries = store.list_all(tier=tier, scope=scope)
         if as_json:
@@ -543,7 +543,7 @@ def memory_save(key: str, value: str, tier: str, tags: str) -> None:
 
     from tapps_core.memory.store import MemoryStore
 
-    store = MemoryStore(_get_project_root())
+    store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
         result = store.save(key=key, value=value, tier=tier, tags=tag_list)
@@ -563,7 +563,7 @@ def memory_get(key: str) -> None:
 
     from tapps_core.memory.store import MemoryStore
 
-    store = MemoryStore(_get_project_root())
+    store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
         entry = store.get(key)
         if entry is None:
@@ -609,7 +609,7 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
     store: MemoryStore | None = None
     scored: list[ScoredMemory] = []
     try:
-        store = MemoryStore(root)
+        store = MemoryStore(root, store_dir=".tapps-mcp")
         retriever = MemoryRetriever()
         scored = retriever.search(
             query,
@@ -653,7 +653,7 @@ def memory_search(query: str, limit: int, as_json: bool) -> None:
 
     from tapps_core.memory.store import MemoryStore
 
-    store = MemoryStore(_get_project_root())
+    store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
         results = store.search(query)[:limit]
         if as_json:
@@ -679,7 +679,7 @@ def memory_delete(key: str) -> None:
     """Delete a memory entry."""
     from tapps_core.memory.store import MemoryStore
 
-    store = MemoryStore(_get_project_root())
+    store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
         deleted = store.delete(key)
         if not deleted:
@@ -702,7 +702,7 @@ def memory_import(file_path: str, overwrite: bool) -> None:
     from tapps_core.security.path_validator import PathValidator
 
     root = _get_project_root()
-    store = MemoryStore(root)
+    store = MemoryStore(root, store_dir=".tapps-mcp")
     validator = PathValidator(root)
     try:
         result = import_memories(store, Path(file_path), validator, overwrite=overwrite)
@@ -732,7 +732,7 @@ def memory_export(file_path: str) -> None:
     from tapps_core.security.path_validator import PathValidator
 
     root = _get_project_root()
-    store = MemoryStore(root)
+    store = MemoryStore(root, store_dir=".tapps-mcp")
     validator = PathValidator(root)
     try:
         result = export_memories(store, Path(file_path), validator)

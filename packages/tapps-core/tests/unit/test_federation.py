@@ -35,7 +35,7 @@ from tapps_core.memory.models import MemoryEntry, MemoryScope, MemorySource, Mem
 @pytest.fixture(autouse=True)
 def _isolate_federation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Redirect federation hub dir to tmp_path to avoid real filesystem pollution."""
-    monkeypatch.setattr("tapps_core.memory.federation._DEFAULT_HUB_DIR", tmp_path)
+    monkeypatch.setattr("tapps_brain.federation._DEFAULT_HUB_DIR", tmp_path)
 
 
 @pytest.fixture()
