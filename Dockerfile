@@ -17,8 +17,18 @@ RUN apt-get update \
     && pip install --no-cache-dir hatchling==1.28.0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Build tapps-brain wheel from git (tapps-core dependency)
-RUN pip wheel --no-deps --wheel-dir /wheels git+https://github.com/wtthornton/tapps-brain.git@v1.0.0
+# Build tapps-brain wheel from git (private repo — requires BuildKit secret)
+# Build with: docker build --secret id=github_token,env=GITHUB_TOKEN -t tapps-mcp .
+# Or:         docker build --secret id=github_token,src=$HOME/.github_token -t tapps-mcp .
+RUN --mount=type=secret,id=github_token \
+    TOKEN=$(cat /run/secrets/github_token 2>/dev/null || echo "") && \
+    if [ -n "$TOKEN" ]; then \
+        pip wheel --no-deps --wheel-dir /wheels \
+            git+https://${TOKEN}@github.com/wtthornton/tapps-brain.git@v1.0.0; \
+    else \
+        pip wheel --no-deps --wheel-dir /wheels \
+            git+https://github.com/wtthornton/tapps-brain.git@v1.0.0; \
+    fi
 
 # Build tapps-core wheel (dependency)
 COPY packages/tapps-core/pyproject.toml packages/tapps-core/
