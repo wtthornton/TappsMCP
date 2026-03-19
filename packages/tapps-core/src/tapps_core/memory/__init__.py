@@ -1,4 +1,21 @@
-"""Shared memory subsystem — re-exports from tapps-brain."""
+"""Shared memory subsystem — re-exports from tapps-brain.
+
+.. deprecated::
+    Import directly from ``tapps_brain`` instead of ``tapps_core.memory``.
+    These re-exports exist for backward compatibility and will be removed
+    in a future major release.
+"""
+
+from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "tapps_core.memory is deprecated — import from tapps_brain directly. "
+    "Re-exports will be removed in a future major release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from tapps_brain.auto_consolidation import (
     ConsolidationResult as ConsolidationResult,

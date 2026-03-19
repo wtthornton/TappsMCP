@@ -8,15 +8,16 @@ TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs
 
 ## Repository structure
 
-This is a **uv workspace monorepo** with three packages:
+This is a **uv workspace monorepo** with three packages plus an external dependency:
 
 | Package | Path | Purpose |
 |---|---|---|
-| **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, memory, experts, metrics, adaptive) |
+| **tapps-brain** | [github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain) | Standalone memory system (SQLite, BM25, decay, federation) |
+| **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, experts, metrics, adaptive) |
 | **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (31 tools) |
 
-tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
+tapps-core's `memory/` modules are re-export shims delegating to tapps-brain (except `injection.py` which is a bridge adapter). tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
 
 For detailed module maps and internal architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

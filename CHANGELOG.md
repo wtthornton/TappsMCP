@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **tapps-brain v1.0.1 tag** - Created v1.0.1 tag on tapps-brain with CI fixes (ruff, mypy, formatting, build job). Updated all Dockerfiles and `[tool.uv.sources]` from v1.0.0 to v1.0.1
+- **Doctor: tapps-brain health check** - `tapps_doctor` now verifies that the tapps-brain library is importable, catching broken installations before runtime memory failures
+- **Deprecation warnings on tapps_core.memory** - Importing from `tapps_core.memory` now emits a `DeprecationWarning` directing users to `tapps_brain.*` imports. Warnings are filtered in test config
+
+### Changed
+
+- **Memory test dedup** - Replaced 6 duplicate tapps-core memory test files (~1,480 lines) with lightweight re-export verification in `test_memory_reexport.py`. Behavioral tests live in tapps-brain (521+ tests)
+- **docs-mcp async test fix** - Converted 6 tests in `test_content_return.py` from broken `asyncio.get_event_loop().run_until_complete()` to proper `async def` + `@pytest.mark.asyncio` + `await`
+- **Documentation refresh** - Updated README, ARCHITECTURE.md, and package READMEs with tapps-brain extraction details, updated test counts (7,900+), and dependency graph
+- **tree-sitter promoted to dev dependency** - Added `tree-sitter` + 4 language grammars (Go, Java, Rust, TypeScript) to root dev-dependencies. 15 previously-skipped docs-mcp multi-language extraction tests now run in all dev environments. Total skipped tests reduced from 25 to 10
+- **optional_deps pytest marker** - Added `optional_deps` marker for tests requiring sentence-transformers, faiss-cpu, or cohere. Allows CI jobs to target optional-dep tests via `pytest -m optional_deps`
+- **Improved Windows env var skip** - Enhanced skip reason on `test_output_dir_env_var_resolves` to document that `${VAR}` expansion is intentionally unsupported on Windows (POSIX-only design decision)
+
 ## [1.4.1] - 2026-03-12
 
 ### Fixed

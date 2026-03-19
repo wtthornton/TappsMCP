@@ -24,10 +24,10 @@ RUN --mount=type=secret,id=github_token \
     TOKEN=$(cat /run/secrets/github_token 2>/dev/null || echo "") && \
     if [ -n "$TOKEN" ]; then \
         pip wheel --no-deps --wheel-dir /wheels \
-            git+https://${TOKEN}@github.com/wtthornton/tapps-brain.git@v1.0.0; \
+            git+https://${TOKEN}@github.com/wtthornton/tapps-brain.git@v1.0.1; \
     else \
         pip wheel --no-deps --wheel-dir /wheels \
-            git+https://github.com/wtthornton/tapps-brain.git@v1.0.0; \
+            git+https://github.com/wtthornton/tapps-brain.git@v1.0.1; \
     fi
 
 # Build tapps-core wheel (dependency)

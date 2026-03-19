@@ -551,6 +551,31 @@ def check_stale_exe_backups() -> CheckResult:
     )
 
 
+def check_tapps_brain() -> CheckResult:
+    """Check that the tapps-brain memory library is importable.
+
+    tapps-brain was extracted from tapps-core as a standalone library.
+    All memory modules in tapps-core delegate to tapps-brain; if it is
+    missing, memory operations will fail at runtime.
+    """
+    try:
+        import tapps_brain  # noqa: F811
+
+        version = getattr(tapps_brain, "__version__", "(unknown)")
+        return CheckResult(
+            "tapps-brain library",
+            True,
+            f"tapps-brain {version} available",
+        )
+    except ImportError as exc:
+        return CheckResult(
+            "tapps-brain library",
+            False,
+            "tapps-brain not importable (memory subsystem unavailable)",
+            f"Error: {exc}. Install: pip install tapps-brain>=1.0.0",
+        )
+
+
 def check_quality_tools() -> list[CheckResult]:
     """Check for installed quality tools (ruff, mypy, bandit, radon)."""
     from tapps_mcp.tools.tool_detection import detect_installed_tools
@@ -700,6 +725,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_claude_settings(root))
     checks.append(check_hooks(root))
     checks.append(check_stale_exe_backups())
+    checks.append(check_tapps_brain())
     if quick:
         checks.append(CheckResult(
             "Quality tools",

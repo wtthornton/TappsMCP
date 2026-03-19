@@ -14,7 +14,7 @@ MCP server providing deterministic code quality tools for AI coding assistants (
 - **Dependency vulnerability scanning** with pip-audit
 - **Domain expert consultation** (17 built-in experts with RAG)
 - **Documentation lookup** via Context7 or LlmsTxt
-- **Shared memory** for cross-session knowledge persistence
+- **Shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) for cross-session knowledge persistence
 - **Platform integration** for Claude Code, Cursor, VS Code Copilot
 
 ## Installation

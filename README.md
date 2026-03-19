@@ -10,12 +10,12 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-8%2C400%2B_passing-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-7%2C900%2B_passing-brightgreen.svg)](#development)
 [![Tools](https://img.shields.io/badge/MCP_tools-61-blue.svg)](#tools-reference)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
-[Quick Start](#quick-start) · [Install](#install) · [Tools Reference](#tools-reference) · [Docs](#docs-and-roadmap)
+[Quick Start](#quick-start) · [Install](#install) · [Tools Reference](#tools-reference) · [Architecture](#architecture) · [Docs](#docs-and-roadmap)
 
 </div>
 
@@ -25,22 +25,28 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 | Package | PyPI Name | Purpose | Tools |
 |---|---|---|---|
-| **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics) | 0 (library) |
+| **tapps-brain** | `tapps-brain` | Standalone memory system (SQLite persistence, BM25 retrieval, decay, federation) | 0 (library) |
+| **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, experts, metrics, adaptive) | 0 (library) |
 | **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 30 |
 | **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 31 |
 
+```
+tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (30 tools)
+                                                          <──  docs-mcp  (31 tools)
+```
+
 ### Key highlights
 
-- **61 deterministic MCP tools** (30 TappsMCP + 31 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
-- **Multi-language code scoring** — Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
+- **61 deterministic MCP tools** (30 TappsMCP + 31 DocsMCP) - no LLM calls in the tool chain; same input always produces same output
+- **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **17 domain experts** with 171 curated knowledge files and RAG-backed answers
-- **Persistent shared memory** — project decisions survive across sessions (SQLite + BM25 retrieval)
-- **Unified feature flags** — optional dependency detection (faiss, numpy, radon) with graceful degradation
-- **Platform generation** — auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
-- **Self-bootstrapping** — `tapps_init` sets up quality infrastructure in any project with one call
-- **Docker distribution** — Docker images for external distribution and CI/CD
-- **8,400+ tests** across 3 packages with strict mypy and ruff enforcement
-- **Benchmark infrastructure** — AGENTBench evaluation, template optimization, tool effectiveness measurement
+- **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) - project decisions survive across sessions (SQLite + BM25 retrieval, time-based decay, federation)
+- **Unified feature flags** - optional dependency detection (faiss, numpy, radon) with graceful degradation
+- **Platform generation** - auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
+- **Self-bootstrapping** - `tapps_init` sets up quality infrastructure in any project with one call
+- **Docker distribution** - Docker images for external distribution and CI/CD
+- **7,900+ tests** across 4 packages with strict mypy and ruff enforcement
+- **Benchmark infrastructure** - AGENTBench evaluation, template optimization, tool effectiveness measurement
 
 ---
 
@@ -58,6 +64,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 - [Configuration](#configuration)
 - [Optional tool dependencies](#optional-tool-dependencies)
 - [Docker](#docker)
+- [Architecture](#architecture)
 - [Development](#development)
 - [Project layout](#project-layout)
 - [DocsMCP (documentation server)](#docsmcp-documentation-server)
@@ -107,7 +114,7 @@ The platform exposes **61 MCP tools** (30 TappsMCP + 31 DocsMCP) plus workflow p
 | **Documentation lookup** | Up-to-date library docs via Context7 (when `TAPPS_MCP_CONTEXT7_API_KEY` is set) and LlmsTxt (always, as fallback). Fuzzy matching, local cache. |
 | **Domain experts** | 17 built-in experts (security, testing, APIs, GitHub, etc.) with RAG-backed answers, confidence scores, and knowledge freshness warnings. |
 | **Project context** | Detect project type, tech stack, structure for context-aware analysis. |
-| **Shared memory** | Persistent, project-scoped memory with BM25-scored retrieval (stemming + stop-word filtering), time-based decay, contradiction detection, and expert injection. Memories survive across sessions in SQLite (WAL + FTS5). Three tiers (architectural/pattern/context) with configurable half-lives. Auto-seeds from project profile. Auto-GC in `tapps_session_start` when memory exceeds 80% capacity. `reinforce` and `gc` actions exposed via MCP tool. |
+| **Shared memory** | Powered by [tapps-brain](https://github.com/wtthornton/tapps-brain) - a standalone memory library with BM25-scored retrieval, time-based decay, contradiction detection, and expert injection. Memories survive across sessions in SQLite (WAL + FTS5). Four tiers (architectural/pattern/procedural/context) with configurable half-lives. Auto-seeds from project profile. Auto-GC in `tapps_session_start` when memory exceeds 80% capacity. 23 actions exposed via the `tapps_memory` MCP tool. |
 | **Session notes** | In-memory decisions and constraints for a single session. Promotable to shared memory for persistence. |
 | **Impact analysis** | File dependencies and blast radius before refactoring or API changes. |
 | **Quality reports** | JSON, Markdown, or HTML summaries. |
@@ -1047,18 +1054,58 @@ See [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full 
 
 ---
 
+## Architecture
+
+### Package dependency graph
+
+```
+tapps-brain (standalone library)
+    ^
+    |
+tapps-core (shared infrastructure)
+    ^              ^
+    |              |
+tapps-mcp      docs-mcp
+(30 tools)     (31 tools)
+```
+
+**[tapps-brain](https://github.com/wtthornton/tapps-brain)** is a standalone memory system extracted from tapps-core. It provides SQLite-backed persistence, BM25 retrieval, time-based decay, contradiction detection, consolidation, federation, and garbage collection. It has its own release cycle and test suite (521+ tests).
+
+**tapps-core** provides shared infrastructure (config, security, logging, knowledge, experts, metrics, adaptive). Its `memory/` package contains thin re-export shims that delegate to tapps-brain for backward compatibility (`from tapps_core.memory.store import MemoryStore` still works). The one exception is `injection.py`, which is a bridge adapter that translates TappsMCP settings into tapps-brain's `InjectionConfig`.
+
+**tapps-mcp** and **docs-mcp** are MCP servers that depend on tapps-core. tapps-mcp also re-exports from tapps-core for backward compat with consuming projects.
+
+### Memory subsystem
+
+The memory system is implemented by tapps-brain and exposed via 23 actions in the `tapps_memory` MCP tool:
+
+| Tier | Half-life | Use for |
+|------|-----------|---------|
+| `architectural` | 180 days | Design decisions, API contracts, system boundaries |
+| `pattern` | 60 days | Recurring code patterns, domain conventions |
+| `procedural` | 30 days | Build commands, deployment steps, workflow |
+| `context` | 14 days | Sprint goals, current focus, temporary state |
+
+Features: BM25 ranked retrieval (stemming + stop words), time-based confidence decay, contradiction detection, auto-consolidation, federation across projects, garbage collection, import/export (JSON + Markdown).
+
+> **Deprecation notice:** `tapps_core.memory.*` imports still work but emit a `DeprecationWarning`. Prefer importing from `tapps_brain.*` directly in new code.
+
+For the full architecture reference, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
 ## Development
 
-This is a **uv workspace monorepo** with three packages. All commands run from the **repository root**.
+This is a **uv workspace monorepo** with four packages. All commands run from the **repository root**.
 
 ```bash
 # Install all packages (tapps-core, tapps-mcp, docs-mcp)
 uv sync --all-packages
 
-# Run tests per package (recommended — avoids conftest collisions)
-uv run pytest packages/tapps-core/tests/ -v      # tapps-core (2,000+ tests)
-uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (4,700+ tests)
-uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (1,650+ tests)
+# Run tests per package (recommended - avoids conftest collisions)
+uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1,600+ tests)
+uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (4,500+ tests)
+uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (1,750+ tests)
 
 # Run a single test file
 uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v
@@ -1096,7 +1143,7 @@ TappsMCP runs on **Linux, macOS, and Windows**. Platform-specific behavior:
 
 ## Project layout
 
-This is a **uv workspace monorepo** with three packages under `packages/`:
+This is a **uv workspace monorepo** with three packages under `packages/` plus the standalone [tapps-brain](https://github.com/wtthornton/tapps-brain) library:
 
 ```
 packages/
@@ -1109,7 +1156,8 @@ packages/
 │       ├── knowledge/                 # Context7 client, cache, lookup, warming, RAG safety,
 │       │                              #   Context7 + LlmsTxt providers (providers/)
 │       ├── experts/                   # Domain detector, engine, RAG, 171 knowledge files
-│       ├── memory/                    # Shared memory: SQLite persistence, decay, retrieval
+│       ├── memory/                    # Re-export shims delegating to tapps-brain
+│       │                              #   (injection.py is a bridge adapter)
 │       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export
 │       └── adaptive/                  # Adaptive scoring, expert voting, weight distribution
 │
@@ -1145,7 +1193,9 @@ examples/
 └── agent-sdk/                         # Claude Agent SDK integration examples (Python + TypeScript)
 ```
 
-**Backward compatibility:** `from tapps_mcp.config import load_settings` still works — tapps-mcp re-exports everything from tapps-core. Existing consuming projects need no changes.
+**External dependency:** [tapps-brain](https://github.com/wtthornton/tapps-brain) (`pip install tapps-brain`) provides the standalone memory system. It is a required dependency of tapps-core and is installed automatically.
+
+**Backward compatibility:** `from tapps_mcp.config import load_settings` and `from tapps_core.memory.store import MemoryStore` still work - tapps-mcp re-exports from tapps-core, and tapps-core re-exports from tapps-brain. Existing consuming projects need no changes.
 
 ---
 

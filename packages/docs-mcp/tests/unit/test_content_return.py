@@ -73,16 +73,13 @@ class TestBuildGeneratorManifest:
 class TestGeneratorContentReturn:
     """Integration tests for generators in content-return mode."""
 
-    def test_onboarding_content_return(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_onboarding_content_return(self, tmp_path: Path) -> None:
         """docs_generate_onboarding returns manifest when can't write."""
-        import asyncio
-
         from docs_mcp.server_gen_tools import docs_generate_onboarding
 
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
-            result = asyncio.get_event_loop().run_until_complete(
-                docs_generate_onboarding(project_root=str(tmp_path))
-            )
+            result = await docs_generate_onboarding(project_root=str(tmp_path))
 
         data = result["data"]
         assert data.get("content_return") is True
@@ -92,35 +89,29 @@ class TestGeneratorContentReturn:
         # No files should be written
         assert not list(tmp_path.rglob("*.md"))
 
-    def test_contributing_content_return(self, tmp_path: Path) -> None:
-        import asyncio
-
+    @pytest.mark.asyncio
+    async def test_contributing_content_return(self, tmp_path: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_contributing
 
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
-            result = asyncio.get_event_loop().run_until_complete(
-                docs_generate_contributing(project_root=str(tmp_path))
-            )
+            result = await docs_generate_contributing(project_root=str(tmp_path))
 
         data = result["data"]
         assert data.get("content_return") is True
         assert "file_manifest" in data
 
-    def test_changelog_content_return_with_output_path(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_changelog_content_return_with_output_path(self, tmp_path: Path) -> None:
         """Optional-write generators include manifest when output_path + Docker."""
-        import asyncio
-
         from docs_mcp.server_gen_tools import docs_generate_changelog
 
         # Need a git repo for changelog
         (tmp_path / ".git").mkdir()
 
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
-            result = asyncio.get_event_loop().run_until_complete(
-                docs_generate_changelog(
-                    output_path="CHANGELOG.md",
-                    project_root=str(tmp_path),
-                )
+            result = await docs_generate_changelog(
+                output_path="CHANGELOG.md",
+                project_root=str(tmp_path),
             )
 
         data = result["data"]
@@ -128,18 +119,15 @@ class TestGeneratorContentReturn:
         assert "file_manifest" in data
         assert not (tmp_path / "CHANGELOG.md").exists()
 
-    def test_changelog_no_manifest_without_output_path(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_changelog_no_manifest_without_output_path(self, tmp_path: Path) -> None:
         """Optional-write generators skip manifest when no output_path."""
-        import asyncio
-
         from docs_mcp.server_gen_tools import docs_generate_changelog
 
         (tmp_path / ".git").mkdir()
 
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
-            result = asyncio.get_event_loop().run_until_complete(
-                docs_generate_changelog(project_root=str(tmp_path))
-            )
+            result = await docs_generate_changelog(project_root=str(tmp_path))
 
         data = result["data"]
         # No output_path, so no manifest — content is just returned normally
@@ -147,33 +135,27 @@ class TestGeneratorContentReturn:
         assert "file_manifest" not in data
         assert "content" in data
 
-    def test_direct_write_unchanged(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_direct_write_unchanged(self, tmp_path: Path) -> None:
         """Direct-write mode still writes files normally."""
-        import asyncio
-
         from docs_mcp.server_gen_tools import docs_generate_contributing
 
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("TAPPS_WRITE_MODE", None)
-            result = asyncio.get_event_loop().run_until_complete(
-                docs_generate_contributing(project_root=str(tmp_path))
-            )
+            result = await docs_generate_contributing(project_root=str(tmp_path))
 
         data = result["data"]
         assert data.get("content_return") is None
         assert "written_to" in data
         assert (tmp_path / "CONTRIBUTING.md").exists()
 
-    def test_readme_content_return(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_readme_content_return(self, tmp_path: Path) -> None:
         """README generator returns manifest in content-return mode."""
-        import asyncio
-
         from docs_mcp.server_gen_tools import docs_generate_readme
 
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
-            result = asyncio.get_event_loop().run_until_complete(
-                docs_generate_readme(project_root=str(tmp_path))
-            )
+            result = await docs_generate_readme(project_root=str(tmp_path))
 
         data = result["data"]
         assert data.get("content_return") is True

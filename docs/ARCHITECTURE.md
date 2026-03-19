@@ -6,11 +6,21 @@ For quick-start guidance, see [CLAUDE.md](../CLAUDE.md).
 ## Package dependency graph
 
 ```
-tapps-core (library)  <──  tapps-mcp (30 tools)
-                      <──  docs-mcp  (31 tools)
+tapps-brain (standalone library - memory system)
+    ^
+    |
+tapps-core (shared infrastructure)
+    ^              ^
+    |              |
+tapps-mcp      docs-mcp
+(30 tools)     (31 tools)
 ```
 
-Shared infrastructure (config, security, logging, knowledge, memory, experts, metrics, adaptive) lives in `tapps-core`. Both MCP servers depend on it. Server files in tapps-mcp import from `tapps_core` directly for extracted packages.
+**tapps-brain** (`pip install tapps-brain`) is a standalone memory library extracted from tapps-core. It provides SQLite persistence (WAL + FTS5), BM25 retrieval, time-based decay, contradiction detection, consolidation, federation, and garbage collection. It has its own repository ([github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain)), release cycle, and test suite (521+ tests).
+
+Shared infrastructure (config, security, logging, knowledge, experts, metrics, adaptive) lives in `tapps-core`. Both MCP servers depend on it. Server files in tapps-mcp import from `tapps_core` directly for extracted packages.
+
+tapps-core's `memory/` package contains thin re-export shims delegating to tapps-brain. The one exception is `injection.py`, a bridge adapter that reads TappsMCP settings and constructs tapps-brain's `InjectionConfig`. Imports from `tapps_core.memory.*` emit a `DeprecationWarning` pointing users to `tapps_brain.*` directly.
 
 ## Server module split (tapps-mcp)
 
@@ -162,6 +172,21 @@ Split across `pipeline/` modules: hooks, rules, skills, subagents, bundles. AGEN
 ## Quality gate evaluation
 
 6 category scores + overall against thresholds. Failures sorted by weight (security 0.27 > maintainability 0.24 > complexity 0.18 > test coverage 0.13 > performance 0.08 > structure/devex 0.05). Security floor: 50.
+
+## Doctor diagnostics
+
+The `tapps_doctor` tool/CLI command runs configuration and connectivity checks:
+
+- **Binary availability**: `tapps-mcp` on PATH (or frozen exe detection)
+- **MCP client configs**: Claude Code, Cursor, VS Code (project + user scope)
+- **Platform rules**: CLAUDE.md, `.cursor/rules/tapps-pipeline.md`
+- **AGENTS.md**: Version parity with installed TappsMCP
+- **Hooks**: Script presence, `.cursor/hooks.json` schema, Windows .sh detection
+- **Settings**: `.claude/settings.json` permissions and hook key validation
+- **Quality tools**: ruff, mypy, bandit, radon installation
+- **tapps-brain library**: Importability check for the memory subsystem
+- **Stale exe backups**: Cleanup detection for frozen exe updates
+- **Config scope**: Warns when tapps-mcp is in user-scoped `~/.claude.json`
 
 ## Config scope (Epic 47)
 

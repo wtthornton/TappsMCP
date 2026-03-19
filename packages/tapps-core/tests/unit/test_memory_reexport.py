@@ -65,12 +65,37 @@ _REEXPORT_MODULES: list[tuple[str, list[str]]] = [
         ["MemoryGarbageCollector", "GCResult"],
     ),
     (
+        "tapps_core.memory.injection",
+        [
+            "InjectionConfig",
+            "append_memory_to_answer",
+            "estimate_tokens",
+            "_MAX_INJECT_HIGH",
+            "_MAX_INJECT_MEDIUM",
+            "_MIN_CONFIDENCE_MEDIUM",
+            "_MIN_SCORE",
+        ],
+    ),
+    (
         "tapps_core.memory.io",
-        ["export_memories", "import_memories"],
+        ["export_memories", "export_to_markdown", "import_memories"],
     ),
     (
         "tapps_core.memory.models",
-        ["MemoryEntry", "MemoryTier", "MemorySource", "MemoryScope"],
+        [
+            "MemoryEntry",
+            "MemoryTier",
+            "MemorySource",
+            "MemoryScope",
+            "MemorySnapshot",
+            "MAX_KEY_LENGTH",
+            "MAX_TAGS",
+            "MAX_VALUE_LENGTH",
+            "ConsolidatedEntry",
+            "ConsolidationReason",
+            "_SOURCE_CONFIDENCE_DEFAULTS",
+            "_utc_now_iso",
+        ],
     ),
     (
         "tapps_core.memory.persistence",
@@ -130,7 +155,15 @@ def test_reexport_symbols_exist(module_path: str, symbols: list[str]) -> None:
     ids=[m for m, _ in _REEXPORT_MODULES],
 )
 def test_reexport_identity(module_path: str, symbols: list[str]) -> None:
-    """Re-exported symbols must be the same objects as tapps_brain originals."""
+    """Re-exported symbols must be the same objects as tapps_brain originals.
+
+    Skips ``tapps_core.memory.injection`` because its ``inject_memories``
+    function is a bridge adapter (wraps the brain version with settings),
+    not a pure re-export.  The pure re-exports in that module are still
+    checked by ``test_reexport_symbols_exist``.
+    """
+    if module_path == "tapps_core.memory.injection":
+        pytest.skip("injection module has bridge logic; identity check not applicable")
     core_mod = importlib.import_module(module_path)
     brain_path = module_path.replace("tapps_core.memory", "tapps_brain")
     try:
@@ -147,3 +180,29 @@ def test_reexport_identity(module_path: str, symbols: list[str]) -> None:
                 assert core_obj is brain_obj, (
                     f"{module_path}.{sym} is not the same object as {brain_path}.{sym}"
                 )
+
+
+def test_injection_bridge_is_callable() -> None:
+    """The injection bridge wraps brain's inject_memories with TappsMCP settings."""
+    from tapps_core.memory.injection import inject_memories
+
+    assert callable(inject_memories)
+    # Bridge signature differs from brain's — it reads TappsMCP settings internally
+    import inspect
+
+    sig = inspect.signature(inject_memories)
+    assert "store" in sig.parameters
+    assert "engagement_level" in sig.parameters
+
+
+def test_store_instantiable(tmp_path: types.SimpleNamespace | None = None) -> None:
+    """MemoryStore can be instantiated through the tapps_core shim."""
+    import tempfile
+    from pathlib import Path
+
+    from tapps_core.memory.store import MemoryStore
+
+    with tempfile.TemporaryDirectory() as td:
+        store = MemoryStore(Path(td))
+        assert store is not None
+        store.close()
