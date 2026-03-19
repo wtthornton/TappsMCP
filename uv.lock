@@ -2182,7 +2182,7 @@ wheels = [
 [[package]]
 name = "tapps-brain"
 version = "1.0.0"
-source = { git = "https://github.com/wtthornton/tapps-brain.git?branch=main#1b4ffa90ac95f6135a1405f1120976514cf92377" }
+source = { git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.0.0#ca819e779c137774baabc0b954dc26b71b474927" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -2223,7 +2223,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
     { name = "sentence-transformers", marker = "extra == 'vector'", specifier = ">=5.2.3,<6" },
     { name = "structlog", specifier = ">=25.5.0,<26" },
-    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?branch=main" },
+    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.0.0" },
 ]
 provides-extras = ["vector", "reranker"]
 

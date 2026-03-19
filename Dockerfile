@@ -18,7 +18,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Build tapps-brain wheel from git (tapps-core dependency)
-RUN pip wheel --no-deps --wheel-dir /wheels git+https://github.com/wtthornton/tapps-brain.git@main
+RUN pip wheel --no-deps --wheel-dir /wheels git+https://github.com/wtthornton/tapps-brain.git@v1.0.0
 
 # Build tapps-core wheel (dependency)
 COPY packages/tapps-core/pyproject.toml packages/tapps-core/
