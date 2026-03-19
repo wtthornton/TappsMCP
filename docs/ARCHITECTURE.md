@@ -77,11 +77,10 @@ src/tapps_mcp/
 │               business_metrics.py, quality_aggregator.py,
 │               alerts.py, trends.py, visualizer.py,
 │               dashboard.py, otel_export.py, feedback.py
-├── memory/     models.py, persistence.py, store.py, decay.py,
-│               reinforcement.py, contradictions.py, gc.py,
-│               retrieval.py, injection.py, seeding.py, io.py
-│               (tapps-core also has: bm25.py, federation.py,
-│                similarity.py, consolidation.py, auto_consolidation.py)
+├── memory/     Re-export shims delegating to tapps-brain library.
+│               injection.py is a bridge adapter (TappsMCP settings → brain config).
+│               All other modules (models, persistence, store, decay, etc.)
+│               are thin re-exports from tapps_brain.*
 ├── prompts/    prompt_loader.py, overview.md, discover.md, research.md,
 │               develop.md, validate.md, verify.md, templates...
 ├── project/    models.py, ast_parser.py, tech_stack.py,
@@ -154,7 +153,7 @@ All file I/O through `security/path_validator.py` (sandboxed to `TAPPS_MCP_PROJE
 
 ## Memory subsystem
 
-Persistent cross-session knowledge (cap: 1500/project). SQLite with WAL + FTS5. BM25 ranked retrieval, time-based confidence decay, contradiction detection, garbage collection. Federation via central hub at `~/.tapps-mcp/memory/federated.db`.
+Implemented by the standalone **tapps-brain** library (`pip install tapps-brain`). tapps-core/memory/ modules are re-export shims; injection.py is a bridge adapter translating TappsMCP settings into brain's config. Persistent cross-session knowledge (cap: 1500/project). SQLite with WAL + FTS5. BM25 ranked retrieval, time-based confidence decay, contradiction detection, garbage collection. Federation via central hub at `~/.tapps-mcp/memory/federated.db`. TappsMCP passes `store_dir=".tapps-mcp"` for backward compat (brain defaults to `.tapps-brain`).
 
 ## Platform generation
 
