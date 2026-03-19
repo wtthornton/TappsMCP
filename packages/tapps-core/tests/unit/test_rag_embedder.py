@@ -1,4 +1,8 @@
-"""Tests for the RAG embedder."""
+"""Tests for the RAG embedder.
+
+Requires: sentence-transformers (optional dep, install via ``pip install tapps-core[vector]``).
+Run with: ``pytest -m optional_deps`` to include these tests.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +14,8 @@ from tapps_core.experts.rag_embedder import (
     SentenceTransformerEmbedder,
     create_embedder,
 )
+
+pytestmark = pytest.mark.optional_deps
 
 
 class TestEmbedderABC:

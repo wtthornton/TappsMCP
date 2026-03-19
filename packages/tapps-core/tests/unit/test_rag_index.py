@@ -1,4 +1,9 @@
-"""Tests for the FAISS-based RAG vector index."""
+"""Tests for the FAISS-based RAG vector index.
+
+Requires: faiss-cpu, sentence-transformers (optional deps, install via
+``pip install tapps-core[vector]``).
+Run with: ``pytest -m optional_deps`` to include these tests.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +11,8 @@ import pytest
 
 from tapps_core.experts.rag_chunker import Chunk
 from tapps_core.experts.rag_index import FAISS_AVAILABLE, IndexMetadata, VectorIndex
+
+pytestmark = pytest.mark.optional_deps
 
 
 class TestIndexMetadata:

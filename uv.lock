@@ -19,6 +19,11 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.0.0,<8" },
     { name = "pytest-timeout", specifier = ">=2.4.0,<3" },
     { name = "ruff", specifier = ">=0.15.2,<1" },
+    { name = "tree-sitter", specifier = ">=0.24.0,<1" },
+    { name = "tree-sitter-go", specifier = ">=0.23.4,<1" },
+    { name = "tree-sitter-java", specifier = ">=0.23.5,<1" },
+    { name = "tree-sitter-rust", specifier = ">=0.23.2,<1" },
+    { name = "tree-sitter-typescript", specifier = ">=0.23.2,<1" },
     { name = "types-pyyaml", specifier = ">=6.0.12" },
 ]
 
@@ -2182,7 +2187,7 @@ wheels = [
 [[package]]
 name = "tapps-brain"
 version = "1.0.0"
-source = { git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.0.0#ca819e779c137774baabc0b954dc26b71b474927" }
+source = { git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.0.1#e0adada2e67dc84c239107c4b9d00dc02bc60955" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -2223,7 +2228,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
     { name = "sentence-transformers", marker = "extra == 'vector'", specifier = ">=5.2.3,<6" },
     { name = "structlog", specifier = ">=25.5.0,<26" },
-    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.0.0" },
+    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.0.1" },
 ]
 provides-extras = ["vector", "reranker"]
 

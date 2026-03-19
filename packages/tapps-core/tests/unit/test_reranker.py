@@ -1,4 +1,8 @@
-"""Unit tests for optional reranker (Epic 65.9)."""
+"""Unit tests for optional reranker (Epic 65.9).
+
+Requires: cohere (optional dep, install via ``pip install tapps-core[reranker]``).
+Run with: ``pytest -m optional_deps`` to include these tests.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +15,8 @@ from tapps_core.memory.reranker import (
     RERANKER_TOP_CANDIDATES,
     get_reranker,
 )
+
+pytestmark = pytest.mark.optional_deps
 
 
 # ---------------------------------------------------------------------------

@@ -164,7 +164,11 @@ class TestEnvVarResolution:
 
     @pytest.mark.skipif(
         platform.system() == "Windows",
-        reason="${VAR} expansion is Unix-style; use %USERPROFILE% on Windows",
+        reason=(
+            "${VAR} expansion is Unix-style; Windows uses %VAR% syntax. "
+            "Windows env var expansion is intentionally unsupported — "
+            "DocsMCP config files should use forward-slash POSIX paths."
+        ),
     )
     def test_output_dir_env_var_resolves(self, tmp_path: Path) -> None:
         """output_dir with env vars should resolve (Unix ${HOME})."""

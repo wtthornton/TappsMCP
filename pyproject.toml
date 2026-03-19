@@ -2,7 +2,7 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v1.0.0" }
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v1.0.1" }
 
 [tool.uv]
 dev-dependencies = [
@@ -15,6 +15,12 @@ dev-dependencies = [
     "pre-commit>=4.5.1,<5",
     "types-PyYAML>=6.0.12",
     "playwright>=1.58.0,<2",
+    # tree-sitter for docs-mcp multi-language extraction tests
+    "tree-sitter>=0.24.0,<1",
+    "tree-sitter-typescript>=0.23.2,<1",
+    "tree-sitter-go>=0.23.4,<1",
+    "tree-sitter-rust>=0.23.2,<1",
+    "tree-sitter-java>=0.23.5,<1",
 ]
 
 [tool.ruff]
@@ -86,7 +92,7 @@ module = "tapps_mcp.server"
 disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
-module = ["sentence_transformers", "sentence_transformers.*", "faiss", "numpy", "numpy.*", "radon", "radon.*", "tapps_brain", "tapps_brain.*"]
+module = ["sentence_transformers", "sentence_transformers.*", "faiss", "numpy", "numpy.*", "radon", "radon.*", "tapps_brain", "tapps_brain.*", "tree_sitter", "tree_sitter_go", "tree_sitter_rust", "tree_sitter_java", "tree_sitter_typescript"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -110,8 +116,12 @@ timeout = 60
 markers = [
     "integration: marks tests as integration tests",
     "slow: marks tests as slow (subprocess-heavy, may be skipped with -m 'not slow')",
+    "optional_deps: marks tests requiring optional dependencies (sentence-transformers, faiss-cpu, cohere)",
 ]
 addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore:tapps_core\\.memory is deprecated:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["tapps_core", "tapps_mcp", "docs_mcp"]
