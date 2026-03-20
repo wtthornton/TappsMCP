@@ -89,6 +89,51 @@ class DocsMCPSettings(BaseSettings):
         description="Maximum number of git commits to analyze.",
     )
 
+    # Style checking (Epic 84)
+    style_enabled_rules: list[str] = Field(
+        default_factory=lambda: [
+            "passive_voice", "jargon", "sentence_length",
+            "heading_consistency", "tense_consistency",
+        ],
+        description="Style rules to enable. Available: passive_voice, jargon, "
+                    "sentence_length, heading_consistency, tense_consistency.",
+    )
+    style_heading: Literal["sentence", "title"] = Field(
+        default="sentence",
+        description="Heading case style: sentence or title.",
+    )
+    style_max_sentence_words: int = Field(
+        default=40,
+        ge=10,
+        description="Max words per sentence before flagging.",
+    )
+    style_custom_terms: list[str] = Field(
+        default_factory=list,
+        description="Project-specific terms to exclude from jargon checks.",
+    )
+    style_jargon_terms: list[str] = Field(
+        default_factory=list,
+        description="Custom jargon terms to flag (overrides defaults when non-empty).",
+    )
+
+    @field_validator("style_enabled_rules", mode="before")
+    @classmethod
+    def _parse_style_rules(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        if isinstance(v, list):
+            return list(v)
+        return []
+
+    @field_validator("style_custom_terms", "style_jargon_terms", mode="before")
+    @classmethod
+    def _parse_style_terms(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        if isinstance(v, list):
+            return list(v)
+        return []
+
     # Tool curation (Epic 79.2): server-side allow/deny list and presets
     enabled_tools: list[str] | None = Field(
         default=None,

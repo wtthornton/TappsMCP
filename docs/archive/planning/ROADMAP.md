@@ -34,29 +34,28 @@ TappsMCP has completed all planned epics:
 | Epic | Name | Priority | LOE | Rationale |
 |------|------|----------|-----|-----------|
 | **59** | [MCP Registry Submission](epics/EPIC-59-MCP-REGISTRY-SUBMISSION.md) | P1 | ~1 week | List TappsMCP and DocsMCP in official MCP server registry for discoverability. **Complete** (2026-03-06). |
-| **60** | Video & Tutorial Content | P2 | ~2 weeks | Demo videos, getting-started guides, use-case walkthroughs. |
-| **61** | VS Code Native Extension | P3 | ~4-6 weeks | Native VS Code extension beyond MCP for broader reach. |
 
 ### Tier 3: Advanced Features
 
 | Epic | Name | Priority | LOE | Rationale |
 |------|------|----------|-----|-----------|
-| **62** | [Context7-Assisted Memory Validation](epics/EPIC-62-CONTEXT7-MEMORY-VALIDATION.md) | P2 | ~3 weeks | Validate memory entries against authoritative docs via Context7/LlmsTxt lookup. Extract library claims, score similarity, adjust confidence, enrich with doc references. 7 stories. **Complete**. |
+| **62** | [Context7-Assisted Memory Validation](epics/EPIC-62-CONTEXT7-MEMORY-VALIDATION.md) | P2 | ~3 weeks | Validate memory entries against authoritative docs via Context7/LlmsTxt lookup. Extract library claims, score similarity, adjust confidence, enrich with doc references. 7 stories. **Complete** (2026-03-09). |
 | **63** | [Auto Expert Generator](epics/EPIC-63-AUTO-EXPERT-GENERATOR.md) | P3 | ~2-3 weeks | Analyze codebase patterns to suggest/create domain experts. **Complete** (2026-03-09). |
 | **64** | [Cross-Project Memory Federation](epics/EPIC-64-CROSS-PROJECT-MEMORY-FEDERATION.md) | P3 | ~3-4 weeks | Share memory across related projects (monorepo packages). **Complete** (2026-03-09). |
 
-### Tier 4: Deferred Items (From Completed Epics)
+### Tier 4: Archived / Deferred Items
 
-These items were explicitly deferred during epic implementation:
-
-| Source | Item | Notes |
-|--------|------|-------|
-| Epic 6 | Full Workflow State Tool | Only if demand exists |
-| Epic 9 | docs://templates resource | Low ROI; host support inconsistent |
-| Epic 9 | AGENTS.md generation for consuming projects | Optional; manual preferred |
-| Epic 10 | npm wrapper for docs-mcp | PyPI/pipx sufficient |
-| Epic 10 | CLI `check` command | Optional |
-| Epic 10 | CI workflow generator | Optional |
+| Source | Item | Status | Notes |
+|--------|------|--------|-------|
+| Epic 60 | Video & Tutorial Content | **Archived** (2026-03-19) | Not pursuing |
+| Epic 61 | VS Code Native Extension | **Archived** (2026-03-19) | Not pursuing |
+| Platform PRD | PyPI release | **Archived** (2026-03-19) | Not releasing to PyPI |
+| Epic 6 | Full Workflow State Tool | Deferred | Only if demand exists |
+| Epic 9 | docs://templates resource | Deferred | Low ROI; host support inconsistent |
+| Epic 9 | AGENTS.md generation for consuming projects | Deferred | Optional; manual preferred |
+| Epic 10 | npm wrapper for docs-mcp | Deferred | PyPI/pipx sufficient |
+| Epic 10 | CLI `check` command | Deferred | Optional |
+| Epic 10 | CI workflow generator | Deferred | Optional |
 
 ---
 
@@ -84,6 +83,11 @@ Enhancements are prioritized by:
 | 2026-03-06 | Completed Epic 59 | MCP Registry submission: server.json for both packages, GitHub Actions workflow, README mcp-name verification |
 | 2026-03-09 | Completed Epic 63 | Auto Expert Generator: gap analysis, config generation, knowledge scaffolding, MCP tool integration, init suggestion |
 | 2026-03-09 | Completed Epic 64 | Cross-Project Memory Federation: hub store, publish/subscribe, federated search, scope extension, 6 MCP actions |
+| 2026-03-19 | Archived Epic 60 | Video & Tutorial Content -- not pursuing |
+| 2026-03-19 | Archived Epic 61 | VS Code Native Extension -- not pursuing |
+| 2026-03-19 | Archived PyPI release | Not releasing to PyPI |
+| 2026-03-19 | Marked Epic 62 Complete | Context7-Assisted Memory Validation |
+| 2026-03-19 | Started Epic 84 | Doc Style & Tone Validation (Vale Integration) -- previously deferred |
 
 ---
 

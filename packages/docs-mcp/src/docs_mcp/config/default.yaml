@@ -12,3 +12,15 @@ diagram_format: mermaid  # mermaid | plantuml | d2
 git_log_limit: 500
 log_level: INFO
 log_json: false
+
+# Style checking (Epic 84)
+style_enabled_rules:
+  - passive_voice
+  - jargon
+  - sentence_length
+  - heading_consistency
+  - tense_consistency
+style_heading: sentence   # sentence | title
+style_max_sentence_words: 40
+style_custom_terms: []    # project-specific terms excluded from jargon
+style_jargon_terms: []    # custom jargon (overrides defaults when non-empty)

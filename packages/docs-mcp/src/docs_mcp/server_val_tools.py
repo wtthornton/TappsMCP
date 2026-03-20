@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from docs_mcp.validators.style import StyleReport
 
 from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call, mcp
 from docs_mcp.server_helpers import _get_settings, error_response, success_response
@@ -510,6 +513,223 @@ async def docs_check_cross_refs(
 
 
 # ---------------------------------------------------------------------------
+# Epic 84: Style & tone validation
+# ---------------------------------------------------------------------------
+
+
+async def docs_check_style(
+    files: str = "",
+    rules: str = "",
+    heading_style: str = "",
+    max_sentence_words: int = 0,
+    custom_terms: str = "",
+    output_format: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Check documentation style and tone for writing quality issues.
+
+    Applies deterministic regex/pattern rules to detect passive voice,
+    jargon, long sentences, heading inconsistency, and tense mixing.
+    Returns per-file issues with severity, location, and fix suggestions.
+
+    Args:
+        files: Comma-separated list of specific files to check (relative or
+            absolute paths). When empty, scans all documentation files.
+        rules: Comma-separated list of rules to enable. Available rules:
+            passive_voice, jargon, sentence_length, heading_consistency,
+            tense_consistency. When empty, uses all rules.
+        heading_style: Heading case style to enforce: ``"sentence"`` (default)
+            or ``"title"``. Only applies when heading_consistency rule is active.
+        max_sentence_words: Maximum words per sentence before flagging (default: 40).
+            Only applies when sentence_length rule is active.
+        custom_terms: Comma-separated list of project-specific terms to exclude
+            from jargon checks and allow in headings (e.g. ``"FastMCP,DocsMCP"``).
+        output_format: Output format: ``""`` (default structured) or ``"vale"``
+            for Vale-compatible output.
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_check_style")
+    start = time.perf_counter_ns()
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root.strip() else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_check_style", "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.validators.style import StyleChecker, StyleConfig, StyleReport
+
+    # Build config: explicit params override settings, which override defaults.
+    config_kwargs: dict[str, Any] = {}
+
+    # Read settings safely (may be a mock without these attrs)
+    s_rules: list[str] = getattr(settings, "style_enabled_rules", []) or []
+    s_heading: str = getattr(settings, "style_heading", "") or ""
+    s_max_words: int = getattr(settings, "style_max_sentence_words", 0) or 0
+    s_custom: list[str] = getattr(settings, "style_custom_terms", []) or []
+    s_jargon: list[str] = getattr(settings, "style_jargon_terms", []) or []
+
+    # Ensure settings values are the right types (guard against mocks)
+    if not isinstance(s_rules, list):
+        s_rules = []
+    if not isinstance(s_heading, str):
+        s_heading = ""
+    if not isinstance(s_max_words, int):
+        s_max_words = 0
+    if not isinstance(s_custom, list):
+        s_custom = []
+    if not isinstance(s_jargon, list):
+        s_jargon = []
+
+    # Rules: explicit param > settings > default
+    if rules.strip():
+        config_kwargs["enabled_rules"] = [r.strip() for r in rules.split(",") if r.strip()]
+    elif s_rules:
+        config_kwargs["enabled_rules"] = s_rules
+
+    # Heading style
+    if heading_style.strip() in ("sentence", "title"):
+        config_kwargs["heading_style"] = heading_style.strip()
+    elif s_heading in ("sentence", "title"):
+        config_kwargs["heading_style"] = s_heading
+
+    # Max sentence words
+    if max_sentence_words > 0:
+        config_kwargs["max_sentence_words"] = max_sentence_words
+    elif s_max_words > 0:
+        config_kwargs["max_sentence_words"] = s_max_words
+
+    # Custom terms: merge param + settings + .docsmcp-terms.txt
+    terms_list: list[str] = []
+    if custom_terms.strip():
+        terms_list.extend(t.strip() for t in custom_terms.split(",") if t.strip())
+    for t in s_custom:
+        if t not in terms_list:
+            terms_list.append(t)
+    # Also load from .docsmcp-terms.txt if it exists
+    terms_file = root / ".docsmcp-terms.txt"
+    if terms_file.is_file():
+        try:
+            for line in terms_file.read_text(encoding="utf-8").splitlines():
+                term = line.strip()
+                if term and not term.startswith("#") and term not in terms_list:
+                    terms_list.append(term)
+        except Exception:
+            pass
+    if terms_list:
+        config_kwargs["custom_terms"] = terms_list
+
+    # Custom jargon terms from settings
+    if s_jargon:
+        config_kwargs["jargon_terms"] = s_jargon
+
+    config = StyleConfig(**config_kwargs)
+    checker = StyleChecker(config)
+
+    # Check specific files or whole project
+    if files.strip():
+        file_list = [f.strip() for f in files.split(",") if f.strip()]
+        from docs_mcp.validators.style import FileStyleResult
+
+        results: list[FileStyleResult] = []
+        for file_str in file_list:
+            fp = Path(file_str)
+            if not fp.is_absolute():
+                fp = root / fp
+            if fp.exists():
+                results.append(checker.check_file(fp, relative_to=root))
+
+        total_issues = sum(len(r.issues) for r in results)
+        agg_score = (
+            sum(r.score for r in results) / len(results) if results else 100.0
+        )
+        issue_counts: dict[str, int] = {}
+        for r in results:
+            for issue in r.issues:
+                issue_counts[issue.rule] = issue_counts.get(issue.rule, 0) + 1
+
+        report = StyleReport(
+            total_files=len(results),
+            total_issues=total_issues,
+            files=results,
+            aggregate_score=round(agg_score, 1),
+            issue_counts=issue_counts,
+        )
+    else:
+        report = checker.check_project(root)
+
+    # Build response
+    if output_format.strip().lower() == "vale":
+        data = _style_report_vale(report)
+    else:
+        data = _style_report_structured(report)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    return success_response(
+        "docs_check_style",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Fix high-severity style issues (errors first, then warnings).",
+            "Add project-specific terms to custom_terms to reduce false positives.",
+            "Run docs_check_completeness for a broader documentation health check.",
+        ],
+    )
+
+
+def _style_report_structured(report: StyleReport) -> dict[str, Any]:
+    """Build structured response data from a StyleReport."""
+    files_data: list[dict[str, Any]] = []
+    for fr in report.files:
+        if fr.issues:
+            files_data.append({
+                "file_path": fr.file_path,
+                "score": fr.score,
+                "issue_count": len(fr.issues),
+                "issues": [i.model_dump() for i in fr.issues[:20]],
+            })
+
+    return {
+        "total_files": report.total_files,
+        "total_issues": report.total_issues,
+        "aggregate_score": report.aggregate_score,
+        "issue_counts": report.issue_counts,
+        "top_issues": report.top_issues,
+        "files": files_data,
+    }
+
+
+def _style_report_vale(report: StyleReport) -> dict[str, Any]:
+    """Build Vale-compatible output from a StyleReport."""
+    vale_output: dict[str, list[dict[str, Any]]] = {}
+    for fr in report.files:
+        if fr.issues:
+            vale_output[fr.file_path] = [
+                {
+                    "Check": f"DocsMCP.{i.rule}",
+                    "Severity": i.severity,
+                    "Line": i.line,
+                    "Span": [i.column, i.column],
+                    "Message": i.message,
+                    "Action": {"Name": "suggest", "Params": [i.suggestion]}
+                    if i.suggestion else {},
+                }
+                for i in fr.issues
+            ]
+
+    return {
+        "format": "vale",
+        "total_files": report.total_files,
+        "total_issues": report.total_issues,
+        "aggregate_score": report.aggregate_score,
+        "results": vale_output,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Registration (Epic 79.2: conditional)
 # ---------------------------------------------------------------------------
 
@@ -530,3 +750,5 @@ def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_diataxis)
     if "docs_check_cross_refs" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_cross_refs)
+    if "docs_check_style" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_style)

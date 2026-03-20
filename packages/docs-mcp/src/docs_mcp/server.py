@@ -98,6 +98,7 @@ ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset({
     "docs_generate_purpose",
     "docs_generate_doc_index",
     "docs_check_cross_refs",
+    "docs_check_style",
 })
 
 # Core preset (Epic 79.2): session start, project scan, drift, readme, completeness, links.
@@ -565,6 +566,22 @@ async def docs_project_scan(
     lang_counts = _count_source_files(root)
     if lang_counts:
         data["language_composition"] = lang_counts
+
+    # Optional style summary (Epic 84)
+    try:
+        from docs_mcp.validators.style import StyleChecker
+
+        style_checker = StyleChecker()
+        style_report = style_checker.check_project(root)
+        if style_report.total_files > 0:
+            data["style_summary"] = {
+                "total_files": style_report.total_files,
+                "total_issues": style_report.total_issues,
+                "aggregate_score": style_report.aggregate_score,
+                "top_issues": style_report.top_issues[:5],
+            }
+    except Exception:  # noqa: S110 — style check is optional enrichment
+        pass
 
     # Optional TappsMCP enrichment
     try:
