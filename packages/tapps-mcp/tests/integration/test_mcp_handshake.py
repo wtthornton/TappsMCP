@@ -9,6 +9,7 @@ from tapps_mcp.server import mcp, tapps_server_info
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMCPHandshake:
     @pytest.mark.asyncio
     async def test_server_info_tool_returns_valid_response(self):

@@ -81,20 +81,19 @@ class TestLinkReportModel:
 class TestHelpers:
     """Test helper functions."""
 
-    def test_is_external_link_http(self) -> None:
-        assert _is_external_link("http://example.com") is True
-
-    def test_is_external_link_https(self) -> None:
-        assert _is_external_link("https://example.com") is True
-
-    def test_is_external_link_mailto(self) -> None:
-        assert _is_external_link("mailto:user@example.com") is True
-
-    def test_is_external_link_relative(self) -> None:
-        assert _is_external_link("./docs/guide.md") is False
-
-    def test_is_external_link_protocol_relative(self) -> None:
-        assert _is_external_link("//example.com/path") is True
+    @pytest.mark.parametrize(
+        "link,expected",
+        [
+            ("http://example.com", True),
+            ("https://example.com", True),
+            ("mailto:user@example.com", True),
+            ("./docs/guide.md", False),
+            ("//example.com/path", True),
+        ],
+        ids=["http", "https", "mailto", "relative", "protocol-relative"],
+    )
+    def test_is_external_link(self, link: str, expected: bool) -> None:
+        assert _is_external_link(link) is expected
 
     def test_is_anchor_only(self) -> None:
         assert _is_anchor_only("#section") is True

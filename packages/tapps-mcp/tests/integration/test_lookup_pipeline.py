@@ -29,6 +29,7 @@ def _make_mock_client(
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestLookupPipelineCacheMissToHit:
     """Full cache miss → API → cache → cache hit lifecycle."""
 
@@ -107,6 +108,7 @@ class TestLookupPipelineCacheMissToHit:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestLookupPipelineFuzzyMatch:
     """Fuzzy matching retrieves close-enough library names from cache."""
 
@@ -129,6 +131,7 @@ class TestLookupPipelineFuzzyMatch:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestLookupPipelineCircuitBreaker:
     """Circuit breaker integration with the lookup pipeline."""
 
@@ -179,6 +182,7 @@ class TestLookupPipelineCircuitBreaker:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestLookupPipelineRAGSafety:
     """RAG safety filter blocks prompt injection from API results."""
 
@@ -253,6 +257,7 @@ class TestLookupPipelineRAGSafety:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestLookupPipelineAirGapped:
     """Air-gapped mode (no API key) degrades gracefully."""
 
@@ -281,6 +286,7 @@ class TestLookupPipelineAirGapped:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestLookupPipelineMultiTopic:
     """Multiple topics for the same library are stored separately."""
 

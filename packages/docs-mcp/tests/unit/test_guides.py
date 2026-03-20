@@ -9,47 +9,14 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from docs_mcp.generators.guides import ContributingGuideGenerator, OnboardingGuideGenerator
 from docs_mcp.generators.metadata import ProjectMetadata
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously for testing."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _make_settings(root: Path) -> MagicMock:
-    """Create a mock DocsMCPSettings pointing to *root*."""
-    settings = MagicMock()
-    settings.project_root = root
-    settings.output_dir = "docs"
-    settings.default_style = "standard"
-    settings.default_format = "markdown"
-    settings.include_toc = True
-    settings.include_badges = True
-    settings.changelog_format = "keep-a-changelog"
-    settings.adr_format = "madr"
-    settings.diagram_format = "mermaid"
-    settings.git_log_limit = 100
-    settings.log_level = "INFO"
-    settings.log_json = False
-    return settings
+from tests.helpers import make_settings as _make_settings
 
 
 # ---------------------------------------------------------------------------
@@ -575,7 +542,7 @@ class TestContributingIssueGuidance:
 class TestDocsGenerateOnboarding:
     """Tests for the ``docs_generate_onboarding`` MCP tool handler."""
 
-    def test_success_response_envelope(self, tmp_path: Path) -> None:
+    async def test_success_response_envelope(self, tmp_path: Path) -> None:
         """Success response has the standard envelope structure."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -591,7 +558,7 @@ class TestDocsGenerateOnboarding:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(docs_generate_onboarding(project_root=str(root)))
+            result = await docs_generate_onboarding(project_root=str(root))
 
         assert result["tool"] == "docs_generate_onboarding"
         assert result["success"] is True
@@ -603,7 +570,7 @@ class TestDocsGenerateOnboarding:
         assert "content" in data
         assert "Getting Started" in data["content"]
 
-    def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
+    async def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
         """Non-existent project root returns error with INVALID_ROOT code."""
         from docs_mcp.server_gen_tools import docs_generate_onboarding
 
@@ -612,7 +579,7 @@ class TestDocsGenerateOnboarding:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(fake),
         ):
-            result = _run(docs_generate_onboarding(project_root=str(fake)))
+            result = await docs_generate_onboarding(project_root=str(fake))
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
@@ -626,7 +593,7 @@ class TestDocsGenerateOnboarding:
 class TestDocsGenerateContributing:
     """Tests for the ``docs_generate_contributing`` MCP tool handler."""
 
-    def test_success_response_envelope(self, tmp_path: Path) -> None:
+    async def test_success_response_envelope(self, tmp_path: Path) -> None:
         """Success response has the standard envelope structure."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -642,7 +609,7 @@ class TestDocsGenerateContributing:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(docs_generate_contributing(project_root=str(root)))
+            result = await docs_generate_contributing(project_root=str(root))
 
         assert result["tool"] == "docs_generate_contributing"
         assert result["success"] is True
@@ -654,7 +621,7 @@ class TestDocsGenerateContributing:
         assert "content" in data
         assert "Contributing to" in data["content"]
 
-    def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
+    async def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
         """Non-existent project root returns error with INVALID_ROOT code."""
         from docs_mcp.server_gen_tools import docs_generate_contributing
 
@@ -663,7 +630,7 @@ class TestDocsGenerateContributing:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(fake),
         ):
-            result = _run(docs_generate_contributing(project_root=str(fake)))
+            result = await docs_generate_contributing(project_root=str(fake))
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"

@@ -2,27 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from docs_mcp.generators.llms_txt import LlmsTxtGenerator, LlmsTxtResult
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+from tests.helpers import make_settings
 
 
 def _write(path: Path, content: str) -> None:
@@ -215,50 +201,45 @@ class TestLlmsTxtEdgeCases:
 
 
 class TestDocsGenerateLlmsTxtTool:
-    def _make_settings(self, root: Path) -> MagicMock:
-        settings = MagicMock()
-        settings.project_root = root
-        return settings
-
-    def test_compact_mode(self, tmp_path: Path) -> None:
+    async def test_compact_mode(self, tmp_path: Path) -> None:
         _make_pyproject(tmp_path)
         from docs_mcp.server_gen_tools import docs_generate_llms_txt
 
         with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_llms_txt(mode="compact", project_root=str(tmp_path)))
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_llms_txt(mode="compact", project_root=str(tmp_path))
 
         assert result["success"] is True
         assert result["data"]["mode"] == "compact"
         assert "content" in result["data"]
 
-    def test_full_mode(self, tmp_path: Path) -> None:
+    async def test_full_mode(self, tmp_path: Path) -> None:
         _make_pyproject(tmp_path)
         _write(tmp_path / "src" / "__init__.py", "")
         from docs_mcp.server_gen_tools import docs_generate_llms_txt
 
         with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_llms_txt(mode="full", project_root=str(tmp_path)))
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_llms_txt(mode="full", project_root=str(tmp_path))
 
         assert result["success"] is True
         assert result["data"]["mode"] == "full"
 
-    def test_invalid_mode(self, tmp_path: Path) -> None:
+    async def test_invalid_mode(self, tmp_path: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_llms_txt
 
-        result = _run(docs_generate_llms_txt(mode="bad"))
+        result = await docs_generate_llms_txt(mode="bad")
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_MODE"
 
-    def test_invalid_root(self) -> None:
+    async def test_invalid_root(self) -> None:
         from docs_mcp.server_gen_tools import docs_generate_llms_txt
 
-        result = _run(docs_generate_llms_txt(project_root="/nonexistent/path"))
+        result = await docs_generate_llms_txt(project_root="/nonexistent/path")
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
-    def test_output_path_content_return(self, tmp_path: Path) -> None:
+    async def test_output_path_content_return(self, tmp_path: Path) -> None:
         _make_pyproject(tmp_path)
         from docs_mcp.server_gen_tools import docs_generate_llms_txt
 
@@ -266,12 +247,12 @@ class TestDocsGenerateLlmsTxtTool:
             patch("docs_mcp.server_gen_tools._get_settings") as mock_settings,
             patch("docs_mcp.server_gen_tools.can_write_to_project", return_value=False),
         ):
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_llms_txt(
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_llms_txt(
                 mode="compact",
                 output_path="llms.txt",
                 project_root=str(tmp_path),
-            ))
+            )
 
         assert result["success"] is True
         assert result["data"].get("content_return") is True

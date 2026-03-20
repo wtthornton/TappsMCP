@@ -55,24 +55,37 @@ class TestFreshnessReportModel:
 class TestClassifyFreshness:
     """Test _classify_freshness helper."""
 
-    def test_fresh(self) -> None:
-        assert _classify_freshness(0) == "fresh"
-        assert _classify_freshness(15) == "fresh"
-        assert _classify_freshness(29) == "fresh"
-
-    def test_aging(self) -> None:
-        assert _classify_freshness(30) == "aging"
-        assert _classify_freshness(60) == "aging"
-        assert _classify_freshness(89) == "aging"
-
-    def test_stale(self) -> None:
-        assert _classify_freshness(90) == "stale"
-        assert _classify_freshness(200) == "stale"
-        assert _classify_freshness(364) == "stale"
-
-    def test_ancient(self) -> None:
-        assert _classify_freshness(365) == "ancient"
-        assert _classify_freshness(1000) == "ancient"
+    @pytest.mark.parametrize(
+        "age_days,expected",
+        [
+            (0, "fresh"),
+            (15, "fresh"),
+            (29, "fresh"),
+            (30, "aging"),
+            (60, "aging"),
+            (89, "aging"),
+            (90, "stale"),
+            (200, "stale"),
+            (364, "stale"),
+            (365, "ancient"),
+            (1000, "ancient"),
+        ],
+        ids=[
+            "fresh-0d",
+            "fresh-15d",
+            "fresh-29d",
+            "aging-30d",
+            "aging-60d",
+            "aging-89d",
+            "stale-90d",
+            "stale-200d",
+            "stale-364d",
+            "ancient-365d",
+            "ancient-1000d",
+        ],
+    )
+    def test_classify(self, age_days: int, expected: str) -> None:
+        assert _classify_freshness(age_days) == expected
 
 
 class TestFreshnessWeight:

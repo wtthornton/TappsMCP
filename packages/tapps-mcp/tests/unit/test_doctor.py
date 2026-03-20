@@ -4,6 +4,7 @@ import json
 import sys
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
 from tapps_mcp.cli import main
@@ -60,17 +61,14 @@ class TestReadEngagementLevel:
     def test_no_file_returns_none(self, tmp_path):
         assert _read_engagement_level(tmp_path) is None
 
-    def test_valid_level_high(self, tmp_path):
-        (tmp_path / ".tapps-mcp.yaml").write_text("llm_engagement_level: high\n")
-        assert _read_engagement_level(tmp_path) == "high"
-
-    def test_valid_level_medium(self, tmp_path):
-        (tmp_path / ".tapps-mcp.yaml").write_text("llm_engagement_level: medium\n")
-        assert _read_engagement_level(tmp_path) == "medium"
-
-    def test_valid_level_low(self, tmp_path):
-        (tmp_path / ".tapps-mcp.yaml").write_text("llm_engagement_level: low\n")
-        assert _read_engagement_level(tmp_path) == "low"
+    @pytest.mark.parametrize(
+        "level",
+        ["high", "medium", "low"],
+        ids=["high", "medium", "low"],
+    )
+    def test_valid_level(self, tmp_path, level):
+        (tmp_path / ".tapps-mcp.yaml").write_text(f"llm_engagement_level: {level}\n")
+        assert _read_engagement_level(tmp_path) == level
 
     def test_invalid_level_returns_none(self, tmp_path):
         (tmp_path / ".tapps-mcp.yaml").write_text("llm_engagement_level: strict\n")

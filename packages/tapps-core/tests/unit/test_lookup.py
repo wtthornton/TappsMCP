@@ -150,10 +150,9 @@ class TestLookupFuzzyMatch:
         result = await engine.lookup("fastap")
         await engine.close()
 
-        # May or may not fuzzy match depending on threshold
-        # If the fuzzy score is >= 0.7, it should match
-        if result.success:
-            assert result.cache_hit is True
+        # "fastap" is close enough to "fastapi" for fuzzy match
+        assert result.success is True, f"Expected fuzzy match to succeed, got error: {result.error}"
+        assert result.cache_hit is True
 
 
 class TestLookupRAGSafety:

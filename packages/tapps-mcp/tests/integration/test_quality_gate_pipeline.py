@@ -24,6 +24,7 @@ def hello() -> str:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestQualityGatePipeline:
     @pytest.fixture
     def project_file(self, tmp_path: Path) -> Path:

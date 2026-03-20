@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Tests for uncovered modules** - Added dedicated test files for `common/logging.py`, `common/pipeline_models.py`, `security/api_keys.py`, `metrics/feedback.py`, and `adaptive/protocols.py` in tapps-core (24 new tests)
+- **Integration test conftest files** - Created `conftest.py` with heavier fixtures (real project trees) for integration test directories in all 3 packages
+- **pytest-randomly** - Added `pytest-randomly>=3.16.0` to dev dependencies with `--randomly-seed=last` for reproducible test order randomization
+
+### Changed
+
+- **Test suite quality Phase 2** - Comprehensive test infrastructure improvements across all 3 packages (7,244 tests passing)
+- **Deduplicated test_rag_safety.py** - Reduced tapps-core `test_rag_safety.py` from 121 lines of duplicated behavioral tests to a 28-line import-identity test; all behavioral coverage remains in `test_content_safety.py`
+- **Native async tests in docs-mcp** - Migrated 14 test files (69 call sites) from `run_async()` sync wrapper to native `async def` / `await`, leveraging the already-configured `asyncio_mode = "auto"`
+- **Parallel CI test execution** - Wired `pytest-xdist` (`-n auto --dist worksteal`) into the GitHub Actions CI workflow for parallel test execution across all packages
+- **Integration tests marked slow** - Applied `@pytest.mark.slow` to all 16 integration test files (44 test classes) enabling `pytest -m "not slow"` for fast local feedback
+- **Public API assertions** - Replaced private attribute assertions (`_cache`, `_tracker`) in `test_feature_flags.py` and `test_voting_engine.py` with observable behavior checks
+
 - **tapps-brain v1.0.1 tag** - Created v1.0.1 tag on tapps-brain with CI fixes (ruff, mypy, formatting, build job). Updated all Dockerfiles and `[tool.uv.sources]` from v1.0.0 to v1.0.1
 - **Doctor: tapps-brain health check** - `tapps_doctor` now verifies that the tapps-brain library is importable, catching broken installations before runtime memory failures
 - **Deprecation warnings on tapps_core.memory** - Importing from `tapps_core.memory` now emits a `DeprecationWarning` directing users to `tapps_brain.*` imports. Warnings are filtered in test config

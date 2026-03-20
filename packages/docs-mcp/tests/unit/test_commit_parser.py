@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from docs_mcp.analyzers.commit_parser import (
     ParsedCommit,
     classify_commit,
@@ -48,37 +50,25 @@ class TestParsedCommitModel:
 class TestParseConventionalCommit:
     """Tests for parse_conventional_commit."""
 
-    def test_feat_no_scope(self) -> None:
-        result = parse_conventional_commit("feat: add user login")
-        assert result.type == "feat"
+    @pytest.mark.parametrize(
+        "message,expected_type,expected_desc",
+        [
+            ("feat: add user login", "feat", "add user login"),
+            ("fix: resolve null pointer", "fix", "resolve null pointer"),
+            ("docs: update readme", "docs", "update readme"),
+            ("chore: bump dependencies", "chore", "bump dependencies"),
+            ("refactor: simplify parser", "refactor", "simplify parser"),
+            ("test: add unit tests", "test", "add unit tests"),
+        ],
+        ids=["feat", "fix", "docs", "chore", "refactor", "test"],
+    )
+    def test_type_no_scope(
+        self, message: str, expected_type: str, expected_desc: str
+    ) -> None:
+        result = parse_conventional_commit(message)
+        assert result.type == expected_type
         assert result.scope == ""
-        assert result.description == "add user login"
-        assert result.is_conventional is True
-
-    def test_fix_no_scope(self) -> None:
-        result = parse_conventional_commit("fix: resolve null pointer")
-        assert result.type == "fix"
-        assert result.description == "resolve null pointer"
-        assert result.is_conventional is True
-
-    def test_docs_type(self) -> None:
-        result = parse_conventional_commit("docs: update readme")
-        assert result.type == "docs"
-        assert result.is_conventional is True
-
-    def test_chore_type(self) -> None:
-        result = parse_conventional_commit("chore: bump dependencies")
-        assert result.type == "chore"
-        assert result.is_conventional is True
-
-    def test_refactor_type(self) -> None:
-        result = parse_conventional_commit("refactor: simplify parser")
-        assert result.type == "refactor"
-        assert result.is_conventional is True
-
-    def test_test_type(self) -> None:
-        result = parse_conventional_commit("test: add unit tests")
-        assert result.type == "test"
+        assert result.description == expected_desc
         assert result.is_conventional is True
 
     def test_with_scope(self) -> None:
@@ -175,64 +165,40 @@ class TestClassifyCommit:
         assert result.is_conventional is True
         assert result.type == "feat"
 
-    def test_fix_keywords(self) -> None:
-        result = classify_commit("Fixed the login bug")
-        assert result.type == "fix"
-        assert result.is_conventional is False
-
-    def test_bug_keyword(self) -> None:
-        result = classify_commit("Bug in user registration")
-        assert result.type == "fix"
-        assert result.is_conventional is False
-
-    def test_patch_keyword(self) -> None:
-        result = classify_commit("Patch for security issue")
-        assert result.type == "fix"
-        assert result.is_conventional is False
-
-    def test_add_keyword(self) -> None:
-        result = classify_commit("Add new dashboard feature")
-        assert result.type == "feat"
-        assert result.is_conventional is False
-
-    def test_feature_keyword(self) -> None:
-        result = classify_commit("New feature: dark mode")
-        assert result.type == "feat"
-        assert result.is_conventional is False
-
-    def test_implement_keyword(self) -> None:
-        result = classify_commit("Implement caching layer")
-        assert result.type == "feat"
-        assert result.is_conventional is False
-
-    def test_doc_keyword(self) -> None:
-        result = classify_commit("Updated documentation")
-        assert result.type == "docs"
-        assert result.is_conventional is False
-
-    def test_readme_keyword(self) -> None:
-        result = classify_commit("Update README with examples")
-        assert result.type == "docs"
-        assert result.is_conventional is False
-
-    def test_refactor_keyword(self) -> None:
-        result = classify_commit("Refactor database module")
-        assert result.type == "refactor"
-        assert result.is_conventional is False
-
-    def test_clean_keyword(self) -> None:
-        result = classify_commit("Clean up unused imports")
-        assert result.type == "refactor"
-        assert result.is_conventional is False
-
-    def test_test_keyword(self) -> None:
-        result = classify_commit("Unit tests for the parser module")
-        assert result.type == "test"
-        assert result.is_conventional is False
-
-    def test_default_chore(self) -> None:
-        result = classify_commit("Bump version to 2.0.0")
-        assert result.type == "chore"
+    @pytest.mark.parametrize(
+        "message,expected_type",
+        [
+            ("Fixed the login bug", "fix"),
+            ("Bug in user registration", "fix"),
+            ("Patch for security issue", "fix"),
+            ("Add new dashboard feature", "feat"),
+            ("New feature: dark mode", "feat"),
+            ("Implement caching layer", "feat"),
+            ("Updated documentation", "docs"),
+            ("Update README with examples", "docs"),
+            ("Refactor database module", "refactor"),
+            ("Clean up unused imports", "refactor"),
+            ("Unit tests for the parser module", "test"),
+            ("Bump version to 2.0.0", "chore"),
+        ],
+        ids=[
+            "fix-fixed",
+            "fix-bug",
+            "fix-patch",
+            "feat-add",
+            "feat-feature",
+            "feat-implement",
+            "docs-documentation",
+            "docs-readme",
+            "refactor-refactor",
+            "refactor-clean",
+            "test-keyword",
+            "chore-default",
+        ],
+    )
+    def test_keyword_classification(self, message: str, expected_type: str) -> None:
+        result = classify_commit(message)
+        assert result.type == expected_type
         assert result.is_conventional is False
 
     def test_empty_message_classify(self) -> None:

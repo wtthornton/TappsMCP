@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestExpertConsultationPipeline:
     """End-to-end expert consultation tests using real knowledge files."""
 
@@ -85,6 +86,7 @@ class TestExpertConsultationPipeline:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestExpertListPipeline:
     """End-to-end list_experts tests."""
 
@@ -107,6 +109,7 @@ class TestExpertListPipeline:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestRAGWithRealKnowledgeFiles:
     """Tests RAG search against the actual bundled knowledge files."""
 
@@ -134,6 +137,7 @@ class TestRAGWithRealKnowledgeFiles:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestDomainDetectionFromProject:
     """Tests domain detection against real project structures."""
 
@@ -158,6 +162,7 @@ class TestDomainDetectionFromProject:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMCPToolHandlers:
     """Tests for the MCP tool wrappers in server.py."""
 

@@ -10,14 +10,13 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from docs_mcp.generators.diagrams import DiagramGenerator, DiagramResult
+from tests.helpers import make_settings as _make_settings
 
 
 # ---------------------------------------------------------------------------
@@ -71,38 +70,6 @@ class Order(BaseModel):
     user: User
     total: float
 '''
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously for testing."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _make_settings(root: Path) -> MagicMock:
-    """Create a mock DocsMCPSettings pointing to *root*."""
-    settings = MagicMock()
-    settings.project_root = root
-    settings.output_dir = "docs"
-    settings.default_style = "standard"
-    settings.default_format = "markdown"
-    settings.include_toc = True
-    settings.include_badges = True
-    settings.changelog_format = "keep-a-changelog"
-    settings.adr_format = "madr"
-    settings.diagram_format = "mermaid"
-    settings.git_log_limit = 100
-    settings.log_level = "INFO"
-    settings.log_json = False
-    return settings
 
 
 # ---------------------------------------------------------------------------
@@ -747,7 +714,7 @@ class TestD2ThemesAcrossTypes:
 class TestDocsGenerateDiagramD2:
     """docs_generate_diagram MCP tool with D2 format and theme."""
 
-    def test_tool_accepts_d2_format(self, python_project: Path) -> None:
+    async def test_tool_accepts_d2_format(self, python_project: Path) -> None:
         """MCP tool generates D2 output when format=d2."""
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
@@ -755,18 +722,18 @@ class TestDocsGenerateDiagramD2:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(python_project),
         ), patch("docs_mcp.server_gen_tools._record_call"):
-            result = _run(docs_generate_diagram(
+            result = await docs_generate_diagram(
                 diagram_type="class_hierarchy",
                 format="d2",
                 project_root=str(python_project),
-            ))
+            )
 
         assert result.get("success") is True
         data = result.get("data", {})
         assert data.get("format") == "d2"
         assert "shape: class" in data.get("content", "")
 
-    def test_tool_accepts_theme_parameter(self, python_project: Path) -> None:
+    async def test_tool_accepts_theme_parameter(self, python_project: Path) -> None:
         """MCP tool passes theme to DiagramGenerator."""
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
@@ -774,18 +741,18 @@ class TestDocsGenerateDiagramD2:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(python_project),
         ), patch("docs_mcp.server_gen_tools._record_call"):
-            result = _run(docs_generate_diagram(
+            result = await docs_generate_diagram(
                 diagram_type="class_hierarchy",
                 format="d2",
                 theme="sketch",
                 project_root=str(python_project),
-            ))
+            )
 
         assert result.get("success") is True
         data = result.get("data", {})
         assert "sketch: true" in data.get("content", "")
 
-    def test_tool_d2_er_diagram(self, model_project: Path) -> None:
+    async def test_tool_d2_er_diagram(self, model_project: Path) -> None:
         """MCP tool generates D2 ER diagrams."""
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
@@ -793,11 +760,11 @@ class TestDocsGenerateDiagramD2:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(model_project),
         ), patch("docs_mcp.server_gen_tools._record_call"):
-            result = _run(docs_generate_diagram(
+            result = await docs_generate_diagram(
                 diagram_type="er_diagram",
                 format="d2",
                 project_root=str(model_project),
-            ))
+            )
 
         assert result.get("success") is True
         data = result.get("data", {})

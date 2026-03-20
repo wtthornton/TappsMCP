@@ -233,8 +233,8 @@ class TestAdaptiveWeightDelegation:
         assert results
         # Look for weight signal in results.
         security_results = [r for r in results if r.domain == "security"]
-        if security_results:
-            assert any("weight:" in s for s in security_results[0].signals)
+        assert security_results, "Expected security domain in results"
+        assert any("weight:" in s for s in security_results[0].signals)
 
     def test_weight_affects_ranking(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -260,10 +260,11 @@ class TestAdaptiveWeightDelegation:
         assert results
         # Testing should be boosted to top due to higher weight.
         domains = [r.domain for r in results]
-        if "testing-strategies" in domains and "security" in domains:
-            testing_idx = domains.index("testing-strategies")
-            security_idx = domains.index("security")
-            assert testing_idx < security_idx
+        assert "testing-strategies" in domains, f"Expected testing-strategies in {domains}"
+        assert "security" in domains, f"Expected security in {domains}"
+        testing_idx = domains.index("testing-strategies")
+        security_idx = domains.index("security")
+        assert testing_idx < security_idx
 
     def test_fallback_on_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

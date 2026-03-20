@@ -13,6 +13,7 @@ from tapps_mcp.tools.subprocess_utils import CommandResult
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestSecurityPipeline:
     @pytest.fixture
     def clean_file(self, tmp_path: Path) -> Path:
@@ -90,6 +91,7 @@ class TestSecurityPipeline:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestSecretScannerIntegration:
     """Integration tests for the SecretScanner standalone."""
 

@@ -17,21 +17,18 @@ class TestEngagementLevelSettings:
         settings = load_settings(project_root=tmp_path)
         assert settings.llm_engagement_level == "medium"
 
-    def test_loads_from_yaml(self, tmp_path):
+    @pytest.mark.parametrize(
+        "level",
+        ["high", "low"],
+        ids=["high", "low"],
+    )
+    def test_loads_level_from_yaml(self, tmp_path, level):
         from tapps_mcp.config.settings import load_settings
 
         config = tmp_path / ".tapps-mcp.yaml"
-        config.write_text("llm_engagement_level: high\n", encoding="utf-8")
+        config.write_text(f"llm_engagement_level: {level}\n", encoding="utf-8")
         settings = load_settings(project_root=tmp_path)
-        assert settings.llm_engagement_level == "high"
-
-    def test_loads_low_from_yaml(self, tmp_path):
-        from tapps_mcp.config.settings import load_settings
-
-        config = tmp_path / ".tapps-mcp.yaml"
-        config.write_text("llm_engagement_level: low\n", encoding="utf-8")
-        settings = load_settings(project_root=tmp_path)
-        assert settings.llm_engagement_level == "low"
+        assert settings.llm_engagement_level == level
 
     def test_invalid_value_raises_error(self, tmp_path):
         from pydantic import ValidationError

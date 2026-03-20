@@ -2,28 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from docs_mcp.analyzers.diataxis import DiataxisClassifier, DiataxisResult
 from docs_mcp.validators.diataxis import DiataxisValidator
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+from tests.helpers import make_settings
 
 
 def _write(path: Path, content: str) -> None:
@@ -213,38 +199,33 @@ class TestDiataxisValidator:
 
 
 class TestDocsCheckDiataxisTool:
-    def _make_settings(self, root: Path) -> MagicMock:
-        settings = MagicMock()
-        settings.project_root = root
-        return settings
-
-    def test_success(self, tmp_path: Path) -> None:
+    async def test_success(self, tmp_path: Path) -> None:
         _write(tmp_path / "README.md", "# Project\n\nDescription.\n")
         from docs_mcp.server_val_tools import docs_check_diataxis
 
         with patch("docs_mcp.server_val_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_check_diataxis(project_root=str(tmp_path)))
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_check_diataxis(project_root=str(tmp_path))
 
         assert result["success"] is True
         assert "balance_score" in result["data"]
         assert "coverage" in result["data"]
         assert "recommendations" in result["data"]
 
-    def test_invalid_root(self, tmp_path: Path) -> None:
+    async def test_invalid_root(self, tmp_path: Path) -> None:
         from docs_mcp.server_val_tools import docs_check_diataxis
 
         bad_path = str(tmp_path / "nonexistent_dir_xyz")
-        result = _run(docs_check_diataxis(project_root=bad_path))
+        result = await docs_check_diataxis(project_root=bad_path)
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
-    def test_empty_project(self, tmp_path: Path) -> None:
+    async def test_empty_project(self, tmp_path: Path) -> None:
         from docs_mcp.server_val_tools import docs_check_diataxis
 
         with patch("docs_mcp.server_val_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_check_diataxis(project_root=str(tmp_path)))
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_check_diataxis(project_root=str(tmp_path))
 
         assert result["success"] is True
         assert result["data"]["balance_score"] == 0.0

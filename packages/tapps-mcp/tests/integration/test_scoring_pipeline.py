@@ -30,6 +30,7 @@ def greet(name: str) -> str:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestScoringPipeline:
     """End-to-end scoring pipeline tests."""
 

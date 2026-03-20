@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from tapps_core.security.secret_scanner import (
     SecretFinding,
     SecretScanner,
@@ -53,22 +55,25 @@ class TestSecretScanner:
 
     # --- API key patterns ---
 
-    def test_detect_api_key(self) -> None:
+    @pytest.mark.parametrize(
+        "code",
+        [
+            'api_key = "ABCDEF1234567890abcdef"',
+            'api_key: "ABCDEF1234567890abcdef"',
+            'apikey = "ABCDEF1234567890abcdef"',
+        ],
+        ids=["equals", "colon", "no-separator"],
+    )
+    def test_detect_api_key_variants(self, code: str) -> None:
+        findings = self.scanner.scan_content(code, "test.py")
+        assert len(findings) >= 1
+
+    def test_detect_api_key_type_and_severity(self) -> None:
         code = 'api_key = "ABCDEF1234567890abcdef"'
         findings = self.scanner.scan_content(code, "test.py")
         assert len(findings) >= 1
         assert findings[0].secret_type == "api_key"
         assert findings[0].severity == "high"
-
-    def test_detect_api_key_colon(self) -> None:
-        code = 'api_key: "ABCDEF1234567890abcdef"'
-        findings = self.scanner.scan_content(code, "test.py")
-        assert len(findings) >= 1
-
-    def test_detect_apikey_no_separator(self) -> None:
-        code = 'apikey = "ABCDEF1234567890abcdef"'
-        findings = self.scanner.scan_content(code, "test.py")
-        assert len(findings) >= 1
 
     # --- Secret key patterns ---
 
@@ -89,21 +94,23 @@ class TestSecretScanner:
 
     # --- Token patterns ---
 
-    def test_detect_token(self) -> None:
+    @pytest.mark.parametrize(
+        "code",
+        [
+            'token = "ghp_1234567890abcdefghij"',
+            'access_token = "eyJhbGciOiJIUzI1NiIsI"',
+            'auth_token = "abcdefghijklmnopqrst1234"',
+        ],
+        ids=["token", "access-token", "auth-token"],
+    )
+    def test_detect_token_variants(self, code: str) -> None:
+        findings = self.scanner.scan_content(code, "test.py")
+        assert len(findings) >= 1
+
+    def test_detect_token_type(self) -> None:
         code = 'token = "ghp_1234567890abcdefghij"'
         findings = self.scanner.scan_content(code, "test.py")
-        assert len(findings) >= 1
         assert any(f.secret_type == "token" for f in findings)
-
-    def test_detect_access_token(self) -> None:
-        code = 'access_token = "eyJhbGciOiJIUzI1NiIsI"'
-        findings = self.scanner.scan_content(code, "test.py")
-        assert len(findings) >= 1
-
-    def test_detect_auth_token(self) -> None:
-        code = 'auth_token = "abcdefghijklmnopqrst1234"'
-        findings = self.scanner.scan_content(code, "test.py")
-        assert len(findings) >= 1
 
     # --- AWS patterns ---
 
@@ -116,21 +123,23 @@ class TestSecretScanner:
 
     # --- Private key patterns ---
 
-    def test_detect_rsa_private_key(self) -> None:
+    @pytest.mark.parametrize(
+        "code",
+        [
+            "-----BEGIN RSA PRIVATE KEY-----",
+            "-----BEGIN EC PRIVATE KEY-----",
+            "-----BEGIN PRIVATE KEY-----",
+        ],
+        ids=["rsa", "ec", "generic"],
+    )
+    def test_detect_private_key_variants(self, code: str) -> None:
+        findings = self.scanner.scan_content(code, "test.py")
+        assert len(findings) >= 1
+
+    def test_detect_private_key_type(self) -> None:
         code = "-----BEGIN RSA PRIVATE KEY-----"
         findings = self.scanner.scan_content(code, "test.py")
-        assert len(findings) >= 1
         assert any(f.secret_type == "private_key" for f in findings)
-
-    def test_detect_ec_private_key(self) -> None:
-        code = "-----BEGIN EC PRIVATE KEY-----"
-        findings = self.scanner.scan_content(code, "test.py")
-        assert len(findings) >= 1
-
-    def test_detect_generic_private_key(self) -> None:
-        code = "-----BEGIN PRIVATE KEY-----"
-        findings = self.scanner.scan_content(code, "test.py")
-        assert len(findings) >= 1
 
     # --- OAuth patterns ---
 

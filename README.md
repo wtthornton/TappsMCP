@@ -45,7 +45,7 @@ tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp
 - **Platform generation** - auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** - `tapps_init` sets up quality infrastructure in any project with one call
 - **Docker distribution** - Docker images for external distribution and CI/CD
-- **7,900+ tests** across 4 packages with strict mypy and ruff enforcement
+- **7,200+ tests** across 3 packages with strict mypy and ruff enforcement, parallel execution (pytest-xdist), and randomized ordering (pytest-randomly)
 - **Benchmark infrastructure** - AGENTBench evaluation, template optimization, tool effectiveness measurement
 
 ---

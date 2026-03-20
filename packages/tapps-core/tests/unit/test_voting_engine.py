@@ -63,13 +63,16 @@ def _three_expert_matrix() -> ExpertWeightMatrix:
 class TestVotingEngineInit:
     def test_engine_creation(self, engine: AdaptiveVotingEngine) -> None:
         assert engine is not None
-        assert engine._tracker is not None
 
-    def test_engine_with_mock_tracker(self) -> None:
+    @pytest.mark.asyncio
+    async def test_engine_with_mock_tracker_delegates(self) -> None:
         mock_tracker = MagicMock()
         mock_tracker.get_all_performance.return_value = {}
         eng = AdaptiveVotingEngine(mock_tracker)
-        assert eng._tracker is mock_tracker
+        matrix = _two_expert_matrix()
+        # Verify the engine delegates to the provided tracker
+        await eng.adjust_voting_weights(performance_data=None, current_matrix=matrix)
+        mock_tracker.get_all_performance.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

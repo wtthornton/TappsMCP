@@ -20,6 +20,7 @@ from tapps_mcp.knowledge.warming import warm_cache
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestWarmingPipeline:
     """End-to-end cache warming from dependency detection to cache storage."""
 

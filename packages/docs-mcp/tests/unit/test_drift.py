@@ -231,10 +231,10 @@ class TestDriftDetector:
 
         detector = DriftDetector()
         report = detector.check(tmp_path)
-        if report.items:
-            # At least one item should have error severity
-            severities = {item.severity for item in report.items}
-            assert "error" in severities
+        assert report.items, "Expected drift items when code is newer than docs"
+        # At least one item should have error severity
+        severities = {item.severity for item in report.items}
+        assert "error" in severities
 
     def test_doc_dirs_filter(self, tmp_path: Path) -> None:
         """doc_dirs parameter should restrict which docs are searched."""

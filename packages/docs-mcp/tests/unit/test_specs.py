@@ -7,7 +7,6 @@ regeneration, parse_phases_json, and the ``docs_generate_prd`` MCP tool.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -16,38 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from docs_mcp.generators.specs import PRDConfig, PRDGenerator, PRDPhase
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously for testing."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _make_settings(root: Path) -> MagicMock:
-    """Create a mock DocsMCPSettings pointing to *root*."""
-    settings = MagicMock()
-    settings.project_root = root
-    settings.output_dir = "docs"
-    settings.default_style = "standard"
-    settings.default_format = "markdown"
-    settings.include_toc = True
-    settings.include_badges = True
-    settings.changelog_format = "keep-a-changelog"
-    settings.adr_format = "madr"
-    settings.diagram_format = "mermaid"
-    settings.git_log_limit = 100
-    settings.log_level = "INFO"
-    settings.log_json = False
-    return settings
+from tests.helpers import make_settings as _make_settings
 
 
 def _make_config(**kwargs: Any) -> PRDConfig:
@@ -637,12 +605,12 @@ class TestSmartMergerIntegration:
 class TestDocsGeneratePrdTool:
     """Tests for the ``docs_generate_prd`` MCP tool handler."""
 
-    def _call(self, **kwargs: Any) -> dict[str, Any]:
+    async def _call(self, **kwargs: Any) -> dict[str, Any]:
         from docs_mcp.server_gen_tools import docs_generate_prd
 
-        return _run(docs_generate_prd(**kwargs))
+        return await docs_generate_prd(**kwargs)
 
-    def test_basic_success(self, tmp_path: Path) -> None:
+    async def test_basic_success(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -650,24 +618,24 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(title="My Feature", project_root=str(root))
+            result = await self._call(title="My Feature", project_root=str(root))
 
         assert result["success"] is True
         assert result["data"]["title"] == "My Feature"
         assert "# PRD: My Feature" in result["data"]["content"]
 
-    def test_invalid_root(self, tmp_path: Path) -> None:
+    async def test_invalid_root(self, tmp_path: Path) -> None:
         bad_root = tmp_path / "does_not_exist"
         with patch(
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(bad_root),
         ):
-            result = self._call(title="X", project_root=str(bad_root))
+            result = await self._call(title="X", project_root=str(bad_root))
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
-    def test_invalid_phases_json(self, tmp_path: Path) -> None:
+    async def test_invalid_phases_json(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -675,7 +643,7 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 phases="{bad",
                 project_root=str(root),
@@ -684,7 +652,7 @@ class TestDocsGeneratePrdTool:
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_PHASES"
 
-    def test_personas_comma_parsing(self, tmp_path: Path) -> None:
+    async def test_personas_comma_parsing(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -692,7 +660,7 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 personas="Admin, Developer, Viewer",
                 project_root=str(root),
@@ -704,7 +672,7 @@ class TestDocsGeneratePrdTool:
         assert "**Developer**" in content
         assert "**Viewer**" in content
 
-    def test_comprehensive_style(self, tmp_path: Path) -> None:
+    async def test_comprehensive_style(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -712,7 +680,7 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 style="comprehensive",
                 project_root=str(root),
@@ -721,7 +689,7 @@ class TestDocsGeneratePrdTool:
         assert result["success"] is True
         assert "Boundary System" in result["data"]["content"]
 
-    def test_write_to_file(self, tmp_path: Path) -> None:
+    async def test_write_to_file(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -729,7 +697,7 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="Written PRD",
                 output_path="docs/PRD.md",
                 project_root=str(root),
@@ -740,7 +708,7 @@ class TestDocsGeneratePrdTool:
         written = (root / "docs" / "PRD.md").read_text(encoding="utf-8")
         assert "# PRD: Written PRD" in written
 
-    def test_merge_with_existing(self, tmp_path: Path) -> None:
+    async def test_merge_with_existing(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -754,7 +722,7 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="Updated",
                 existing_content=existing,
                 project_root=str(root),
@@ -763,7 +731,7 @@ class TestDocsGeneratePrdTool:
         assert result["success"] is True
         assert result["data"]["merged"] is True
 
-    def test_no_merge_without_existing(self, tmp_path: Path) -> None:
+    async def test_no_merge_without_existing(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -771,12 +739,12 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(title="Fresh", project_root=str(root))
+            result = await self._call(title="Fresh", project_root=str(root))
 
         assert result["success"] is True
         assert result["data"]["merged"] is False
 
-    def test_phases_json_parsing(self, tmp_path: Path) -> None:
+    async def test_phases_json_parsing(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -788,7 +756,7 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 phases=phases,
                 project_root=str(root),
@@ -798,7 +766,7 @@ class TestDocsGeneratePrdTool:
         assert "Phase 1: Alpha" in result["data"]["content"]
         assert "Feature A" in result["data"]["content"]
 
-    def test_constraints_and_non_goals_comma_parsing(self, tmp_path: Path) -> None:
+    async def test_constraints_and_non_goals_comma_parsing(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -806,7 +774,7 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 constraints="Python 3.12+, No Redis",
                 non_goals="Mobile, i18n",
@@ -820,7 +788,7 @@ class TestDocsGeneratePrdTool:
         assert "- Mobile" in content
         assert "- i18n" in content
 
-    def test_generation_error_handling(self, tmp_path: Path) -> None:
+    async def test_generation_error_handling(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -834,12 +802,12 @@ class TestDocsGeneratePrdTool:
                 side_effect=RuntimeError("boom"),
             ),
         ):
-            result = self._call(title="X", project_root=str(root))
+            result = await self._call(title="X", project_root=str(root))
 
         assert result["success"] is False
         assert result["error"]["code"] == "GENERATION_ERROR"
 
-    def test_elapsed_ms_present(self, tmp_path: Path) -> None:
+    async def test_elapsed_ms_present(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -847,7 +815,7 @@ class TestDocsGeneratePrdTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(title="X", project_root=str(root))
+            result = await self._call(title="X", project_root=str(root))
 
         assert "elapsed_ms" in result
         assert isinstance(result["elapsed_ms"], int)

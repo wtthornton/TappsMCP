@@ -2,29 +2,16 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from docs_mcp.generators.diagrams import DiagramGenerator, DiagramResult
 from docs_mcp.generators.interactive_html import InteractiveHtmlGenerator
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+from tests.helpers import make_settings
 
 
 def _write(path: Path, content: str) -> None:
@@ -456,13 +443,7 @@ class TestSequenceAutoDetect:
 
 
 class TestDocsGenerateDiagramSequenceTool:
-    def _make_settings(self, root: Path) -> MagicMock:
-        settings = MagicMock()
-        settings.project_root = root
-        settings.diagram_format = "mermaid"
-        return settings
-
-    def test_manual_flow_spec(self, tmp_path: Path) -> None:
+    async def test_manual_flow_spec(self, tmp_path: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
         spec = json.dumps({
@@ -471,18 +452,18 @@ class TestDocsGenerateDiagramSequenceTool:
         })
 
         with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_diagram(
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_diagram(
                 diagram_type="sequence",
                 flow_spec=spec,
                 project_root=str(tmp_path),
-            ))
+            )
 
         assert result["success"] is True
         assert result["data"]["diagram_type"] == "sequence"
         assert "sequenceDiagram" in result["data"]["content"]
 
-    def test_auto_detect(self, tmp_path: Path) -> None:
+    async def test_auto_detect(self, tmp_path: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
         pkg = tmp_path / "src" / "svc"
@@ -491,11 +472,11 @@ class TestDocsGenerateDiagramSequenceTool:
         _write(pkg / "logic.py", "x = 1\n")
 
         with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_diagram(
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_diagram(
                 diagram_type="sequence",
                 project_root=str(tmp_path),
-            ))
+            )
 
         assert result["success"] is True
         assert result["data"]["diagram_type"] == "sequence"
@@ -579,45 +560,39 @@ class TestInteractiveHtmlGenerator:
 
 
 class TestDocsGenerateInteractiveDiagramsTool:
-    def _make_settings(self, root: Path) -> MagicMock:
-        settings = MagicMock()
-        settings.project_root = root
-        settings.diagram_format = "mermaid"
-        return settings
-
-    def test_success(self, tmp_path: Path) -> None:
+    async def test_success(self, tmp_path: Path) -> None:
         _make_pyproject(tmp_path, dependencies=["fastapi"])
         _write(tmp_path / "src" / "app" / "__init__.py", "")
         _write(tmp_path / "src" / "app" / "main.py", "def run(): pass\n")
         from docs_mcp.server_gen_tools import docs_generate_interactive_diagrams
 
         with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_interactive_diagrams(
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_interactive_diagrams(
                 diagram_types="c4_context",
                 project_root=str(tmp_path),
-            ))
+            )
 
         assert result["success"] is True
         assert result["data"]["diagram_count"] >= 1
         assert "<!DOCTYPE html>" in result["data"]["content"]
 
-    def test_no_types(self, tmp_path: Path) -> None:
+    async def test_no_types(self, tmp_path: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_interactive_diagrams
 
         with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_interactive_diagrams(
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_interactive_diagrams(
                 diagram_types="",
                 project_root=str(tmp_path),
-            ))
+            )
 
         assert result["success"] is False
         assert result["error"]["code"] == "NO_TYPES"
 
-    def test_invalid_root(self, tmp_path: Path) -> None:
+    async def test_invalid_root(self, tmp_path: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_interactive_diagrams
 
         bad_path = str(tmp_path / "nonexistent_xyz")
-        result = _run(docs_generate_interactive_diagrams(project_root=bad_path))
+        result = await docs_generate_interactive_diagrams(project_root=bad_path)
         assert result["success"] is False

@@ -63,6 +63,7 @@ jobs:
       - name: Run tests (${{ matrix.package.name }})
         run: >
           uv run pytest ${{ matrix.package.path }}/tests/
+          -n auto --dist worksteal
           --cov=${{ matrix.package.cov_source }}
           --cov-report=xml:coverage-${{ matrix.package.name }}.xml
           -v

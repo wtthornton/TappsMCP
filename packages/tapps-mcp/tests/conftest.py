@@ -11,9 +11,10 @@ calls must be reset here.  When adding a new cache:
 2. Import and call it in ``_reset_caches()`` below.
 3. Verify isolation by running the new tests twice in a row.
 
-Current resets (10 total):
+Current resets (11 total):
   - settings              — ``tapps_core.config.settings._reset_settings_cache``
   - feature_flags         — ``tapps_core.config.feature_flags.feature_flags.reset``
+  - business_experts      — ``tapps_core.experts.registry.ExpertRegistry.clear_business_experts``
   - tech_stack_domains    — ``tapps_core.experts.engine._reset_tech_stack_domains_cache``
   - scorer           — ``tapps_mcp.server_helpers._reset_scorer_cache``
   - lookup_engine    — ``tapps_mcp.server_helpers._reset_lookup_engine_cache``
@@ -45,9 +46,11 @@ def _reset_caches() -> Generator[None, None, None]:
     from tapps_core.config.settings import _reset_settings_cache
 
     from tapps_core.experts.engine import _reset_tech_stack_domains_cache
+    from tapps_core.experts.registry import ExpertRegistry
 
     _reset_settings_cache()
     feature_flags.reset()
+    ExpertRegistry.clear_business_experts()
     _reset_tech_stack_domains_cache()
 
     # -- tapps-mcp caches --

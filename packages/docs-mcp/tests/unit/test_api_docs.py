@@ -7,10 +7,8 @@ coverage calculation, and the ``docs_generate_api`` MCP tool handler.
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -27,31 +25,7 @@ from docs_mcp.generators.api_docs import (
     _is_noise_constant,
     _is_reexport_module,
 )
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously for testing."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _make_settings(root: Path) -> MagicMock:
-    """Create a mock DocsMCPSettings pointing to root."""
-    settings = MagicMock()
-    settings.project_root = root
-    settings.output_dir = "docs"
-    settings.default_format = "markdown"
-    settings.log_level = "INFO"
-    settings.log_json = False
-    return settings
+from tests.helpers import make_settings as _make_settings
 
 
 # ---------------------------------------------------------------------------
@@ -741,7 +715,7 @@ class TestAPIDocCoverage:
 class TestAPIDocMCPTool:
     """Test docs_generate_api MCP tool response envelope."""
 
-    def test_success_response_envelope(self, tmp_path: Path) -> None:
+    async def test_success_response_envelope(self, tmp_path: Path) -> None:
         """Successful generation returns standard envelope."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -753,13 +727,11 @@ class TestAPIDocMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(
-                docs_generate_api(
-                    source_path="lib.py",
-                    format="markdown",
-                    depth="public",
-                    project_root=str(root),
-                )
+            result = await docs_generate_api(
+                source_path="lib.py",
+                format="markdown",
+                depth="public",
+                project_root=str(root),
             )
 
         assert result["success"] is True
@@ -772,7 +744,7 @@ class TestAPIDocMCPTool:
         assert data["content_length"] > 0
         assert "content" in data
 
-    def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
+    async def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
         """Non-existent project root returns an error."""
         fake = tmp_path / "no_such_dir"
 
@@ -782,12 +754,12 @@ class TestAPIDocMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(fake),
         ):
-            result = _run(docs_generate_api(project_root=str(fake)))
+            result = await docs_generate_api(project_root=str(fake))
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
-    def test_source_not_found_returns_error(self, tmp_path: Path) -> None:
+    async def test_source_not_found_returns_error(self, tmp_path: Path) -> None:
         """Non-existent source_path returns SOURCE_NOT_FOUND error."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -798,17 +770,15 @@ class TestAPIDocMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(
-                docs_generate_api(
-                    source_path="nonexistent.py",
-                    project_root=str(root),
-                )
+            result = await docs_generate_api(
+                source_path="nonexistent.py",
+                project_root=str(root),
             )
 
         assert result["success"] is False
         assert result["error"]["code"] == "SOURCE_NOT_FOUND"
 
-    def test_no_content_returns_error(self, tmp_path: Path) -> None:
+    async def test_no_content_returns_error(self, tmp_path: Path) -> None:
         """A non-Python file produces NO_CONTENT error."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -820,11 +790,9 @@ class TestAPIDocMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(
-                docs_generate_api(
-                    source_path="readme.txt",
-                    project_root=str(root),
-                )
+            result = await docs_generate_api(
+                source_path="readme.txt",
+                project_root=str(root),
             )
 
         assert result["success"] is False

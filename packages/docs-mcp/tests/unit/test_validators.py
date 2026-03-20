@@ -1,85 +1,35 @@
-"""Tests for documentation validators and their MCP tool wrappers.
+"""Tests for MCP tool wrappers around documentation validators.
 
-Covers DriftDetector, CompletenessChecker, LinkChecker, FreshnessChecker,
-and the four MCP tools: docs_check_drift, docs_check_completeness,
-docs_check_links, docs_check_freshness.
+Behavioral tests for individual validators (DriftDetector, CompletenessChecker,
+LinkChecker, FreshnessChecker) live in their dedicated test files:
+  - test_drift.py
+  - test_completeness.py
+  - test_link_checker.py
+  - test_freshness.py
+
+This file tests:
+  1. The server tool integration layer (docs_check_drift, docs_check_completeness,
+     docs_check_links, docs_check_freshness) -- response envelopes, parameter
+     parsing, error handling, patched delegation, filtering, and pagination.
+  2. A small number of validator behavioral tests that are not covered by
+     the individual files (partial coverage, specific recommendations,
+     line numbers on broken links).
 """
 
 from __future__ import annotations
 
-import os
-import time
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 # ---------------------------------------------------------------------------
-# DriftDetector tests
+# Unique validator behavioral tests (not covered in individual test files)
 # ---------------------------------------------------------------------------
 
 
-class TestDriftDetectorEmpty:
-    """DriftDetector on empty or nonexistent projects."""
-
-    def test_empty_project_returns_zero_drift(self, tmp_path: Path) -> None:
-        from docs_mcp.validators.drift import DriftDetector
-
-        report = DriftDetector().check(tmp_path)
-        assert report.total_items == 0
-        assert report.checked_files == 0
-        assert report.drift_score == 0.0
-
-    def test_nonexistent_root_returns_empty_report(self) -> None:
-        from docs_mcp.validators.drift import DriftDetector
-
-        report = DriftDetector().check(Path("/nonexistent/xyz"))
-        assert report.total_items == 0
-        assert report.items == []
-
-
-class TestDriftDetectorCodeOnly:
-    """DriftDetector when there is code but no documentation."""
-
-    def test_code_without_docs_produces_drift(self, tmp_path: Path) -> None:
-        (tmp_path / "app.py").write_text(
-            '"""App module."""\n\ndef process() -> None:\n    pass\n',
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.drift import DriftDetector
-
-        report = DriftDetector().check(tmp_path)
-        assert report.total_items > 0
-        assert report.drift_score > 0.0
-
-    def test_drift_items_have_file_path(self, tmp_path: Path) -> None:
-        (tmp_path / "service.py").write_text(
-            '"""Service."""\n\nclass Handler:\n    """Handle."""\n    pass\n',
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.drift import DriftDetector
-
-        report = DriftDetector().check(tmp_path)
-        assert report.total_items > 0
-        assert all(item.file_path for item in report.items)
-
-
-class TestDriftDetectorFullDocs:
-    """DriftDetector when docs reference all public names."""
-
-    def test_no_drift_when_docs_cover_names(self, tmp_path: Path) -> None:
-        (tmp_path / "calc.py").write_text(
-            '"""Calc."""\n\ndef add() -> int:\n    """Add."""\n    return 0\n',
-            encoding="utf-8",
-        )
-        (tmp_path / "README.md").write_text(
-            "# Calc\n\nThe `add` function adds numbers.\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.drift import DriftDetector
-
-        report = DriftDetector().check(tmp_path)
-        assert report.total_items == 0
+class TestDriftDetectorPartialCoverage:
+    """Drift detector partial coverage scenario not in test_drift.py."""
 
     def test_partial_coverage_produces_partial_drift(self, tmp_path: Path) -> None:
         (tmp_path / "utils.py").write_text(
@@ -101,128 +51,8 @@ class TestDriftDetectorFullDocs:
         assert "beta" in descriptions
 
 
-class TestDriftDetectorMixed:
-    """DriftDetector with mixed scenarios."""
-
-    def test_doc_dirs_restricts_search(self, tmp_path: Path) -> None:
-        (tmp_path / "api.py").write_text(
-            '"""API."""\n\ndef endpoint() -> None:\n    pass\n',
-            encoding="utf-8",
-        )
-        (tmp_path / "README.md").write_text(
-            "# Project\n\nUse `endpoint` for requests.\n",
-            encoding="utf-8",
-        )
-        docs = tmp_path / "docs"
-        docs.mkdir()
-        (docs / "guide.md").write_text("# Guide\n\nGeneral info.\n", encoding="utf-8")
-
-        from docs_mcp.validators.drift import DriftDetector
-
-        # Without restriction: README covers endpoint -> no drift
-        report_all = DriftDetector().check(tmp_path)
-        # With restriction to docs/ only: endpoint not mentioned -> drift
-        report_docs = DriftDetector().check(tmp_path, doc_dirs=["docs"])
-        assert report_docs.total_items > 0
-
-    def test_severity_error_when_code_newer_than_docs(self, tmp_path: Path) -> None:
-        readme = tmp_path / "README.md"
-        readme.write_text("# Project\n", encoding="utf-8")
-        old_time = time.time() - 86400 * 60
-        os.utime(readme, (old_time, old_time))
-
-        (tmp_path / "main.py").write_text(
-            '"""Main."""\n\ndef new_feature() -> None:\n    pass\n',
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.drift import DriftDetector
-
-        report = DriftDetector().check(tmp_path)
-        if report.items:
-            severities = {item.severity for item in report.items}
-            assert "error" in severities
-
-    def test_empty_python_files_skipped(self, tmp_path: Path) -> None:
-        (tmp_path / "empty.py").write_text("", encoding="utf-8")
-        from docs_mcp.validators.drift import DriftDetector
-
-        report = DriftDetector().check(tmp_path)
-        assert report.checked_files == 0
-
-    def test_drift_score_capped_at_one(self, tmp_path: Path) -> None:
-        for i in range(10):
-            (tmp_path / f"mod{i}.py").write_text(
-                f'"""Mod {i}."""\n\ndef func_{i}() -> None:\n    pass\n',
-                encoding="utf-8",
-            )
-        from docs_mcp.validators.drift import DriftDetector
-
-        report = DriftDetector().check(tmp_path)
-        assert report.drift_score <= 1.0
-
-
-# ---------------------------------------------------------------------------
-# CompletenessChecker tests
-# ---------------------------------------------------------------------------
-
-
-class TestCompletenessCheckerEmpty:
-    """CompletenessChecker on empty or nonexistent projects."""
-
-    def test_empty_project_low_score(self, tmp_path: Path) -> None:
-        from docs_mcp.validators.completeness import CompletenessChecker
-
-        report = CompletenessChecker().check(tmp_path)
-        assert report.overall_score == 0.0
-        assert len(report.recommendations) > 0
-
-    def test_nonexistent_root(self) -> None:
-        from docs_mcp.validators.completeness import CompletenessChecker
-
-        report = CompletenessChecker().check(Path("/nonexistent/xyz"))
-        assert report.overall_score == 0.0
-        assert len(report.recommendations) > 0
-
-
-class TestCompletenessCheckerFullDocs:
-    """CompletenessChecker with all docs present."""
-
-    def test_all_essential_docs_high_score(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
-        (tmp_path / "LICENSE").write_text("MIT License\n", encoding="utf-8")
-        (tmp_path / "CONTRIBUTING.md").write_text("# Contributing\n", encoding="utf-8")
-        (tmp_path / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
-        docs = tmp_path / "docs"
-        docs.mkdir()
-        (docs / "guide.md").write_text("# Guide\n", encoding="utf-8")
-
-        from docs_mcp.validators.completeness import CompletenessChecker
-
-        report = CompletenessChecker().check(tmp_path)
-        assert report.overall_score > 50.0
-
-    def test_all_categories_returned(self, tmp_path: Path) -> None:
-        from docs_mcp.validators.completeness import CompletenessChecker
-
-        report = CompletenessChecker().check(tmp_path)
-        names = {c.name for c in report.categories}
-        assert "essential_docs" in names
-        assert "development_docs" in names
-        assert "api_documentation" in names
-        assert "inline_docs" in names
-        assert "project_docs" in names
-
-
-class TestCompletenessCheckerMissing:
-    """CompletenessChecker with partial documentation."""
-
-    def test_missing_readme_generates_recommendation(self, tmp_path: Path) -> None:
-        (tmp_path / "LICENSE").write_text("MIT\n", encoding="utf-8")
-        from docs_mcp.validators.completeness import CompletenessChecker
-
-        report = CompletenessChecker().check(tmp_path)
-        has_rec = any("README" in r for r in report.recommendations)
-        assert has_rec
+class TestCompletenessCheckerRecommendations:
+    """Completeness recommendation tests not covered in test_completeness.py."""
 
     def test_missing_changelog_generates_recommendation(self, tmp_path: Path) -> None:
         (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
@@ -231,16 +61,6 @@ class TestCompletenessCheckerMissing:
         report = CompletenessChecker().check(tmp_path)
         has_rec = any("CHANGELOG" in r for r in report.recommendations)
         assert has_rec
-
-    def test_weight_affects_score(self, tmp_path: Path) -> None:
-        """Essential docs (weight=3) should affect score more than project docs (weight=1)."""
-        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
-        (tmp_path / "LICENSE").write_text("MIT\n", encoding="utf-8")
-        from docs_mcp.validators.completeness import CompletenessChecker
-
-        report = CompletenessChecker().check(tmp_path)
-        # Essential docs score 1.0*3 out of total weight 9 -> ~33%
-        assert report.overall_score > 25.0
 
     def test_undocumented_module_recommendation(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -263,107 +83,8 @@ class TestCompletenessCheckerMissing:
         assert has_docs_rec
 
 
-# ---------------------------------------------------------------------------
-# LinkChecker tests
-# ---------------------------------------------------------------------------
-
-
-class TestLinkCheckerEmpty:
-    """LinkChecker on empty or nonexistent projects."""
-
-    def test_empty_project_no_links(self, tmp_path: Path) -> None:
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert report.total_links == 0
-        assert report.valid_links == 0
-        assert report.broken_links == []
-
-    def test_nonexistent_root(self) -> None:
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(Path("/nonexistent/xyz"))
-        assert report.total_links == 0
-
-
-class TestLinkCheckerValidLinks:
-    """LinkChecker with valid links."""
-
-    def test_valid_file_link(self, tmp_path: Path) -> None:
-        (tmp_path / "guide.md").write_text("# Guide\n", encoding="utf-8")
-        (tmp_path / "README.md").write_text(
-            "# Project\n\nSee [guide](guide.md).\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert report.total_links == 1
-        assert report.valid_links == 1
-        assert report.broken_links == []
-
-    def test_valid_anchor_link(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text(
-            "# Project\n\n[Setup](#setup)\n\n## Setup\n\nInstructions.\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert report.total_links == 1
-        assert report.valid_links == 1
-
-    def test_valid_cross_file_anchor(self, tmp_path: Path) -> None:
-        (tmp_path / "guide.md").write_text(
-            "# Guide\n\n## Installation\n",
-            encoding="utf-8",
-        )
-        (tmp_path / "README.md").write_text(
-            "# Project\n\n[Install](guide.md#installation).\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert report.valid_links == 1
-
-    def test_external_links_skipped(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text(
-            "# Project\n\n[Google](https://google.com)\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert report.total_links == 0
-
-    def test_subdirectory_link(self, tmp_path: Path) -> None:
-        docs = tmp_path / "docs"
-        docs.mkdir()
-        (docs / "api.md").write_text("# API\n", encoding="utf-8")
-        (tmp_path / "README.md").write_text(
-            "[API](docs/api.md)\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert report.valid_links == 1
-
-
-class TestLinkCheckerBrokenFileLinks:
-    """LinkChecker with broken file references."""
-
-    def test_broken_file_reference(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text(
-            "# Project\n\n[Missing](missing.md)\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert len(report.broken_links) == 1
-        assert report.broken_links[0].reason == "file_not_found"
+class TestLinkCheckerLineNumbers:
+    """Link checker line number test not covered in test_link_checker.py."""
 
     def test_broken_link_has_line_number(self, tmp_path: Path) -> None:
         (tmp_path / "README.md").write_text(
@@ -375,175 +96,6 @@ class TestLinkCheckerBrokenFileLinks:
         report = LinkChecker().check(tmp_path)
         assert len(report.broken_links) == 1
         assert report.broken_links[0].line == 5
-
-    def test_multiple_broken_links(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text(
-            "[A](a.md) and [B](b.md)\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert len(report.broken_links) == 2
-
-
-class TestLinkCheckerBrokenAnchors:
-    """LinkChecker with broken anchor references."""
-
-    def test_broken_same_file_anchor(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text(
-            "# Project\n\n[Jump](#nonexistent)\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert len(report.broken_links) == 1
-        assert report.broken_links[0].reason == "anchor_not_found"
-
-    def test_broken_cross_file_anchor(self, tmp_path: Path) -> None:
-        (tmp_path / "guide.md").write_text("# Guide\n\n## Setup\n", encoding="utf-8")
-        (tmp_path / "README.md").write_text(
-            "[Usage](guide.md#usage)\n",
-            encoding="utf-8",
-        )
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path)
-        assert len(report.broken_links) == 1
-        assert report.broken_links[0].reason == "anchor_not_found"
-
-
-class TestLinkCheckerFilesFilter:
-    """LinkChecker with files parameter filtering."""
-
-    def test_files_restricts_scanning(self, tmp_path: Path) -> None:
-        (tmp_path / "good.md").write_text("# Good\n", encoding="utf-8")
-        (tmp_path / "a.md").write_text("[link](good.md)\n", encoding="utf-8")
-        (tmp_path / "b.md").write_text("[broken](missing.md)\n", encoding="utf-8")
-
-        from docs_mcp.validators.link_checker import LinkChecker
-
-        report = LinkChecker().check(tmp_path, files=["a.md"])
-        assert report.total_links == 1
-        assert report.valid_links == 1
-        assert report.broken_links == []
-
-
-# ---------------------------------------------------------------------------
-# FreshnessChecker tests
-# ---------------------------------------------------------------------------
-
-
-class TestFreshnessCheckerEmpty:
-    """FreshnessChecker on empty or nonexistent projects."""
-
-    def test_empty_project_zero_score(self, tmp_path: Path) -> None:
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(tmp_path)
-        assert report.items == []
-        assert report.freshness_score == 0.0
-        assert report.average_age_days == 0.0
-
-    def test_nonexistent_root(self) -> None:
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(Path("/nonexistent/xyz"))
-        assert report.freshness_score == 0.0
-
-
-class TestFreshnessCheckerFreshDocs:
-    """FreshnessChecker with recently modified docs."""
-
-    def test_fresh_files_high_score(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
-        (tmp_path / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
-
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(tmp_path)
-        assert len(report.items) == 2
-        assert report.freshness_score > 90.0
-        for item in report.items:
-            assert item.freshness == "fresh"
-
-    def test_fresh_file_age_near_zero(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(tmp_path)
-        assert report.average_age_days < 1.0
-
-    def test_iso_date_format(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(tmp_path)
-        iso = report.items[0].last_modified
-        assert "T" in iso
-        assert len(iso) == 20  # YYYY-MM-DDTHH:MM:SSZ
-        assert iso.endswith("Z")
-
-
-class TestFreshnessCheckerStaleDocs:
-    """FreshnessChecker with old modification times."""
-
-    def test_stale_files_low_score(self, tmp_path: Path) -> None:
-        readme = tmp_path / "README.md"
-        readme.write_text("# Project\n", encoding="utf-8")
-        old_time = time.time() - 86400 * 200
-        os.utime(readme, (old_time, old_time))
-
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(tmp_path)
-        assert report.items[0].freshness == "stale"
-        assert report.freshness_score < 50.0
-
-    def test_ancient_files(self, tmp_path: Path) -> None:
-        readme = tmp_path / "README.md"
-        readme.write_text("# Old\n", encoding="utf-8")
-        old_time = time.time() - 86400 * 730
-        os.utime(readme, (old_time, old_time))
-
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(tmp_path)
-        assert report.items[0].freshness == "ancient"
-        assert report.items[0].age_days >= 365
-
-    def test_mixed_freshness_intermediate_score(self, tmp_path: Path) -> None:
-        (tmp_path / "fresh.md").write_text("# Fresh\n", encoding="utf-8")
-        old_doc = tmp_path / "old.md"
-        old_doc.write_text("# Old\n", encoding="utf-8")
-        old_time = time.time() - 86400 * 200
-        os.utime(old_doc, (old_time, old_time))
-
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(tmp_path)
-        labels = {item.freshness for item in report.items}
-        assert "fresh" in labels
-
-    def test_score_between_zero_and_hundred(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(tmp_path)
-        assert 0.0 <= report.freshness_score <= 100.0
-
-    def test_skip_dirs_honored(self, tmp_path: Path) -> None:
-        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
-        venv = tmp_path / ".venv"
-        venv.mkdir()
-        (venv / "hidden.md").write_text("# Hidden\n", encoding="utf-8")
-
-        from docs_mcp.validators.freshness import FreshnessChecker
-
-        report = FreshnessChecker().check(tmp_path)
-        paths = {item.file_path for item in report.items}
-        assert not any(".venv" in p for p in paths)
 
 
 # ---------------------------------------------------------------------------

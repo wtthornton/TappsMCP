@@ -41,6 +41,7 @@ def _sample_audit_result(
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestDependencyScanTool:
     """End-to-end tests for tapps_dependency_scan MCP tool."""
 
@@ -164,6 +165,7 @@ class TestDependencyScanTool:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestDependencyGraphTool:
     """End-to-end tests for tapps_dependency_graph MCP tool."""
 

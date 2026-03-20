@@ -7,7 +7,6 @@ auto-populate with mocked analyzers, parse_stories_json, and the
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -16,38 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from docs_mcp.generators.epics import EpicConfig, EpicGenerator, EpicStoryStub
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously for testing."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _make_settings(root: Path) -> MagicMock:
-    """Create a mock DocsMCPSettings pointing to *root*."""
-    settings = MagicMock()
-    settings.project_root = root
-    settings.output_dir = "docs"
-    settings.default_style = "standard"
-    settings.default_format = "markdown"
-    settings.include_toc = True
-    settings.include_badges = True
-    settings.changelog_format = "keep-a-changelog"
-    settings.adr_format = "madr"
-    settings.diagram_format = "mermaid"
-    settings.git_log_limit = 100
-    settings.log_level = "INFO"
-    settings.log_json = False
-    return settings
+from tests.helpers import make_settings as _make_settings
 
 
 def _make_config(**kwargs: Any) -> EpicConfig:
@@ -741,12 +709,12 @@ class TestEpicStatusValidation:
 class TestDocsGenerateEpicTool:
     """Tests for the ``docs_generate_epic`` MCP tool handler."""
 
-    def _call(self, **kwargs: Any) -> dict[str, Any]:
+    async def _call(self, **kwargs: Any) -> dict[str, Any]:
         from docs_mcp.server_gen_tools import docs_generate_epic
 
-        return _run(docs_generate_epic(**kwargs))
+        return await docs_generate_epic(**kwargs)
 
-    def test_basic_success(self, tmp_path: Path) -> None:
+    async def test_basic_success(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -754,25 +722,25 @@ class TestDocsGenerateEpicTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(title="My Feature", number=10, project_root=str(root))
+            result = await self._call(title="My Feature", number=10, project_root=str(root))
 
         assert result["success"] is True
         assert result["data"]["title"] == "My Feature"
         assert result["data"]["number"] == 10
         assert "# Epic 10: My Feature" in result["data"]["content"]
 
-    def test_invalid_root(self, tmp_path: Path) -> None:
+    async def test_invalid_root(self, tmp_path: Path) -> None:
         bad_root = tmp_path / "does_not_exist"
         with patch(
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(bad_root),
         ):
-            result = self._call(title="X", project_root=str(bad_root))
+            result = await self._call(title="X", project_root=str(bad_root))
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
-    def test_invalid_stories_json(self, tmp_path: Path) -> None:
+    async def test_invalid_stories_json(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -780,7 +748,7 @@ class TestDocsGenerateEpicTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 stories="{bad",
                 project_root=str(root),
@@ -789,7 +757,7 @@ class TestDocsGenerateEpicTool:
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_STORIES"
 
-    def test_comma_separated_fields(self, tmp_path: Path) -> None:
+    async def test_comma_separated_fields(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -797,7 +765,7 @@ class TestDocsGenerateEpicTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 dependencies="Epic 0, Epic 4",
                 blocks="Epic 43",
@@ -815,7 +783,7 @@ class TestDocsGenerateEpicTool:
         assert "- Note1" in content
         assert "- NG1" in content
 
-    def test_comprehensive_style(self, tmp_path: Path) -> None:
+    async def test_comprehensive_style(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -823,7 +791,7 @@ class TestDocsGenerateEpicTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 style="comprehensive",
                 project_root=str(root),
@@ -832,7 +800,7 @@ class TestDocsGenerateEpicTool:
         assert result["success"] is True
         assert "## Implementation Order" in result["data"]["content"]
 
-    def test_write_to_file(self, tmp_path: Path) -> None:
+    async def test_write_to_file(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -840,7 +808,7 @@ class TestDocsGenerateEpicTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="Written Epic",
                 number=99,
                 output_path="docs/epics/EPIC-99.md",
@@ -852,7 +820,7 @@ class TestDocsGenerateEpicTool:
         written = (root / "docs" / "epics" / "EPIC-99.md").read_text(encoding="utf-8")
         assert "# Epic 99: Written Epic" in written
 
-    def test_stories_json_parsing(self, tmp_path: Path) -> None:
+    async def test_stories_json_parsing(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -865,7 +833,7 @@ class TestDocsGenerateEpicTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 number=10,
                 stories=stories,
@@ -877,7 +845,7 @@ class TestDocsGenerateEpicTool:
         assert "### 10.1 -- Data Models" in result["data"]["content"]
         assert "### 10.2 -- API" in result["data"]["content"]
 
-    def test_generation_error_handling(self, tmp_path: Path) -> None:
+    async def test_generation_error_handling(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -891,12 +859,12 @@ class TestDocsGenerateEpicTool:
                 side_effect=RuntimeError("boom"),
             ),
         ):
-            result = self._call(title="X", project_root=str(root))
+            result = await self._call(title="X", project_root=str(root))
 
         assert result["success"] is False
         assert result["error"]["code"] == "GENERATION_ERROR"
 
-    def test_elapsed_ms_present(self, tmp_path: Path) -> None:
+    async def test_elapsed_ms_present(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -904,7 +872,7 @@ class TestDocsGenerateEpicTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(title="X", project_root=str(root))
+            result = await self._call(title="X", project_root=str(root))
 
         assert "elapsed_ms" in result
         assert isinstance(result["elapsed_ms"], int)
@@ -1421,11 +1389,11 @@ class TestEpicFileHintsMCPTool:
     """Tests for the docs_generate_epic MCP tool with files parameter."""
 
     @staticmethod
-    def _call(**kwargs: Any) -> dict[str, Any]:
+    async def _call(**kwargs: Any) -> dict[str, Any]:
         from docs_mcp.server_gen_tools import docs_generate_epic
-        return _run(docs_generate_epic(**kwargs))
+        return await docs_generate_epic(**kwargs)
 
-    def test_tool_with_files_parameter(self, tmp_path: Path) -> None:
+    async def test_tool_with_files_parameter(self, tmp_path: Path) -> None:
         """MCP tool accepts files parameter and passes to generator."""
         setup_py = tmp_path / "setup.py"
         setup_py.write_text("def setup():\n    pass\n", encoding="utf-8")
@@ -1434,7 +1402,7 @@ class TestEpicFileHintsMCPTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(tmp_path),
         ):
-            result = self._call(
+            result = await self._call(
                 title="File Hints Epic",
                 files="setup.py",
                 project_root=str(tmp_path),
@@ -1444,13 +1412,13 @@ class TestEpicFileHintsMCPTool:
         assert "## Files Affected" in content
         assert "`setup.py`" in content
 
-    def test_tool_without_files_backward_compat(self, tmp_path: Path) -> None:
+    async def test_tool_without_files_backward_compat(self, tmp_path: Path) -> None:
         """MCP tool without files parameter preserves existing behavior."""
         with patch(
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(tmp_path),
         ):
-            result = self._call(
+            result = await self._call(
                 title="No Files Epic",
                 project_root=str(tmp_path),
             )
@@ -1459,7 +1427,7 @@ class TestEpicFileHintsMCPTool:
         content = result["data"]["content"]
         assert "Public Symbols" not in content
 
-    def test_tool_files_without_auto_populate(self, tmp_path: Path) -> None:
+    async def test_tool_files_without_auto_populate(self, tmp_path: Path) -> None:
         """Files parameter works even without auto_populate=True."""
         readme = tmp_path / "README.md"
         readme.write_text("# Readme\n", encoding="utf-8")
@@ -1468,7 +1436,7 @@ class TestEpicFileHintsMCPTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(tmp_path),
         ):
-            result = self._call(
+            result = await self._call(
                 title="Files Only Epic",
                 files="README.md",
                 project_root=str(tmp_path),

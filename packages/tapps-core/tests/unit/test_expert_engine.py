@@ -56,27 +56,27 @@ class TestConsultExpert:
         assert result.factors.domain_relevance > 0
 
     def test_low_confidence_nudge_when_confidence_low(self) -> None:
-        # Ambiguous/off-topic question often yields low confidence
-        result = consult_expert("Tell me something interesting about cats")
+        # Truly nonsensical query guarantees low confidence (no keyword matches)
+        result = consult_expert("xyzzy plugh 12345 nonsense gibberish")
         assert hasattr(result, "low_confidence_nudge")
-        if result.confidence < 0.5:
-            assert result.low_confidence_nudge is not None
-            assert "tapps_lookup_docs" in result.low_confidence_nudge
-            assert "Note:" in result.answer
+        assert result.confidence < 0.5, f"Expected low confidence, got {result.confidence}"
+        assert result.low_confidence_nudge is not None
+        assert "tapps_lookup_docs" in result.low_confidence_nudge
+        assert "Note:" in result.answer
 
     def test_structured_suggestion_fields_when_no_context(self) -> None:
-        result = consult_expert("Tell me something interesting about cats")
-        if result.chunks_used == 0:
-            assert result.suggested_tool == "tapps_lookup_docs"
-            assert result.suggested_library is not None
-            assert result.suggested_topic is not None
+        # Truly nonsensical query guarantees no chunks matched
+        result = consult_expert("xyzzy plugh 12345 nonsense gibberish")
+        assert result.chunks_used == 0, f"Expected 0 chunks, got {result.chunks_used}"
+        assert result.suggested_tool == "tapps_lookup_docs"
+        assert result.suggested_library is not None
+        assert result.suggested_topic is not None
 
     def test_fallback_flags_default_shape(self) -> None:
         result = consult_expert("How to write pytest fixtures?")
         assert isinstance(result.fallback_used, bool)
-        if result.fallback_used:
-            assert result.fallback_library is not None
-            assert result.fallback_topic is not None
+        # Known domain question should not use fallback
+        assert result.fallback_used is False, "Expected no fallback for known domain question"
 
     def test_detected_domains_populated_on_auto_detect(self) -> None:
         result = consult_expert("How do I prevent SQL injection?")
@@ -102,14 +102,15 @@ class TestConsultExpert:
     def test_recommendation_high_confidence(self) -> None:
         result = consult_expert("What are OWASP top 10 vulnerabilities?")
         assert result.recommendation
-        if result.confidence >= 0.7:
-            assert "high-confidence" in result.recommendation
+        assert result.confidence >= 0.7, f"Expected high confidence, got {result.confidence}"
+        assert "high-confidence" in result.recommendation
 
     def test_recommendation_low_confidence(self) -> None:
-        result = consult_expert("Tell me something interesting about cats")
+        # Truly nonsensical query guarantees low confidence
+        result = consult_expert("xyzzy plugh 12345 nonsense gibberish")
         assert result.recommendation
-        if result.confidence < 0.5:
-            assert "tapps_research" in result.recommendation
+        assert result.confidence < 0.5, f"Expected low confidence, got {result.confidence}"
+        assert "tapps_research" in result.recommendation
 
     def test_recommendation_always_present(self) -> None:
         result = consult_expert("How to write pytest fixtures?")

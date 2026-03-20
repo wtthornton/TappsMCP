@@ -23,6 +23,7 @@ SAMPLE_CODE = '"""Module."""\n\ndef f() -> int:\n    return 1\n'
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMCPScoreFileTool:
     """End-to-end tests for tapps_score_file MCP tool."""
 
@@ -86,6 +87,7 @@ class TestMCPScoreFileTool:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMCPSecurityScanTool:
     @pytest.fixture(autouse=True)
     def reset_tracker(self):
@@ -121,6 +123,7 @@ class TestMCPSecurityScanTool:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMCPQualityGateTool:
     @pytest.fixture(autouse=True)
     def reset_tracker(self):
@@ -169,6 +172,7 @@ class TestMCPQualityGateTool:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMCPChecklistTool:
     @pytest.fixture(autouse=True)
     def reset_tracker(self):
@@ -223,6 +227,7 @@ class TestMCPChecklistTool:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMCPLookupDocsTool:
     """End-to-end tests for tapps_lookup_docs MCP tool."""
 
@@ -304,6 +309,7 @@ class TestMCPLookupDocsTool:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMCPValidateConfigTool:
     """End-to-end tests for tapps_validate_config MCP tool."""
 

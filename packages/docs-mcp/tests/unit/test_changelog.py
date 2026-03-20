@@ -5,53 +5,13 @@ from __future__ import annotations
 import pytest
 
 from docs_mcp.analyzers.commit_parser import ParsedCommit
-from docs_mcp.analyzers.git_history import CommitInfo
-from docs_mcp.analyzers.version_detector import VersionBoundary
 from docs_mcp.generators.changelog import (
     ChangelogEntry,
     ChangelogGenerator,
     ChangelogVersion,
 )
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-def _commit(
-    message: str,
-    *,
-    hash: str = "abc1234567890",
-    short_hash: str = "abc1234",
-    author: str = "Test Author",
-    author_email: str = "test@example.com",
-    date: str = "2026-02-15T10:00:00+00:00",
-) -> CommitInfo:
-    """Create a test CommitInfo."""
-    return CommitInfo(
-        hash=hash,
-        short_hash=short_hash,
-        author=author,
-        author_email=author_email,
-        date=date,
-        message=message,
-    )
-
-
-def _version(
-    version: str,
-    date: str,
-    commits: list[CommitInfo] | None = None,
-) -> VersionBoundary:
-    """Create a test VersionBoundary."""
-    return VersionBoundary(
-        version=version,
-        tag=f"v{version}",
-        date=date,
-        commit_count=len(commits) if commits else 0,
-        commits=commits or [],
-    )
+from tests.helpers import make_commit as _commit
+from tests.helpers import make_version as _version
 
 
 @pytest.fixture

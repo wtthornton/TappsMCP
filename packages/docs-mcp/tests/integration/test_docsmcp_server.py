@@ -11,6 +11,7 @@ import pytest
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestSessionStartFullFlow:
     @pytest.mark.asyncio
     async def test_session_start_full_flow(self, sample_project: Path) -> None:
@@ -39,6 +40,7 @@ class TestSessionStartFullFlow:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestProjectScanFullFlow:
     @pytest.mark.asyncio
     async def test_project_scan_full_flow(self, sample_project: Path) -> None:
@@ -72,6 +74,7 @@ class TestProjectScanFullFlow:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMCPInstanceIntegration:
     def test_mcp_has_tools_registered(self) -> None:
         from docs_mcp.server import mcp

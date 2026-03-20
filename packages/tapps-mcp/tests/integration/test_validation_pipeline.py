@@ -17,6 +17,7 @@ from tapps_mcp.validators.base import detect_config_type, validate_config
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestDockerfilePipeline:
     """End-to-end Dockerfile validation."""
 
@@ -55,6 +56,7 @@ class TestDockerfilePipeline:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestDockerComposePipeline:
     """End-to-end docker-compose validation."""
 
@@ -99,6 +101,7 @@ class TestDockerComposePipeline:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestAutoDetection:
     """Auto-detection from filename and content."""
 
@@ -127,6 +130,7 @@ class TestAutoDetection:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestWebSocketValidationPipeline:
     """End-to-end WebSocket config validation."""
 
@@ -145,6 +149,7 @@ class TestWebSocketValidationPipeline:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMQTTValidationPipeline:
     """End-to-end MQTT config validation."""
 
@@ -165,6 +170,7 @@ class TestMQTTValidationPipeline:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestInfluxDBValidationPipeline:
     """End-to-end InfluxDB config validation."""
 
@@ -185,6 +191,7 @@ class TestInfluxDBValidationPipeline:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestUnknownConfigType:
     """Unknown config types pass through cleanly."""
 

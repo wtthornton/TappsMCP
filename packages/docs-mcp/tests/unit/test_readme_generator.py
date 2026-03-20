@@ -87,7 +87,8 @@ class TestStyleSelection:
         assert "# my-project" in result
         assert "## Table of Contents" in result
         assert "## Features" in result
-        assert "## Architecture" not in result or "## Architecture" in result
+        # Comprehensive style may include Architecture if project has packages
+        # Just verify core sections are present; Architecture is optional
         assert "## Contributing" in result
 
     def test_invalid_style_defaults_to_standard(self, python_project: Path) -> None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 
 class TestMCPInstance:
     def test_mcp_instance_exists(self) -> None:
@@ -44,27 +46,18 @@ class TestToolCallTracking:
 
 
 class TestHelperFunctions:
-    def test_should_skip_dir_git(self) -> None:
+    @pytest.mark.parametrize(
+        "dirname,expected",
+        [
+            (".git", True),
+            ("node_modules", True),
+            ("my_package.egg-info", True),
+            ("docs", False),
+            ("src", False),
+        ],
+        ids=["git", "node_modules", "egg-info", "docs", "src"],
+    )
+    def test_should_skip_dir(self, dirname: str, expected: bool) -> None:
         from docs_mcp.server import _should_skip_dir
 
-        assert _should_skip_dir(".git") is True
-
-    def test_should_skip_dir_node_modules(self) -> None:
-        from docs_mcp.server import _should_skip_dir
-
-        assert _should_skip_dir("node_modules") is True
-
-    def test_should_skip_dir_egg_info(self) -> None:
-        from docs_mcp.server import _should_skip_dir
-
-        assert _should_skip_dir("my_package.egg-info") is True
-
-    def test_should_not_skip_docs(self) -> None:
-        from docs_mcp.server import _should_skip_dir
-
-        assert _should_skip_dir("docs") is False
-
-    def test_should_not_skip_src(self) -> None:
-        from docs_mcp.server import _should_skip_dir
-
-        assert _should_skip_dir("src") is False
+        assert _should_skip_dir(dirname) is expected

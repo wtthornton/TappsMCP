@@ -14,6 +14,7 @@ from tapps_mcp.tools.tool_detection import detect_installed_tools
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestCrossPlatformPaths:
     """Path handling works on all platforms."""
 
@@ -45,6 +46,7 @@ class TestCrossPlatformPaths:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestCrossPlatformSubprocess:
     """Subprocess execution works on all platforms."""
 
@@ -61,6 +63,7 @@ class TestCrossPlatformSubprocess:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestCrossPlatformToolDetection:
     """Tool detection works on all platforms."""
 
@@ -84,6 +87,7 @@ class TestCrossPlatformToolDetection:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 class TestCrossPlatformScoring:
     """Scoring pipeline works with native filesystem."""
 

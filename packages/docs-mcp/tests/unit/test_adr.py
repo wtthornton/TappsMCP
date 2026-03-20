@@ -7,46 +7,13 @@ validation fallbacks, and the ``docs_generate_adr`` MCP tool handler.
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from docs_mcp.generators.adr import ADRGenerator, ADRRecord
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously for testing."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _make_settings(root: Path) -> MagicMock:
-    """Create a mock DocsMCPSettings pointing to *root*."""
-    settings = MagicMock()
-    settings.project_root = root
-    settings.output_dir = "docs"
-    settings.default_style = "standard"
-    settings.default_format = "markdown"
-    settings.include_toc = True
-    settings.include_badges = True
-    settings.changelog_format = "keep-a-changelog"
-    settings.adr_format = "madr"
-    settings.diagram_format = "mermaid"
-    settings.git_log_limit = 100
-    settings.log_level = "INFO"
-    settings.log_json = False
-    return settings
+from tests.helpers import make_settings as _make_settings
 
 
 # ---------------------------------------------------------------------------
@@ -383,7 +350,7 @@ class TestADRGeneratorValidation:
 class TestADRMCPTool:
     """Tests for the ``docs_generate_adr`` MCP tool handler."""
 
-    def test_generate_adr_response_envelope(self, tmp_path: Path) -> None:
+    async def test_generate_adr_response_envelope(self, tmp_path: Path) -> None:
         """Response has the standard success_response envelope."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -394,11 +361,9 @@ class TestADRMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(
-                docs_generate_adr(
-                    title="Use MCP Protocol",
-                    project_root=str(root),
-                )
+            result = await docs_generate_adr(
+                title="Use MCP Protocol",
+                project_root=str(root),
             )
 
         assert result["tool"] == "docs_generate_adr"
@@ -411,7 +376,7 @@ class TestADRMCPTool:
         assert "content" in data
         assert "written_to" in data
 
-    def test_generate_adr_nygard_template(self, tmp_path: Path) -> None:
+    async def test_generate_adr_nygard_template(self, tmp_path: Path) -> None:
         """Nygard template via MCP tool produces nygard-style content."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -422,19 +387,17 @@ class TestADRMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(
-                docs_generate_adr(
-                    title="Choose Database",
-                    template="nygard",
-                    project_root=str(root),
-                )
+            result = await docs_generate_adr(
+                title="Choose Database",
+                template="nygard",
+                project_root=str(root),
             )
 
         assert result["success"] is True
         assert result["data"]["template"] == "nygard"
         assert "What is the issue" in result["data"]["content"]
 
-    def test_generate_adr_invalid_root(self, tmp_path: Path) -> None:
+    async def test_generate_adr_invalid_root(self, tmp_path: Path) -> None:
         """Non-existent project root returns an error."""
         from docs_mcp.server_gen_tools import docs_generate_adr
 
@@ -443,11 +406,9 @@ class TestADRMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(fake),
         ):
-            result = _run(
-                docs_generate_adr(
-                    title="Orphan ADR",
-                    project_root=str(fake),
-                )
+            result = await docs_generate_adr(
+                title="Orphan ADR",
+                project_root=str(fake),
             )
 
         assert result["success"] is False

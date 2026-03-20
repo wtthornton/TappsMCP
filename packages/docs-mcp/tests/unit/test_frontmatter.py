@@ -2,27 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from docs_mcp.generators.frontmatter import FrontmatterGenerator, FrontmatterResult
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+from tests.helpers import make_settings
 
 
 # ---------------------------------------------------------------------------
@@ -190,46 +176,41 @@ class TestSpecialCharacters:
 
 
 class TestDocsGenerateFrontmatterTool:
-    def _make_settings(self, root: Path) -> MagicMock:
-        settings = MagicMock()
-        settings.project_root = root
-        return settings
-
-    def test_missing_path(self) -> None:
+    async def test_missing_path(self) -> None:
         from docs_mcp.server_gen_tools import docs_generate_frontmatter
 
-        result = _run(docs_generate_frontmatter())
+        result = await docs_generate_frontmatter()
         assert result["success"] is False
         assert result["error"]["code"] == "MISSING_PATH"
 
-    def test_file_not_found(self, tmp_path: Path) -> None:
+    async def test_file_not_found(self, tmp_path: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_frontmatter
 
         with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_frontmatter(
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_frontmatter(
                 file_path="nonexistent.md",
                 project_root=str(tmp_path),
-            ))
+            )
 
         assert result["success"] is False
         assert result["error"]["code"] == "FILE_NOT_FOUND"
 
-    def test_non_markdown_file(self, tmp_path: Path) -> None:
+    async def test_non_markdown_file(self, tmp_path: Path) -> None:
         (tmp_path / "code.py").write_text("x = 1")
         from docs_mcp.server_gen_tools import docs_generate_frontmatter
 
         with patch("docs_mcp.server_gen_tools._get_settings") as mock_settings:
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_frontmatter(
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_frontmatter(
                 file_path="code.py",
                 project_root=str(tmp_path),
-            ))
+            )
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_FILE_TYPE"
 
-    def test_success(self, tmp_path: Path) -> None:
+    async def test_success(self, tmp_path: Path) -> None:
         md_file = tmp_path / "README.md"
         md_file.write_text("# Hello\n\nWorld.\n")
         from docs_mcp.server_gen_tools import docs_generate_frontmatter
@@ -238,17 +219,17 @@ class TestDocsGenerateFrontmatterTool:
             patch("docs_mcp.server_gen_tools._get_settings") as mock_settings,
             patch("docs_mcp.server_gen_tools.can_write_to_project", return_value=True),
         ):
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_frontmatter(
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_frontmatter(
                 file_path="README.md",
                 project_root=str(tmp_path),
-            ))
+            )
 
         assert result["success"] is True
         assert "fields_added" in result["data"]
         assert result["data"]["written_to"] == "README.md"
 
-    def test_content_return_mode(self, tmp_path: Path) -> None:
+    async def test_content_return_mode(self, tmp_path: Path) -> None:
         md_file = tmp_path / "doc.md"
         md_file.write_text("# Doc\n\nContent.\n")
         from docs_mcp.server_gen_tools import docs_generate_frontmatter
@@ -257,11 +238,11 @@ class TestDocsGenerateFrontmatterTool:
             patch("docs_mcp.server_gen_tools._get_settings") as mock_settings,
             patch("docs_mcp.server_gen_tools.can_write_to_project", return_value=False),
         ):
-            mock_settings.return_value = self._make_settings(tmp_path)
-            result = _run(docs_generate_frontmatter(
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_generate_frontmatter(
                 file_path="doc.md",
                 project_root=str(tmp_path),
-            ))
+            )
 
         assert result["success"] is True
         assert result["data"].get("content_return") is True

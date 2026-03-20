@@ -14,83 +14,15 @@ Unit tests for the underlying generator classes live in their own files:
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from docs_mcp.analyzers.git_history import CommitInfo
-from docs_mcp.analyzers.version_detector import VersionBoundary
 from docs_mcp.generators.release_notes import ReleaseNotes
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously for testing."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _commit(
-    message: str,
-    *,
-    hash: str = "abc1234567890",
-    short_hash: str = "abc1234",
-    author: str = "Test Author",
-    author_email: str = "test@example.com",
-    date: str = "2026-02-15T10:00:00+00:00",
-) -> CommitInfo:
-    """Create a test CommitInfo."""
-    return CommitInfo(
-        hash=hash,
-        short_hash=short_hash,
-        author=author,
-        author_email=author_email,
-        date=date,
-        message=message,
-    )
-
-
-def _version(
-    version: str,
-    date: str,
-    commits: list[CommitInfo] | None = None,
-) -> VersionBoundary:
-    """Create a test VersionBoundary."""
-    return VersionBoundary(
-        version=version,
-        tag=f"v{version}",
-        date=date,
-        commit_count=len(commits) if commits else 0,
-        commits=commits or [],
-    )
-
-
-def _make_settings(root: Path) -> MagicMock:
-    """Create a mock DocsMCPSettings pointing to root."""
-    settings = MagicMock()
-    settings.project_root = root
-    settings.output_dir = "docs"
-    settings.default_style = "standard"
-    settings.default_format = "markdown"
-    settings.include_toc = True
-    settings.include_badges = True
-    settings.changelog_format = "keep-a-changelog"
-    settings.adr_format = "madr"
-    settings.diagram_format = "mermaid"
-    settings.git_log_limit = 100
-    settings.log_level = "INFO"
-    settings.log_json = False
-    return settings
+from tests.helpers import make_commit as _commit
+from tests.helpers import make_settings as _make_settings
+from tests.helpers import make_version as _version
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +33,7 @@ def _make_settings(root: Path) -> MagicMock:
 class TestDocsGenerateReadme:
     """Tests for the docs_generate_readme MCP tool handler."""
 
-    def test_generate_readme_standard(self, tmp_path: Path) -> None:
+    async def test_generate_readme_standard(self, tmp_path: Path) -> None:
         """Generate a standard README for a Python project."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -117,7 +49,7 @@ class TestDocsGenerateReadme:
             "docs_mcp.config.settings.load_docs_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(docs_generate_readme(style="standard", project_root=str(root)))
+            result = await docs_generate_readme(style="standard", project_root=str(root))
 
         assert result["success"] is True
         assert result["tool"] == "docs_generate_readme"
@@ -127,7 +59,7 @@ class TestDocsGenerateReadme:
         assert data["content_length"] > 0
         assert "# test-proj" in data["content"]
 
-    def test_generate_readme_minimal(self, tmp_path: Path) -> None:
+    async def test_generate_readme_minimal(self, tmp_path: Path) -> None:
         """Minimal style generates a simpler README."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -143,7 +75,7 @@ class TestDocsGenerateReadme:
             "docs_mcp.config.settings.load_docs_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(docs_generate_readme(style="minimal", project_root=str(root)))
+            result = await docs_generate_readme(style="minimal", project_root=str(root))
 
         assert result["success"] is True
         content = result["data"]["content"]
@@ -152,7 +84,7 @@ class TestDocsGenerateReadme:
         # Minimal should not have Features
         assert "## Features" not in content
 
-    def test_generate_readme_invalid_style(self, tmp_path: Path) -> None:
+    async def test_generate_readme_invalid_style(self, tmp_path: Path) -> None:
         """Invalid style returns an error response."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -167,12 +99,12 @@ class TestDocsGenerateReadme:
             "docs_mcp.config.settings.load_docs_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(docs_generate_readme(style="nonexistent", project_root=str(root)))
+            result = await docs_generate_readme(style="nonexistent", project_root=str(root))
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_STYLE"
 
-    def test_generate_readme_with_merge(self, tmp_path: Path) -> None:
+    async def test_generate_readme_with_merge(self, tmp_path: Path) -> None:
         """When merge=True and README exists, SmartMerger is invoked."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -192,9 +124,7 @@ class TestDocsGenerateReadme:
             "docs_mcp.config.settings.load_docs_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(
-                docs_generate_readme(style="standard", merge=True, project_root=str(root))
-            )
+            result = await docs_generate_readme(style="standard", merge=True, project_root=str(root))
 
         assert result["success"] is True
         data = result["data"]
@@ -202,7 +132,7 @@ class TestDocsGenerateReadme:
         # User content should be preserved
         assert "User content here" in data["content"]
 
-    def test_generate_readme_no_merge(self, tmp_path: Path) -> None:
+    async def test_generate_readme_no_merge(self, tmp_path: Path) -> None:
         """When merge=False, existing content is replaced entirely."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -222,16 +152,14 @@ class TestDocsGenerateReadme:
             "docs_mcp.config.settings.load_docs_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(
-                docs_generate_readme(style="minimal", merge=False, project_root=str(root))
-            )
+            result = await docs_generate_readme(style="minimal", merge=False, project_root=str(root))
 
         assert result["success"] is True
         data = result["data"]
         assert data["merged"] is False
         assert "# no-merge" in data["content"]
 
-    def test_generate_readme_response_envelope(self, tmp_path: Path) -> None:
+    async def test_generate_readme_response_envelope(self, tmp_path: Path) -> None:
         """Response has the standard success_response envelope."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -246,7 +174,7 @@ class TestDocsGenerateReadme:
             "docs_mcp.config.settings.load_docs_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(docs_generate_readme(style="minimal", project_root=str(root)))
+            result = await docs_generate_readme(style="minimal", project_root=str(root))
 
         assert "tool" in result
         assert "success" in result
@@ -255,7 +183,7 @@ class TestDocsGenerateReadme:
         assert result["elapsed_ms"] >= 0
         assert "next_steps" in result["data"]
 
-    def test_generate_readme_writes_file(self, tmp_path: Path) -> None:
+    async def test_generate_readme_writes_file(self, tmp_path: Path) -> None:
         """Verify the tool writes the README file to disk."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -271,7 +199,7 @@ class TestDocsGenerateReadme:
             "docs_mcp.config.settings.load_docs_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(docs_generate_readme(style="minimal", project_root=str(root)))
+            result = await docs_generate_readme(style="minimal", project_root=str(root))
 
         assert result["success"] is True
         readme_path = root / "README.md"
@@ -288,17 +216,15 @@ class TestDocsGenerateReadme:
 class TestDocsGenerateChangelog:
     """Tests for the docs_generate_changelog MCP tool handler."""
 
-    def test_invalid_format_returns_error(self, tmp_path: Path) -> None:
+    async def test_invalid_format_returns_error(self, tmp_path: Path) -> None:
         """Invalid format parameter returns an error."""
         from docs_mcp.server_gen_tools import docs_generate_changelog
 
-        result = _run(
-            docs_generate_changelog(format="invalid-format", project_root=str(tmp_path))
-        )
+        result = await docs_generate_changelog(format="invalid-format", project_root=str(tmp_path))
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_FORMAT"
 
-    def test_nonexistent_root_returns_error(self, tmp_path: Path) -> None:
+    async def test_nonexistent_root_returns_error(self, tmp_path: Path) -> None:
         """Non-existent project root returns an error."""
         from docs_mcp.server_gen_tools import docs_generate_changelog
 
@@ -307,11 +233,11 @@ class TestDocsGenerateChangelog:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(fake),
         ):
-            result = _run(docs_generate_changelog(project_root=str(fake)))
+            result = await docs_generate_changelog(project_root=str(fake))
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
-    def test_generate_changelog_success(self, tmp_path: Path) -> None:
+    async def test_generate_changelog_success(self, tmp_path: Path) -> None:
         """Successful changelog generation with mocked version detector."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -342,13 +268,13 @@ class TestDocsGenerateChangelog:
                 return_value=[],
             ),
         ):
-            result = _run(docs_generate_changelog(project_root=str(root)))
+            result = await docs_generate_changelog(project_root=str(root))
 
         assert result["success"] is True
         assert result["data"]["version_count"] == 1
         assert "# Changelog" in result["data"]["content"]
 
-    def test_generate_changelog_response_envelope(self, tmp_path: Path) -> None:
+    async def test_generate_changelog_response_envelope(self, tmp_path: Path) -> None:
         """Response has correct structure."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -373,7 +299,7 @@ class TestDocsGenerateChangelog:
                 return_value=[],
             ),
         ):
-            result = _run(docs_generate_changelog(project_root=str(root)))
+            result = await docs_generate_changelog(project_root=str(root))
 
         assert result["tool"] == "docs_generate_changelog"
         assert result["success"] is True
@@ -381,7 +307,7 @@ class TestDocsGenerateChangelog:
         assert "format" in result["data"]
         assert "content" in result["data"]
 
-    def test_generate_changelog_conventional_format(self, tmp_path: Path) -> None:
+    async def test_generate_changelog_conventional_format(self, tmp_path: Path) -> None:
         """Conventional format works correctly."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -413,9 +339,7 @@ class TestDocsGenerateChangelog:
                 return_value=[],
             ),
         ):
-            result = _run(
-                docs_generate_changelog(format="conventional", project_root=str(root))
-            )
+            result = await docs_generate_changelog(format="conventional", project_root=str(root))
 
         assert result["success"] is True
         assert result["data"]["format"] == "conventional"
@@ -430,7 +354,7 @@ class TestDocsGenerateChangelog:
 class TestDocsGenerateReleaseNotes:
     """Tests for the docs_generate_release_notes MCP tool handler."""
 
-    def test_nonexistent_root_returns_error(self, tmp_path: Path) -> None:
+    async def test_nonexistent_root_returns_error(self, tmp_path: Path) -> None:
         """Non-existent project root returns an error."""
         from docs_mcp.server_gen_tools import docs_generate_release_notes
 
@@ -439,11 +363,11 @@ class TestDocsGenerateReleaseNotes:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(fake),
         ):
-            result = _run(docs_generate_release_notes(project_root=str(fake)))
+            result = await docs_generate_release_notes(project_root=str(fake))
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
-    def test_no_versions_returns_error(self, tmp_path: Path) -> None:
+    async def test_no_versions_returns_error(self, tmp_path: Path) -> None:
         """Error when no semver tags exist."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -460,12 +384,12 @@ class TestDocsGenerateReleaseNotes:
                 return_value=[],
             ),
         ):
-            result = _run(docs_generate_release_notes(project_root=str(root)))
+            result = await docs_generate_release_notes(project_root=str(root))
 
         assert result["success"] is False
         assert result["error"]["code"] == "NO_VERSIONS"
 
-    def test_version_not_found_returns_error(self, tmp_path: Path) -> None:
+    async def test_version_not_found_returns_error(self, tmp_path: Path) -> None:
         """Error when requested version does not exist."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -488,14 +412,12 @@ class TestDocsGenerateReleaseNotes:
                 return_value=versions,
             ),
         ):
-            result = _run(
-                docs_generate_release_notes(version="9.9.9", project_root=str(root))
-            )
+            result = await docs_generate_release_notes(version="9.9.9", project_root=str(root))
 
         assert result["success"] is False
         assert result["error"]["code"] == "VERSION_NOT_FOUND"
 
-    def test_generate_release_notes_latest(self, tmp_path: Path) -> None:
+    async def test_generate_release_notes_latest(self, tmp_path: Path) -> None:
         """Generate notes for the latest version (no version arg)."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -521,7 +443,7 @@ class TestDocsGenerateReleaseNotes:
                 return_value=versions,
             ),
         ):
-            result = _run(docs_generate_release_notes(project_root=str(root)))
+            result = await docs_generate_release_notes(project_root=str(root))
 
         assert result["success"] is True
         data = result["data"]
@@ -530,7 +452,7 @@ class TestDocsGenerateReleaseNotes:
         assert "v2 feature" in data["features"][0]
         assert "# Release 2.0.0" in data["markdown"]
 
-    def test_generate_release_notes_specific_version(self, tmp_path: Path) -> None:
+    async def test_generate_release_notes_specific_version(self, tmp_path: Path) -> None:
         """Generate notes for a specific version."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -557,9 +479,7 @@ class TestDocsGenerateReleaseNotes:
                 return_value=versions,
             ),
         ):
-            result = _run(
-                docs_generate_release_notes(version="1.0.0", project_root=str(root))
-            )
+            result = await docs_generate_release_notes(version="1.0.0", project_root=str(root))
 
         assert result["success"] is True
         data = result["data"]
@@ -568,7 +488,7 @@ class TestDocsGenerateReleaseNotes:
         assert len(data["fixes"]) >= 1
         assert "Alice" in data["contributors"]
 
-    def test_generate_release_notes_response_envelope(self, tmp_path: Path) -> None:
+    async def test_generate_release_notes_response_envelope(self, tmp_path: Path) -> None:
         """Response has the standard success_response envelope."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -589,7 +509,7 @@ class TestDocsGenerateReleaseNotes:
                 return_value=versions,
             ),
         ):
-            result = _run(docs_generate_release_notes(project_root=str(root)))
+            result = await docs_generate_release_notes(project_root=str(root))
 
         assert result["tool"] == "docs_generate_release_notes"
         assert result["success"] is True
@@ -599,7 +519,7 @@ class TestDocsGenerateReleaseNotes:
         assert "highlights" in result["data"]
         assert "breaking_changes" in result["data"]
 
-    def test_generate_release_notes_breaking_in_highlights(self, tmp_path: Path) -> None:
+    async def test_generate_release_notes_breaking_in_highlights(self, tmp_path: Path) -> None:
         """Breaking changes appear in highlights."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -623,7 +543,7 @@ class TestDocsGenerateReleaseNotes:
                 return_value=versions,
             ),
         ):
-            result = _run(docs_generate_release_notes(project_root=str(root)))
+            result = await docs_generate_release_notes(project_root=str(root))
 
         assert result["success"] is True
         data = result["data"]

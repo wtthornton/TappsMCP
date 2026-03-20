@@ -16,14 +16,13 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from docs_mcp.generators.diagrams import DiagramGenerator, DiagramResult
+from tests.helpers import make_settings as _make_settings
 
 
 # ---------------------------------------------------------------------------
@@ -111,38 +110,6 @@ IMPORTING_CODE_B = '''\
 def helper() -> int:
     return 42
 '''
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously for testing."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _make_settings(root: Path) -> MagicMock:
-    """Create a mock DocsMCPSettings pointing to *root*."""
-    settings = MagicMock()
-    settings.project_root = root
-    settings.output_dir = "docs"
-    settings.default_style = "standard"
-    settings.default_format = "markdown"
-    settings.include_toc = True
-    settings.include_badges = True
-    settings.changelog_format = "keep-a-changelog"
-    settings.adr_format = "madr"
-    settings.diagram_format = "mermaid"
-    settings.git_log_limit = 100
-    settings.log_level = "INFO"
-    settings.log_json = False
-    return settings
 
 
 def _write_py(directory: Path, filename: str, content: str) -> Path:
@@ -831,7 +798,7 @@ class TestEmptyProject:
 class TestDiagramMCPTool:
     """docs_generate_diagram MCP tool response envelope and error handling."""
 
-    def test_response_envelope(self, python_project: Path) -> None:
+    async def test_response_envelope(self, python_project: Path) -> None:
         """Successful generation returns the standard envelope fields."""
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
@@ -839,11 +806,9 @@ class TestDiagramMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(python_project),
         ):
-            result = _run(
-                docs_generate_diagram(
-                    diagram_type="dependency",
-                    project_root=str(python_project),
-                )
+            result = await docs_generate_diagram(
+                diagram_type="dependency",
+                project_root=str(python_project),
             )
 
         assert result["tool"] == "docs_generate_diagram"
@@ -851,7 +816,7 @@ class TestDiagramMCPTool:
         assert result["elapsed_ms"] >= 0
         assert "data" in result
 
-    def test_data_fields(self, python_project: Path) -> None:
+    async def test_data_fields(self, python_project: Path) -> None:
         """Response data includes diagram_type, format, node_count, edge_count, content."""
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
@@ -859,11 +824,9 @@ class TestDiagramMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(python_project),
         ):
-            result = _run(
-                docs_generate_diagram(
-                    diagram_type="dependency",
-                    project_root=str(python_project),
-                )
+            result = await docs_generate_diagram(
+                diagram_type="dependency",
+                project_root=str(python_project),
             )
 
         data = result["data"]
@@ -875,7 +838,7 @@ class TestDiagramMCPTool:
         assert data["node_count"] >= 0
         assert data["edge_count"] >= 0
 
-    def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
+    async def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
         """Non-existent project root returns INVALID_ROOT error."""
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
@@ -884,14 +847,12 @@ class TestDiagramMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(fake),
         ):
-            result = _run(
-                docs_generate_diagram(project_root=str(fake))
-            )
+            result = await docs_generate_diagram(project_root=str(fake))
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
-    def test_no_content_returns_error(self, tmp_path: Path) -> None:
+    async def test_no_content_returns_error(self, tmp_path: Path) -> None:
         """Empty project returns NO_CONTENT error."""
         root = tmp_path / "empty"
         root.mkdir()
@@ -902,17 +863,15 @@ class TestDiagramMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(root),
         ):
-            result = _run(
-                docs_generate_diagram(
-                    diagram_type="class_hierarchy",
-                    project_root=str(root),
-                )
+            result = await docs_generate_diagram(
+                diagram_type="class_hierarchy",
+                project_root=str(root),
             )
 
         assert result["success"] is False
         assert result["error"]["code"] == "NO_CONTENT"
 
-    def test_format_defaults_to_settings(self, tmp_path: Path) -> None:
+    async def test_format_defaults_to_settings(self, tmp_path: Path) -> None:
         """When format is empty, the tool uses the setting's diagram_format."""
         _write_py(tmp_path, "animals.py", CLASS_HIERARCHY_CODE)
         settings = _make_settings(tmp_path)
@@ -924,19 +883,17 @@ class TestDiagramMCPTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=settings,
         ):
-            result = _run(
-                docs_generate_diagram(
-                    diagram_type="class_hierarchy",
-                    format="",
-                    project_root=str(tmp_path),
-                )
+            result = await docs_generate_diagram(
+                diagram_type="class_hierarchy",
+                format="",
+                project_root=str(tmp_path),
             )
 
         assert result["success"] is True
         assert result["data"]["format"] == "plantuml"
         assert "@startuml" in result["data"]["content"]
 
-    def test_explicit_format_overrides_settings(self, tmp_path: Path) -> None:
+    async def test_explicit_format_overrides_settings(self, tmp_path: Path) -> None:
         """An explicit format param takes precedence over settings."""
         _write_py(tmp_path, "animals.py", CLASS_HIERARCHY_CODE)
         settings = _make_settings(tmp_path)
@@ -948,19 +905,17 @@ class TestDiagramMCPTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=settings,
         ):
-            result = _run(
-                docs_generate_diagram(
-                    diagram_type="class_hierarchy",
-                    format="mermaid",
-                    project_root=str(tmp_path),
-                )
+            result = await docs_generate_diagram(
+                diagram_type="class_hierarchy",
+                format="mermaid",
+                project_root=str(tmp_path),
             )
 
         assert result["success"] is True
         assert result["data"]["format"] == "mermaid"
         assert "classDiagram" in result["data"]["content"]
 
-    def test_er_diagram_via_tool(self, tmp_path: Path) -> None:
+    async def test_er_diagram_via_tool(self, tmp_path: Path) -> None:
         """ER diagram type works through the MCP tool."""
         _write_py(tmp_path, "models.py", MODEL_CODE)
 
@@ -970,18 +925,16 @@ class TestDiagramMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(tmp_path),
         ):
-            result = _run(
-                docs_generate_diagram(
-                    diagram_type="er_diagram",
-                    project_root=str(tmp_path),
-                )
+            result = await docs_generate_diagram(
+                diagram_type="er_diagram",
+                project_root=str(tmp_path),
             )
 
         assert result["success"] is True
         assert result["data"]["diagram_type"] == "er_diagram"
         assert "erDiagram" in result["data"]["content"]
 
-    def test_class_hierarchy_via_tool(self, tmp_path: Path) -> None:
+    async def test_class_hierarchy_via_tool(self, tmp_path: Path) -> None:
         """Class hierarchy succeeds through the MCP tool."""
         _write_py(tmp_path, "animals.py", CLASS_HIERARCHY_CODE)
 
@@ -991,11 +944,9 @@ class TestDiagramMCPTool:
             "docs_mcp.server_helpers._get_settings",
             return_value=_make_settings(tmp_path),
         ):
-            result = _run(
-                docs_generate_diagram(
-                    diagram_type="class_hierarchy",
-                    project_root=str(tmp_path),
-                )
+            result = await docs_generate_diagram(
+                diagram_type="class_hierarchy",
+                project_root=str(tmp_path),
             )
 
         assert result["success"] is True

@@ -7,7 +7,6 @@ empty inputs, auto-populate with mocked analyzers, and the
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from pathlib import Path
@@ -17,38 +16,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from docs_mcp.generators.stories import StoryConfig, StoryGenerator, StoryTask
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously for testing."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _make_settings(root: Path) -> MagicMock:
-    """Create a mock DocsMCPSettings pointing to *root*."""
-    settings = MagicMock()
-    settings.project_root = root
-    settings.output_dir = "docs"
-    settings.default_style = "standard"
-    settings.default_format = "markdown"
-    settings.include_toc = True
-    settings.include_badges = True
-    settings.changelog_format = "keep-a-changelog"
-    settings.adr_format = "madr"
-    settings.diagram_format = "mermaid"
-    settings.git_log_limit = 100
-    settings.log_level = "INFO"
-    settings.log_json = False
-    return settings
+from tests.helpers import make_settings as _make_settings
 
 
 def _make_config(**kwargs: Any) -> StoryConfig:
@@ -623,12 +591,12 @@ class TestStorySlugify:
 class TestDocsGenerateStoryTool:
     """Tests for the ``docs_generate_story`` MCP tool handler."""
 
-    def _call(self, **kwargs: Any) -> dict[str, Any]:
+    async def _call(self, **kwargs: Any) -> dict[str, Any]:
         from docs_mcp.server_gen_tools import docs_generate_story
 
-        return _run(docs_generate_story(**kwargs))
+        return await docs_generate_story(**kwargs)
 
-    def test_basic_success(self, tmp_path: Path) -> None:
+    async def test_basic_success(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -636,7 +604,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="My Story",
                 epic_number=10,
                 story_number=1,
@@ -649,18 +617,18 @@ class TestDocsGenerateStoryTool:
         assert result["data"]["story_number"] == 1
         assert "# Story 10.1 -- My Story" in result["data"]["content"]
 
-    def test_invalid_root(self, tmp_path: Path) -> None:
+    async def test_invalid_root(self, tmp_path: Path) -> None:
         bad_root = tmp_path / "does_not_exist"
         with patch(
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(bad_root),
         ):
-            result = self._call(title="X", project_root=str(bad_root))
+            result = await self._call(title="X", project_root=str(bad_root))
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
-    def test_invalid_tasks_json(self, tmp_path: Path) -> None:
+    async def test_invalid_tasks_json(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -668,7 +636,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 tasks="{bad",
                 project_root=str(root),
@@ -677,7 +645,7 @@ class TestDocsGenerateStoryTool:
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_TASKS"
 
-    def test_tasks_json_not_a_list(self, tmp_path: Path) -> None:
+    async def test_tasks_json_not_a_list(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -685,7 +653,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 tasks='{"desc": "oops"}',
                 project_root=str(root),
@@ -694,7 +662,7 @@ class TestDocsGenerateStoryTool:
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_TASKS"
 
-    def test_user_story_statement(self, tmp_path: Path) -> None:
+    async def test_user_story_statement(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -702,7 +670,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 role="developer",
                 want="to test features",
@@ -716,7 +684,7 @@ class TestDocsGenerateStoryTool:
         assert "**I want** to test features" in content
         assert "**so that** quality improves" in content
 
-    def test_gherkin_criteria_format(self, tmp_path: Path) -> None:
+    async def test_gherkin_criteria_format(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -724,7 +692,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 acceptance_criteria="Login works, Logout works",
                 criteria_format="gherkin",
@@ -735,7 +703,7 @@ class TestDocsGenerateStoryTool:
         assert "```gherkin" in result["data"]["content"]
         assert result["data"]["criteria_format"] == "gherkin"
 
-    def test_comprehensive_style(self, tmp_path: Path) -> None:
+    async def test_comprehensive_style(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -743,7 +711,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 style="comprehensive",
                 project_root=str(root),
@@ -752,7 +720,7 @@ class TestDocsGenerateStoryTool:
         assert result["success"] is True
         assert "## INVEST Checklist" in result["data"]["content"]
 
-    def test_write_to_file(self, tmp_path: Path) -> None:
+    async def test_write_to_file(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -760,7 +728,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="Written Story",
                 epic_number=10,
                 story_number=1,
@@ -773,7 +741,7 @@ class TestDocsGenerateStoryTool:
         written = (root / "docs" / "stories" / "STORY-10-1.md").read_text(encoding="utf-8")
         assert "# Story 10.1 -- Written Story" in written
 
-    def test_tasks_json_parsing(self, tmp_path: Path) -> None:
+    async def test_tasks_json_parsing(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -786,7 +754,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 tasks=tasks,
                 project_root=str(root),
@@ -798,7 +766,7 @@ class TestDocsGenerateStoryTool:
         assert "Create model (`src/models.py`)" in content
         assert "Write tests" in content
 
-    def test_comma_separated_fields(self, tmp_path: Path) -> None:
+    async def test_comma_separated_fields(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -806,7 +774,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(
+            result = await self._call(
                 title="X",
                 acceptance_criteria="AC1, AC2",
                 files="src/a.py, src/b.py",
@@ -820,7 +788,7 @@ class TestDocsGenerateStoryTool:
         assert "- [ ] AC1" in content
         assert "`src/a.py`" in content
 
-    def test_generation_error_handling(self, tmp_path: Path) -> None:
+    async def test_generation_error_handling(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -834,12 +802,12 @@ class TestDocsGenerateStoryTool:
                 side_effect=RuntimeError("boom"),
             ),
         ):
-            result = self._call(title="X", project_root=str(root))
+            result = await self._call(title="X", project_root=str(root))
 
         assert result["success"] is False
         assert result["error"]["code"] == "GENERATION_ERROR"
 
-    def test_elapsed_ms_present(self, tmp_path: Path) -> None:
+    async def test_elapsed_ms_present(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
         root.mkdir()
 
@@ -847,7 +815,7 @@ class TestDocsGenerateStoryTool:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = self._call(title="X", project_root=str(root))
+            result = await self._call(title="X", project_root=str(root))
 
         assert "elapsed_ms" in result
         assert isinstance(result["elapsed_ms"], int)
