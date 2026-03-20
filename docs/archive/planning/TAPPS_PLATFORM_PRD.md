@@ -3,7 +3,7 @@
 **Version:** 1.0.0
 **Date:** 2026-02-28
 **Author:** TappsMCP Team
-**Status:** Implemented — monorepo (tapps-core, tapps-mcp, docs-mcp) and FastMCP composition are in place.
+**Status:** Archived — Delivered. All 14 epics (0-13) across 5 phases complete. Residual items: first PyPI release (B), version coordination script (C), composition singleton tests (C), npm docs-mcp wrapper (D).
 **Depends on:** [DOCSMCP_PRD.md](DOCSMCP_PRD.md) (DocsMCP feature specification)
 
 ---

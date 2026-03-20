@@ -10,7 +10,7 @@
 # Run DocsMCP only:   docker run -v $(pwd):/workspace tapps-platform docsmcp serve
 
 # Tool versions — keep in sync with pyproject.toml dev-dependencies
-ARG TAPPS_VERSION=1.10.0
+ARG TAPPS_VERSION=1.11.0
 ARG RUFF_VERSION=0.15.2
 ARG MYPY_VERSION=1.19.1
 ARG BANDIT_VERSION=1.9.3
