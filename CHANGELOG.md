@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-03-21
+
+### Added
+
+- **Epic M1: Memory security surface** - 2 new `tapps_memory` actions: `safety_check` (pre-flight prompt injection detection using 6 OWASP-aligned patterns) and `verify_integrity` (SHA-256 tamper detection across all entries). Doctor now warns when `tapps-brain-mcp` is configured alongside TappsMCP (split-brain risk). Session start enriched with active profile name and source.
+- **Epic M2: Memory profile & lifecycle management** - 3 new `tapps_memory` actions: `profile_info` (active profile layers, decay config, scoring weights), `profile_list` (6 built-in profiles), `profile_switch` (switch profile, persist to `.tapps-brain/profile.yaml`, reset store singleton). Added `memory.profile` config setting for explicit override. Profile auto-detection from project type at session start. Promotion events surfaced in `reinforce` responses via PromotionEngine.
+- **Planning docs** - `TAPPS_BRAIN_INTEGRATION_RECOMMENDATIONS.md` (2026 industry research, OWASP ASI06, competitor analysis, 18 cross-repo recommendations) and `TAPPS_MCP_MEMORY_ROADMAP.md` (TappsMCP-only implementation plan, 7 epics, 15 planned new actions)
+- **23 new unit tests** - `test_memory_m1_security.py` (9 tests) and `test_memory_m2_profiles.py` (14 tests) covering all new actions, doctor checks, config settings, and promotion surfacing
+
+### Changed
+
+- **tapps_memory action count: 23 → 28** - Updated all documentation, prompt templates, skills, and platform rules to reflect the new action count
+- **MemoryStore singleton** now resolves profile from `memory.profile` setting or auto-detect via `tapps_brain.profile.resolve_profile()`, with graceful fallback for tapps-brain < 1.1.0
+
 ## [1.11.0] - 2026-03-19
 
 ### Added

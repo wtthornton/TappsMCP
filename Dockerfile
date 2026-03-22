@@ -7,7 +7,7 @@
 # HTTP:   docker run -p 8000:8000 -v $(pwd):/workspace tapps-mcp tapps-mcp serve --transport http --host 0.0.0.0 --port 8000
 
 # Tool versions — keep in sync with pyproject.toml dev-dependencies
-ARG TAPPS_VERSION=1.11.0
+ARG TAPPS_VERSION=1.12.0
 ARG RUFF_VERSION=0.15.2
 ARG MYPY_VERSION=1.19.1
 ARG BANDIT_VERSION=1.9.3

@@ -56,7 +56,7 @@ When the user requests a persona by name (e.g. "use Frontend Developer", "@reali
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **23 actions**: save, save_bulk, get, list, delete, search, reinforce, gc, contradictions, reseed, import, export, consolidate, unconsolidate, 6 federation actions (federate_register, federate_publish, federate_subscribe, federate_sync, federate_search, federate_status), and 3 maintenance actions (index_session, validate, maintain).
+`tapps_memory` provides persistent cross-session knowledge with **28 actions**: save, save_bulk, get, list, delete, search, reinforce, gc, contradictions, reseed, import, export, consolidate, unconsolidate, 6 federation actions (federate_register, federate_publish, federate_subscribe, federate_sync, federate_search, federate_status), and 3 maintenance actions (index_session, validate, maintain).
 
 **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared (federation). Max 1500 entries.
 

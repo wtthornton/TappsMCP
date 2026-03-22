@@ -861,7 +861,7 @@ Add to `_VALID_ACTIONS` in `server_memory_tools.py`:
 
 ```python
 _VALID_ACTIONS: frozenset[str] = frozenset({
-    # ... existing 23 actions ...
+    # ... existing 28 actions ...
     # New in M1 (Security)
     "safety_check",
     "verify_integrity",

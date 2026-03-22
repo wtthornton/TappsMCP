@@ -15,7 +15,7 @@ When the **TappsMCP** MCP server is configured, you **MUST** use its tools for c
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files. **Always pass explicit `file_paths`** (comma-separated). Default is quick mode; only use `quick=false` as a last resort. |
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
-| **tapps_memory** | **REQUIRED** - persistent cross-session knowledge (23 actions). Search at session start, save before end. See **Memory action reference** below. |
+| **tapps_memory** | **REQUIRED** - persistent cross-session knowledge (28 actions). Search at session start, save before end. See **Memory action reference** below. |
 
 **For full tool reference** (30 tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
@@ -114,7 +114,7 @@ Your project may have two complementary memory systems:
 
 REQUIRED: Use `tapps_memory` for all architecture decisions and quality patterns. Check memory at session start and save learnings before session end.
 
-### Memory action reference (23 actions)
+### Memory action reference (28 actions)
 
 **Core:** `save` (key, value, tier, scope, tags), `save_bulk` (up to 50 entries), `get` (by key), `list` (filter by scope/tier/tags), `delete` (by key)
 

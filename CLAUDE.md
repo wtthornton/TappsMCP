@@ -107,6 +107,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Ruff RUF012**: Mutable class-level attributes need `ClassVar` annotation.
 - **Windows testing**: Use `python -c "import time; time.sleep(N)"` for timeout tests -- Git Bash intercepts `cmd /c timeout`.
 - **Patching lazy imports**: Some imports happen inside tool handlers from `tapps_core`. Patch at source modules, not `tapps_mcp.server`.
+- **tapps-brain version gap**: TappsMCP pins tapps-brain at `v1.0.1` (git tag). The tapps-brain repo has v1.1.0 in pyproject.toml but it is **not yet tagged**. Profile/promotion modules (`tapps_brain.profile`, `tapps_brain.promotion`) are only available in v1.1.0+. All TappsMCP imports of these modules use `try/except ImportError` with graceful degradation.
 
 ## Important context
 
@@ -165,7 +166,7 @@ When the user requests a persona by name (e.g. "use Frontend Developer", "@reali
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **23 actions** (save, search, consolidate, federation, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall (inject memories before turns) and auto-capture (extract facts on session end).
+`tapps_memory` provides persistent cross-session knowledge with **28 actions** (save, search, consolidate, federation, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall (inject memories before turns) and auto-capture (extract facts on session end).
 
 ## 5-Stage Pipeline
 

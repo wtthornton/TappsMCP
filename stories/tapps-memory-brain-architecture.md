@@ -10,7 +10,7 @@
 ```
                          MCP Tool Layer
                    ┌──────────────────────┐
-                   │  tapps_memory(action) │  23 actions
+                   │  tapps_memory(action) │  28 actions
                    │  server_memory_tools  │
                    └──────────┬───────────┘
                               │
