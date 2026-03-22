@@ -576,6 +576,48 @@ def check_tapps_brain() -> CheckResult:
         )
 
 
+def check_dual_memory_server(root: Path) -> CheckResult:
+    """Warn if tapps-brain-mcp is configured alongside TappsMCP (split-brain risk).
+
+    Scans common MCP config locations for a ``tapps-brain-mcp`` or
+    ``tapps-brain`` server entry.  Running both memory servers against the
+    same project causes two processes accessing the same SQLite database.
+    """
+    config_paths = [
+        root / ".claude" / "settings.json",
+        root / ".claude" / "settings.local.json",
+        root / ".cursor" / "mcp.json",
+        root / ".vscode" / "mcp.json",
+        Path.home() / ".claude" / "settings.json",
+    ]
+    for cfg in config_paths:
+        if not cfg.exists():
+            continue
+        try:
+            text = cfg.read_text(encoding="utf-8-sig")
+            if "tapps-brain-mcp" in text or "tapps-brain" in text.lower():
+                # Exclude our own doctor check reference — look for server config patterns
+                if any(
+                    marker in text
+                    for marker in ['"tapps-brain-mcp"', "'tapps-brain-mcp'", "tapps-brain-mcp"]
+                ):
+                    return CheckResult(
+                        "Dual memory server",
+                        True,
+                        f"tapps-brain-mcp may be configured alongside TappsMCP in {cfg.name}",
+                        "Running both causes split-brain risk. Use tapps_memory for all memory "
+                        "operations. Remove the tapps-brain-mcp server entry if using TappsMCP.",
+                    )
+        except Exception:
+            continue
+
+    return CheckResult(
+        "Dual memory server",
+        True,
+        "No dual memory server detected",
+    )
+
+
 def check_quality_tools() -> list[CheckResult]:
     """Check for installed quality tools (ruff, mypy, bandit, radon)."""
     from tapps_mcp.tools.tool_detection import detect_installed_tools
@@ -726,6 +768,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_hooks(root))
     checks.append(check_stale_exe_backups())
     checks.append(check_tapps_brain())
+    checks.append(check_dual_memory_server(root))
     if quick:
         checks.append(CheckResult(
             "Quality tools",

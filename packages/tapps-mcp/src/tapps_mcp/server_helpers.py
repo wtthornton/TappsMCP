@@ -148,11 +148,31 @@ def _get_memory_store() -> _MemoryStoreType:
             model=ss.model,
         )
 
+        # Epic M2.4: Resolve memory profile from settings or auto-detect
+        profile = None
+        try:
+            from tapps_brain.profile import get_builtin_profile, resolve_profile
+
+            profile_name = settings.memory.profile
+            if profile_name:
+                profile = get_builtin_profile(profile_name)
+            else:
+                profile = resolve_profile(settings.project_root)
+        except (ImportError, Exception):
+            pass  # Falls back to tapps-brain's default resolution
+
+        # Only pass profile kwarg when the store constructor supports it
+        store_kwargs: dict[str, Any] = {
+            "store_dir": ".tapps-mcp",
+            "consolidation_config": consolidation_config,
+            "embedding_provider": embedding_provider,
+        }
+        if profile is not None:
+            store_kwargs["profile"] = profile
+
         _memory_store = MemoryStore(
             settings.project_root,
-            store_dir=".tapps-mcp",
-            consolidation_config=consolidation_config,
-            embedding_provider=embedding_provider,
+            **store_kwargs,
         )
     return _memory_store
 

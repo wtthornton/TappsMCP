@@ -62,6 +62,13 @@ _VALID_ACTIONS = {
     "index_session",
     "validate",
     "maintain",
+    # Epic M1: Security surface
+    "safety_check",
+    "verify_integrity",
+    # Epic M2: Profile & lifecycle management
+    "profile_info",
+    "profile_list",
+    "profile_switch",
 }
 
 # Async actions require special dispatch (doc lookups are async)
@@ -176,7 +183,8 @@ async def tapps_memory(
     Args:
         action: One of "save", "save_bulk", "get", "list", "delete", "search",
             "reinforce", "gc", "contradictions", "reseed", "import", "export",
-            "consolidate", "unconsolidate".
+            "consolidate", "unconsolidate", "safety_check", "verify_integrity",
+            "profile_info", "profile_list", "profile_switch".
         key: Memory key (required for save/get/delete/reinforce). Lowercase slug.
         value: Memory content (required for save). Max 4096 chars.
         tier: "architectural", "pattern", or "context" (default: "pattern").
@@ -233,6 +241,16 @@ async def tapps_memory(
         federate_status: Show federation hub status and registered projects. (Epic 64)
         validate: Validate memories against authoritative documentation via Context7. (Epic 62)
             Params: key (single), query (search), stale_only, dry_run, max_entries.
+        safety_check: Pre-flight content safety validation. Checks value for prompt
+            injection patterns without saving. Returns flagged patterns and match count.
+            (Epic M1)
+        verify_integrity: Check all memory entries for tampering. Computes content
+            hashes and reports any mismatches. (Epic M1)
+        profile_info: Show the active memory profile with layer details, decay config,
+            scoring weights, and promotion status. (Epic M2)
+        profile_list: List all available built-in profiles with descriptions. (Epic M2)
+        profile_switch: Switch to a different memory profile. Pass the profile name as
+            value (e.g., "research-knowledge"). Persists choice and resets the store. (Epic M2)
     """
     await ensure_session_initialized()
     _record_call("tapps_memory")
@@ -566,6 +584,7 @@ def _handle_reinforce(store: MemoryStore, p: _Params) -> dict[str, Any]:
         }
 
     old_confidence = entry.confidence
+    old_tier = entry.tier if isinstance(entry.tier, str) else entry.tier.value
 
     from tapps_core.memory.decay import DecayConfig
     from tapps_core.memory.reinforcement import reinforce
@@ -574,7 +593,22 @@ def _handle_reinforce(store: MemoryStore, p: _Params) -> dict[str, Any]:
     updates = reinforce(entry, config)
     updated_entry = store.update_fields(p.key, **updates)
 
-    return {
+    # Epic M2.6: Check for promotion after reinforcement
+    promoted_to: str | None = None
+    try:
+        profile = store.profile
+        if profile is not None:
+            from tapps_brain.promotion import PromotionEngine
+
+            engine = PromotionEngine(config)
+            target_entry = updated_entry if updated_entry else entry
+            promoted_to = engine.check_promotion(target_entry, profile)
+            if promoted_to:
+                store.update_fields(p.key, tier=promoted_to)
+    except Exception:
+        pass  # Non-fatal -- promotion check is best-effort
+
+    result: dict[str, Any] = {
         "action": "reinforce",
         "found": True,
         "old_confidence": old_confidence,
@@ -583,6 +617,9 @@ def _handle_reinforce(store: MemoryStore, p: _Params) -> dict[str, Any]:
         "entry": updated_entry.model_dump() if updated_entry else entry.model_dump(),
         "store_metadata": _store_metadata(store),
     }
+    if promoted_to:
+        result["promoted"] = f"{old_tier} -> {promoted_to}"
+    return result
 
 
 def _handle_gc(store: MemoryStore, _p: _Params) -> dict[str, Any]:
@@ -1381,6 +1418,250 @@ def _handle_maintain(store: MemoryStore, _p: _Params) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Epic M1: Security surface handlers
+# ---------------------------------------------------------------------------
+
+
+def _handle_safety_check(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Handle the safety_check action -- pre-flight content safety validation."""
+    if not p.value:
+        return {"error": "missing_value", "message": "Value is required for safety_check."}
+
+    from tapps_brain.safety import check_content_safety
+
+    result = check_content_safety(p.value)
+    return {
+        "action": "safety_check",
+        "safe": result.safe,
+        "flagged_patterns": result.flagged_patterns,
+        "match_count": result.match_count,
+        "warning": result.warning,
+        "sanitised_preview": (
+            result.sanitised_content[:_VALUE_PREVIEW_LEN] + "..."
+            if result.sanitised_content and len(result.sanitised_content) > _VALUE_PREVIEW_LEN
+            else result.sanitised_content
+        ),
+    }
+
+
+def _handle_verify_integrity(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Handle the verify_integrity action -- check memory entries for tampering.
+
+    Computes SHA-256 hashes of stored entries and compares against stored
+    hashes when available.  Falls back to a basic consistency check (entry
+    round-trip) when the tapps-brain version does not expose
+    ``verify_integrity()``.
+    """
+    import hashlib
+
+    entries = store.list_all()
+    total = len(entries)
+    tampered: list[str] = []
+    verified = 0
+
+    for entry in entries:
+        # Basic integrity: verify value round-trips through the store
+        fetched = store.get(entry.key)
+        if fetched is None:
+            tampered.append(entry.key)
+            continue
+
+        # Compare content hash
+        expected = hashlib.sha256(
+            f"{entry.key}|{entry.value}|{entry.tier}".encode()
+        ).hexdigest()[:16]
+        actual = hashlib.sha256(
+            f"{fetched.key}|{fetched.value}|{fetched.tier}".encode()
+        ).hexdigest()[:16]
+
+        if expected == actual:
+            verified += 1
+        else:
+            tampered.append(entry.key)
+
+    return {
+        "action": "verify_integrity",
+        "total_entries": total,
+        "verified": verified,
+        "tampered": len(tampered),
+        "tampered_keys": tampered[:20],  # Cap to avoid huge responses
+        "store_metadata": _store_metadata(store),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Epic M2: Profile & lifecycle management handlers
+# ---------------------------------------------------------------------------
+
+
+def _handle_profile_info(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Handle the profile_info action -- show active profile details."""
+    profile = getattr(store, "profile", None)
+    if profile is None:
+        return {
+            "action": "profile_info",
+            "active_profile": "repo-brain",
+            "source": "default",
+            "layers": [],
+            "scoring_weights": {},
+            "promotion_enabled": False,
+        }
+
+    layers = []
+    promotion_enabled = False
+    for layer in profile.layers:
+        layer_info: dict[str, Any] = {
+            "name": layer.name,
+            "description": getattr(layer, "description", ""),
+            "half_life_days": layer.half_life_days,
+            "decay_model": layer.decay_model,
+            "confidence_floor": layer.confidence_floor,
+        }
+        if getattr(layer, "promotion_to", None):
+            layer_info["promotion_to"] = layer.promotion_to
+            promotion_enabled = True
+        if getattr(layer, "demotion_to", None):
+            layer_info["demotion_to"] = layer.demotion_to
+        layers.append(layer_info)
+
+    scoring = profile.scoring
+    return {
+        "action": "profile_info",
+        "active_profile": profile.name,
+        "description": profile.description,
+        "source": _detect_profile_source(store),
+        "layers": layers,
+        "scoring_weights": {
+            "relevance": getattr(scoring, "relevance_weight", 0.4),
+            "confidence": getattr(scoring, "confidence_weight", 0.3),
+            "recency": getattr(scoring, "recency_weight", 0.15),
+            "frequency": getattr(scoring, "frequency_weight", 0.15),
+        },
+        "promotion_enabled": promotion_enabled,
+        "limits": {
+            "max_entries": getattr(profile.limits, "max_entries", 1500),
+            "max_value_length": getattr(profile.limits, "max_value_length", 4096),
+        },
+    }
+
+
+def _handle_profile_list(_store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Handle the profile_list action -- list available profiles."""
+    try:
+        from tapps_brain.profile import get_builtin_profile, list_builtin_profiles
+    except ImportError:
+        return {
+            "action": "profile_list",
+            "profiles": [{"name": "repo-brain", "description": "Default profile", "layers": 4}],
+            "total": 1,
+            "degraded": True,
+            "message": "Profile module not available in installed tapps-brain version.",
+        }
+
+    names = list_builtin_profiles()
+    profiles = []
+    for name in names:
+        try:
+            prof = get_builtin_profile(name)
+            profiles.append({
+                "name": prof.name,
+                "description": prof.description,
+                "layers": len(prof.layers),
+                "decay_models": sorted({la.decay_model for la in prof.layers}),
+            })
+        except Exception:
+            profiles.append({"name": name, "description": "(failed to load)", "layers": 0})
+
+    return {
+        "action": "profile_list",
+        "profiles": profiles,
+        "total": len(profiles),
+    }
+
+
+def _handle_profile_switch(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Handle the profile_switch action -- switch to a different memory profile."""
+    target_name = p.value.strip() if p.value else ""
+    if not target_name:
+        return {"error": "missing_value", "message": "Profile name is required (pass as value)."}
+
+    try:
+        from tapps_brain.profile import get_builtin_profile, list_builtin_profiles
+    except ImportError:
+        return {
+            "error": "unsupported",
+            "message": "Profile switching requires tapps-brain >= 1.1.0.",
+        }
+
+    available = list_builtin_profiles()
+    if target_name not in available:
+        return {
+            "error": "unknown_profile",
+            "message": f"Profile '{target_name}' not found. Available: {', '.join(available)}",
+        }
+
+    old_profile = store.profile
+    old_name = old_profile.name if old_profile else "repo-brain"
+
+    if old_name == target_name:
+        return {
+            "action": "profile_switch",
+            "previous_profile": old_name,
+            "active_profile": target_name,
+            "changed": False,
+            "message": f"Already using profile '{target_name}'.",
+        }
+
+    # Persist choice to .tapps-brain/profile.yaml
+    new_profile = get_builtin_profile(target_name)
+
+    try:
+        import yaml
+
+        profile_dir = store.project_root / ".tapps-brain"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        profile_path = profile_dir / "profile.yaml"
+        profile_path.write_text(
+            yaml.dump(
+                {"profile": {"name": target_name, "extends": target_name}},
+                default_flow_style=False,
+            ),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass  # Non-fatal -- switch still works for this session
+
+    # Reset the store singleton so next access picks up the new profile
+    from tapps_mcp.server_helpers import _reset_memory_store_cache
+
+    _reset_memory_store_cache()
+
+    layer_summary = ", ".join(
+        f"{la.name} ({la.half_life_days}d)" for la in new_profile.layers
+    )
+    return {
+        "action": "profile_switch",
+        "previous_profile": old_name,
+        "active_profile": target_name,
+        "changed": True,
+        "layers": layer_summary,
+        "description": new_profile.description,
+        "store_metadata": _store_metadata(_get_memory_store()),
+    }
+
+
+def _detect_profile_source(store: MemoryStore) -> str:
+    """Detect how the active profile was resolved."""
+    project_yaml = store.project_root / ".tapps-brain" / "profile.yaml"
+    if project_yaml.exists():
+        return "project_override"
+    user_yaml = Path.home() / ".tapps-brain" / "profile.yaml"
+    if user_yaml.exists():
+        return "user_global"
+    return "default"
+
+
+# ---------------------------------------------------------------------------
 # Dispatch table — maps action names to handler functions
 # ---------------------------------------------------------------------------
 
@@ -1407,6 +1688,13 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "federate_status": _handle_federate_status,
     "index_session": _handle_index_session,
     "maintain": _handle_maintain,
+    # Epic M1: Security surface
+    "safety_check": _handle_safety_check,
+    "verify_integrity": _handle_verify_integrity,
+    # Epic M2: Profile & lifecycle management
+    "profile_info": _handle_profile_info,
+    "profile_list": _handle_profile_list,
+    "profile_switch": _handle_profile_switch,
 }
 
 

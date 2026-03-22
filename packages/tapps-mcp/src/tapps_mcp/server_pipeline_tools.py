@@ -935,6 +935,34 @@ def _enrich_memory_status_hints(
         _logger.debug("memory_status_hints_failed", exc_info=True)
 
 
+def _enrich_memory_profile_status(
+    memory_status: dict[str, Any],
+    store: Any,
+    settings: TappsMCPSettings,
+) -> None:
+    """Add active profile name and source to memory_status (Epic M2.4)."""
+    try:
+        profile = store.profile
+        if profile is not None:
+            profile_name = profile.name
+        else:
+            profile_name = "repo-brain"
+
+        # Detect source
+        project_yaml = settings.project_root / ".tapps-brain" / "profile.yaml"
+        if settings.memory.profile:
+            source = "settings"
+        elif project_yaml.exists():
+            source = "project_override"
+        else:
+            source = "default"
+
+        memory_status["profile"] = profile_name
+        memory_status["profile_source"] = source
+    except Exception:
+        _logger.debug("memory_profile_status_failed", exc_info=True)
+
+
 def _maybe_consolidation_scan(
     store: MemoryStore,
     settings: TappsMCPSettings,
@@ -1242,6 +1270,9 @@ async def tapps_session_start(
                     "avg_confidence": avg_conf,
                     "capacity_pct": cap_pct,
                 }
+
+                # Epic M2.4: Profile info in memory status
+                _enrich_memory_profile_status(memory_status, mem_store, settings)
 
                 # Epic 65.1: Consolidation and federation hints when applicable
                 _enrich_memory_status_hints(memory_status, snapshot.entries, settings)

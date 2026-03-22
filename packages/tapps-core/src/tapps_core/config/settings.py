@@ -384,6 +384,14 @@ class MemorySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="TAPPS_MCP_MEMORY_")
 
     enabled: bool = Field(default=True, description="Enable the memory subsystem.")
+    profile: str = Field(
+        default="",
+        description=(
+            "Memory profile override. Empty string means auto-detect from project type. "
+            "Set to a built-in profile name (e.g., 'repo-brain', 'research-knowledge', "
+            "'project-management') to force a specific profile."
+        ),
+    )
     gc_enabled: bool = Field(default=True, description="Enable garbage collection.")
     contradiction_check_on_start: bool = Field(
         default=True, description="Run contradiction detection at session start."
