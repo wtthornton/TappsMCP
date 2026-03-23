@@ -1,0 +1,51 @@
+# TappsMCP Pre-Deployment Fix Plan
+
+<!-- Each ## section is an "epic". QA runs when the last task in a section is completed. -->
+
+## Phase 1: Critical Deploy Blockers (Quick Fixes)
+
+- [x] C1: Replace `import logging` with `structlog` in `packages/tapps-mcp/src/tapps_mcp/server_scoring_tools.py` (lines 11, 47). Change `_logger = logging.getLogger(__name__)` to `logger = structlog.get_logger(__name__)`. Update all `_logger.debug/error` calls to `logger.debug/error`.
+- [x] C2: Remove tag trigger from `.github/workflows/docker.yml` -- delete the `tags: - "v*"` block under `push:`. Keep PR trigger only. `docker-publish.yml` owns all tag-triggered builds.
+- [x] C3: Fix path filter in `.github/workflows/docker.yml` -- replace `src/**` with `packages/*/src/**`. Add `packages/docs-mcp/Dockerfile` and `packages/*/pyproject.toml` to the paths list.
+- [x] C4: Add ImportError guard to `packages/tapps-mcp/src/tapps_mcp/server_memory_tools.py:1430` -- wrap `from tapps_brain.safety import check_content_safety` in try/except ImportError, return `{"error": "unsupported", "degraded": true, "message": "Safety module not available in installed tapps-brain version."}` on failure.
+- [x] H1: Update `expected_tools` in `.github/workflows/docker-publish.yml` -- line 32: change 28 to 30, line 36: change 18 to 32.
+- [x] H5: Add logging to `packages/tapps-mcp/src/tapps_mcp/cli.py:620` -- add `logger.debug("memory_search_failed", exc_info=True)` before `sys.exit(0)` in the bare `except Exception:` handler.
+
+## Phase 2: tapps-brain Version & Profile (Requires tapps-brain repo)
+
+- [x] H2a: Tag v1.1.0 in tapps-brain repo (`C:\cursor\tapps-brain`) and push tag to GitHub.
+- [x] H2b: Update root `pyproject.toml` -- change `tag = "v1.0.1"` to `tag = "v1.1.0"` for tapps-brain dependency.
+- [x] H2c: Run `uv sync --all-packages` and verify profile/promotion imports work without try/except fallback. ✓ tapps-brain 1.1.0 installed, profile (6 profiles) and promotion modules import cleanly.
+- [x] H2d: Add profile management documentation to AGENTS.md memory section. (Added profiles subsection, security/profile actions, updated count to 28.)
+
+## Phase 3: Security Hardening (OWASP ASI06)
+
+- [x] H3a: Wire `check_content_safety()` into `_handle_save()` in `server_memory_tools.py`. Call before store.save(). In warn mode: log flagged patterns but allow the write. Include safety results in save response.
+- [x] H3b: Add `safety.enforcement` setting to `.tapps-mcp.yaml` config schema (values: `warn` | `block`, default: `warn`). Read in `_handle_save()` to determine behavior.
+- [x] H3c: Implement bypass access control -- only allow `safety_bypass=True` when source is `"system"` (not `"agent"` or `"inferred"`). Added `safety_bypass` param to `_Params`, `tapps_memory()`, and `_handle_save()`. Added `allow_bypass` config to `MemorySafetySettings`. Bypass denied with warning log for non-system sources. Extended safety enforcement to `_handle_save_bulk()` with per-entry checks, bypass access control, and `blocked` count.
+- [x] H3d: Add tests for safety enforcement in save path (6 known injection patterns from MINJA test suite + false positive rate check). ✓ 22 tests in `test_memory_safety_enforcement.py`: 6 MINJA patterns, bypass access control (system/agent/inferred/human/config), false positives (10 parametrized), warn mode, bulk save safety. Also extended `_handle_save_bulk` with per-entry safety checks.
+- [x] H4a: (tapps-brain) Add `integrity_hash` nullable column to `memories` table. Compute HMAC-SHA256 on save. Key stored at `~/.tapps-brain/integrity.key`. ✓ Created `integrity.py` (key mgmt + compute/verify), added `integrity_hash` field to `MemoryEntry`, schema v8 migration, hash computed on save in `persistence.py`, hash read back in `_row_to_entry`.
+- [x] H4b: (tapps-brain) Add `verify_integrity()` method that scans entries and reports tampered ones. Added `MemoryStore.verify_integrity()` in `store.py` — scans all entries, verifies HMAC-SHA256 via `verify_integrity_hash()`, returns `{total, verified, tampered, no_hash, tampered_keys}`.
+- [x] H4c: Surface integrity violations in `tapps_memory(action="verify_integrity")` response and in `memory_health()`. ✓ Updated `_handle_verify_integrity` in `server_memory_tools.py` to delegate to `store.verify_integrity()` (HMAC-SHA256). Added `integrity_verified/tampered/no_hash/tampered_keys` fields to `StoreHealthReport` in tapps-brain. `store.health()` now includes integrity scan results.
+- [x] H6a: (tapps-brain) Add sliding window rate limiter to `MemoryStore.save()`. Default: 20 writes/min, 100/session. Warn-only. ✓ Created `rate_limiter.py` (SlidingWindowRateLimiter, RateLimiterConfig, RateLimitResult, RateLimiterStats). Wired into `MemoryStore.__init__` and `save()`. Added `batch_context` param to `save()` for H6b exemptions. 18 tests in `test_rate_limiter.py`. Exported from `__init__.py`.
+- [x] H6b: (tapps-brain) Add batch_context exemption for `import_markdown`, `seed`, `federation_sync`, `consolidate`. ✓ Wired `batch_context` param into all `store.save()` calls: seeding.py (7 calls, "seed"), markdown_import.py (3 calls, "import_markdown"), auto_consolidation.py (1 call, "consolidate"), federation.py (1 call, "federation_sync").
+- [x] H6c: Surface anomaly counts in `memory_health()` response. ✓ Added `rate_limit_minute_anomalies`, `rate_limit_session_anomalies`, `rate_limit_total_writes`, `rate_limit_exempt_writes` fields to `StoreHealthReport` in tapps-brain. Populated from `rate_limiter.stats` in `store.health()`. Surfaced in `_handle_health()` in TappsMCP with `getattr` fallback for older tapps-brain versions.
+
+## Phase 4: Medium Priority Fixes
+
+- [x] M1: Wire `ablated_template` parameter into `evaluator.evaluate_batch()` in `packages/tapps-mcp/src/tapps_mcp/benchmark/ablation.py:219`.
+- [x] M4: Enable promotion engine in default `repo-brain` profile (requires tapps-brain v1.1.0). Set thresholds: context->procedural (3 accesses, 7d), procedural->pattern (5, 14d), pattern->architectural (10, 30d). ✓ Updated repo-brain.yaml thresholds (context: 5→3, procedural: 8→5). Added explicit `profile: repo-brain` to both tapps-mcp and tapps-core default.yaml configs.
+- [x] M3: Enable graph-boosted recall when store has >= 10 relation triples. Set `graph_boost_factor=0.1`. Add relation count to `memory_health()` output. ✓ Added `relation_count` to `StoreHealthReport` in tapps-brain, `count_relations()` to `MemoryStore`, populated in `health()`. Added density-gated graph boost in `_ranked_search()` (>= 10 relations → boost factor 0.1, inversely proportional to hop distance). Surfaced `relation_count` in `_handle_health()` and `graph_boost_active` flag in ranked search response.
+- [x] M2: Add `source_trust` signal to composite retrieval scoring in tapps-brain. Defaults: human=1.0, system=0.9, agent=0.7, inferred=0.5. ✓ tapps-brain: `ScoringConfig.source_trust` in `profile.py`, `_DEFAULT_SOURCE_TRUST` in `retrieval.py`, post-composite multiplier in `MemoryRetriever.search()`, `repo-brain.yaml` profile, 13 tests in `test_source_trust.py`. TappsMCP: wired profile `scoring_config` into `_ranked_search()`, `_find_entries_by_query()`, and CLI search. Added `source_trust_active` to search response, `source_trust` dict to `profile_info` response.
+
+## Completed
+- [x] Project reviewed and fix plan created (2026-03-22)
+
+## Notes
+- Phase 1 items are independent quick fixes (no external dependencies)
+- Phase 2 requires access to tapps-brain repo at C:\cursor\tapps-brain
+- Phase 3 requires tapps-brain changes to land first (R01-R03 from recommendations)
+- Phase 4 items are enhancements, not blocking deployment
+- QA runs at epic boundaries (when a section's last task is completed)
+- This is the primary fix plan (canonical copy)
+- See docs/planning/TAPPS_BRAIN_INTEGRATION_RECOMMENDATIONS.md for R01-R18 details
