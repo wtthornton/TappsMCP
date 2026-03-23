@@ -31,6 +31,7 @@ memory_hooks:
 
 memory:
   enabled: true
+  profile: repo-brain
   gc_enabled: true
   contradiction_check_on_start: true
   max_memories: 1500
@@ -43,6 +44,8 @@ memory:
     block_sensitive_keywords: ["password", "secret", "api_key", "token"]
     min_value_length: 10
     max_value_length: 4096
+  safety:
+    enforcement: warn
   semantic_search:
     enabled: false
     provider: sentence_transformers

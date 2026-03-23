@@ -77,6 +77,7 @@ class MockEvaluator:
         instances: list[BenchmarkInstance],
         context_mode: ContextMode,
         engagement_level: str = "medium",
+        template_override: str | None = None,
     ) -> list[BenchmarkResult]:
         """Evaluate a batch of instances."""
         results: list[BenchmarkResult] = []

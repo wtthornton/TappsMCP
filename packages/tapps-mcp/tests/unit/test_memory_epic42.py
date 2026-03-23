@@ -453,5 +453,7 @@ class TestValidActions:
             "federate_register", "federate_publish", "federate_subscribe",
             "federate_sync", "federate_search", "federate_status",
             "index_session", "validate", "maintain",
+            "health", "profile_info", "profile_list", "profile_switch",
+            "safety_check", "verify_integrity",
         }
         assert _VALID_ACTIONS == expected

@@ -352,7 +352,10 @@ def validate_skills_cmd(skills_path: str, platform: str) -> None:
     if not dirs_to_check and root.name == "skills":
         dirs_to_check = [root]
     if not dirs_to_check:
-        click.echo("No skills directories found. Run from project root or pass --path to .claude/skills or .cursor/skills.", err=True)
+        click.echo(
+            "No skills directories found. Run from project root or pass --path to .claude/skills or .cursor/skills.",
+            err=True,
+        )
         raise SystemExit(1)
 
     errors: list[tuple[str, list[str]]] = []
@@ -610,7 +613,9 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
     scored: list[ScoredMemory] = []
     try:
         store = MemoryStore(root, store_dir=".tapps-mcp")
-        retriever = MemoryRetriever()
+        # M2: Load profile scoring config for source_trust multipliers
+        scoring_config = getattr(getattr(store, "profile", None), "scoring", None)
+        retriever = MemoryRetriever(scoring_config=scoring_config)
         scored = retriever.search(
             query,
             store,
@@ -618,6 +623,9 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
             min_confidence=min_score,
         )
     except Exception:
+        import structlog
+
+        structlog.get_logger(__name__).debug("memory_search_failed", exc_info=True)
         sys.exit(0)
     finally:
         if store is not None:

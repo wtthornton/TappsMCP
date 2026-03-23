@@ -93,6 +93,7 @@ class Evaluator:
         instances: list[BenchmarkInstance],
         context_mode: ContextMode,
         progress_callback: Any = None,  # noqa: ANN401
+        template_override: str | None = None,
     ) -> list[BenchmarkResult]:
         """Evaluate a batch with configurable parallelism.
 
@@ -104,6 +105,8 @@ class Evaluator:
             context_mode: Context injection mode.
             progress_callback: Optional callable(completed, total) for
                 progress reporting.
+            template_override: Optional template content to use instead
+                of the default generated template (for ablation testing).
 
         Returns:
             List of results in the same order as instances.

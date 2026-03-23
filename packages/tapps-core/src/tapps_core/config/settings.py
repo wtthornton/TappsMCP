@@ -149,6 +149,27 @@ class MemoryWriteRules(BaseModel):
     )
 
 
+class MemorySafetySettings(BaseModel):
+    """Content safety enforcement for memory saves."""
+
+    enforcement: Literal["warn", "block"] = Field(
+        default="warn",
+        description=(
+            "How to handle flagged content in memory saves. "
+            "'warn': log and allow the write. "
+            "'block': reject the save and return an error."
+        ),
+    )
+    allow_bypass: bool = Field(
+        default=False,
+        description=(
+            "Allow safety_bypass=True from any source. "
+            "When False (default), only source='system' may bypass safety checks. "
+            "When True, any source may use safety_bypass=True."
+        ),
+    )
+
+
 class MemoryAutoRecallSettings(BaseModel):
     """Settings for the auto-recall hook (Epic 65.4)."""
 
@@ -422,6 +443,10 @@ class MemorySettings(BaseSettings):
     write_rules: MemoryWriteRules = Field(
         default_factory=MemoryWriteRules,
         description="Rules for memory write validation (Epic 65.3).",
+    )
+    safety: MemorySafetySettings = Field(
+        default_factory=MemorySafetySettings,
+        description="Content safety enforcement for memory saves.",
     )
     decay: MemoryDecaySettings = Field(default_factory=MemoryDecaySettings)
     consolidation: MemoryConsolidationSettings = Field(default_factory=MemoryConsolidationSettings)

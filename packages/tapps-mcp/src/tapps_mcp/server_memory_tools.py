@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 from tapps_mcp.server_helpers import (
     _get_memory_store,
     ensure_session_initialized,
@@ -37,6 +39,8 @@ _ANNOTATIONS_MEMORY = ToolAnnotations(
 )
 
 _VALUE_PREVIEW_LEN = 200
+
+logger = structlog.get_logger(__name__)
 
 _VALID_ACTIONS = {
     "save",
@@ -69,6 +73,8 @@ _VALID_ACTIONS = {
     "profile_info",
     "profile_list",
     "profile_switch",
+    # Health / diagnostics
+    "health",
 }
 
 # Async actions require special dispatch (doc lookups are async)
@@ -129,6 +135,8 @@ class _Params:
     include_session_index: bool = False
     session_id: str = ""
     chunks: str = ""
+    # Safety bypass (H3c)
+    safety_bypass: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +177,7 @@ async def tapps_memory(
     include_session_index: bool = False,
     session_id: str = "",
     chunks: str = "",
+    safety_bypass: bool = False,
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
@@ -210,6 +219,9 @@ async def tapps_memory(
         include_sources: When True, search/list includes source entries of consolidated
             memories (default: False). By default, entries that were consolidated into
             other entries are filtered out to avoid duplicates. (Epic 58, Story 58.5)
+        safety_bypass: When True, skip content safety checks for save/save_bulk.
+            Only honored when source="system" or memory.safety.allow_bypass is True.
+            Agent/inferred sources cannot self-bypass. (H3c)
 
     Actions:
         save: Store a new memory or update an existing one.
@@ -309,6 +321,7 @@ async def tapps_memory(
         include_session_index=include_session_index,
         session_id=session_id,
         chunks=chunks,
+        safety_bypass=safety_bypass,
     )
 
     try:
@@ -339,6 +352,58 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
     if not p.value:
         return {"error": "missing_value", "message": "Value is required for save."}
 
+    # --- Content safety pre-flight ---
+    from tapps_core.config.settings import load_settings
+
+    settings = load_settings()
+    enforcement = settings.memory.safety.enforcement
+
+    # Bypass access control (H3c): only source="system" or explicit config
+    # may skip safety checks. Agent/inferred sources cannot self-bypass.
+    bypass_allowed = p.safety_bypass and (
+        p.source == "system" or settings.memory.safety.allow_bypass
+    )
+    if p.safety_bypass and not bypass_allowed:
+        logger.warning(
+            "memory_save_bypass_denied",
+            key=p.key,
+            source=p.source,
+            reason="safety_bypass requires source='system' or allow_bypass config",
+        )
+
+    safety_info: dict[str, Any] | None = None
+    if not bypass_allowed:
+        try:
+            from tapps_brain.safety import check_content_safety
+
+            safety_result = check_content_safety(p.value)
+            if not safety_result.safe:
+                logger.warning(
+                    "memory_save_safety_flagged",
+                    key=p.key,
+                    flagged_patterns=safety_result.flagged_patterns,
+                    match_count=safety_result.match_count,
+                    enforcement=enforcement,
+                )
+                safety_info = {
+                    "safe": False,
+                    "flagged_patterns": safety_result.flagged_patterns,
+                    "match_count": safety_result.match_count,
+                    "warning": safety_result.warning,
+                    "enforcement": enforcement,
+                }
+                if enforcement == "block":
+                    return {
+                        "error": "content_blocked",
+                        "message": (
+                            "Content flagged by safety check and enforcement is 'block'. "
+                            "Set memory.safety.enforcement to 'warn' to allow."
+                        ),
+                        "safety": safety_info,
+                    }
+        except ImportError:
+            pass  # Safety module not available; proceed without check
+
     result = store.save(
         key=p.key,
         value=p.value,
@@ -354,11 +419,17 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
     if isinstance(result, dict):
         return result
 
-    return {
+    response: dict[str, Any] = {
         "action": "save",
         "entry": result.model_dump(),
         "store_metadata": _store_metadata(store),
     }
+    if safety_info is not None:
+        response["safety"] = safety_info
+    if p.safety_bypass and not bypass_allowed:
+        response["bypass_denied"] = True
+        response["bypass_reason"] = "safety_bypass requires source='system' or allow_bypass config"
+    return response
 
 
 def _handle_save_bulk(store: MemoryStore, p: _Params) -> dict[str, Any]:
@@ -386,8 +457,34 @@ def _handle_save_bulk(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "message": (f"Maximum {_BULK_SAVE_MAX_ENTRIES} entries per call, got {len(parsed)}."),
         }
 
+    # --- Content safety setup (H3c: bypass access control) ---
+    from tapps_core.config.settings import load_settings
+
+    settings = load_settings()
+    enforcement = settings.memory.safety.enforcement
+
+    bypass_allowed = p.safety_bypass and (
+        p.source == "system" or settings.memory.safety.allow_bypass
+    )
+    if p.safety_bypass and not bypass_allowed:
+        logger.warning(
+            "memory_save_bulk_bypass_denied",
+            source=p.source,
+            reason="safety_bypass requires source='system' or allow_bypass config",
+        )
+
+    check_content_safety_fn = None
+    if not bypass_allowed:
+        try:
+            from tapps_brain.safety import check_content_safety
+
+            check_content_safety_fn = check_content_safety
+        except ImportError:
+            pass  # Safety module not available; proceed without check
+
     saved = 0
     skipped = 0
+    blocked = 0
     errors: list[dict[str, str]] = []
 
     for i, entry in enumerate(parsed):
@@ -412,6 +509,28 @@ def _handle_save_bulk(store: MemoryStore, p: _Params) -> dict[str, Any]:
             )
             skipped += 1
             continue
+
+        # Per-entry content safety check
+        if check_content_safety_fn is not None:
+            safety_result = check_content_safety_fn(e_value)
+            if not safety_result.safe:
+                logger.warning(
+                    "memory_save_bulk_safety_flagged",
+                    key=e_key,
+                    index=i,
+                    flagged_patterns=safety_result.flagged_patterns,
+                    enforcement=enforcement,
+                )
+                if enforcement == "block":
+                    errors.append(
+                        {
+                            "index": str(i),
+                            "key": e_key,
+                            "error": f"Content blocked by safety check: {safety_result.warning}",
+                        }
+                    )
+                    blocked += 1
+                    continue
 
         e_tier = entry.get("tier", p.tier)
         e_scope = entry.get("scope", p.scope)
@@ -443,13 +562,16 @@ def _handle_save_bulk(store: MemoryStore, p: _Params) -> dict[str, Any]:
             errors.append({"key": e_key, "error": str(exc)})
             skipped += 1
 
-    return {
+    response: dict[str, Any] = {
         "action": "save_bulk",
         "saved": saved,
         "skipped": skipped,
         "errors": errors,
         "store_metadata": _store_metadata(store),
     }
+    if blocked > 0:
+        response["blocked"] = blocked
+    return response
 
 
 def _handle_get(store: MemoryStore, p: _Params) -> dict[str, Any]:
@@ -1089,7 +1211,10 @@ def _find_entries_by_query(
         if rr.enabled
         else None
     )
+    # M2: Load profile scoring config (includes source_trust multipliers)
+    scoring_config = getattr(getattr(store, "profile", None), "scoring", None)
     retriever = MemoryRetriever(
+        scoring_config=scoring_config,
         semantic_enabled=settings.memory.semantic_search.enabled,
         hybrid_config=settings.memory.hybrid,
         reranker=reranker,
@@ -1143,7 +1268,10 @@ def _handle_index_session(store: MemoryStore, p: _Params) -> dict[str, Any]:
     try:
         parsed = json.loads(p.chunks)
     except (json.JSONDecodeError, TypeError) as exc:
-        return {"error": "invalid_chunks", "message": f"chunks must be JSON array of strings: {exc}"}
+        return {
+            "error": "invalid_chunks",
+            "message": f"chunks must be JSON array of strings: {exc}",
+        }
     if not isinstance(parsed, list):
         return {"error": "invalid_chunks", "message": "chunks must be a JSON array."}
     chunks_list = [str(c) for c in parsed if c]
@@ -1417,6 +1545,53 @@ def _handle_maintain(store: MemoryStore, _p: _Params) -> dict[str, Any]:
     }
 
 
+def _handle_health(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Handle the health action -- aggregate health report with integrity status.
+
+    Delegates to ``store.health()`` when available (tapps-brain >= v1.1.0).
+    Falls back to a basic snapshot-based report for older versions.
+    """
+    if hasattr(store, "health") and callable(store.health):
+        report = store.health()
+        return {
+            "action": "health",
+            "store_path": report.store_path,
+            "entry_count": report.entry_count,
+            "max_entries": report.max_entries,
+            "schema_version": report.schema_version,
+            "tier_distribution": report.tier_distribution,
+            "oldest_entry_age_days": round(report.oldest_entry_age_days, 1),
+            "consolidation_candidates": report.consolidation_candidates,
+            "gc_candidates": report.gc_candidates,
+            "federation_enabled": report.federation_enabled,
+            "federation_project_count": report.federation_project_count,
+            # Integrity (H4c)
+            "integrity_verified": report.integrity_verified,
+            "integrity_tampered": report.integrity_tampered,
+            "integrity_no_hash": report.integrity_no_hash,
+            "integrity_tampered_keys": report.integrity_tampered_keys[:20],
+            "integrity_status": ("clean" if report.integrity_tampered == 0 else "tampered"),
+            # Rate limiter anomaly counts (H6c)
+            "rate_limit_minute_anomalies": getattr(report, "rate_limit_minute_anomalies", 0),
+            "rate_limit_session_anomalies": getattr(report, "rate_limit_session_anomalies", 0),
+            "rate_limit_total_writes": getattr(report, "rate_limit_total_writes", 0),
+            "rate_limit_exempt_writes": getattr(report, "rate_limit_exempt_writes", 0),
+            # Relation graph (M3)
+            "relation_count": getattr(report, "relation_count", 0),
+        }
+
+    # Fallback for older tapps-brain without store.health()
+    snap = store.snapshot()
+    return {
+        "action": "health",
+        "entry_count": snap.total_count,
+        "tier_distribution": snap.tier_counts,
+        "integrity_status": "unavailable",
+        "degraded": True,
+        "message": "Full health report requires tapps-brain >= v1.1.0.",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Epic M1: Security surface handlers
 # ---------------------------------------------------------------------------
@@ -1427,7 +1602,15 @@ def _handle_safety_check(store: MemoryStore, p: _Params) -> dict[str, Any]:
     if not p.value:
         return {"error": "missing_value", "message": "Value is required for safety_check."}
 
-    from tapps_brain.safety import check_content_safety
+    try:
+        from tapps_brain.safety import check_content_safety
+    except ImportError:
+        return {
+            "action": "safety_check",
+            "error": "unsupported",
+            "degraded": True,
+            "message": "Safety module not available in installed tapps-brain version.",
+        }
 
     result = check_content_safety(p.value)
     return {
@@ -1447,11 +1630,26 @@ def _handle_safety_check(store: MemoryStore, p: _Params) -> dict[str, Any]:
 def _handle_verify_integrity(store: MemoryStore, _p: _Params) -> dict[str, Any]:
     """Handle the verify_integrity action -- check memory entries for tampering.
 
-    Computes SHA-256 hashes of stored entries and compares against stored
-    hashes when available.  Falls back to a basic consistency check (entry
-    round-trip) when the tapps-brain version does not expose
-    ``verify_integrity()``.
+    Delegates to ``store.verify_integrity()`` for HMAC-SHA256 verification
+    when available. Falls back to a basic consistency check (entry round-trip)
+    for older tapps-brain versions.
     """
+    if hasattr(store, "verify_integrity") and callable(store.verify_integrity):
+        result = store.verify_integrity()
+        return {
+            "action": "verify_integrity",
+            "total_entries": result["total"],
+            "verified": result["verified"],
+            "tampered": result["tampered"],
+            "no_hash": result["no_hash"],
+            "tampered_keys": result["tampered_keys"][:20],
+            "missing_hash_keys": result.get("missing_hash_keys", [])[:20],
+            "tampered_details": result.get("tampered_details", [])[:10],
+            "integrity_method": "hmac_sha256",
+            "store_metadata": _store_metadata(store),
+        }
+
+    # Fallback for older tapps-brain without verify_integrity()
     import hashlib
 
     entries = store.list_all()
@@ -1460,16 +1658,14 @@ def _handle_verify_integrity(store: MemoryStore, _p: _Params) -> dict[str, Any]:
     verified = 0
 
     for entry in entries:
-        # Basic integrity: verify value round-trips through the store
         fetched = store.get(entry.key)
         if fetched is None:
             tampered.append(entry.key)
             continue
 
-        # Compare content hash
-        expected = hashlib.sha256(
-            f"{entry.key}|{entry.value}|{entry.tier}".encode()
-        ).hexdigest()[:16]
+        expected = hashlib.sha256(f"{entry.key}|{entry.value}|{entry.tier}".encode()).hexdigest()[
+            :16
+        ]
         actual = hashlib.sha256(
             f"{fetched.key}|{fetched.value}|{fetched.tier}".encode()
         ).hexdigest()[:16]
@@ -1484,7 +1680,8 @@ def _handle_verify_integrity(store: MemoryStore, _p: _Params) -> dict[str, Any]:
         "total_entries": total,
         "verified": verified,
         "tampered": len(tampered),
-        "tampered_keys": tampered[:20],  # Cap to avoid huge responses
+        "tampered_keys": tampered[:20],
+        "integrity_method": "sha256_roundtrip",
         "store_metadata": _store_metadata(store),
     }
 
@@ -1537,6 +1734,7 @@ def _handle_profile_info(store: MemoryStore, _p: _Params) -> dict[str, Any]:
             "recency": getattr(scoring, "recency_weight", 0.15),
             "frequency": getattr(scoring, "frequency_weight", 0.15),
         },
+        "source_trust": dict(getattr(scoring, "source_trust", {})),
         "promotion_enabled": promotion_enabled,
         "limits": {
             "max_entries": getattr(profile.limits, "max_entries", 1500),
@@ -1563,12 +1761,14 @@ def _handle_profile_list(_store: MemoryStore, _p: _Params) -> dict[str, Any]:
     for name in names:
         try:
             prof = get_builtin_profile(name)
-            profiles.append({
-                "name": prof.name,
-                "description": prof.description,
-                "layers": len(prof.layers),
-                "decay_models": sorted({la.decay_model for la in prof.layers}),
-            })
+            profiles.append(
+                {
+                    "name": prof.name,
+                    "description": prof.description,
+                    "layers": len(prof.layers),
+                    "decay_models": sorted({la.decay_model for la in prof.layers}),
+                }
+            )
         except Exception:
             profiles.append({"name": name, "description": "(failed to load)", "layers": 0})
 
@@ -1636,9 +1836,7 @@ def _handle_profile_switch(store: MemoryStore, p: _Params) -> dict[str, Any]:
 
     _reset_memory_store_cache()
 
-    layer_summary = ", ".join(
-        f"{la.name} ({la.half_life_days}d)" for la in new_profile.layers
-    )
+    layer_summary = ", ".join(f"{la.name} ({la.half_life_days}d)" for la in new_profile.layers)
     return {
         "action": "profile_switch",
         "previous_profile": old_name,
@@ -1695,6 +1893,8 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "profile_info": _handle_profile_info,
     "profile_list": _handle_profile_list,
     "profile_switch": _handle_profile_switch,
+    # Health / diagnostics
+    "health": _handle_health,
 }
 
 
@@ -1821,7 +2021,10 @@ def _ranked_search(
         if rr.enabled
         else None
     )
+    # M2: Load profile scoring config (includes source_trust multipliers)
+    scoring_config = getattr(getattr(store, "profile", None), "scoring", None)
     retriever = MemoryRetriever(
+        scoring_config=scoring_config,
         semantic_enabled=settings.memory.semantic_search.enabled,
         hybrid_config=settings.memory.hybrid,
         reranker=reranker,
@@ -1831,6 +2034,40 @@ def _ranked_search(
     )
     scored = retriever.search(query, store, limit=limit, include_sources=include_sources)
 
+    # M3: Graph-boosted recall -- density-gated activation (>= 10 relation triples)
+    graph_boost_min_relations = 10
+    graph_boost_factor = 0.1
+    graph_boosted = False
+    connected: dict[str, int] = {}
+    if scored and hasattr(store, "count_relations"):
+        try:
+            rel_count = store.count_relations()
+            if rel_count >= graph_boost_min_relations:
+                graph_boosted = True
+                # Collect result keys
+                result_keys = {sm.entry.key for sm in scored}
+                # Build connected map: key -> min hop distance
+                for sm in scored:
+                    try:
+                        related = store.find_related(sm.entry.key, max_hops=2)
+                    except (KeyError, AttributeError):
+                        continue
+                    for rel_key, hop in related:
+                        if rel_key in result_keys and (
+                            rel_key not in connected or hop < connected[rel_key]
+                        ):
+                            connected[rel_key] = hop
+                # Apply additive boost inversely proportional to hop distance
+                if connected:
+                    for sm in scored:
+                        if sm.entry.key in connected:
+                            hop = connected[sm.entry.key]
+                            hop_boost = graph_boost_factor / hop
+                            sm.score = min(sm.score + hop_boost, 1.0)
+                    scored.sort(key=lambda s: s.score, reverse=True)
+        except Exception:
+            logger.debug("graph_boost_skipped", reason="count_relations unavailable")
+
     result_entries: list[dict[str, Any]] = []
     for i, sm in enumerate(scored):
         entry_data = (
@@ -1838,15 +2075,16 @@ def _ranked_search(
             if include_summary and i >= _FULL_VALUE_THRESHOLD
             else sm.entry.model_dump()
         )
-        result_entries.append(
-            {
-                "entry": entry_data,
-                "score": sm.score,
-                "effective_confidence": sm.effective_confidence,
-                "stale": sm.stale,
-                "source": "memory",
-            }
-        )
+        entry_dict: dict[str, Any] = {
+            "entry": entry_data,
+            "score": sm.score,
+            "effective_confidence": sm.effective_confidence,
+            "stale": sm.stale,
+            "source": "memory",
+        }
+        if graph_boosted and sm.entry.key in connected:
+            entry_dict["graph_boosted"] = True
+        result_entries.append(entry_dict)
 
     # Epic 65.10: optionally include session index hits
     if include_session_index and settings.memory.session_index.enabled:
@@ -1861,7 +2099,8 @@ def _ranked_search(
                     "session_chunk": {
                         "session_id": hit["session_id"],
                         "chunk_index": hit["chunk_index"],
-                        "content": hit["content"][:200] + ("..." if len(hit["content"]) > 200 else ""),
+                        "content": hit["content"][:200]
+                        + ("..." if len(hit["content"]) > 200 else ""),
                         "created_at": hit["created_at"],
                     },
                     "score": max(0.4, score),
@@ -1873,15 +2112,18 @@ def _ranked_search(
         result_entries.sort(key=lambda x: x["score"], reverse=True)
         result_entries = result_entries[:limit]
 
-    return {
+    result: dict[str, Any] = {
         "action": "search",
         "ranked": True,
+        "graph_boost_active": graph_boosted,
+        "source_trust_active": scoring_config is not None,
         "results": result_entries,
         "total_count": len(result_entries),
         "returned_count": len(result_entries),
         "query": query,
         "store_metadata": _store_metadata(store),
     }
+    return result
 
 
 # Marker text for consolidated source entries

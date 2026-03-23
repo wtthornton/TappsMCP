@@ -74,3 +74,6 @@ mcp-registry/
 # Generated report screenshots
 arch-report*.png
 architecture-report*.png
+
+# LOCK-1: Instance lock file (auto-released by flock)
+.ralph/.ralph.lock

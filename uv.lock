@@ -445,7 +445,7 @@ wheels = [
 
 [[package]]
 name = "docs-mcp"
-version = "1.11.0"
+version = "1.12.0"
 source = { editable = "packages/docs-mcp" }
 dependencies = [
     { name = "click" },
@@ -2222,8 +2222,8 @@ wheels = [
 
 [[package]]
 name = "tapps-brain"
-version = "1.0.0"
-source = { git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.0.1#e0adada2e67dc84c239107c4b9d00dc02bc60955" }
+version = "1.1.0"
+source = { git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.1.0#7db1e985d4d775c298f56b94ecf2d7964fdfbd21" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "tapps-core"
-version = "1.11.0"
+version = "1.12.0"
 source = { editable = "packages/tapps-core" }
 dependencies = [
     { name = "httpx" },
@@ -2264,13 +2264,13 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
     { name = "sentence-transformers", marker = "extra == 'vector'", specifier = ">=5.2.3,<6" },
     { name = "structlog", specifier = ">=25.5.0,<26" },
-    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.0.1" },
+    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?tag=v1.1.0" },
 ]
 provides-extras = ["vector", "reranker"]
 
 [[package]]
 name = "tapps-mcp"
-version = "1.11.0"
+version = "1.12.0"
 source = { editable = "packages/tapps-mcp" }
 dependencies = [
     { name = "anyio" },

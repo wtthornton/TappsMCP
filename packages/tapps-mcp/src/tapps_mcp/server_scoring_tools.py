@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
-import logging
+import structlog
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -44,7 +44,7 @@ _ANNOTATIONS_READ_ONLY = ToolAnnotations(
     openWorldHint=False,
 )
 
-_logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Complexity thresholds for AST heuristic
 _CC_MODERATE_THRESHOLD = 10
@@ -124,7 +124,7 @@ def _attach_score_file_structured_output(
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
-        _logger.debug("structured_output_failed: tapps_score_file", exc_info=True)
+        logger.debug("structured_output_failed: tapps_score_file", exc_info=True)
 
 
 async def tapps_score_file(
@@ -188,7 +188,7 @@ async def tapps_score_file(
         else:
             result = await scorer.score_file(resolved, mode=mode)
     except Exception as exc:
-        _logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
         return error_response("tapps_score_file", "scoring_failed", str(exc))
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -250,7 +250,7 @@ def _attach_quality_gate_structured_output(
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
-        _logger.debug("structured_output_failed: tapps_quality_gate", exc_info=True)
+        logger.debug("structured_output_failed: tapps_quality_gate", exc_info=True)
 
 
 async def _resolve_preset(
@@ -344,7 +344,7 @@ async def tapps_quality_gate(
     try:
         score_result = await scorer.score_file(resolved)
     except Exception as exc:
-        _logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
         return error_response("tapps_quality_gate", "scoring_failed", str(exc))
     gate_result = evaluate_gate(score_result, preset=preset)
 
@@ -519,7 +519,7 @@ def _attach_uncached_libraries_hint(
                 "to avoid hallucinated APIs"
             )
     except Exception:
-        _logger.debug("uncached_libraries detection failed", exc_info=True)
+        logger.debug("uncached_libraries detection failed", exc_info=True)
 
 
 def _attach_quick_check_structured_output(
@@ -554,7 +554,7 @@ def _attach_quick_check_structured_output(
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
-        _logger.debug("structured_output_failed: tapps_quick_check", exc_info=True)
+        logger.debug("structured_output_failed: tapps_quick_check", exc_info=True)
 
 
 _BATCH_CONCURRENCY = 10
@@ -692,7 +692,7 @@ async def tapps_quick_check(
                 try:
                     return await _quick_check_single(resolved, preset, fix, settings)
                 except Exception as exc:
-                    _logger.error(
+                    logger.error(
                         "quick_check_batch_file_failed", file_path=fp, error=str(exc),
                     )
                     return {
@@ -769,13 +769,13 @@ async def tapps_quick_check(
         try:
             score_result, sec_result = await asyncio.gather(score_coro, sec_coro)
         except Exception as exc:
-            _logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
+            logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
             return error_response("tapps_quick_check", "scoring_failed", str(exc))
     else:
         try:
             score_result = await score_coro
         except Exception as exc:
-            _logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
+            logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
             return error_response("tapps_quick_check", "scoring_failed", str(exc))
 
         from tapps_mcp.security.security_scanner import SecurityScanResult

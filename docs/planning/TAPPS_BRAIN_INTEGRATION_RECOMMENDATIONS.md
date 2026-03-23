@@ -101,6 +101,18 @@ tapps_brain (standalone library, 33 modules)
 | **BM25 tuning** | bm25 | **Internal only** |
 | **Embeddings/reranker** | embeddings, reranker | **Optional, not surfaced** |
 
+### tapps-brain Internal Bugs (Upstream Fixes Required)
+
+The following bugs were identified during the 2026-03-21 code review and are tracked in `tapps-brain/.ralph/fix_plan.md` as **BUG-001**. These must be fixed upstream before the corresponding TappsMCP features can be safely enabled.
+
+| Bug | File | Impact | Blocks |
+|---|---|---|---|
+| `select_tier` ignores custom profile tier priorities | `consolidation.py` | Custom tiers always lose during consolidation | R05 (profile management), R07 (promotion engine) |
+| `dict[str, Any]` type regression in `decay_config_from_profile` | `decay.py` | Type safety hole in decay config construction | R07 (promotion engine) |
+| HiveStore connection leak on MCP handler exception | `mcp_server.py` | SQLite connection leak under errors | R08 (Hive for Agent Teams) |
+| Silent tier fallback without logging | `decay.py` | Misconfigured profiles are undebuggable | R05, R06 (profile auto-detection) |
+| Bare `except Exception` in MCP Hive tools | `mcp_server.py` | Unexpected errors swallowed silently | R08 (Hive for Agent Teams) |
+
 ---
 
 ## 2026 Industry Landscape

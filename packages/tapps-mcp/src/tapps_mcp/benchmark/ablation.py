@@ -47,6 +47,7 @@ class _EvaluatorProtocol(Protocol):
         instances: Any,  # noqa: ANN401
         context_mode: Any,  # noqa: ANN401
         engagement_level: str,
+        template_override: str | None = None,
     ) -> list[BenchmarkResult]: ...
 
 
@@ -216,11 +217,11 @@ class AblationRunner:
             ablated_template = _remove_section(config.base_template, section_name)
 
             # Evaluate with ablated template
-            # TODO: pass ablated_template to evaluator when template injection is wired up
             ablated_results = await evaluator.evaluate_batch(
                 instances,
                 config.benchmark_config.context_mode,
                 config.benchmark_config.engagement_level,
+                template_override=ablated_template,
             )
 
             ablated_rate = _compute_resolution_rate(ablated_results)

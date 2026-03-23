@@ -1,16 +1,15 @@
 name: Docker
 
 on:
-  push:
-    tags:
-      - "v*"
   pull_request:
     branches: [master, main]
     paths:
       - "Dockerfile"
+      - "packages/docs-mcp/Dockerfile"
       - "docker-compose.yml"
       - "pyproject.toml"
-      - "src/**"
+      - "packages/*/pyproject.toml"
+      - "packages/*/src/**"
 
 permissions:
   packages: write

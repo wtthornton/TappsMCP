@@ -29,11 +29,11 @@ jobs:
           - name: tapps-mcp
             dockerfile: Dockerfile
             image_env: TAPPS_IMAGE
-            expected_tools: 28
+            expected_tools: 30
           - name: docs-mcp
             dockerfile: packages/docs-mcp/Dockerfile
             image_env: DOCS_IMAGE
-            expected_tools: 18
+            expected_tools: 32
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 

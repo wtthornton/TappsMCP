@@ -167,7 +167,7 @@ Your project may have two complementary memory systems:
 
 RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
-### Memory actions (23 total)
+### Memory actions (28 total)
 
 **Core:** `save`, `save_bulk`, `get`, `list`, `delete` — CRUD operations with tier/scope/tag classification
 
@@ -181,7 +181,11 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Federation:** `federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`, `federate_search`, `federate_status` — cross-project memory sharing via central hub
 
-**Maintenance:** `index_session` (index current session notes), `validate` (check store integrity), `maintain` (run GC + consolidation + contradiction detection)
+**Maintenance:** `index_session` (index current session notes), `validate` (check store integrity against docs), `maintain` (run GC + consolidation + contradiction detection)
+
+**Security:** `safety_check` (scan text for injection patterns), `verify_integrity` (detect tampered entries)
+
+**Profiles:** `profile_info` (show active profile details), `profile_list` (list available profiles), `profile_switch` (change active profile)
 
 ### Memory tiers and scopes
 
@@ -189,7 +193,20 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Scopes:** `project` (default, all sessions), `branch` (git branch), `session` (ephemeral), `shared` (federation-eligible)
 
-**Configuration:** Override `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
+### Memory profiles
+
+Memory profiles control tier definitions, decay rates, scoring weights, and capacity limits. Profiles are provided by tapps-brain (>= v1.1.0).
+
+**Built-in profiles:** `repo-brain` (default -- optimized for code repos), `personal-assistant`, `customer-support`, `research-knowledge`, `project-management`, `home-automation`
+
+**Actions:**
+- `tapps_memory(action="profile_info")` — show active profile name, layers, decay config, scoring weights, and limits
+- `tapps_memory(action="profile_list")` — list all available built-in profiles with descriptions
+- `tapps_memory(action="profile_switch", value="<name>")` — switch to a different profile (applies new tier/decay/scoring settings)
+
+**Profile resolution order:** project override (`.tapps-brain/profile.yaml`) > user global (`~/.tapps-brain/profile.yaml`) > `memory.profile` setting in `.tapps-mcp.yaml` > auto-detect from project type > `repo-brain` default
+
+**Configuration:** Override `memory.profile`, `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
 
 ---
 
