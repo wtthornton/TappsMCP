@@ -1200,6 +1200,12 @@ async def docs_generate_epic(
         output_path: File path to write the epic (relative to project root).
             When empty, returns the content without writing a file.
         project_root: Override project root path (default: configured root).
+
+    Returns:
+        On success, ``data`` includes ``timing_ms`` (per-phase milliseconds:
+        ``render_ms``, ``total_ms``, and when ``auto_populate=True``,
+        ``metadata_ms``, ``module_map_ms``, ``git_ms``, ``experts_ms``,
+        ``auto_populate_ms``).
     """
     _record_call("docs_generate_epic")
     start = time.perf_counter_ns()
@@ -1294,7 +1300,7 @@ async def docs_generate_epic(
     needs_root = auto_populate or bool(files_list)
 
     try:
-        content = generator.generate(
+        content, timing_ms = generator.generate_with_timing(
             config,
             project_root=root if needs_root else None,
             auto_populate=auto_populate,
@@ -1334,6 +1340,7 @@ async def docs_generate_epic(
         "auto_populated": auto_populate,
         "content_length": len(content),
         "content": content,
+        "timing_ms": timing_ms,
     }
     if written_path:
         data["written_to"] = written_path
@@ -1420,6 +1427,8 @@ async def docs_generate_story(
         auto_populate: Enrich from project analyzers (ModuleMap, Metadata).
         output_path: File path to write the story (relative to project root).
             When empty, returns the content without writing a file.
+            When set with ``epic_path``, the epic link is rewritten relative to
+            this file (e.g. ``../EPIC-99.md`` for stories in a subdirectory).
         project_root: Override project root path (default: configured root).
     """
     _record_call("docs_generate_story")
@@ -1512,6 +1521,7 @@ async def docs_generate_story(
             config,
             project_root=root if auto_populate else None,
             auto_populate=auto_populate,
+            output_path=output_path or "",
         )
     except Exception as exc:
         return error_response(

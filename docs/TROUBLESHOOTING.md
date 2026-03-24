@@ -51,6 +51,14 @@ tapps-mcp doctor --quick
 
 Doctor prints **Memory pipeline (effective config)** — a read-only summary of resolved `memory.*` and `memory_hooks.*` flags (expert auto-save, recurring quick_check memory, architectural supersede, impact enrichment, auto-recall/capture). If behavior feels noisy, set the relevant keys to `false` in `.tapps-mcp.yaml` (see [MEMORY_REFERENCE.md](MEMORY_REFERENCE.md)).
 
+### Claude Code: project-only MCP (no `~/.claude.json`)
+
+**Problem:** `tapps-mcp doctor` mentions Claude user config, or you only use project-scoped `.mcp.json`.
+
+**Expected:** A valid **project** `.mcp.json` with a `tapps-mcp` entry is sufficient. User-level `~/.claude.json` is optional. Doctor reports this as OK when the project registers the server.
+
+**Non-interactive init:** If `tapps-mcp init` skips merging an existing MCP entry (no TTY), pass `--force` or set `TAPPS_MCP_INIT_ASSUME_YES=1` to overwrite without prompts.
+
 ## Common issues
 
 ### Too many automatic memory writes or hook injections

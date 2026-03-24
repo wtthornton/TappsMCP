@@ -131,6 +131,21 @@ class TestDetectFromQuestion:
         domains = [r.domain for r in results]
         assert "cloud-infrastructure" in domains
 
+    def test_registry_keywords_merge_c4_model_routes_architecture(self) -> None:
+        results = DomainDetector.detect_from_question(
+            "Should we document services with the c4 model?"
+        )
+        assert results
+        domains = [r.domain for r in results]
+        assert "software-architecture" in domains
+
+    def test_registry_keywords_prompt_injection_routes_security(self) -> None:
+        results = DomainDetector.detect_from_question(
+            "How do I mitigate indirect prompt injection in my agent?"
+        )
+        assert results
+        assert results[0].domain == "security"
+
 
 class TestDetectFromProject:
     """Tests for DomainDetector.detect_from_project."""
@@ -178,8 +193,6 @@ class TestDetectFromProject:
 # ---------------------------------------------------------------------------
 # Adaptive weight delegation tests (Epic 57, Story 57.4)
 # ---------------------------------------------------------------------------
-
-import pytest
 
 
 class TestAdaptiveWeightDelegation:

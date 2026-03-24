@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -118,10 +119,29 @@ def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
     )
 
 
-def check_claude_code_user(home: Path | None = None) -> CheckResult:
-    """Check ``~/.claude.json`` for tapps-mcp entry."""
+def check_claude_code_user(
+    home: Path | None = None,
+    project_root: Path | None = None,
+) -> CheckResult:
+    """Check ``~/.claude.json`` for tapps-mcp entry.
+
+    When the user file omits tapps-mcp but project ``.mcp.json`` registers it
+    (Epic 80.9), this check passes with an informational detail.
+    """
     base = home or Path.home()
-    return check_json_config(base / ".claude.json", "mcpServers", "Claude Code (user)")
+    user_path = base / ".claude.json"
+    if user_path.exists() and _validate_json_config(user_path, "mcpServers") is None:
+        return CheckResult("Claude Code (user)", True, f"Configured in {user_path}")
+    if project_root is not None:
+        proj_path = project_root / ".mcp.json"
+        if proj_path.exists() and _validate_json_config(proj_path, "mcpServers") is None:
+            return CheckResult(
+                "Claude Code (user)",
+                True,
+                "Project .mcp.json configures tapps-mcp (~/.claude.json optional)",
+                "User-level Claude MCP is optional when the project registers tapps-mcp.",
+            )
+    return check_json_config(user_path, "mcpServers", "Claude Code (user)")
 
 
 def check_claude_code_project(project_root: Path) -> CheckResult:
@@ -198,6 +218,81 @@ def check_mcp_client_config(
         f"Add tapps-mcp to your MCP client config. "
         f"Cursor: .cursor/mcp.json, VS Code: .vscode/mcp.json, "
         f"Claude Code: .mcp.json. Example:\n{snippet}",
+    )
+
+
+_HOOK_SCRIPT_PATH_RE = re.compile(
+    r'(\.claude/hooks/tapps-[^"\'\s]+\.(?:ps1|sh))',
+    re.IGNORECASE,
+)
+
+
+def _hook_paths_from_claude_settings(data: dict[str, object]) -> list[str]:
+    """Collect relative ``.claude/hooks/tapps-*`` paths from a settings dict."""
+    out: list[str] = []
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    if not isinstance(hooks, dict):
+        return out
+    for groups in hooks.values():
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            for hook in group.get("hooks") or []:
+                if not isinstance(hook, dict):
+                    continue
+                cmd = hook.get("command", "")
+                if not isinstance(cmd, str) or "tapps-" not in cmd:
+                    continue
+                for m in _HOOK_SCRIPT_PATH_RE.finditer(cmd):
+                    out.append(m.group(1).replace("\\", "/"))
+    return out
+
+
+def check_claude_hook_scripts(project_root: Path) -> CheckResult:
+    """Verify hook scripts referenced under ``.claude/settings*.json`` exist."""
+    found_settings = False
+    missing: list[str] = []
+    for name in ("settings.json", "settings.local.json"):
+        sf = project_root / ".claude" / name
+        if not sf.exists():
+            continue
+        found_settings = True
+        try:
+            raw = sf.read_text(encoding="utf-8-sig")
+            data = json.loads(raw) if raw.strip() else {}
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        rels = _hook_paths_from_claude_settings(cast(dict[str, object], data))
+        root_res = project_root.resolve()
+        for rel in rels:
+            candidate = (project_root / rel).resolve()
+            try:
+                candidate.relative_to(root_res)
+            except ValueError:
+                continue
+            if not candidate.is_file():
+                missing.append(f"{rel} (via {name})")
+    if not found_settings:
+        return CheckResult(
+            "Claude hook scripts",
+            True,
+            "No .claude/settings*.json (hook path check skipped)",
+        )
+    if missing:
+        return CheckResult(
+            "Claude hook scripts",
+            False,
+            f"Missing hook file(s): {', '.join(missing)}",
+            "Run: tapps-mcp upgrade --host claude-code --force",
+        )
+    return CheckResult(
+        "Claude hook scripts",
+        True,
+        "All tapps-* hook scripts referenced in Claude settings exist",
     )
 
 
@@ -698,7 +793,7 @@ _REQ_CHECK_MAP: dict[int, list[str]] = {
         "MCP client config",
     ],
     3: [".claude/settings.json"],
-    4: ["AGENTS.md", "Hooks", "CLAUDE.md rules", "Cursor rules"],
+    4: ["AGENTS.md", "Hooks", "Claude hook scripts", "CLAUDE.md rules", "Cursor rules"],
     5: [
         "Tool: ruff",
         "Tool: mypy",
@@ -792,7 +887,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     """
     checks: list[CheckResult] = []
     checks.append(check_binary_on_path())
-    checks.append(check_claude_code_user())
+    checks.append(check_claude_code_user(project_root=root))
     checks.append(check_claude_code_project(root))
     checks.append(check_cursor_config(root))
     checks.append(check_vscode_config(root))
@@ -802,6 +897,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_cursor_rules(root))
     checks.append(check_agents_md(root))
     checks.append(check_claude_settings(root))
+    checks.append(check_claude_hook_scripts(root))
     checks.append(check_hooks(root))
     checks.append(check_stale_exe_backups())
     checks.append(check_tapps_brain())

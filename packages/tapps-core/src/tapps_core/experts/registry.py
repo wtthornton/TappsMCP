@@ -63,6 +63,14 @@ class ExpertRegistry:
             "without threat analysis.",
             communication_style="Cite specific vulnerability types (e.g. CWE-79, OWASP A03:2025). "
             "Provide remediation code examples alongside findings. Reference OWASP Top 10:2025.",
+            keywords=[
+                "prompt injection",
+                "llm security",
+                "agentic security",
+                "mcp security",
+                "tool poisoning",
+                "indirect prompt injection",
+            ],
         ),
         ExpertConfig(
             expert_id="expert-performance",
@@ -105,6 +113,16 @@ class ExpertRegistry:
             description="System design, architectural patterns, scalability.",
             persona="Principal software architect focused on clean architecture, "
             "domain-driven design, and evolutionary system design.",
+            keywords=[
+                "c4 model",
+                "bounded context",
+                "strangler fig",
+                "ports and adapters",
+                "adr",
+                "architecture decision record",
+                "evolutionary architecture",
+                "modular monolith",
+            ],
         ),
         ExpertConfig(
             expert_id="expert-devops",
@@ -114,6 +132,16 @@ class ExpertRegistry:
             persona="Senior DevOps engineer specializing in CI/CD pipelines, build tooling, "
             "and developer productivity. Default to automation and reproducibility; prefer "
             "declarative over imperative configuration.",
+            keywords=[
+                "jenkins",
+                "gitlab ci",
+                "circleci",
+                "buildkite",
+                "azure pipelines",
+                "tekton",
+                "bamboo",
+                "teamcity",
+            ],
         ),
         ExpertConfig(
             expert_id="expert-data-privacy",
@@ -153,6 +181,15 @@ class ExpertRegistry:
             "product SPA shells unless unification is explicit; keep cross-surface status "
             "semantics and state UX aligned. Default to simplicity and consistency; prefer "
             "established patterns over novel interactions.",
+            keywords=[
+                "htmx",
+                "view transition",
+                "information architecture",
+                "progressive disclosure",
+                "empty state",
+                "skeleton screen",
+                "microcopy",
+            ],
         ),
         ExpertConfig(
             expert_id="expert-documentation",
@@ -198,6 +235,16 @@ class ExpertRegistry:
             persona="Senior API architect focused on RESTful design, versioning, and "
             "integration patterns. Default to consistency and backward compatibility; "
             "require deprecation paths for breaking changes.",
+            keywords=[
+                "idempotency",
+                "idempotency key",
+                "webhook signature",
+                "hmac verification",
+                "api gateway",
+                "retry after",
+                "problem json",
+                "rfc 7807",
+            ],
         ),
         ExpertConfig(
             expert_id="expert-cloud-infrastructure",
@@ -228,6 +275,15 @@ class ExpertRegistry:
             persona="Senior GitHub platform engineer focused on Actions, repository "
             "governance, and Copilot integration. Default to automation and policy "
             "enforcement; prefer rulesets over manual review gates.",
+            keywords=[
+                "repository ruleset",
+                "github advanced security",
+                "merge queue",
+                "codeowners file",
+                "github copilot workspace",
+                "gh cli",
+                "artifact attestation",
+            ],
         ),
     ]
 

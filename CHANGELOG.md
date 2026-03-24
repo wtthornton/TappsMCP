@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Epic 80 (archive): Consumer Init & Bootstrap Hardening** — PostToolUse `script_event_map` includes `tapps-post-validate` / `tapps-post-report`; `tapps-mcp doctor` checks Claude hook script paths and treats project `.mcp.json` as sufficient vs user `~/.claude.json`; init refuses `.../packages/tapps-mcp` without `--allow-package-init` / `TAPPS_MCP_ALLOW_PACKAGE_INIT`; non-TTY MCP merge skips overwrite with log (`--force`, `TAPPS_MCP_INIT_ASSUME_YES`); MCP config uses `uv run` + monorepo placeholder when `tapps-mcp` not on PATH and merges existing `env`; CLI `--with-docs-mcp`; TECH_STACK low-confidence callout; README + troubleshooting updates. See `docs/archive/planning/epics/EPIC-80-CONSUMER-INIT-BOOTSTRAP-HARDENING.md`.
+
 ## [1.12.0] - 2026-03-21
 
 ### Added

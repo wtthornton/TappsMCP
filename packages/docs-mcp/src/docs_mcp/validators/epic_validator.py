@@ -27,8 +27,14 @@ _SIZE_POINT_RANGES: dict[str, tuple[int, int]] = {
 }
 
 # Regex patterns
+# Classic: ### Story 67.1: Title
 _STORY_HEADING_RE = re.compile(
     r"^###\s+Story\s+(\d+(?:\.\d+)?)\s*:\s*(.+)",
+    re.IGNORECASE,
+)
+# DocsMCP generator: ### 67.1 -- Title (matches docs_generate_epic stubs)
+_STORY_HEADING_DOCSMCP_RE = re.compile(
+    r"^###\s+(\d+(?:\.\d+)?)\s*--\s*(.+)\s*$",
     re.IGNORECASE,
 )
 _POINTS_RE = re.compile(r"\*\*Points:\*\*\s*(\d+)", re.IGNORECASE)
@@ -79,6 +85,17 @@ class EpicValidationReport(BaseModel):
 # ---------------------------------------------------------------------------
 # Parser helpers
 # ---------------------------------------------------------------------------
+
+
+def _parse_story_heading(stripped: str) -> tuple[str, str] | None:
+    """Parse a ### story heading; supports Story N: T or docs_generate_epic N -- T."""
+    m = _STORY_HEADING_RE.match(stripped)
+    if m:
+        return m.group(1), m.group(2)
+    m2 = _STORY_HEADING_DOCSMCP_RE.match(stripped)
+    if m2:
+        return m2.group(1), m2.group(2)
+    return None
 
 
 def _split_by_heading(
@@ -151,6 +168,19 @@ def _extract_story(
         prm = _PRIORITY_RE.search(stripped)
         if prm:
             priority = prm.group(1).upper()
+
+        # Detect h2 sub-sections (docs_generate_story uses ## Acceptance Criteria)
+        h2_match = _H2_RE.match(stripped)
+        if h2_match:
+            heading_text = h2_match.group(1).strip().lower()
+            in_ac_section = heading_text == "acceptance criteria"
+            in_tasks_section = heading_text.startswith("task")
+            in_files_section = heading_text.startswith("file")
+            if in_ac_section:
+                has_ac = True
+            if in_tasks_section:
+                has_tasks = True
+            continue
 
         # Detect h4 sub-sections
         h4_match = _H4_RE.match(stripped)
@@ -449,15 +479,14 @@ class EpicValidator:
 
         for line in stories_body:
             stripped = line.strip()
-            match = _STORY_HEADING_RE.match(stripped)
-            if match:
+            parsed = _parse_story_heading(stripped)
+            if parsed:
                 # Save previous story
                 if current_number:
                     story = _extract_story(current_number, current_title, current_lines)
                     report.stories.append(story)
 
-                current_number = match.group(1)
-                current_title = match.group(2)
+                current_number, current_title = parsed
                 current_lines = []
             else:
                 current_lines.append(line)

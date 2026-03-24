@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -78,7 +79,7 @@ async def test_auto_run_true_runs_validate_when_score_missing() -> None:
 
     call_count = 0
 
-    def evaluate_side_effect(task_type: str = "review") -> ChecklistResult:
+    def evaluate_side_effect(task_type: str = "review", **_kw: Any) -> ChecklistResult:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -87,6 +88,9 @@ async def test_auto_run_true_runs_validate_when_score_missing() -> None:
 
     mock_settings = MagicMock()
     mock_settings.quality_preset = "standard"
+    mock_settings.project_root = Path.cwd()
+    mock_settings.checklist_require_success = False
+    mock_settings.checklist_strict_unknown_task_types = False
 
     with (
         patch(_EVALUATE_TARGET, side_effect=evaluate_side_effect),
@@ -130,6 +134,9 @@ async def test_auto_run_validate_failure_graceful() -> None:
 
     mock_settings = MagicMock()
     mock_settings.quality_preset = "standard"
+    mock_settings.project_root = Path.cwd()
+    mock_settings.checklist_require_success = False
+    mock_settings.checklist_strict_unknown_task_types = False
 
     with (
         patch(_EVALUATE_TARGET, return_value=result),
@@ -160,7 +167,7 @@ async def test_auto_run_re_evaluates_after_running() -> None:
 
     call_count = 0
 
-    def evaluate_side_effect(task_type: str = "review") -> ChecklistResult:
+    def evaluate_side_effect(task_type: str = "review", **_kw: Any) -> ChecklistResult:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -169,6 +176,9 @@ async def test_auto_run_re_evaluates_after_running() -> None:
 
     mock_settings = MagicMock()
     mock_settings.quality_preset = "standard"
+    mock_settings.project_root = Path.cwd()
+    mock_settings.checklist_require_success = False
+    mock_settings.checklist_strict_unknown_task_types = False
 
     with (
         patch(_EVALUATE_TARGET, side_effect=evaluate_side_effect),

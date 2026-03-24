@@ -162,11 +162,13 @@ async def tapps_score_file(
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
+        _record_call("tapps_score_file", success=False)
         return error_response("tapps_score_file", "path_denied", str(exc))
 
     # Get language-appropriate scorer
     scorer = _get_scorer_for_file(resolved)
     if scorer is None:
+        _record_call("tapps_score_file", success=False)
         return error_response(
             "tapps_score_file",
             "unsupported_language",
@@ -190,6 +192,7 @@ async def tapps_score_file(
             result = await scorer.score_file(resolved, mode=mode)
     except Exception as exc:
         logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        _record_call("tapps_score_file", success=False)
         return error_response("tapps_score_file", "scoring_failed", str(exc))
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -328,6 +331,7 @@ async def tapps_quality_gate(
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
+        _record_call("tapps_quality_gate", success=False)
         return error_response("tapps_quality_gate", "path_denied", str(exc))
 
     from tapps_mcp.gates.evaluator import evaluate_gate
@@ -335,6 +339,7 @@ async def tapps_quality_gate(
     # Get language-appropriate scorer
     scorer = _get_scorer_for_file(resolved)
     if scorer is None:
+        _record_call("tapps_quality_gate", success=False)
         return error_response(
             "tapps_quality_gate",
             "unsupported_language",
@@ -346,6 +351,7 @@ async def tapps_quality_gate(
         score_result = await scorer.score_file(resolved)
     except Exception as exc:
         logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        _record_call("tapps_quality_gate", success=False)
         return error_response("tapps_quality_gate", "scoring_failed", str(exc))
     gate_result = evaluate_gate(score_result, preset=preset)
 
@@ -678,6 +684,7 @@ async def tapps_quick_check(
     if file_paths.strip():
         raw_paths = [p.strip() for p in file_paths.split(",") if p.strip()]
         if not raw_paths:
+            _record_call("tapps_quick_check", success=False)
             return error_response(
                 "tapps_quick_check", "invalid_input", "file_paths is empty after parsing"
             )
@@ -718,6 +725,9 @@ async def tapps_quick_check(
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_quick_check", start)
 
+        if failure_count > 0:
+            _record_call("tapps_quick_check", success=False)
+
         return success_response(
             "tapps_quick_check",
             elapsed_ms,
@@ -733,6 +743,7 @@ async def tapps_quick_check(
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
+        _record_call("tapps_quick_check", success=False)
         return error_response("tapps_quick_check", "path_denied", str(exc))
 
     from tapps_mcp.gates.evaluator import evaluate_gate
@@ -742,6 +753,7 @@ async def tapps_quick_check(
 
     scorer = _get_scorer_for_file(resolved)
     if scorer is None:
+        _record_call("tapps_quick_check", success=False)
         return error_response(
             "tapps_quick_check",
             "unsupported_language",
@@ -776,12 +788,14 @@ async def tapps_quick_check(
             score_result, sec_result = await asyncio.gather(score_coro, sec_coro)
         except Exception as exc:
             logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
+            _record_call("tapps_quick_check", success=False)
             return error_response("tapps_quick_check", "scoring_failed", str(exc))
     else:
         try:
             score_result = await score_coro
         except Exception as exc:
             logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
+            _record_call("tapps_quick_check", success=False)
             return error_response("tapps_quick_check", "scoring_failed", str(exc))
 
         from tapps_mcp.security.security_scanner import SecurityScanResult
@@ -796,6 +810,9 @@ async def tapps_quick_check(
 
     complexity_hint = _compute_complexity_hint(resolved) if is_python else None
     gate_result = evaluate_gate(score_result, preset=preset)
+
+    if not gate_result.passed or not sec_result.passed:
+        _record_call("tapps_quick_check", success=False)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(

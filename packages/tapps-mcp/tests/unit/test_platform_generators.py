@@ -275,7 +275,7 @@ class TestMiscGenerators:
         # Medium engagement (default): 7 events, 9 scripts
         # (SessionStart has 2 scripts: start + compact, SubagentStop added)
         result = generate_claude_hooks(tmp_path, force_windows=False)
-        assert len(result["scripts_created"]) == 10
+        assert len(result["scripts_created"]) == 12
         assert result["engagement_level"] == "medium"
 
     def test_cursor_hooks_creates_scripts(self, tmp_path: Path) -> None:

@@ -2,16 +2,33 @@
 
 from __future__ import annotations
 
+import os
 import re
-from typing import TYPE_CHECKING, Any, ClassVar
+from pathlib import Path
+from typing import Any, ClassVar
 
 import structlog
 from pydantic import BaseModel
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 logger = structlog.get_logger(__name__)
+
+
+def markdown_relative_link(target: str, from_file: str) -> str:
+    """Return ``target`` as a path relative to ``from_file``'s directory.
+
+    Used so epic links in generated story files resolve correctly when the
+    story lives in a subdirectory (e.g. ``EPIC-80/story-80.1.md`` → ``../EPIC.md``).
+    """
+    t = target.strip()
+    f = from_file.strip()
+    if not t or not f:
+        return target
+    if t.startswith(("http://", "https://", "mailto:")):
+        return t
+    try:
+        return os.path.relpath(t, Path(f).parent).replace("\\", "/")
+    except ValueError:
+        return t.replace("\\", "/")
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +101,7 @@ class StoryGenerator:
         *,
         project_root: Path | None = None,
         auto_populate: bool = False,
+        output_path: str = "",
     ) -> str:
         """Generate a user story document.
 
@@ -91,6 +109,8 @@ class StoryGenerator:
             config: Story configuration with title, tasks, criteria, etc.
             project_root: Project root for auto-populate analyzers.
             auto_populate: When True, enrich sections from project analyzers.
+            output_path: When set (relative to project root), ``epic_path`` in
+                config is rewritten as a markdown link relative to this file.
 
         Returns:
             Rendered markdown content with docsmcp markers.
@@ -110,17 +130,28 @@ class StoryGenerator:
             else {}
         )
 
+        render_config = config
+        if output_path.strip() and config.epic_path.strip():
+            render_config = config.model_copy(
+                update={
+                    "epic_path": markdown_relative_link(
+                        config.epic_path.strip(),
+                        output_path.strip(),
+                    ),
+                },
+            )
+
         lines: list[str] = []
 
         lines.extend(self._render_title(config))
         lines.extend(self._render_user_story_statement(config))
         lines.extend(self._render_sizing(config))
         lines.extend(self._render_purpose_and_intent(config))
-        lines.extend(self._render_description(config, enrichment))
+        lines.extend(self._render_description(render_config, enrichment))
         lines.extend(self._render_files(config))
         lines.extend(self._render_tasks(config))
         lines.extend(self._render_acceptance_criteria(config))
-        lines.extend(self._render_definition_of_done(config, enrichment))
+        lines.extend(self._render_definition_of_done(render_config, enrichment))
 
         if style == "comprehensive":
             lines.extend(self._render_test_cases(config))

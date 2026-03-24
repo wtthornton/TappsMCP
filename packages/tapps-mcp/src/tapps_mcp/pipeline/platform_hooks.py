@@ -194,6 +194,8 @@ def _filter_scripts(
         "tapps-session-start": "SessionStart",
         "tapps-session-compact": "SessionStart",
         "tapps-post-edit": "PostToolUse",
+        "tapps-post-validate": "PostToolUse",
+        "tapps-post-report": "PostToolUse",
         "tapps-stop": "Stop",
         "tapps-task-completed": "TaskCompleted",
         "tapps-pre-compact": "PreCompact",

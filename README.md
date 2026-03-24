@@ -190,7 +190,7 @@ Choose one of the following. After installing, see [Quick start](#quick-start) t
 |--------|--------------|----------|
 | **MCP Registry** | MCP-compatible client | One-click install from the official MCP server registry. |
 | **PyPI** | Python 3.12+, pip | You want a global or venv install and will run from any project. |
-| **npx** | Node.js 18+ | You prefer not to touch Python; runs on demand. |
+| **npx** | Node.js 18+ | Optional; use only if an npm package matches your release. Prefer **PyPI** or **`uv run`** from source otherwise. |
 | **From source** | Python 3.12+, [uv](https://docs.astral.sh/uv/) or pip | You are developing TappsMCP or want the latest code. |
 | **Docker** | Docker, Docker Compose | You want HTTP transport or to run in a container. |
 
@@ -224,15 +224,15 @@ pip install tapps-mcp
 
 **Upgrade:** `pip install -U tapps-mcp` then run `tapps-mcp upgrade` to refresh all generated files (AGENTS.md, platform rules, hooks, permissions). A backup is created automatically before overwriting — use `tapps-mcp rollback` if needed. See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide.
 
-### Install with npx (no Python install)
+### Install with npx (optional)
 
-No need to install Python. From any directory:
+If a matching npm package is published for your TappsMCP version, you can run without a prior `pip`/`uv` install:
 
 ```bash
 npx tapps-mcp serve
 ```
 
-The first run downloads the package; use `npx tapps-mcp@latest serve` to pin to latest.
+If `npx` fails or the package is unavailable, use [PyPI](#install-from-pypi) or [from source](#install-from-source) (`uv run tapps-mcp serve`) instead.
 
 ### Install from source
 
@@ -287,6 +287,12 @@ After [installing](#install), set up TappsMCP in your project and connect your A
 ```bash
 tapps-mcp init                    # detects Claude Code, Cursor, VS Code
 # or: tapps-mcp init --host cursor   # target a specific client
+```
+
+**Windows / monorepo checkout:** run init against your **app** root, not the `packages/tapps-mcp` folder. Example:
+
+```powershell
+uv --directory C:\path\to\tapps-mcp run tapps-mcp init --project-root C:\path\to\your-app
 ```
 
 **2. Start the server:**

@@ -32,9 +32,9 @@ provide the full tool reference from this skill.
 | Tool | When to use it |
 |------|----------------|
 | **tapps_lookup_docs** | Before writing code using an external library |
-| **tapps_consult_expert** | Domain-specific decisions (security, testing, APIs, etc.) |
+| **tapps_consult_expert** | Domain-specific decisions — use `domain` when clear (17 slugs; includes `github` for GitHub platform, `security` for LLM/MCP abuse) |
 | **tapps_research** | Combined expert + docs in one call |
-| **tapps_list_experts** | See which expert domains exist |
+| **tapps_list_experts** | See which expert domains exist (metadata and KB file counts) |
 
 ## Project & memory
 | Tool | When to use it |

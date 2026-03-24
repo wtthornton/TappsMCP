@@ -2,6 +2,9 @@
 
 Validates markdown knowledge files for structural quality, correct
 Python code blocks, cross-reference integrity, and formatting.
+
+Optional YAML frontmatter may include ``last_reviewed: YYYY-MM-DD``; the
+consultation engine uses it (with mtime) for staleness heuristics.
 """
 
 from __future__ import annotations

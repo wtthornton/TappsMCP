@@ -639,6 +639,7 @@ async def tapps_validate_changed(
             return_exceptions=True,
         )
     except Exception as exc:
+        _record_call("tapps_validate_changed", success=False)
         tracker.finalize_error(str(exc))
         raise
     finally:
@@ -660,6 +661,8 @@ async def tapps_validate_changed(
     per_file_results, summary_rows = _build_per_file_results(results)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    if not all_passed:
+        _record_call("tapps_validate_changed", success=False)
     _record_execution("tapps_validate_changed", start, gate_passed=all_passed)
     tracker.finalize(all_passed, summary, elapsed_ms)
     if all_passed:
@@ -1219,6 +1222,12 @@ async def tapps_session_start(
     )
 
     start = time.perf_counter_ns()
+    try:
+        from tapps_mcp.tools.checklist import CallTracker
+
+        CallTracker.begin_session()
+    except ImportError:
+        pass
     _record_call("tapps_session_start")
 
     if quick:
@@ -1361,6 +1370,14 @@ async def tapps_session_start(
     except Exception:
         _logger.debug("path_mapping_detection_failed", exc_info=True)
 
+    checklist_sid: str | None = None
+    try:
+        from tapps_mcp.tools.checklist import CallTracker
+
+        checklist_sid = CallTracker.get_active_checklist_session_id()
+    except ImportError:
+        pass
+
     data: dict[str, Any] = {
         "server": info["data"]["server"],
         "configuration": info["data"]["configuration"],
@@ -1369,6 +1386,7 @@ async def tapps_session_start(
         "quick_start": info["data"].get("quick_start", []),
         "critical_rules": info["data"].get("critical_rules", []),
         "pipeline": info["data"]["pipeline"],
+        "checklist_session_id": checklist_sid,
         "memory_status": memory_status,
         "hive_status": hive_status,
         "memory_gc": "background",
@@ -1459,6 +1477,14 @@ async def _session_start_quick(
     except Exception:
         _logger.debug("hive_status_check_failed_quick", exc_info=True)
 
+    checklist_sid_q: str | None = None
+    try:
+        from tapps_mcp.tools.checklist import CallTracker
+
+        checklist_sid_q = CallTracker.get_active_checklist_session_id()
+    except ImportError:
+        pass
+
     data: dict[str, Any] = {
         "server": {
             "name": "TappsMCP",
@@ -1473,6 +1499,7 @@ async def _session_start_quick(
         "installed_checkers": [t.model_dump() for t in installed],
         "cache": _cache_info_dict(cache_dir, cache_fallback),
         "quick": True,
+        "checklist_session_id": checklist_sid_q,
         "hive_status": hive_status,
         "recommended_next": (
             "Quick session started (diagnostics skipped). "

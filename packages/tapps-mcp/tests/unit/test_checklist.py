@@ -116,6 +116,30 @@ class TestCallTracker:
         result = CallTracker.evaluate("unknown_task")
         assert result.task_type == "unknown_task"
         assert result.complete is True
+        assert result.policy_fallback is True
+        assert result.resolved_policy_task_type == "review"
+
+    def test_evaluate_unknown_task_strict_raises(self):
+        with pytest.raises(ValueError, match="Unknown task_type"):
+            CallTracker.evaluate(
+                "not_a_real_task",
+                strict_unknown_task_type=True,
+            )
+
+    def test_begin_session_filters_calls(self):
+        CallTracker.record("tapps_score_file")
+        CallTracker.begin_session()
+        CallTracker.record("tapps_quality_gate")
+        r = CallTracker.evaluate("feature")
+        assert "tapps_score_file" not in r.called
+        assert "tapps_quality_gate" in r.called
+
+    def test_research_satisfies_consult_and_docs(self):
+        from tapps_mcp.tools.checklist import _compute_effective_tools
+
+        eff = _compute_effective_tools({"tapps_research"})
+        assert "tapps_consult_expert" in eff
+        assert "tapps_lookup_docs" in eff
 
     def test_evaluate_includes_recommended(self):
         result = CallTracker.evaluate("feature")

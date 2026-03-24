@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -1099,17 +1098,30 @@ def _render_infrastructure_section(profile: ProjectProfile) -> list[str]:
     ]
 
 
+_TECH_STACK_LOW_CONFIDENCE_THRESHOLD = 0.6
+
+
 def _render_tech_stack_md(profile: ProjectProfile) -> str:
     """Render TECH_STACK.md content from project profile."""
     ts = profile.tech_stack
+    low_conf = profile.project_type_confidence < _TECH_STACK_LOW_CONFIDENCE_THRESHOLD
     lines = [
         "# Tech Stack",
         "",
+    ]
+    if low_conf:
+        lines.extend([
+            "> **Low confidence:** Auto-detected project type may be wrong (e.g. docs-only root "
+            "with code in a subfolder). Confirm or edit sections below; optionally add "
+            "`pyproject.toml` / `package.json` where the real code lives.",
+            "",
+        ])
+    lines.extend([
         "## Project Type",
         f"- **Type:** {profile.project_type or 'unknown'}",
         f"- **Confidence:** {profile.project_type_confidence:.2f}",
         f"- **Reason:** {profile.project_type_reason or 'N/A'}",
-    ]
+    ])
     lines.extend(_render_list_section("Languages", ts.languages))
     lines.extend(_render_list_section("Frameworks", ts.frameworks))
     lines.extend(_render_list_section("Libraries", ts.libraries))

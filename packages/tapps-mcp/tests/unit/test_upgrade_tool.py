@@ -50,16 +50,16 @@ class TestDetectCommandPath:
         assert result == "tapps-mcp"
 
     def test_fallback_returns_bare_name(self) -> None:
-        """When neither frozen nor on PATH, returns 'tapps-mcp'."""
+        """When neither frozen nor on PATH, uses uv-run template (Epic 80.5)."""
         with (
             patch.object(sys, "frozen", False, create=True),
             patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value=None),
         ):
             result = _detect_command_path()
-        assert result == "tapps-mcp"
+        assert result == "uv"
 
     def test_build_server_entry_uses_detected_path(self) -> None:
-        """_build_server_entry uses _detect_command_path for the command."""
+        """_build_server_entry uses _resolve_tapps_mcp_launch for command and args."""
         with (
             patch.object(sys, "frozen", True, create=True),
             patch.object(sys, "executable", r"C:\custom\tapps-mcp.exe"),
@@ -67,6 +67,17 @@ class TestDetectCommandPath:
             entry = _build_server_entry("cursor")
         assert entry["command"] == r"C:\custom\tapps-mcp.exe"
         assert entry["args"] == ["serve"]
+
+    def test_build_server_entry_uv_fallback_when_not_on_path(self) -> None:
+        """Without tapps-mcp on PATH, emit uv run with monorepo placeholder."""
+        with (
+            patch.object(sys, "frozen", False, create=True),
+            patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value=None),
+        ):
+            entry = _build_server_entry("cursor")
+        assert entry["command"] == "uv"
+        assert "tapps-mcp" in entry["args"]
+        assert "serve" in entry["args"]
 
     def test_build_server_entry_adds_instructions_for_claude(self) -> None:
         """Claude Code entry gets instructions field."""

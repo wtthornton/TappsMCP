@@ -374,7 +374,7 @@ def _library_to_domain(library: str) -> str:
 _checklist_state: dict[str, bool] = {"persist_configured": False}
 
 
-def _record_call(tool_name: str) -> None:
+def _record_call(tool_name: str, *, success: bool = True) -> None:
     """Record a tool call in the session checklist tracker."""
     try:
         from tapps_mcp.tools.checklist import CallTracker
@@ -385,7 +385,7 @@ def _record_call(tool_name: str) -> None:
             persist_path = sessions_dir / "checklist_calls.jsonl"
             CallTracker.set_persist_path(persist_path)
             _checklist_state["persist_configured"] = True
-        CallTracker.record(tool_name)
+        CallTracker.record(tool_name, success=success)
     except ImportError:
         logger.debug("checklist module unavailable, skipping call record", tool=tool_name)
 
@@ -556,6 +556,7 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
+        _record_call("tapps_security_scan", success=False)
         return error_response("tapps_security_scan", "path_denied", str(exc))
 
     from tapps_mcp.security.security_scanner import run_security_scan
@@ -567,6 +568,9 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
         cwd=str(settings.project_root),
         timeout=settings.tool_timeout,
     )
+
+    if not result.passed:
+        _record_call("tapps_security_scan", success=False)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
@@ -921,12 +925,11 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
     with confidence scores.
 
     Available domains (omit domain to auto-detect from question):
-      security, performance-optimization, testing-strategies,
-      code-quality-analysis, software-architecture, development-workflow,
-      data-privacy-compliance, accessibility, user-experience,
-      documentation-knowledge-management, ai-frameworks, agent-learning,
-      observability-monitoring, api-design-integration, cloud-infrastructure,
-      database-data-management
+      accessibility, agent-learning, ai-frameworks, api-design-integration,
+      cloud-infrastructure, code-quality-analysis, database-data-management,
+      data-privacy-compliance, development-workflow, documentation-knowledge-management,
+      github, observability-monitoring, performance-optimization, security,
+      software-architecture, testing-strategies, user-experience
 
     For combined expert + docs in one call, use tapps_research instead.
 
@@ -1087,29 +1090,50 @@ def tapps_list_experts() -> dict[str, Any]:
 def _checklist_json_format(
     result: ChecklistResult,
     auto_run_results: dict[str, Any],
+    *,
+    checklist_session_id: str | None,
+    trace_hint: dict[str, str] | None,
 ) -> dict[str, Any]:
     """Build structured JSON output with computed counts and next_steps for checklist."""
-    required_called = [t for t in result.called if t not in result.missing_required]
-    recommended_missing = result.missing_recommended
-    recommended_called = [
-        t for t in result.called if t not in result.missing_recommended
-    ]
-    optional_missing = result.missing_optional
-    optional_called = [t for t in result.called if t not in result.missing_optional]
-
     next_steps: list[str] = [h.reason for h in result.missing_required_hints]
     next_steps.extend(h.reason for h in result.missing_recommended_hints)
 
     data: dict[str, Any] = {
         "task_type": result.task_type,
+        "resolved_policy_task_type": result.resolved_policy_task_type,
+        "policy_fallback": result.policy_fallback,
+        "checklist_policy_version": result.checklist_policy_version,
+        "checklist_session_id": checklist_session_id,
+        "otel_trace_hint": trace_hint,
         "complete": result.complete,
         "total_calls": result.total_calls,
-        "required_called": required_called,
-        "required_missing": result.missing_required,
-        "recommended_called": recommended_called,
-        "recommended_missing": recommended_missing,
-        "optional_called": optional_called,
-        "optional_missing": optional_missing,
+        "required": {
+            "total": (
+                len(result.required_tool_names)
+                if result.required_tool_names
+                else len(result.missing_required) + len(result.satisfied_required_tools)
+            ),
+            "satisfied": result.satisfied_required_tools,
+            "missing": result.missing_required,
+        },
+        "recommended": {
+            "total": (
+                len(result.recommended_tool_names)
+                if result.recommended_tool_names
+                else len(result.missing_recommended) + len(result.satisfied_recommended_tools)
+            ),
+            "satisfied": result.satisfied_recommended_tools,
+            "missing": result.missing_recommended,
+        },
+        "optional": {
+            "total": (
+                len(result.optional_tool_names)
+                if result.optional_tool_names
+                else len(result.missing_optional) + len(result.satisfied_optional_tools)
+            ),
+            "satisfied": result.satisfied_optional_tools,
+            "missing": result.missing_optional,
+        },
         "priority_actions": result.missing_required[:3] if result.missing_required else [],
         "next_steps": next_steps,
         "full": result.model_dump(),
@@ -1122,13 +1146,19 @@ def _checklist_json_format(
 def _checklist_compact_format(
     result: ChecklistResult,
     auto_run_results: dict[str, Any],
+    *,
+    checklist_session_id: str | None,
+    trace_hint: dict[str, str] | None,
 ) -> dict[str, Any]:
     """Build a short 1-2 line compact summary for checklist."""
-    req_ok = len(result.called) - len(result.missing_required)
-    parts = [f"complete={result.complete}"]
-
-    if req_ok > 0:
-        parts.append(f"{req_ok} required OK")
+    req_tot = len(result.required_tool_names)
+    if req_tot == 0:
+        req_tot = len(result.missing_required) + len(result.satisfied_required_tools)
+    req_sat = len(result.satisfied_required_tools)
+    parts = [
+        f"complete={result.complete}",
+        f"required {req_sat}/{req_tot} satisfied",
+    ]
     if result.missing_required:
         missing_names = ", ".join(result.missing_required)
         parts.append(f"{len(result.missing_required)} required missing ({missing_names})")
@@ -1147,6 +1177,10 @@ def _checklist_compact_format(
         "summary": summary,
         "complete": result.complete,
         "task_type": result.task_type,
+        "resolved_policy_task_type": result.resolved_policy_task_type,
+        "checklist_policy_version": result.checklist_policy_version,
+        "checklist_session_id": checklist_session_id,
+        "otel_trace_hint": trace_hint,
         "total_calls": result.total_calls,
         "next_steps": next_steps,
         "full": result.model_dump(),
@@ -1156,24 +1190,37 @@ def _checklist_compact_format(
     return data
 
 
+def _optional_otel_trace_hint() -> dict[str, str] | None:
+    tid = (os.environ.get("TAPPS_OTEL_TRACE_ID") or "").strip()
+    sid = (os.environ.get("TAPPS_OTEL_SPAN_ID") or "").strip()
+    if not tid and not sid:
+        return None
+    return {"trace_id": tid, "span_id": sid}
+
+
 async def tapps_checklist(
     task_type: str = "review",
     auto_run: bool = False,
     output_format: str = "markdown",
     commit_sha: str = "",
+    epic_file_path: str = "",
+    reset_checklist_session: bool = False,
 ) -> dict[str, Any]:
     """REQUIRED as the FINAL step before declaring work complete.
 
     Args:
-        task_type: "feature" | "bugfix" | "refactor" | "security" | "review".
+        task_type: feature | bugfix | refactor | security | review | epic.
         auto_run: When True, automatically run missing required validations
             (via tapps_validate_changed) and re-evaluate the checklist.
         output_format: "markdown" (default, full table), "json" (structured counts),
             or "compact" (short 1-2 line summary).
         commit_sha: Optional git SHA to embed in response. If empty, auto-detects HEAD.
+        epic_file_path: When non-empty, runs epic markdown structural validation
+            (``task_type`` should usually be ``epic``).
+        reset_checklist_session: When True, starts a new checklist session boundary
+            before evaluating (rotates session id; call from long-lived servers).
     """
     start = time.perf_counter_ns()
-    _record_call("tapps_checklist")
 
     valid_formats = {"markdown", "json", "compact"}
     if output_format not in valid_formats:
@@ -1186,15 +1233,38 @@ async def tapps_checklist(
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
-        result = CallTracker.evaluate(task_type)
+        if reset_checklist_session:
+            CallTracker.begin_session()
+        _record_call("tapps_checklist")
+
+        settings = load_settings()
+        eval_kw: dict[str, Any] = {
+            "require_success": settings.checklist_require_success,
+            "strict_unknown_task_type": settings.checklist_strict_unknown_task_types,
+            "project_root": settings.project_root,
+        }
+
+        def _eval_checklist() -> ChecklistResult:
+            epic = epic_file_path.strip()
+            if epic:
+                epic_res = CallTracker.evaluate_epic(file_path=epic, **eval_kw)
+                return epic_res
+            return CallTracker.evaluate(task_type, **eval_kw)
+
+        try:
+            result = _eval_checklist()
+        except ValueError as exc:
+            return error_response(
+                "tapps_checklist",
+                "invalid_task_type",
+                str(exc),
+            )
 
         auto_run_results: dict[str, Any] = {}
 
         if auto_run and result.missing_required:
-            missing = set(result.missing_required)
-
             # validate_changed covers score_file + quality_gate + security_scan
-            needs_validate = missing & {
+            needs_validate = set(result.missing_required) & {
                 "tapps_score_file",
                 "tapps_quality_gate",
                 "tapps_security_scan",
@@ -1206,7 +1276,6 @@ async def tapps_checklist(
                 try:
                     from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
-                    settings = load_settings()
                     vc_result = await tapps_validate_changed(
                         preset=settings.quality_preset,
                     )
@@ -1229,30 +1298,46 @@ async def tapps_checklist(
                     }
 
             # Re-evaluate after auto-running
-            result = CallTracker.evaluate(task_type)
+            result = _eval_checklist()
 
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_checklist", start)
-        resp_data = result.model_dump()
-        if auto_run_results:
-            resp_data["auto_run_results"] = auto_run_results
+        trace_hint = _optional_otel_trace_hint()
+        session_id = CallTracker.get_active_checklist_session_id()
 
-        # Story 75.5: Add git context for audit trail linkage
+        git_context: dict[str, Any] | None = None
         try:
             from tapps_mcp.tools.checklist import _get_git_context
 
             git_context = await _get_git_context(commit_sha=commit_sha)
-            resp_data["git_context"] = git_context
         except Exception:
-            resp_data["git_context"] = None
+            git_context = None
 
-        # Format output based on output_format
+        resp_data: dict[str, Any]
         if output_format == "json":
-            resp_data = _checklist_json_format(result, auto_run_results)
+            resp_data = _checklist_json_format(
+                result,
+                auto_run_results,
+                checklist_session_id=session_id,
+                trace_hint=trace_hint,
+            )
         elif output_format == "compact":
-            resp_data = _checklist_compact_format(result, auto_run_results)
+            resp_data = _checklist_compact_format(
+                result,
+                auto_run_results,
+                checklist_session_id=session_id,
+                trace_hint=trace_hint,
+            )
+        else:
+            resp_data = result.model_dump()
+            if auto_run_results:
+                resp_data["auto_run_results"] = auto_run_results
 
         resp_data["git_context"] = git_context
+        resp_data["checklist_session_id"] = session_id
+        resp_data["otel_trace_hint"] = trace_hint
+        if result.checklist_policy_version:
+            resp_data["checklist_policy_version"] = result.checklist_policy_version
 
         # Epic 66.2: Surface validation_note in next_steps
         if auto_run_results.get("validate_changed", {}).get("validation_note"):
@@ -1264,6 +1349,11 @@ async def tapps_checklist(
                 "Use tapps_quick_check on individual changed files as fallback."
             )
             resp_data["next_steps"] = next_steps
+
+        # Surface epic_validation on markdown path when present
+        ev = getattr(result, "epic_validation", None)
+        if ev is not None:
+            resp_data["epic_validation"] = ev.model_dump()
 
         resp = success_response("tapps_checklist", elapsed_ms, resp_data)
 
@@ -1279,6 +1369,9 @@ async def tapps_checklist(
                     missing_required=result.missing_required,
                     missing_recommended=result.missing_recommended,
                     total_calls=result.total_calls,
+                    checklist_policy_version=result.checklist_policy_version or None,
+                    resolved_policy_task_type=result.resolved_policy_task_type or None,
+                    checklist_session_id=session_id,
                     auto_run_results=auto_run_results or None,
                 )
                 resp["structuredContent"] = structured.to_structured_content()

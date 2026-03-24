@@ -6,6 +6,7 @@ import ast
 import json
 import re
 import subprocess
+import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import structlog
@@ -106,6 +107,26 @@ class EpicGenerator:
         Returns:
             Rendered markdown content with docsmcp markers.
         """
+        content, _timing = self.generate_with_timing(
+            config,
+            project_root=project_root,
+            auto_populate=auto_populate,
+        )
+        return content
+
+    def generate_with_timing(
+        self,
+        config: EpicConfig,
+        *,
+        project_root: Path | None = None,
+        auto_populate: bool = False,
+    ) -> tuple[str, dict[str, int]]:
+        """Like :meth:`generate` but returns per-phase timings (milliseconds).
+
+        Keys may include: ``metadata_ms``, ``module_map_ms``, ``git_ms``,
+        ``experts_ms``, ``auto_populate_ms`` (wall-clock for populate),
+        ``render_ms`` (markdown assembly and file-hint scans), ``total_ms``.
+        """
         style = config.style if config.style in self.VALID_STYLES else "standard"
 
         if style != config.style:
@@ -115,12 +136,14 @@ class EpicGenerator:
                 fallback="standard",
             )
 
-        enrichment = (
-            self._auto_populate(project_root, config)
-            if auto_populate and project_root
-            else {}
-        )
+        timing: dict[str, int] = {}
+        t_wall = time.perf_counter()
+        enrichment: dict[str, Any] = {}
+        if auto_populate and project_root:
+            enrichment, ap_timings = self._auto_populate(project_root, config)
+            timing.update(ap_timings)
 
+        t_render = time.perf_counter()
         lines: list[str] = []
 
         lines.extend(self._render_title(config))
@@ -153,7 +176,9 @@ class EpicGenerator:
                 lines.extend(self._render_files_affected(config))
             lines.extend(self._render_performance_targets(enrichment))
 
-        return "\n".join(lines)
+        timing["render_ms"] = int((time.perf_counter() - t_render) * 1000)
+        timing["total_ms"] = int((time.perf_counter() - t_wall) * 1000)
+        return "\n".join(lines), timing
 
     # -- section renderers --------------------------------------------------
 
@@ -854,20 +879,39 @@ class EpicGenerator:
 
     def _auto_populate(
         self, project_root: Path, config: EpicConfig | None = None,
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], dict[str, int]]:
         """Gather enrichment data from project analyzers and domain experts.
 
         Returns a dict with optional keys: tech_stack, module_summary,
         dependencies, git_summary, expert_guidance. Each key is only present
         when the corresponding analyzer/expert succeeds.
+
+        Second return value is per-step timings in milliseconds plus
+        ``auto_populate_ms`` (wall-clock for the full populate phase).
         """
         enrichment: dict[str, Any] = {}
+        timings: dict[str, int] = {}
+        t_wall = time.perf_counter()
+
+        t0 = time.perf_counter()
         self._enrich_metadata(project_root, enrichment)
+        timings["metadata_ms"] = int((time.perf_counter() - t0) * 1000)
+
+        t0 = time.perf_counter()
         self._enrich_module_map(project_root, enrichment)
+        timings["module_map_ms"] = int((time.perf_counter() - t0) * 1000)
+
+        t0 = time.perf_counter()
         self._enrich_git(project_root, enrichment)
+        timings["git_ms"] = int((time.perf_counter() - t0) * 1000)
+
         if config:
+            t0 = time.perf_counter()
             self._enrich_experts(config, enrichment)
-        return enrichment
+            timings["experts_ms"] = int((time.perf_counter() - t0) * 1000)
+
+        timings["auto_populate_ms"] = int((time.perf_counter() - t_wall) * 1000)
+        return enrichment, timings
 
     @staticmethod
     def _enrich_metadata(project_root: Path, enrichment: dict[str, Any]) -> None:

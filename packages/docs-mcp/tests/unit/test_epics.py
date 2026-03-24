@@ -151,6 +151,29 @@ class TestEpicGeneratorSections:
         content = self.gen.generate(config)
         assert "- [ ] Define verifiable acceptance criteria" in content
 
+    def test_generate_with_timing_returns_phase_ms(self) -> None:
+        config = _make_config()
+        content, timing = self.gen.generate_with_timing(config)
+        assert "## Stories" in content
+        assert "total_ms" in timing
+        assert "render_ms" in timing
+        assert timing["total_ms"] >= timing["render_ms"]
+
+    def test_generate_with_timing_auto_populate_breakdown(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "proj"\nversion = "0.1.0"\n',
+            encoding="utf-8",
+        )
+        config = _make_config()
+        _, timing = self.gen.generate_with_timing(
+            config,
+            project_root=tmp_path,
+            auto_populate=True,
+        )
+        assert "auto_populate_ms" in timing
+        assert "metadata_ms" in timing
+        assert "render_ms" in timing
+
     def test_stories_rendered(self) -> None:
         config = _make_config()
         content = self.gen.generate(config)
@@ -728,6 +751,8 @@ class TestDocsGenerateEpicTool:
         assert result["data"]["title"] == "My Feature"
         assert result["data"]["number"] == 10
         assert "# Epic 10: My Feature" in result["data"]["content"]
+        assert "timing_ms" in result["data"]
+        assert "total_ms" in result["data"]["timing_ms"]
 
     async def test_invalid_root(self, tmp_path: Path) -> None:
         bad_root = tmp_path / "does_not_exist"
@@ -854,8 +879,9 @@ class TestDocsGenerateEpicTool:
                 "docs_mcp.server_gen_tools._get_settings",
                 return_value=_make_settings(root),
             ),
-            patch(
-                "docs_mcp.generators.epics.EpicGenerator.generate",
+            patch.object(
+                EpicGenerator,
+                "generate_with_timing",
                 side_effect=RuntimeError("boom"),
             ),
         ):

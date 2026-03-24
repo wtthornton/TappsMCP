@@ -12,6 +12,7 @@ from docs_mcp.validators.epic_validator import (
     _check_point_size_consistency,
     _detect_cycle,
     _parse_implementation_order,
+    _parse_story_heading,
     _split_by_heading,
     StoryInfo,
 )
@@ -402,6 +403,55 @@ class TestEpicValidatorImplOrder:
         ]
         assert len(cycle_errors) == 1
         assert cycle_errors[0].severity == "error"
+
+
+_DOCSMCP_STUB_EPIC = """\
+# Epic 80: Consumer Init
+
+## Goal
+
+Close bootstrap gaps.
+
+## Motivation
+
+Adoption.
+
+## Acceptance Criteria
+
+- [ ] Done
+
+## Stories
+
+### 80.1 -- Fix hooks
+
+**Points:** 2 | **Size:** S | **Priority:** P1
+
+#### Tasks
+
+- [ ] Implement
+
+#### Acceptance Criteria
+
+- [ ] Scripts exist
+
+---
+"""
+
+
+class TestEpicValidatorDocsMcpStoryHeadings:
+    """docs_generate_epic uses ### N -- Title; validator must recognize it."""
+
+    def test_parse_story_heading_docsmcp_format(self) -> None:
+        assert _parse_story_heading("### 80.1 -- Fix hooks") == ("80.1", "Fix hooks")
+        assert _parse_story_heading("### Story 99.1: Classic") == ("99.1", "Classic")
+
+    def test_validator_counts_docsmcp_style_stories(self, tmp_path: Path) -> None:
+        fp = _write_epic(tmp_path, _DOCSMCP_STUB_EPIC)
+        report = EpicValidator().validate(fp)
+
+        assert report.total_stories == 1
+        assert report.stories[0].number == "80.1"
+        assert "hooks" in report.stories[0].title.lower()
 
 
 class TestEpicValidatorEdgeCases:

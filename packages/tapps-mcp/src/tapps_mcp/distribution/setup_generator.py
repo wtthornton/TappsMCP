@@ -7,6 +7,7 @@ with auto-detection of installed hosts and config merging.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -38,25 +39,62 @@ _SERVER_INSTRUCTIONS = (
     "profiling for Python projects."
 )
 
+_DOCS_SERVER_INSTRUCTIONS = (
+    "Documentation MCP: epic/story/prompt generators, artifact validation, "
+    "and planning helpers for Markdown docs in this repo."
+)
 
-def _detect_command_path() -> str:
-    """Detect the best ``tapps-mcp`` command path for MCP configs.
+# Placeholder for uv-based configs when ``tapps-mcp`` is not on PATH (Epic 80.5).
+_TAPPS_MCP_UV_ROOT_PLACEHOLDER = "<PATH_TO_TAPPS_MCP_MONOREPO_ROOT>"
+
+
+def _resolve_tapps_mcp_launch() -> tuple[str, list[str]]:
+    """Return ``command`` and ``args`` to launch ``tapps-mcp serve``.
 
     Resolution order:
-    1. If running as a PyInstaller frozen exe, return ``sys.executable``.
-    2. If ``tapps-mcp`` is on PATH, return ``"tapps-mcp"``.
-    3. Fallback to ``"tapps-mcp"`` (user must ensure it's on PATH).
+    1. PyInstaller frozen exe: ``sys.executable`` + ``["serve"]``.
+    2. ``tapps-mcp`` on PATH: ``"tapps-mcp"`` + ``["serve"]``.
+    3. Fallback: ``uv run --directory <placeholder> tapps-mcp serve`` for checkout installs.
     """
-    # PyInstaller frozen executable
     if getattr(sys, "frozen", False):
-        return sys.executable
+        return sys.executable, ["serve"]
+    if shutil.which("tapps-mcp") is not None:
+        return "tapps-mcp", ["serve"]
+    return (
+        "uv",
+        [
+            "run",
+            "--directory",
+            _TAPPS_MCP_UV_ROOT_PLACEHOLDER,
+            "tapps-mcp",
+            "serve",
+        ],
+    )
 
-    # Available on PATH
-    which_result = shutil.which("tapps-mcp")
-    if which_result is not None:
-        return "tapps-mcp"
 
-    return "tapps-mcp"
+def _resolve_docsmcp_launch() -> tuple[str, list[str]]:
+    """Return command + args to launch DocsMCP (``docsmcp serve``)."""
+    if shutil.which("docsmcp") is not None:
+        return "docsmcp", ["serve"]
+    return (
+        "uv",
+        [
+            "run",
+            "--directory",
+            _TAPPS_MCP_UV_ROOT_PLACEHOLDER,
+            "docsmcp",
+            "serve",
+        ],
+    )
+
+
+def _detect_command_path() -> str:
+    """Return the primary executable name or path for MCP configs (compat shim).
+
+    Prefer :func:`_resolve_tapps_mcp_launch` for full ``command`` + ``args``.
+    """
+    cmd, _args = _resolve_tapps_mcp_launch()
+    return cmd
 
 
 def _build_server_entry(host: str) -> dict[str, Any]:
@@ -70,20 +108,47 @@ def _build_server_entry(host: str) -> dict[str, Any]:
     ``${workspaceFolder}``.  Cursor and VS Code resolve ``${workspaceFolder}``
     natively so it is used there.
 
-    Uses :func:`_detect_command_path` to determine the command.
+    Uses :func:`_resolve_tapps_mcp_launch` for command and args.
     """
-    command = _detect_command_path()
+    command, args = _resolve_tapps_mcp_launch()
     # Claude Code CWD == project root; VS Code/Cursor resolve ${workspaceFolder}
     project_root_value = "." if host == "claude-code" else "${workspaceFolder}"
     entry: dict[str, Any] = {
         "type": "stdio",
         "command": command,
-        "args": ["serve"],
+        "args": args,
         "env": {"TAPPS_MCP_PROJECT_ROOT": project_root_value},
     }
     if host == "claude-code":
         entry["instructions"] = _SERVER_INSTRUCTIONS
     return entry
+
+
+def _build_docsmcp_server_entry(host: str) -> dict[str, Any]:
+    """Build the docs-mcp server entry (optional ``--with-docs-mcp``, Epic 80.7)."""
+    command, args = _resolve_docsmcp_launch()
+    project_root_value = "." if host == "claude-code" else "${workspaceFolder}"
+    entry: dict[str, Any] = {
+        "type": "stdio",
+        "command": command,
+        "args": args,
+        "env": {"DOCS_MCP_PROJECT_ROOT": project_root_value},
+    }
+    if host == "claude-code":
+        entry["instructions"] = _DOCS_SERVER_INSTRUCTIONS
+    return entry
+
+
+def is_tapps_mcp_package_layout(project_root: Path) -> bool:
+    """Return True if *project_root* looks like ``.../packages/tapps-mcp`` (Epic 80.3)."""
+    resolved = project_root.resolve()
+    parts = resolved.parts
+    min_segments = 2
+    return (
+        len(parts) >= min_segments
+        and parts[-2] == "packages"
+        and parts[-1] == "tapps-mcp"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -218,14 +283,18 @@ def _merge_config(
         merged[servers_key] = {}
 
     new_entry = _build_server_entry(host)
-
-    if upgrade_mode:
-        old_entry = merged[servers_key].get("tapps-mcp")
-        if isinstance(old_entry, dict) and "command" in old_entry:
+    old_entry = merged[servers_key].get("tapps-mcp")
+    if isinstance(old_entry, dict):
+        if upgrade_mode and "command" in old_entry:
             # Preserve custom command paths (exe/uv) during upgrade
             new_entry["command"] = old_entry["command"]
             if "args" in old_entry:
                 new_entry["args"] = old_entry["args"]
+        old_env = old_entry.get("env")
+        new_env = new_entry.get("env") or {}
+        if isinstance(old_env, dict):
+            # Epic 80.5: keep unrelated env keys (e.g. API keys) when merging/replacing
+            new_entry["env"] = {**old_env, **new_env}
 
     merged[servers_key]["tapps-mcp"] = new_entry
 
@@ -245,6 +314,7 @@ def _generate_config(
     scope: str = "project",
     dry_run: bool = False,
     upgrade_mode: bool = False,
+    with_docs_mcp: bool = False,
 ) -> bool:
     """Generate (or merge) the MCP config for the given host.
 
@@ -254,6 +324,7 @@ def _generate_config(
         force: If ``True``, overwrite any existing ``tapps-mcp`` entry without
             prompting. Intended for non-interactive use (CI, scripts).
         scope: ``"project"`` (default) or ``"user"``. Only affects ``claude-code``.
+        with_docs_mcp: When ``True``, also write a ``docs-mcp`` server entry (Epic 80.7).
 
     Returns:
         ``True`` if configuration was successfully written, ``False`` if the
@@ -288,14 +359,42 @@ def _generate_config(
                     fg="yellow",
                 )
             )
-            if not force and not click.confirm("Overwrite the existing tapps-mcp entry?"):
-                click.echo("Aborted.")
-                return False
+            if not force:
+                if sys.stdin.isatty():
+                    if not click.confirm("Overwrite the existing tapps-mcp entry?"):
+                        click.echo("Aborted.")
+                        return False
+                else:
+                    assume = os.environ.get("TAPPS_MCP_INIT_ASSUME_YES", "").strip().lower()
+                    if assume not in ("1", "true", "yes", "y", "on"):
+                        click.echo(
+                            click.style(
+                                "Non-interactive session: skipping overwrite of existing "
+                                "tapps-mcp entry.",
+                                fg="yellow",
+                            )
+                        )
+                        click.echo(
+                            "  Re-run with --force or set TAPPS_MCP_INIT_ASSUME_YES=1 "
+                            "to overwrite without prompting."
+                        )
+                        return True
 
         merged = _merge_config(existing, host, upgrade_mode=upgrade_mode)
     else:
         servers_key_new = _get_servers_key(host)
         merged = {servers_key_new: {"tapps-mcp": _build_server_entry(host)}}
+
+    if with_docs_mcp:
+        merged.setdefault(servers_key, {})
+        old_docs = merged[servers_key].get("docs-mcp")
+        new_docs = _build_docsmcp_server_entry(host)
+        if isinstance(old_docs, dict):
+            old_env = old_docs.get("env")
+            new_env = new_docs.get("env") or {}
+            if isinstance(old_env, dict):
+                new_docs["env"] = {**old_env, **new_env}
+        merged[servers_key]["docs-mcp"] = new_docs
 
     if dry_run:
         click.echo(
@@ -431,6 +530,7 @@ def _configure_multiple_hosts(
     scope: str = "project",
     rules: bool = True,
     dry_run: bool = False,
+    with_docs_mcp: bool = False,
 ) -> bool:
     """Configure (or check) multiple hosts, reporting per-host results.
 
@@ -443,7 +543,14 @@ def _configure_multiple_hosts(
         if check:
             ok = _check_config(host, project_root, scope=scope)
         else:
-            ok = _generate_config(host, project_root, force=force, scope=scope, dry_run=dry_run)
+            ok = _generate_config(
+                host,
+                project_root,
+                force=force,
+                scope=scope,
+                dry_run=dry_run,
+                with_docs_mcp=with_docs_mcp,
+            )
             if ok and rules and not dry_run:
                 _generate_rules(host, project_root)
             elif ok and rules and dry_run:
@@ -704,6 +811,8 @@ def run_init(
     rules: bool = True,
     dry_run: bool = False,
     engagement_level: str | None = None,
+    allow_package_init: bool = False,
+    with_docs_mcp: bool = False,
 ) -> bool:
     """Run the init command logic.
 
@@ -721,6 +830,8 @@ def run_init(
         dry_run: If ``True``, show what would be written without making changes.
         engagement_level: When set (high/medium/low), write to .tapps-mcp.yaml and
             use for platform rules. When ``None``, rules use medium or existing config.
+        allow_package_init: Allow init when ``project_root`` is ``.../packages/tapps-mcp``.
+        with_docs_mcp: Also register the docs-mcp server (Epic 80.7).
     """
     root = Path(project_root).resolve()
     log.info(
@@ -733,7 +844,36 @@ def run_init(
         rules=rules,
         dry_run=dry_run,
         engagement_level=engagement_level,
+        allow_package_init=allow_package_init,
+        with_docs_mcp=with_docs_mcp,
     )
+
+    allow_pkg = allow_package_init or os.environ.get(
+        "TAPPS_MCP_ALLOW_PACKAGE_INIT",
+        "",
+    ).strip().lower() in ("1", "true", "yes", "y", "on")
+    if (
+        not check
+        and not allow_pkg
+        and is_tapps_mcp_package_layout(root)
+    ):
+        click.echo(
+            click.style(
+                "Refusing init: project root is the tapps-mcp package directory "
+                "(.../packages/tapps-mcp).",
+                fg="red",
+            )
+        )
+        click.echo("  Target your consumer repo with: --project-root <path>")
+        click.echo(
+            "  Example: uv --directory <TappMCP-monorepo> run tapps-mcp init "
+            "--project-root <consumer-app>"
+        )
+        click.echo(
+            "  Package maintainers: set TAPPS_MCP_ALLOW_PACKAGE_INIT=1 or use "
+            "--allow-package-init."
+        )
+        return False
 
     if mcp_host == "auto":
         hosts = _detect_hosts()
@@ -755,6 +895,7 @@ def run_init(
             scope=scope,
             rules=rules,
             dry_run=dry_run,
+            with_docs_mcp=with_docs_mcp,
         )
 
     if check:
@@ -763,7 +904,14 @@ def run_init(
     if engagement_level is not None and not dry_run:
         _write_engagement_level_to_yaml(root, engagement_level)
 
-    ok = _generate_config(mcp_host, root, force=force, scope=scope, dry_run=dry_run)
+    ok = _generate_config(
+        mcp_host,
+        root,
+        force=force,
+        scope=scope,
+        dry_run=dry_run,
+        with_docs_mcp=with_docs_mcp,
+    )
     if ok and rules and not dry_run:
         _generate_rules(mcp_host, root, engagement_level=engagement_level)
     elif ok and rules and dry_run:

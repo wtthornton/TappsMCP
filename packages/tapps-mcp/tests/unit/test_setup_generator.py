@@ -1,6 +1,8 @@
 """Tests for distribution.setup_generator (Story 6.2 - One-Command Setup)."""
 
 import json
+import os
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +18,7 @@ from tapps_mcp.distribution.setup_generator import (
     _get_config_path,
     _get_servers_key,
     _merge_config,
+    is_tapps_mcp_package_layout,
     run_init,
     run_upgrade,
 )
@@ -302,7 +305,10 @@ class TestGenerateConfig:
         (cursor_dir / "mcp.json").write_text(json.dumps(existing), encoding="utf-8")
 
         # Simulate user saying "no"
-        with patch("tapps_mcp.distribution.setup_generator.click.confirm", return_value=False):
+        with (
+            patch.object(sys.stdin, "isatty", return_value=True),
+            patch("tapps_mcp.distribution.setup_generator.click.confirm", return_value=False),
+        ):
             _generate_config("cursor", project)
         # Should NOT have overwritten
         data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
@@ -316,7 +322,11 @@ class TestGenerateConfig:
         existing = {"mcpServers": {"tapps-mcp": {"command": "old"}}}
         (cursor_dir / "mcp.json").write_text(json.dumps(existing), encoding="utf-8")
 
-        with patch("tapps_mcp.distribution.setup_generator.click.confirm", return_value=True):
+        with (
+            patch.object(sys.stdin, "isatty", return_value=True),
+            patch("tapps_mcp.distribution.setup_generator.click.confirm", return_value=True),
+            patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"),
+        ):
             _generate_config("cursor", project)
         data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
         assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
@@ -544,7 +554,7 @@ class TestCliInit:
         runner = CliRunner()
         result = runner.invoke(main, ["init", "--help"])
         assert result.exit_code == 0
-        assert "Generate MCP configuration" in result.output
+        assert "Bootstrap TappsMCP" in result.output
 
     def test_init_cursor(self, tmp_path):
         runner = CliRunner()
@@ -946,7 +956,7 @@ class TestCliUpgrade:
         runner = CliRunner()
         result = runner.invoke(main, ["upgrade", "--help"])
         assert result.exit_code == 0
-        assert "Validate and update" in result.output
+        assert "Refresh generated files" in result.output
 
     def test_upgrade_dry_run_via_cli(self, tmp_path):
         """CLI upgrade --dry-run does not create files."""
@@ -1013,6 +1023,106 @@ class TestDefaultScopeProject:
         assert result.exit_code == 0
         # Help text should show project as default
         assert "project" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# Epic 80: Consumer init hardening
+# ---------------------------------------------------------------------------
+
+
+class TestEpic80ConsumerInit:
+    """Regression tests for Epic 80 (hooks, MCP merge, package-root guard)."""
+
+    def test_is_tapps_mcp_package_layout(self, tmp_path):
+        root = tmp_path / "r" / "packages" / "tapps-mcp"
+        root.mkdir(parents=True)
+        assert is_tapps_mcp_package_layout(root) is True
+        assert is_tapps_mcp_package_layout(tmp_path / "other") is False
+
+    def test_merge_preserves_extra_env_keys(self, tmp_path):
+        project = tmp_path / "project"
+        cursor_dir = project / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        existing = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "tapps-mcp",
+                    "args": ["serve"],
+                    "env": {
+                        "TAPPS_MCP_PROJECT_ROOT": ".",
+                        "TAPPS_MCP_CONTEXT7_API_KEY": "secret",
+                    },
+                },
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(existing), encoding="utf-8")
+        with patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"):
+            _generate_config("cursor", project, force=True)
+        data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
+        env = data["mcpServers"]["tapps-mcp"]["env"]
+        assert env.get("TAPPS_MCP_CONTEXT7_API_KEY") == "secret"
+
+    def test_noninteractive_skips_overwrite_without_hang(self, tmp_path):
+        project = tmp_path / "project"
+        cursor_dir = project / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        existing = {"mcpServers": {"tapps-mcp": {"command": "old"}}}
+        (cursor_dir / "mcp.json").write_text(json.dumps(existing), encoding="utf-8")
+        with patch.object(sys.stdin, "isatty", return_value=False):
+            ok = _generate_config("cursor", project, force=False)
+        assert ok is True
+        data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
+        assert data["mcpServers"]["tapps-mcp"]["command"] == "old"
+
+    def test_noninteractive_assume_yes_overwrites(self, tmp_path):
+        project = tmp_path / "project"
+        cursor_dir = project / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        existing = {"mcpServers": {"tapps-mcp": {"command": "old"}}}
+        (cursor_dir / "mcp.json").write_text(json.dumps(existing), encoding="utf-8")
+        with (
+            patch.object(sys.stdin, "isatty", return_value=False),
+            patch.dict(os.environ, {"TAPPS_MCP_INIT_ASSUME_YES": "1"}),
+            patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/x/tapps-mcp"),
+        ):
+            ok = _generate_config("cursor", project, force=False)
+        assert ok is True
+        data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
+        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+
+    def test_run_init_refuses_package_dir_without_flag(self, tmp_path):
+        pkg = tmp_path / "packages" / "tapps-mcp"
+        pkg.mkdir(parents=True)
+        ok = run_init(mcp_host="cursor", project_root=str(pkg), rules=False)
+        assert ok is False
+
+    def test_run_init_package_dir_with_allow_flag(self, tmp_path):
+        pkg = tmp_path / "packages" / "tapps-mcp"
+        pkg.mkdir(parents=True)
+        with patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"):
+            ok = run_init(
+                mcp_host="cursor",
+                project_root=str(pkg),
+                rules=False,
+                allow_package_init=True,
+            )
+        assert ok is True
+
+    def test_with_docs_mcp_adds_server_entry(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+
+        def _which(cmd: str) -> str | None:
+            if cmd == "tapps-mcp":
+                return "/bin/tapps-mcp"
+            return None
+
+        with patch("tapps_mcp.distribution.setup_generator.shutil.which", side_effect=_which):
+            _generate_config("cursor", project, force=True, with_docs_mcp=True)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        assert "docs-mcp" in data["mcpServers"]
+        assert data["mcpServers"]["docs-mcp"]["command"] == "uv"
+        assert "docsmcp" in data["mcpServers"]["docs-mcp"]["args"]
 
 
 # ---------------------------------------------------------------------------

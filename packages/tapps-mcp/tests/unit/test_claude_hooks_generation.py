@@ -31,6 +31,8 @@ class TestClaudeHooksScripts:
             "tapps-session-start.sh",
             "tapps-session-compact.sh",
             "tapps-post-edit.sh",
+            "tapps-post-validate.sh",
+            "tapps-post-report.sh",
             "tapps-stop.sh",
             "tapps-task-completed.sh",
             "tapps-pre-compact.sh",
@@ -236,7 +238,7 @@ class TestClaudeHooksMerge:
         """Returns a summary dict with scripts_created and hooks_action."""
         result = generate_claude_hooks(tmp_path, force_windows=False)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 10  # medium engagement (includes memory hooks)
+        assert len(result["scripts_created"]) == 12  # medium + post-validate/report + memory hooks
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0
 
@@ -260,6 +262,8 @@ class TestClaudeHooksScriptsWindows:
             "tapps-session-start.ps1",
             "tapps-session-compact.ps1",
             "tapps-post-edit.ps1",
+            "tapps-post-validate.ps1",
+            "tapps-post-report.ps1",
             "tapps-stop.ps1",
             "tapps-task-completed.ps1",
             "tapps-pre-compact.ps1",
@@ -309,7 +313,7 @@ class TestClaudeHooksScriptsWindows:
     def test_result_dict(self, tmp_path):
         result = generate_claude_hooks(tmp_path, force_windows=True)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 10  # medium engagement (includes memory hooks)
+        assert len(result["scripts_created"]) == 12  # medium + post-validate/report + memory hooks
         assert all(n.endswith(".ps1") for n in result["scripts_created"])
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0

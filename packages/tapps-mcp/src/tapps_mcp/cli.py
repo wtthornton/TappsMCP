@@ -102,6 +102,18 @@ def serve(transport: str, host: str, port: int) -> None:
     default=False,
     help="Overwrite existing TECH_STACK.md with auto-detected content (default: preserve).",
 )
+@click.option(
+    "--allow-package-init",
+    is_flag=True,
+    default=False,
+    help="Allow init when --project-root is the tapps-mcp package dir (.../packages/tapps-mcp).",
+)
+@click.option(
+    "--with-docs-mcp",
+    is_flag=True,
+    default=False,
+    help="Also register the docs-mcp server in generated MCP JSON (Epic 80.7).",
+)
 def init(
     mcp_host: str,
     project_root: str,
@@ -112,6 +124,8 @@ def init(
     dry_run: bool,
     engagement_level: str | None,
     overwrite_tech_stack: bool,
+    allow_package_init: bool,
+    with_docs_mcp: bool,
 ) -> None:
     """Bootstrap TappsMCP in a project (MCP config, AGENTS.md, hooks, agents, skills, rules).
 
@@ -130,6 +144,8 @@ def init(
         rules=rules,
         dry_run=dry_run,
         engagement_level=engagement_level,
+        allow_package_init=allow_package_init,
+        with_docs_mcp=with_docs_mcp,
     )
     if not success:
         raise SystemExit(1)

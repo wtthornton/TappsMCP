@@ -89,12 +89,12 @@ async def test_checklist_json_format() -> None:
     data = resp["data"]
     assert data["task_type"] == "feature"
     assert data["complete"] is False
-    assert data["required_missing"] == ["tapps_security_scan"]
-    assert data["recommended_missing"] == ["tapps_dead_code"]
-    assert data["optional_missing"] == ["tapps_dependency_scan"]
-    assert "required_called" in data
-    assert "recommended_called" in data
-    assert "optional_called" in data
+    assert data["required"]["missing"] == ["tapps_security_scan"]
+    assert data["recommended"]["missing"] == ["tapps_dead_code"]
+    assert data["optional"]["missing"] == ["tapps_dependency_scan"]
+    assert "required" in data
+    assert "recommended" in data
+    assert "optional" in data
     assert "priority_actions" in data
     assert data["priority_actions"] == ["tapps_security_scan"]
     assert data["total_calls"] == 2

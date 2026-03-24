@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -37,11 +38,11 @@ from tapps_core.experts.models import (
     ExpertConfig,
     ExpertInfo,
 )
-
-_STALE_KNOWLEDGE_DAYS = 365
 from tapps_core.experts.rag import _extract_keywords
 from tapps_core.experts.registry import ExpertRegistry
 from tapps_core.experts.vector_rag import VectorKnowledgeBase
+
+_STALE_KNOWLEDGE_DAYS = 365
 
 logger = structlog.get_logger(__name__)
 
@@ -315,8 +316,8 @@ def _resolve_knowledge_path(expert: ExpertConfig) -> Path:
         return ExpertRegistry.get_knowledge_base_path() / knowledge_dir_name
 
     try:
-        from tapps_core.experts.business_knowledge import get_business_knowledge_path
         from tapps_core.config.settings import load_settings
+        from tapps_core.experts.business_knowledge import get_business_knowledge_path
 
         settings = load_settings()
         return get_business_knowledge_path(settings.project_root, expert)
@@ -446,16 +447,54 @@ def _unique_top_sources(chunks: list[Any], limit: int = 3) -> list[str]:
     return sources
 
 
+def _parse_frontmatter_last_reviewed_utc(content: str) -> datetime | None:
+    """Return UTC midnight for ``last_reviewed`` in YAML frontmatter, if present.
+
+    Optional frontmatter (first lines of a knowledge markdown file)::
+
+        ---
+        last_reviewed: 2026-03-24
+        ---
+
+    When set, freshness uses ``max(mtime_age, review_age)`` so a recent file
+    touch does not hide an old editorial review date.
+    """
+    stripped = content.lstrip("\ufeff")
+    if not stripped.startswith("---"):
+        return None
+    end = stripped.find("\n---", 3)
+    if end == -1:
+        return None
+    block = stripped[3:end]
+    for raw_line in block.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, _, value = line.partition(":")
+        if key.strip().lower() != "last_reviewed":
+            continue
+        val = value.strip().strip('"').strip("'")
+        if not val:
+            return None
+        try:
+            day = date.fromisoformat(val[:10])
+        except ValueError:
+            return None
+        return datetime(day.year, day.month, day.day, tzinfo=UTC)
+    return None
+
+
 def _collect_source_ages(
     sources: list[str],
     knowledge_base_path: Path,
 ) -> list[int]:
-    """Compute file ages in days for each source that exists on disk.
+    """Compute effective ages in days for each source that exists on disk.
+
+    Effective age is ``max(mtime age, last_reviewed age)`` when the file declares
+    ``last_reviewed`` in YAML frontmatter; otherwise mtime age only.
 
     Silently skips missing files and files that cannot be stat'd.
     """
-    from datetime import UTC, datetime
-
     now = datetime.now(tz=UTC)
     ages_days: list[int] = []
     for source in sources:
@@ -464,10 +503,20 @@ def _collect_source_ages(
             continue
         try:
             mtime = datetime.fromtimestamp(source_path.stat().st_mtime, tz=UTC)
-            age = (now - mtime).days
-            ages_days.append(age)
+            m_age = (now - mtime).days
         except OSError:
-            pass
+            continue
+        try:
+            raw = source_path.read_text(encoding="utf-8")
+        except OSError:
+            ages_days.append(m_age)
+            continue
+        reviewed_at = _parse_frontmatter_last_reviewed_utc(raw)
+        if reviewed_at is None:
+            ages_days.append(m_age)
+        else:
+            r_age = (now - reviewed_at).days
+            ages_days.append(max(m_age, r_age))
     return ages_days
 
 
@@ -477,9 +526,11 @@ def _check_freshness(
 ) -> _FreshnessResult:
     """Check freshness of retrieved knowledge source files.
 
-    Examines the modification timestamps of source files for the top chunks.
-    If all top chunks (up to 3) come from files older than ``_STALE_KNOWLEDGE_DAYS``,
-    marks the knowledge as stale and produces a caveat message.
+    Examines each source file's effective age: ``max(mtime, last_reviewed)``
+    when optional YAML frontmatter includes ``last_reviewed: YYYY-MM-DD``;
+    otherwise mtime only. If all top chunks (up to 3) come from files whose
+    effective age exceeds ``_STALE_KNOWLEDGE_DAYS``, marks the knowledge as
+    stale and produces a caveat message.
     """
     if not knowledge.chunks:
         return _FreshnessResult()

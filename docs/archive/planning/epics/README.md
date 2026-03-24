@@ -176,6 +176,16 @@ Stories: [79.1](EPIC-79/story-79.1-tappsmcp-enabled-tools-config.md) TappsMCP en
 | [Epic 72](EPIC-72-EXPERT-KNOWLEDGE-ENRICHMENT.md) | Expert Knowledge Enrichment (metrics, workflow, templates) | P2 | 0 | None | **Complete** |
 | [Epic 73](EPIC-73-EXPERT-COMMUNICATION-STYLE.md) | Expert Communication Style (optional) | P3 | 0 | Epic 69, opt. 70–71 | **Complete** |
 
+### Epic 80 (Consumer Init): Bootstrap Hardening — **Complete** (2026-03-24)
+
+*Source: consumer feedback (Windows / uv / non-interactive init). Distinct from [docs/planning Epic 80 (C4 diagrams)](../../../planning/epics/EPIC-80-C4-MODEL-SEQUENCE-DIAGRAM-SUPPORT.md).*
+
+| Epic | Name | Priority | LOE | Dependencies | Status |
+|---|---|---|---|---|---|
+| [Epic 80](EPIC-80-CONSUMER-INIT-BOOTSTRAP-HARDENING.md) | Consumer Init & Bootstrap Hardening (`tapps-mcp init`) | P0–P1 | ~3–5 weeks | Epic 12, 37, 47 | **Complete** — 10/10 stories |
+
+Stories: [80.1](EPIC-80/story-80.1-fix-posttooluse-hook-scripts-validate-report.md) hook script_event_map, [80.2](EPIC-80/story-80.2-doctor-verify-hook-files-exist.md) doctor hook paths, [80.3](EPIC-80/story-80.3-init-project-root-self-bootstrap-guard.md) package-root guard, [80.4](EPIC-80/story-80.4-noninteractive-init-mcp-overwrite.md) non-interactive MCP merge, [80.5](EPIC-80/story-80.5-mcp-config-path-and-uv-fallback.md) PATH + uv + env merge, [80.6](EPIC-80/story-80.6-docs-canonical-install-windows.md) README/install docs, [80.7](EPIC-80/story-80.7-docs-mcp-parity-across-hosts.md) `--with-docs-mcp`, [80.8](EPIC-80/story-80.8-tech-stack-low-confidence-wrappers.md) TECH_STACK callout, [80.9](EPIC-80/story-80.9-doctor-project-only-mcp.md) project-only MCP, [80.10](EPIC-80/story-80.10-regression-tests-init-hooks-noninteractive.md) regression tests.
+
 ### Proposed Future Epics
 
 | Epic | Name | Priority | LOE | Dependencies | Status |

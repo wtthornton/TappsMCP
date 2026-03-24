@@ -16,6 +16,7 @@ from tapps_mcp.distribution.doctor import (
     check_binary_on_path,
     check_claude_code_project,
     check_claude_code_user,
+    check_claude_hook_scripts,
     check_claude_md,
     check_claude_settings,
     check_cursor_config,
@@ -212,6 +213,57 @@ class TestHostConfigChecks:
     def test_claude_code_user_missing(self, tmp_path):
         result = check_claude_code_user(home=tmp_path)
         assert result.ok is False
+
+    def test_claude_code_user_passes_when_project_mcp_configures(self, tmp_path):
+        """Epic 80.9: ~/.claude.json optional when project .mcp.json has tapps-mcp."""
+        consumer = tmp_path / "app"
+        consumer.mkdir()
+        cfg = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp", "args": ["serve"]}}}
+        (consumer / ".mcp.json").write_text(json.dumps(cfg), encoding="utf-8")
+        result = check_claude_code_user(home=tmp_path, project_root=consumer)
+        assert result.ok is True
+        assert "project" in result.message.lower()
+
+    def test_claude_hook_scripts_missing_file(self, tmp_path):
+        claude = tmp_path / ".claude"
+        claude.mkdir()
+        settings = {
+            "hooks": {
+                "PostToolUse": [
+                    {
+                        "matcher": "Edit",
+                        "hooks": [
+                            {"type": "command", "command": ".claude/hooks/tapps-post-edit.sh"},
+                        ],
+                    },
+                ],
+            },
+        }
+        (claude / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        result = check_claude_hook_scripts(tmp_path)
+        assert result.ok is False
+        assert "Missing" in result.message
+
+    def test_claude_hook_scripts_present(self, tmp_path):
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-post-edit.sh").write_text("# ok", encoding="utf-8")
+        claude = tmp_path / ".claude"
+        settings = {
+            "hooks": {
+                "PostToolUse": [
+                    {
+                        "matcher": "Edit",
+                        "hooks": [
+                            {"type": "command", "command": ".claude/hooks/tapps-post-edit.sh"},
+                        ],
+                    },
+                ],
+            },
+        }
+        (claude / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        result = check_claude_hook_scripts(tmp_path)
+        assert result.ok is True
 
     def test_claude_code_project_found(self, tmp_path):
         config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}

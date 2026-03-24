@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 from tapps_core.experts.engine import (
+    _check_freshness,
     _FreshnessResult,
     _KnowledgeResult,
-    _check_freshness,
 )
 from tapps_core.experts.models import ConsultationResult, KnowledgeChunk
 
@@ -162,6 +163,68 @@ class TestCheckFreshnessMultipleStaleFiles:
         assert result.oldest_chunk_age_days is not None
         assert result.oldest_chunk_age_days >= 500
         assert result.freshness_caveat is not None
+
+
+class TestCheckFreshnessFrontmatterLastReviewed:
+    """last_reviewed in YAML frontmatter participates in effective file age."""
+
+    def test_old_last_reviewed_makes_stale_despite_fresh_mtime(self, tmp_path: Path) -> None:
+        kb_file = tmp_path / "review-stale.md"
+        kb_file.write_text(
+            "---\nlast_reviewed: 2020-01-01\n---\n\n# Topic\nBody.\n",
+            encoding="utf-8",
+        )
+
+        chunks = [
+            KnowledgeChunk(
+                content="Body.",
+                source_file="review-stale.md",
+                line_start=1,
+                line_end=5,
+                score=0.9,
+            ),
+        ]
+        knowledge = _KnowledgeResult(
+            chunks=chunks, context="Body.", sources=["review-stale.md"]
+        )
+
+        result = _check_freshness(knowledge, tmp_path)
+        assert result.stale_knowledge is True
+        assert result.oldest_chunk_age_days is not None
+        assert result.oldest_chunk_age_days >= 365
+        assert result.freshness_caveat is not None
+
+    def test_last_reviewed_combined_with_mtime_uses_max_age(self, tmp_path: Path) -> None:
+        """Effective age is max(mtime, review); both must be under threshold to be fresh."""
+        reviewed = (datetime.now(tz=UTC) - timedelta(days=60)).date().isoformat()
+        kb_file = tmp_path / "both-reasonably-fresh.md"
+        kb_file.write_text(
+            f"---\nlast_reviewed: {reviewed}\n---\n\n# Topic\nBody.\n",
+            encoding="utf-8",
+        )
+        medium_time = time.time() - (10 * 86400)
+        os.utime(kb_file, (medium_time, medium_time))
+
+        chunks = [
+            KnowledgeChunk(
+                content="Body.",
+                source_file="both-reasonably-fresh.md",
+                line_start=1,
+                line_end=5,
+                score=0.85,
+            ),
+        ]
+        knowledge = _KnowledgeResult(
+            chunks=chunks,
+            context="Body.",
+            sources=["both-reasonably-fresh.md"],
+        )
+
+        result = _check_freshness(knowledge, tmp_path)
+        assert result.stale_knowledge is False
+        assert result.freshness_caveat is None
+        assert result.oldest_chunk_age_days is not None
+        assert 58 <= result.oldest_chunk_age_days <= 62
 
 
 class TestCheckFreshnessMissingFile:

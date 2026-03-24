@@ -191,6 +191,9 @@ class ChecklistOutput(StructuredOutput):
     missing_required: list[str] = Field(default_factory=list)
     missing_recommended: list[str] = Field(default_factory=list)
     total_calls: int = 0
+    checklist_policy_version: str | None = None
+    resolved_policy_task_type: str | None = None
+    checklist_session_id: str | None = None
     auto_run_results: dict[str, Any] | None = None
 
 

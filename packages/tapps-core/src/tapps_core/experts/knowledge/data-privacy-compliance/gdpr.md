@@ -328,6 +328,9 @@ The European Commission proposed the Digital Omnibus Package in November 2025, w
 - **Simplified cross-border enforcement**: Streamlined cooperation procedures between supervisory authorities for cross-border cases
 
 ### EU AI Act Integration
+
+For a structured compliance-oriented summary, see [EU AI Act — developer-oriented overview](eu-ai-act.md).
+
 - **High-risk AI system deadlines postponed**: Originally August 2026, now extended to December 2027 for compliance with Chapter III obligations (high-risk AI classification and conformity assessment)
 - **AI literacy requirements**: Responsibility shifted from individual organizations to the European Commission and Member States to provide guidance, training resources, and sandboxes
 - **Interplay with GDPR**: AI systems processing personal data must comply with both GDPR and the AI Act. DPIAs under GDPR should incorporate AI-specific risk factors from the AI Act

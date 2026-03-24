@@ -108,18 +108,51 @@ Provide **purpose_and_intent** for epic and story when calling the generators so
 
 Pass the `domain` parameter when the context clearly implies a domain. This improves routing accuracy and avoids auto-detection mistakes.
 
+### Built-in domains (17)
+
+Use these exact slugs with `tapps_consult_expert(domain="...")`:
+
+| Domain slug | Typical use |
+|-------------|-------------|
+| `accessibility` | WCAG, ARIA, keyboard/screen-reader UX |
+| `agent-learning` | Agent memory, feedback loops, adaptive behavior |
+| `ai-frameworks` | LLM apps, agents, RAG, orchestration (not AI security—use `security`) |
+| `api-design-integration` | REST/GraphQL/gRPC, versioning, webhooks, integrations |
+| `cloud-infrastructure` | AWS/Azure/GCP, Kubernetes, Docker, IaC, serverless |
+| `code-quality-analysis` | Linting, typing, static analysis, maintainability |
+| `database-data-management` | SQL/NoSQL, schema, migrations, query design |
+| `data-privacy-compliance` | GDPR, HIPAA, consent, DPIA, EU AI Act (with dedicated KB) |
+| `development-workflow` | Generic CI/CD, build/release, trunk-based flow, non-GitHub-specific tooling |
+| `documentation-knowledge-management` | Technical writing, API docs, knowledge bases |
+| `github` | GitHub Actions (platform), rulesets, Copilot agents, Issues/PRs, GH MCP |
+| `observability-monitoring` | Logs, metrics, traces, SLOs, alerting |
+| `performance-optimization` | Profiling, latency, throughput, caching |
+| `security` | AppSec, OWASP, authz, crypto, **LLM/agent/MCP security** |
+| `software-architecture` | System design, DDD, modularization, ADRs, service boundaries |
+| `testing-strategies` | Unit/integration/E2E, fixtures, coverage, test design |
+| `user-experience` | Product UX, design systems, UI patterns, frontend UX (overlaps a11y—pick the sharper fit) |
+
+### Quick context → domain
+
 | Context | domain value |
 |---------|--------------|
 | Editing test files, conftest.py, pytest config | `testing-strategies` |
-| Security-sensitive code, auth, validation | `security` |
+| Security-sensitive code, auth, validation, prompt/MCP/tool abuse | `security` |
 | API routes, FastAPI/Flask endpoints | `api-design-integration` |
 | Database models, migrations, queries | `database-data-management` |
 | Dockerfile, docker-compose, k8s manifests | `cloud-infrastructure` |
-| CI/CD, workflows, build config | `development-workflow` |
+| CI/CD with Jenkins, GitLab CI, generic pipelines (not GitHub-only) | `development-workflow` |
+| GitHub rulesets, Copilot coding agent, GH Actions *as GitHub product* | `github` |
 | Code quality, linting, type hints | `code-quality-analysis` |
-| Architecture decisions, patterns | `software-architecture` |
+| Architecture decisions, bounded contexts, ADRs | `software-architecture` |
 
-When in doubt, omit `domain` to let auto-detection from the question text choose.
+### Expert knowledge ownership (routing)
+
+- **`github`** — GitHub *platform* features: Actions YAML on GitHub, rulesets, merge queue, Copilot agent modes, GitHub MCP server, security features tied to the platform.
+- **`development-workflow`** — *Host-agnostic* delivery: branching models, generic CI concepts, reproducible builds, release strategy, non-GitHub CI systems.
+- When a question is equally about “how we deploy” and “GitHub Actions syntax,” prefer **`github`** if the repository host is GitHub; otherwise **`development-workflow`** or **`cloud-infrastructure`**.
+
+When in doubt, omit `domain` to let auto-detection from the question text choose (or call `tapps_list_experts`).
 
 ### Business experts
 

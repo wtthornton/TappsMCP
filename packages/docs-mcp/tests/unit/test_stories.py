@@ -15,7 +15,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from docs_mcp.generators.stories import StoryConfig, StoryGenerator, StoryTask
+from docs_mcp.generators.stories import (
+    StoryConfig,
+    StoryGenerator,
+    StoryTask,
+    markdown_relative_link,
+)
 from tests.helpers import make_settings as _make_settings
 
 
@@ -156,6 +161,25 @@ class TestStoryGeneratorSections:
         config = _make_config(description="")
         content = self.gen.generate(config)
         assert "Describe what this story delivers" in content
+
+    def test_markdown_relative_link_epic_from_nested_story(self) -> None:
+        rel = markdown_relative_link(
+            "docs/archive/planning/epics/EPIC-80-PARENT.md",
+            "docs/archive/planning/epics/EPIC-80/story-80.1.md",
+        )
+        assert rel == "../EPIC-80-PARENT.md"
+
+    def test_epic_path_rewritten_when_output_path_set(self) -> None:
+        config = _make_config(
+            epic_path="docs/archive/planning/epics/EPIC-80-PARENT.md",
+            inherit_context=True,
+        )
+        content = self.gen.generate(
+            config,
+            output_path="docs/archive/planning/epics/EPIC-80/story-80.1.md",
+        )
+        assert "../EPIC-80-PARENT.md" in content
+        assert "See [Epic 23](../EPIC-80-PARENT.md)" in content
 
     def test_files_section(self) -> None:
         config = _make_config(files=["src/main.py", "tests/test_main.py"])

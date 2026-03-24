@@ -2541,14 +2541,11 @@ def _build_entry_list(
     ]
 
 
-def _record_call(tool_name: str) -> None:
-    """Record a tool call in the session checklist tracker."""
-    try:
-        from tapps_mcp.tools.checklist import CallTracker
+def _record_call(tool_name: str, *, success: bool = True) -> None:
+    """Delegate to server._record_call for checklist persistence."""
+    from tapps_mcp.server import _record_call as _rc
 
-        CallTracker.record(tool_name)
-    except ImportError:
-        pass
+    _rc(tool_name, success=success)
 
 
 # ---------------------------------------------------------------------------

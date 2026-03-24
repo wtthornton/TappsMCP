@@ -499,7 +499,17 @@ class DomainDetector:
         for domain, keywords in DOMAIN_KEYWORDS.items():
             expert = ExpertRegistry.get_expert_for_domain(domain)
             expert_name = expert.expert_name if expert else domain
-            mapping = _score_keywords(question_clean, domain, keywords, expert_name)
+            merged_keywords = list(keywords)
+            if expert is not None and expert.keywords:
+                seen_lower = {k.lower() for k in merged_keywords}
+                for extra in expert.keywords:
+                    el = extra.lower()
+                    if el not in seen_lower:
+                        seen_lower.add(el)
+                        merged_keywords.append(el)
+            mapping = _score_keywords(
+                question_clean, domain, merged_keywords, expert_name
+            )
             if mapping is not None:
                 results.append(mapping)
 

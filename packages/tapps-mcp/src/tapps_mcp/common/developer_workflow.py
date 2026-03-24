@@ -79,7 +79,7 @@ def render_workflow_md() -> str:
         lines.append(f"- {step}")
     lines.extend([
         "",
-        "Use `task_type` in tapps_checklist: feature, bugfix, refactor, security, or review.",
+        "Use `task_type` in tapps_checklist: feature, bugfix, refactor, security, review, or epic.",
         "",
         "## When to use other tools",
         "",

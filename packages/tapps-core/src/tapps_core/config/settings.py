@@ -633,6 +633,22 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Checklist policy (tapps_checklist)
+    checklist_strict_unknown_task_types: bool = Field(
+        default=False,
+        description=(
+            "When True, tapps_checklist rejects unknown task_type values instead of falling "
+            "back to the review policy. Env: TAPPS_MCP_CHECKLIST_STRICT_UNKNOWN_TASK_TYPES."
+        ),
+    )
+    checklist_require_success: bool = Field(
+        default=False,
+        description=(
+            "When True, the latest failed tool call does not satisfy checklist requirements. "
+            "Env: TAPPS_MCP_CHECKLIST_REQUIRE_SUCCESS."
+        ),
+    )
+
     # Destructive command guard (opt-in PreToolUse hook)
     destructive_guard: bool = Field(
         default=False,

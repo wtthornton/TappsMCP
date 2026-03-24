@@ -74,3 +74,23 @@ class TestEngagementLevelSettings:
         monkeypatch.setenv("TAPPS_MCP_LLM_ENGAGEMENT_LEVEL", "high")
         settings = load_settings(project_root=tmp_path)  # type: ignore[arg-type]
         assert settings.llm_engagement_level == "high"
+
+
+class TestChecklistSettings:
+    """Checklist policy flags on TappsMCPSettings."""
+
+    def test_defaults(self, tmp_path: pytest.TempPathFactory) -> None:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings(project_root=tmp_path)  # type: ignore[arg-type]
+        assert settings.checklist_strict_unknown_task_types is False
+        assert settings.checklist_require_success is False
+
+    def test_env_overrides(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+        from tapps_core.config.settings import load_settings
+
+        monkeypatch.setenv("TAPPS_MCP_CHECKLIST_STRICT_UNKNOWN_TASK_TYPES", "true")
+        monkeypatch.setenv("TAPPS_MCP_CHECKLIST_REQUIRE_SUCCESS", "1")
+        settings = load_settings(project_root=tmp_path)  # type: ignore[arg-type]
+        assert settings.checklist_strict_unknown_task_types is True
+        assert settings.checklist_require_success is True

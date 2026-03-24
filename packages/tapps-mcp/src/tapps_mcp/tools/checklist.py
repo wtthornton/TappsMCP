@@ -15,10 +15,9 @@ import json
 import re
 import threading
 import time
-from typing import TYPE_CHECKING, Any, ClassVar
-
-if TYPE_CHECKING:
-    from pathlib import Path
+import uuid
+from pathlib import Path
+from typing import Any, ClassVar
 
 import structlog
 from pydantic import BaseModel, Field
@@ -80,6 +79,11 @@ class ToolCallRecord(BaseModel):
 
     tool_name: str
     timestamp: float = Field(default_factory=time.time)
+    session_id: str = Field(
+        default="",
+        description="Checklist session id (empty = recorded before session boundary).",
+    )
+    success: bool = Field(default=True, description="Whether the invocation succeeded.")
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +263,58 @@ _ENGAGEMENT_TOOL_MAP: dict[str, dict[str, dict[str, list[str]]]] = {
     "low": TASK_TOOL_MAP_LOW,
 }
 
+KNOWN_TASK_TYPES: frozenset[str] = frozenset(TASK_TOOL_MAP.keys())
+
+# Primary tool -> checklist tool names satisfied by calling the primary (success only).
+_TOOL_EQUIVALENTS: dict[str, frozenset[str]] = {
+    "tapps_research": frozenset({"tapps_consult_expert", "tapps_lookup_docs"}),
+}
+
+_engagement_maps_cache: dict[str, dict[str, dict[str, list[str]]]] | None = None
+_engagement_maps_version: str = ""
+_engagement_maps_root: str | None = None
+_engagement_maps_extras_fp: str | None = None
+
+
+def invalidate_engagement_maps_cache() -> None:
+    """Clear merged policy cache (tests / policy file edits)."""
+    global _engagement_maps_cache, _engagement_maps_version, _engagement_maps_root  # noqa: PLW0603
+    global _engagement_maps_extras_fp  # noqa: PLW0603
+    _engagement_maps_cache = None
+    _engagement_maps_version = ""
+    _engagement_maps_root = None
+    _engagement_maps_extras_fp = None
+
+
+def _get_merged_engagement_maps(
+    project_root: Path | None,
+) -> tuple[dict[str, dict[str, dict[str, list[str]]]], str]:
+    from tapps_mcp.tools.checklist_policy import (
+        compute_policy_version,
+        load_checklist_policy_extras,
+        merge_engagement_maps,
+    )
+
+    global _engagement_maps_cache, _engagement_maps_version, _engagement_maps_root  # noqa: PLW0603
+    global _engagement_maps_extras_fp  # noqa: PLW0603
+    root = (project_root or Path.cwd()).resolve()
+    extras = load_checklist_policy_extras(root)
+    fp = extras.content_fingerprint if extras else ""
+    key = str(root)
+    if (
+        _engagement_maps_cache is not None
+        and _engagement_maps_root == key
+        and _engagement_maps_extras_fp == fp
+    ):
+        return _engagement_maps_cache, _engagement_maps_version
+    merged = merge_engagement_maps(_ENGAGEMENT_TOOL_MAP, extras)
+    ver = compute_policy_version(merged, extras)
+    _engagement_maps_cache = merged
+    _engagement_maps_version = ver
+    _engagement_maps_root = key
+    _engagement_maps_extras_fp = fp
+    return merged, ver
+
 
 class ChecklistHint(BaseModel):
     """A missing tool with a short reason for the LLM."""
@@ -271,6 +327,18 @@ class ChecklistResult(BaseModel):
     """Result of checklist evaluation."""
 
     task_type: str = Field(description="The task type evaluated.")
+    resolved_policy_task_type: str = Field(
+        default="",
+        description="Task key used to load policy (may differ when falling back to review).",
+    )
+    policy_fallback: bool = Field(
+        default=False,
+        description="True when user task_type was unknown and review policy was used.",
+    )
+    checklist_policy_version: str = Field(
+        default="",
+        description="Hash of merged built-in + optional checklist-policy.yaml maps.",
+    )
     called: list[str] = Field(
         default_factory=list, description="Tools already called this session."
     )
@@ -295,6 +363,24 @@ class ChecklistResult(BaseModel):
         default_factory=list,
         description="Optional tools not yet called, with a short reason for each.",
     )
+    required_tool_names: list[str] = Field(
+        default_factory=list, description="Required tools for this task/engagement."
+    )
+    satisfied_required_tools: list[str] = Field(
+        default_factory=list, description="Required tools satisfied (including equivalents)."
+    )
+    recommended_tool_names: list[str] = Field(
+        default_factory=list, description="Recommended tools for this task/engagement."
+    )
+    satisfied_recommended_tools: list[str] = Field(
+        default_factory=list, description="Recommended tools satisfied (including equivalents)."
+    )
+    optional_tool_names: list[str] = Field(
+        default_factory=list, description="Optional tools for this task/engagement."
+    )
+    satisfied_optional_tools: list[str] = Field(
+        default_factory=list, description="Optional tools satisfied (including equivalents)."
+    )
     complete: bool = Field(default=False, description="All required tools have been called.")
     total_calls: int = Field(default=0, description="Total tool calls this session.")
 
@@ -307,19 +393,34 @@ class ChecklistResult(BaseModel):
 def _resolve_task_tool_map(
     task_type: str,
     engagement_level: str | None,
-) -> dict[str, Any]:
-    """Resolve the task-specific tool map for the given engagement level."""
+    project_root: Path | None,
+    *,
+    strict_unknown_task_type: bool,
+) -> tuple[dict[str, Any], str, str, str, bool]:
+    """Return tool_map, engagement_level, policy_version, resolved_key, policy_fallback."""
+    merged, ver = _get_merged_engagement_maps(project_root)
     if engagement_level is None:
         from tapps_core.config.settings import load_settings
 
         engagement_level = load_settings().llm_engagement_level
-    if engagement_level not in _ENGAGEMENT_TOOL_MAP:
+    if engagement_level not in merged:
         engagement_level = "medium"
-    task_maps = _ENGAGEMENT_TOOL_MAP[engagement_level]
-    tool_map = task_maps.get(task_type, task_maps["review"])
+    task_maps = merged[engagement_level]
+    policy_fallback = False
+    resolved_key = task_type
+    if task_type not in KNOWN_TASK_TYPES:
+        if strict_unknown_task_type:
+            msg = (
+                f"Unknown task_type {task_type!r}; "
+                f"expected one of {sorted(KNOWN_TASK_TYPES)}"
+            )
+            raise ValueError(msg)
+        resolved_key = "review"
+        policy_fallback = True
+    tool_map = task_maps.get(resolved_key, task_maps["review"])
     if not isinstance(tool_map, dict):
         tool_map = task_maps["review"]
-    return tool_map
+    return tool_map, engagement_level, ver, resolved_key, policy_fallback
 
 
 def _get_tool_lists(
@@ -338,11 +439,28 @@ def _get_tool_lists(
     return required, recommended, optional
 
 
-def _compute_effective_tools(called: set[str]) -> set[str]:
-    """Expand called tools with composite tool coverage."""
-    effective = set(called)
-    if "tapps_quick_check" in called or "tapps_validate_changed" in called:
+def _call_states_ordered(calls: list[ToolCallRecord]) -> dict[str, bool]:
+    """Latest success flag per tool name (chronological order)."""
+    last_success: dict[str, bool] = {}
+    for c in sorted(calls, key=lambda x: x.timestamp):
+        last_success[c.tool_name] = c.success
+    return last_success
+
+
+def _base_successful_tools(states: dict[str, bool], *, require_success: bool) -> set[str]:
+    if require_success:
+        return {t for t, ok in states.items() if ok}
+    return set(states.keys())
+
+
+def _compute_effective_tools(base_successful: set[str]) -> set[str]:
+    """Expand successful tools with composite / equivalent coverage."""
+    effective = set(base_successful)
+    if "tapps_quick_check" in base_successful or "tapps_validate_changed" in base_successful:
         effective.update({"tapps_score_file", "tapps_quality_gate", "tapps_security_scan"})
+    for primary, implied in _TOOL_EQUIVALENTS.items():
+        if primary in base_successful:
+            effective.update(implied)
     return effective
 
 
@@ -361,21 +479,84 @@ class CallTracker:
     _calls: ClassVar[list[ToolCallRecord]] = []
     _lock: ClassVar[threading.Lock] = threading.Lock()
     _persist_path: ClassVar[Path | None] = None
+    _active_session_id: ClassVar[str | None] = None
+
+    @classmethod
+    def _lock_file_path(cls) -> Path | None:
+        if cls._persist_path is None:
+            return None
+        return cls._persist_path.with_name(cls._persist_path.name + ".lock")
+
+    @classmethod
+    def _active_session_marker(cls) -> Path | None:
+        if cls._persist_path is None:
+            return None
+        return cls._persist_path.parent / "checklist_active_session"
 
     @classmethod
     def set_persist_path(cls, path: Path) -> None:
         """Configure persistence file and load existing records."""
         with cls._lock:
-            cls._persist_path = path
+            cls._persist_path = Path(path)
+            cls._load_active_session_id()
             cls._load_persisted()
+
+    @classmethod
+    def _load_active_session_id(cls) -> None:
+        marker = cls._active_session_marker()
+        if marker is None or not marker.is_file():
+            cls._active_session_id = None
+            return
+        try:
+            text = marker.read_text(encoding="utf-8").strip()
+            cls._active_session_id = text or None
+        except OSError:
+            cls._active_session_id = None
+
+    @classmethod
+    def _persist_active_session(cls) -> None:
+        marker = cls._active_session_marker()
+        if marker is None or cls._active_session_id is None:
+            return
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(cls._active_session_id, encoding="utf-8")
+        except OSError:
+            logger.debug("checklist_active_session_write_failed", exc_info=True)
+
+    @classmethod
+    def begin_session(cls, session_id: str | None = None) -> str:
+        """Start a new checklist session boundary (call from tapps_session_start)."""
+        sid = session_id or uuid.uuid4().hex[:16]
+        with cls._lock:
+            cls._active_session_id = sid
+            cls._persist_active_session()
+        return sid
+
+    @classmethod
+    def get_active_checklist_session_id(cls) -> str | None:
+        with cls._lock:
+            return cls._active_session_id
+
+    @classmethod
+    def _filtered_calls(cls) -> list[ToolCallRecord]:
+        if cls._active_session_id is None:
+            return list(cls._calls)
+        return [c for c in cls._calls if c.session_id == cls._active_session_id]
 
     @classmethod
     def _load_persisted(cls) -> None:
         """Load previously persisted records (called under lock)."""
         if cls._persist_path is None or not cls._persist_path.exists():
             return
+        from filelock import FileLock
+
+        lock_p = cls._lock_file_path()
+        if lock_p is None:
+            return
         try:
-            text = cls._persist_path.read_text(encoding="utf-8")
+            with FileLock(str(lock_p), timeout=10):
+                text = cls._persist_path.read_text(encoding="utf-8")
             for line in text.strip().splitlines():
                 if not line.strip():
                     continue
@@ -385,11 +566,13 @@ class CallTracker:
                         ToolCallRecord(
                             tool_name=data["tool_name"],
                             timestamp=data.get("timestamp", time.time()),
+                            session_id=data.get("session_id", ""),
+                            success=data.get("success", True),
                         )
                     )
                 except (json.JSONDecodeError, KeyError, TypeError):
                     pass
-        except OSError:
+        except Exception:
             logger.debug("checklist_persist_load_failed", exc_info=True)
 
     @classmethod
@@ -397,75 +580,121 @@ class CallTracker:
         """Append a single record to the persist file (called under lock)."""
         if cls._persist_path is None:
             return
+        from filelock import FileLock
+
+        lock_p = cls._lock_file_path()
+        if lock_p is None:
+            return
         try:
             cls._persist_path.parent.mkdir(parents=True, exist_ok=True)
-            with cls._persist_path.open("a", encoding="utf-8") as fh:
-                payload = {"tool_name": record.tool_name, "timestamp": record.timestamp}
-                fh.write(json.dumps(payload) + "\n")
-        except OSError:
+            with FileLock(str(lock_p), timeout=10):
+                payload = {
+                    "tool_name": record.tool_name,
+                    "timestamp": record.timestamp,
+                    "session_id": record.session_id,
+                    "success": record.success,
+                }
+                with cls._persist_path.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(payload) + "\n")
+        except Exception:
             logger.debug("checklist_persist_write_failed", exc_info=True)
 
     @classmethod
-    def record(cls, tool_name: str) -> None:
+    def record(cls, tool_name: str, *, success: bool = True) -> None:
         """Record a tool invocation."""
         with cls._lock:
-            rec = ToolCallRecord(tool_name=tool_name)
+            sid = cls._active_session_id or ""
+            rec = ToolCallRecord(tool_name=tool_name, session_id=sid, success=success)
             cls._calls.append(rec)
             cls._persist_record(rec)
 
     @classmethod
     def get_called_tools(cls) -> set[str]:
-        """Return the set of unique tool names called."""
+        """Return the set of unique tool names called (active checklist session)."""
         with cls._lock:
-            return {c.tool_name for c in cls._calls}
+            return {c.tool_name for c in cls._filtered_calls()}
 
     @classmethod
     def total_calls(cls) -> int:
-        """Return total number of calls."""
+        """Return total number of calls (active checklist session)."""
         with cls._lock:
-            return len(cls._calls)
+            return len(cls._filtered_calls())
 
     @classmethod
     def reset(cls) -> None:
         """Reset the call log (for testing)."""
+        invalidate_engagement_maps_cache()
         with cls._lock:
             cls._calls.clear()
-            if cls._persist_path is not None and cls._persist_path.exists():
-                with contextlib.suppress(OSError):
-                    cls._persist_path.unlink()
+            cls._active_session_id = None
+            if cls._persist_path is not None:
+                if cls._persist_path.exists():
+                    with contextlib.suppress(OSError):
+                        cls._persist_path.unlink()
+                lf = cls._lock_file_path()
+                if lf is not None and lf.exists():
+                    with contextlib.suppress(OSError):
+                        lf.unlink()
+                marker = cls._active_session_marker()
+                if marker is not None and marker.exists():
+                    with contextlib.suppress(OSError):
+                        marker.unlink()
 
     @classmethod
     def evaluate(
         cls,
         task_type: str = "review",
         engagement_level: str | None = None,
+        *,
+        require_success: bool = False,
+        strict_unknown_task_type: bool = False,
+        project_root: Path | None = None,
     ) -> ChecklistResult:
         """Evaluate the checklist for a given task type and engagement level.
 
         When *engagement_level* is None, it is read from
         ``load_settings().llm_engagement_level`` (high/medium/low).
         """
-        tool_map = _resolve_task_tool_map(task_type, engagement_level)
+        tool_map, _elvl, policy_version, resolved_key, policy_fallback = _resolve_task_tool_map(
+            task_type,
+            engagement_level,
+            project_root,
+            strict_unknown_task_type=strict_unknown_task_type,
+        )
         required, recommended, optional = _get_tool_lists(tool_map)
 
         with cls._lock:
-            called = {c.tool_name for c in cls._calls}
-            call_count = len(cls._calls)
-
-        effective = _compute_effective_tools(called)
+            sub = cls._filtered_calls()
+            call_count = len(sub)
+        states = _call_states_ordered(sub)
+        base_ok = _base_successful_tools(states, require_success=require_success)
+        called_sorted = sorted(states.keys())
+        effective = _compute_effective_tools(base_ok)
         missing_required = [t for t in required if t not in effective]
         missing_recommended = [t for t in recommended if t not in effective]
         missing_optional = [t for t in optional if t not in effective]
+        sat_req = [t for t in required if t in effective]
+        sat_rec = [t for t in recommended if t in effective]
+        sat_opt = [t for t in optional if t in effective]
 
         return ChecklistResult(
             task_type=task_type,
-            called=sorted(called),
+            resolved_policy_task_type=resolved_key,
+            policy_fallback=policy_fallback,
+            checklist_policy_version=policy_version,
+            called=called_sorted,
             missing_required=missing_required,
             missing_recommended=missing_recommended,
             missing_optional=missing_optional,
             missing_required_hints=_build_hints(missing_required),
             missing_recommended_hints=_build_hints(missing_recommended),
             missing_optional_hints=_build_hints(missing_optional),
+            required_tool_names=list(required),
+            satisfied_required_tools=sat_req,
+            recommended_tool_names=list(recommended),
+            satisfied_recommended_tools=sat_rec,
+            optional_tool_names=list(optional),
+            satisfied_optional_tools=sat_opt,
             complete=len(missing_required) == 0,
             total_calls=call_count,
         )
@@ -475,6 +704,7 @@ class CallTracker:
         cls,
         file_path: str | None = None,
         engagement_level: str | None = None,
+        **eval_kwargs: Any,  # noqa: ANN401
     ) -> EpicChecklistResult:
         """Evaluate the epic checklist, optionally validating an epic file.
 
@@ -482,26 +712,18 @@ class CallTracker:
         structural validation is performed. When not provided, only the
         checklist template items are returned.
         """
-        base = cls.evaluate("epic", engagement_level=engagement_level)
+        base = cls.evaluate(
+            "epic",
+            engagement_level=engagement_level,
+            **eval_kwargs,
+        )
         validation: EpicValidation | None = None
         if file_path is not None:
-            from pathlib import Path as _Path
-
-            content = _Path(file_path).read_text(encoding="utf-8")
+            content = Path(file_path).read_text(encoding="utf-8")
             validation = validate_epic_markdown(content)
-        return EpicChecklistResult(
-            task_type=base.task_type,
-            called=base.called,
-            missing_required=base.missing_required,
-            missing_recommended=base.missing_recommended,
-            missing_optional=base.missing_optional,
-            missing_required_hints=base.missing_required_hints,
-            missing_recommended_hints=base.missing_recommended_hints,
-            missing_optional_hints=base.missing_optional_hints,
-            complete=base.complete,
-            total_calls=base.total_calls,
-            epic_validation=validation,
-        )
+        payload = base.model_dump()
+        payload["epic_validation"] = validation
+        return EpicChecklistResult(**payload)
 
 
 # ---------------------------------------------------------------------------
