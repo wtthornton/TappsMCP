@@ -70,11 +70,12 @@ class TestMemoryStoreCRUD:
         store.save(key="k1", value="v1")
         entry = store.get("k1")
         assert entry is not None
-        assert entry.access_count == 1
+        # tapps-brain seeds new entries with access_count=1 on save; each get increments.
+        assert entry.access_count == 2
 
         entry2 = store.get("k1")
         assert entry2 is not None
-        assert entry2.access_count == 2
+        assert entry2.access_count == 3
 
 
 class TestMemoryStoreList:

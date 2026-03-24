@@ -200,7 +200,9 @@ class TestBranchExistence:
         detector = ContradictionDetector(tmp_path)
 
         with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = "  main\n  develop\n"
+            mock_run.return_value.stderr = ""
             results = detector.detect_contradictions([entry], profile)
 
         assert len(results) == 1
@@ -218,7 +220,9 @@ class TestBranchExistence:
         detector = ContradictionDetector(tmp_path)
 
         with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = "  main\n  develop\n"
+            mock_run.return_value.stderr = ""
             results = detector.detect_contradictions([entry], profile)
 
         assert len(results) == 0

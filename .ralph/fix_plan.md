@@ -38,14 +38,38 @@
 - [x] M3: Enable graph-boosted recall when store has >= 10 relation triples. Set `graph_boost_factor=0.1`. Add relation count to `memory_health()` output. ✓ Added `relation_count` to `StoreHealthReport` in tapps-brain, `count_relations()` to `MemoryStore`, populated in `health()`. Added density-gated graph boost in `_ranked_search()` (>= 10 relations → boost factor 0.1, inversely proportional to hop distance). Surfaced `relation_count` in `_handle_health()` and `graph_boost_active` flag in ranked search response.
 - [x] M2: Add `source_trust` signal to composite retrieval scoring in tapps-brain. Defaults: human=1.0, system=0.9, agent=0.7, inferred=0.5. ✓ tapps-brain: `ScoringConfig.source_trust` in `profile.py`, `_DEFAULT_SOURCE_TRUST` in `retrieval.py`, post-composite multiplier in `MemoryRetriever.search()`, `repo-brain.yaml` profile, 13 tests in `test_source_trust.py`. TappsMCP: wired profile `scoring_config` into `_ranked_search()`, `_find_entries_by_query()`, and CLI search. Added `source_trust_active` to search response, `source_trust` dict to `profile_info` response.
 
+## Phase 5: Cross-Project Tool Parity (Epic 89)
+
+<!-- Epic: docs/planning/epics/EPIC-89-CROSS-PROJECT-TOOL-PARITY.md -->
+<!-- Source: https://github.com/wtthornton/TappsMCP/issues/76 -->
+
+- [ ] 89.1: Execute story — docs/planning/epics/EPIC-89/story-89.1-impact-analysis-project-root.md
+- [ ] 89.2: Execute story — docs/planning/epics/EPIC-89/story-89.2-session-start-project-root.md
+- [ ] 89.3: Execute story — docs/planning/epics/EPIC-89/story-89.3-installed-checkers-environment-context.md
+- [ ] 89.4: Execute story — docs/planning/epics/EPIC-89/story-89.4-shell-bash-project-detection.md
+
+## Phase 6: Epic Validation Enhancements (Epic 90)
+
+<!-- Epic: docs/planning/epics/EPIC-90-EPIC-VALIDATION-ENHANCEMENTS.md -->
+<!-- Source: https://github.com/wtthornton/TappsMCP/issues/76 -->
+<!-- Note: Stories are sequential — 90.1 enables 90.2, 90.2 enables 90.3 -->
+
+- [ ] 90.1: Execute story — docs/planning/epics/EPIC-90/story-90.1-epic-file-path-relative-resolution.md
+- [ ] 90.2: Execute story — docs/planning/epics/EPIC-90/story-90.2-table-linked-story-parsing.md
+- [ ] 90.3: Execute story — docs/planning/epics/EPIC-90/story-90.3-cross-file-story-validation.md
+
 ## Completed
 - [x] Project reviewed and fix plan created (2026-03-22)
+- [x] Phase 1-4 completed (2026-03-22 to 2026-03-23)
 
 ## Notes
 - Phase 1 items are independent quick fixes (no external dependencies)
 - Phase 2 requires access to tapps-brain repo at C:\cursor\tapps-brain
 - Phase 3 requires tapps-brain changes to land first (R01-R03 from recommendations)
 - Phase 4 items are enhancements, not blocking deployment
-- QA runs at epic boundaries (when a section's last task is completed)
+- Phase 5-6 use pointer convention: read the story file for full spec, tasks, and AC
+- Phase 5 stories are independent (can parallelize 89.2-89.4 after 89.1)
+- Phase 6 stories are sequential (90.1 -> 90.2 -> 90.3)
+- QA runs at epic boundaries (when a section's last task in a `##` section is completed)
 - This is the primary fix plan (canonical copy)
 - See docs/planning/TAPPS_BRAIN_INTEGRATION_RECOMMENDATIONS.md for R01-R18 details

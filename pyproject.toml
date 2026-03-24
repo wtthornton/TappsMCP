@@ -2,7 +2,7 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v1.1.0" }
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v1.3.1" }
 
 [tool.uv]
 dev-dependencies = [

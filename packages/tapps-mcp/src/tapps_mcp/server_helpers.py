@@ -203,8 +203,8 @@ def build_impact_memory_context(
 
     Skips when memory is disabled, when ``enrich_impact_analysis`` is false, or
     when the store/search fails (returns empty ``memory_context`` + status fields).
-    Relation-graph enrichment is not available in tapps-brain v1.1.0 via a stable
-    public API; only ``MemoryStore.search`` is used.
+    Relation-graph enrichment is not wired here (only ``MemoryStore.search`` is used);
+    graph-boosted recall remains a separate integration path.
     """
     mem = settings.memory
     if not mem.enabled:
@@ -460,7 +460,7 @@ def _get_hive_registry() -> _HiveAgentRegistryType | None:
 def _hive_propagation_config_payload() -> dict[str, Any]:
     """Describe Hive propagation settings visible to MCP clients (Epic M3 polish).
 
-    tapps-brain v1.1.0 does not expose profile YAML keys such as
+    tapps-brain does not expose profile YAML keys such as
     ``hive.auto_propagate_tiers`` / ``hive.private_tiers`` through a public API
     that TappsMCP can read, so live profile-sourced tier lists cannot appear in
     ``hive_status`` yet.
@@ -473,7 +473,7 @@ def _hive_propagation_config_payload() -> dict[str, Any]:
     return {
         "profile_sourced": False,
         "reason": (
-            "tapps-brain v1.1.0 does not expose Hive propagation tier rules from "
+            "tapps-brain does not expose Hive propagation tier rules from "
             "memory profiles to TappsMCP; live auto_propagate_tiers/private_tiers "
             "are not available in this response."
         ),
