@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.wtthornton/docs-mcp",
   "title": "DocsMCP",
-  "description": "MCP server for automated documentation generation, validation, and maintenance. Generates READMEs, changelogs, API docs, ADRs, onboarding guides, and diagrams. Validates documentation drift, completeness, links, and freshness.",
+  "description": "MCP server for automated documentation generation, validation, and maintenance. Generates READMEs, changelogs, API docs, ADRs, onboarding guides, and diagrams. Validates documentation drift, completeness, links, freshness, style, and cross-references.",
   "repository": {
     "url": "https://github.com/wtthornton/TappsMCP",
     "source": "github"
@@ -56,13 +56,23 @@
     {"name": "docs_generate_onboarding", "description": "Generate getting-started guide"},
     {"name": "docs_generate_contributing", "description": "Generate CONTRIBUTING.md"},
     {"name": "docs_generate_prd", "description": "Generate Product Requirements Documents"},
-    {"name": "docs_generate_diagram", "description": "Generate Mermaid/PlantUML diagrams"},
+    {"name": "docs_generate_diagram", "description": "Generate Mermaid/PlantUML/D2 diagrams"},
     {"name": "docs_generate_architecture", "description": "Generate self-contained HTML architecture report"},
     {"name": "docs_generate_epic", "description": "Generate epic planning docs with expert enrichment"},
     {"name": "docs_generate_story", "description": "Generate user story docs with expert enrichment"},
+    {"name": "docs_generate_prompt", "description": "Generate reusable prompt templates from project context"},
     {"name": "docs_check_drift", "description": "Detect code changes not reflected in docs"},
     {"name": "docs_check_completeness", "description": "Score documentation completeness (0-100)"},
     {"name": "docs_check_links", "description": "Validate internal links in markdown files"},
-    {"name": "docs_check_freshness", "description": "Score documentation freshness"}
+    {"name": "docs_check_freshness", "description": "Score documentation freshness"},
+    {"name": "docs_validate_epic", "description": "Validate epic documents for completeness and consistency"},
+    {"name": "docs_generate_llms_txt", "description": "Machine-readable llms.txt project summary"},
+    {"name": "docs_generate_frontmatter", "description": "YAML frontmatter injection/update for markdown"},
+    {"name": "docs_check_diataxis", "description": "Diataxis quadrant coverage analysis and balance scoring"},
+    {"name": "docs_generate_interactive_diagrams", "description": "Interactive HTML viewer with pan/zoom for Mermaid diagrams"},
+    {"name": "docs_generate_purpose", "description": "Purpose/intent architecture template"},
+    {"name": "docs_generate_doc_index", "description": "Documentation index/map with auto-categorization"},
+    {"name": "docs_check_cross_refs", "description": "Cross-reference validation (orphans, broken refs, backlinks)"},
+    {"name": "docs_check_style", "description": "Deterministic style and tone checks for markdown (passive voice, jargon, headings, etc.)"}
   ]
 }

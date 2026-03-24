@@ -101,7 +101,7 @@ The checklist uses this to decide which tools are required vs recommended vs opt
 Your project may have two complementary memory systems:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, cross-agent knowledge. 28 actions: save, get, list, search, delete, reinforce, gc, contradictions, reseed, import, export, consolidate, unconsolidate, and 6 federation actions for cross-project sharing.
+- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, cross-agent knowledge. **33 actions** (CRUD, search, intelligence, consolidation, import/export, federation, maintenance, security, profiles, hive, health). See `docs/MEMORY_REFERENCE.md`.
 
 OPTIONAL: Consider using `tapps_memory` for important architecture decisions.
 

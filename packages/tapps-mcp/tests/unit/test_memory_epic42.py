@@ -455,5 +455,6 @@ class TestValidActions:
             "index_session", "validate", "maintain",
             "health", "profile_info", "profile_list", "profile_switch",
             "safety_check", "verify_integrity",
+            "hive_status", "hive_search", "hive_propagate", "agent_register",
         }
         assert _VALID_ACTIONS == expected

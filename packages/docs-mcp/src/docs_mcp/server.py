@@ -16,7 +16,11 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from docs_mcp import __version__
-from docs_mcp.server_helpers import error_response, success_response
+from docs_mcp.server_helpers import (
+    build_style_checker_for_project,
+    error_response,
+    success_response,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -65,7 +69,7 @@ def _reset_tool_calls() -> None:
 # Tool curation (Epic 79.2): allowed tool names and presets
 # ---------------------------------------------------------------------------
 
-# Canonical list of all DocsMCP tools (31). Used for filtering.
+# Canonical list of all DocsMCP tools (32). Used for filtering.
 ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset({
     "docs_session_start",
     "docs_project_scan",
@@ -567,21 +571,20 @@ async def docs_project_scan(
     if lang_counts:
         data["language_composition"] = lang_counts
 
-    # Optional style summary (Epic 84)
-    try:
-        from docs_mcp.validators.style import StyleChecker
-
-        style_checker = StyleChecker()
-        style_report = style_checker.check_project(root)
-        if style_report.total_files > 0:
-            data["style_summary"] = {
-                "total_files": style_report.total_files,
-                "total_issues": style_report.total_issues,
-                "aggregate_score": style_report.aggregate_score,
-                "top_issues": style_report.top_issues[:5],
-            }
-    except Exception:  # noqa: S110 — style check is optional enrichment
-        pass
+    # Optional style summary (Epic 84) — respects .docsmcp.yaml and .docsmcp-terms.txt
+    if settings.style_include_in_project_scan:
+        try:
+            style_checker = build_style_checker_for_project(root, settings)
+            style_report = style_checker.check_project(root)
+            if style_report.total_files > 0:
+                data["style_summary"] = {
+                    "total_files": style_report.total_files,
+                    "total_issues": style_report.total_issues,
+                    "aggregate_score": style_report.aggregate_score,
+                    "top_issues": style_report.top_issues[:5],
+                }
+        except Exception:  # noqa: S110 — style check is optional enrichment
+            pass
 
     # Optional TappsMCP enrichment
     try:

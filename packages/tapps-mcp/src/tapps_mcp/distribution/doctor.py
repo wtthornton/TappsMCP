@@ -576,6 +576,43 @@ def check_tapps_brain() -> CheckResult:
         )
 
 
+def check_memory_pipeline_config(root: Path) -> CheckResult:
+    """Echo effective memory-related settings (informational; always passes).
+
+    Surfaces flags for expert auto-save, recurring quick_check memory,
+    architectural supersede, impact enrichment, and memory hooks so
+    ``tapps-mcp doctor`` matches shipped defaults and project overrides.
+    """
+    try:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings(project_root=root)
+        m = settings.memory
+        mh = settings.memory_hooks
+        msg = (
+            f"memory.enabled={m.enabled} auto_save_quality={m.auto_save_quality} "
+            f"track_recurring_quick_check={m.track_recurring_quick_check} "
+            f"auto_supersede_architectural={m.auto_supersede_architectural} "
+            f"enrich_impact_analysis={m.enrich_impact_analysis}; "
+            f"hooks auto_recall={mh.auto_recall.enabled} "
+            f"auto_capture={mh.auto_capture.enabled}"
+        )
+        return CheckResult(
+            "Memory pipeline (effective config)",
+            True,
+            msg,
+            "Override under `memory:` and `memory_hooks:` in .tapps-mcp.yaml. "
+            "See docs/MEMORY_REFERENCE.md.",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return CheckResult(
+            "Memory pipeline (effective config)",
+            True,
+            f"Could not load settings ({exc})",
+            "See docs/MEMORY_REFERENCE.md",
+        )
+
+
 def check_dual_memory_server(root: Path) -> CheckResult:
     """Warn if tapps-brain-mcp is configured alongside TappsMCP (split-brain risk).
 
@@ -768,6 +805,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_hooks(root))
     checks.append(check_stale_exe_backups())
     checks.append(check_tapps_brain())
+    checks.append(check_memory_pipeline_config(root))
     checks.append(check_dual_memory_server(root))
     if quick:
         checks.append(CheckResult(

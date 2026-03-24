@@ -1,6 +1,10 @@
 # TappsMCP Memory Reference
 
-Complete reference for the `tapps_memory` tool's 28 actions.
+Complete reference for the `tapps_memory` tool’s **33 actions** (single MCP tool, action dispatch via `action=`).
+
+**Pipeline defaults (POC-oriented):** shipped `default.yaml` enables `memory.auto_save_quality`, `memory.track_recurring_quick_check`, `memory.auto_supersede_architectural`, `memory.enrich_impact_analysis`, and `memory_hooks.auto_recall` / `auto_capture`. Override in `.tapps-mcp.yaml` to turn features off.
+
+**Architectural saves:** when `memory.auto_supersede_architectural` is true, `save` with `tier=architectural` uses `MemoryStore.supersede` (via `store.history`) so prior versions stay in the temporal chain; responses may include `status`, `superseded_old_key`, `new_key`, `version_count`.
 
 ## Memory tiers
 
@@ -24,7 +28,7 @@ Complete reference for the `tapps_memory` tool's 28 actions.
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| **save** | `key`, `value`, `tier`, `scope`, `tags`, `source` | Save a memory entry |
+| **save** | `key`, `value`, `tier`, `scope`, `tags`, `source` | Save a memory entry (architectural tier may supersede; see intro) |
 | **save_bulk** | `entries` (list, max 50) | Batch save entries |
 | **get** | `key` | Retrieve by key (includes provenance for consolidated) |
 | **list** | `scope`, `tier`, `tags`, `limit`, `include_sources` | List with filters (max 50) |
@@ -93,6 +97,23 @@ Complete reference for the `tapps_memory` tool's 28 actions.
 | **profile_list** | -- | List all available built-in profiles (repo-brain, personal-assistant, customer-support, research-knowledge, project-management, home-automation). |
 | **profile_switch** | `value` (profile name) | Switch to a different memory profile. Persists to `.tapps-brain/profile.yaml` and resets the store. |
 
+## Health
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **health** | -- | Store health / integrity-style signals when supported by tapps-brain. |
+
+## Hive / Agent Teams (M3)
+
+Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` for live Hive usage; actions still return structured payloads when Hive is disabled.
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **hive_status** | -- | Hive / registry status, propagation hints, `propagation_config`. |
+| **hive_search** | `query` or `value`, `tags`, `limit` | Search Hive store (tags may filter namespace). |
+| **hive_propagate** | `limit`, tiers, etc. | Push eligible local entries through `PropagationEngine`. |
+| **agent_register** | `key` (agent id), `value`, `tags` | Register agent in Hive registry. |
+
 ### Built-in profiles
 
 | Profile | Use case | Layers | Key emphasis |
@@ -107,16 +128,32 @@ Complete reference for the `tapps_memory` tool's 28 actions.
 ## Configuration (.tapps-mcp.yaml)
 
 ```yaml
-max_memories: 1500
-gc_auto_threshold: 0.8
-memory_decay_enabled: true
-profile: ""  # Empty = auto-detect. Override: "repo-brain", "research-knowledge", etc.
+memory:
+  enabled: true
+  profile: repo-brain # or "" for auto-detect
+  max_memories: 1500
+  gc_auto_threshold: 0.8
+  inject_into_experts: true
+  # Pipeline integrations (defaults on in shipped default.yaml; set false to disable)
+  auto_save_quality: true
+  track_recurring_quick_check: true
+  recurring_quick_check_threshold: 3
+  enrich_impact_analysis: true
+  auto_supersede_architectural: true
+  decay:
+    architectural_half_life_days: 180
+    pattern_half_life_days: 60
+    context_half_life_days: 14
 
 memory_hooks:
   auto_recall:
-    enabled: false
+    enabled: true
+    max_results: 5
     min_score: 0.3
+    min_prompt_length: 50
   auto_capture:
-    enabled: false
+    enabled: true
     max_facts: 5
 ```
+
+Run `tapps-mcp doctor` to see **Memory pipeline (effective config)** for the resolved values in your project.

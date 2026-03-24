@@ -45,7 +45,7 @@ This document details 18 recommendations across 4 priority tiers, with effort es
 Consuming Project (MCP Client)
     |
     v
-tapps_memory MCP tool (28 actions)
+tapps_memory MCP tool (33 actions)
     |
     v
 server_memory_tools.py (dispatch + response curation)
@@ -184,7 +184,7 @@ Three access paths exist today with no clear guidance:
 | Path | Entry Point | Features |
 |---|---|---|
 | **A. tapps-brain direct** | `tapps-brain-mcp` (28 tools) or Python `MemoryStore` | Full feature set |
-| **B. Through TappsMCP** | `tapps_memory` (28 actions) | Pipeline-integrated but incomplete |
+| **B. Through TappsMCP** | `tapps_memory` (33 actions) | Pipeline-integrated but incomplete |
 | **C. Both** | Two MCP servers | Everything, but split-brain risk |
 
 ### The Decision

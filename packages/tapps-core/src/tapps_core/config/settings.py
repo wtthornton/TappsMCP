@@ -174,10 +174,10 @@ class MemoryAutoRecallSettings(BaseModel):
     """Settings for the auto-recall hook (Epic 65.4)."""
 
     enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable auto-recall hook that injects relevant memories before agent prompt. "
-            "Default: false for backward compatibility."
+            "Default true for POC; set false in .tapps-mcp.yaml to disable."
         ),
     )
     max_results: int = Field(
@@ -203,10 +203,10 @@ class MemoryAutoCaptureSettings(BaseModel):
     """Settings for the auto-capture hook (Epic 65.5)."""
 
     enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable auto-capture hook that extracts durable facts on session stop. "
-            "Default: false for backward compatibility."
+            "Default true for POC; set false in .tapps-mcp.yaml to disable."
         ),
     )
     max_facts: int = Field(
@@ -429,6 +429,44 @@ class MemorySettings(BaseSettings):
     inject_into_experts: bool = Field(
         default=True,
         description="Inject relevant memories into expert consultations (Epic 25).",
+    )
+    auto_save_quality: bool = Field(
+        default=True,
+        description=(
+            "When True, persist successful expert consultations (tapps_consult_expert / "
+            "tapps_research) as pattern-tier memories for pipeline recall (Epic M4.1). "
+            "Default true for POC; set false to disable."
+        ),
+    )
+    track_recurring_quick_check: bool = Field(
+        default=True,
+        description=(
+            "When True, consecutive tapps_quick_check gate failures on the same file and "
+            "category trigger procedural memory save or reinforce (Epic M4.2). "
+            "Default true for POC; set false to disable."
+        ),
+    )
+    recurring_quick_check_threshold: int = Field(
+        default=3,
+        ge=2,
+        le=50,
+        description="Consecutive gate failures per file+category before procedural memory (M4.2).",
+    )
+    enrich_impact_analysis: bool = Field(
+        default=True,
+        description=(
+            "When True and memory is enabled, tapps_impact_analysis includes memory_context "
+            "from a project-relative search for the target file (Epic M4.4)."
+        ),
+    )
+    auto_supersede_architectural: bool = Field(
+        default=True,
+        description=(
+            "When True and memory is enabled, tapps_memory save with tier=architectural "
+            "supersedes the active architectural head for the key chain (store.history) "
+            "via MemoryStore.supersede instead of overwriting in place (Epic M4.3). "
+            "Default true for POC; set false to disable."
+        ),
     )
     capture_prompt: str = Field(
         default=(

@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import os
+import re
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import Context
+    from tapps_brain.hive import AgentRegistry as _HiveAgentRegistryType
+    from tapps_brain.hive import HiveStore as _HiveStoreType
 
+    from tapps_core.config.settings import TappsMCPSettings
     from tapps_core.knowledge.lookup import LookupEngine as _LookupEngineType
     from tapps_core.memory.store import MemoryStore as _MemoryStoreType
     from tapps_mcp.scoring.scorer import CodeScorer as _CodeScorerType
@@ -181,6 +187,377 @@ def _reset_memory_store_cache() -> None:
     """Reset the cached :class:`MemoryStore` singleton (for testing)."""
     global _memory_store
     _memory_store = None
+
+
+_IMPACT_MEMORY_CONTEXT_LIMIT = 5
+_IMPACT_MEMORY_MIN_CONFIDENCE = 0.3
+_IMPACT_MEMORY_SUMMARY_MAX = 200
+
+
+def build_impact_memory_context(
+    resolved_file: Path,
+    project_root: Path,
+    settings: "TappsMCPSettings",
+) -> dict[str, Any]:
+    """BM25 memory hits for :func:`tapps_impact_analysis` (Epic M4.4).
+
+    Skips when memory is disabled, when ``enrich_impact_analysis`` is false, or
+    when the store/search fails (returns empty ``memory_context`` + status fields).
+    Relation-graph enrichment is not available in tapps-brain v1.1.0 via a stable
+    public API; only ``MemoryStore.search`` is used.
+    """
+    mem = settings.memory
+    if not mem.enabled:
+        return {
+            "memory_context": [],
+            "memory_context_enrichment": "skipped",
+            "memory_context_skip": "memory_disabled",
+        }
+    if not mem.enrich_impact_analysis:
+        return {
+            "memory_context": [],
+            "memory_context_enrichment": "skipped",
+            "memory_context_skip": "enrich_impact_analysis_disabled",
+        }
+
+    try:
+        root = project_root.resolve()
+        file_resolved = resolved_file.resolve()
+        try:
+            rel = file_resolved.relative_to(root)
+            rel_s = rel.as_posix()
+        except ValueError:
+            rel_s = resolved_file.name
+        query = f"{rel_s} {resolved_file.name}".strip()
+    except OSError:
+        query = resolved_file.name
+
+    def _tier_str(tier_obj: object) -> str:
+        if hasattr(tier_obj, "value"):
+            return str(getattr(tier_obj, "value", ""))
+        return str(tier_obj)
+
+    try:
+        store = _get_memory_store()
+        raw = store.search(query)
+    except Exception as exc:
+        import structlog
+
+        structlog.get_logger(__name__).debug(
+            "impact_memory_context_search_failed", query=query, exc_info=True
+        )
+        return {
+            "memory_context": [],
+            "memory_context_enrichment": "error",
+            "memory_context_error": str(exc),
+            "memory_context_query": query,
+        }
+
+    min_c = _IMPACT_MEMORY_MIN_CONFIDENCE
+    filtered: list[Any] = []
+    for entry in raw:
+        conf = float(getattr(entry, "confidence", 1.0))
+        if conf >= min_c:
+            filtered.append(entry)
+        if len(filtered) >= _IMPACT_MEMORY_CONTEXT_LIMIT:
+            break
+
+    items: list[dict[str, Any]] = []
+    for entry in filtered:
+        val = str(getattr(entry, "value", "") or "")
+        cap = _IMPACT_MEMORY_SUMMARY_MAX
+        items.append({
+            "key": str(getattr(entry, "key", "")),
+            "summary": val[:cap] + ("..." if len(val) > cap else ""),
+            "tier": _tier_str(getattr(entry, "tier", "")),
+            "confidence": float(getattr(entry, "confidence", 0.0)),
+            "source": "memory",
+        })
+
+    return {
+        "memory_context": items,
+        "memory_context_enrichment": "ok",
+        "memory_context_query": query,
+    }
+
+
+def _expert_consultation_memory_key(domain: str, question: str) -> str:
+    """Build a stable, filesystem-safe key from domain and question text."""
+    raw_dom = (domain or "auto").strip().lower() or "auto"
+    dom_slug = re.sub(r"[^a-z0-9._-]+", "-", raw_dom).strip("-")[:48] or "auto"
+    qhash = hashlib.sha256(question.encode("utf-8")).hexdigest()[:16]
+    return f"expert-{dom_slug}-{qhash}"
+
+
+def _auto_save_expert_consultation_memory(  # noqa: PLR0911
+    settings: TappsMCPSettings,
+    *,
+    question: str,
+    domain: str,
+    expert_answer: str,
+    expert_id: str,
+    expert_name: str,
+    confidence: float,
+) -> dict[str, Any]:
+    """Persist expert Q&A to pattern-tier memory when ``memory.auto_save_quality`` is True.
+
+    Uses the same content safety path as ``tapps_memory`` saves. Never raises; failures
+    are logged and summarized in the returned dict for tool payloads.
+    """
+    out: dict[str, Any] = {"quality_memory_saved": False}
+    if not settings.memory.auto_save_quality or not settings.memory.enabled:
+        out["quality_memory_skip"] = "feature_disabled"
+        return out
+
+    dom_display = (domain or "auto").strip() or "auto"
+    key = _expert_consultation_memory_key(dom_display, question)
+    label = expert_name or expert_id or dom_display
+    header = (
+        f"[{label}] domain={dom_display} confidence={round(float(confidence), 4)}\n"
+        f"Q: {question}\nA: "
+    )
+    max_total = settings.memory.write_rules.max_value_length
+    room = max_total - len(header)
+    if room < settings.memory.write_rules.min_value_length:
+        out["quality_memory_skip"] = "write_rules_length"
+        return out
+    body_a = expert_answer if len(expert_answer) <= room else f"{expert_answer[: room - 3]}..."
+    value = header + body_a
+
+    wr = settings.memory.write_rules
+    if wr.enforced:
+        if len(value) < wr.min_value_length:
+            out["quality_memory_skip"] = "write_rules_length"
+            return out
+        lowered_v = value.lower()
+        lowered_k = key.lower()
+        for kw in wr.block_sensitive_keywords:
+            klow = kw.lower()
+            if klow in lowered_v or klow in lowered_k:
+                out["quality_memory_skip"] = "write_rules_keyword"
+                return out
+
+    try:
+        from tapps_brain.safety import check_content_safety
+
+        safety_result = check_content_safety(value)
+        if not safety_result.safe and settings.memory.safety.enforcement == "block":
+            import structlog
+
+            structlog.get_logger(__name__).debug(
+                "expert_consultation_memory_skipped_safety",
+                key=key,
+                match_count=safety_result.match_count,
+            )
+            out["quality_memory_skip"] = "safety_blocked"
+            return out
+    except ImportError:
+        pass
+
+    tag_dom = re.sub(r"[^a-z0-9._-]+", "-", dom_display.lower()).strip("-")[:32] or "auto"
+    tags = [f"expert-{tag_dom}", "auto-captured"]
+
+    try:
+        store = _get_memory_store()
+        save_res = store.save(
+            key=key,
+            value=value,
+            tier="pattern",
+            source="agent",
+            source_agent="tapps-mcp",
+            scope="project",
+            tags=tags,
+            confidence=float(confidence),
+        )
+        if isinstance(save_res, dict) and save_res.get("error"):
+            out["quality_memory_skip"] = "save_rejected"
+            out["quality_memory_error"] = str(save_res.get("message", "unknown"))[:200]
+            return out
+        out["quality_memory_saved"] = True
+        out["quality_memory_key"] = key
+    except Exception as exc:
+        import structlog
+
+        structlog.get_logger(__name__).warning(
+            "expert_consultation_memory_failed", key=key, error=str(exc)[:200], exc_info=True
+        )
+        out["quality_memory_skip"] = "save_exception"
+        out["quality_memory_error"] = str(exc)[:200]
+
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Hive (tapps_brain.hive) — optional; gated by Agent Teams env (Epic M3)
+# ---------------------------------------------------------------------------
+
+_hive_store: Any | None = None
+_hive_registry: Any | None = None
+_hive_import_error: str | None = None
+_hive_lock = threading.Lock()
+
+
+def _agent_teams_env_enabled() -> bool:
+    """True when Claude Code Agent Teams experimental flag is set."""
+    return bool(os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"))
+
+
+def _reset_hive_store_cache() -> None:
+    """Reset Hive singletons and import-error cache (for testing)."""
+    global _hive_store, _hive_registry, _hive_import_error
+    with _hive_lock:
+        if _hive_store is not None:
+            with contextlib.suppress(Exception):
+                _hive_store.close()
+        _hive_store = None
+        _hive_registry = None
+        _hive_import_error = None
+
+
+def _ensure_hive_singletons() -> tuple[
+    _HiveStoreType | None,
+    _HiveAgentRegistryType | None,
+    str | None,
+]:
+    """Lazily construct Hive store and agent registry.
+
+    Returns:
+        ``(hive_store, agent_registry, error_message)``. *error_message* is set
+        when the env flag is on but ``tapps_brain.hive`` cannot be imported.
+    """
+    global _hive_store, _hive_registry, _hive_import_error
+    if not _agent_teams_env_enabled():
+        return None, None, None
+    if _hive_import_error is not None:
+        return None, None, _hive_import_error
+    with _hive_lock:
+        if _hive_import_error is not None:
+            return None, None, _hive_import_error
+        try:
+            from tapps_brain.hive import AgentRegistry, HiveStore
+        except ImportError as exc:
+            _hive_import_error = str(exc)
+            return None, None, _hive_import_error
+        if _hive_store is None:
+            _hive_store = HiveStore()
+        if _hive_registry is None:
+            _hive_registry = AgentRegistry()
+    return _hive_store, _hive_registry, None
+
+
+def _get_hive_store() -> _HiveStoreType | None:
+    """Return :class:`HiveStore` singleton when Agent Teams env is set, else None."""
+    store, _, _err = _ensure_hive_singletons()
+    return store
+
+
+def _get_hive_registry() -> _HiveAgentRegistryType | None:
+    """Return :class:`AgentRegistry` singleton when Agent Teams env is set, else None."""
+    _, registry, _err = _ensure_hive_singletons()
+    return registry
+
+
+def _hive_propagation_config_payload() -> dict[str, Any]:
+    """Describe Hive propagation settings visible to MCP clients (Epic M3 polish).
+
+    tapps-brain v1.1.0 does not expose profile YAML keys such as
+    ``hive.auto_propagate_tiers`` / ``hive.private_tiers`` through a public API
+    that TappsMCP can read, so live profile-sourced tier lists cannot appear in
+    ``hive_status`` yet.
+
+    The ``hive_propagate`` action calls :meth:`PropagationEngine.propagate` with
+    both tier lists set to ``None``; the engine then routes only by
+    ``agent_scope`` (private entries stay local; domain → agent profile namespace;
+    hive → ``universal``).
+    """
+    return {
+        "profile_sourced": False,
+        "reason": (
+            "tapps-brain v1.1.0 does not expose Hive propagation tier rules from "
+            "memory profiles to TappsMCP; live auto_propagate_tiers/private_tiers "
+            "are not available in this response."
+        ),
+        "hive_propagate_tool": {
+            "auto_propagate_tiers": None,
+            "private_tiers": None,
+            "note": (
+                "TappsMCP passes None for both; tier-based scope upgrades are not "
+                "applied—only each entry's agent_scope is used."
+            ),
+        },
+    }
+
+
+def initial_session_hive_status() -> dict[str, Any]:
+    """Baseline ``hive_status`` before :func:`collect_session_hive_status` runs.
+
+    Used by session-start when collection is skipped or raises; includes
+    ``propagation_config`` so clients always see the same keys.
+    """
+    return {"enabled": False, "propagation_config": _hive_propagation_config_payload()}
+
+
+def collect_session_hive_status(settings: "TappsMCPSettings") -> dict[str, Any]:
+    """Build ``hive_status`` payload for :func:`tapps_session_start`.
+
+    When ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` is unset, returns
+    ``{\"enabled\": False, \"propagation_config\": ...}``. When set, registers
+    this process as a Hive agent
+    (best-effort) and returns namespace / agent counts. On failure, returns
+    ``degraded: true`` with a message (non-fatal), matching other optional
+    tapps-brain integrations.
+    """
+    if not _agent_teams_env_enabled():
+        return initial_session_hive_status()
+
+    propagation = {"propagation_config": _hive_propagation_config_payload()}
+    try:
+        store, registry, import_err = _ensure_hive_singletons()
+        if import_err:
+            return {
+                "enabled": True,
+                "degraded": True,
+                "message": f"Hive unavailable (import): {import_err}",
+                **propagation,
+            }
+        if store is None or registry is None:
+            return {
+                "enabled": True,
+                "degraded": True,
+                "message": "Hive singleton initialization failed.",
+                **propagation,
+            }
+
+        from tapps_brain.hive import AgentRegistration
+
+        active_profile = settings.memory.profile or "repo-brain"
+        agent_id = os.environ.get("CLAUDE_AGENT_ID", f"agent-{os.getpid()}")
+        agent_name = os.environ.get("CLAUDE_AGENT_NAME", "unnamed")
+        registry.register(
+            AgentRegistration(
+                id=agent_id,
+                name=agent_name,
+                profile=active_profile,
+                project_root=str(settings.project_root),
+            )
+        )
+        namespaces = store.list_namespaces()
+        agents = registry.list_agents()
+        return {
+            "enabled": True,
+            "degraded": False,
+            "agent_id": agent_id,
+            "namespaces": namespaces,
+            "registered_agents_count": len(agents),
+            **propagation,
+        }
+    except Exception as exc:
+        return {
+            "enabled": True,
+            "degraded": True,
+            "message": f"Hive status failed: {exc}",
+            **propagation,
+        }
 
 
 def error_response(tool_name: str, code: str, message: str) -> dict[str, Any]:

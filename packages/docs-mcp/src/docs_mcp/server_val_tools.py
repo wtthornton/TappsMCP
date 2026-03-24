@@ -12,10 +12,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
+
     from docs_mcp.validators.style import StyleReport
 
-from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call, mcp
-from docs_mcp.server_helpers import _get_settings, error_response, success_response
+from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call
+from docs_mcp.server_helpers import (
+    _get_settings,
+    build_custom_terms_for_style,
+    error_response,
+    success_response,
+)
 
 
 async def docs_check_drift(
@@ -569,7 +576,6 @@ async def docs_check_style(
     s_rules: list[str] = getattr(settings, "style_enabled_rules", []) or []
     s_heading: str = getattr(settings, "style_heading", "") or ""
     s_max_words: int = getattr(settings, "style_max_sentence_words", 0) or 0
-    s_custom: list[str] = getattr(settings, "style_custom_terms", []) or []
     s_jargon: list[str] = getattr(settings, "style_jargon_terms", []) or []
 
     # Ensure settings values are the right types (guard against mocks)
@@ -579,8 +585,6 @@ async def docs_check_style(
         s_heading = ""
     if not isinstance(s_max_words, int):
         s_max_words = 0
-    if not isinstance(s_custom, list):
-        s_custom = []
     if not isinstance(s_jargon, list):
         s_jargon = []
 
@@ -602,25 +606,13 @@ async def docs_check_style(
     elif s_max_words > 0:
         config_kwargs["max_sentence_words"] = s_max_words
 
-    # Custom terms: merge param + settings + .docsmcp-terms.txt
-    terms_list: list[str] = []
+    # Custom terms: param + settings + .docsmcp-terms.txt + optional auto-detect
+    extra: list[str] | None = None
     if custom_terms.strip():
-        terms_list.extend(t.strip() for t in custom_terms.split(",") if t.strip())
-    for t in s_custom:
-        if t not in terms_list:
-            terms_list.append(t)
-    # Also load from .docsmcp-terms.txt if it exists
-    terms_file = root / ".docsmcp-terms.txt"
-    if terms_file.is_file():
-        try:
-            for line in terms_file.read_text(encoding="utf-8").splitlines():
-                term = line.strip()
-                if term and not term.startswith("#") and term not in terms_list:
-                    terms_list.append(term)
-        except Exception:
-            pass
-    if terms_list:
-        config_kwargs["custom_terms"] = terms_list
+        extra = [t.strip() for t in custom_terms.split(",") if t.strip()]
+    merged_terms = build_custom_terms_for_style(root, settings, extra_terms=extra)
+    if merged_terms:
+        config_kwargs["custom_terms"] = merged_terms
 
     # Custom jargon terms from settings
     if s_jargon:
@@ -734,7 +726,7 @@ def _style_report_vale(report: StyleReport) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
+def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:  # noqa: UP037
     """Register validation tools on the shared mcp instance (Epic 79.2: conditional)."""
     if "docs_check_drift" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_drift)

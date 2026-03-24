@@ -13,7 +13,7 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(30 tools)     (31 tools)
+(30 tools)     (32 tools)
 ```
 
 **tapps-brain** (`pip install tapps-brain`) is a standalone memory library extracted from tapps-core. It provides SQLite persistence (WAL + FTS5), BM25 retrieval, time-based decay, contradiction detection, consolidation, federation, and garbage collection. It has its own repository ([github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain)), release cycle, and test suite (521+ tests).
@@ -30,7 +30,7 @@ The MCP server is split across ten files (server.py + 9 server_*.py) plus a shar
 - **`server_scoring_tools.py`** -- `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** -- `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`
 - **`server_metrics_tools.py`** -- `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`
-- **`server_memory_tools.py`** -- `tapps_memory` (28 actions)
+- **`server_memory_tools.py`** -- `tapps_memory` (33 actions)
 - **`server_analysis_tools.py`** -- `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`
 - **`server_expert_tools.py`** -- `tapps_manage_experts` (6 actions)
 - **`server_persona_tools.py`** -- `tapps_get_canonical_persona`

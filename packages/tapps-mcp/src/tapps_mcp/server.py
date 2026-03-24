@@ -43,7 +43,12 @@ from tapps_mcp.common.developer_workflow import (
     DAILY_STEPS,
     RECOMMENDED_WORKFLOW_TEXT,
 )
-from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
+from tapps_mcp.server_helpers import (
+    _auto_save_expert_consultation_memory,
+    error_response,
+    serialize_issues,
+    success_response,
+)
 from tapps_mcp.tools.tool_detection import (
     detect_installed_tools,
     detect_installed_tools_async,
@@ -951,14 +956,14 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "Expert consultation failed. Try a different question or domain.",
         )
 
-    # Memory injection (Epic 25)
+    # Memory injection (Epic 25) + optional pattern-tier capture (M4.1)
+    settings = load_settings()
     answer = result.answer
     memory_injected = 0
     try:
         from tapps_core.memory.injection import append_memory_to_answer, inject_memories
         from tapps_mcp.server_helpers import _get_memory_store
 
-        settings = load_settings()
         store = _get_memory_store()
         mem_result = inject_memories(
             question, store, settings.llm_engagement_level
@@ -967,6 +972,16 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
         memory_injected = mem_result.get("memory_injected", 0)
     except Exception:
         logger.debug("memory_injection_failed: tapps_consult_expert", exc_info=True)
+
+    quality_memory = _auto_save_expert_consultation_memory(
+        settings,
+        question=question,
+        domain=str(result.domain),
+        expert_answer=str(result.answer),
+        expert_id=str(result.expert_id),
+        expert_name=str(result.expert_name),
+        confidence=float(result.confidence),
+    )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_consult_expert", start)
@@ -1007,6 +1022,7 @@ def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
             "memory_injected": memory_injected,
             "is_builtin": _is_builtin,
             "expert_type": _expert_type,
+            **quality_memory,
         },
     )
 

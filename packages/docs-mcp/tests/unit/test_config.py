@@ -102,6 +102,23 @@ class TestLoadDocsSettings:
         # Defaults should still be present for unset values
         assert result.default_format == "markdown"
 
+    def test_yaml_style_include_in_project_scan(self, tmp_path: Path) -> None:
+        (tmp_path / ".docsmcp.yaml").write_text(
+            "style_include_in_project_scan: false\n",
+            encoding="utf-8",
+        )
+        result = load_docs_settings(project_root=tmp_path)
+        assert result.style_include_in_project_scan is False
+
+    def test_yaml_style_auto_detect_terms(self, tmp_path: Path) -> None:
+        (tmp_path / ".docsmcp.yaml").write_text(
+            "style_auto_detect_terms: true\nstyle_auto_detect_max_terms: 10\n",
+            encoding="utf-8",
+        )
+        result = load_docs_settings(project_root=tmp_path)
+        assert result.style_auto_detect_terms is True
+        assert result.style_auto_detect_max_terms == 10
+
     def test_missing_yaml_uses_defaults(self, tmp_path: Path) -> None:
         # No .docsmcp.yaml in tmp_path
         result = load_docs_settings(project_root=tmp_path)

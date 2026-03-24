@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from pathlib import Path
+from docs_mcp.config.settings import DocsMCPSettings  # noqa: TC001
 
-    from docs_mcp.config.settings import DocsMCPSettings
+if TYPE_CHECKING:
+    from docs_mcp.validators.style import StyleChecker
 
 
 # ---------------------------------------------------------------------------
@@ -176,3 +177,83 @@ def _get_docsmcp_version() -> str:
         return __version__
     except (ImportError, AttributeError):
         return "unknown"
+
+
+def build_custom_terms_for_style(
+    project_root: Path,
+    settings: DocsMCPSettings,
+    *,
+    extra_terms: list[str] | None = None,
+) -> list[str]:
+    """Merge manual terms, ``.docsmcp-terms.txt``, and optional auto-detected identifiers.
+
+    Order: *extra_terms* (e.g. tool param), ``settings.style_custom_terms``, terms file,
+    then :func:`~docs_mcp.validators.identifier_terms.collect_identifier_terms` when
+    ``style_auto_detect_terms`` is True. Case-insensitive de-duplication preserves the
+    first spelling.
+    """
+    terms_list: list[str] = []
+    seen_lower: set[str] = set()
+
+    def _push(raw: str) -> None:
+        t = raw.strip()
+        if not t:
+            return
+        k = t.lower()
+        if k in seen_lower:
+            return
+        seen_lower.add(k)
+        terms_list.append(t)
+
+    if extra_terms:
+        for t in extra_terms:
+            _push(t)
+    raw_custom = getattr(settings, "style_custom_terms", None) or []
+    if not isinstance(raw_custom, list):
+        raw_custom = []
+    for t in raw_custom:
+        _push(str(t))
+
+    terms_file = project_root / ".docsmcp-terms.txt"
+    if terms_file.is_file():
+        try:
+            for line in terms_file.read_text(encoding="utf-8").splitlines():
+                term = line.strip()
+                if term and not term.startswith("#"):
+                    _push(term)
+        except OSError:
+            pass
+
+    # Use ``is True`` so MagicMock defaults do not accidentally enable scanning.
+    if getattr(settings, "style_auto_detect_terms", False) is True:
+        from docs_mcp.validators.identifier_terms import collect_identifier_terms
+
+        mf_raw = getattr(settings, "style_auto_detect_max_files", 120)
+        mt_raw = getattr(settings, "style_auto_detect_max_terms", 80)
+        mf = int(mf_raw) if isinstance(mf_raw, int) else 120
+        mt = int(mt_raw) if isinstance(mt_raw, int) else 80
+        mf = max(1, min(mf, 500))
+        mt = max(1, min(mt, 200))
+        for t in collect_identifier_terms(project_root, max_files=mf, max_terms=mt):
+            _push(t)
+
+    return terms_list
+
+
+def build_style_checker_for_project(
+    project_root: Path,
+    settings: DocsMCPSettings,
+) -> StyleChecker:
+    """Build a :class:`~docs_mcp.validators.style.StyleChecker` from project settings."""
+    from docs_mcp.validators.style import StyleChecker, StyleConfig
+
+    terms_list = build_custom_terms_for_style(project_root, settings)
+
+    config = StyleConfig(
+        enabled_rules=list(settings.style_enabled_rules),
+        heading_style=settings.style_heading,
+        max_sentence_words=settings.style_max_sentence_words,
+        custom_terms=terms_list,
+        jargon_terms=list(settings.style_jargon_terms),
+    )
+    return StyleChecker(config)

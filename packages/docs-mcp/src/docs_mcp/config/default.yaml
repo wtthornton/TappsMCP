@@ -24,3 +24,7 @@ style_heading: sentence   # sentence | title
 style_max_sentence_words: 40
 style_custom_terms: []    # project-specific terms excluded from jargon
 style_jargon_terms: []    # custom jargon (overrides defaults when non-empty)
+style_include_in_project_scan: true   # include style_summary in docs_project_scan
+style_auto_detect_terms: false        # scan *.py for class/def names -> custom_terms
+style_auto_detect_max_files: 120
+style_auto_detect_max_terms: 80

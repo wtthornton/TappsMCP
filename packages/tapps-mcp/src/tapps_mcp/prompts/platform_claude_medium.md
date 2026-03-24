@@ -48,7 +48,7 @@ When the user requests a persona by name (e.g. "use Frontend Developer", "@reali
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **28 actions** (save, search, consolidate, federation, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall (inject memories before turns) and auto-capture (extract facts on session end).
+`tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall (inject memories before turns) and auto-capture (extract facts on session end).
 
 ## 5-Stage Pipeline
 

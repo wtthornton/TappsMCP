@@ -17,6 +17,16 @@ class TestMemorySettings:
         assert settings.contradiction_check_on_start is True
         assert settings.max_memories == 1500
         assert settings.inject_into_experts is True
+        assert settings.enrich_impact_analysis is True
+        assert settings.auto_save_quality is True
+        assert settings.track_recurring_quick_check is True
+        assert settings.auto_supersede_architectural is True
+
+    def test_memory_hooks_defaults_on_root_settings(self) -> None:
+        """memory_hooks default to on for POC (auto-recall / auto-capture)."""
+        root = TappsMCPSettings()
+        assert root.memory_hooks.auto_recall.enabled is True
+        assert root.memory_hooks.auto_capture.enabled is True
 
     def test_decay_defaults(self) -> None:
         """Decay settings have the correct half-lives."""

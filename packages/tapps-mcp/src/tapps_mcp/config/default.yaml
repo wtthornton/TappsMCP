@@ -20,13 +20,15 @@ adaptive:
   learning_rate: 0.1
   min_outcomes: 5
 
+# Memory hooks (Epic 65.4–65.5) — defaults on for POC; disable in .tapps-mcp.yaml if noisy
 memory_hooks:
   auto_recall:
-    enabled: false
+    enabled: true
     max_results: 5
     min_score: 0.3
+    min_prompt_length: 50
   auto_capture:
-    enabled: false
+    enabled: true
     max_facts: 5
 
 memory:
@@ -36,6 +38,12 @@ memory:
   contradiction_check_on_start: true
   max_memories: 1500
   inject_into_experts: true
+  # M4 pipeline memory integrations — on by default for POC
+  auto_save_quality: true
+  track_recurring_quick_check: true
+  recurring_quick_check_threshold: 3
+  enrich_impact_analysis: true
+  auto_supersede_architectural: true
   capture_prompt: |
     Store durable memories: architectural (project structure, key decisions), pattern (coding conventions, recurring solutions), context (session-specific facts that matter next week).
     Skip: raw action logs, transient state, sensitive data.
@@ -61,11 +69,3 @@ memory:
     provider: noop  # noop | cohere
     top_k: 10
     # api_key: ${COHERE_API_KEY}  # required when provider=cohere; incurs API cost
-
-# Memory hooks (Epic 65.4) — opt-in
-memory_hooks:
-  auto_recall:
-    enabled: false
-    max_results: 5
-    min_score: 0.3
-    min_prompt_length: 50

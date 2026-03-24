@@ -22,7 +22,7 @@ packages/docs-mcp/
 │   ├── server_analysis.py     # docs_module_map, docs_api_surface
 │   ├── server_git_tools.py    # docs_git_summary
 │   ├── server_gen_tools.py    # docs_generate_readme, _changelog, _release_notes, _api, _adr, _onboarding, _contributing, _diagram, _prd, _purpose, _doc_index, _llms_txt, _frontmatter, _interactive_diagrams
-│   ├── server_val_tools.py    # docs_check_drift, _completeness, _links, _freshness, _diataxis, _cross_refs
+│   ├── server_val_tools.py    # docs_check_drift, _completeness, _links, _freshness, _diataxis, _cross_refs, _style
 │   ├── config/
 │   │   ├── settings.py        # DocsMCPSettings (Pydantic), load_docs_settings()
 │   │   └── default.yaml
@@ -64,7 +64,8 @@ packages/docs-mcp/
 │   │   ├── link_checker.py    # Internal link validation
 │   │   ├── freshness.py       # File age classification
 │   │   ├── diataxis.py        # Diataxis coverage validation
-│   │   └── cross_ref.py       # Cross-reference validation
+│   │   ├── cross_ref.py       # Cross-reference validation
+│   │   └── style.py           # Style/tone validation (Epic 84)
 │   └── integrations/
 │       └── tapps.py           # Optional TappsMCP enrichment reader
 └── tests/
@@ -132,7 +133,7 @@ The MCP server is split across five tool files sharing the same `mcp` FastMCP in
 - **`server_analysis.py`** -- `docs_module_map`, `docs_api_surface`
 - **`server_git_tools.py`** -- `docs_git_summary`
 - **`server_gen_tools.py`** -- `docs_generate_readme`, `docs_generate_changelog`, `docs_generate_release_notes`, `docs_generate_api`, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing`, `docs_generate_prd`, `docs_generate_diagram`, `docs_generate_architecture`, `docs_generate_epic`, `docs_generate_story`, `docs_generate_prompt`, `docs_generate_llms_txt`, `docs_generate_frontmatter`, `docs_generate_interactive_diagrams`, `docs_generate_purpose`, `docs_generate_doc_index`
-- **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`, `docs_validate_epic`, `docs_check_diataxis`, `docs_check_cross_refs`
+- **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`, `docs_validate_epic`, `docs_check_diataxis`, `docs_check_cross_refs`, `docs_check_style`
 - **`server_helpers.py`** -- Response builders (`error_response`, `success_response`), settings singleton (`_get_settings`)
 
 ### Configuration
@@ -157,7 +158,7 @@ To add a new MCP tool:
 4. Use `error_response()` and `success_response()` for return values
 5. Add tests in `packages/docs-mcp/tests/unit/`
 
-## The 31 MCP tools
+## The 32 MCP tools
 
 | Category | Tool | Description |
 |---|---|---|
@@ -192,6 +193,7 @@ To add a new MCP tool:
 | Validation | `docs_check_freshness` | Score documentation freshness (fresh/aging/stale/ancient) |
 | Validation | `docs_check_diataxis` | Diataxis quadrant coverage analysis and balance scoring |
 | Validation | `docs_check_cross_refs` | Cross-reference validation (orphans, broken refs, backlinks) |
+| Validation | `docs_check_style` | Deterministic markdown style/tone checks |
 
 ## Code conventions
 

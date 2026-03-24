@@ -49,7 +49,13 @@ Use `--quick` to skip tool version checks for faster results:
 tapps-mcp doctor --quick
 ```
 
+Doctor prints **Memory pipeline (effective config)** — a read-only summary of resolved `memory.*` and `memory_hooks.*` flags (expert auto-save, recurring quick_check memory, architectural supersede, impact enrichment, auto-recall/capture). If behavior feels noisy, set the relevant keys to `false` in `.tapps-mcp.yaml` (see [MEMORY_REFERENCE.md](MEMORY_REFERENCE.md)).
+
 ## Common issues
+
+### Too many automatic memory writes or hook injections
+
+Shipped defaults turn **on** expert/research auto-save, recurring gate-failure memory, architectural supersede, impact-analysis memory context, and memory hook recall/capture. Disable selectively under `memory:` and `memory_hooks:` in `.tapps-mcp.yaml`, then restart the MCP server.
 
 ### Memory store not found
 

@@ -1,9 +1,11 @@
 # Open Epics and Stories — Review
 
+> **Superseded / update:** As of **2026-03-23**, use **`docs/planning/epics/README.md`** as the source of truth for active DocsMCP epics (80–88). Epic 84 (style validation) is **complete** in code and planning docs. This file remains a historical snapshot of epics 74–79 and related reconciliation.
+
 **Date:** 2026-03-12
 **Source:** `docs/planning/epics/README.md`, epic metadata, and implementation verification.
 
-**ALL EPICS AND STORIES ARE COMPLETE.** No open work remains.
+**Historical note (2026-03-12):** The summary below claimed all work complete; Epic 84 was later finished under `docs/planning/epics/`.
 
 ---
 
@@ -186,7 +188,7 @@ Many sub-epic markdown files list **Status: Complete** (e.g. 65.1, 65.2, 65.3, 6
 
 ## Status (2026-03-12)
 
-**All epics and stories are complete.** No remaining open work.
+**Historical snapshot only.** For current DocsMCP Documentation Excellence epics (80–88), see `docs/planning/epics/README.md` (Epic 84 completed 2026-03-23).
 
 - **Epics 0–79 (TappsMCP):** All complete, including Docker Pipeline Reliability (75-Docker) and Canonical Persona Injection (78) completed 2026-03-12.
 - **Epics 0–21 (DocsMCP):** All complete.

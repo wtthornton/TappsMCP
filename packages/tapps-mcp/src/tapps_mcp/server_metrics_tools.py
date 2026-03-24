@@ -14,7 +14,11 @@ from typing import TYPE_CHECKING, Any
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
-from tapps_mcp.server_helpers import error_response, success_response
+from tapps_mcp.server_helpers import (
+    _auto_save_expert_consultation_memory,
+    error_response,
+    success_response,
+)
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -732,6 +736,17 @@ async def tapps_research(
             consult_expert, question=question, domain=domain or None,
         )
 
+        research_settings = load_settings()
+        quality_memory = _auto_save_expert_consultation_memory(
+            research_settings,
+            question=question,
+            domain=str(result.domain),
+            expert_answer=str(result.answer),
+            expert_id=str(result.expert_id),
+            expert_name=str(result.expert_name),
+            confidence=float(result.confidence),
+        )
+
         library = _infer_library_for_research(library, file_context, result.suggested_library)
         lookup_library = library or result.suggested_library or "python"
         lookup_topic = topic or result.suggested_topic or "overview"
@@ -771,6 +786,7 @@ async def tapps_research(
                 "fallback_library": result.fallback_library,
                 "fallback_topic": result.fallback_topic,
                 "memory_injected": memory_injected,
+                **quality_memory,
             },
         )
 

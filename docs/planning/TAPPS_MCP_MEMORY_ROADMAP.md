@@ -28,7 +28,7 @@
 
 ## Overview
 
-TappsMCP currently exposes ~40% of tapps-brain's capabilities through 23 `tapps_memory` actions. This roadmap closes the feature gap so that **code projects never need to run `tapps-brain-mcp` alongside TappsMCP**. It adds 15 new actions, wires memory into the quality pipeline, enables Hive for Agent Teams, and surfaces OWASP ASI06 security defenses.
+TappsMCP currently exposes ~40% of tapps-brain's capabilities through 29 `tapps_memory` actions (see table below). This roadmap closes the feature gap so that **code projects never need to run `tapps-brain-mcp` alongside TappsMCP**. It adds further actions (target total 38 in this doc), wires memory into the quality pipeline, enables Hive for Agent Teams, and surfaces OWASP ASI06 security defenses.
 
 All changes are scoped to `packages/tapps-mcp/` and `packages/tapps-core/`. Changes needed in the tapps-brain repository are listed as **prerequisites** (not detailed here -- see the companion doc).
 
@@ -55,7 +55,7 @@ All changes are scoped to `packages/tapps-mcp/` and `packages/tapps-core/`. Chan
 MCP Client (Claude Code, Cursor, etc.)
         |
         v
-  tapps_memory (single MCP tool, expanding from 23 to 38 actions)
+  tapps_memory (single MCP tool, expanding from 29 toward 38 actions)
         |
         v
   server_memory_tools.py (dispatch + response curation)
@@ -79,7 +79,7 @@ MCP Client (Claude Code, Cursor, etc.)
 
 ## Current State
 
-### Existing `tapps_memory` Actions (23)
+### Existing `tapps_memory` Actions (29)
 
 | Category | Actions |
 |---|---|
@@ -88,6 +88,9 @@ MCP Client (Claude Code, Cursor, etc.)
 | **I/O** | `import`, `export` |
 | **Federation** | `federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`, `federate_search`, `federate_status` |
 | **Session** | `index_session`, `contradictions` |
+| **Security** | `safety_check`, `verify_integrity` |
+| **Profiles** | `profile_info`, `profile_list`, `profile_switch` |
+| **Diagnostics** | `health` |
 
 ### Existing Pipeline Integration
 
@@ -397,58 +400,54 @@ After `reinforce` action, check if tapps-brain promoted/demoted the entry and su
 
 **File:** `server_helpers.py`
 
-Add alongside existing `_get_memory_store()`:
+Add alongside existing `_get_memory_store()` (see **CHUNK-A Hive API notes** in
+`MEMORY_ROADMAP_AGENT_HANDOFF.md` — v1.1.0 uses separate `AgentRegistry`, not
+`HiveStore.register_agent`):
 
 ```python
 _hive_store: HiveStore | None = None
+_hive_registry: AgentRegistry | None = None
 _hive_lock = threading.Lock()
 
 def _get_hive_store() -> HiveStore | None:
     """Return HiveStore singleton, or None if Agent Teams not enabled."""
-    global _hive_store
-    if not os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"):
-        return None
-    with _hive_lock:
-        if _hive_store is None:
-            from tapps_brain.hive import HiveStore
-            _hive_store = HiveStore()
-        return _hive_store
+    ...
+
+def _get_hive_registry() -> AgentRegistry | None:
+    """Return AgentRegistry singleton, or None if Agent Teams not enabled."""
+    ...
 
 def _reset_hive_store_cache() -> None:
-    global _hive_store
-    _hive_store = None
+    ...
 ```
 
 ### M3.2: Auto-Initialize Hive at Session Start
 
 **File:** `server_pipeline_tools.py`
 
-In `tapps_session_start`, after memory status check:
+In `tapps_session_start` (full and quick paths), attach ``hive_status`` from
+``collect_session_hive_status(settings)`` (implemented in `server_helpers.py`).
+Registration uses **`AgentRegistry.register(AgentRegistration(...))`** — not methods on
+`HiveStore`. There is **no** `HiveStore.count()` in v1.1.0; use
+``registered_agents_count`` from ``len(registry.list_agents())`` and omit global entry
+counts unless a future tapps-brain API adds them.
 
 ```python
 # Hive initialization for Agent Teams
-hive_status: dict[str, Any] = {"enabled": False}
-if os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"):
-    hive = _get_hive_store()
-    if hive:
-        agent_id = os.environ.get("CLAUDE_AGENT_ID", f"agent-{os.getpid()}")
-        agent_name = os.environ.get("CLAUDE_AGENT_NAME", "unnamed")
-        hive.register_agent(AgentRegistration(
-            id=agent_id, name=agent_name,
-            profile=active_profile, project_root=str(project_root),
-        ))
-        hive_status = {
-            "enabled": True,
-            "agent_id": agent_id,
-            "namespaces": hive.list_namespaces(),
-            "total_entries": hive.count(),
-            "registered_agents": len(hive.list_agents()),
-        }
+hive_status = collect_session_hive_status(settings)
+# data["hive_status"] = hive_status
 ```
 
-Add to session start response:
+Example shape when enabled:
+
 ```python
-result["hive_status"] = hive_status
+{
+    "enabled": True,
+    "degraded": False,
+    "agent_id": "agent-12345",
+    "namespaces": ["universal", "repo-brain"],
+    "registered_agents_count": 2,
+}
 ```
 
 ### M3.3: New Action -- `hive_status`
@@ -562,12 +561,12 @@ Add `_reset_hive_store_cache()` to the autouse fixture alongside existing cache 
 
 ### Acceptance Criteria
 
-- [ ] HiveStore singleton created only when Agent Teams env var is set
-- [ ] Session start auto-registers agent and reports Hive status
-- [ ] `hive_status` shows namespaces, agents, propagation config
-- [ ] `hive_search` queries across all namespaces with attribution
-- [ ] `hive_propagate` pushes eligible entries per profile rules
-- [ ] `agent_register` allows manual registration
+- [x] HiveStore singleton created only when Agent Teams env var is set
+- [x] Session start auto-registers agent and reports Hive status
+- [x] `hive_status` shows namespaces, agents, and explicit `propagation_config` (profile-sourced tier lists not in tapps-brain v1.1.0 API — response documents `profile_sourced: false` and `hive_propagate_tool` defaults)
+- [x] `hive_search` queries across all namespaces with attribution
+- [x] `hive_propagate` pushes eligible entries per profile rules
+- [x] `agent_register` allows manual registration
 - [ ] Hive operations are no-ops (not errors) when Agent Teams is disabled
 - [ ] Cache reset in conftest.py for test isolation
 - [ ] Unit + integration tests for all 4 actions
@@ -582,9 +581,12 @@ Add `_reset_hive_store_cache()` to the autouse fixture alongside existing cache 
 
 ### M4.1: Auto-Save Expert Consultation Results
 
-**File:** `server_pipeline_tools.py` (or `server_expert_tools.py`)
+**Implemented:** `server_helpers._auto_save_expert_consultation_memory` (sync); wired from
+`tapps_consult_expert` (`server.py`) and `tapps_research` (`server_metrics_tools.py`).
+Default `memory.auto_save_quality` is **true** (POC; set `false` in `.tapps-mcp.yaml` to disable). Response fields: `quality_memory_saved`,
+`quality_memory_key`, `quality_memory_skip` / `quality_memory_error` when applicable.
 
-After `tapps_consult_expert` returns actionable recommendations:
+**Original sketch** (superseded — kept for history):
 
 ```python
 async def _auto_save_expert_result(domain: str, question: str, answer: str) -> None:
@@ -610,6 +612,14 @@ async def _auto_save_expert_result(domain: str, question: str, answer: str) -> N
 ```
 
 ### M4.2: Auto-Save Recurring Quality Issues
+
+**Implemented:** `quick_check_recurring.py` — bounded in-process `OrderedDict` (max 4096 keys),
+thread-safe; wired from `server_scoring_tools` after each `tapps_quick_check` evaluation.
+Config: `memory.track_recurring_quick_check` (default `true` for POC), `memory.recurring_quick_check_threshold`
+(default `3`, range 2–50). Response / structured output: `recurring_quality_memory_events`.
+On pass, streaks for that file are cleared.
+
+**Original sketch** (superseded):
 
 **File:** `server_helpers.py`
 
@@ -640,9 +650,14 @@ async def _track_recurring_failures(file_path: str, failures: list[str]) -> None
 
 ### M4.3: Auto-Supersede for Architectural Saves
 
-**File:** `server_memory_tools.py`
+**Implemented (2026-03-23):** `_memory_tier_label`, `_resolve_architectural_supersede_old_key`, and
+`_handle_save` in `server_memory_tools.py`. Gated by `memory.auto_supersede_architectural`
+(default `true` for POC; set `false` to disable). When enabled, `save` with `tier=architectural` resolves the active
+architectural head via `store.history(key)` and calls `MemoryStore.supersede` (falls back to
+`save` on failure). Response may include `status`, `superseded_old_key`, `new_key`,
+`version_count`. Tests: `test_memory_architectural_supersede.py`.
 
-In the `save` action handler, when `tier="architectural"` and the key already exists, use `supersede()` instead of overwrite:
+**Original sketch** (superseded — use `history` for version chains, not only `get(key)`):
 
 ```python
 if action == "save":
@@ -665,6 +680,14 @@ if action == "save":
 ```
 
 ### M4.4: Memory Recall Before Impact Analysis
+
+**Implemented (2026-03-23):** `server_helpers.build_impact_memory_context` — `MemoryStore.search`
+using project-relative path + basename; merged into `tapps_impact_analysis` data as
+`memory_context`, `memory_context_enrichment`, `memory_context_query` / skip fields.
+Gated by `memory.enabled` and `memory.enrich_impact_analysis` (default True). Structured
+output `ImpactOutput.memory_context`. Tests: `test_memory_impact_context.py`.
+
+**Original sketch** (superseded — relation graph not wired; no public `find_related` in v1.1.0):
 
 **File:** `tools/impact.py` (or relevant impact analysis module)
 
@@ -710,20 +733,22 @@ Add a `knowledge_context` section to impact analysis response.
 ```python
 class MemorySettings(BaseModel):
     # ... existing fields ...
-    auto_save_quality: bool = True  # Auto-save expert results and recurring failures
-    auto_supersede_architectural: bool = True  # Use bi-temporal versioning for architectural tier
+    auto_save_quality: bool = True  # M4.1 expert/research auto-save (POC default on)
+    track_recurring_quick_check: bool = True  # M4.2 recurring quick_check -> procedural memory
+    recurring_quick_check_threshold: int = 3  # M4.2 streak length (2–50)
+    auto_supersede_architectural: bool = True  # M4.3 bi-temporal supersede (POC default on)
     enrich_impact_analysis: bool = True  # Include memory context in impact analysis
 ```
 
 ### Acceptance Criteria
 
-- [ ] Expert consultation results auto-saved as `pattern` tier memories
-- [ ] Recurring quick_check failures tracked and saved as `procedural` tier
-- [ ] Architectural saves auto-supersede (preserve version history)
-- [ ] Impact analysis includes knowledge context from memory
+- [x] Expert consultation results auto-saved as `pattern` tier memories when `memory.auto_save_quality` is true (default on for POC; `tapps_consult_expert` + `tapps_research`)
+- [x] Recurring quick_check failures tracked and saved as `procedural` tier (`memory.track_recurring_quick_check`; tests: `test_memory_recurring_quick_check.py`)
+- [x] Architectural saves auto-supersede when `memory.auto_supersede_architectural` is true (default on for POC; `store.history` + `supersede`; tests: `test_memory_architectural_supersede.py`)
+- [x] Impact analysis includes memory context from project memory search (`memory.enrich_impact_analysis`, default True; relation graph deferred — no stable `find_related` in tapps-brain v1.1.0)
 - [ ] All auto-save behaviors configurable via `.tapps-mcp.yaml`
-- [ ] Auto-save uses `source: "agent"` and `tags: ["auto-captured"]` for traceability
-- [ ] Unit tests for each integration point
+- [x] Auto-save uses `source: "agent"` and `tags: ["auto-captured"]` for traceability
+- [x] Unit tests for each integration point (M4.1: `test_memory_auto_save_expert.py`)
 
 ---
 
@@ -861,7 +886,7 @@ Add to `_VALID_ACTIONS` in `server_memory_tools.py`:
 
 ```python
 _VALID_ACTIONS: frozenset[str] = frozenset({
-    # ... existing 28 actions ...
+    # ... existing 33 actions ...
     # New in M1 (Security)
     "safety_check",
     "verify_integrity",
@@ -881,7 +906,7 @@ _VALID_ACTIONS: frozenset[str] = frozenset({
     "relations",
     "metrics",
 })
-# Total: 38 actions (up from 23)
+# Total: 38 actions (roadmap target; 29 implemented today in tapps_memory)
 ```
 
 ### Acceptance Criteria
@@ -1042,7 +1067,7 @@ def check_dual_memory_server() -> CheckResult:
 | `docs/MEMORY_REFERENCE.md` | Add all 15 new actions with examples |
 | `AGENTS.md` | Add gateway model guidance, new action list |
 | `docs/ONBOARDING.md` | Add memory profile selection, Hive setup for Agent Teams |
-| `README.md` | Update action count (23 -> 38), mention profiles and Hive |
+| `README.md` | Update action count (29 -> 38), mention profiles and Hive |
 
 Key documentation addition for AGENTS.md:
 
@@ -1105,33 +1130,33 @@ and can search across all agents' knowledge with `hive_search`.
 
 ### Phase 2: Hive + New Actions (Week 2-3)
 
-| Task | Epic | Effort | Depends On |
-|---|---|---|---|
-| M3.1 HiveStore singleton | M3 | 0.5 day | -- |
-| M3.2 Session start Hive init | M3 | 0.5 day | M3.1 |
-| M3.3 `hive_status` action | M3 | 0.5 day | M3.1 |
-| M3.4 `hive_search` action | M3 | 0.5 day | M3.1 |
-| M3.5 `hive_propagate` action | M3 | 0.5 day | M3.1 |
-| M3.6 `agent_register` action | M3 | 0.5 day | M3.1 |
-| M3.7 Test isolation | M3 | 0.25 day | M3.1 |
-| M5.1 `audit` action | M5 | 0.5 day | -- |
-| M5.2 `audit_recent` action | M5 | 0.5 day | -- |
-| M5.3 `import_markdown` action | M5 | 0.5 day | -- |
-| M5.4 `relations` action | M5 | 0.5 day | -- |
-| M5.5 `metrics` action | M5 | 0.5 day | -- |
+| Task | Epic | Effort | Depends On | Status |
+|---|---|---|---|---|
+| M3.1 HiveStore singleton | M3 | 0.5 day | -- | Done (2026-03-23) |
+| M3.2 Session start Hive init | M3 | 0.5 day | M3.1 | Done (2026-03-23) |
+| M3.3 `hive_status` action | M3 | 0.5 day | M3.1 | Done (2026-03-23) |
+| M3.4 `hive_search` action | M3 | 0.5 day | M3.1 | Done (2026-03-23) |
+| M3.5 `hive_propagate` action | M3 | 0.5 day | M3.1 | Done (2026-03-23) |
+| M3.6 `agent_register` action | M3 | 0.5 day | M3.1 | Done (2026-03-23) |
+| M3.7 Test isolation | M3 | 0.25 day | M3.1 | Done (2026-03-23) |
+| M5.1 `audit` action | M5 | 0.5 day | -- | |
+| M5.2 `audit_recent` action | M5 | 0.5 day | -- | |
+| M5.3 `import_markdown` action | M5 | 0.5 day | -- | |
+| M5.4 `relations` action | M5 | 0.5 day | -- | |
+| M5.5 `metrics` action | M5 | 0.5 day | -- | |
 
 ### Phase 3: Pipeline Integration (Week 3-5)
 
-| Task | Epic | Effort | Depends On |
-|---|---|---|---|
-| M4.1 Auto-save expert results | M4 | 1 day | -- |
-| M4.2 Track recurring failures | M4 | 1 day | -- |
-| M4.3 Auto-supersede architectural | M4 | 0.5 day | -- |
-| M4.4 Memory in impact analysis | M4 | 1 day | M5.4 (relations) |
-| M4.5 Config settings | M4 | 0.25 day | -- |
-| M6.1 Convention recall | M6 | 1.5 days | -- |
-| M6.3 Memory context in quick check | M6 | 1 day | -- |
-| M7.1-M7.4 Init, doctor, docs | M7 | 2 days | All above |
+| Task | Epic | Effort | Depends On | Status |
+|---|---|---|---|---|
+| M4.1 Auto-save expert results | M4 | 1 day | -- | Done (2026-03-23) |
+| M4.2 Track recurring failures | M4 | 1 day | -- | Done (2026-03-23) |
+| M4.3 Auto-supersede architectural | M4 | 0.5 day | -- | Done (2026-03-23): `auto_supersede_architectural` + `_handle_save` |
+| M4.4 Memory in impact analysis | M4 | 1 day | -- | Done (2026-03-23): `build_impact_memory_context` + `memory.enrich_impact_analysis`; relations optional follow-up |
+| M4.5 Config settings | M4 | 0.25 day | -- | Partial (M4.1 + M4.2 + `enrich_impact_analysis` + `auto_supersede_architectural` landed) |
+| M6.1 Convention recall | M6 | 1.5 days | -- | |
+| M6.3 Memory context in quick check | M6 | 1 day | -- | |
+| M7.1-M7.4 Init, doctor, docs | M7 | 2 days | All above | |
 
 ### Phase 4: Advanced (Week 5-6, optional)
 
@@ -1188,10 +1213,14 @@ memory:
   # New in M4: Auto-save quality results to memory
   auto_save_quality: true
 
-  # New in M4: Use bi-temporal versioning for architectural tier
+  # New in M4.2: Recurring tapps_quick_check gate failures -> procedural memory
+  track_recurring_quick_check: true
+  recurring_quick_check_threshold: 3
+
+  # M4.3: Bi-temporal versioning for architectural tier (default on for POC)
   auto_supersede_architectural: true
 
-  # New in M4: Include memory context in impact analysis
+  # New in M4: Include memory_context in tapps_impact_analysis (BM25 search by file path)
   enrich_impact_analysis: true
 
   # New in M6: Convention weight in scoring (0 = disabled)
@@ -1252,7 +1281,7 @@ memory:
 | 14 | `metrics` | M5 | P2 | Expose store and operation metrics |
 | 15 | `history` | -- | -- | Already exists (verify exposed) |
 
-**Total actions after implementation: 38** (23 existing + 15 new)
+**Total actions after implementation: 38** (29 existing in code today + 9 additional per this roadmap)
 
 ---
 

@@ -18,6 +18,7 @@ from mcp.server.fastmcp import (
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
+from tapps_mcp.quick_check_recurring import record_quick_check_recurring
 from tapps_mcp.server_helpers import (
     _get_scorer,
     _get_scorer_for_file,
@@ -533,6 +534,7 @@ def _attach_quick_check_structured_output(
     complexity_hint: dict[str, Any] | None,
     quick_categories: dict[str, float],
     fixes_applied: int | None,
+    recurring_events: list[dict[str, str]] | None = None,
 ) -> None:
     """Attach structured output to the response dict in-place."""
     try:
@@ -551,6 +553,7 @@ def _attach_quick_check_structured_output(
             gate_failures=[f.model_dump() for f in gate_result.failures],
             quick_categories=quick_categories,
             fixes_applied=fixes_applied,
+            recurring_quality_memory_events=list(recurring_events or []),
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
@@ -623,6 +626,9 @@ async def _quick_check_single(
     data, _suggestions = _build_quick_check_data(
         resolved, score_result, sec_result, gate_result,
         preset, complexity_hint, fixes_applied, fix,
+    )
+    data.update(
+        record_quick_check_recurring(settings, resolved, gate_result.passed, gate_result.failures)
     )
 
     _attach_uncached_libraries_hint(data, resolved, settings.project_root)
@@ -804,6 +810,9 @@ async def tapps_quick_check(
         resolved, score_result, sec_result, gate_result,
         preset, complexity_hint, fixes_applied, fix,
     )
+    data.update(
+        record_quick_check_recurring(settings, resolved, gate_result.passed, gate_result.failures)
+    )
 
     _attach_uncached_libraries_hint(data, resolved, settings.project_root)
 
@@ -823,6 +832,7 @@ async def tapps_quick_check(
         resp, resolved, score_result, sec_result, gate_result,
         preset, suggestions, complexity_hint, quick_categories,
         fixes_applied if fix else None,
+        recurring_events=data.get("recurring_quality_memory_events", []),
     )
 
     return _with_nudges(

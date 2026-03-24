@@ -46,7 +46,7 @@ When the user requests a persona by name, consider calling `tapps_get_canonical_
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with 28 actions (save, search, consolidate, federation, etc.). Tiers: architectural/pattern/procedural/context. Scopes: project/branch/session/shared. Max 1500 entries. Memory is manual at low engagement: call `search` at session start and `save` before end.
+`tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, federation, profiles, Hive, etc.). Tiers: architectural/pattern/procedural/context. Scopes: project/branch/session/shared. Max 1500 entries. At low engagement, still call `search` at session start and `save` before end; automatic hooks may be off depending on `.tapps-mcp.yaml`.
 
 ## 5-Stage Pipeline (optional)
 

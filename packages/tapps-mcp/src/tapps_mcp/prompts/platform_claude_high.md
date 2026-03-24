@@ -56,11 +56,11 @@ When the user requests a persona by name (e.g. "use Frontend Developer", "@reali
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **28 actions**: save, save_bulk, get, list, delete, search, reinforce, gc, contradictions, reseed, import, export, consolidate, unconsolidate, 6 federation actions (federate_register, federate_publish, federate_subscribe, federate_sync, federate_search, federate_status), and 3 maintenance actions (index_session, validate, maintain).
+`tapps_memory` provides persistent cross-session knowledge with **33 actions** (see AGENTS.md / docs/MEMORY_REFERENCE.md): CRUD, search, intelligence, consolidation, import/export, federation (6), maintenance (index_session, validate, maintain), security (safety_check, verify_integrity), profiles (3), health, and Hive/Agent Teams (hive_status, hive_search, hive_propagate, agent_register).
 
 **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared (federation). Max 1500 entries.
 
-**Memory hooks:** Auto-recall injects relevant memories before each turn. Auto-capture saves durable facts on session end. Configure in `.tapps-mcp.yaml` under `memory_hooks`. High engagement enables both by default. Tune `min_score` to balance coverage vs noise.
+**Memory hooks:** Auto-recall and auto-capture default **on** in shipped `default.yaml`; configure under `memory_hooks` in `.tapps-mcp.yaml`. High engagement also merges hook entries during init. Tune `min_score` to balance coverage vs noise.
 
 ## 5-Stage Pipeline
 

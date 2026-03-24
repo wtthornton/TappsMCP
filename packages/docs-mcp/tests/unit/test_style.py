@@ -794,3 +794,17 @@ class TestProjectScanStyleSummary:
         # No docs = no style_summary key (or 0 files)
         if "style_summary" in result["data"]:
             assert result["data"]["style_summary"]["total_files"] == 0
+
+    async def test_scan_skips_style_when_disabled_in_config(self, tmp_path: Path) -> None:
+        _write(tmp_path / "README.md", "# Readme\n\nWe leverage this tool.")
+        from docs_mcp.server import docs_project_scan
+
+        with patch("docs_mcp.config.settings.load_docs_settings") as mock_load:
+            mock_load.return_value = make_settings(
+                tmp_path,
+                style_include_in_project_scan=False,
+            )
+            result = await docs_project_scan(project_root=str(tmp_path))
+
+        assert result["success"] is True
+        assert "style_summary" not in result["data"]

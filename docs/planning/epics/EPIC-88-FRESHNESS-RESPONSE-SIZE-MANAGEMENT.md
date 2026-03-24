@@ -166,7 +166,7 @@ Add a `freshness` parameter to filter items by category (e.g., `freshness="stale
 - **Cursor-based pagination** — while 2026 best practice for mutable backing stores (SQLite, live APIs), freshness results are scanned from a stable filesystem. `max_items` with staleness-first ordering covers the primary use case. If cross-tool cursor pagination is adopted later (e.g., base64-encoded opaque tokens as in `tapps_core/memory`), freshness can adopt it then.
 - **Streaming/SSE responses** — MCP `2025-11-25` `CallToolResult` is atomic (no streaming). Streamable HTTP transport exists but doesn't support incremental tool results.
 - **Token-budget-aware truncation utility** — the research identified `tapps_core/memory/injection.py`'s budget loop as a candidate for promotion to `server_helpers.py` as a reusable `budget_truncate()`. This is a cross-cutting concern for all tools, not specific to freshness.
-- **`structuredContent` migration** — separating summary text from machine-readable data in `CallToolResult` is a valuable cross-cutting improvement but affects all 31 tools.
+- **`structuredContent` migration** — separating summary text from machine-readable data in `CallToolResult` is a valuable cross-cutting improvement but affects all 32 DocsMCP tools.
 - **Cross-tool response size middleware** — a generic response truncation layer across all docs-mcp tools. Useful long-term, but per-tool implementation is appropriate now.
 
 <!-- docsmcp:end:non-goals -->

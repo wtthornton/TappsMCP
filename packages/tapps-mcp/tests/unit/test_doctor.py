@@ -863,6 +863,7 @@ class TestCheckMcpClientConfig:
         checks = _collect_checks(tmp_path, quick=True)
         names = [c.name for c in checks]
         assert "MCP client config" in names
+        assert "Memory pipeline (effective config)" in names
 
 
 # ---------------------------------------------------------------------------

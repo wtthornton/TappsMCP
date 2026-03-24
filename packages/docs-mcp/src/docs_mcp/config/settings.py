@@ -115,6 +115,32 @@ class DocsMCPSettings(BaseSettings):
         default_factory=list,
         description="Custom jargon terms to flag (overrides defaults when non-empty).",
     )
+    style_include_in_project_scan: bool = Field(
+        default=True,
+        description=(
+            "When True, docs_project_scan includes a style_summary using the same "
+            "rules as docs_check_style (and .docsmcp-terms.txt)."
+        ),
+    )
+    style_auto_detect_terms: bool = Field(
+        default=False,
+        description=(
+            "When True, scan Python files for class/def names and merge into "
+            "custom_terms (bounded; reduces false positives for project identifiers)."
+        ),
+    )
+    style_auto_detect_max_files: int = Field(
+        default=120,
+        ge=1,
+        le=500,
+        description="Max Python files to read when style_auto_detect_terms is True.",
+    )
+    style_auto_detect_max_terms: int = Field(
+        default=80,
+        ge=1,
+        le=200,
+        description="Max detected terms to add when style_auto_detect_terms is True.",
+    )
 
     @field_validator("style_enabled_rules", mode="before")
     @classmethod

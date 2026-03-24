@@ -85,6 +85,7 @@ class QuickCheckOutput(StructuredOutput):
     gate_failures: list[dict[str, Any]] = Field(default_factory=list)
     quick_categories: dict[str, float] = Field(default_factory=dict)
     fixes_applied: int | None = None
+    recurring_quality_memory_events: list[dict[str, str]] = Field(default_factory=list)
 
 
 class SecurityFindingOutput(BaseModel):
@@ -165,6 +166,10 @@ class ImpactOutput(StructuredOutput):
     direct_dependents: list[str] = Field(default_factory=list)
     test_files: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
+    memory_context: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Memory search hits for the target file (Epic M4.4).",
+    )
 
 
 class ExpertOutput(StructuredOutput):

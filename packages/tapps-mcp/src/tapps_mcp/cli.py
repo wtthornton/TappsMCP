@@ -113,7 +113,12 @@ def init(
     engagement_level: str | None,
     overwrite_tech_stack: bool,
 ) -> None:
-    """Generate MCP configuration for Claude Code, Cursor, or VS Code."""
+    """Bootstrap TappsMCP in a project (MCP config, AGENTS.md, hooks, agents, skills, rules).
+
+    Creates or merges `.tapps-mcp.yaml` (including `memory_hooks` when engagement implies it).
+    Memory pipeline defaults (auto-save, recurring quick_check, architectural supersede, hooks)
+    come from shipped `default.yaml` unless your YAML overrides them — see docs/MEMORY_REFERENCE.md.
+    """
     from tapps_mcp.distribution.setup_generator import run_init
 
     success = run_init(
@@ -160,10 +165,12 @@ def init(
     help="Config scope: 'project' (.mcp.json in project root, default) or 'user' (~/.claude.json).",
 )
 def upgrade(mcp_host: str, project_root: str, force: bool, dry_run: bool, scope: str) -> None:
-    """Validate and update all TappsMCP-generated files after a version upgrade.
+    """Refresh generated files after upgrading the `tapps-mcp` package.
 
-    Checks AGENTS.md, platform rules, hooks, agents, skills, and settings
-    against the current TappsMCP version and refreshes outdated files.
+    Re-merges AGENTS.md, platform rules, hooks, agents, skills, and Claude/Cursor settings.
+    Creates a timestamped backup under `.tapps-mcp/backups/` before overwriting.
+    Preserves custom MCP command paths. Review `.tapps-mcp.yaml` after major upgrades if you
+    relied on older default flags (memory pipeline, hooks). See docs/UPGRADE_FOR_CONSUMERS.md.
     """
     from tapps_mcp.distribution.setup_generator import run_upgrade
 
@@ -191,7 +198,11 @@ def upgrade(mcp_host: str, project_root: str, force: bool, dry_run: bool, scope:
     help="Quick mode: skip tool version checks for faster results.",
 )
 def doctor(project_root: str, quick: bool) -> None:
-    """Diagnose TappsMCP configuration and connectivity."""
+    """Diagnose MCP config, bootstrap files, hooks, checkers, tapps-brain, and memory flags.
+
+    Includes an informational **Memory pipeline (effective config)** row (resolved settings).
+    Use `--quick` to skip per-tool version probes.
+    """
     from tapps_mcp.distribution.doctor import run_doctor
 
     success = run_doctor(project_root=project_root, quick=quick)

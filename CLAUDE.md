@@ -15,7 +15,7 @@ This is a **uv workspace monorepo** with three packages plus an external depende
 | **tapps-brain** | [github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain) | Standalone memory system (SQLite, BM25, decay, federation) |
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, experts, metrics, adaptive) |
 | **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools) |
-| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (31 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (32 tools) |
 
 tapps-core's `memory/` modules are re-export shims delegating to tapps-brain (except `injection.py` which is a bridge adapter). tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
 
@@ -166,7 +166,7 @@ When the user requests a persona by name (e.g. "use Frontend Developer", "@reali
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **28 actions** (save, search, consolidate, federation, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall (inject memories before turns) and auto-capture (extract facts on session end).
+`tapps_memory` provides persistent cross-session knowledge with **33 actions** (CRUD, search, federation, profiles, security, Hive, maintenance, etc.). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Shipped defaults enable pipeline memory features and `memory_hooks` (auto-recall / auto-capture); override in `.tapps-mcp.yaml`. See `docs/MEMORY_REFERENCE.md`. Run `tapps-mcp doctor` for **Memory pipeline (effective config)**.
 
 ## 5-Stage Pipeline
 

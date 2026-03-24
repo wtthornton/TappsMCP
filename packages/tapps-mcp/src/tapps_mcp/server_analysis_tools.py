@@ -24,6 +24,7 @@ from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
 from tapps_mcp.server_helpers import (
+    build_impact_memory_context,
     emit_ctx_info,
     ensure_session_initialized,
     error_response,
@@ -154,10 +155,11 @@ def _promote_note_to_memory(note: SessionNote, tier: str = "context") -> dict[st
             scope="session",
             tags=["promoted-from-session-notes"],
         )
+        dumped: dict[str, Any] = entry if isinstance(entry, dict) else entry.model_dump()
         return {
             "action": "promote",
             "promoted": True,
-            "memory_entry": entry.model_dump(),
+            "memory_entry": dumped,
         }
     except Exception as exc:
         logger.debug("promote_to_memory_failed", key=note.key, error=str(exc))
@@ -261,23 +263,27 @@ async def tapps_impact_analysis(
 
     settings = load_settings()
     report = analyze_impact(resolved, settings.project_root, change_type)
+    mem_ctx = build_impact_memory_context(resolved, settings.project_root, settings)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_impact_analysis", start, file_path=str(resolved))
 
+    data: dict[str, Any] = {
+        "changed_file": report.changed_file,
+        "change_type": report.change_type,
+        "severity": report.severity,
+        "total_affected": report.total_affected,
+        "direct_dependents": [d.model_dump() for d in report.direct_dependents],
+        "transitive_dependents": [d.model_dump() for d in report.transitive_dependents],
+        "test_files": [t.model_dump() for t in report.test_files],
+        "recommendations": report.recommendations,
+    }
+    data.update(mem_ctx)
+
     resp = success_response(
         "tapps_impact_analysis",
         elapsed_ms,
-        {
-            "changed_file": report.changed_file,
-            "change_type": report.change_type,
-            "severity": report.severity,
-            "total_affected": report.total_affected,
-            "direct_dependents": [d.model_dump() for d in report.direct_dependents],
-            "transitive_dependents": [d.model_dump() for d in report.transitive_dependents],
-            "test_files": [t.model_dump() for t in report.test_files],
-            "recommendations": report.recommendations,
-        },
+        data,
     )
 
     # Attach structured output
@@ -292,6 +298,7 @@ async def tapps_impact_analysis(
             direct_dependents=[d.file_path for d in report.direct_dependents],
             test_files=[t.file_path for t in report.test_files],
             recommendations=report.recommendations,
+            memory_context=mem_ctx.get("memory_context", []),
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:

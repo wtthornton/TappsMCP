@@ -167,25 +167,31 @@ Your project may have two complementary memory systems:
 
 RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
-### Memory actions (28 total)
+### Memory actions (33 total)
 
-**Core:** `save`, `save_bulk`, `get`, `list`, `delete` — CRUD operations with tier/scope/tag classification
+**Core:** `save`, `save_bulk`, `get`, `list`, `delete` — CRUD with tier/scope/tag classification (`save` + architectural tier may **supersede** prior versions when `memory.auto_supersede_architectural` is true)
 
 **Search:** `search` — ranked BM25 retrieval with composite scoring (relevance + confidence + recency + frequency)
 
-**Intelligence:** `reinforce` (reset decay clock), `gc` (archive stale entries), `contradictions` (detect stale claims), `reseed` (re-populate from profile)
+**Intelligence:** `reinforce`, `gc`, `contradictions`, `reseed`
 
-**Consolidation:** `consolidate` (merge related entries with provenance), `unconsolidate` (undo merge)
+**Consolidation:** `consolidate`, `unconsolidate`
 
-**Import/export:** `import` (JSON), `export` (JSON or Markdown)
+**Import/export:** `import`, `export`
 
-**Federation:** `federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`, `federate_search`, `federate_status` — cross-project memory sharing via central hub
+**Federation:** `federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`, `federate_search`, `federate_status`
 
-**Maintenance:** `index_session` (index current session notes), `validate` (check store integrity against docs), `maintain` (run GC + consolidation + contradiction detection)
+**Maintenance:** `index_session`, `validate`, `maintain`
 
-**Security:** `safety_check` (scan text for injection patterns), `verify_integrity` (detect tampered entries)
+**Security:** `safety_check`, `verify_integrity`
 
-**Profiles:** `profile_info` (show active profile details), `profile_list` (list available profiles), `profile_switch` (change active profile)
+**Profiles:** `profile_info`, `profile_list`, `profile_switch`
+
+**Diagnostics:** `health`
+
+**Hive / Agent Teams:** `hive_status`, `hive_search`, `hive_propagate`, `agent_register` (opt-in; see session `hive_status` when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is set)
+
+**Default pipeline behavior (POC-oriented):** `memory.auto_save_quality`, `track_recurring_quick_check`, `auto_supersede_architectural`, `enrich_impact_analysis`, and `memory_hooks` auto-recall/capture default **on** in shipped config — set `false` in `.tapps-mcp.yaml` if you want a quieter setup.
 
 ### Memory tiers and scopes
 

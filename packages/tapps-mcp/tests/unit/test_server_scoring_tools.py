@@ -100,7 +100,7 @@ _PATCH_SESSION = patch(
     new_callable=AsyncMock,
 )
 _PATCH_VALIDATE = "tapps_mcp.server._validate_file_path"
-_PATCH_LOGGER = patch("tapps_mcp.server_scoring_tools._logger", new_callable=MagicMock)
+_PATCH_LOGGER = patch("tapps_mcp.server_scoring_tools.logger", new_callable=MagicMock)
 
 
 # ---------------------------------------------------------------------------

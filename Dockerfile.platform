@@ -1,5 +1,5 @@
 # TappsPlatform — combined multi-stage Docker build (monorepo-aware)
-# Builds tapps-core + tapps-mcp + docs-mcp into a single image with all 61 tools.
+# Builds tapps-core + tapps-mcp + docs-mcp into a single image with all 62 tools (30 + 32).
 #
 # Build:  docker build -f Dockerfile.platform -t tapps-platform .
 # Run:    docker run -v $(pwd):/workspace tapps-platform

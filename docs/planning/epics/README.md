@@ -12,11 +12,11 @@ Goal: Elevate DocsMCP from B+ to A+ -- the best documentation tooling for AI-ass
 | [80](EPIC-80-C4-MODEL-SEQUENCE-DIAGRAM-SUPPORT.md) | C4 Model & Sequence Diagram Support | P1 | ~2-3 weeks | 5 (26 pts) | **Complete** |
 | [81](EPIC-81-D2-FORMAT-INTERACTIVE-HTML-DIAGRAMS.md) | D2 Format & Interactive HTML Diagrams | P2 | ~2 weeks | 4 (24 pts) | **Complete** |
 | [85](EPIC-85-PURPOSE-INTENT-TEMPLATES-DOC-INDEX.md) | Architecture Templates & Doc Index (reduced) | P2 | ~1.5 weeks | 3 (16 pts) | **Complete** (85.3 cut) |
-| [84](EPIC-84-DOC-STYLE-TONE-VALIDATION.md) | Doc Style & Tone Validation (Vale Integration) | P2 | ~2 weeks | 4 (18 pts) | **In Progress** |
+| [84](EPIC-84-DOC-STYLE-TONE-VALIDATION.md) | Doc Style & Tone Validation (Vale Integration) | P2 | ~2 weeks | 4 (18 pts) | **Complete** |
 | [87](EPIC-87-CONTENT-RETURN-PATTERN-DOCKER-FILE-WRITES.md) | Content-Return Pattern for Docker File Writes | P0 | ~3-4 weeks | 7 (39 pts) | **Complete** |
 | [88](EPIC-88-FRESHNESS-RESPONSE-SIZE-MANAGEMENT.md) | Freshness Tool Response Size Management | P1 | ~1 week | 5 (17 pts) | **Complete** |
 
-**8 of 9 epics complete. Epic 84 in progress. 1 individual story cut (85.3).**
+**9 of 9 epics complete. 1 individual story cut (85.3).**
 
 ### Revised Implementation Order (2026-03-17)
 
@@ -30,7 +30,7 @@ Phase 4 (Diagrams):       Epic 80 (C4 + sequence) + 81 (D2 + interactive HTML) �
 Phase 5 (Templates):      Epic 85 (reduced: no series bootstrap) ─── 1.5 weeks ✓
 Phase 6 (Docker writes):  Epic 87 (Content-return pattern)      ─── 3 weeks    ✓
 Phase 7 (Validation):     Epic 88 (Freshness response size)     ─── 1 week     ✓
-Phase 8 (Style):          Epic 84 (Doc Style & Tone Validation) ─── 2 weeks    ← IN PROGRESS
+Phase 8 (Style):          Epic 84 (Doc Style & Tone Validation) ─── 2 weeks    ✓
 ```
 
 ### Scope Adjustments
@@ -40,7 +40,7 @@ Phase 8 (Style):          Epic 84 (Doc Style & Tone Validation) ─── 2 week
 | 80 | Story 80.4 (Sequence Diagrams) now complete | Originally deferred; implemented with depth-limited auto-detect + manual flow_spec modes |
 | 81 | All 4 stories complete (81.1/81.2/81.4 D2 format + 81.3 interactive HTML) | D2 format implemented with 3 themes (default, sketch, terminal) |
 | 85 | Cut Story 85.3 (Architecture Series Bootstrap) | Auto-generating 25+ files produces heavy manual editing; ship building blocks instead |
-| 84 | Defer entirely | P2 style checking is noisy for terse technical docs; English-only limits adoption |
+| 84 | Shipped (deterministic rules, optional Vale output); auto-detect terms from code deferred | Style off noisy paths via `style_enabled_rules` / `style_include_in_project_scan` |
 
 ### Dependency Graph
 

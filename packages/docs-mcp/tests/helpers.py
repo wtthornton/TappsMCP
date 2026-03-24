@@ -50,6 +50,21 @@ def make_settings(root: Path, **overrides: Any) -> MagicMock:
     settings.git_log_limit = 100
     settings.log_level = "INFO"
     settings.log_json = False
+    settings.style_enabled_rules = [
+        "passive_voice",
+        "jargon",
+        "sentence_length",
+        "heading_consistency",
+        "tense_consistency",
+    ]
+    settings.style_heading = "sentence"
+    settings.style_max_sentence_words = 40
+    settings.style_custom_terms = []
+    settings.style_jargon_terms = []
+    settings.style_include_in_project_scan = True
+    settings.style_auto_detect_terms = False
+    settings.style_auto_detect_max_files = 120
+    settings.style_auto_detect_max_terms = 80
     for key, value in overrides.items():
         setattr(settings, key, value)
     return settings

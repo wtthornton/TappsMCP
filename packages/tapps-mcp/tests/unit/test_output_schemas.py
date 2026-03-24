@@ -237,6 +237,7 @@ class TestQuickCheckOutput:
         assert "lint_issue_count" in props
         assert "security_issue_count" in props
         assert "suggestions" in props
+        assert "recurring_quality_memory_events" in props
 
     def test_quick_check_output_serialize(self) -> None:
         """Verify all fields serialize correctly."""

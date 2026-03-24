@@ -1,9 +1,10 @@
 # Epic 84: Doc Style & Tone Validation (Vale Integration)
 
 <!-- docsmcp:start:metadata -->
-**Status:** In Progress
+**Status:** Complete
 **Priority:** P2 - Medium
 **Started:** 2026-03-19
+**Completed:** 2026-03-23
 **Estimated LOE:** ~2 weeks (1 developer)
 **Dependencies:** Epic 7 (Doc Validation)
 
@@ -35,15 +36,15 @@ Best-in-class documentation sites (Stripe, Vercel, Cloudflare) enforce strict st
 <!-- docsmcp:start:acceptance-criteria -->
 ## Acceptance Criteria
 
-- [ ] New `docs_check_style` tool analyzes markdown files for style and tone issues
-- [ ] Built-in rule set covers: passive voice, jargon, sentence length, heading consistency, tense consistency
-- [ ] Rules implemented as deterministic regex/AST patterns (no LLM calls)
-- [ ] Each issue has severity (error/warning/suggestion) and fix recommendation
-- [ ] Project-level style config supported via `.docsmcp.yaml` (enable/disable rules, custom terms)
-- [ ] `docs_check_style` returns structured results with per-file and aggregate scores
-- [ ] Optional Vale-compatible output format for teams already using Vale
-- [ ] Custom terminology dictionary support for project-specific terms
-- [ ] Init/upgrade generates default style config in `.docsmcp.yaml`
+- [x] New `docs_check_style` tool analyzes markdown files for style and tone issues
+- [x] Built-in rule set covers: passive voice, jargon, sentence length, heading consistency, tense consistency
+- [x] Rules implemented as deterministic regex/AST patterns (no LLM calls)
+- [x] Each issue has severity (error/warning/suggestion) and fix recommendation
+- [x] Project-level style config supported via `.docsmcp.yaml` (enable/disable rules, custom terms)
+- [x] `docs_check_style` returns structured results with per-file and aggregate scores
+- [x] Optional Vale-compatible output format for teams already using Vale (`output_format="vale"`)
+- [x] Custom terminology dictionary support (`.docsmcp-terms.txt` plus `style_custom_terms` in YAML)
+- [x] Default style keys ship in DocsMCP `config/default.yaml`; projects override via `.docsmcp.yaml` or `docs_config`
 
 <!-- docsmcp:end:acceptance-criteria -->
 
@@ -57,15 +58,15 @@ Best-in-class documentation sites (Stripe, Vercel, Cloudflare) enforce strict st
 Build a deterministic style checking engine with pluggable rules. Each rule receives parsed markdown content and returns issues with severity, location, and fix suggestion.
 
 **Tasks:**
-- [ ] Create `validators/style.py` with `StyleChecker` class
-- [ ] Implement `RuleBase` abstract class with `check()` method
-- [ ] Implement `PassiveVoiceRule` using regex patterns (be-verb + past-participle)
-- [ ] Implement `JargonRule` with configurable term list
-- [ ] Implement `SentenceLengthRule` (flag sentences >40 words)
-- [ ] Implement `HeadingConsistencyRule` (case style, punctuation)
-- [ ] Implement `TenseConsistencyRule` (imperative vs declarative)
-- [ ] Add `StyleResult` model with per-file issues and aggregate score
-- [ ] Add comprehensive tests for each rule
+- [x] Create `validators/style.py` with `StyleChecker` class
+- [x] Implement `RuleBase` abstract class with `check()` method
+- [x] Implement `PassiveVoiceRule` using regex patterns (be-verb + past-participle)
+- [x] Implement `JargonRule` with configurable term list
+- [x] Implement `SentenceLengthRule` (flag sentences >40 words)
+- [x] Implement `HeadingConsistencyRule` (case style, punctuation)
+- [x] Implement `TenseConsistencyRule` (imperative vs declarative)
+- [x] Add `FileStyleResult` / `StyleReport` models with per-file issues and aggregate score
+- [x] Add comprehensive tests for each rule
 
 **Definition of Done:** Style Rule Engine is implemented, tests pass, and documentation is updated.
 
@@ -78,12 +79,12 @@ Build a deterministic style checking engine with pluggable rules. Each rule rece
 Register the style checker as an MCP tool with project-wide scanning, configurable rule sets, and structured output.
 
 **Tasks:**
-- [ ] Register `docs_check_style` in `server_val_tools.py`
-- [ ] Support file path or project-wide scanning
-- [ ] Load style config from `.docsmcp.yaml`
-- [ ] Support rule enable/disable via config
-- [ ] Add Vale-compatible output format option
-- [ ] Add tests for tool handler
+- [x] Register `docs_check_style` in `server_val_tools.py`
+- [x] Support file path or project-wide scanning
+- [x] Load style config from `.docsmcp.yaml`
+- [x] Support rule enable/disable via config
+- [x] Add Vale-compatible output format option
+- [x] Add tests for tool handler
 
 **Definition of Done:** docs_check_style MCP Tool is implemented, tests pass, and documentation is updated.
 
@@ -96,12 +97,12 @@ Register the style checker as an MCP tool with project-wide scanning, configurab
 Support project-specific terminology dictionaries and wire style config into init/upgrade.
 
 **Tasks:**
-- [ ] Add terminology dictionary support (`.docsmcp-terms.txt`)
-- [ ] Auto-detect project terms from code identifiers
-- [ ] Add default style config section to `.docsmcp.yaml` template in init
-- [ ] Add `docs_check_style` to AGENTS.md template
-- [ ] Update docs-mcp CLAUDE.md
-- [ ] Add tests for custom terms and init integration
+- [x] Add terminology dictionary support (`.docsmcp-terms.txt`)
+- [x] Auto-detect project terms from code identifiers (`style_auto_detect_terms` in `.docsmcp.yaml`)
+- [x] Default style keys in DocsMCP `config/default.yaml` (consuming projects: copy or use `docs_config`)
+- [x] Document `docs_check_style` in `packages/docs-mcp/AGENTS.md`
+- [x] Update docs-mcp CLAUDE.md tool list
+- [x] Add tests for custom terms and project scan style summary
 
 **Definition of Done:** Custom Terminology & Init Integration is implemented, tests pass, and documentation is updated.
 
@@ -114,10 +115,10 @@ Support project-specific terminology dictionaries and wire style config into ini
 Include style summary in `docs_project_scan` output when style rules are configured.
 
 **Tasks:**
-- [ ] Add optional `style_summary` to project scan results
-- [ ] Run style checks during project scan when enabled
-- [ ] Include top-5 most common issues in summary
-- [ ] Add tests for enriched project scan
+- [x] Add optional `style_summary` to project scan results
+- [x] Run style checks during project scan when `style_include_in_project_scan` is true (`.docsmcp.yaml`)
+- [x] Include top-5 most common issues in summary
+- [x] Add tests for enriched project scan
 
 **Definition of Done:** Style Report in Project Scan is implemented, tests pass, and documentation is updated.
 

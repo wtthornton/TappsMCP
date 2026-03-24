@@ -20,7 +20,13 @@ from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
 from tapps_mcp.common.developer_workflow import get_developer_workflow_dict
-from tapps_mcp.server_helpers import emit_ctx_info, error_response, success_response
+from tapps_mcp.server_helpers import (
+    collect_session_hive_status,
+    emit_ctx_info,
+    error_response,
+    initial_session_hive_status,
+    success_response,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -1285,6 +1291,15 @@ async def tapps_session_start(
         _logger.debug("memory_status_check_failed", exc_info=True)
     timings["memory_status_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
 
+    # Hive / Agent Teams (Epic M3)
+    phase_start = time.perf_counter_ns()
+    hive_status: dict[str, Any] = initial_session_hive_status()
+    try:
+        hive_status = collect_session_hive_status(settings)
+    except Exception:
+        _logger.debug("hive_status_check_failed", exc_info=True)
+    timings["hive_status_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
+
     # Business experts (Epic 43) - load from .tapps-mcp/experts.yaml
     phase_start = time.perf_counter_ns()
     business_experts_result: dict[str, Any] | None = None
@@ -1355,6 +1370,7 @@ async def tapps_session_start(
         "critical_rules": info["data"].get("critical_rules", []),
         "pipeline": info["data"]["pipeline"],
         "memory_status": memory_status,
+        "hive_status": hive_status,
         "memory_gc": "background",
         "memory_consolidation": "background",
         "memory_doc_validation": "background",
@@ -1437,6 +1453,12 @@ async def _session_start_quick(
     elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
     record_execution("tapps_session_start", start_ns)
 
+    hive_status: dict[str, Any] = initial_session_hive_status()
+    try:
+        hive_status = collect_session_hive_status(settings)
+    except Exception:
+        _logger.debug("hive_status_check_failed_quick", exc_info=True)
+
     data: dict[str, Any] = {
         "server": {
             "name": "TappsMCP",
@@ -1451,6 +1473,7 @@ async def _session_start_quick(
         "installed_checkers": [t.model_dump() for t in installed],
         "cache": _cache_info_dict(cache_dir, cache_fallback),
         "quick": True,
+        "hive_status": hive_status,
         "recommended_next": (
             "Quick session started (diagnostics skipped). "
             "Call tapps_session_start() without quick=True for full diagnostics."
@@ -1522,8 +1545,9 @@ async def tapps_init(
     """Bootstrap TAPPS pipeline in the current project.
 
     Side effects: Writes files (AGENTS.md, TECH_STACK.md, platform rules, hooks,
-    agents, skills). May create .tapps-mcp.yaml on first run. Optionally warms
-    caches. Call once per project.
+    agents, skills). May create or merge ``.tapps-mcp.yaml`` on first run (memory
+    pipeline + ``memory_hooks`` defaults follow shipped ``default.yaml`` unless
+    overridden). Optionally warms caches. Call once per project.
 
     Verifies server info and optionally installs missing checkers (ruff, mypy,
     bandit, radon). Creates handoff, runlog, AGENTS.md, and TECH_STACK.md.
@@ -1775,7 +1799,9 @@ async def tapps_upgrade(
     and can be restored with ``tapps-mcp rollback`` (CLI) or
     ``tapps-mcp rollback --list`` to view available backups.
 
-    Use ``dry_run=True`` to preview what would change.
+    Use ``dry_run=True`` to preview what would change. After upgrading TappsMCP, compare
+    your ``.tapps-mcp.yaml`` to ``packages/tapps-mcp/src/tapps_mcp/config/default.yaml``
+    if you depend on explicit opt-out flags for memory or hooks.
 
     Args:
         platform: Target platform - "claude", "cursor", "both", or "" for auto-detection.
@@ -1990,7 +2016,9 @@ def tapps_doctor(
     """Diagnose TappsMCP configuration and connectivity.
 
     Checks binary availability, MCP configs, platform rules, generated
-    files (AGENTS.md, settings), hooks, and installed quality tools.
+    files (AGENTS.md, settings), hooks, installed quality tools, tapps-brain,
+    and an informational **Memory pipeline (effective config)** row (resolved
+    ``memory.*`` and ``memory_hooks.*`` flags).
 
     Returns structured results with per-check pass/fail status and
     remediation hints for any failures.

@@ -69,6 +69,8 @@ tapps-mcp doctor                  # diagnose configuration and connectivity
 tapps-mcp init --check            # verify MCP config is correct
 ```
 
+Doctor includes **Memory pipeline (effective config)** — a non-blocking summary of resolved `memory.*` and `memory_hooks.*` flags (expert auto-save, recurring quick_check memory, architectural supersede, impact enrichment, auto-recall/capture). Compare with [docs/MEMORY_REFERENCE.md](MEMORY_REFERENCE.md) if behavior feels noisy after an upgrade.
+
 ---
 
 ## 6. Re-run init for caches and TECH_STACK
@@ -91,7 +93,7 @@ A normal `tapps_init` run (without overwrite flags) will:
 | Get latest platform rules | `tapps_init(overwrite_platform_rules=True, platform="cursor")` or `platform="claude"` |
 | Refresh MCP config | `tapps-mcp init --force` |
 | Refresh caches and TECH_STACK | `tapps_init()` (default) |
-| Verify upgrade | `tapps-mcp doctor` |
+| Verify upgrade | `tapps-mcp doctor` (includes memory pipeline summary) |
 | Rollback if upgrade causes issues | `tapps-mcp rollback` (restores from automatic pre-upgrade backup) |
 | List available backups | `tapps-mcp rollback --list` |
 

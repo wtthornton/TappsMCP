@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -15,7 +16,10 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from tapps_mcp.server_helpers import (
+    _agent_teams_env_enabled,
+    _ensure_hive_singletons,
     _get_memory_store,
+    collect_session_hive_status,
     ensure_session_initialized,
     error_response,
     success_response,
@@ -75,6 +79,11 @@ _VALID_ACTIONS = {
     "profile_switch",
     # Health / diagnostics
     "health",
+    # Epic M3: Hive / Agent Teams
+    "hive_status",
+    "hive_search",
+    "hive_propagate",
+    "agent_register",
 }
 
 # Async actions require special dispatch (doc lookups are async)
@@ -87,6 +96,8 @@ _SEARCH_DEFAULT_LIMIT = 10
 _LIST_DEFAULT_LIMIT = 50
 _FULL_VALUE_THRESHOLD = 5
 _SUMMARY_MAX_LEN = 80
+_HIVE_SEARCH_DEFAULT_LIMIT = 50
+_HIVE_PROPAGATE_DEFAULT_LIMIT = 100
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +204,8 @@ async def tapps_memory(
         action: One of "save", "save_bulk", "get", "list", "delete", "search",
             "reinforce", "gc", "contradictions", "reseed", "import", "export",
             "consolidate", "unconsolidate", "safety_check", "verify_integrity",
-            "profile_info", "profile_list", "profile_switch".
+            "profile_info", "profile_list", "profile_switch",
+            "hive_status", "hive_search", "hive_propagate", "agent_register".
         key: Memory key (required for save/get/delete/reinforce). Lowercase slug.
         value: Memory content (required for save). Max 4096 chars.
         tier: "architectural", "pattern", or "context" (default: "pattern").
@@ -224,7 +236,10 @@ async def tapps_memory(
             Agent/inferred sources cannot self-bypass. (H3c)
 
     Actions:
-        save: Store a new memory or update an existing one.
+        save: Store a new memory or update an existing one. When
+            memory.auto_supersede_architectural is True, tier=architectural uses
+            MemoryStore.supersede on the active chain head (store.history) instead of overwrite;
+            response may include status="superseded" and new_key.
         save_bulk: Save multiple memories in one call (requires entries parameter).
         get: Retrieve a memory by key.
         list: List all memories with optional filters.
@@ -263,6 +278,16 @@ async def tapps_memory(
         profile_list: List all available built-in profiles with descriptions. (Epic M2)
         profile_switch: Switch to a different memory profile. Pass the profile name as
             value (e.g., "research-knowledge"). Persists choice and resets the store. (Epic M2)
+        hive_status: Show Hive / Agent Teams status (requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).
+            Mirrors session-start hive_status; includes propagation_config (documents that
+            profile-sourced tier lists are unavailable in tapps-brain v1.1.0 and how
+            hive_propagate calls PropagationEngine). Registers this process when enabled. (Epic M3)
+        hive_search: Search the Hive store (query or value = search text). Optional tags =
+            comma-separated namespace filter. limit/min_confidence apply. (Epic M3)
+        hive_propagate: Push eligible local MemoryStore entries to Hive via PropagationEngine
+            (uses entry agent_scope). limit caps entries scanned (0 = default cap). (Epic M3)
+        agent_register: Register an agent in Hive (key=agent id, value=display name,
+            tags=comma-separated skills). Profile comes from memory settings. (Epic M3)
     """
     await ensure_session_initialized()
     _record_call("tapps_memory")
@@ -345,6 +370,36 @@ async def tapps_memory(
 # ---------------------------------------------------------------------------
 
 
+def _memory_tier_label(tier: object) -> str:
+    """Normalize tier for comparisons (supports MemoryTier and profile layer strings)."""
+    if isinstance(tier, str):
+        return tier.lower()
+    val = getattr(tier, "value", tier)
+    raw = str(val).lower()
+    return raw.rsplit(".", maxsplit=1)[-1]
+
+
+def _resolve_architectural_supersede_old_key(store: object, key: str) -> str | None:
+    """Return the key to pass to ``supersede(old_key=...)``, or None if no active arch head."""
+    history_fn = getattr(store, "history", None)
+    if history_fn is None:
+        return None
+    try:
+        chain = history_fn(key)
+    except KeyError:
+        return None
+    active_arch = [
+        e
+        for e in chain
+        if getattr(e, "invalid_at", None) is None
+        and _memory_tier_label(getattr(e, "tier", "")) == "architectural"
+    ]
+    if not active_arch:
+        return None
+    active_arch.sort(key=lambda e: getattr(e, "valid_at", None) or "")
+    return str(active_arch[-1].key)
+
+
 def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
     """Handle the save action."""
     if not p.key:
@@ -404,17 +459,60 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
         except ImportError:
             pass  # Safety module not available; proceed without check
 
-    result = store.save(
-        key=p.key,
-        value=p.value,
-        tier=p.tier,
-        source=p.source,
-        source_agent=p.source_agent,
-        scope=p.scope,
-        tags=p.tag_list,
-        branch=p.branch or None,
-        confidence=p.confidence,
+    supersede_old_key: str | None = None
+    use_supersede = (
+        settings.memory.enabled
+        and settings.memory.auto_supersede_architectural
+        and _memory_tier_label(p.tier) == "architectural"
+        and hasattr(store, "supersede")
     )
+    if use_supersede:
+        supersede_old_key = _resolve_architectural_supersede_old_key(store, p.key)
+
+    if supersede_old_key is not None:
+        try:
+            result = store.supersede(
+                old_key=supersede_old_key,
+                new_value=p.value,
+                tier=p.tier,
+                source=p.source,
+                source_agent=p.source_agent,
+                scope=p.scope,
+                tags=p.tag_list,
+                branch=p.branch or None,
+                confidence=p.confidence,
+            )
+        except (KeyError, ValueError, TypeError) as exc:
+            logger.warning(
+                "memory_architectural_supersede_fallback",
+                key=p.key,
+                supersede_old_key=supersede_old_key,
+                error=str(exc),
+            )
+            supersede_old_key = None
+            result = store.save(
+                key=p.key,
+                value=p.value,
+                tier=p.tier,
+                source=p.source,
+                source_agent=p.source_agent,
+                scope=p.scope,
+                tags=p.tag_list,
+                branch=p.branch or None,
+                confidence=p.confidence,
+            )
+    else:
+        result = store.save(
+            key=p.key,
+            value=p.value,
+            tier=p.tier,
+            source=p.source,
+            source_agent=p.source_agent,
+            scope=p.scope,
+            tags=p.tag_list,
+            branch=p.branch or None,
+            confidence=p.confidence,
+        )
 
     if isinstance(result, dict):
         return result
@@ -424,6 +522,14 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
         "entry": result.model_dump(),
         "store_metadata": _store_metadata(store),
     }
+    if supersede_old_key is not None:
+        response["status"] = "superseded"
+        response["superseded_old_key"] = supersede_old_key
+        response["new_key"] = result.key
+        try:
+            response["version_count"] = len(store.history(p.key))
+        except Exception:
+            response["version_count"] = len(store.history(result.key))
     if safety_info is not None:
         response["safety"] = safety_info
     if p.safety_bypass and not bypass_allowed:
@@ -1848,6 +1954,216 @@ def _handle_profile_switch(store: MemoryStore, p: _Params) -> dict[str, Any]:
     }
 
 
+def _memory_tier_str(tier: object) -> str:
+    return tier.value if hasattr(tier, "value") else str(tier)
+
+
+def _memory_source_str(source: object) -> str:
+    return source.value if hasattr(source, "value") else str(source)
+
+
+def _hive_search_text(p: _Params) -> str:
+    return (p.query or "").strip() or (p.value or "").strip()
+
+
+def _handle_hive_status(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Hive snapshot + optional registration (Epic M3)."""
+    from tapps_core.config.settings import load_settings
+
+    settings = load_settings()
+    status = collect_session_hive_status(settings)
+    return {
+        "action": "hive_status",
+        **status,
+        "store_metadata": _store_metadata(store),
+    }
+
+
+def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Search Hive namespaces via FTS5 / LIKE fallback (Epic M3)."""
+    text = _hive_search_text(p)
+    if not text:
+        return {
+            "action": "hive_search",
+            "error": "missing_query",
+            "message": "Provide query= or value= with the search text.",
+            "store_metadata": _store_metadata(store),
+        }
+
+    if not _agent_teams_env_enabled():
+        return {
+            "action": "hive_search",
+            "enabled": False,
+            "message": "Agent Teams not enabled (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).",
+            "results": [],
+            "result_count": 0,
+            "store_metadata": _store_metadata(store),
+        }
+
+    hive_store, _reg, import_err = _ensure_hive_singletons()
+    if import_err or hive_store is None:
+        return {
+            "action": "hive_search",
+            "enabled": True,
+            "degraded": True,
+            "message": f"Hive unavailable: {import_err or 'init failed'}",
+            "results": [],
+            "result_count": 0,
+            "store_metadata": _store_metadata(store),
+        }
+
+    limit = p.limit if p.limit > 0 else _HIVE_SEARCH_DEFAULT_LIMIT
+    namespaces = p.tag_list if p.tag_list else None
+    raw = hive_store.search(
+        text,
+        namespaces=namespaces,
+        min_confidence=p.min_confidence,
+        limit=limit,
+    )
+    return {
+        "action": "hive_search",
+        "enabled": True,
+        "degraded": False,
+        "query": text,
+        "results": raw,
+        "result_count": len(raw),
+        "namespaces_filter": namespaces,
+        "store_metadata": _store_metadata(store),
+    }
+
+
+def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Propagate local memories into Hive per entry agent_scope (Epic M3)."""
+    from tapps_brain.hive import PropagationEngine
+
+    from tapps_core.config.settings import load_settings
+
+    if not _agent_teams_env_enabled():
+        return {
+            "action": "hive_propagate",
+            "enabled": False,
+            "propagated": 0,
+            "skipped_private": 0,
+            "message": "Agent Teams not enabled (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).",
+            "store_metadata": _store_metadata(store),
+        }
+
+    hive_s, _reg, import_err = _ensure_hive_singletons()
+    if import_err or hive_s is None:
+        return {
+            "action": "hive_propagate",
+            "enabled": True,
+            "degraded": True,
+            "propagated": 0,
+            "skipped_private": 0,
+            "message": f"Hive unavailable: {import_err or 'init failed'}",
+            "store_metadata": _store_metadata(store),
+        }
+
+    settings = load_settings()
+    active_profile = settings.memory.profile or "repo-brain"
+    agent_id = os.environ.get("CLAUDE_AGENT_ID", f"agent-{os.getpid()}")
+
+    cap = p.limit if p.limit > 0 else _HIVE_PROPAGATE_DEFAULT_LIMIT
+    entries = store.snapshot().entries[:cap]
+
+    propagated = 0
+    skipped_private = 0
+    details: list[dict[str, Any]] = []
+
+    for entry in entries:
+        conf = entry.confidence if entry.confidence >= 0.0 else 0.6
+        saved = PropagationEngine.propagate(
+            key=entry.key,
+            value=entry.value,
+            agent_scope=entry.agent_scope,
+            agent_id=agent_id,
+            agent_profile=active_profile,
+            tier=_memory_tier_str(entry.tier),
+            confidence=conf,
+            source=_memory_source_str(entry.source),
+            tags=entry.tags,
+            hive_store=hive_s,
+            auto_propagate_tiers=None,
+            private_tiers=None,
+        )
+        if saved is None:
+            skipped_private += 1
+        else:
+            propagated += 1
+            ns = saved.get("namespace", "")
+            details.append({"key": entry.key, "namespace": ns})
+
+    return {
+        "action": "hive_propagate",
+        "enabled": True,
+        "degraded": False,
+        "propagated": propagated,
+        "skipped_private": skipped_private,
+        "scanned": len(entries),
+        "details": details[:50],
+        "store_metadata": _store_metadata(store),
+    }
+
+
+def _handle_agent_register(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Register an agent in the Hive YAML registry (Epic M3)."""
+    from tapps_brain.hive import AgentRegistration
+
+    from tapps_core.config.settings import load_settings
+
+    aid = (p.key or "").strip()
+    if not aid:
+        return {
+            "action": "agent_register",
+            "error": "missing_key",
+            "message": "key is required (unique agent id / slug).",
+            "store_metadata": _store_metadata(store),
+        }
+
+    if not _agent_teams_env_enabled():
+        return {
+            "action": "agent_register",
+            "enabled": False,
+            "message": "Agent Teams not enabled (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).",
+            "store_metadata": _store_metadata(store),
+        }
+
+    _hive, registry, import_err = _ensure_hive_singletons()
+    if import_err or registry is None:
+        return {
+            "action": "agent_register",
+            "enabled": True,
+            "degraded": True,
+            "message": f"Hive registry unavailable: {import_err or 'init failed'}",
+            "store_metadata": _store_metadata(store),
+        }
+
+    settings = load_settings()
+    display = (p.value or "").strip() or aid
+    profile_name = settings.memory.profile or "repo-brain"
+
+    reg = AgentRegistration(
+        id=aid,
+        name=display,
+        profile=profile_name,
+        skills=p.tag_list,
+        project_root=str(settings.project_root),
+    )
+    registry.register(reg)
+
+    return {
+        "action": "agent_register",
+        "enabled": True,
+        "degraded": False,
+        "agent_id": aid,
+        "agent_name": display,
+        "profile": profile_name,
+        "skills": p.tag_list,
+        "store_metadata": _store_metadata(store),
+    }
+
+
 def _detect_profile_source(store: MemoryStore) -> str:
     """Detect how the active profile was resolved."""
     project_yaml = store.project_root / ".tapps-brain" / "profile.yaml"
@@ -1895,6 +2211,11 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "profile_switch": _handle_profile_switch,
     # Health / diagnostics
     "health": _handle_health,
+    # Epic M3: Hive / Agent Teams
+    "hive_status": _handle_hive_status,
+    "hive_search": _handle_hive_search,
+    "hive_propagate": _handle_hive_propagate,
+    "agent_register": _handle_agent_register,
 }
 
 

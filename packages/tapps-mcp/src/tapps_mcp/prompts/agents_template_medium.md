@@ -115,21 +115,31 @@ Your project may have two complementary memory systems:
 
 RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
-### Memory actions (23 total)
+### Memory actions (33 total)
 
-**Core:** `save`, `save_bulk`, `get`, `list`, `delete` — CRUD operations with tier/scope/tag classification
+**Core:** `save`, `save_bulk`, `get`, `list`, `delete` — CRUD with tier/scope/tag classification (`save` + architectural tier may **supersede** prior versions when `memory.auto_supersede_architectural` is true)
 
 **Search:** `search` — ranked BM25 retrieval with composite scoring (relevance + confidence + recency + frequency)
 
-**Intelligence:** `reinforce` (reset decay clock), `gc` (archive stale entries), `contradictions` (detect stale claims), `reseed` (re-populate from profile)
+**Intelligence:** `reinforce`, `gc`, `contradictions`, `reseed`
 
-**Consolidation:** `consolidate` (merge related entries with provenance), `unconsolidate` (undo merge)
+**Consolidation:** `consolidate`, `unconsolidate`
 
-**Import/export:** `import` (JSON), `export` (JSON or Markdown)
+**Import/export:** `import`, `export`
 
-**Federation:** `federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`, `federate_search`, `federate_status` — cross-project memory sharing via central hub
+**Federation:** `federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`, `federate_search`, `federate_status`
 
-**Maintenance:** `index_session` (index current session notes), `validate` (check store integrity), `maintain` (run GC + consolidation + contradiction detection)
+**Maintenance:** `index_session`, `validate`, `maintain`
+
+**Security:** `safety_check`, `verify_integrity`
+
+**Profiles:** `profile_info`, `profile_list`, `profile_switch`
+
+**Diagnostics:** `health`
+
+**Hive / Agent Teams:** `hive_status`, `hive_search`, `hive_propagate`, `agent_register` (opt-in; see `hive_status` when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is set)
+
+**Default pipeline behavior (POC-oriented):** Shipped config turns on auto-save quality signals, recurring quick_check memory, architectural supersede, impact enrichment, and `memory_hooks` auto-recall/capture — set `false` in `.tapps-mcp.yaml` if you want a quieter setup. See `docs/MEMORY_REFERENCE.md`.
 
 ### Memory tiers and scopes
 
@@ -137,7 +147,9 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Scopes:** `project` (default, all sessions), `branch` (git branch), `session` (ephemeral), `shared` (federation-eligible)
 
-**Configuration:** Override `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
+**Memory profiles:** Built-in profiles from tapps-brain (e.g. `repo-brain` default). Use `profile_info`, `profile_list`, `profile_switch` actions.
+
+**Configuration:** Override `memory.profile`, `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
 
 ---
 

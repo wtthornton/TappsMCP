@@ -6,12 +6,12 @@ When the **DocsMCP** MCP server is configured in your host (Claude Code, Cursor,
 
 ## What DocsMCP is
 
-DocsMCP is an MCP server that provides 31 tools for:
+DocsMCP is an MCP server that provides 32 tools for:
 
 - **Code analysis** -- module maps, API surface extraction, dependency analysis via AST parsing
 - **Git analysis** -- commit history with conventional commit parsing, version detection from tags
 - **Documentation generation** -- README, CHANGELOG, release notes, API reference, ADRs, onboarding guides, contributing guides, PRDs, epics, stories, prompt templates, diagrams (Mermaid/PlantUML/D2), interactive HTML diagrams, llms.txt, frontmatter, architecture templates, doc index
-- **Documentation validation** -- drift detection, completeness scoring, link checking, freshness classification, Diataxis coverage analysis, cross-reference validation, epic validation
+- **Documentation validation** -- drift detection, completeness scoring, link checking, freshness classification, Diataxis coverage analysis, cross-reference validation, epic validation, deterministic style/tone checks
 - **Configuration** -- view and update DocsMCP settings per-project
 - **TappsMCP integration** -- optional quality score enrichment when TappsMCP is also available
 
@@ -56,6 +56,7 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_check_freshness** | Score documentation freshness (fresh/aging/stale/ancient) |
 | **docs_check_diataxis** | Diataxis quadrant coverage analysis and balance scoring |
 | **docs_check_cross_refs** | Cross-reference validation (orphans, broken refs, backlinks) |
+| **docs_check_style** | Deterministic style/tone checks for markdown (passive voice, jargon, headings, sentence length, tense consistency) |
 
 ---
 
@@ -94,6 +95,7 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_check_freshness** | During **documentation audit** -- identifies stale docs that may need updating. |
 | **docs_check_diataxis** | When assessing **documentation balance** across Diataxis quadrants (tutorials, how-to, reference, explanation). |
 | **docs_check_cross_refs** | When validating **cross-references** between documentation files -- finds orphans and broken refs. |
+| **docs_check_style** | When reviewing **writing quality** in markdown -- flags jargon, passive voice, long sentences, heading case, and tense mixing. Use `output_format="vale"` for Vale-shaped output. |
 
 ---
 
@@ -146,6 +148,7 @@ Check documentation quality after generation or code changes:
 - `docs_check_freshness` -- stale documentation files
 - `docs_check_diataxis` -- Diataxis quadrant coverage analysis
 - `docs_check_cross_refs` -- cross-reference validation
+- `docs_check_style` -- style and tone (deterministic rules)
 
 ### 5. Configure
 
@@ -215,7 +218,7 @@ Use `format="mermaid"` (default) for GitHub-rendered diagrams, `format="plantuml
 
 When both DocsMCP and TappsMCP servers are available in the same session:
 
-- `docs_project_scan` enriches results with TappsMCP project profile (project type, tech stack, CI, test frameworks)
+- `docs_project_scan` enriches results with TappsMCP project profile (project type, tech stack, CI, test frameworks) and may include `style_summary` when `style_include_in_project_scan` is true
 - `docs_check_drift` enriches results with quality scores for files with documentation drift
 - Use TappsMCP's `tapps_quick_check` and `tapps_validate_changed` on DocsMCP's own source files after edits
 
@@ -238,9 +241,18 @@ Settings can be viewed/changed via `docs_config` or set in `.docsmcp.yaml`:
 | `adr_format` | `madr` | ADR template: madr, nygard |
 | `diagram_format` | `mermaid` | Diagram format: mermaid, plantuml, d2 |
 | `git_log_limit` | `500` | Maximum git commits to analyze |
+| `style_enabled_rules` | *(see default.yaml)* | Rules for `docs_check_style`: passive_voice, jargon, sentence_length, heading_consistency, tense_consistency |
+| `style_heading` | `sentence` | Heading case: `sentence` or `title` |
+| `style_max_sentence_words` | `40` | Flag sentences longer than this |
+| `style_custom_terms` | `[]` | Terms allowed in headings / excluded from jargon checks |
+| `style_jargon_terms` | `[]` | Custom jargon list (non-empty overrides built-in jargon list) |
+| `style_include_in_project_scan` | `true` | When true, `docs_project_scan` includes `style_summary` |
+| `style_auto_detect_terms` | `false` | When true, scan `*.py` for class/def names and merge into custom terms (bounded) |
+| `style_auto_detect_max_files` | `120` | Max Python files to read for auto-detect |
+| `style_auto_detect_max_terms` | `80` | Max terms to add from auto-detect |
 | `enabled_tools` | *(none)* | Allow list: only these tools are exposed. Empty/missing = all tools. Env: `DOCS_MCP_ENABLED_TOOLS` (comma-separated). |
 | `disabled_tools` | `[]` | Deny list: excluded from the exposed set. Ignored when `enabled_tools` is set. Env: `DOCS_MCP_DISABLED_TOOLS`. |
-| `tool_preset` | *(none)* | Preset: `full` (all 31 tools, default) or `core` (6 tools: session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). Env: `DOCS_MCP_TOOL_PRESET`. |
+| `tool_preset` | *(none)* | Preset: `full` (all 32 tools, default) or `core` (6 tools: session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). Env: `DOCS_MCP_TOOL_PRESET`. |
 
 Environment variables use the `DOCS_MCP_` prefix (e.g., `DOCS_MCP_OUTPUT_DIR`).
 
@@ -252,4 +264,4 @@ When using DocsMCP with TappsMCP or in environments where the combined tool coun
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `DOCS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools, default when unset) or `core` (6 essential tools). Env: `DOCS_MCP_TOOL_PRESET=core`.
 
-Empty or missing = all 31 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. See tool-count best practices in the repo planning docs (Epic 79).
+Empty or missing = all 32 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. See tool-count best practices in the repo planning docs (Epic 79).

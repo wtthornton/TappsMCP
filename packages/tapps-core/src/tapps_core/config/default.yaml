@@ -20,6 +20,16 @@ adaptive:
   learning_rate: 0.1
   min_outcomes: 5
 
+memory_hooks:
+  auto_recall:
+    enabled: true
+    max_results: 5
+    min_score: 0.3
+    min_prompt_length: 50
+  auto_capture:
+    enabled: true
+    max_facts: 5
+
 memory:
   enabled: true
   profile: repo-brain
@@ -28,6 +38,11 @@ memory:
   max_memories: 1500
   injection_max_tokens: 2000  # Epic 65.16: cap injected memory context (~4 chars/token)
   inject_into_experts: true
+  auto_save_quality: true
+  track_recurring_quick_check: true
+  recurring_quick_check_threshold: 3
+  enrich_impact_analysis: true
+  auto_supersede_architectural: true
   safety:
     enforcement: warn
   semantic_search:
