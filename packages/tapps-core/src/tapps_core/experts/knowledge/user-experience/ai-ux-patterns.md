@@ -2,6 +2,8 @@
 
 ## Overview
 
+See also: **prompt-first AI governance** (`prompt-first-ai-feature-governance.md`), **dual-surface admin + SPA** (`dual-surface-admin-spa-operational-ui.md`), and **semantic dashboard UI** (`semantic-status-dashboard-ui.md`) for operational consoles and fleet-style dashboards.
+
 AI-powered interfaces are now mainstream. From chat assistants to inline copilots, generative search to smart suggestions — designing effective AI UX requires new patterns for trust, transparency, control, and error recovery. This guide covers the dominant AI UX patterns of 2025-2026.
 
 ## Core Principles for AI UX

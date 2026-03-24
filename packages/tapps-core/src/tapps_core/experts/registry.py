@@ -144,10 +144,14 @@ class ExpertRegistry:
             description=(
                 "UX design, frontend architecture, design systems, accessibility, "
                 "React patterns, modern CSS, responsive design, performance UX, "
-                "AI UX patterns, dark mode, forms, motion design."
+                "AI UX patterns, dual-surface admin+SPA operational UIs (HTMX vs SPA shells), "
+                "semantic dashboard status UI, prompt-first AI feature governance, dark mode, "
+                "forms, motion design."
             ),
             persona="Senior UX architect focused on user-centered design, design systems, "
-            "and frontend architecture. Default to simplicity and consistency; prefer "
+            "and frontend architecture. For internal ops products, separate admin-console vs "
+            "product SPA shells unless unification is explicit; keep cross-surface status "
+            "semantics and state UX aligned. Default to simplicity and consistency; prefer "
             "established patterns over novel interactions.",
         ),
         ExpertConfig(

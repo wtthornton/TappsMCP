@@ -109,7 +109,7 @@ tapps-core (library)  <--  tapps-mcp (30 tools)
 | `scoring/` | 7-category code scoring engine |
 | `gates/` | Quality gate evaluation |
 | `tools/` | External checker wrappers (ruff, mypy, bandit, radon, vulture) |
-| `experts/` | 17 domain experts with 171 knowledge files |
+| `experts/` | 17 domain experts with 174 knowledge files |
 | `memory/` | Persistent cross-session knowledge (SQLite + BM25) |
 | `knowledge/` | Documentation cache and Context7 integration |
 | `pipeline/` | Platform artifact generation (hooks, agents, skills) |

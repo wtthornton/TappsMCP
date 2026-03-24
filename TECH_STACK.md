@@ -45,6 +45,6 @@
 - **3-package monorepo**: tapps-core (library), tapps-mcp (30 tools), docs-mcp (32 tools)
 - **MCP Protocol**: 2025-11-25 (latest stable)
 - **7-category scoring**: complexity, security, maintainability, test coverage, performance, structure, devex
-- **17 domain experts** with 171 curated knowledge files
+- **17 domain experts** with 174 curated knowledge files
 - **BM25 ranked retrieval** for memory search
 - **Adaptive learning** with domain weight persistence

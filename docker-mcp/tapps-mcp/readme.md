@@ -7,7 +7,7 @@ Deterministic code quality MCP server providing 30 tools for AI coding assistant
 - **7-category scoring** - complexity, security, maintainability, test coverage, performance, structure, developer experience
 - **Quality gates** - configurable pass/fail thresholds (standard 70+, strict 80+)
 - **Security scanning** - bandit + secret detection
-- **17 domain experts** - 171 curated knowledge files with keyword-based RAG
+- **17 domain experts** - 174 curated knowledge files with keyword-based RAG
 - **Library docs lookup** - Context7 integration for real-time documentation
 - **Dead code detection** - vulture-based unused code finder
 - **Dependency scanning** - pip-audit CVE checks

@@ -13,7 +13,7 @@ about:
   description: >
     Deterministic code quality MCP server. Scores Python files across 7
     categories, runs security scans, enforces quality gates, looks up
-    library docs, and consults 17 domain experts (171 knowledge files).
+    library docs, and consults 17 domain experts (174 knowledge files).
     30 tools, zero LLM calls in the tool chain.
   icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:

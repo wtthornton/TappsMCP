@@ -48,7 +48,7 @@ tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp
 
 - **62 deterministic MCP tools** (30 TappsMCP + 32 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
-- **17 domain experts** with 171 curated knowledge files and RAG-backed answers
+- **17 domain experts** with 174 curated knowledge files and RAG-backed answers
 - **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) - project decisions survive across sessions (SQLite + BM25 retrieval, time-based decay, federation)
 - **Unified feature flags** - optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** - auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
@@ -1178,7 +1178,7 @@ packages/
 │       ├── prompts/                   # Workflow prompt templates
 │       ├── knowledge/                 # Context7 client, cache, lookup, warming, RAG safety,
 │       │                              #   Context7 + LlmsTxt providers (providers/)
-│       ├── experts/                   # Domain detector, engine, RAG, 171 knowledge files
+│       ├── experts/                   # Domain detector, engine, RAG, 174 knowledge files
 │       ├── memory/                    # Re-export shims delegating to tapps-brain
 │       │                              #   (injection.py is a bridge adapter)
 │       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export

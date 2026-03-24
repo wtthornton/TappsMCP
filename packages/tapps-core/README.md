@@ -10,7 +10,7 @@ tapps-core provides the common foundation used by both tapps-mcp and docs-mcp:
 - **security/** - Path validation, IO guardrails, secret scanning, governance
 - **common/** - Exceptions, structured logging (structlog), shared models, utilities
 - **knowledge/** - Context7/LlmsTxt doc lookup, cache, fuzzy matching, RAG safety
-- **experts/** - 17 domain experts with 171 knowledge files, keyword + vector RAG
+- **experts/** - 17 domain experts with 174 knowledge files, keyword + vector RAG
 - **memory/** - Re-export shims delegating to [tapps-brain](https://github.com/wtthornton/tapps-brain)
 - **metrics/** - Collector, dashboard, alerts, trends, OpenTelemetry export
 - **adaptive/** - Adaptive scoring weights, expert voting, weight distribution
