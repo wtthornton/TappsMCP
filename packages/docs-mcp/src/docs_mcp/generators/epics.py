@@ -723,19 +723,39 @@ class EpicGenerator:
                     if p not in all_paths:
                         all_paths.append(p)
 
+        # Parallelize per-file analysis (git log + AST parsing) to avoid
+        # sequential subprocess overhead, especially on Windows.
+        from concurrent.futures import ThreadPoolExecutor
+
+        resolvable: list[tuple[str, _Path]] = []
         for file_path in all_paths:
             resolved = _Path(project_root) / file_path
             if not resolved.is_file():
                 lines.append(f"| `{file_path}` | *(not found)* | - | - |")
-                continue
+            else:
+                resolvable.append((file_path, resolved))
 
-            info = self._analyze_file(resolved, project_root)
-            lines.append(
-                f"| `{file_path}` "
-                f"| {info['line_count']} "
-                f"| {info['commits_summary']} "
-                f"| {info['symbols_summary']} |"
-            )
+        if resolvable:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                futures = {
+                    pool.submit(self._analyze_file, resolved, project_root): fp
+                    for fp, resolved in resolvable
+                }
+                # Collect results keyed by display path
+                results: dict[str, dict[str, str]] = {}
+                for future in futures:
+                    fp = futures[future]
+                    results[fp] = future.result()
+
+            # Maintain original order
+            for fp, _resolved in resolvable:
+                info = results[fp]
+                lines.append(
+                    f"| `{fp}` "
+                    f"| {info['line_count']} "
+                    f"| {info['commits_summary']} "
+                    f"| {info['symbols_summary']} |"
+                )
 
         lines.extend(["", "<!-- docsmcp:end:files-affected -->", ""])
         return lines
@@ -877,6 +897,8 @@ class EpicGenerator:
 
     # -- auto-populate from analyzers ----------------------------------------
 
+    _AUTO_POPULATE_TIMEOUT_S: ClassVar[float] = 15.0
+
     def _auto_populate(
         self, project_root: Path, config: EpicConfig | None = None,
     ) -> tuple[dict[str, Any], dict[str, int]]:
@@ -886,29 +908,42 @@ class EpicGenerator:
         dependencies, git_summary, expert_guidance. Each key is only present
         when the corresponding analyzer/expert succeeds.
 
+        A wall-clock budget of 15 s is enforced.  If a step exhausts the
+        budget the remaining steps are skipped and partial results returned.
+
         Second return value is per-step timings in milliseconds plus
         ``auto_populate_ms`` (wall-clock for the full populate phase).
         """
         enrichment: dict[str, Any] = {}
         timings: dict[str, int] = {}
         t_wall = time.perf_counter()
+        budget = self._AUTO_POPULATE_TIMEOUT_S
 
-        t0 = time.perf_counter()
-        self._enrich_metadata(project_root, enrichment)
-        timings["metadata_ms"] = int((time.perf_counter() - t0) * 1000)
+        def _remaining() -> float:
+            return budget - (time.perf_counter() - t_wall)
 
-        t0 = time.perf_counter()
-        self._enrich_module_map(project_root, enrichment)
-        timings["module_map_ms"] = int((time.perf_counter() - t0) * 1000)
+        steps: list[tuple[str, Any, list[Any]]] = [
+            ("metadata_ms", self._enrich_metadata, [project_root, enrichment]),
+            ("module_map_ms", self._enrich_module_map, [project_root, enrichment]),
+            ("git_ms", self._enrich_git, [project_root, enrichment]),
+        ]
 
-        t0 = time.perf_counter()
-        self._enrich_git(project_root, enrichment)
-        timings["git_ms"] = int((time.perf_counter() - t0) * 1000)
+        for key, fn, args in steps:
+            if _remaining() <= 0:
+                logger.warning("auto_populate_budget_exceeded", skipped=key)
+                timings[key] = 0
+                continue
+            t0 = time.perf_counter()
+            fn(*args)
+            timings[key] = int((time.perf_counter() - t0) * 1000)
 
-        if config:
+        if config and _remaining() > 0:
             t0 = time.perf_counter()
             self._enrich_experts(config, enrichment)
             timings["experts_ms"] = int((time.perf_counter() - t0) * 1000)
+        elif config:
+            logger.warning("auto_populate_budget_exceeded", skipped="experts_ms")
+            timings["experts_ms"] = 0
 
         timings["auto_populate_ms"] = int((time.perf_counter() - t_wall) * 1000)
         return enrichment, timings
@@ -935,12 +970,15 @@ class EpicGenerator:
 
     @staticmethod
     def _enrich_module_map(project_root: Path, enrichment: dict[str, Any]) -> None:
-        """Enrich with module structure from ModuleMapAnalyzer."""
+        """Enrich with module structure from ModuleMapAnalyzer.
+
+        Uses a shallow depth (3) to avoid hanging on large projects.
+        """
         try:
             from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
 
             analyzer = ModuleMapAnalyzer()
-            module_map = analyzer.analyze(project_root)
+            module_map = analyzer.analyze(project_root, depth=3)
             enrichment["module_summary"] = (
                 f"{module_map.total_packages} packages, "
                 f"{module_map.total_modules} modules, "
@@ -981,36 +1019,54 @@ class EpicGenerator:
 
     @staticmethod
     def _enrich_experts(config: EpicConfig, enrichment: dict[str, Any]) -> None:
-        """Enrich with guidance from TappsMCP domain experts."""
+        """Enrich with guidance from TappsMCP domain experts.
+
+        Runs consultations in parallel using a thread pool to avoid
+        sequential latency across all 8 domains.
+        """
         try:
             from tapps_core.experts.engine import consult_expert
         except Exception:
             logger.debug("epic_expert_import_failed", exc_info=True)
             return
 
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         context = config.title
         if config.goal:
             context = f"{config.title} - {config.goal}"
 
-        guidance: list[dict[str, str]] = []
-        for domain, question_template in EpicGenerator._EXPERT_DOMAINS:
+        def _consult_one(domain: str, question_template: str) -> dict[str, str] | None:
             try:
                 question = question_template.format(context=context)
-                result = consult_expert(question, domain=domain, max_chunks=3,
-                                        max_context_length=1500)
+                result = consult_expert(
+                    question, domain=domain, max_chunks=3, max_context_length=1500,
+                )
                 if result.confidence >= 0.3 and result.answer:
                     from docs_mcp.generators.expert_utils import extract_expert_advice
 
                     advice = extract_expert_advice(result.answer)
                     if advice:
-                        guidance.append({
+                        return {
                             "domain": result.domain,
                             "expert": result.expert_name,
                             "advice": advice,
                             "confidence": f"{result.confidence:.0%}",
-                        })
+                        }
             except Exception:
                 logger.debug("epic_expert_consult_failed", domain=domain, exc_info=True)
+            return None
+
+        guidance: list[dict[str, str]] = []
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {
+                pool.submit(_consult_one, domain, tmpl): domain
+                for domain, tmpl in EpicGenerator._EXPERT_DOMAINS
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    guidance.append(result)
 
         if guidance:
             enrichment["expert_guidance"] = guidance

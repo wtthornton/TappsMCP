@@ -1197,6 +1197,10 @@ async def docs_generate_epic(
         link_stories: When True, story stubs link to full story files.
         style: Epic style - "standard" or "comprehensive".
         auto_populate: Enrich from project analyzers (ModuleMap, Metadata, etc).
+            Default False. On large projects this adds latency (module map
+            walk, 8 expert consultations, git history). A 15 s wall-clock
+            budget is enforced; steps that exceed it are skipped and partial
+            results returned.
         output_path: File path to write the epic (relative to project root).
             When empty, returns the content without writing a file.
         project_root: Override project root path (default: configured root).
