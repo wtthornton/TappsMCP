@@ -44,7 +44,7 @@
 <!-- Source: https://github.com/wtthornton/TappsMCP/issues/76 -->
 
 - [x] 89.1: Execute story — docs/planning/epics/EPIC-89/story-89.1-impact-analysis-project-root.md
-- [ ] 89.2: Execute story — docs/planning/epics/EPIC-89/story-89.2-session-start-project-root.md
+- [x] 89.2: Execute story — docs/planning/epics/EPIC-89/story-89.2-session-start-project-root.md
 - [ ] 89.3: Execute story — docs/planning/epics/EPIC-89/story-89.3-installed-checkers-environment-context.md
 - [ ] 89.4: Execute story — docs/planning/epics/EPIC-89/story-89.4-shell-bash-project-detection.md
 

@@ -1352,6 +1352,54 @@ class TestMaybeAutoGC:
         assert data["session_capture"] == "background"
 
 
+class TestSessionStartProjectRoot:
+    """Tests for project_root top-level field in session_start (Story 89.2)."""
+
+    @pytest.mark.asyncio
+    async def test_session_start_full_includes_project_root(self) -> None:
+        """Full session_start response includes top-level project_root."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_settings = MagicMock()
+        mock_settings.project_root = Path("/test/project")
+        mock_settings.memory.enabled = False
+        mock_settings.business_experts_enabled = False
+
+        with patch(
+            "tapps_mcp.server_pipeline_tools.load_settings",
+            return_value=mock_settings,
+        ):
+            result = await tapps_session_start()
+
+        data = result["data"]
+        assert "project_root" in data
+        assert data["project_root"] == "/test/project"
+        # Also still present in nested configuration
+        assert data["configuration"]["project_root"] == "/test/project"
+
+    @pytest.mark.asyncio
+    async def test_session_start_quick_includes_project_root(self) -> None:
+        """Quick session_start response includes top-level project_root."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_settings = MagicMock()
+        mock_settings.project_root = Path("/test/project")
+        mock_settings.quality_preset = "standard"
+        mock_settings.log_level = "WARNING"
+
+        with patch(
+            "tapps_mcp.server_pipeline_tools.load_settings",
+            return_value=mock_settings,
+        ):
+            result = await tapps_session_start(quick=True)
+
+        data = result["data"]
+        assert "project_root" in data
+        assert data["project_root"] == "/test/project"
+        # Also still present in nested configuration
+        assert data["configuration"]["project_root"] == "/test/project"
+
+
 class TestScheduleBackgroundMaintenance:
     """Tests for _schedule_background_maintenance (Epic 68.2)."""
 

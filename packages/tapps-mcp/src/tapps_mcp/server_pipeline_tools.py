@@ -1379,6 +1379,7 @@ async def tapps_session_start(
         pass
 
     data: dict[str, Any] = {
+        "project_root": str(settings.project_root),
         "server": info["data"]["server"],
         "configuration": info["data"]["configuration"],
         "installed_checkers": info["data"]["installed_checkers"],
@@ -1486,6 +1487,7 @@ async def _session_start_quick(
         pass
 
     data: dict[str, Any] = {
+        "project_root": str(settings.project_root),
         "server": {
             "name": "TappsMCP",
             "version": __version__,
