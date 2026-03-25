@@ -135,6 +135,98 @@ class EpicGenerator:
         "Cancelled",
     })
 
+    # Keyword → suggested story titles (keyword-to-pattern mapping for suggestion engine).
+    _STORY_PATTERNS: ClassVar[dict[str, list[str]]] = {
+        "auth": ["Data Models", "Auth Endpoints", "Session Management", "Tests"],
+        "login": ["Data Models", "Auth Endpoints", "Session Management", "Tests"],
+        "user": ["Data Models", "Auth Endpoints", "Session Management", "Tests"],
+        "account": ["Data Models", "Auth Endpoints", "Session Management", "Tests"],
+        "api": ["Schema & Models", "Endpoint Handlers", "Validation", "Client SDK", "Tests"],
+        "endpoint": ["Schema & Models", "Endpoint Handlers", "Validation", "Client SDK", "Tests"],
+        "rest": ["Schema & Models", "Endpoint Handlers", "Validation", "Client SDK", "Tests"],
+        "graphql": ["Schema & Models", "Endpoint Handlers", "Validation", "Client SDK", "Tests"],
+        "ui": ["Component Scaffold", "State Management", "Form Validation", "Styling", "Tests"],
+        "frontend": ["Component Scaffold", "State Management", "Form Validation", "Styling", "Tests"],
+        "page": ["Component Scaffold", "State Management", "Form Validation", "Styling", "Tests"],
+        "form": ["Component Scaffold", "State Management", "Form Validation", "Styling", "Tests"],
+        "database": ["Schema Design", "Migration Scripts", "Query Layer", "Seed Data", "Tests"],
+        "migration": ["Schema Design", "Migration Scripts", "Query Layer", "Seed Data", "Tests"],
+        "schema": ["Schema Design", "Migration Scripts", "Query Layer", "Seed Data", "Tests"],
+        "deploy": ["Config Setup", "Build Pipeline", "Deploy Scripts", "Monitoring", "Tests"],
+        "ci": ["Config Setup", "Build Pipeline", "Deploy Scripts", "Monitoring", "Tests"],
+        "pipeline": ["Config Setup", "Build Pipeline", "Deploy Scripts", "Monitoring", "Tests"],
+        "infra": ["Config Setup", "Build Pipeline", "Deploy Scripts", "Monitoring", "Tests"],
+        "security": ["Threat Model", "Scanner Integration", "Remediation", "Policy Docs", "Tests"],
+        "audit": ["Threat Model", "Scanner Integration", "Remediation", "Policy Docs", "Tests"],
+        "scan": ["Threat Model", "Scanner Integration", "Remediation", "Policy Docs", "Tests"],
+    }
+
+    # Keyword → suggested risk descriptions.
+    _RISK_PATTERNS: ClassVar[dict[str, list[str]]] = {
+        "auth": ["Authentication bypass if token validation incomplete"],
+        "security": ["Authentication bypass if token validation incomplete"],
+        "api": ["Breaking API changes affecting existing clients"],
+        "endpoint": ["Breaking API changes affecting existing clients"],
+        "database": ["Data loss during migration if rollback path untested"],
+        "migration": ["Data loss during migration if rollback path untested"],
+        "deploy": ["Deployment downtime if blue-green not configured"],
+        "infra": ["Deployment downtime if blue-green not configured"],
+        "performance": ["Performance degradation under load without benchmarks"],
+        "scale": ["Performance degradation under load without benchmarks"],
+    }
+
+    @classmethod
+    def _suggest_stories(cls, title: str, goal: str) -> list[EpicStoryStub]:
+        """Suggest story stubs from title/goal keywords.
+
+        Scans the title and goal for known keyword patterns and returns a
+        deduplicated list of relevant story stubs. Falls back to the generic
+        3-story pattern when no keywords match.
+
+        Returns:
+            A list of :class:`EpicStoryStub` with ``(suggested)`` suffix on each title.
+        """
+        combined = (title + " " + goal).lower()
+        tokens = set(re.split(r"[\s\-_/]+", combined))
+
+        seen_patterns: set[int] = set()
+        story_titles: list[str] = []
+
+        for keyword, stories in cls._STORY_PATTERNS.items():
+            pattern_id = id(stories)
+            if pattern_id in seen_patterns:
+                continue
+            if keyword in tokens or keyword in combined:
+                seen_patterns.add(pattern_id)
+                story_titles = stories
+                break  # First matching keyword group wins
+
+        if not story_titles:
+            story_titles = ["Foundation & Setup", "Core Implementation", "Testing & Documentation"]
+
+        return [EpicStoryStub(title=f"{t} (suggested)") for t in story_titles]
+
+    @classmethod
+    def _suggest_risks(cls, title: str, goal: str) -> list[str]:
+        """Suggest risk descriptions from title/goal keywords.
+
+        Returns an empty list when no keywords match.
+        """
+        combined = (title + " " + goal).lower()
+        tokens = set(re.split(r"[\s\-_/]+", combined))
+
+        seen: set[str] = set()
+        risks: list[str] = []
+
+        for keyword, risk_list in cls._RISK_PATTERNS.items():
+            if keyword in tokens or keyword in combined:
+                for risk in risk_list:
+                    if risk not in seen:
+                        seen.add(risk)
+                        risks.append(risk)
+
+        return risks
+
     @staticmethod
     def _infer_quick_start_defaults(config: EpicConfig) -> EpicConfig:
         """Fill empty fields with title-derived defaults for quick-start mode.
@@ -502,18 +594,23 @@ class EpicGenerator:
                 lines.append("---")
                 lines.append("")
         else:
-            for i in range(1, 4):
+            # Use the suggestion engine to produce keyword-relevant story stubs.
+            suggested = self._suggest_stories(config.title, config.goal)
+            for i, story in enumerate(suggested, 1):
                 story_id = f"{epic_num}.{i}"
-                lines.append(f"### {story_id} -- Story Title")
+                lines.append(f"### {story_id} -- {story.title}")
                 lines.append("")
                 lines.append("**Points:** TBD")
                 lines.append("")
                 lines.append("Describe what this story delivers...")
                 lines.append("")
                 lines.append("**Tasks:**")
-                lines.append("- Define implementation tasks...")
+                lines.append(f"- [ ] Implement {story.title.lower()}")
+                lines.append("- [ ] Write unit tests")
+                lines.append("- [ ] Update documentation")
                 lines.append("")
-                lines.append("**Definition of Done:** TBD")
+                lines.append(f"**Definition of Done:** {story.title} is implemented, "
+                             "tests pass, and documentation is updated.")
                 lines.append("")
                 lines.append("---")
                 lines.append("")
@@ -777,10 +874,18 @@ class EpicGenerator:
                 )
                 lines.append(f"| {risk} | {probability} | {impact} | {mitigation} |")
         else:
-            lines.append(
-                "| No risks identified | - | - "
-                "| Consider adding risks during planning |"
-            )
+            # Use the suggestion engine to produce keyword-relevant risk stubs.
+            suggested_risks = self._suggest_risks(config.title, config.goal)
+            if suggested_risks:
+                for risk in suggested_risks:
+                    probability, impact, _score = classifier.classify(risk)
+                    mitigation = classifier.derive_mitigation(risk, expert_advice=None)
+                    lines.append(f"| {risk} | {probability} | {impact} | {mitigation} |")
+            else:
+                lines.append(
+                    "| No risks identified | - | - "
+                    "| Consider adding risks during planning |"
+                )
 
         # Add expert-identified risks from security/performance domains.
         rendered_experts = self._filter_expert_guidance(expert_guidance)

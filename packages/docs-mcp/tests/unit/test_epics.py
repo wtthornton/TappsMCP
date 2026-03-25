@@ -188,10 +188,11 @@ class TestEpicGeneratorSections:
         assert "- [ ] Write unit tests" in content
 
     def test_stories_placeholder(self) -> None:
+        # "Test Epic" has no matching keywords; suggestion engine falls back to generic stubs.
         config = _make_config(stories=[], number=10)
         content = self.gen.generate(config)
-        assert "### 10.1 -- Story Title" in content
-        assert "### 10.2 -- Story Title" in content
+        assert "### 10.1 -- Foundation & Setup (suggested)" in content
+        assert "### 10.2 -- Core Implementation (suggested)" in content
 
     def test_technical_notes_rendered(self) -> None:
         config = _make_config(technical_notes=["Use async/await", "SQLite WAL mode"])
@@ -1846,3 +1847,199 @@ class TestEpicFileHintsMCPTool:
         content = result["data"]["content"]
         assert "## Files Affected" in content
         assert "`README.md`" in content
+
+
+# ---------------------------------------------------------------------------
+# Story 91.4 -- Suggestion Engine
+# ---------------------------------------------------------------------------
+
+
+class TestSuggestionEngineStories:
+    """Unit tests for EpicGenerator._suggest_stories()."""
+
+    def test_auth_keyword_in_title_produces_auth_stories(self) -> None:
+        """Title 'User Authentication' yields auth-related story stubs."""
+        gen = EpicGenerator()
+        stubs = gen._suggest_stories("User Authentication", "")
+        titles = [s.title for s in stubs]
+        assert any("(suggested)" in t for t in titles), "All stubs must have (suggested) suffix"
+        assert any("Auth Endpoints" in t or "Session Management" in t for t in titles)
+
+    def test_api_keyword_produces_api_stories(self) -> None:
+        """Title 'API Gateway' yields API-related story stubs."""
+        gen = EpicGenerator()
+        stubs = gen._suggest_stories("API Gateway", "")
+        titles = [s.title for s in stubs]
+        assert any("Endpoint Handlers" in t or "Validation" in t for t in titles)
+
+    def test_database_keyword_produces_db_stories(self) -> None:
+        """Title 'Database Migration' yields database-related story stubs."""
+        gen = EpicGenerator()
+        stubs = gen._suggest_stories("Database Migration Tool", "")
+        titles = [s.title for s in stubs]
+        assert any("Schema Design" in t or "Migration Scripts" in t for t in titles)
+
+    def test_ui_keyword_produces_frontend_stories(self) -> None:
+        """Title 'UI Component Library' yields frontend-related story stubs."""
+        gen = EpicGenerator()
+        stubs = gen._suggest_stories("UI Component Library", "")
+        titles = [s.title for s in stubs]
+        assert any("Component Scaffold" in t or "State Management" in t for t in titles)
+
+    def test_deploy_keyword_produces_infra_stories(self) -> None:
+        """Title 'Deploy Pipeline' yields CI/CD-related story stubs."""
+        gen = EpicGenerator()
+        stubs = gen._suggest_stories("Deploy Pipeline Setup", "")
+        titles = [s.title for s in stubs]
+        assert any("Build Pipeline" in t or "Deploy Scripts" in t for t in titles)
+
+    def test_security_keyword_produces_security_stories(self) -> None:
+        """Title 'Security Audit' yields security-related story stubs."""
+        gen = EpicGenerator()
+        stubs = gen._suggest_stories("Security Audit", "")
+        titles = [s.title for s in stubs]
+        assert any("Threat Model" in t or "Scanner Integration" in t for t in titles)
+
+    def test_no_matching_keywords_fallback_to_generic(self) -> None:
+        """Title with no matching keywords falls back to 3 generic story stubs."""
+        gen = EpicGenerator()
+        stubs = gen._suggest_stories("Widget Refactor", "")
+        titles = [s.title for s in stubs]
+        assert len(stubs) == 3
+        assert any("Foundation" in t for t in titles)
+        assert any("Core Implementation" in t for t in titles)
+        assert any("Testing" in t for t in titles)
+
+    def test_all_stubs_have_suggested_suffix(self) -> None:
+        """All suggested stubs have '(suggested)' suffix to distinguish from user-provided."""
+        gen = EpicGenerator()
+        for title in ("User Auth", "API Gateway", "No Match Epic"):
+            stubs = gen._suggest_stories(title, "")
+            for stub in stubs:
+                assert stub.title.endswith("(suggested)"), (
+                    f"Expected '(suggested)' suffix on stub title, got: {stub.title!r}"
+                )
+
+    def test_keyword_in_goal_also_matches(self) -> None:
+        """Keyword match in goal text (not just title) triggers suggestion."""
+        gen = EpicGenerator()
+        stubs = gen._suggest_stories("Onboarding Epic", "Build auth endpoints for new users")
+        titles = [s.title for s in stubs]
+        assert any("Auth Endpoints" in t or "Session Management" in t for t in titles)
+
+
+class TestSuggestionEngineRisks:
+    """Unit tests for EpicGenerator._suggest_risks()."""
+
+    def test_auth_keyword_produces_auth_risk(self) -> None:
+        gen = EpicGenerator()
+        risks = gen._suggest_risks("User Authentication", "")
+        assert any("Authentication bypass" in r for r in risks)
+
+    def test_api_keyword_produces_breaking_change_risk(self) -> None:
+        gen = EpicGenerator()
+        risks = gen._suggest_risks("API Gateway", "")
+        assert any("Breaking API changes" in r for r in risks)
+
+    def test_database_keyword_produces_data_loss_risk(self) -> None:
+        gen = EpicGenerator()
+        risks = gen._suggest_risks("Database Migration", "")
+        assert any("Data loss during migration" in r for r in risks)
+
+    def test_deploy_keyword_produces_downtime_risk(self) -> None:
+        gen = EpicGenerator()
+        risks = gen._suggest_risks("Deploy Pipeline", "")
+        assert any("Deployment downtime" in r for r in risks)
+
+    def test_performance_keyword_produces_perf_risk(self) -> None:
+        gen = EpicGenerator()
+        risks = gen._suggest_risks("Performance Optimization", "")
+        assert any("Performance degradation" in r for r in risks)
+
+    def test_no_matching_keywords_returns_empty(self) -> None:
+        gen = EpicGenerator()
+        risks = gen._suggest_risks("Widget Refactor", "")
+        assert risks == []
+
+    def test_deduplication_across_matching_keywords(self) -> None:
+        """Matching multiple keywords in same group produces no duplicate risks."""
+        gen = EpicGenerator()
+        # Both 'auth' and 'security' map to the same risk text.
+        risks = gen._suggest_risks("Security Auth Module", "")
+        unique_risks = list(dict.fromkeys(risks))
+        assert risks == unique_risks
+
+
+class TestSuggestionEngineIntegration:
+    """Integration tests -- suggestions appear in rendered output."""
+
+    def test_render_stories_empty_uses_suggestions(self) -> None:
+        """_render_stories falls back to suggestion engine when config.stories is empty."""
+        gen = EpicGenerator()
+        config = _make_config(title="User Authentication", stories=[], number=7)
+        result = "\n".join(gen._render_stories(config))
+        # Auth-related titles should appear (with (suggested) suffix)
+        assert "(suggested)" in result
+        assert "Auth Endpoints (suggested)" in result or "Session Management (suggested)" in result
+
+    def test_render_stories_user_provided_overrides_suggestions(self) -> None:
+        """User-provided stories are used as-is; no suggestions mixed in."""
+        gen = EpicGenerator()
+        config = _make_config(
+            title="User Authentication",
+            stories=[EpicStoryStub(title="My Custom Story", points=3)],
+            number=7,
+        )
+        result = "\n".join(gen._render_stories(config))
+        assert "My Custom Story" in result
+        assert "(suggested)" not in result
+
+    def test_render_risk_assessment_empty_uses_suggestions(self) -> None:
+        """_render_risk_assessment uses suggestion engine when config.risks is empty."""
+        gen = EpicGenerator()
+        config = _make_config(
+            title="API Gateway",
+            risks=[],
+            style="comprehensive",
+        )
+        result = "\n".join(gen._render_risk_assessment(config, {}))
+        # API risk should appear
+        assert "Breaking API changes" in result
+        # Placeholder should NOT appear when suggestions found
+        assert "No risks identified" not in result
+
+    def test_render_risk_assessment_no_keywords_shows_placeholder(self) -> None:
+        """No-keyword title falls back to 'No risks identified' placeholder."""
+        gen = EpicGenerator()
+        config = _make_config(
+            title="Widget Refactor",
+            risks=[],
+            style="comprehensive",
+        )
+        result = "\n".join(gen._render_risk_assessment(config, {}))
+        assert "No risks identified" in result
+
+    def test_full_generate_auth_epic_has_suggested_stories(self) -> None:
+        """End-to-end: generate with auth title and no stories produces suggested stubs."""
+        gen = EpicGenerator()
+        config = EpicConfig(
+            title="User Authentication",
+            number=10,
+            stories=[],
+            style="standard",
+        )
+        output = gen.generate(config)
+        assert "(suggested)" in output
+
+    def test_full_generate_no_stories_no_keyword_fallback(self) -> None:
+        """End-to-end: generate with unrecognized title falls back to generic stubs."""
+        gen = EpicGenerator()
+        config = EpicConfig(
+            title="Miscellaneous Tasks",
+            number=99,
+            stories=[],
+            style="standard",
+        )
+        output = gen.generate(config)
+        assert "(suggested)" in output
+        assert "Foundation & Setup (suggested)" in output
