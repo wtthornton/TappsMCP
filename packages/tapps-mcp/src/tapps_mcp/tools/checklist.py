@@ -730,7 +730,7 @@ class CallTracker:
                 )
                 raise FileNotFoundError(msg)
             content = resolved.read_text(encoding="utf-8")
-            validation = validate_epic_markdown(content)
+            validation = validate_epic_markdown(content, epic_file_path=resolved)
         payload = base.model_dump()
         payload["epic_validation"] = validation
         return EpicChecklistResult(**payload)
@@ -776,6 +776,25 @@ class EpicFinding(BaseModel):
     )
 
 
+class CrossFileSummary(BaseModel):
+    """Aggregate completeness metrics from linked story files."""
+
+    total_stories: int = Field(default=0, description="Stories with linked files.")
+    stories_with_files: int = Field(default=0, description="Stories that have linked files.")
+    files_found: int = Field(default=0, description="Linked files that exist on disk.")
+    files_missing: int = Field(default=0, description="Linked files not found.")
+    with_acceptance_criteria: int = Field(
+        default=0, description="Stories whose linked file has an AC section."
+    )
+    with_tasks: int = Field(
+        default=0, description="Stories whose linked file has a Tasks section."
+    )
+    with_definition_of_done: int = Field(
+        default=0, description="Stories whose linked file has a DoD section."
+    )
+    summary: str = Field(default="", description="Human-readable summary line.")
+
+
 class EpicValidation(BaseModel):
     """Result of structural validation of an epic markdown file."""
 
@@ -795,6 +814,10 @@ class EpicValidation(BaseModel):
     valid: bool = Field(
         default=True,
         description="True when no error-severity findings exist.",
+    )
+    cross_file_summary: CrossFileSummary | None = Field(
+        default=None,
+        description="Cross-file story completeness metrics (when linked files are validated).",
     )
 
 
@@ -1206,8 +1229,177 @@ def _check_files_table_coverage(
                 )
 
 
-def validate_epic_markdown(content: str) -> EpicValidation:
+def _check_story_file_structure(
+    content: str,
+) -> tuple[bool, bool, bool, int | None, str | None]:
+    """Check a story file for structural sections.
+
+    Returns:
+        Tuple of (has_ac, has_tasks, has_dod, points, size).
+    """
+    ac_re = re.compile(
+        r"(?:^##?\s+Acceptance\s+Criteria|^\*\*Acceptance\s+Criteria:?\*\*)",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    tasks_re = re.compile(
+        r"(?:^##?\s+Tasks?\b|^\*\*Tasks?:?\*\*)",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    dod_re = re.compile(
+        r"(?:^##?\s+Definition\s+of\s+Done|^\*\*Definition\s+of\s+Done:?\*\*)",
+        re.IGNORECASE | re.MULTILINE,
+    )
+
+    has_ac = bool(ac_re.search(content))
+    has_tasks = bool(tasks_re.search(content))
+    has_dod = bool(dod_re.search(content))
+
+    pm = _POINTS_RE.search(content)
+    points = int(pm.group(1)) if pm else None
+
+    sm = _SIZE_RE.search(content)
+    size = sm.group(1).upper() if sm else None
+
+    return has_ac, has_tasks, has_dod, points, size
+
+
+def _validate_linked_stories(
+    stories: list[EpicStoryInfo],
+    findings: list[EpicFinding],
+    epic_file_path: Path,
+) -> CrossFileSummary | None:
+    """Follow linked story files and validate their structure.
+
+    Args:
+        stories: Parsed stories (may have ``linked_file`` set).
+        findings: Findings list to append to.
+        epic_file_path: Path to the epic file (links are resolved relative to its parent).
+
+    Returns:
+        A ``CrossFileSummary`` or ``None`` if no stories have linked files.
+    """
+    epic_dir = epic_file_path.parent
+    stories_with_files = [s for s in stories if s.linked_file]
+
+    if not stories_with_files:
+        return None
+
+    files_found = 0
+    files_missing = 0
+    with_ac = 0
+    with_tasks = 0
+    with_dod = 0
+    seen_paths: set[str] = set()
+
+    for story in stories_with_files:
+        linked = story.linked_file
+        if linked is None:  # pragma: no cover — filtered above
+            continue
+
+        resolved = (epic_dir / linked).resolve()
+        canonical = str(resolved)
+
+        # Guard against circular/self references
+        if canonical in seen_paths:
+            continue
+        seen_paths.add(canonical)
+        if resolved == epic_file_path.resolve():
+            continue
+
+        if not resolved.is_file():
+            files_missing += 1
+            findings.append(
+                EpicFinding(
+                    severity="warning",
+                    message=f"Story {story.story_id} linked file not found: {linked}",
+                    story_id=story.story_id,
+                )
+            )
+            continue
+
+        files_found += 1
+        try:
+            content = resolved.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            findings.append(
+                EpicFinding(
+                    severity="warning",
+                    message=f"Story {story.story_id} cannot read linked file: {linked}",
+                    story_id=story.story_id,
+                )
+            )
+            continue
+
+        has_ac, has_tasks_sec, has_dod, points, size = _check_story_file_structure(content)
+
+        # Merge with inline metadata (linked file wins if present)
+        if has_ac:
+            story.has_acceptance_criteria = True
+            with_ac += 1
+        elif not story.has_acceptance_criteria:
+            findings.append(
+                EpicFinding(
+                    severity="info",
+                    message=(
+                        f"Story {story.story_id} linked file missing Acceptance Criteria"
+                    ),
+                    story_id=story.story_id,
+                )
+            )
+
+        if has_tasks_sec:
+            story.has_tasks = True
+            with_tasks += 1
+        elif not story.has_tasks:
+            findings.append(
+                EpicFinding(
+                    severity="info",
+                    message=f"Story {story.story_id} linked file missing Tasks section",
+                    story_id=story.story_id,
+                )
+            )
+
+        if has_dod:
+            with_dod += 1
+
+        if points is not None and story.points is None:
+            story.points = points
+        if size is not None and story.size is None:
+            story.size = size
+
+    total = len(stories_with_files)
+    parts = [
+        f"{total} stories",
+        f"{files_found}/{total} files found",
+        f"{with_ac}/{total} have AC",
+        f"{with_tasks}/{total} have tasks",
+    ]
+    return CrossFileSummary(
+        total_stories=total,
+        stories_with_files=total,
+        files_found=files_found,
+        files_missing=files_missing,
+        with_acceptance_criteria=with_ac,
+        with_tasks=with_tasks,
+        with_definition_of_done=with_dod,
+        summary=", ".join(parts),
+    )
+
+
+def validate_epic_markdown(
+    content: str,
+    *,
+    epic_file_path: Path | None = None,
+    validate_linked_stories: bool = True,
+) -> EpicValidation:
     """Validate an epic markdown document for structural completeness.
+
+    Args:
+        content: The epic markdown content.
+        epic_file_path: Path to the epic file on disk.  Required for
+            cross-file story validation (resolving linked story files).
+        validate_linked_stories: When True and ``epic_file_path`` is given,
+            follow linked story files and validate their structure.
 
     Returns an ``EpicValidation`` with all findings.
     """
@@ -1215,6 +1407,8 @@ def validate_epic_markdown(content: str) -> EpicValidation:
     findings: list[EpicFinding] = []
 
     _check_required_sections(section_names, findings)
+
+    cross_file_summary: CrossFileSummary | None = None
 
     if not stories:
         findings.append(
@@ -1231,6 +1425,12 @@ def validate_epic_markdown(content: str) -> EpicValidation:
         _check_point_size_consistency(stories, findings)
         _check_files_table_coverage(stories, files_affected, findings)
 
+        # Cross-file story validation
+        if validate_linked_stories and epic_file_path is not None:
+            cross_file_summary = _validate_linked_stories(
+                stories, findings, epic_file_path,
+            )
+
     _check_dependency_cycles(content, findings)
 
     has_errors = any(f.severity == "error" for f in findings)
@@ -1241,4 +1441,5 @@ def validate_epic_markdown(content: str) -> EpicValidation:
         files_affected_entries=files_affected,
         findings=findings,
         valid=not has_errors,
+        cross_file_summary=cross_file_summary,
     )

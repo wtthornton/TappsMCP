@@ -7,9 +7,11 @@ from pathlib import Path
 import pytest
 
 from docs_mcp.validators.epic_validator import (
+    CrossFileSummary,
     EpicValidationReport,
     EpicValidator,
     _check_point_size_consistency,
+    _check_story_file_structure,
     _detect_cycle,
     _parse_implementation_order,
     _parse_story_heading,
@@ -927,3 +929,281 @@ class TestMixedFormats:
         linked = next(s for s in report.stories if s.number == "90.2")
         assert inline.linked_file is None
         assert linked.linked_file == "EPIC-90/story-90.2.md"
+
+
+# ---------------------------------------------------------------------------
+# Tests — cross-file story validation (Story 90.3)
+# ---------------------------------------------------------------------------
+
+_CROSS_FILE_EPIC = """\
+# Epic 93: Cross-File Test
+
+## Goal
+
+Test cross-file story validation.
+
+## Motivation
+
+We need linked story files to be validated.
+
+## Acceptance Criteria
+
+- [ ] All linked files validated
+
+## Stories
+
+### [93.1](stories/story-93.1.md) -- Full Story
+
+**Points:** 3 | **Size:** M | **Priority:** P1
+
+### [93.2](stories/story-93.2.md) -- Partial Story
+
+**Points:** 2 | **Size:** S | **Priority:** P2
+
+### [93.3](stories/story-93.3-missing.md) -- Missing Story
+
+**Points:** 1 | **Size:** S | **Priority:** P3
+"""
+
+_FULL_STORY_FILE = """\
+# Story 93.1: Full Story
+
+## Acceptance Criteria
+
+- [ ] Works correctly
+- [ ] Tests pass
+
+## Tasks
+
+- [ ] Implement feature
+- [ ] Write tests
+
+## Definition of Done
+
+All tests passing, code reviewed.
+
+**Points:** 5 | **Size:** M
+"""
+
+_PARTIAL_STORY_FILE = """\
+# Story 93.2: Partial Story
+
+## Tasks
+
+- [ ] Do the thing
+
+No AC or DoD sections here.
+"""
+
+
+def _setup_cross_file_epic(tmp_path: Path) -> Path:
+    """Create an epic with linked story files for testing."""
+    epic_dir = tmp_path / "epics"
+    epic_dir.mkdir()
+    stories_dir = epic_dir / "stories"
+    stories_dir.mkdir()
+
+    epic_path = epic_dir / "EPIC-93.md"
+    epic_path.write_text(_CROSS_FILE_EPIC, encoding="utf-8")
+
+    (stories_dir / "story-93.1.md").write_text(_FULL_STORY_FILE, encoding="utf-8")
+    (stories_dir / "story-93.2.md").write_text(_PARTIAL_STORY_FILE, encoding="utf-8")
+    # story-93.3-missing.md intentionally not created
+
+    return epic_path
+
+
+class TestCheckStoryFileStructure:
+    """Tests for _check_story_file_structure helper."""
+
+    def test_full_structure(self) -> None:
+        has_ac, has_tasks, has_dod, points, size = _check_story_file_structure(
+            _FULL_STORY_FILE
+        )
+        assert has_ac is True
+        assert has_tasks is True
+        assert has_dod is True
+        assert points == 5
+        assert size == "M"
+
+    def test_partial_structure(self) -> None:
+        has_ac, has_tasks, has_dod, points, size = _check_story_file_structure(
+            _PARTIAL_STORY_FILE
+        )
+        assert has_ac is False
+        assert has_tasks is True
+        assert has_dod is False
+        assert points is None
+        assert size is None
+
+    def test_bold_section_names(self) -> None:
+        content = "**Acceptance Criteria:**\n- works\n\n**Tasks:**\n- do it"
+        has_ac, has_tasks, has_dod, _, _ = _check_story_file_structure(content)
+        assert has_ac is True
+        assert has_tasks is True
+        assert has_dod is False
+
+
+class TestCrossFileStoryValidation:
+    """Tests for cross-file story validation (Story 90.3)."""
+
+    def test_all_files_present_full_structure(self, tmp_path: Path) -> None:
+        """When all story files exist and have full structure."""
+        epic_dir = tmp_path / "epics"
+        epic_dir.mkdir()
+        stories_dir = epic_dir / "stories"
+        stories_dir.mkdir()
+
+        epic_content = """\
+# Epic 94: All Present
+
+## Goal
+Test.
+
+## Motivation
+Test.
+
+## Acceptance Criteria
+- [ ] Done
+
+## Stories
+
+### [94.1](stories/s1.md) -- Story One
+
+### [94.2](stories/s2.md) -- Story Two
+"""
+        full_story = """\
+## Acceptance Criteria
+- [ ] Works
+
+## Tasks
+- [ ] Do it
+
+## Definition of Done
+Done when tests pass.
+
+**Points:** 3 | **Size:** M
+"""
+        fp = epic_dir / "EPIC-94.md"
+        fp.write_text(epic_content, encoding="utf-8")
+        (stories_dir / "s1.md").write_text(full_story, encoding="utf-8")
+        (stories_dir / "s2.md").write_text(full_story, encoding="utf-8")
+
+        report = EpicValidator().validate(fp)
+        assert report.cross_file_summary is not None
+        summary = report.cross_file_summary
+        assert summary.total_stories == 2
+        assert summary.files_found == 2
+        assert summary.files_missing == 0
+        assert summary.with_acceptance_criteria == 2
+        assert summary.with_tasks == 2
+        assert summary.with_definition_of_done == 2
+
+    def test_some_files_missing(self, tmp_path: Path) -> None:
+        """Missing linked files produce warning findings."""
+        fp = _setup_cross_file_epic(tmp_path)
+        report = EpicValidator().validate(fp)
+
+        assert report.cross_file_summary is not None
+        summary = report.cross_file_summary
+        assert summary.total_stories == 3
+        assert summary.files_found == 2
+        assert summary.files_missing == 1
+
+        # Check warning finding for missing file
+        missing_findings = [
+            i for i in report.issues
+            if "not found" in i.message and "93.3" in i.message
+        ]
+        assert len(missing_findings) == 1
+        assert missing_findings[0].severity == "warning"
+
+    def test_story_files_without_ac(self, tmp_path: Path) -> None:
+        """Story files without AC section produce info findings."""
+        fp = _setup_cross_file_epic(tmp_path)
+        report = EpicValidator().validate(fp)
+
+        # Story 93.2 has no AC section
+        ac_findings = [
+            i for i in report.issues
+            if "Acceptance Criteria" in i.message and "93.2" in i.location
+        ]
+        assert len(ac_findings) >= 1
+
+    def test_linked_file_merges_metadata(self, tmp_path: Path) -> None:
+        """Linked file metadata merges into story info."""
+        fp = _setup_cross_file_epic(tmp_path)
+        report = EpicValidator().validate(fp)
+
+        s1 = next(s for s in report.stories if s.number == "93.1")
+        # Full story file has AC and tasks
+        assert s1.has_acceptance_criteria is True
+        assert s1.has_tasks is True
+        # Points from inline (3) stays since it was set first
+        assert s1.points == 3
+
+    def test_deeply_nested_paths(self, tmp_path: Path) -> None:
+        """Story files in deeply nested directories are resolved."""
+        epic_dir = tmp_path / "docs" / "epics"
+        epic_dir.mkdir(parents=True)
+        nested = epic_dir / "deep" / "nested" / "stories"
+        nested.mkdir(parents=True)
+
+        epic = """\
+# Epic 95: Nested
+
+## Goal
+Test.
+
+## Motivation
+Test.
+
+## Acceptance Criteria
+- [ ] Done
+
+## Stories
+
+### [95.1](deep/nested/stories/s1.md) -- Deep Story
+"""
+        story = """\
+## Acceptance Criteria
+- [ ] Works
+
+## Tasks
+- [ ] Do it
+
+## Definition of Done
+Done.
+"""
+        fp = epic_dir / "EPIC-95.md"
+        fp.write_text(epic, encoding="utf-8")
+        (nested / "s1.md").write_text(story, encoding="utf-8")
+
+        report = EpicValidator().validate(fp)
+        assert report.cross_file_summary is not None
+        assert report.cross_file_summary.files_found == 1
+        assert report.cross_file_summary.files_missing == 0
+
+    def test_validate_linked_stories_false_skips(self, tmp_path: Path) -> None:
+        """validate_linked_stories=False disables cross-file validation."""
+        fp = _setup_cross_file_epic(tmp_path)
+        report = EpicValidator().validate(fp, validate_linked_stories=False)
+        assert report.cross_file_summary is None
+
+    def test_summary_string_format(self, tmp_path: Path) -> None:
+        """Summary string has expected format."""
+        fp = _setup_cross_file_epic(tmp_path)
+        report = EpicValidator().validate(fp)
+
+        assert report.cross_file_summary is not None
+        s = report.cross_file_summary.summary
+        assert "3 stories" in s
+        assert "2/3 files found" in s
+        assert "have AC" in s
+        assert "have tasks" in s
+
+    def test_no_linked_files_no_summary(self, tmp_path: Path) -> None:
+        """Epic with no linked files produces no cross_file_summary."""
+        fp = _write_epic(tmp_path, _WELL_FORMED_EPIC)
+        report = EpicValidator().validate(fp)
+        assert report.cross_file_summary is None

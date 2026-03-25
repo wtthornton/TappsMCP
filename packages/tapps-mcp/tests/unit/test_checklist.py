@@ -13,6 +13,7 @@ from tapps_mcp.tools.checklist import (
     TASK_TOOL_MAP_LOW,
     CallTracker,
     ChecklistResult,
+    CrossFileSummary,
     EpicChecklistResult,
     EpicValidation,
     ToolCallRecord,
@@ -919,3 +920,166 @@ class TestTableLinkedStoryParsing:
         # Only heading story should be found; table is not parsed when headings exist
         assert len(result.stories) == 1
         assert result.stories[0].story_id == "95.1"
+
+
+# ---------------------------------------------------------------------------
+# Cross-file story validation (Story 90.3)
+# ---------------------------------------------------------------------------
+
+
+class TestCrossFileStoryValidation:
+    """Tests for cross-file story validation in validate_epic_markdown."""
+
+    def _make_epic_with_stories(
+        self,
+        tmp_path: Path,
+        story_files: dict[str, str],
+    ) -> Path:
+        """Create an epic file with linked stories and write story files."""
+        epic_dir = tmp_path / "epics"
+        epic_dir.mkdir(exist_ok=True)
+        stories_dir = epic_dir / "stories"
+        stories_dir.mkdir(exist_ok=True)
+
+        story_lines = []
+        for i, (fname, _) in enumerate(story_files.items(), 1):
+            story_lines.append(
+                f"| S{i} | [{fname}](stories/{fname}) | M | P1 |"
+            )
+
+        epic_content = dedent("""\
+        # Epic 96: Cross-File Test
+
+        ## Goal
+
+        Test.
+
+        ## Acceptance Criteria
+
+        - [ ] Done
+
+        ## Stories
+
+        | ID | Story | Size | Priority |
+        |---|---|---|---|
+        """) + "\n".join(story_lines) + "\n"
+
+        fp = epic_dir / "EPIC-96.md"
+        fp.write_text(epic_content, encoding="utf-8")
+
+        for fname, content in story_files.items():
+            (stories_dir / fname).write_text(content, encoding="utf-8")
+
+        return fp
+
+    def test_all_present_full_structure(self, tmp_path: Path) -> None:
+        full = dedent("""\
+        ## Acceptance Criteria
+        - [ ] Works
+
+        ## Tasks
+        - [ ] Do it
+
+        ## Definition of Done
+        Done.
+
+        **Points:** 3 | **Size:** M
+        """)
+        fp = self._make_epic_with_stories(
+            tmp_path, {"s1.md": full, "s2.md": full}
+        )
+        content = fp.read_text(encoding="utf-8")
+        result = validate_epic_markdown(content, epic_file_path=fp)
+
+        assert result.cross_file_summary is not None
+        s = result.cross_file_summary
+        assert s.files_found == 2
+        assert s.files_missing == 0
+        assert s.with_acceptance_criteria == 2
+        assert s.with_tasks == 2
+        assert s.with_definition_of_done == 2
+
+    def test_missing_story_file(self, tmp_path: Path) -> None:
+        epic_dir = tmp_path / "epics"
+        epic_dir.mkdir(exist_ok=True)
+
+        epic_content = dedent("""\
+        # Epic 97: Missing File
+
+        ## Goal
+        Test.
+
+        ## Acceptance Criteria
+        - [ ] Done
+
+        ## Stories
+
+        | ID | Story | Size | Priority |
+        |---|---|---|---|
+        | S1 | [missing.md](stories/missing.md) | S | P1 |
+        """)
+        fp = epic_dir / "EPIC-97.md"
+        fp.write_text(epic_content, encoding="utf-8")
+
+        content = fp.read_text(encoding="utf-8")
+        result = validate_epic_markdown(content, epic_file_path=fp)
+
+        assert result.cross_file_summary is not None
+        assert result.cross_file_summary.files_missing == 1
+        assert result.cross_file_summary.files_found == 0
+
+        warnings = [f for f in result.findings if f.severity == "warning" and "not found" in f.message]
+        assert len(warnings) >= 1
+
+    def test_no_epic_file_path_skips_cross_file(self) -> None:
+        content = dedent("""\
+        # Epic 98: No Path
+
+        ## Goal
+        Test.
+
+        ## Acceptance Criteria
+        - [ ] Done
+
+        ## Stories
+
+        | ID | Story | Size | Priority |
+        |---|---|---|---|
+        | S1 | [story.md](story.md) | M | P1 |
+        """)
+        result = validate_epic_markdown(content)
+        assert result.cross_file_summary is None
+
+    def test_validate_linked_stories_false(self, tmp_path: Path) -> None:
+        full = "## Acceptance Criteria\n- [ ] Works\n## Tasks\n- [ ] Do\n"
+        fp = self._make_epic_with_stories(tmp_path, {"s1.md": full})
+        content = fp.read_text(encoding="utf-8")
+        result = validate_epic_markdown(
+            content, epic_file_path=fp, validate_linked_stories=False,
+        )
+        assert result.cross_file_summary is None
+
+    def test_story_without_ac_gets_info_finding(self, tmp_path: Path) -> None:
+        no_ac = "## Tasks\n- [ ] Do it\n"
+        fp = self._make_epic_with_stories(tmp_path, {"s1.md": no_ac})
+        content = fp.read_text(encoding="utf-8")
+        result = validate_epic_markdown(content, epic_file_path=fp)
+
+        assert result.cross_file_summary is not None
+        assert result.cross_file_summary.with_acceptance_criteria == 0
+        info_findings = [
+            f for f in result.findings
+            if f.severity == "info" and "Acceptance Criteria" in f.message
+        ]
+        assert len(info_findings) >= 1
+
+    def test_summary_string(self, tmp_path: Path) -> None:
+        full = "## Acceptance Criteria\n- [ ] AC\n## Tasks\n- [ ] T\n"
+        fp = self._make_epic_with_stories(tmp_path, {"s1.md": full})
+        content = fp.read_text(encoding="utf-8")
+        result = validate_epic_markdown(content, epic_file_path=fp)
+
+        assert result.cross_file_summary is not None
+        s = result.cross_file_summary.summary
+        assert "1 stories" in s
+        assert "files found" in s

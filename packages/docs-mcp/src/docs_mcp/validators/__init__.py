@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from docs_mcp.validators.completeness import CompletenessChecker, CompletenessReport
 from docs_mcp.validators.drift import DriftDetector, DriftReport
-from docs_mcp.validators.epic_validator import EpicValidationReport, EpicValidator
+from docs_mcp.validators.epic_validator import (
+    CrossFileSummary,
+    EpicValidationReport,
+    EpicValidator,
+)
 from docs_mcp.validators.freshness import FreshnessChecker, FreshnessReport
 from docs_mcp.validators.link_checker import LinkChecker, LinkReport
 from docs_mcp.validators.style import StyleChecker, StyleConfig, StyleReport
@@ -17,6 +21,7 @@ from docs_mcp.validators.style import StyleChecker, StyleConfig, StyleReport
 __all__ = [
     "CompletenessChecker",
     "CompletenessReport",
+    "CrossFileSummary",
     "DriftDetector",
     "DriftReport",
     "EpicValidationReport",

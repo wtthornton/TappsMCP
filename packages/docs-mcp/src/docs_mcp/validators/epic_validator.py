@@ -83,6 +83,19 @@ class StoryInfo(BaseModel):
     linked_file: str | None = None  # file path from markdown link
 
 
+class CrossFileSummary(BaseModel):
+    """Aggregate completeness metrics from linked story files."""
+
+    total_stories: int = 0
+    stories_with_files: int = 0
+    files_found: int = 0
+    files_missing: int = 0
+    with_acceptance_criteria: int = 0
+    with_tasks: int = 0
+    with_definition_of_done: int = 0
+    summary: str = ""
+
+
 class EpicValidationReport(BaseModel):
     """Aggregated epic validation results."""
 
@@ -93,6 +106,7 @@ class EpicValidationReport(BaseModel):
     issues: list[EpicIssue] = []
     score: int = 100  # Start at 100, deduct for issues
     passed: bool = True
+    cross_file_summary: CrossFileSummary | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +385,40 @@ def _detect_cycle(edges: list[tuple[str, list[str]]]) -> list[str] | None:
     return None
 
 
+def _check_story_file_structure(
+    content: str,
+) -> tuple[bool, bool, bool, int | None, str | None]:
+    """Check a story file for structural sections.
+
+    Returns:
+        Tuple of (has_ac, has_tasks, has_dod, points, size).
+    """
+    _ac_re = re.compile(
+        r"(?:^##?\s+Acceptance\s+Criteria|^\*\*Acceptance\s+Criteria:?\*\*)",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    _tasks_re = re.compile(
+        r"(?:^##?\s+Tasks?\b|^\*\*Tasks?:?\*\*)",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    _dod_re = re.compile(
+        r"(?:^##?\s+Definition\s+of\s+Done|^\*\*Definition\s+of\s+Done:?\*\*)",
+        re.IGNORECASE | re.MULTILINE,
+    )
+
+    has_ac = bool(_ac_re.search(content))
+    has_tasks = bool(_tasks_re.search(content))
+    has_dod = bool(_dod_re.search(content))
+
+    pm = _POINTS_RE.search(content)
+    points = int(pm.group(1)) if pm else None
+
+    sm = _SIZE_RE.search(content)
+    size = sm.group(1).upper() if sm else None
+
+    return has_ac, has_tasks, has_dod, points, size
+
+
 # ---------------------------------------------------------------------------
 # Validator
 # ---------------------------------------------------------------------------
@@ -379,11 +427,18 @@ def _detect_cycle(edges: list[tuple[str, list[str]]]) -> list[str] | None:
 class EpicValidator:
     """Validate the structure and completeness of epic planning documents."""
 
-    def validate(self, file_path: Path) -> EpicValidationReport:
+    def validate(
+        self,
+        file_path: Path,
+        *,
+        validate_linked_stories: bool = True,
+    ) -> EpicValidationReport:
         """Validate an epic document.
 
         Args:
             file_path: Path to the epic markdown file.
+            validate_linked_stories: When True, follow linked story files and
+                validate their internal structure.
 
         Returns:
             An EpicValidationReport with findings and score.
@@ -477,6 +532,10 @@ class EpicValidator:
         # Check files-affected coverage
         if files_affected_body and report.stories:
             self._check_files_affected(files_affected_body, report)
+
+        # Cross-file story validation
+        if validate_linked_stories and report.stories:
+            self._validate_linked_stories(file_path, report)
 
         # Calculate final score
         self._calculate_score(report)
@@ -664,6 +723,120 @@ class EpicValidator:
                         message="Story files not referenced in Files Affected section",
                     )
                 )
+
+    def _validate_linked_stories(
+        self,
+        epic_path: Path,
+        report: EpicValidationReport,
+    ) -> None:
+        """Follow linked story files and validate their structure."""
+        epic_dir = epic_path.parent
+        stories_with_files = [s for s in report.stories if s.linked_file]
+
+        if not stories_with_files:
+            return
+
+        files_found = 0
+        files_missing = 0
+        with_ac = 0
+        with_tasks = 0
+        with_dod = 0
+        seen_paths: set[str] = set()
+
+        for story in stories_with_files:
+            linked = story.linked_file
+            if linked is None:  # pragma: no cover — filtered above
+                continue
+
+            # Guard against circular/self references
+            resolved = (epic_dir / linked).resolve()
+            canonical = str(resolved)
+            if canonical in seen_paths:
+                continue
+            seen_paths.add(canonical)
+
+            # Don't read the epic file itself
+            if resolved == epic_path.resolve():
+                continue
+
+            if not resolved.is_file():
+                files_missing += 1
+                report.issues.append(
+                    EpicIssue(
+                        severity="warning",
+                        location=f"Story {story.number}",
+                        message=f"Linked story file not found: {linked}",
+                    )
+                )
+                continue
+
+            files_found += 1
+            try:
+                content = resolved.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                report.issues.append(
+                    EpicIssue(
+                        severity="warning",
+                        location=f"Story {story.number}",
+                        message=f"Cannot read linked story file: {linked}",
+                    )
+                )
+                continue
+
+            has_ac, has_tasks_sec, has_dod, points, size = (
+                _check_story_file_structure(content)
+            )
+
+            # Merge with inline metadata (linked file wins if present)
+            if has_ac:
+                story.has_acceptance_criteria = True
+                with_ac += 1
+            elif not story.has_acceptance_criteria:
+                report.issues.append(
+                    EpicIssue(
+                        severity="info",
+                        location=f"Story {story.number}",
+                        message="Linked story file missing Acceptance Criteria section",
+                    )
+                )
+
+            if has_tasks_sec:
+                story.has_tasks = True
+                with_tasks += 1
+            elif not story.has_tasks:
+                report.issues.append(
+                    EpicIssue(
+                        severity="info",
+                        location=f"Story {story.number}",
+                        message="Linked story file missing Tasks section",
+                    )
+                )
+
+            if has_dod:
+                with_dod += 1
+
+            if points is not None and story.points is None:
+                story.points = points
+            if size is not None and story.size is None:
+                story.size = size
+
+        total = len(stories_with_files)
+        parts = [
+            f"{total} stories",
+            f"{files_found}/{total} files found",
+            f"{with_ac}/{total} have AC",
+            f"{with_tasks}/{total} have tasks",
+        ]
+        report.cross_file_summary = CrossFileSummary(
+            total_stories=total,
+            stories_with_files=total,
+            files_found=files_found,
+            files_missing=files_missing,
+            with_acceptance_criteria=with_ac,
+            with_tasks=with_tasks,
+            with_definition_of_done=with_dod,
+            summary=", ".join(parts),
+        )
 
     def _calculate_score(self, report: EpicValidationReport) -> None:
         """Calculate score: start at 100, deduct for issues."""
