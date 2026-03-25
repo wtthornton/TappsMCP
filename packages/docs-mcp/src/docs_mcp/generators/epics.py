@@ -379,7 +379,7 @@ class EpicGenerator:
                 if not config.files:
                     # Only render generic files-affected when no file hints given
                     lines.extend(self._render_files_affected(config))
-                lines.extend(self._render_performance_targets(enrichment))
+                lines.extend(self._render_performance_targets(enrichment, config))
 
         timing["render_ms"] = int((time.perf_counter() - t_render) * 1000)
         timing["total_ms"] = int((time.perf_counter() - t_wall) * 1000)
@@ -954,12 +954,21 @@ class EpicGenerator:
         return lines
 
     def _render_performance_targets(
-        self, enrichment: dict[str, Any] | None = None,
+        self,
+        enrichment: dict[str, Any] | None = None,
+        config: EpicConfig | None = None,
     ) -> list[str]:
         """Render the Performance Targets section (comprehensive only).
 
-        Only rendered when performance-related expert advice exists at
-        sufficient confidence. Omitted entirely otherwise.
+        Always renders at least a test coverage row.  When ``config`` is
+        provided, additional rows are derived from EpicConfig signals:
+
+        - AC count > 5  → acceptance criteria pass rate row
+        - Files > 3     → quality gate score row
+        - Stories > 3   → story completion rate row
+
+        Expert-derived targets (when available via ``enrichment``) are
+        rendered before the config-derived table and take precedence.
         """
         expert_guidance: list[dict[str, str]] = (enrichment or {}).get("expert_guidance", [])
         from docs_mcp.generators.expert_utils import parse_confidence
@@ -971,8 +980,23 @@ class EpicGenerator:
             and parse_confidence(g.get("confidence", "0%")) >= 0.5
         ]
 
-        if not perf_experts:
-            return []
+        # Derive config-signal targets: (metric, baseline, target, measurement)
+        derived: list[tuple[str, str, str, str]] = [
+            ("Test coverage", "baseline", ">= 80%", "pytest --cov"),
+        ]
+        if config is not None:
+            if len(config.acceptance_criteria) > 5:
+                derived.append(
+                    ("Acceptance criteria pass rate", "0%", "100%", "CI pipeline"),
+                )
+            if len(config.files) > 3:
+                derived.append(
+                    ("Quality gate score", "N/A", ">= 70/100", "tapps_quality_gate"),
+                )
+            if len(config.stories) > 3:
+                derived.append(
+                    ("Story completion rate", "0%", "100%", "Sprint tracking"),
+                )
 
         lines = [
             "<!-- docsmcp:start:performance-targets -->",
@@ -980,9 +1004,19 @@ class EpicGenerator:
             "",
         ]
 
+        # Expert guidance rendered first (free-form advice takes precedence)
         for expert in perf_experts:
             lines.append(f"**{expert['expert']}:** {expert['advice']}")
             lines.append("")
+
+        # Config-derived table (always present)
+        lines.extend([
+            "| Metric | Baseline | Target | Measurement |",
+            "|--------|----------|--------|-------------|",
+        ])
+        for metric, baseline, target, measurement in derived:
+            lines.append(f"| {metric} | {baseline} | {target} | {measurement} |")
+        lines.append("")
 
         lines.extend(["<!-- docsmcp:end:performance-targets -->", ""])
         return lines

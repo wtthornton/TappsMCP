@@ -361,12 +361,13 @@ class TestEpicGeneratorStyles:
         content = self.gen.generate(config)
         assert "## Files Affected" in content
 
-    def test_comprehensive_omits_performance_targets_without_expert(self) -> None:
-        """Performance targets are only rendered when performance expert advice exists."""
+    def test_comprehensive_always_renders_performance_targets(self) -> None:
+        """Performance targets section is always present in comprehensive epics (Story 91.5)."""
         config = _make_config(style="comprehensive")
         content = self.gen.generate(config)
-        # Without auto_populate/expert advice, performance targets are omitted.
-        assert "## Performance Targets" not in content
+        # Config-derived test coverage row is always included.
+        assert "## Performance Targets" in content
+        assert "Test coverage" in content
 
     def test_invalid_style_falls_back_to_standard(self) -> None:
         config = _make_config(style="unknown")
@@ -627,11 +628,11 @@ class TestEpicGeneratorMarkers:
             "implementation-order",
             "risk-assessment",
             "files-affected",
+            "performance-targets",  # Story 91.5: always rendered with config-derived targets
         ]
         for section in always_present:
             assert f"<!-- docsmcp:start:{section} -->" in content, f"Missing start: {section}"
             assert f"<!-- docsmcp:end:{section} -->" in content, f"Missing end: {section}"
-        # performance-targets is only present when expert advice exists.
         # stakeholders and references are only present when provided.
 
 
@@ -1352,15 +1353,17 @@ class TestEpicExpertFiltering:
 # ---------------------------------------------------------------------------
 
 class TestEpicPerformanceTargetsSuppression:
-    """Tests for performance targets section suppression."""
+    """Tests for performance targets section rendering (updated for Story 91.5)."""
 
     def setup_method(self) -> None:
         self.gen = EpicGenerator()
 
-    def test_omitted_without_expert(self) -> None:
+    def test_always_rendered_in_comprehensive_even_without_expert(self) -> None:
+        """Performance targets section is always present in comprehensive epics (Story 91.5)."""
         config = _make_config(style="comprehensive")
         content = self.gen.generate(config)
-        assert "## Performance Targets" not in content
+        assert "## Performance Targets" in content
+        assert "Test coverage" in content
 
     def test_rendered_with_high_confidence_expert(self) -> None:
         enrichment = {
@@ -1373,14 +1376,18 @@ class TestEpicPerformanceTargetsSuppression:
         assert "## Performance Targets" in rendered
         assert "Use caching." in rendered
 
-    def test_omitted_with_low_confidence_expert(self) -> None:
+    def test_low_confidence_expert_omitted_but_section_still_renders(self) -> None:
+        """Low-confidence expert advice is excluded; config-derived table still renders."""
         enrichment = {
             "expert_guidance": [
                 {"domain": "performance", "expert": "Perf Expert", "advice": "Maybe cache.", "confidence": "25%"}
             ]
         }
         result = self.gen._render_performance_targets(enrichment)
-        assert result == []
+        rendered = "\n".join(result)
+        assert "## Performance Targets" in rendered
+        assert "Perf Expert" not in rendered
+        assert "Test coverage" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -2043,3 +2050,180 @@ class TestSuggestionEngineIntegration:
         output = gen.generate(config)
         assert "(suggested)" in output
         assert "Foundation & Setup (suggested)" in output
+
+
+class TestPerformanceTargets:
+    """Unit tests for EpicGenerator._render_performance_targets() (Story 91.5)."""
+
+    def test_no_enrichment_no_config_renders_test_coverage(self) -> None:
+        """With no enrichment and no config, test coverage row always present."""
+        gen = EpicGenerator()
+        lines = gen._render_performance_targets()
+        output = "\n".join(lines)
+        assert "## Performance Targets" in output
+        assert "Test coverage" in output
+        assert ">= 80%" in output
+        assert "pytest --cov" in output
+
+    def test_section_markers_always_present(self) -> None:
+        """docsmcp markers wrap the section regardless of inputs."""
+        gen = EpicGenerator()
+        lines = gen._render_performance_targets()
+        output = "\n".join(lines)
+        assert "<!-- docsmcp:start:performance-targets -->" in output
+        assert "<!-- docsmcp:end:performance-targets -->" in output
+
+    def test_ac_count_above_threshold_adds_row(self) -> None:
+        """AC count > 5 adds acceptance criteria pass rate row."""
+        gen = EpicGenerator()
+        config = EpicConfig(
+            title="Big Epic",
+            acceptance_criteria=[f"AC{i}" for i in range(6)],
+        )
+        lines = gen._render_performance_targets(config=config)
+        output = "\n".join(lines)
+        assert "Acceptance criteria pass rate" in output
+        assert "CI pipeline" in output
+
+    def test_ac_count_at_threshold_omits_row(self) -> None:
+        """AC count == 5 does NOT add acceptance criteria row (threshold is > 5)."""
+        gen = EpicGenerator()
+        config = EpicConfig(
+            title="Medium Epic",
+            acceptance_criteria=[f"AC{i}" for i in range(5)],
+        )
+        lines = gen._render_performance_targets(config=config)
+        output = "\n".join(lines)
+        assert "Acceptance criteria pass rate" not in output
+
+    def test_files_above_threshold_adds_quality_gate_row(self) -> None:
+        """Files > 3 adds quality gate score row."""
+        gen = EpicGenerator()
+        config = EpicConfig(
+            title="Multi-file Epic",
+            files=["a.py", "b.py", "c.py", "d.py"],
+        )
+        lines = gen._render_performance_targets(config=config)
+        output = "\n".join(lines)
+        assert "Quality gate score" in output
+        assert "tapps_quality_gate" in output
+        assert ">= 70/100" in output
+
+    def test_files_at_threshold_omits_quality_gate_row(self) -> None:
+        """Files == 3 does NOT add quality gate row (threshold is > 3)."""
+        gen = EpicGenerator()
+        config = EpicConfig(
+            title="Small Epic",
+            files=["a.py", "b.py", "c.py"],
+        )
+        lines = gen._render_performance_targets(config=config)
+        output = "\n".join(lines)
+        assert "Quality gate score" not in output
+
+    def test_stories_above_threshold_adds_completion_rate_row(self) -> None:
+        """Stories > 3 adds story completion rate row."""
+        gen = EpicGenerator()
+        config = EpicConfig(
+            title="Large Epic",
+            stories=[
+                EpicStoryStub(number=1, title="S1"),
+                EpicStoryStub(number=2, title="S2"),
+                EpicStoryStub(number=3, title="S3"),
+                EpicStoryStub(number=4, title="S4"),
+            ],
+        )
+        lines = gen._render_performance_targets(config=config)
+        output = "\n".join(lines)
+        assert "Story completion rate" in output
+        assert "Sprint tracking" in output
+
+    def test_stories_at_threshold_omits_completion_rate_row(self) -> None:
+        """Stories == 3 does NOT add story completion rate row (threshold is > 3)."""
+        gen = EpicGenerator()
+        config = EpicConfig(
+            title="Small Epic",
+            stories=[
+                EpicStoryStub(number=1, title="S1"),
+                EpicStoryStub(number=2, title="S2"),
+                EpicStoryStub(number=3, title="S3"),
+            ],
+        )
+        lines = gen._render_performance_targets(config=config)
+        output = "\n".join(lines)
+        assert "Story completion rate" not in output
+
+    def test_expert_guidance_rendered_before_derived_table(self) -> None:
+        """Expert guidance appears before config-derived table rows."""
+        gen = EpicGenerator()
+        enrichment = {
+            "expert_guidance": [
+                {
+                    "expert": "Performance Expert",
+                    "domain": "performance",
+                    "advice": "Keep p99 latency under 200ms.",
+                    "confidence": "80%",
+                }
+            ]
+        }
+        config = EpicConfig(title="Perf Epic")
+        lines = gen._render_performance_targets(enrichment=enrichment, config=config)
+        output = "\n".join(lines)
+        # Expert advice present
+        assert "Performance Expert" in output
+        assert "p99 latency" in output
+        # Config-derived table still present
+        assert "Test coverage" in output
+        # Expert text appears before the table
+        expert_pos = output.index("Performance Expert")
+        table_pos = output.index("Test coverage")
+        assert expert_pos < table_pos
+
+    def test_expert_low_confidence_omitted(self) -> None:
+        """Expert guidance below 50% confidence is not rendered."""
+        gen = EpicGenerator()
+        enrichment = {
+            "expert_guidance": [
+                {
+                    "expert": "Uncertain Expert",
+                    "domain": "performance",
+                    "advice": "Maybe optimize the DB.",
+                    "confidence": "30%",
+                }
+            ]
+        }
+        lines = gen._render_performance_targets(enrichment=enrichment)
+        output = "\n".join(lines)
+        assert "Uncertain Expert" not in output
+        # Config-derived table still renders
+        assert "Test coverage" in output
+
+    def test_comprehensive_epic_includes_performance_targets(self) -> None:
+        """End-to-end: comprehensive epic always has Performance Targets section."""
+        gen = EpicGenerator()
+        config = EpicConfig(
+            title="Comprehensive Test Epic",
+            number=42,
+            style="comprehensive",
+            goal="Ship it.",
+        )
+        output = gen.generate(config)
+        assert "## Performance Targets" in output
+        assert "Test coverage" in output
+
+    def test_non_performance_expert_domain_excluded(self) -> None:
+        """Expert guidance with a non-performance domain is not shown."""
+        gen = EpicGenerator()
+        enrichment = {
+            "expert_guidance": [
+                {
+                    "expert": "Security Expert",
+                    "domain": "security",
+                    "advice": "Use TLS everywhere.",
+                    "confidence": "90%",
+                }
+            ]
+        }
+        lines = gen._render_performance_targets(enrichment=enrichment)
+        output = "\n".join(lines)
+        assert "Security Expert" not in output
+        assert "Test coverage" in output
