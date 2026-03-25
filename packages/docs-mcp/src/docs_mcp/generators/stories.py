@@ -542,21 +542,96 @@ class StoryGenerator:
         lines.append("")
         return lines
 
+    @staticmethod
+    def _derive_given(role: str, ac_text: str) -> str:
+        """Derive a Gherkin Given clause from the story role.
+
+        Returns the derived clause text (without the ``Given`` keyword), or an
+        empty string when the context is too ambiguous to produce useful output.
+        Falls back to bracket placeholder in :meth:`_render_gherkin_criteria`.
+        """
+        role = role.strip()
+        if not role:
+            return ""
+        return f"a {role} is ready to perform the action"
+
+    @staticmethod
+    def _derive_when(role: str, want: str, ac_text: str) -> str:
+        """Derive a Gherkin When clause from want field or AC verb phrase.
+
+        Priority: (1) ``want`` field, (2) first verb phrase extracted from
+        ``ac_text``. Returns an empty string when neither is available.
+        Falls back to bracket placeholder in :meth:`_render_gherkin_criteria`.
+        """
+        role = role.strip()
+        want = want.strip()
+        actor = f"the {role}" if role else "the user"
+
+        if want:
+            # Strip leading "to " so "to validate login" → "validate login".
+            action = want[3:] if want.lower().startswith("to ") else want
+            return f"{actor} {action}"
+
+        ac_text = ac_text.strip()
+        if ac_text:
+            # Extract first verb + remainder as action phrase.
+            words = ac_text.split()
+            if words:
+                verb = words[0].lower()
+                rest = " ".join(words[1:]).lower() if len(words) > 1 else ""
+                action = f"{verb} {rest}".strip() if rest else verb
+                return f"{actor} {action}"
+
+        return ""
+
+    @staticmethod
+    def _derive_then(ac_text: str, so_that: str) -> str:
+        """Derive a Gherkin Then clause from AC text or so_that field.
+
+        Returns the AC text with ``" successfully"`` appended when available.
+        Falls back to ``so_that`` if AC is empty. Returns an empty string when
+        both are empty (bracket placeholder used in caller).
+        """
+        ac_text = ac_text.strip()
+        if ac_text:
+            clean = ac_text.rstrip(".!?")
+            return f"{clean} successfully"
+        so_that = so_that.strip()
+        if so_that:
+            return so_that
+        return ""
+
     def _render_gherkin_criteria(self, config: StoryConfig) -> list[str]:
-        """Render acceptance criteria in Gherkin Given/When/Then format."""
+        """Render acceptance criteria in Gherkin Given/When/Then format.
+
+        When role/want context is available, derives meaningful Given/When/Then
+        clauses from the story fields. Falls back to bracket placeholders when
+        derivation produces empty strings.
+        """
         lines: list[str] = []
 
         if config.acceptance_criteria:
             for criterion in config.acceptance_criteria:
                 slug = self._slugify(criterion)
+                given = self._derive_given(config.role, criterion)
+                when = self._derive_when(config.role, config.want, criterion)
+                then = self._derive_then(criterion, config.so_that)
+
+                given_line = given if given else "[describe the precondition]"
+                when_line = (
+                    when if when
+                    else f"[describe the action that triggers: {criterion.lower()}]"
+                )
+                then_line = then if then else "[describe the expected observable outcome]"
+
                 lines.append(f"### AC: {criterion}")
                 lines.append("")
                 lines.append("```gherkin")
                 lines.append(f"Feature: {slug}")
                 lines.append(f"  Scenario: {criterion}")
-                lines.append("    Given [describe the precondition]")
-                lines.append(f"    When [describe the action that triggers: {criterion.lower()}]")
-                lines.append("    Then [describe the expected observable outcome]")
+                lines.append(f"    Given {given_line}")
+                lines.append(f"    When {when_line}")
+                lines.append(f"    Then {then_line}")
                 lines.append("```")
                 lines.append("")
         else:

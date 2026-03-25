@@ -215,11 +215,14 @@ class TestStoryGeneratorSections:
         assert "- [ ] Error messages displayed" in content
 
     def test_gherkin_acceptance_criteria(self) -> None:
+        # _make_config has role="developer" and want="to validate login credentials"
+        # so derivation methods produce meaningful output (no bracket placeholders).
         config = _make_config(criteria_format="gherkin")
         content = self.gen.generate(config)
         assert "```gherkin" in content
-        assert "Given [describe the precondition]" in content
-        assert "Then [describe the expected observable outcome]" in content
+        assert "Given a developer is ready to perform the action" in content
+        assert "When the developer validate login credentials" in content
+        assert "Validation rejects empty fields successfully" in content
 
     def test_acceptance_criteria_placeholder_checkbox(self) -> None:
         # _make_config has title="Test Story" → context-aware AC placeholder
@@ -1249,6 +1252,125 @@ class TestTaskSuggestionEngine:
         content = self.gen.generate(config)
         assert "- [ ] My custom task" in content
         assert "Define data model fields and relationships" not in content
+
+
+# ---------------------------------------------------------------------------
+# StoryGenerator -- improved Gherkin scaffolding (Story 92.5)
+# ---------------------------------------------------------------------------
+
+
+class TestImprovedGherkinScaffolding:
+    """Tests for improved Gherkin Given/When/Then derivation (Story 92.5).
+
+    Verifies that role/want/AC context produces meaningful Gherkin clauses
+    and that missing context falls back to bracket placeholders.
+    """
+
+    def setup_method(self) -> None:
+        self.gen = StoryGenerator()
+
+    # -- _derive_given -------------------------------------------------------
+
+    def test_derive_given_with_role(self) -> None:
+        result = StoryGenerator._derive_given("developer", "Login validates credentials")
+        assert result == "a developer is ready to perform the action"
+
+    def test_derive_given_empty_role_returns_empty(self) -> None:
+        result = StoryGenerator._derive_given("", "Login validates credentials")
+        assert result == ""
+
+    def test_derive_given_whitespace_role_returns_empty(self) -> None:
+        result = StoryGenerator._derive_given("   ", "Login validates credentials")
+        assert result == ""
+
+    # -- _derive_when --------------------------------------------------------
+
+    def test_derive_when_uses_want_field(self) -> None:
+        result = StoryGenerator._derive_when("developer", "to validate login credentials", "AC")
+        assert result == "the developer validate login credentials"
+
+    def test_derive_when_strips_to_prefix(self) -> None:
+        result = StoryGenerator._derive_when("admin", "to manage users", "AC")
+        assert result == "the admin manage users"
+
+    def test_derive_when_want_without_to_prefix(self) -> None:
+        result = StoryGenerator._derive_when("user", "submits the form", "AC")
+        assert result == "the user submits the form"
+
+    def test_derive_when_no_role_uses_the_user(self) -> None:
+        result = StoryGenerator._derive_when("", "to validate login", "AC")
+        assert result == "the user validate login"
+
+    def test_derive_when_falls_back_to_ac_verb(self) -> None:
+        result = StoryGenerator._derive_when("developer", "", "Login validates credentials")
+        # First word of AC text as verb
+        assert result.startswith("the developer login")
+
+    def test_derive_when_no_want_no_role_uses_ac(self) -> None:
+        result = StoryGenerator._derive_when("", "", "Validation rejects empty fields")
+        assert result == "the user validation rejects empty fields"
+
+    def test_derive_when_empty_want_and_ac_returns_empty(self) -> None:
+        result = StoryGenerator._derive_when("", "", "")
+        assert result == ""
+
+    # -- _derive_then --------------------------------------------------------
+
+    def test_derive_then_uses_ac_text(self) -> None:
+        result = StoryGenerator._derive_then("Login validates credentials", "")
+        assert result == "Login validates credentials successfully"
+
+    def test_derive_then_strips_trailing_punctuation(self) -> None:
+        result = StoryGenerator._derive_then("Feature works correctly.", "")
+        assert result == "Feature works correctly successfully"
+
+    def test_derive_then_falls_back_to_so_that(self) -> None:
+        result = StoryGenerator._derive_then("", "invalid logins are rejected")
+        assert result == "invalid logins are rejected"
+
+    def test_derive_then_empty_returns_empty(self) -> None:
+        result = StoryGenerator._derive_then("", "")
+        assert result == ""
+
+    # -- _render_gherkin_criteria with context --------------------------------
+
+    def test_gherkin_with_role_and_want(self) -> None:
+        config = _make_config(
+            role="developer",
+            want="to validate login credentials",
+            acceptance_criteria=["Login validates credentials"],
+            criteria_format="gherkin",
+        )
+        content = self.gen.generate(config)
+        assert "Given a developer is ready to perform the action" in content
+        assert "When the developer validate login credentials" in content
+        assert "Login validates credentials successfully" in content
+
+    def test_gherkin_fallback_without_role(self) -> None:
+        config = _make_config(
+            role="",
+            want="",
+            acceptance_criteria=["Feature works"],
+            criteria_format="gherkin",
+        )
+        content = self.gen.generate(config)
+        # Given falls back to bracket (no role)
+        assert "Given [describe the precondition]" in content
+
+    def test_gherkin_then_always_derived_from_ac(self) -> None:
+        config = _make_config(
+            acceptance_criteria=["Rate limit enforced"],
+            criteria_format="gherkin",
+        )
+        content = self.gen.generate(config)
+        assert "Then Rate limit enforced successfully" in content
+
+    def test_gherkin_empty_criteria_unchanged(self) -> None:
+        """Empty criteria case still renders the example block."""
+        config = _make_config(acceptance_criteria=[], criteria_format="gherkin")
+        content = self.gen.generate(config)
+        assert "Feature: Example" in content
+        assert "Given a precondition" in content
 
 
 # ---------------------------------------------------------------------------
