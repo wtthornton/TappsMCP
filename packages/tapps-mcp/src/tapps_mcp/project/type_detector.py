@@ -136,6 +136,40 @@ def _has_click_or_typer(root: Path) -> bool:
     return False
 
 
+_MIN_SHELL_SCRIPT_COUNT = 3
+
+
+def _has_shell_scripts(root: Path) -> bool:
+    """Return True if the project has 3+ shell script files."""
+    import os
+
+    sh_count = 0
+    for _dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames
+            if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")
+        ]
+        for f in filenames:
+            if f.endswith(".sh"):
+                sh_count += 1
+                if sh_count >= _MIN_SHELL_SCRIPT_COUNT:
+                    return True
+    return False
+
+
+def _has_bin_directory(root: Path) -> bool:
+    """Return True if a bin/ directory with files exists."""
+    bin_dir = root / "bin"
+    if not bin_dir.is_dir():
+        return False
+    return any(bin_dir.iterdir())
+
+
+def _has_install_script(root: Path) -> bool:
+    """Return True if install.sh, setup.sh, or Makefile exists."""
+    return _exists_any(root, ["install.sh", "setup.sh", "Makefile"])
+
+
 def _has_package_structure(root: Path) -> bool:
     for item in root.iterdir():
         if item.is_dir() and not item.name.startswith(".") and (item / "__init__.py").exists():
@@ -216,7 +250,7 @@ def _has_few_source_files(root: Path) -> bool:
     import os
 
     code_count = 0
-    code_exts = {".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".cs"}
+    code_exts = {".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".cs", ".sh"}
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [
             d for d in dirnames
@@ -261,16 +295,24 @@ _PROJECT_TYPES: dict[str, dict[str, Any]] = {
             ("has_cli_entrypoint", _has_cli_entrypoint),
             ("has_setup_py_cli", _has_setup_py_cli),
             ("has_click_typer", _has_click_or_typer),
+            ("has_shell_scripts", _has_shell_scripts),
+            ("has_bin_directory", _has_bin_directory),
+            ("has_install_script", _has_install_script),
             (
                 "cli_focused_structure",
                 lambda r: (
-                    (_has_cli_entrypoint(r) or _has_setup_py_cli(r))
+                    (
+                        _has_cli_entrypoint(r)
+                        or _has_setup_py_cli(r)
+                        or _has_shell_scripts(r)
+                        or _has_bin_directory(r)
+                    )
                     and not _has_frontend(r)
                     and not _has_api_indicators(r)
                 ),
             ),
         ],
-        "weights": [0.4, 0.2, 0.2, 0.2],
+        "weights": [0.25, 0.15, 0.1, 0.25, 0.2, 0.15, 0.15],
     },
     "library": {
         "indicators": [
@@ -300,7 +342,12 @@ _PROJECT_TYPES: dict[str, dict[str, Any]] = {
             ("has_few_source_files", _has_few_source_files),
             (
                 "docs_focused",
-                lambda r: _has_heavy_docs(r) and _has_few_source_files(r),
+                lambda r: (
+                    _has_heavy_docs(r)
+                    and _has_few_source_files(r)
+                    and not _has_shell_scripts(r)
+                    and not _has_bin_directory(r)
+                ),
             ),
         ],
         "weights": [0.3, 0.3, 0.2, 0.2],

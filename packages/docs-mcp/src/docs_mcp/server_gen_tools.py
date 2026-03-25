@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import structlog
 
 from docs_mcp.server import (
     _ANNOTATIONS_READ_ONLY,
     _ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
     _record_call,
-    mcp,
 )
 from docs_mcp.server_helpers import (
     _get_settings,
@@ -25,6 +26,11 @@ from docs_mcp.server_helpers import (
     error_response,
     success_response,
 )
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
+
+logger = structlog.get_logger(__name__)
 
 
 async def docs_generate_changelog(
@@ -2182,7 +2188,7 @@ async def docs_generate_purpose(
     content = result.content
     written_path = ""
 
-    if output_path and can_write_to_project():
+    if output_path and can_write_to_project(root):
         write_path = root / output_path
         try:
             write_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2279,7 +2285,7 @@ async def docs_generate_doc_index(
     content = result.content
     written_path = ""
 
-    if output_path and can_write_to_project():
+    if output_path and can_write_to_project(root):
         write_path = root / output_path
         try:
             write_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2326,7 +2332,7 @@ async def docs_generate_doc_index(
 # ---------------------------------------------------------------------------
 
 
-def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
+def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register generation tools on the shared mcp instance (Epic 79.2: conditional)."""
     if "docs_generate_changelog" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_changelog)

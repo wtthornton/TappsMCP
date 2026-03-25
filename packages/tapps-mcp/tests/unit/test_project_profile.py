@@ -336,6 +336,65 @@ class TestDetectProjectType:
         assert ptype == "microservice"
         assert conf >= 0.3
 
+    def test_shell_project_detected_as_cli(self, tmp_path: Path) -> None:
+        """Pure shell project with 5 .sh files -> cli-tool."""
+        for i in range(5):
+            (tmp_path / f"script{i}.sh").write_text("#!/bin/bash\necho hi\n", encoding="utf-8")
+        ptype, conf, reason = detect_project_type(tmp_path)
+        assert ptype == "cli-tool"
+        assert conf >= 0.3
+        assert "has_shell_scripts" in reason
+
+    def test_shell_project_with_bin_and_install(self, tmp_path: Path) -> None:
+        """Shell project with install.sh and bin/ -> cli-tool with high confidence."""
+        for i in range(4):
+            (tmp_path / f"lib{i}.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / "install.sh").write_text("#!/bin/bash\nmake install\n", encoding="utf-8")
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "mytool").write_text("#!/bin/bash\n", encoding="utf-8")
+        ptype, conf, reason = detect_project_type(tmp_path)
+        assert ptype == "cli-tool"
+        assert conf >= 0.7
+
+    def test_mixed_shell_python_cli(self, tmp_path: Path) -> None:
+        """Mixed shell + python project -> cli-tool."""
+        (tmp_path / "cli.py").write_text("import click\n", encoding="utf-8")
+        for i in range(3):
+            (tmp_path / f"helper{i}.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        ptype, conf, reason = detect_project_type(tmp_path)
+        assert ptype == "cli-tool"
+        assert conf >= 0.3
+
+    def test_few_shell_scripts_not_cli(self, tmp_path: Path) -> None:
+        """1-2 helper .sh scripts should NOT classify as cli-tool alone."""
+        (tmp_path / "helper.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / "build.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        # With only 2 .sh files and nothing else, confidence should be too low
+        ptype, conf, reason = detect_project_type(tmp_path)
+        assert ptype != "cli-tool" or conf < 0.3
+
+    def test_ralph_like_structure_cli_tool(self, tmp_path: Path) -> None:
+        """Ralph-like: 85% bash, install.sh, bin/ dir, Makefile, some .md files."""
+        # Shell scripts (majority)
+        for i in range(10):
+            (tmp_path / f"module{i}.sh").write_text("#!/bin/bash\necho run\n", encoding="utf-8")
+        (tmp_path / "install.sh").write_text("#!/bin/bash\nmake install\n", encoding="utf-8")
+        (tmp_path / "Makefile").write_text("install:\n\t./install.sh\n", encoding="utf-8")
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "ralph").write_text("#!/bin/bash\n", encoding="utf-8")
+        (bin_dir / "ralph-init").write_text("#!/bin/bash\n", encoding="utf-8")
+        # Some docs (should not cause misclassification)
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+        for i in range(5):
+            (docs_dir / f"doc{i}.md").write_text(f"# Doc {i}\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text("# Ralph\n", encoding="utf-8")
+        ptype, conf, reason = detect_project_type(tmp_path)
+        assert ptype == "cli-tool"
+        assert conf > 0.7
+
     def test_empty_project_returns_none(self, tmp_path: Path) -> None:
         ptype, conf, reason = detect_project_type(tmp_path)
         assert ptype is None

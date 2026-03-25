@@ -96,6 +96,9 @@ class StoryGenerator:
     VALID_SIZES: ClassVar[frozenset[str]] = frozenset({"S", "M", "L", "XL", ""})
     VALID_CRITERIA_FORMATS: ClassVar[frozenset[str]] = frozenset({"checkbox", "gherkin"})
 
+    # Minimum confidence threshold for including expert guidance.
+    _EXPERT_CONFIDENCE_THRESHOLD: ClassVar[float] = 0.3
+
     # Keyword-to-task patterns for the task suggestion engine (Story 92.4).
     # Multiple keywords that share the same list object are deduplicated via id().
     # First matching keyword group wins.
@@ -936,7 +939,8 @@ class StoryGenerator:
                 result = consult_expert(
                     question, domain=domain, max_chunks=3, max_context_length=1500,
                 )
-                if result.confidence >= 0.3 and result.answer:
+                threshold = StoryGenerator._EXPERT_CONFIDENCE_THRESHOLD
+                if result.confidence >= threshold and result.answer:
                     from docs_mcp.generators.expert_utils import extract_expert_advice
 
                     advice = extract_expert_advice(result.answer)

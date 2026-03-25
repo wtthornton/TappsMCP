@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-03-25
+
 ### Added
 
-- **Epic 80 (archive): Consumer Init & Bootstrap Hardening** — PostToolUse `script_event_map` includes `tapps-post-validate` / `tapps-post-report`; `tapps-mcp doctor` checks Claude hook script paths and treats project `.mcp.json` as sufficient vs user `~/.claude.json`; init refuses `.../packages/tapps-mcp` without `--allow-package-init` / `TAPPS_MCP_ALLOW_PACKAGE_INIT`; non-TTY MCP merge skips overwrite with log (`--force`, `TAPPS_MCP_INIT_ASSUME_YES`); MCP config uses `uv run` + monorepo placeholder when `tapps-mcp` not on PATH and merges existing `env`; CLI `--with-docs-mcp`; TECH_STACK low-confidence callout; README + troubleshooting updates. See `docs/archive/planning/epics/EPIC-80-CONSUMER-INIT-BOOTSTRAP-HARDENING.md`.
+- **Epic 89: PLANOPT Feedback (TappsMCP)** — `tapps_impact_analysis` accepts `project_root` parameter for cross-project analysis (Story 89.1); `tapps_session_start` returns top-level `project_root` in response (Story 89.2); `tapps_session_start` annotates `installed_checkers` with `environment` context field (Story 89.3)
+- **Epic 90: Epic Validator Completeness** — `tapps_checklist` resolves `epic_file_path` relative to `project_root` (Story 90.1); `docs_validate_epic` parses linked headings and table-linked story references (Story 90.2); `docs_validate_epic` cross-file story validation and completeness reporting (Story 90.3)
+- **Epic 91: Epic Generator Quality Gaps** — Context-aware placeholder prose replacing generic `[TBD]` tokens (Story 91.1); quick-start mode for title-only epic generation (Story 91.2); adaptive detail level with auto/minimal styles (Story 91.3); story and risk suggestion engine from project context (Story 91.4); always-render Performance Targets with config-derived metrics (Story 91.5)
+- **Epic 92: Story Generator Quality Gaps** — Performance fixes ported from epic generator (Story 92.1); context-aware story placeholders (Story 92.2); `quick_start` mode for `docs_generate_story` (Story 92.3); task suggestion engine (Story 92.4); improved Gherkin scaffolding with context derivation (Story 92.5)
+- **Shell/CLI project detection** — `type_detector` now detects shell-heavy projects (3+ `.sh` files, `bin/` directories, `install.sh`/`setup.sh`/`Makefile`) as `cli-tool` type with appropriate confidence weighting
+- **Epic 80 (archive): Consumer Init & Bootstrap Hardening** — PostToolUse `script_event_map` includes `tapps-post-validate` / `tapps-post-report`; `tapps-mcp doctor` checks Claude hook script paths and treats project `.mcp.json` as sufficient vs user `~/.claude.json`; init refuses `.../packages/tapps-mcp` without `--allow-package-init` / `TAPPS_MCP_ALLOW_PACKAGE_INIT`; non-TTY MCP merge skips overwrite with log (`--force`, `TAPPS_MCP_INIT_ASSUME_YES`); MCP config uses `uv run` + monorepo placeholder when `tapps-mcp` not on PATH and merges existing `env`; CLI `--with-docs-mcp`; TECH_STACK low-confidence callout; README + troubleshooting updates
+
+### Changed
+
+- **StoryGenerator refactoring** — Expert confidence threshold extracted to class-level constant `_EXPERT_CONFIDENCE_THRESHOLD`; `server_gen_tools.py` import cleanup (structlog logger, TYPE_CHECKING for FastMCP); `can_write_to_project()` now receives `root` parameter for purpose/doc_index generators
+- Version bump: tapps-core 1.12.0 → 1.13.0, tapps-mcp 1.12.0 → 1.13.0, docs-mcp 1.12.0 → 1.13.0
 
 ## [1.12.0] - 2026-03-21
 
