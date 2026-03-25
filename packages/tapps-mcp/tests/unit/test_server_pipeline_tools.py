@@ -87,6 +87,17 @@ class TestTappsSessionStart:
         assert "installed_checkers" in data
 
     @pytest.mark.asyncio
+    async def test_includes_checker_environment_context(self) -> None:
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        result = await tapps_session_start()
+        data = result["data"]
+        assert data["checker_environment"] == "mcp_server"
+        assert "checker_environment_note" in data
+        assert "MCP server" in data["checker_environment_note"]
+        assert "Target project" in data["checker_environment_note"]
+
+    @pytest.mark.asyncio
     async def test_includes_memory_status(self) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
@@ -1398,6 +1409,26 @@ class TestSessionStartProjectRoot:
         assert data["project_root"] == "/test/project"
         # Also still present in nested configuration
         assert data["configuration"]["project_root"] == "/test/project"
+
+    @pytest.mark.asyncio
+    async def test_session_start_quick_includes_checker_environment(self) -> None:
+        """Quick session_start response includes checker environment context."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_settings = MagicMock()
+        mock_settings.project_root = Path("/test/project")
+        mock_settings.quality_preset = "standard"
+        mock_settings.log_level = "WARNING"
+
+        with patch(
+            "tapps_mcp.server_pipeline_tools.load_settings",
+            return_value=mock_settings,
+        ):
+            result = await tapps_session_start(quick=True)
+
+        data = result["data"]
+        assert data["checker_environment"] == "mcp_server"
+        assert "MCP server" in data["checker_environment_note"]
 
 
 class TestScheduleBackgroundMaintenance:

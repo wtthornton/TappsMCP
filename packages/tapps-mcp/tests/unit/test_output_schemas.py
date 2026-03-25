@@ -941,6 +941,7 @@ class TestSessionStartOutput:
         assert "project_type" in props
         assert "quality_preset" in props
         assert "installed_checkers" in props
+        assert "checker_environment" in props
         assert "has_ci" in props
         assert "has_docker" in props
         assert "has_tests" in props
@@ -963,6 +964,7 @@ class TestSessionStartOutput:
         assert content["project_type"] == "mcp-server"
         assert content["quality_preset"] == "strict"
         assert content["installed_checkers"] == ["ruff", "mypy", "bandit"]
+        assert content["checker_environment"] == "mcp_server"
         assert content["has_ci"] is True
         assert content["has_docker"] is False
         assert content["has_tests"] is True
@@ -976,6 +978,7 @@ class TestSessionStartOutput:
         assert output.project_type is None
         assert output.quality_preset == "standard"
         assert output.installed_checkers == []
+        assert output.checker_environment == "mcp_server"
         assert output.has_ci is False
         assert output.has_docker is False
         assert output.has_tests is False

@@ -34,6 +34,9 @@ class TestMCPHandshake:
         assert "installed_checkers" in data
         assert isinstance(data["installed_checkers"], list)
 
+        assert data["checker_environment"] == "mcp_server"
+        assert "MCP server" in data["checker_environment_note"]
+
         assert "configuration" in data
         assert "project_root" in data["configuration"]
         assert "quality_preset" in data["configuration"]

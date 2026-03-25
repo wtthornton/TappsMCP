@@ -275,6 +275,7 @@ class SessionStartOutput(StructuredOutput):
     project_type: str | None = None
     quality_preset: str = "standard"
     installed_checkers: list[str] = Field(default_factory=list)
+    checker_environment: str = "mcp_server"
     has_ci: bool = False
     has_docker: bool = False
     has_tests: bool = False

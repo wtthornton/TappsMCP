@@ -45,7 +45,7 @@
 
 - [x] 89.1: Execute story — docs/planning/epics/EPIC-89/story-89.1-impact-analysis-project-root.md
 - [x] 89.2: Execute story — docs/planning/epics/EPIC-89/story-89.2-session-start-project-root.md
-- [ ] 89.3: Execute story — docs/planning/epics/EPIC-89/story-89.3-installed-checkers-environment-context.md
+- [x] 89.3: Execute story — docs/planning/epics/EPIC-89/story-89.3-installed-checkers-environment-context.md ✓ Added `checker_environment` ("mcp_server") and `checker_environment_note` fields to `_build_server_info_data`, full session start, quick session start, and `SessionStartOutput` schema. Backward compatible — new fields have defaults.
 - [ ] 89.4: Execute story — docs/planning/epics/EPIC-89/story-89.4-shell-bash-project-detection.md
 
 ## Phase 6: Epic Validation Enhancements (Epic 90)

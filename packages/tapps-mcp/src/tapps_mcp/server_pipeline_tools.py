@@ -1383,6 +1383,12 @@ async def tapps_session_start(
         "server": info["data"]["server"],
         "configuration": info["data"]["configuration"],
         "installed_checkers": info["data"]["installed_checkers"],
+        "checker_environment": info["data"].get("checker_environment", "mcp_server"),
+        "checker_environment_note": info["data"].get(
+            "checker_environment_note",
+            "Checker availability reflects the MCP server process environment. "
+            "Target project may have different tools installed.",
+        ),
         "diagnostics": info["data"]["diagnostics"],
         "quick_start": info["data"].get("quick_start", []),
         "critical_rules": info["data"].get("critical_rules", []),
@@ -1499,6 +1505,11 @@ async def _session_start_quick(
             "log_level": settings.log_level,
         },
         "installed_checkers": [t.model_dump() for t in installed],
+        "checker_environment": "mcp_server",
+        "checker_environment_note": (
+            "Checker availability reflects the MCP server process environment. "
+            "Target project may have different tools installed."
+        ),
         "cache": _cache_info_dict(cache_dir, cache_fallback),
         "quick": True,
         "checklist_session_id": checklist_sid_q,

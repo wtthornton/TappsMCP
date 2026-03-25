@@ -343,6 +343,11 @@ def _build_server_info_data(
         },
         "available_tools": available_tools,
         "installed_checkers": [t.model_dump() for t in installed],
+        "checker_environment": "mcp_server",
+        "checker_environment_note": (
+            "Checker availability reflects the MCP server process environment. "
+            "Target project may have different tools installed."
+        ),
         "diagnostics": diagnostics.model_dump(),
         "recommended_workflow": RECOMMENDED_WORKFLOW_TEXT,
         "quick_start": list(DAILY_STEPS),
