@@ -158,9 +158,10 @@ class TestStoryGeneratorSections:
         assert "Build the feature." in content
 
     def test_description_placeholder(self) -> None:
+        # _make_config has title + role + want → context-aware placeholder
         config = _make_config(description="")
         content = self.gen.generate(config)
-        assert "Describe what this story delivers" in content
+        assert "Describe how **Test Story** will enable" in content
 
     def test_markdown_relative_link_epic_from_nested_story(self) -> None:
         rel = markdown_relative_link(
@@ -201,9 +202,10 @@ class TestStoryGeneratorSections:
         assert "- [ ] Write unit tests" in content
 
     def test_tasks_placeholder(self) -> None:
+        # _make_config has title="Test Story" → context-aware task placeholder
         config = _make_config(tasks=[])
         content = self.gen.generate(config)
-        assert "- [ ] Define implementation tasks" in content
+        assert "- [ ] Implement test story" in content
 
     def test_checkbox_acceptance_criteria(self) -> None:
         config = _make_config(criteria_format="checkbox")
@@ -220,9 +222,10 @@ class TestStoryGeneratorSections:
         assert "Then [describe the expected observable outcome]" in content
 
     def test_acceptance_criteria_placeholder_checkbox(self) -> None:
+        # _make_config has title="Test Story" → context-aware AC placeholder
         config = _make_config(acceptance_criteria=[], criteria_format="checkbox")
         content = self.gen.generate(config)
-        assert "- [ ] Feature works as specified" in content
+        assert "- [ ] Test Story works as specified" in content
 
     def test_acceptance_criteria_placeholder_gherkin(self) -> None:
         config = _make_config(acceptance_criteria=[], criteria_format="gherkin")
@@ -230,11 +233,102 @@ class TestStoryGeneratorSections:
         assert "Feature: Example" in content
 
     def test_definition_of_done(self) -> None:
+        # _make_config has title="Test Story" → context-aware DoD placeholder
         config = _make_config()
         content = self.gen.generate(config)
         assert "## Definition of Done" in content
-        assert "- [ ] Code reviewed and approved" in content
+        assert "- [ ] Test Story code reviewed and approved" in content
         assert "- [ ] Tests passing" in content
+
+
+# ---------------------------------------------------------------------------
+# StoryGenerator -- context-aware placeholders (Story 92.2)
+# ---------------------------------------------------------------------------
+
+
+class TestContextAwarePlaceholders:
+    """Tests for context-interpolated placeholder text (Story 92.2).
+
+    Verifies that description, task, AC, and DoD placeholders use the story's
+    title (and role/want when available) instead of generic boilerplate.
+    Falls back to generic text when title is empty/whitespace.
+    """
+
+    def setup_method(self) -> None:
+        self.gen = StoryGenerator()
+
+    # -- description --------------------------------------------------------
+
+    def test_description_placeholder_with_title_role_want(self) -> None:
+        config = _make_config(description="", role="developer", want="add search")
+        content = self.gen.generate(config)
+        assert "Describe how **Test Story** will enable **developer** to **add search**" in content
+
+    def test_description_placeholder_with_title_only(self) -> None:
+        config = _make_config(description="", role="", want="", so_that="")
+        content = self.gen.generate(config)
+        assert "Describe what **Test Story** delivers" in content
+
+    def test_description_placeholder_empty_title_fallback(self) -> None:
+        config = _make_config(title="", description="", role="", want="")
+        content = self.gen.generate(config)
+        assert "Describe what this story delivers and any important context" in content
+
+    def test_description_placeholder_whitespace_title_fallback(self) -> None:
+        config = _make_config(title="   ", description="", role="", want="")
+        content = self.gen.generate(config)
+        assert "Describe what this story delivers and any important context" in content
+
+    # -- tasks --------------------------------------------------------------
+
+    def test_tasks_placeholder_uses_title(self) -> None:
+        config = _make_config(tasks=[], title="Rate Limiter")
+        content = self.gen.generate(config)
+        assert "- [ ] Implement rate limiter" in content
+
+    def test_tasks_placeholder_empty_title_fallback(self) -> None:
+        config = _make_config(tasks=[], title="")
+        content = self.gen.generate(config)
+        assert "- [ ] Define implementation tasks..." in content
+
+    def test_tasks_placeholder_whitespace_title_fallback(self) -> None:
+        config = _make_config(tasks=[], title="   ")
+        content = self.gen.generate(config)
+        assert "- [ ] Define implementation tasks..." in content
+
+    # -- acceptance criteria ------------------------------------------------
+
+    def test_ac_placeholder_uses_title(self) -> None:
+        config = _make_config(acceptance_criteria=[], title="Auth Middleware")
+        content = self.gen.generate(config)
+        assert "- [ ] Auth Middleware works as specified" in content
+
+    def test_ac_placeholder_empty_title_fallback(self) -> None:
+        config = _make_config(acceptance_criteria=[], title="")
+        content = self.gen.generate(config)
+        assert "- [ ] Feature works as specified" in content
+
+    def test_ac_placeholder_whitespace_title_fallback(self) -> None:
+        config = _make_config(acceptance_criteria=[], title="   ")
+        content = self.gen.generate(config)
+        assert "- [ ] Feature works as specified" in content
+
+    # -- definition of done -------------------------------------------------
+
+    def test_dod_placeholder_uses_title(self) -> None:
+        config = _make_config(tasks=[], title="Session Manager")
+        content = self.gen.generate(config)
+        assert "- [ ] Session Manager code reviewed and approved" in content
+
+    def test_dod_placeholder_empty_title_fallback(self) -> None:
+        config = _make_config(title="")
+        content = self.gen.generate(config)
+        assert "- [ ] Code reviewed and approved" in content
+
+    def test_dod_placeholder_whitespace_title_fallback(self) -> None:
+        config = _make_config(title="   ")
+        content = self.gen.generate(config)
+        assert "- [ ] Code reviewed and approved" in content
 
 
 # ---------------------------------------------------------------------------

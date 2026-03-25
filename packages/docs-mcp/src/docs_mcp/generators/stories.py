@@ -250,7 +250,16 @@ class StoryGenerator:
         if config.description:
             lines.append(config.description)
         else:
-            lines.append("Describe what this story delivers and any important context...")
+            title = config.title.strip()
+            if title and config.role and config.want:
+                lines.append(
+                    f"Describe how **{title}** will enable **{config.role}** "
+                    f"to **{config.want}**..."
+                )
+            elif title:
+                lines.append(f"Describe what **{title}** delivers and any important context...")
+            else:
+                lines.append("Describe what this story delivers and any important context...")
 
         # Epic cross-reference when inheriting context.
         if config.inherit_context and config.epic_path:
@@ -304,7 +313,11 @@ class StoryGenerator:
                 else:
                     lines.append(f"- [ ] {task.description}")
         else:
-            lines.append("- [ ] Define implementation tasks...")
+            title = config.title.strip()
+            if title:
+                lines.append(f"- [ ] Implement {title.lower()}")
+            else:
+                lines.append("- [ ] Define implementation tasks...")
             lines.append("- [ ] Write unit tests")
             lines.append("- [ ] Update documentation")
 
@@ -341,7 +354,11 @@ class StoryGenerator:
             for criterion in config.acceptance_criteria:
                 lines.append(f"- [ ] {criterion}")
         else:
-            lines.append("- [ ] Feature works as specified")
+            title = config.title.strip()
+            if title:
+                lines.append(f"- [ ] {title} works as specified")
+            else:
+                lines.append("- [ ] Feature works as specified")
             lines.append("- [ ] Unit tests added with adequate coverage")
             lines.append("- [ ] Documentation updated")
 
@@ -403,7 +420,11 @@ class StoryGenerator:
 
         if config.tasks:
             lines.append("- [ ] All tasks completed")
-        lines.append("- [ ] Code reviewed and approved")
+        title = config.title.strip()
+        if title:
+            lines.append(f"- [ ] {title} code reviewed and approved")
+        else:
+            lines.append("- [ ] Code reviewed and approved")
         lines.append("- [ ] Tests passing (unit + integration)")
         lines.append("- [ ] Documentation updated")
         lines.append("- [ ] No regressions introduced")

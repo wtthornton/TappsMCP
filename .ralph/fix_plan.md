@@ -77,7 +77,7 @@
 <!-- Implementation order: 92.1 → 92.2 → 92.3 → 92.4 → 92.5 -->
 
 - [x] 92.1: Execute story — docs/epics/stories/STORY-92.1-port-performance-fixes.md
-- [ ] 92.2: Execute story — docs/epics/stories/STORY-92.2-context-aware-story-placeholders.md
+- [x] 92.2: Execute story — docs/epics/stories/STORY-92.2-context-aware-story-placeholders.md ✓ Refactored `_render_description`, `_render_tasks`, `_render_checkbox_criteria`, `_render_definition_of_done` in stories.py to interpolate config.title (and role/want for description) into placeholder text. Empty/whitespace title falls back to generic text. Updated 4 existing tests; added 14 new tests in `TestContextAwarePlaceholders`.
 - [ ] 92.3: Execute story — docs/epics/stories/STORY-92.3-quick-start-story-mode.md
 - [ ] 92.4: Execute story — docs/epics/stories/STORY-92.4-task-suggestion-engine.md
 - [ ] 92.5: Execute story — docs/epics/stories/STORY-92.5-improved-gherkin-scaffolding.md
