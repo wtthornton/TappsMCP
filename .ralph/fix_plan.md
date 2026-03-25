@@ -58,6 +58,30 @@
 - [ ] 90.2: Execute story — docs/planning/epics/EPIC-90/story-90.2-table-linked-story-parsing.md
 - [ ] 90.3: Execute story — docs/planning/epics/EPIC-90/story-90.3-cross-file-story-validation.md
 
+## Phase 7: Epic Generator - Close LLM Quality Gaps (Epic 91)
+
+<!-- Epic: docs/epics/EPIC-91-epic-generator-quality-gaps.md -->
+<!-- Perf fix landed in commit 31237f1; these stories close remaining quality gaps -->
+<!-- Implementation order: 91.1 → 91.3 → 91.2 → 91.4 → 91.5 -->
+
+- [ ] 91.1: Execute story — docs/epics/stories/STORY-91.1-context-aware-placeholders.md
+- [ ] 91.3: Execute story — docs/epics/stories/STORY-91.3-adaptive-detail-level.md
+- [ ] 91.2: Execute story — docs/epics/stories/STORY-91.2-quick-start-mode.md
+- [ ] 91.4: Execute story — docs/epics/stories/STORY-91.4-suggestion-engine.md
+- [ ] 91.5: Execute story — docs/epics/stories/STORY-91.5-performance-targets.md
+
+## Phase 8: Story Generator - Performance Parity and Quality Gaps (Epic 92)
+
+<!-- Epic: docs/epics/EPIC-92-story-generator-quality-gaps.md -->
+<!-- Dependencies: Epic 91 (shared patterns for context-aware prose and quick-start) -->
+<!-- Implementation order: 92.1 → 92.2 → 92.3 → 92.4 → 92.5 -->
+
+- [x] 92.1: Execute story — docs/epics/stories/STORY-92.1-port-performance-fixes.md
+- [ ] 92.2: Execute story — docs/epics/stories/STORY-92.2-context-aware-story-placeholders.md
+- [ ] 92.3: Execute story — docs/epics/stories/STORY-92.3-quick-start-story-mode.md
+- [ ] 92.4: Execute story — docs/epics/stories/STORY-92.4-task-suggestion-engine.md
+- [ ] 92.5: Execute story — docs/epics/stories/STORY-92.5-improved-gherkin-scaffolding.md
+
 ## Completed
 - [x] Project reviewed and fix plan created (2026-03-22)
 - [x] Phase 1-4 completed (2026-03-22 to 2026-03-23)
@@ -67,9 +91,11 @@
 - Phase 2 requires access to tapps-brain repo at C:\cursor\tapps-brain
 - Phase 3 requires tapps-brain changes to land first (R01-R03 from recommendations)
 - Phase 4 items are enhancements, not blocking deployment
-- Phase 5-6 use pointer convention: read the story file for full spec, tasks, and AC
+- Phase 5-8 use pointer convention: read the story file for full spec, tasks, and AC
 - Phase 5 stories are independent (can parallelize 89.2-89.4 after 89.1)
 - Phase 6 stories are sequential (90.1 -> 90.2 -> 90.3)
+- Phase 7 stories follow implementation order: 91.1 → 91.3 → 91.2 → 91.4 → 91.5 (91.4/91.5 can parallel)
+- Phase 8 depends on Phase 7 patterns; stories are sequential except 92.4/92.5 can parallel
 - QA runs at epic boundaries (when a section's last task in a `##` section is completed)
 - This is the primary fix plan (canonical copy)
 - See docs/planning/TAPPS_BRAIN_INTEGRATION_RECOMMENDATIONS.md for R01-R18 details

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -552,6 +553,8 @@ class StoryGenerator:
 
     # -- auto-populate from analyzers ----------------------------------------
 
+    _AUTO_POPULATE_TIMEOUT_S: ClassVar[float] = 15.0
+
     def _auto_populate(
         self, project_root: Path, config: StoryConfig | None = None,
     ) -> dict[str, Any]:
@@ -560,12 +563,33 @@ class StoryGenerator:
         Returns a dict with optional keys: tech_stack, module_summary,
         expert_guidance. Each key is only present when the corresponding
         analyzer/expert succeeds.
+
+        A wall-clock budget of 15 s is enforced.  If a step exhausts the
+        budget the remaining steps are skipped and partial results returned.
         """
         enrichment: dict[str, Any] = {}
-        self._enrich_metadata(project_root, enrichment)
-        self._enrich_module_map(project_root, enrichment)
-        if config:
+        t_wall = time.perf_counter()
+        budget = self._AUTO_POPULATE_TIMEOUT_S
+
+        def _remaining() -> float:
+            return budget - (time.perf_counter() - t_wall)
+
+        steps: list[tuple[str, Any, list[Any]]] = [
+            ("metadata", self._enrich_metadata, [project_root, enrichment]),
+            ("module_map", self._enrich_module_map, [project_root, enrichment]),
+        ]
+
+        for key, fn, args in steps:
+            if _remaining() <= 0:
+                logger.warning("story_auto_populate_budget_exceeded", skipped=key)
+                continue
+            fn(*args)
+
+        if config and _remaining() > 0:
             self._enrich_experts(config, enrichment)
+        elif config:
+            logger.warning("story_auto_populate_budget_exceeded", skipped="experts")
+
         return enrichment
 
     @staticmethod
@@ -588,12 +612,15 @@ class StoryGenerator:
 
     @staticmethod
     def _enrich_module_map(project_root: Path, enrichment: dict[str, Any]) -> None:
-        """Enrich with module structure from ModuleMapAnalyzer."""
+        """Enrich with module structure from ModuleMapAnalyzer.
+
+        Uses a shallow depth (3) to avoid hanging on large projects.
+        """
         try:
             from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
 
             analyzer = ModuleMapAnalyzer()
-            module_map = analyzer.analyze(project_root)
+            module_map = analyzer.analyze(project_root, depth=3)
             enrichment["module_summary"] = (
                 f"{module_map.total_packages} packages, "
                 f"{module_map.total_modules} modules, "
@@ -613,36 +640,54 @@ class StoryGenerator:
 
     @staticmethod
     def _enrich_experts(config: StoryConfig, enrichment: dict[str, Any]) -> None:
-        """Enrich with guidance from TappsMCP domain experts."""
+        """Enrich with guidance from TappsMCP domain experts.
+
+        Runs consultations in parallel using a thread pool to avoid
+        sequential latency across all 4 domains.
+        """
         try:
             from tapps_core.experts.engine import consult_expert
         except Exception:
             logger.debug("story_expert_import_failed", exc_info=True)
             return
 
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         context = config.title
         if config.description:
             context = f"{config.title} - {config.description}"
 
-        guidance: list[dict[str, str]] = []
-        for domain, question_template in StoryGenerator._EXPERT_DOMAINS:
+        def _consult_one(domain: str, question_template: str) -> dict[str, str] | None:
             try:
                 question = question_template.format(context=context)
-                result = consult_expert(question, domain=domain, max_chunks=3,
-                                        max_context_length=1500)
+                result = consult_expert(
+                    question, domain=domain, max_chunks=3, max_context_length=1500,
+                )
                 if result.confidence >= 0.3 and result.answer:
                     from docs_mcp.generators.expert_utils import extract_expert_advice
 
                     advice = extract_expert_advice(result.answer)
                     if advice:
-                        guidance.append({
+                        return {
                             "domain": result.domain,
                             "expert": result.expert_name,
                             "advice": advice,
                             "confidence": f"{result.confidence:.0%}",
-                        })
+                        }
             except Exception:
                 logger.debug("story_expert_consult_failed", domain=domain, exc_info=True)
+            return None
+
+        guidance: list[dict[str, str]] = []
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {
+                pool.submit(_consult_one, domain, tmpl): domain
+                for domain, tmpl in StoryGenerator._EXPERT_DOMAINS
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    guidance.append(result)
 
         if guidance:
             from docs_mcp.generators.expert_utils import filter_expert_guidance
