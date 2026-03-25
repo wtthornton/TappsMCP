@@ -107,7 +107,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Ruff RUF012**: Mutable class-level attributes need `ClassVar` annotation.
 - **Windows testing**: Use `python -c "import time; time.sleep(N)"` for timeout tests -- Git Bash intercepts `cmd /c timeout`.
 - **Patching lazy imports**: Some imports happen inside tool handlers from `tapps_core`. Patch at source modules, not `tapps_mcp.server`.
-- **tapps-brain version**: TappsMCP pins tapps-brain at `v1.3.1` (git tag). Profile/promotion modules (`tapps_brain.profile`, `tapps_brain.promotion`) are available. Imports still use `try/except ImportError` for defensive degradation in non-standard installs.
+- **tapps-brain version**: TappsMCP pins tapps-brain at `v1.4.3` (git tag). Profile/promotion modules (`tapps_brain.profile`, `tapps_brain.promotion`) are available. Imports still use `try/except ImportError` for defensive degradation in non-standard installs.
 
 ## Important context
 

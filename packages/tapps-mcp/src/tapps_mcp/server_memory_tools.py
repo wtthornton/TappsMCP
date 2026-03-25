@@ -280,7 +280,7 @@ async def tapps_memory(
             value (e.g., "research-knowledge"). Persists choice and resets the store. (Epic M2)
         hive_status: Show Hive / Agent Teams status (requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).
             Mirrors session-start hive_status; includes propagation_config (documents that
-            profile-sourced tier lists are unavailable in tapps-brain v1.3.1 and how
+            profile-sourced tier lists are unavailable in tapps-brain v1.4.3 and how
             hive_propagate calls PropagationEngine). Registers this process when enabled. (Epic M3)
         hive_search: Search the Hive store (query or value = search text). Optional tags =
             comma-separated namespace filter. limit/min_confidence apply. (Epic M3)

@@ -13,7 +13,7 @@
 1. Read `packages/tapps-mcp/src/tapps_mcp/server_memory_tools.py` — `_VALID_ACTIONS` and dispatch map at bottom.
 2. Read `packages/tapps-mcp/src/tapps_mcp/server_helpers.py` — `_get_memory_store()`, cache reset patterns.
 3. Run: `uv run pytest packages/tapps-mcp/tests/ -m "not slow" -k "memory" -q` (adjust `-k` if too narrow).
-4. Pin: **tapps-brain** is git-sourced at `v1.3.1` (root `pyproject.toml`). Inspect installed API with:
+4. Pin: **tapps-brain** is git-sourced at `v1.4.3` (root `pyproject.toml`). Inspect installed API with:
    `uv run python -c "import tapps_brain.hive as h; print(dir(h))"` (and same for `audit`, `markdown_import`, `metrics` if needed).
 
 ---
