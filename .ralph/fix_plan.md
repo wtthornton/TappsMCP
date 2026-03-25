@@ -79,7 +79,7 @@
 - [x] 92.1: Execute story — docs/epics/stories/STORY-92.1-port-performance-fixes.md
 - [x] 92.2: Execute story — docs/epics/stories/STORY-92.2-context-aware-story-placeholders.md ✓ Refactored `_render_description`, `_render_tasks`, `_render_checkbox_criteria`, `_render_definition_of_done` in stories.py to interpolate config.title (and role/want for description) into placeholder text. Empty/whitespace title falls back to generic text. Updated 4 existing tests; added 14 new tests in `TestContextAwarePlaceholders`.
 - [x] 92.3: Execute story — docs/epics/stories/STORY-92.3-quick-start-story-mode.md ✓ Added `quick_start: bool = False` to `docs_generate_story` and `StoryGenerator.generate()`. Implemented `_infer_story_defaults()` static method that fills role ("developer"), want ("to {title.lower()}"), so_that, points (3), size ("M"), 3 task stubs, and 3 AC from title. Explicit params always override. 22 unit tests in TestQuickStartMode + TestDocsGenerateStoryQuickStart.
-- [ ] 92.4: Execute story — docs/epics/stories/STORY-92.4-task-suggestion-engine.md
+- [x] 92.4: Execute story — docs/epics/stories/STORY-92.4-task-suggestion-engine.md ✓ Added `_TASK_PATTERNS` ClassVar with 6 keyword groups (model/schema/database, endpoint/api/route, test/coverage, ui/component/form, validate/validation, auth/login/token). Implemented `_suggest_tasks(config)` classmethod using first-match token+substring scan and file_path association for first task. Updated `_render_tasks` to call suggestion engine when config.tasks is empty. Updated `test_tasks_placeholder` test. Added 23 unit tests in TestTaskSuggestionEngine.
 - [ ] 92.5: Execute story — docs/epics/stories/STORY-92.5-improved-gherkin-scaffolding.md
 
 ## Completed

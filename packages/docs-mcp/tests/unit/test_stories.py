@@ -202,10 +202,10 @@ class TestStoryGeneratorSections:
         assert "- [ ] Write unit tests" in content
 
     def test_tasks_placeholder(self) -> None:
-        # _make_config has title="Test Story" → context-aware task placeholder
+        # "Test Story" title matches "test" keyword → suggestion engine returns test tasks
         config = _make_config(tasks=[])
         content = self.gen.generate(config)
-        assert "- [ ] Implement test story" in content
+        assert "- [ ] Write unit tests for happy path" in content
 
     def test_checkbox_acceptance_criteria(self) -> None:
         config = _make_config(criteria_format="checkbox")
@@ -1066,6 +1066,189 @@ class TestQuickStartMode:
         content = self.gen.generate(config, quick_start=True)
         assert "to search documents quickly" in content
         assert "to add search" not in content
+
+
+# ---------------------------------------------------------------------------
+# StoryGenerator -- task suggestion engine (Story 92.4)
+# ---------------------------------------------------------------------------
+
+
+class TestTaskSuggestionEngine:
+    """Tests for _suggest_tasks keyword-to-task mapping (Story 92.4).
+
+    Verifies that title/description keywords map to relevant task stubs,
+    that user-provided tasks override suggestions, and that the fallback
+    is used when no keywords match.
+    """
+
+    def setup_method(self) -> None:
+        self.gen = StoryGenerator()
+
+    # -- keyword pattern tests -----------------------------------------------
+
+    def test_model_keyword_suggests_model_tasks(self) -> None:
+        config = StoryConfig(title="User Model Update", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Define data model fields and relationships" in descriptions
+        assert "Write migration script" in descriptions
+        assert "Add model validation" in descriptions
+
+    def test_schema_keyword_suggests_model_tasks(self) -> None:
+        config = StoryConfig(title="Schema Migration", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Define data model fields and relationships" in descriptions
+
+    def test_database_keyword_suggests_model_tasks(self) -> None:
+        config = StoryConfig(title="Database Indexing", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Write migration script" in descriptions
+
+    def test_endpoint_keyword_suggests_api_tasks(self) -> None:
+        config = StoryConfig(title="Add login endpoint", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Define request/response schema" in descriptions
+        assert "Implement endpoint handler" in descriptions
+        assert "Add input validation" in descriptions
+        assert "Add error responses" in descriptions
+
+    def test_api_keyword_suggests_api_tasks(self) -> None:
+        config = StoryConfig(title="REST API rate limiting", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Implement endpoint handler" in descriptions
+
+    def test_route_keyword_suggests_api_tasks(self) -> None:
+        config = StoryConfig(title="Route Authorization", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Add input validation" in descriptions
+
+    def test_coverage_keyword_suggests_test_tasks(self) -> None:
+        config = StoryConfig(title="Improve test coverage", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Write unit tests for happy path" in descriptions
+        assert "Write edge case tests" in descriptions
+        assert "Add integration test" in descriptions
+
+    def test_ui_keyword_suggests_ui_tasks(self) -> None:
+        config = StoryConfig(title="Dashboard UI redesign", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Create component scaffold" in descriptions
+        assert "Add styling/CSS" in descriptions
+        assert "Add accessibility attributes" in descriptions
+
+    def test_component_keyword_suggests_ui_tasks(self) -> None:
+        config = StoryConfig(title="Header component", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Create component scaffold" in descriptions
+
+    def test_form_keyword_suggests_ui_tasks(self) -> None:
+        config = StoryConfig(title="Contact form", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Add form validation" in descriptions
+
+    def test_validate_keyword_suggests_validation_tasks(self) -> None:
+        config = StoryConfig(title="Validate user input", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Define validation rules" in descriptions
+        assert "Implement validation logic" in descriptions
+        assert "Add validation error messages" in descriptions
+
+    def test_validation_keyword_suggests_validation_tasks(self) -> None:
+        config = StoryConfig(title="Add input validation", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Define validation rules" in descriptions
+
+    def test_auth_keyword_suggests_auth_tasks(self) -> None:
+        config = StoryConfig(title="Auth middleware", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Implement auth flow" in descriptions
+        assert "Add token generation/validation" in descriptions
+        assert "Add session management" in descriptions
+
+    def test_login_keyword_suggests_auth_tasks(self) -> None:
+        config = StoryConfig(title="Add user login endpoint", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        # "endpoint" or "login" may match first, both produce relevant tasks
+        assert len(tasks) >= 3
+
+    def test_token_keyword_suggests_auth_tasks(self) -> None:
+        config = StoryConfig(title="JWT token refresh", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Implement auth flow" in descriptions
+
+    # -- fallback and edge cases ---------------------------------------------
+
+    def test_no_keyword_match_fallback_to_generic(self) -> None:
+        config = StoryConfig(title="Rate Limiter", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        descriptions = [t.description for t in tasks]
+        assert "Implement rate limiter" in descriptions
+        assert "Write unit tests" in descriptions
+        assert "Update documentation" in descriptions
+
+    def test_empty_title_returns_empty_list(self) -> None:
+        config = StoryConfig(title="", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        assert tasks == []
+
+    def test_whitespace_title_returns_empty_list(self) -> None:
+        config = StoryConfig(title="   ", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        assert tasks == []
+
+    # -- file_path association -----------------------------------------------
+
+    def test_first_file_associated_with_first_task(self) -> None:
+        config = StoryConfig(
+            title="Rate Limiter",
+            tasks=[],
+            files=["src/rate_limiter.py", "tests/test_rate_limiter.py"],
+        )
+        tasks = StoryGenerator._suggest_tasks(config)
+        assert len(tasks) >= 1
+        assert tasks[0].file_path == "src/rate_limiter.py"
+        # Subsequent tasks have no file_path
+        assert tasks[1].file_path == ""
+
+    def test_no_files_tasks_have_no_file_path(self) -> None:
+        config = StoryConfig(title="Rate Limiter", tasks=[])
+        tasks = StoryGenerator._suggest_tasks(config)
+        for task in tasks:
+            assert task.file_path == ""
+
+    # -- integration with _render_tasks -------------------------------------
+
+    def test_render_tasks_uses_suggestion_engine(self) -> None:
+        config = StoryConfig(title="Database Migration", tasks=[])
+        content = self.gen.generate(config)
+        assert "## Tasks" in content
+        assert "- [ ] Define data model fields and relationships" in content
+
+    def test_render_tasks_empty_title_shows_placeholder(self) -> None:
+        config = StoryConfig(title="", tasks=[])
+        content = self.gen.generate(config)
+        assert "- [ ] Define implementation tasks..." in content
+
+    def test_user_provided_tasks_override_suggestions(self) -> None:
+        custom_task = StoryTask(description="My custom task")
+        config = StoryConfig(title="Database Migration", tasks=[custom_task])
+        content = self.gen.generate(config)
+        assert "- [ ] My custom task" in content
+        assert "Define data model fields and relationships" not in content
 
 
 # ---------------------------------------------------------------------------

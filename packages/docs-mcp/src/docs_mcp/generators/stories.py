@@ -96,6 +96,112 @@ class StoryGenerator:
     VALID_SIZES: ClassVar[frozenset[str]] = frozenset({"S", "M", "L", "XL", ""})
     VALID_CRITERIA_FORMATS: ClassVar[frozenset[str]] = frozenset({"checkbox", "gherkin"})
 
+    # Keyword-to-task patterns for the task suggestion engine (Story 92.4).
+    # Multiple keywords that share the same list object are deduplicated via id().
+    # First matching keyword group wins.
+    _model_tasks: ClassVar[list[str]] = [
+        "Define data model fields and relationships",
+        "Write migration script",
+        "Add model validation",
+    ]
+    _api_tasks: ClassVar[list[str]] = [
+        "Define request/response schema",
+        "Implement endpoint handler",
+        "Add input validation",
+        "Add error responses",
+    ]
+    _test_tasks: ClassVar[list[str]] = [
+        "Write unit tests for happy path",
+        "Write edge case tests",
+        "Add integration test",
+    ]
+    _ui_tasks: ClassVar[list[str]] = [
+        "Create component scaffold",
+        "Add form validation",
+        "Add styling/CSS",
+        "Add accessibility attributes",
+    ]
+    _validation_tasks: ClassVar[list[str]] = [
+        "Define validation rules",
+        "Implement validation logic",
+        "Add validation error messages",
+    ]
+    _auth_tasks: ClassVar[list[str]] = [
+        "Implement auth flow",
+        "Add token generation/validation",
+        "Add session management",
+    ]
+    _TASK_PATTERNS: ClassVar[dict[str, list[str]]] = {
+        "model": _model_tasks,
+        "schema": _model_tasks,
+        "database": _model_tasks,
+        "endpoint": _api_tasks,
+        "api": _api_tasks,
+        "route": _api_tasks,
+        "test": _test_tasks,
+        "coverage": _test_tasks,
+        "ui": _ui_tasks,
+        "component": _ui_tasks,
+        "form": _ui_tasks,
+        "validate": _validation_tasks,
+        "validation": _validation_tasks,
+        "auth": _auth_tasks,
+        "login": _auth_tasks,
+        "token": _auth_tasks,
+    }
+
+    @classmethod
+    def _suggest_tasks(cls, config: StoryConfig) -> list[StoryTask]:
+        """Suggest implementation tasks from title/description keywords.
+
+        Scans the title and description for known keyword patterns and returns
+        a deduplicated list of relevant task stubs. Falls back to a generic
+        3-task pattern when no keywords match but title is non-empty. Returns
+        an empty list when the title is empty/whitespace (preserve existing
+        "Define implementation tasks..." placeholder).
+
+        When ``config.files`` is provided, the first file path is associated
+        with the first task stub.
+
+        Returns:
+            A list of :class:`StoryTask` with inferred descriptions.
+        """
+        title = config.title.strip()
+        if not title:
+            return []
+
+        combined = (title + " " + (config.description or "")).lower()
+        tokens = set(re.split(r"[\s\-_/]+", combined))
+
+        task_descriptions: list[str] = []
+        seen_patterns: set[int] = set()
+
+        for keyword, task_list in cls._TASK_PATTERNS.items():
+            pattern_id = id(task_list)
+            if pattern_id in seen_patterns:
+                continue
+            if keyword in tokens or keyword in combined:
+                seen_patterns.add(pattern_id)
+                task_descriptions = task_list
+                break  # First matching keyword group wins
+
+        if not task_descriptions:
+            # Generic fallback: title-derived implementation task
+            task_descriptions = [
+                f"Implement {title.lower()}",
+                "Write unit tests",
+                "Update documentation",
+            ]
+
+        # Associate first file path with the first task when files are provided.
+        first_file = config.files[0] if config.files else ""
+        tasks: list[StoryTask] = []
+        for i, description in enumerate(task_descriptions):
+            file_path = first_file if i == 0 and first_file else ""
+            tasks.append(StoryTask(description=description, file_path=file_path))
+
+        return tasks
+
     @staticmethod
     def _infer_story_defaults(config: StoryConfig) -> StoryConfig:
         """Fill empty fields with title-derived defaults for quick-start mode.
@@ -362,7 +468,12 @@ class StoryGenerator:
         return lines
 
     def _render_tasks(self, config: StoryConfig) -> list[str]:
-        """Render the Tasks section."""
+        """Render the Tasks section.
+
+        When ``config.tasks`` is empty, falls back to :meth:`_suggest_tasks`
+        which maps title/description keywords to common implementation tasks.
+        When the title is also empty, renders a generic placeholder.
+        """
         lines = [
             "<!-- docsmcp:start:tasks -->",
             "## Tasks",
@@ -370,19 +481,22 @@ class StoryGenerator:
         ]
 
         if config.tasks:
-            for task in config.tasks:
-                if task.file_path:
-                    lines.append(f"- [ ] {task.description} (`{task.file_path}`)")
-                else:
-                    lines.append(f"- [ ] {task.description}")
+            tasks_to_render = config.tasks
         else:
-            title = config.title.strip()
-            if title:
-                lines.append(f"- [ ] Implement {title.lower()}")
+            suggested = self._suggest_tasks(config)
+            if suggested:
+                tasks_to_render = suggested
             else:
+                # Empty title: show generic placeholder
                 lines.append("- [ ] Define implementation tasks...")
-            lines.append("- [ ] Write unit tests")
-            lines.append("- [ ] Update documentation")
+                lines.extend(["", "<!-- docsmcp:end:tasks -->", ""])
+                return lines
+
+        for task in tasks_to_render:
+            if task.file_path:
+                lines.append(f"- [ ] {task.description} (`{task.file_path}`)")
+            else:
+                lines.append(f"- [ ] {task.description}")
 
         lines.extend(["", "<!-- docsmcp:end:tasks -->", ""])
         return lines
