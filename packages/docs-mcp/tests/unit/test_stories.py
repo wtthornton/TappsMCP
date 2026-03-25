@@ -940,6 +940,210 @@ class TestDocsGenerateStoryTool:
 
 
 # ---------------------------------------------------------------------------
+# StoryGenerator -- quick_start mode (Story 92.3)
+# ---------------------------------------------------------------------------
+
+
+class TestQuickStartMode:
+    """Tests for quick_start mode in StoryGenerator (Story 92.3).
+
+    Verifies that ``quick_start=True`` infers defaults from the title alone
+    and that explicit parameters always override inferred defaults.
+    """
+
+    def setup_method(self) -> None:
+        self.gen = StoryGenerator()
+
+    # -- _infer_story_defaults unit tests ------------------------------------
+
+    def test_infer_defaults_sets_role(self) -> None:
+        config = StoryConfig(title="Login Validation")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.role == "developer"
+
+    def test_infer_defaults_sets_want_from_title(self) -> None:
+        config = StoryConfig(title="Login Validation")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.want == "to login validation"
+
+    def test_infer_defaults_sets_so_that(self) -> None:
+        config = StoryConfig(title="Login Validation")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.so_that == "the feature is delivered and tested"
+
+    def test_infer_defaults_sets_points(self) -> None:
+        config = StoryConfig(title="Login Validation")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.points == 3
+
+    def test_infer_defaults_sets_size(self) -> None:
+        config = StoryConfig(title="Login Validation")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.size == "M"
+
+    def test_infer_defaults_sets_tasks_from_title(self) -> None:
+        config = StoryConfig(title="Login Validation")
+        result = StoryGenerator._infer_story_defaults(config)
+        descriptions = [t.description for t in result.tasks]
+        assert "Implement login validation" in descriptions
+        assert "Write unit tests" in descriptions
+        assert "Update documentation" in descriptions
+
+    def test_infer_defaults_sets_ac_from_title(self) -> None:
+        config = StoryConfig(title="Login Validation")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert "Login Validation works as specified" in result.acceptance_criteria
+        assert "Unit tests pass" in result.acceptance_criteria
+        assert "Docs updated" in result.acceptance_criteria
+
+    def test_infer_defaults_does_not_overwrite_explicit_role(self) -> None:
+        config = StoryConfig(title="Login Validation", role="admin")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.role == "admin"
+
+    def test_infer_defaults_does_not_overwrite_explicit_want(self) -> None:
+        config = StoryConfig(title="Login Validation", want="to secure the system")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.want == "to secure the system"
+
+    def test_infer_defaults_does_not_overwrite_explicit_points(self) -> None:
+        config = StoryConfig(title="Login Validation", points=8)
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.points == 8
+
+    def test_infer_defaults_does_not_overwrite_explicit_size(self) -> None:
+        config = StoryConfig(title="Login Validation", size="XL")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.size == "XL"
+
+    def test_infer_defaults_does_not_overwrite_explicit_tasks(self) -> None:
+        existing_tasks = [StoryTask(description="My custom task")]
+        config = StoryConfig(title="Login Validation", tasks=existing_tasks)
+        result = StoryGenerator._infer_story_defaults(config)
+        assert len(result.tasks) == 1
+        assert result.tasks[0].description == "My custom task"
+
+    def test_infer_defaults_does_not_overwrite_explicit_ac(self) -> None:
+        config = StoryConfig(title="X", acceptance_criteria=["Custom criterion"])
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.acceptance_criteria == ["Custom criterion"]
+
+    def test_infer_defaults_empty_title_fallback(self) -> None:
+        config = StoryConfig(title="")
+        result = StoryGenerator._infer_story_defaults(config)
+        assert result.want == "to implement the feature"
+        descriptions = [t.description for t in result.tasks]
+        assert "Implement the feature" in descriptions
+
+    # -- generate() with quick_start=True ------------------------------------
+
+    def test_quick_start_produces_complete_story(self) -> None:
+        config = StoryConfig(title="Login Validation", epic_number=91)
+        content = self.gen.generate(config, quick_start=True)
+        assert "**As a** developer" in content
+        assert "**I want** to login validation" in content
+        assert "**so that** the feature is delivered and tested" in content
+        assert "**Points:** 3" in content
+        assert "**Size:** M" in content
+        assert "- [ ] Implement login validation" in content
+        assert "- [ ] Login Validation works as specified" in content
+
+    def test_quick_start_false_unchanged(self) -> None:
+        """quick_start=False (default) should not change behavior."""
+        config = StoryConfig(title="Login Validation")
+        content_default = self.gen.generate(config)
+        content_explicit_false = self.gen.generate(config, quick_start=False)
+        assert content_default == content_explicit_false
+
+    def test_quick_start_explicit_role_overrides(self) -> None:
+        config = StoryConfig(title="Add Search", role="data analyst")
+        content = self.gen.generate(config, quick_start=True)
+        assert "**As a** data analyst" in content
+        assert "**As a** developer" not in content
+
+    def test_quick_start_explicit_want_overrides(self) -> None:
+        config = StoryConfig(title="Add Search", want="to search documents quickly")
+        content = self.gen.generate(config, quick_start=True)
+        assert "to search documents quickly" in content
+        assert "to add search" not in content
+
+
+# ---------------------------------------------------------------------------
+# MCP tool: docs_generate_story -- quick_start
+# ---------------------------------------------------------------------------
+
+
+class TestDocsGenerateStoryQuickStart:
+    """Tests for quick_start parameter in ``docs_generate_story`` MCP tool."""
+
+    async def _call(self, **kwargs: Any) -> dict[str, Any]:
+        from docs_mcp.server_gen_tools import docs_generate_story
+
+        return await docs_generate_story(**kwargs)
+
+    async def test_quick_start_mcp_tool_produces_complete_story(
+        self, tmp_path: Path,
+    ) -> None:
+        root = tmp_path / "proj"
+        root.mkdir()
+
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(root),
+        ):
+            result = await self._call(
+                title="Login Validation",
+                epic_number=91,
+                quick_start=True,
+                project_root=str(root),
+            )
+
+        assert result["success"] is True
+        assert result["data"]["quick_start"] is True
+        content = result["data"]["content"]
+        assert "**As a** developer" in content
+        assert "**I want** to login validation" in content
+        assert "**Points:** 3" in content
+        assert "**Size:** M" in content
+
+    async def test_quick_start_mcp_tool_explicit_role_overrides(
+        self, tmp_path: Path,
+    ) -> None:
+        root = tmp_path / "proj"
+        root.mkdir()
+
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(root),
+        ):
+            result = await self._call(
+                title="Login Validation",
+                epic_number=91,
+                role="admin",
+                quick_start=True,
+                project_root=str(root),
+            )
+
+        assert result["success"] is True
+        content = result["data"]["content"]
+        assert "**As a** admin" in content
+        assert "**As a** developer" not in content
+
+    async def test_quick_start_false_in_response(self, tmp_path: Path) -> None:
+        root = tmp_path / "proj"
+        root.mkdir()
+
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(root),
+        ):
+            result = await self._call(title="X", project_root=str(root))
+
+        assert result["success"] is True
+        assert result["data"]["quick_start"] is False
+
+
+# ---------------------------------------------------------------------------
 # StoryGenerator -- generate_test_name
 # ---------------------------------------------------------------------------
 

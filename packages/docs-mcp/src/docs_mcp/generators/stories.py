@@ -96,12 +96,68 @@ class StoryGenerator:
     VALID_SIZES: ClassVar[frozenset[str]] = frozenset({"S", "M", "L", "XL", ""})
     VALID_CRITERIA_FORMATS: ClassVar[frozenset[str]] = frozenset({"checkbox", "gherkin"})
 
+    @staticmethod
+    def _infer_story_defaults(config: StoryConfig) -> StoryConfig:
+        """Fill empty fields with title-derived defaults for quick-start mode.
+
+        Explicit parameters are never overwritten -- only empty/default fields
+        are populated.
+
+        Defaults applied when fields are empty/zero:
+        - ``role`` → "developer"
+        - ``want`` → "to {title.lower()}"
+        - ``so_that`` → "the feature is delivered and tested"
+        - ``points`` → 3
+        - ``size`` → "M"
+        - ``tasks`` → 3 stubs derived from title
+        - ``acceptance_criteria`` → 3 items derived from title
+        """
+        title = config.title.strip()
+
+        updates: dict[str, Any] = {}
+
+        if not config.role:
+            updates["role"] = "developer"
+
+        if not config.want:
+            updates["want"] = f"to {title.lower()}" if title else "to implement the feature"
+
+        if not config.so_that:
+            updates["so_that"] = "the feature is delivered and tested"
+
+        if not config.points:
+            updates["points"] = 3
+
+        if not config.size:
+            updates["size"] = "M"
+
+        if not config.tasks:
+            task_title = title.lower() if title else "the feature"
+            updates["tasks"] = [
+                StoryTask(description=f"Implement {task_title}"),
+                StoryTask(description="Write unit tests"),
+                StoryTask(description="Update documentation"),
+            ]
+
+        if not config.acceptance_criteria:
+            ac_title = title if title else "Feature"
+            updates["acceptance_criteria"] = [
+                f"{ac_title} works as specified",
+                "Unit tests pass",
+                "Docs updated",
+            ]
+
+        if updates:
+            return config.model_copy(update=updates)
+        return config
+
     def generate(
         self,
         config: StoryConfig,
         *,
         project_root: Path | None = None,
         auto_populate: bool = False,
+        quick_start: bool = False,
         output_path: str = "",
     ) -> str:
         """Generate a user story document.
@@ -110,12 +166,19 @@ class StoryGenerator:
             config: Story configuration with title, tasks, criteria, etc.
             project_root: Project root for auto-populate analyzers.
             auto_populate: When True, enrich sections from project analyzers.
+            quick_start: When True, infer defaults from the title alone --
+                role, want, so_that, points, size, tasks, and acceptance
+                criteria are filled in automatically. Explicit parameters
+                always override quick-start defaults.
             output_path: When set (relative to project root), ``epic_path`` in
                 config is rewritten as a markdown link relative to this file.
 
         Returns:
             Rendered markdown content with docsmcp markers.
         """
+        if quick_start:
+            config = self._infer_story_defaults(config)
+
         style = config.style if config.style in self.VALID_STYLES else "standard"
 
         if style != config.style:

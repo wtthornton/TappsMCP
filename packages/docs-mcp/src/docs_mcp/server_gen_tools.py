@@ -1398,6 +1398,7 @@ async def docs_generate_story(
     inherit_context: bool = True,
     epic_path: str = "",
     auto_populate: bool = False,
+    quick_start: bool = False,
     output_path: str = "",
     project_root: str = "",
 ) -> dict[str, Any]:
@@ -1414,6 +1415,7 @@ async def docs_generate_story(
     - ``gherkin``: Given/When/Then Gherkin format (best for user-facing behavior)
 
     When ``auto_populate=True``, enriches sections from project analyzers.
+    When ``quick_start=True``, infers defaults from the title alone.
 
     Args:
         title: Story title (e.g. "Add login form validation").
@@ -1438,6 +1440,9 @@ async def docs_generate_story(
         inherit_context: When True, skip project metadata in story (inherit from epic).
         epic_path: Relative path to parent epic file for cross-referencing.
         auto_populate: Enrich from project analyzers (ModuleMap, Metadata).
+        quick_start: When True, infer defaults from the title alone -- role, want,
+            so_that, points, size, tasks, and acceptance criteria are filled in
+            automatically. Explicit parameters always override quick-start defaults.
         output_path: File path to write the story (relative to project root).
             When empty, returns the content without writing a file.
             When set with ``epic_path``, the epic link is rewritten relative to
@@ -1534,6 +1539,7 @@ async def docs_generate_story(
             config,
             project_root=root if auto_populate else None,
             auto_populate=auto_populate,
+            quick_start=quick_start,
             output_path=output_path or "",
         )
     except Exception as exc:
@@ -1571,6 +1577,7 @@ async def docs_generate_story(
         "criteria_format": criteria_format,
         "task_count": len(task_list),
         "auto_populated": auto_populate,
+        "quick_start": quick_start,
         "content_length": len(content),
         "content": content,
     }
