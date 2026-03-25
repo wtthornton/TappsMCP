@@ -1195,7 +1195,9 @@ async def docs_generate_epic(
             auto_populate, generates per-file analysis (line counts, git history,
             public symbols) and cross-references related epics.
         link_stories: When True, story stubs link to full story files.
-        style: Epic style - "standard" or "comprehensive".
+        style: Epic style - "minimal", "standard", "comprehensive", or "auto".
+            "auto" selects the style based on input complexity (stories, risks,
+            files, success_metrics).
         auto_populate: Enrich from project analyzers (ModuleMap, Metadata, etc).
             Default False. On large projects this adds latency (module map
             walk, 8 expert consultations, git history). A 15 s wall-clock

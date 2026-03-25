@@ -373,6 +373,140 @@ class TestEpicGeneratorStyles:
         assert "## Implementation Order" not in content
         assert "## Risk Assessment" not in content
 
+    def test_minimal_style_reduced_output(self) -> None:
+        """Explicit minimal style produces reduced output."""
+        config = _make_config(style="minimal", stories=[])
+        content = self.gen.generate(config)
+        # Minimal includes: title, metadata, purpose, goal, AC, stories, DoD
+        assert "## Goal" in content
+        assert "## Acceptance Criteria" in content
+        assert "## Definition of Done" in content
+        # Minimal omits: motivation, technical notes, non-goals
+        assert "## Motivation" not in content
+        assert "## Technical Notes" not in content
+        assert "## Out of Scope" not in content
+        # And never comprehensive sections
+        assert "## Implementation Order" not in content
+        assert "## Risk Assessment" not in content
+
+
+# ---------------------------------------------------------------------------
+# EpicGenerator -- auto style detection
+# ---------------------------------------------------------------------------
+
+
+class TestEpicAutoDetectStyle:
+    """Tests for _auto_detect_style and style='auto' integration."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_auto_detects_minimal_zero_stories(self) -> None:
+        """Auto with 0 stories, no risks, no files -> minimal."""
+        config = _make_config(style="auto", stories=[], risks=[], files=[])
+        content = self.gen.generate(config)
+        assert "## Definition of Done" in content
+        assert "## Motivation" not in content
+        assert "## Implementation Order" not in content
+
+    def test_auto_detects_minimal_one_story(self) -> None:
+        """Auto with 1 story, no risks, no files -> minimal."""
+        config = _make_config(
+            style="auto",
+            stories=[EpicStoryStub(title="Single story")],
+            risks=[],
+            files=[],
+        )
+        content = self.gen.generate(config)
+        assert "## Definition of Done" in content
+        assert "## Motivation" not in content
+
+    def test_auto_detects_standard_three_stories(self) -> None:
+        """Auto with 3 stories -> standard."""
+        config = _make_config(
+            style="auto",
+            stories=[EpicStoryStub(title=f"Story {i}") for i in range(3)],
+            risks=[],
+            files=[],
+        )
+        content = self.gen.generate(config)
+        # Standard has motivation and tech notes but no comprehensive sections
+        assert "## Motivation" in content
+        assert "## Technical Notes" in content
+        assert "## Implementation Order" not in content
+        assert "## Definition of Done" not in content
+
+    def test_auto_detects_comprehensive_six_stories(self) -> None:
+        """Auto with 6 stories -> comprehensive."""
+        config = _make_config(
+            style="auto",
+            stories=[EpicStoryStub(title=f"Story {i}") for i in range(6)],
+        )
+        content = self.gen.generate(config)
+        assert "## Implementation Order" in content
+        assert "## Risk Assessment" in content
+
+    def test_auto_detects_comprehensive_with_risks(self) -> None:
+        """Auto with risks provided -> comprehensive."""
+        config = _make_config(
+            style="auto",
+            stories=[EpicStoryStub(title="S1")],
+            risks=["Data loss risk"],
+            files=[],
+        )
+        content = self.gen.generate(config)
+        assert "## Implementation Order" in content
+
+    def test_auto_detects_comprehensive_with_many_files(self) -> None:
+        """Auto with files > 3 -> comprehensive."""
+        config = _make_config(
+            style="auto",
+            stories=[],
+            risks=[],
+            files=["a.py", "b.py", "c.py", "d.py"],
+        )
+        content = self.gen.generate(config)
+        assert "## Implementation Order" in content
+
+    def test_auto_detects_comprehensive_with_success_metrics(self) -> None:
+        """Auto with success_metrics -> comprehensive."""
+        config = _make_config(
+            style="auto",
+            stories=[],
+            risks=[],
+            files=[],
+            success_metrics=["MTTR|4h|1h|PagerDuty"],
+        )
+        content = self.gen.generate(config)
+        assert "## Success Metrics" in content
+
+    def test_explicit_comprehensive_always_comprehensive(self) -> None:
+        """Explicit comprehensive overrides auto-detection."""
+        config = _make_config(style="comprehensive", stories=[], risks=[], files=[])
+        content = self.gen.generate(config)
+        assert "## Implementation Order" in content
+        assert "## Risk Assessment" in content
+
+    def test_auto_detect_style_method_directly(self) -> None:
+        """Unit test _auto_detect_style in isolation."""
+        # minimal
+        cfg = _make_config(stories=[], risks=[], files=[])
+        assert self.gen._auto_detect_style(cfg) == "minimal"
+
+        # standard
+        cfg = _make_config(
+            stories=[EpicStoryStub(title=f"S{i}") for i in range(3)],
+            risks=[],
+            files=[],
+        )
+        assert self.gen._auto_detect_style(cfg) == "standard"
+
+        # comprehensive (stories > 5)
+        cfg = _make_config(
+            stories=[EpicStoryStub(title=f"S{i}") for i in range(6)],
+        )
+        assert self.gen._auto_detect_style(cfg) == "comprehensive"
+
 
 # ---------------------------------------------------------------------------
 # EpicGenerator -- docsmcp markers

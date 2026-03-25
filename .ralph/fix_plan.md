@@ -65,7 +65,7 @@
 <!-- Implementation order: 91.1 → 91.3 → 91.2 → 91.4 → 91.5 -->
 
 - [x] 91.1: Execute story — docs/epics/stories/STORY-91.1-context-aware-placeholders.md ✓ Refactored `_render_goal`, `_render_motivation`, `_render_technical_notes`, `_render_non_goals`, `_render_acceptance_criteria` to interpolate `config.title` (and enrichment tech_stack) into placeholder text. Added `_NON_GOAL_KEYWORD_HINTS` dict and `_derive_non_goal_hints()` for keyword-based boundary suggestions. Empty/whitespace title falls back to generic text. Updated 5 existing tests, added 16 new tests in `TestContextAwarePlaceholders`.
-- [ ] 91.3: Execute story — docs/epics/stories/STORY-91.3-adaptive-detail-level.md
+- [x] 91.3: Execute story — docs/epics/stories/STORY-91.3-adaptive-detail-level.md ✓ Added "minimal" and "auto" to VALID_STYLES. Implemented `_auto_detect_style(config)`: stories>5/risks/files>3/success_metrics→comprehensive, stories≤1 no risks no files→minimal, else standard. Added minimal rendering path (title, metadata, purpose, goal, AC, stories, DoD) and `_render_definition_of_done()`. Updated server_gen_tools.py docstring. 10 new tests in TestEpicAutoDetectStyle + 1 test for explicit minimal.
 - [ ] 91.2: Execute story — docs/epics/stories/STORY-91.2-quick-start-mode.md
 - [ ] 91.4: Execute story — docs/epics/stories/STORY-91.4-suggestion-engine.md
 - [ ] 91.5: Execute story — docs/epics/stories/STORY-91.5-performance-targets.md

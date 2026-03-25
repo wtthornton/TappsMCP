@@ -92,7 +92,7 @@ class EpicConfig(BaseModel):
     technical_notes: list[str] = []
     risks: list[str] = []
     non_goals: list[str] = []
-    style: str = "standard"  # "standard" or "comprehensive"
+    style: str = "standard"  # "minimal", "standard", "comprehensive", or "auto"
     success_metrics: list[str] = []
     stakeholders: list[str] = []
     references: list[str] = []
@@ -109,18 +109,24 @@ class EpicConfig(BaseModel):
 class EpicGenerator:
     """Generates Epic planning documents with stories and acceptance criteria.
 
-    Supports two styles:
+    Supports four styles:
 
+    - **minimal**: Lightweight output (title, metadata, purpose, goal, AC,
+      single story stub, DoD). Used for simple epics with few stories.
     - **standard**: Core sections (metadata, goal, motivation, acceptance
       criteria, stories, technical notes, out of scope).
     - **comprehensive**: Adds success metrics, stakeholders, references,
       implementation order, risk assessment, files affected table.
+    - **auto**: Automatically selects minimal, standard, or comprehensive
+      based on the number of stories, risks, files, and success metrics.
 
     Output includes ``<!-- docsmcp:start:section -->`` markers for SmartMerger
     compatibility.
     """
 
-    VALID_STYLES: ClassVar[frozenset[str]] = frozenset({"standard", "comprehensive"})
+    VALID_STYLES: ClassVar[frozenset[str]] = frozenset({
+        "minimal", "standard", "comprehensive", "auto",
+    })
     VALID_STATUSES: ClassVar[frozenset[str]] = frozenset({
         "Proposed",
         "In Progress",
@@ -175,6 +181,10 @@ class EpicGenerator:
                 fallback="standard",
             )
 
+        # Resolve "auto" to a concrete style based on config complexity.
+        if style == "auto":
+            style = self._auto_detect_style(config)
+
         timing: dict[str, int] = {}
         t_wall = time.perf_counter()
         enrichment: dict[str, Any] = {}
@@ -185,39 +195,71 @@ class EpicGenerator:
         t_render = time.perf_counter()
         lines: list[str] = []
 
-        lines.extend(self._render_title(config))
-        lines.extend(self._render_metadata(config))
-        lines.extend(self._render_purpose_and_intent(config))
-        lines.extend(self._render_goal(config, enrichment))
-        lines.extend(self._render_motivation(config))
-        lines.extend(self._render_acceptance_criteria(config))
-        lines.extend(self._render_stories(config))
-        lines.extend(self._render_technical_notes(config, enrichment))
-        lines.extend(self._render_non_goals(config))
+        if style == "minimal":
+            lines.extend(self._render_title(config))
+            lines.extend(self._render_metadata(config))
+            lines.extend(self._render_purpose_and_intent(config))
+            lines.extend(self._render_goal(config, enrichment))
+            lines.extend(self._render_acceptance_criteria(config))
+            lines.extend(self._render_stories(config))
+            lines.extend(self._render_definition_of_done(config))
+        else:
+            lines.extend(self._render_title(config))
+            lines.extend(self._render_metadata(config))
+            lines.extend(self._render_purpose_and_intent(config))
+            lines.extend(self._render_goal(config, enrichment))
+            lines.extend(self._render_motivation(config))
+            lines.extend(self._render_acceptance_criteria(config))
+            lines.extend(self._render_stories(config))
+            lines.extend(self._render_technical_notes(config, enrichment))
+            lines.extend(self._render_non_goals(config))
 
-        # File hints: render file-specific sections when files are provided
-        if config.files and project_root:
-            lines.extend(
-                self._render_file_hints(config.files, project_root, config)
-            )
-            lines.extend(
-                self._render_related_epics(config.files, project_root)
-            )
+            # File hints: render file-specific sections when files are provided
+            if config.files and project_root:
+                lines.extend(
+                    self._render_file_hints(config.files, project_root, config)
+                )
+                lines.extend(
+                    self._render_related_epics(config.files, project_root)
+                )
 
-        if style == "comprehensive":
-            lines.extend(self._render_success_metrics(config))
-            lines.extend(self._render_stakeholders(config))
-            lines.extend(self._render_references(config))
-            lines.extend(self._render_implementation_order(config))
-            lines.extend(self._render_risk_assessment(config, enrichment))
-            if not config.files:
-                # Only render generic files-affected when no file hints given
-                lines.extend(self._render_files_affected(config))
-            lines.extend(self._render_performance_targets(enrichment))
+            if style == "comprehensive":
+                lines.extend(self._render_success_metrics(config))
+                lines.extend(self._render_stakeholders(config))
+                lines.extend(self._render_references(config))
+                lines.extend(self._render_implementation_order(config))
+                lines.extend(self._render_risk_assessment(config, enrichment))
+                if not config.files:
+                    # Only render generic files-affected when no file hints given
+                    lines.extend(self._render_files_affected(config))
+                lines.extend(self._render_performance_targets(enrichment))
 
         timing["render_ms"] = int((time.perf_counter() - t_render) * 1000)
         timing["total_ms"] = int((time.perf_counter() - t_wall) * 1000)
         return "\n".join(lines), timing
+
+    # -- style detection ----------------------------------------------------
+
+    @staticmethod
+    def _auto_detect_style(config: EpicConfig) -> str:
+        """Choose minimal, standard, or comprehensive based on config complexity.
+
+        Rules:
+        - comprehensive: stories > 5, or risks provided, or files > 3,
+          or success_metrics provided.
+        - minimal: stories <= 1 and no risks and no files.
+        - standard: everything else.
+        """
+        if (
+            len(config.stories) > 5
+            or config.risks
+            or len(config.files) > 3
+            or config.success_metrics
+        ):
+            return "comprehensive"
+        if len(config.stories) <= 1 and not config.risks and not config.files:
+            return "minimal"
+        return "standard"
 
     # -- section renderers --------------------------------------------------
 
@@ -512,6 +554,23 @@ class EpicGenerator:
             )
 
         lines.extend(["", "<!-- docsmcp:end:non-goals -->", ""])
+        return lines
+
+    # -- minimal-only sections -----------------------------------------------
+
+    def _render_definition_of_done(self, config: EpicConfig) -> list[str]:
+        """Render a Definition of Done section (minimal style)."""
+        lines = [
+            "<!-- docsmcp:start:definition-of-done -->",
+            "## Definition of Done",
+            "",
+            "- [ ] All acceptance criteria verified",
+            "- [ ] All stories completed and tests passing",
+            "- [ ] Documentation updated",
+            "",
+            "<!-- docsmcp:end:definition-of-done -->",
+            "",
+        ]
         return lines
 
     # -- comprehensive-only sections ----------------------------------------
