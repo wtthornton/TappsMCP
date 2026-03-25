@@ -618,6 +618,55 @@ class TestEvaluateEpic:
         assert result.epic_validation is not None
         assert result.epic_validation.valid is False
 
+    def test_evaluate_epic_relative_path_with_project_root(self, tmp_path: Path) -> None:
+        """Relative epic_file_path resolves against project_root."""
+        docs = tmp_path / "docs" / "epics"
+        docs.mkdir(parents=True)
+        epic_file = docs / "EPIC-90.md"
+        epic_file.write_text(_WELL_FORMED_EPIC, encoding="utf-8")
+        result = CallTracker.evaluate_epic(
+            file_path="docs/epics/EPIC-90.md",
+            engagement_level="medium",
+            project_root=tmp_path,
+        )
+        assert result.epic_validation is not None
+        assert result.epic_validation.valid is True
+
+    def test_evaluate_epic_relative_path_without_project_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Relative path without project_root falls back to cwd."""
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        epic_file = docs / "EPIC-CWD.md"
+        epic_file.write_text(_WELL_FORMED_EPIC, encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        result = CallTracker.evaluate_epic(
+            file_path="docs/EPIC-CWD.md",
+            engagement_level="medium",
+        )
+        assert result.epic_validation is not None
+        assert result.epic_validation.valid is True
+
+    def test_evaluate_epic_absolute_path_unchanged(self, tmp_path: Path) -> None:
+        """Absolute paths work regardless of project_root."""
+        epic_file = tmp_path / "EPIC-ABS.md"
+        epic_file.write_text(_WELL_FORMED_EPIC, encoding="utf-8")
+        result = CallTracker.evaluate_epic(
+            file_path=str(epic_file),
+            engagement_level="medium",
+            project_root=Path("/some/other/root"),
+        )
+        assert result.epic_validation is not None
+        assert result.epic_validation.valid is True
+
+    def test_evaluate_epic_nonexistent_file_error_message(self, tmp_path: Path) -> None:
+        """Non-existent file gives clear error with resolved path."""
+        with pytest.raises(FileNotFoundError, match=r"Epic file not found:.*no-such-epic\.md.*resolved from"):
+            CallTracker.evaluate_epic(
+                file_path="no-such-epic.md",
+                engagement_level="medium",
+                project_root=tmp_path,
+            )
+
 
 class TestEpicWithRealFixtures:
     """Validate parsing against real epic files from the repository."""

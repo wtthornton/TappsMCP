@@ -712,6 +712,7 @@ class CallTracker:
         structural validation is performed. When not provided, only the
         checklist template items are returned.
         """
+        project_root = eval_kwargs.get("project_root")
         base = cls.evaluate(
             "epic",
             engagement_level=engagement_level,
@@ -719,7 +720,16 @@ class CallTracker:
         )
         validation: EpicValidation | None = None
         if file_path is not None:
-            content = Path(file_path).read_text(encoding="utf-8")
+            resolved = Path(file_path)
+            if not resolved.is_absolute() and project_root:
+                resolved = Path(project_root) / resolved
+            if not resolved.exists():
+                msg = (
+                    f"Epic file not found: {resolved}"
+                    f" (resolved from {file_path})"
+                )
+                raise FileNotFoundError(msg)
+            content = resolved.read_text(encoding="utf-8")
             validation = validate_epic_markdown(content)
         payload = base.model_dump()
         payload["epic_validation"] = validation

@@ -46,7 +46,7 @@
 - [x] 89.1: Execute story — docs/planning/epics/EPIC-89/story-89.1-impact-analysis-project-root.md
 - [x] 89.2: Execute story — docs/planning/epics/EPIC-89/story-89.2-session-start-project-root.md
 - [x] 89.3: Execute story — docs/planning/epics/EPIC-89/story-89.3-installed-checkers-environment-context.md ✓ Added `checker_environment` ("mcp_server") and `checker_environment_note` fields to `_build_server_info_data`, full session start, quick session start, and `SessionStartOutput` schema. Backward compatible — new fields have defaults.
-- [ ] 89.4: Execute story — docs/planning/epics/EPIC-89/story-89.4-shell-bash-project-detection.md
+- [x] 89.4: Execute story — docs/planning/epics/EPIC-89/story-89.4-shell-bash-project-detection.md ✓ Added `_has_shell_scripts()` (3+ .sh files), `_has_bin_directory()`, `_has_install_script()` indicators to `cli-tool` type. Rebalanced weights (7 indicators). Added .sh to source file extensions in `_has_few_source_files()`. Added negative signal in `documentation` docs_focused composite. 5 tests: pure shell, shell+bin+install, mixed shell+python, few scripts (no misclass), ralph-like structure (>0.7 confidence).
 
 ## Phase 6: Epic Validation Enhancements (Epic 90)
 
@@ -54,7 +54,7 @@
 <!-- Source: https://github.com/wtthornton/TappsMCP/issues/76 -->
 <!-- Note: Stories are sequential — 90.1 enables 90.2, 90.2 enables 90.3 -->
 
-- [ ] 90.1: Execute story — docs/planning/epics/EPIC-90/story-90.1-epic-file-path-relative-resolution.md
+- [x] 90.1: Execute story — docs/planning/epics/EPIC-90/story-90.1-epic-file-path-relative-resolution.md ✓ `evaluate_epic()` now extracts `project_root` from `eval_kwargs`, resolves relative `file_path` against it, and raises `FileNotFoundError` with both resolved and original paths. 4 new tests: relative+project_root, relative+cwd fallback, absolute unchanged, nonexistent error message.
 - [ ] 90.2: Execute story — docs/planning/epics/EPIC-90/story-90.2-table-linked-story-parsing.md
 - [ ] 90.3: Execute story — docs/planning/epics/EPIC-90/story-90.3-cross-file-story-validation.md
 
