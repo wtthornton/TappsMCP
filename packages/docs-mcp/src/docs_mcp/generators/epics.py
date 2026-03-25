@@ -135,12 +135,60 @@ class EpicGenerator:
         "Cancelled",
     })
 
+    @staticmethod
+    def _infer_quick_start_defaults(config: EpicConfig) -> EpicConfig:
+        """Fill empty fields with title-derived defaults for quick-start mode.
+
+        Explicit parameters are never overwritten -- only empty/default fields
+        are populated.
+        """
+        title = config.title.strip()
+        number = config.number
+
+        updates: dict[str, Any] = {}
+
+        if not config.goal:
+            updates["goal"] = (
+                f"Implement {title} with full test coverage and documentation."
+            )
+
+        if not config.motivation:
+            updates["motivation"] = (
+                f"This epic addresses the need for {title} in the project."
+            )
+
+        if not config.acceptance_criteria:
+            updates["acceptance_criteria"] = [
+                "Core functionality implemented",
+                "Unit tests passing with >= 80% coverage",
+                "Documentation updated",
+            ]
+
+        if not config.stories:
+            updates["stories"] = [
+                EpicStoryStub(title="Foundation & Setup", points=2),
+                EpicStoryStub(title="Core Implementation", points=5),
+                EpicStoryStub(title="Testing & Documentation", points=3),
+            ]
+
+        if not config.priority:
+            updates["priority"] = "P2 - Medium"
+
+        if config.style == "standard":
+            # Let auto-detect pick the best style for inferred content.
+            updates["style"] = "auto"
+
+        if updates:
+            return config.model_copy(update=updates)
+        return config
+
     def generate(
         self,
         config: EpicConfig,
         *,
         project_root: Path | None = None,
         auto_populate: bool = False,
+        quick_start: bool = False,
     ) -> str:
         """Generate an epic document.
 
@@ -148,6 +196,8 @@ class EpicGenerator:
             config: Epic configuration with title, stories, etc.
             project_root: Project root for auto-populate analyzers.
             auto_populate: When True, enrich sections from project analyzers.
+            quick_start: When True, infer defaults from the title for empty
+                fields. Explicit parameters are never overwritten.
 
         Returns:
             Rendered markdown content with docsmcp markers.
@@ -156,6 +206,7 @@ class EpicGenerator:
             config,
             project_root=project_root,
             auto_populate=auto_populate,
+            quick_start=quick_start,
         )
         return content
 
@@ -165,6 +216,7 @@ class EpicGenerator:
         *,
         project_root: Path | None = None,
         auto_populate: bool = False,
+        quick_start: bool = False,
     ) -> tuple[str, dict[str, int]]:
         """Like :meth:`generate` but returns per-phase timings (milliseconds).
 
@@ -172,6 +224,9 @@ class EpicGenerator:
         ``experts_ms``, ``auto_populate_ms`` (wall-clock for populate),
         ``render_ms`` (markdown assembly and file-hint scans), ``total_ms``.
         """
+        if quick_start:
+            config = self._infer_quick_start_defaults(config)
+
         style = config.style if config.style in self.VALID_STYLES else "standard"
 
         if style != config.style:

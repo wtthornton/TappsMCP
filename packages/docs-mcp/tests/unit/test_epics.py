@@ -509,6 +509,85 @@ class TestEpicAutoDetectStyle:
 
 
 # ---------------------------------------------------------------------------
+# EpicGenerator -- quick-start mode
+# ---------------------------------------------------------------------------
+
+
+class TestEpicQuickStart:
+    """Tests for quick_start mode that infers defaults from title alone."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_quick_start_title_only(self) -> None:
+        """quick_start with just title produces complete epic."""
+        config = EpicConfig(title="Auth System", number=10)
+        content = self.gen.generate(config, quick_start=True)
+        # Goal inferred
+        assert "Implement Auth System with full test coverage" in content
+        # Motivation inferred
+        assert "addresses the need for Auth System" in content
+        # 3 story stubs
+        assert "10.1 -- Foundation & Setup" in content
+        assert "10.2 -- Core Implementation" in content
+        assert "10.3 -- Testing & Documentation" in content
+        # AC inferred
+        assert "Core functionality implemented" in content
+        assert ">= 80% coverage" in content
+        assert "Documentation updated" in content
+        # Priority inferred
+        assert "P2 - Medium" in content
+
+    def test_quick_start_explicit_goal_not_overridden(self) -> None:
+        """Explicit goal is preserved when quick_start=True."""
+        config = EpicConfig(
+            title="Auth System",
+            number=5,
+            goal="Build OAuth2 support.",
+        )
+        content = self.gen.generate(config, quick_start=True)
+        assert "Build OAuth2 support." in content
+        assert "Implement Auth System" not in content
+
+    def test_quick_start_explicit_stories_not_overridden(self) -> None:
+        """Explicit stories are preserved when quick_start=True."""
+        config = EpicConfig(
+            title="Auth System",
+            number=5,
+            stories=[EpicStoryStub(title="Custom Story", points=8)],
+        )
+        content = self.gen.generate(config, quick_start=True)
+        assert "Custom Story" in content
+        assert "Foundation & Setup" not in content
+
+    def test_quick_start_explicit_priority_not_overridden(self) -> None:
+        """Explicit priority is preserved when quick_start=True."""
+        config = EpicConfig(
+            title="Auth System",
+            number=5,
+            priority="P0 - Critical",
+        )
+        content = self.gen.generate(config, quick_start=True)
+        assert "P0 - Critical" in content
+        assert "P2 - Medium" not in content
+
+    def test_quick_start_false_unchanged(self) -> None:
+        """quick_start=False does not alter config behavior."""
+        config = EpicConfig(title="Auth System", number=10)
+        content_default = self.gen.generate(config)
+        content_explicit = self.gen.generate(config, quick_start=False)
+        assert content_default == content_explicit
+
+    def test_quick_start_story_points(self) -> None:
+        """Quick-start stories have expected point values."""
+        config = EpicConfig(title="Auth System", number=7)
+        content = self.gen.generate(config, quick_start=True)
+        assert "**Points:** 2" in content
+        assert "**Points:** 5" in content
+        assert "**Points:** 3" in content
+
+
+# ---------------------------------------------------------------------------
 # EpicGenerator -- docsmcp markers
 # ---------------------------------------------------------------------------
 
@@ -1139,6 +1218,65 @@ class TestDocsGenerateEpicTool:
 
         assert "elapsed_ms" in result
         assert isinstance(result["elapsed_ms"], int)
+
+
+# ---------------------------------------------------------------------------
+# MCP tool: docs_generate_epic -- quick-start mode
+# ---------------------------------------------------------------------------
+
+
+class TestDocsGenerateEpicQuickStart:
+    """Tests for quick_start parameter at the MCP tool level."""
+
+    async def _call(self, **kwargs: Any) -> dict[str, Any]:
+        from docs_mcp.server_gen_tools import docs_generate_epic
+
+        return await docs_generate_epic(**kwargs)
+
+    async def test_quick_start_produces_complete_epic(self, tmp_path: Path) -> None:
+        root = tmp_path / "proj"
+        root.mkdir()
+
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(root),
+        ):
+            result = await self._call(
+                title="Auth System",
+                number=10,
+                quick_start=True,
+                project_root=str(root),
+            )
+
+        assert result["success"] is True
+        assert result["data"]["quick_start"] is True
+        content = result["data"]["content"]
+        assert "Implement Auth System" in content
+        assert "Foundation & Setup" in content
+        assert "Core Implementation" in content
+        assert "Testing & Documentation" in content
+        assert "Core functionality implemented" in content
+
+    async def test_quick_start_with_explicit_override(self, tmp_path: Path) -> None:
+        root = tmp_path / "proj"
+        root.mkdir()
+
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(root),
+        ):
+            result = await self._call(
+                title="Auth System",
+                number=10,
+                goal="Custom goal text",
+                quick_start=True,
+                project_root=str(root),
+            )
+
+        assert result["success"] is True
+        content = result["data"]["content"]
+        assert "Custom goal text" in content
+        assert "Implement Auth System" not in content
 
 
 # ---------------------------------------------------------------------------

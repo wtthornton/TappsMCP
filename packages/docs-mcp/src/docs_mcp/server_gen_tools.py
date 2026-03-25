@@ -1146,6 +1146,7 @@ async def docs_generate_epic(
     link_stories: bool = False,
     style: str = "standard",
     auto_populate: bool = False,
+    quick_start: bool = False,
     output_path: str = "",
     project_root: str = "",
 ) -> dict[str, Any]:
@@ -1203,6 +1204,10 @@ async def docs_generate_epic(
             walk, 8 expert consultations, git history). A 15 s wall-clock
             budget is enforced; steps that exceed it are skipped and partial
             results returned.
+        quick_start: When True, infer defaults from the title alone -- goal,
+            motivation, 3 story stubs, acceptance criteria, and priority are
+            filled in automatically. Explicit parameters always override
+            quick-start defaults. Style defaults to "auto" in quick-start mode.
         output_path: File path to write the epic (relative to project root).
             When empty, returns the content without writing a file.
         project_root: Override project root path (default: configured root).
@@ -1310,6 +1315,7 @@ async def docs_generate_epic(
             config,
             project_root=root if needs_root else None,
             auto_populate=auto_populate,
+            quick_start=quick_start,
         )
     except Exception as exc:
         return error_response(
@@ -1344,6 +1350,7 @@ async def docs_generate_epic(
         "style": style,
         "story_count": len(story_list),
         "auto_populated": auto_populate,
+        "quick_start": quick_start,
         "content_length": len(content),
         "content": content,
         "timing_ms": timing_ms,
