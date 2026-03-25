@@ -243,27 +243,48 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
 
 
 async def tapps_impact_analysis(
-    file_path: str, change_type: str = "modified"
+    file_path: str, change_type: str = "modified", project_root: str = ""
 ) -> dict[str, Any]:
     """REQUIRED before refactoring or deleting files. Maps the blast radius.
 
     Args:
         file_path: Path to the file being changed.
         change_type: "added" | "modified" | "removed".
+        project_root: Project root path (default: server's configured root).
+            Use when analyzing files in an external project.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_impact_analysis")
 
-    try:
-        resolved = _validate_file_path_lazy(file_path)
-    except (ValueError, FileNotFoundError) as exc:
-        return error_response("tapps_impact_analysis", "path_denied", str(exc))
+    settings = load_settings()
+    root = settings.project_root
+
+    if project_root:
+        custom = _Path(project_root).resolve()
+        if not custom.is_dir():
+            return error_response(
+                "tapps_impact_analysis",
+                "invalid_project_root",
+                f"project_root is not an existing directory: {custom}",
+            )
+        root = custom
+        try:
+            from tapps_core.security.path_validator import PathValidator
+
+            validator = PathValidator(root)
+            resolved = validator.validate_read_path(file_path.strip())
+        except (ValueError, FileNotFoundError) as exc:
+            return error_response("tapps_impact_analysis", "path_denied", str(exc))
+    else:
+        try:
+            resolved = _validate_file_path_lazy(file_path)
+        except (ValueError, FileNotFoundError) as exc:
+            return error_response("tapps_impact_analysis", "path_denied", str(exc))
 
     from tapps_mcp.project.impact_analyzer import analyze_impact
 
-    settings = load_settings()
-    report = analyze_impact(resolved, settings.project_root, change_type)
-    mem_ctx = build_impact_memory_context(resolved, settings.project_root, settings)
+    report = analyze_impact(resolved, root, change_type)
+    mem_ctx = build_impact_memory_context(resolved, root, settings)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_impact_analysis", start, file_path=str(resolved))

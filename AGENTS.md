@@ -30,7 +30,7 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 | **tapps_consult_expert** | Domain-specific decisions (security, testing, APIs, database, etc.) |
 | **tapps_research** | Combined expert + docs in one call |
 | **tapps_security_scan** | Security-sensitive changes or before security review |
-| **tapps_impact_analysis** | Before modifying a file's public API |
+| **tapps_impact_analysis** | Before modifying a file's public API. Pass `project_root` for external projects. |
 | **tapps_validate_config** | When adding/changing Dockerfile, docker-compose, infra config |
 | **tapps_project_profile** | When you need project context (tech stack, type, recommendations) |
 | **tapps_memory** | Session start: search past decisions. Session end: save learnings. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) |
