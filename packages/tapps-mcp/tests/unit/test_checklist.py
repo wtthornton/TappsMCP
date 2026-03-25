@@ -700,3 +700,222 @@ class TestEpicWithRealFixtures:
         content = ep1.read_text(encoding="utf-8")
         result = validate_epic_markdown(content)
         assert len(result.stories) > 0, "Expected stories in EPIC-1"
+
+
+# ---------------------------------------------------------------------------
+# Tests — linked headings and table-linked stories (Story 90.2)
+# ---------------------------------------------------------------------------
+
+
+class TestLinkedHeadingParsing:
+    """Tests for ### [X.Y](path) -- Title format in checklist epic parser."""
+
+    def test_linked_heading_parsed(self) -> None:
+        content = dedent("""\
+        # Epic 88: Test
+
+        ## Goal
+
+        Test linked headings.
+
+        ## Acceptance Criteria
+
+        - [ ] Done
+
+        ## Stories
+
+        ### [88.1](EPIC-88/story-88.1-slug.md) -- Staleness-First Sort
+
+        **Points:** 3 | **Size:** M | **Priority:** P1
+
+        #### Acceptance Criteria
+
+        - [ ] Works
+
+        #### Tasks
+
+        - [ ] Implement
+
+        ### [88.2](EPIC-88/story-88.2-slug.md) -- Response Truncation
+
+        **Points:** 5 | **Size:** M | **Priority:** P2
+
+        #### Acceptance Criteria
+
+        - [ ] Works
+
+        #### Tasks
+
+        - [ ] Implement
+        """)
+        result = validate_epic_markdown(content)
+        assert len(result.stories) == 2
+        assert result.stories[0].story_id == "88.1"
+        assert result.stories[0].linked_file == "EPIC-88/story-88.1-slug.md"
+        assert result.stories[0].title == "Staleness-First Sort"
+        assert result.stories[1].story_id == "88.2"
+        assert result.stories[1].linked_file == "EPIC-88/story-88.2-slug.md"
+
+    def test_mixed_inline_and_linked(self) -> None:
+        content = dedent("""\
+        # Epic 90: Mixed
+
+        ## Goal
+
+        Test mixed formats.
+
+        ## Acceptance Criteria
+
+        - [ ] Done
+
+        ## Stories
+
+        ### Story 90.1: Inline Story
+
+        **Points:** 2 | **Size:** S | **Priority:** P1
+
+        #### Acceptance Criteria
+
+        - [ ] Works
+
+        #### Tasks
+
+        - [ ] Do it
+
+        ### [90.2](EPIC-90/story-90.2.md) -- Linked Story
+
+        **Points:** 3 | **Size:** M | **Priority:** P2
+
+        #### Acceptance Criteria
+
+        - [ ] Works
+
+        #### Tasks
+
+        - [ ] Do it
+        """)
+        result = validate_epic_markdown(content)
+        assert len(result.stories) == 2
+        ids = {s.story_id for s in result.stories}
+        assert "90.1" in ids
+        assert "90.2" in ids
+        linked = next(s for s in result.stories if s.story_id == "90.2")
+        assert linked.linked_file == "EPIC-90/story-90.2.md"
+        inline = next(s for s in result.stories if s.story_id == "90.1")
+        assert inline.linked_file is None
+
+
+class TestTableLinkedStoryParsing:
+    """Tests for table-linked story rows in checklist epic parser."""
+
+    def test_table_stories_parsed(self) -> None:
+        content = dedent("""\
+        # Epic: Plan Optimization
+
+        ## Goal
+
+        Faster planning.
+
+        ## Acceptance Criteria
+
+        - [ ] Done
+
+        ## Stories
+
+        | ID | Story | Size | Priority |
+        |---|---|---|---|
+        | PLANOPT-1 | [File dependency graph](story-planopt-1.md) | M | P1 |
+        | PLANOPT-2 | [Parallel execution](story-planopt-2.md) | L | P2 |
+        """)
+        result = validate_epic_markdown(content)
+        assert len(result.stories) == 2
+        assert result.stories[0].story_id == "PLANOPT-1"
+        assert result.stories[0].title == "File dependency graph"
+        assert result.stories[0].linked_file == "story-planopt-1.md"
+        assert result.stories[0].size == "M"
+        assert result.stories[0].priority == "P1"
+        assert result.stories[1].story_id == "PLANOPT-2"
+        assert result.stories[1].size == "L"
+
+    def test_table_missing_size_priority(self) -> None:
+        content = dedent("""\
+        # Epic: Minimal Table
+
+        ## Goal
+
+        Test.
+
+        ## Acceptance Criteria
+
+        - [ ] Done
+
+        ## Stories
+
+        | ID | Story |
+        |---|---|
+        | T-1 | [First](story-t1.md) |
+        """)
+        result = validate_epic_markdown(content)
+        assert len(result.stories) == 1
+        assert result.stories[0].story_id == "T-1"
+        assert result.stories[0].linked_file == "story-t1.md"
+        assert result.stories[0].size is None
+        assert result.stories[0].priority is None
+
+    def test_table_plain_text_ignored(self) -> None:
+        """Table rows without markdown links are not matched."""
+        content = dedent("""\
+        # Epic: Plain
+
+        ## Goal
+
+        Test.
+
+        ## Acceptance Criteria
+
+        - [ ] Done
+
+        ## Stories
+
+        | ID | Story | Size |
+        |---|---|---|
+        | PT-1 | No link here | M |
+        | PT-2 | [Linked](story-pt2.md) | L |
+        """)
+        result = validate_epic_markdown(content)
+        assert len(result.stories) == 1
+        assert result.stories[0].story_id == "PT-2"
+
+    def test_heading_stories_preferred_over_table(self) -> None:
+        """When heading-based stories exist, table rows are not parsed."""
+        content = dedent("""\
+        # Epic 95: Mixed
+
+        ## Goal
+
+        Test.
+
+        ## Acceptance Criteria
+
+        - [ ] Done
+
+        ## Stories
+
+        ### Story 95.1: Heading Story
+
+        **Points:** 2 | **Size:** S | **Priority:** P1
+
+        #### Acceptance Criteria
+
+        - [ ] Works
+
+        #### Tasks
+
+        - [ ] Implement
+
+        | T-1 | [Table story](story-t1.md) | M | P2 |
+        """)
+        result = validate_epic_markdown(content)
+        # Only heading story should be found; table is not parsed when headings exist
+        assert len(result.stories) == 1
+        assert result.stories[0].story_id == "95.1"

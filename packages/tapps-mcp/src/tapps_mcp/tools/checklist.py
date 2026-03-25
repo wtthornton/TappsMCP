@@ -761,6 +761,9 @@ class EpicStoryInfo(BaseModel):
         default=False, description="Whether AC section exists."
     )
     has_tasks: bool = Field(default=False, description="Whether Tasks section exists.")
+    linked_file: str | None = Field(
+        default=None, description="File path from a markdown link in the heading or table row."
+    )
 
 
 class EpicFinding(BaseModel):
@@ -814,6 +817,18 @@ _STORY_HEADING_RE = re.compile(
     re.MULTILINE,
 )
 
+# Linked heading: "### [X.Y](path) -- Title"
+_LINKED_HEADING_RE = re.compile(
+    r"^###\s+\[(\d+\.\d+)\]\(([^)]+)\)\s*[:\u2014-]+\s*(.*)",
+    re.MULTILINE,
+)
+
+# Table-linked story: "| ID | [Title](file.md) | ... |"
+_TABLE_STORY_RE = re.compile(
+    r"^\|\s*(\S+)\s*\|\s*\[([^\]]+)\]\(([^)]+)\)\s*\|(.*)$",
+    re.MULTILINE,
+)
+
 # Points pattern: "**Points:** N" or "Points: N"
 _POINTS_RE = re.compile(r"\*{0,2}Points:?\*{0,2}:?\s*(\d+)", re.IGNORECASE)
 
@@ -830,6 +845,28 @@ _FILE_ENTRY_RE = re.compile(r"^-\s+`([^`]+)`", re.MULTILINE)
 _FILES_TABLE_ROW_RE = re.compile(r"^\|\s*`([^`]+)`", re.MULTILINE)
 
 
+def _parse_table_size_priority(remaining_cols: str) -> tuple[str | None, str | None]:
+    """Extract size and priority from remaining table columns.
+
+    Args:
+        remaining_cols: The portion of the table row after the link column.
+
+    Returns:
+        Tuple of (size, priority) — each may be None.
+    """
+    cells = [c.strip() for c in remaining_cols.split("|") if c.strip()]
+    size: str | None = None
+    priority: str | None = None
+    size_re = re.compile(r"^(XS|XL|S|M|L)$", re.IGNORECASE)
+    prio_re = re.compile(r"^(P[0-4])$", re.IGNORECASE)
+    for cell in cells:
+        if not size and size_re.match(cell):
+            size = cell.upper()
+        elif not priority and prio_re.match(cell):
+            priority = cell.upper()
+    return size, priority
+
+
 def _parse_epic_markdown(content: str) -> tuple[
     list[str],
     list[EpicStoryInfo],
@@ -844,7 +881,7 @@ def _parse_epic_markdown(content: str) -> tuple[
     sections = re.findall(r"^##\s+(.+)", content, re.MULTILINE)
     section_names = [s.strip() for s in sections]
 
-    # Find story blocks
+    # --- 1. Try classic story headings ---
     story_matches = list(_STORY_HEADING_RE.finditer(content))
     stories: list[EpicStoryInfo] = []
 
@@ -852,20 +889,14 @@ def _parse_epic_markdown(content: str) -> tuple[
         story_id = match.group(1)
         title = match.group(2).strip()
 
-        # Extract story block text (from this heading to the next story or end)
         start = match.end()
         end = story_matches[i + 1].start() if i + 1 < len(story_matches) else len(content)
         block = content[start:end]
 
-        # Parse fields
         points_m = _POINTS_RE.search(block)
         size_m = _SIZE_RE.search(block)
         priority_m = _PRIORITY_RE.search(block)
-
-        # Find files listed in the story
         files = _extract_story_files(block)
-
-        # Check for AC and Tasks sub-sections
         has_ac = _has_subsection(block, "acceptance criteria")
         has_tasks = _has_subsection(block, "tasks")
 
@@ -881,6 +912,69 @@ def _parse_epic_markdown(content: str) -> tuple[
                 has_tasks=has_tasks,
             )
         )
+
+    # --- 2. Try linked headings: ### [X.Y](path) -- Title ---
+    linked_matches = list(_LINKED_HEADING_RE.finditer(content))
+    # Avoid duplicates — only add if story_id not already captured
+    existing_ids = {s.story_id for s in stories}
+
+    for i, match in enumerate(linked_matches):
+        story_id = match.group(1)
+        if story_id in existing_ids:
+            continue
+        linked_file = match.group(2).strip()
+        title = match.group(3).strip()
+
+        start = match.end()
+        end = (
+            linked_matches[i + 1].start()
+            if i + 1 < len(linked_matches)
+            else len(content)
+        )
+        block = content[start:end]
+
+        points_m = _POINTS_RE.search(block)
+        size_m = _SIZE_RE.search(block)
+        priority_m = _PRIORITY_RE.search(block)
+        files = _extract_story_files(block)
+        has_ac = _has_subsection(block, "acceptance criteria")
+        has_tasks = _has_subsection(block, "tasks")
+
+        stories.append(
+            EpicStoryInfo(
+                story_id=story_id,
+                title=title,
+                linked_file=linked_file,
+                points=int(points_m.group(1)) if points_m else None,
+                size=size_m.group(1).upper() if size_m else None,
+                priority=priority_m.group(1).upper() if priority_m else None,
+                files=files,
+                has_acceptance_criteria=has_ac,
+                has_tasks=has_tasks,
+            )
+        )
+        existing_ids.add(story_id)
+
+    # --- 3. Try table-linked stories if no stories found yet ---
+    if not stories:
+        table_matches = list(_TABLE_STORY_RE.finditer(content))
+        for match in table_matches:
+            story_id = match.group(1)
+            title = match.group(2).strip()
+            linked_file = match.group(3).strip()
+            remaining = match.group(4)
+
+            size, priority = _parse_table_size_priority(remaining)
+
+            stories.append(
+                EpicStoryInfo(
+                    story_id=story_id,
+                    title=title,
+                    linked_file=linked_file,
+                    size=size,
+                    priority=priority,
+                )
+            )
 
     # Extract files-affected table entries
     files_affected = _extract_files_affected(content)
@@ -1126,7 +1220,10 @@ def validate_epic_markdown(content: str) -> EpicValidation:
         findings.append(
             EpicFinding(
                 severity="error",
-                message="No stories found (expected '### Story X.Y:' headings)",
+                message=(
+                    "No stories found (expected '### Story X.Y:', "
+                    "'### [X.Y](path) --', or table-linked rows)"
+                ),
             )
         )
     else:

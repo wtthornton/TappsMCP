@@ -46,6 +46,18 @@ _H3_RE = re.compile(r"^###\s+(.+)")
 _H4_RE = re.compile(r"^####\s+(.+)")
 _STORY_REF_RE = re.compile(r"(?:Story\s+)?(\d+\.\d+)", re.IGNORECASE)
 
+# Linked heading: ### [X.Y](path) -- Title
+_LINKED_HEADING_RE = re.compile(
+    r"^###\s+\[(\d+\.\d+)\]\(([^)]+)\)\s*[:\u2014-]+\s*(.*)",
+    re.IGNORECASE,
+)
+
+# Table-linked story: | ID | [Title](file.md) | ... |
+_TABLE_STORY_RE = re.compile(
+    r"^\|\s*(\S+)\s*\|\s*\[([^\]]+)\]\(([^)]+)\)\s*\|(.*)$",
+    re.MULTILINE,
+)
+
 
 class EpicIssue(BaseModel):
     """A single validation finding."""
@@ -68,6 +80,7 @@ class StoryInfo(BaseModel):
     has_files: bool = False
     ac_count: int = 0
     task_count: int = 0
+    linked_file: str | None = None  # file path from markdown link
 
 
 class EpicValidationReport(BaseModel):
@@ -87,15 +100,42 @@ class EpicValidationReport(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _parse_story_heading(stripped: str) -> tuple[str, str] | None:
-    """Parse a ### story heading; supports Story N: T or docs_generate_epic N -- T."""
+def _parse_story_heading(stripped: str) -> tuple[str, str] | tuple[str, str, str] | None:
+    """Parse a ### story heading.
+
+    Supports:
+    - ``### Story N: Title``
+    - ``### N -- Title``  (docs_generate_epic format)
+    - ``### [N](path) -- Title``  (linked heading)
+
+    Returns a 2-tuple ``(number, title)`` for plain headings, or a 3-tuple
+    ``(number, title, linked_file)`` for linked headings.  ``None`` if no match.
+    """
     m = _STORY_HEADING_RE.match(stripped)
     if m:
         return m.group(1), m.group(2)
+    ml = _LINKED_HEADING_RE.match(stripped)
+    if ml:
+        return ml.group(1), ml.group(3), ml.group(2)
     m2 = _STORY_HEADING_DOCSMCP_RE.match(stripped)
     if m2:
         return m2.group(1), m2.group(2)
     return None
+
+
+def _parse_table_size_priority(remaining_cols: str) -> tuple[str | None, str | None]:
+    """Extract size and priority from remaining table columns."""
+    cells = [c.strip() for c in remaining_cols.split("|") if c.strip()]
+    size: str | None = None
+    priority: str | None = None
+    size_re = re.compile(r"^(XS|XL|S|M|L)$", re.IGNORECASE)
+    prio_re = re.compile(r"^(P[0-4])$", re.IGNORECASE)
+    for cell in cells:
+        if not size and size_re.match(cell):
+            size = cell.upper()
+        elif not priority and prio_re.match(cell):
+            priority = cell.upper()
+    return size, priority
 
 
 def _split_by_heading(
@@ -471,10 +511,15 @@ class EpicValidator:
         stories_body: list[str],
         report: EpicValidationReport,
     ) -> None:
-        """Parse story headings and extract metadata."""
+        """Parse story headings and extract metadata.
+
+        Tries heading-based parsing first (classic, linked, docsmcp).
+        Falls back to table-linked rows if no headings found.
+        """
         # Split stories by ### headings
         current_number = ""
         current_title = ""
+        current_linked_file: str | None = None
         current_lines: list[str] = []
 
         for line in stories_body:
@@ -484,9 +529,14 @@ class EpicValidator:
                 # Save previous story
                 if current_number:
                     story = _extract_story(current_number, current_title, current_lines)
+                    story.linked_file = current_linked_file
                     report.stories.append(story)
 
-                current_number, current_title = parsed
+                if len(parsed) == 3:  # noqa: PLR2004
+                    current_number, current_title, current_linked_file = parsed
+                else:
+                    current_number, current_title = parsed
+                    current_linked_file = None
                 current_lines = []
             else:
                 current_lines.append(line)
@@ -494,7 +544,30 @@ class EpicValidator:
         # Save last story
         if current_number:
             story = _extract_story(current_number, current_title, current_lines)
+            story.linked_file = current_linked_file
             report.stories.append(story)
+
+        # --- Table fallback: try table-linked rows if no heading stories found ---
+        if not report.stories:
+            body_text = "\n".join(stories_body)
+            table_matches = list(_TABLE_STORY_RE.finditer(body_text))
+            for match in table_matches:
+                story_id = match.group(1)
+                title = match.group(2).strip()
+                linked_file = match.group(3).strip()
+                remaining = match.group(4)
+
+                size, priority = _parse_table_size_priority(remaining)
+
+                report.stories.append(
+                    StoryInfo(
+                        number=story_id,
+                        title=title,
+                        linked_file=linked_file,
+                        size=size,
+                        priority=priority,
+                    )
+                )
 
         report.total_stories = len(report.stories)
 

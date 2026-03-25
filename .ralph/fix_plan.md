@@ -55,7 +55,7 @@
 <!-- Note: Stories are sequential — 90.1 enables 90.2, 90.2 enables 90.3 -->
 
 - [x] 90.1: Execute story — docs/planning/epics/EPIC-90/story-90.1-epic-file-path-relative-resolution.md ✓ `evaluate_epic()` now extracts `project_root` from `eval_kwargs`, resolves relative `file_path` against it, and raises `FileNotFoundError` with both resolved and original paths. 4 new tests: relative+project_root, relative+cwd fallback, absolute unchanged, nonexistent error message.
-- [ ] 90.2: Execute story — docs/planning/epics/EPIC-90/story-90.2-table-linked-story-parsing.md
+- [x] 90.2: Execute story — docs/planning/epics/EPIC-90/story-90.2-table-linked-story-parsing.md ✓ Added `linked_file` field to `EpicStoryInfo` (checklist.py) and `StoryInfo` (epic_validator.py). Added `_LINKED_HEADING_RE` for `### [X.Y](path) -- Title` format and `_TABLE_STORY_RE` for table-linked rows. Updated `_parse_epic_markdown()` and `_parse_stories()` with 3-tier parsing: classic headings → linked headings → table fallback. Added `_parse_table_size_priority()` helper. 7 test classes covering linked headings, table rows, mixed formats, missing columns, plain text exclusion.
 - [ ] 90.3: Execute story — docs/planning/epics/EPIC-90/story-90.3-cross-file-story-validation.md
 
 ## Phase 7: Epic Generator - Close LLM Quality Gaps (Epic 91)

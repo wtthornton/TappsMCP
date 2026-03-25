@@ -13,6 +13,7 @@ from docs_mcp.validators.epic_validator import (
     _detect_cycle,
     _parse_implementation_order,
     _parse_story_heading,
+    _parse_table_size_priority,
     _split_by_heading,
     StoryInfo,
 )
@@ -650,3 +651,279 @@ class TestDocsValidateEpicTool:
         )
         assert result["success"] is True
         assert result["data"]["score"] == 100
+
+
+# ---------------------------------------------------------------------------
+# Fixtures — linked headings and table-linked stories (Story 90.2)
+# ---------------------------------------------------------------------------
+
+_LINKED_HEADING_EPIC = """\
+# Epic 88: Freshness & Response Size
+
+## Goal
+
+Manage staleness and response sizes.
+
+## Motivation
+
+Performance.
+
+## Acceptance Criteria
+
+- [ ] All stories complete
+
+## Stories
+
+### [88.1](EPIC-88/story-88.1-staleness-first-sort.md) -- Staleness-First Sort
+
+**Points:** 3 | **Size:** M | **Priority:** P1
+
+#### Tasks
+
+- [ ] Implement sort
+
+#### Acceptance Criteria
+
+- [ ] Stale items sorted first
+
+---
+
+### [88.2](EPIC-88/story-88.2-response-truncation.md) -- Response Truncation
+
+**Points:** 5 | **Size:** M | **Priority:** P2
+
+#### Tasks
+
+- [ ] Implement truncation
+
+#### Acceptance Criteria
+
+- [ ] Large responses truncated
+"""
+
+_TABLE_STORY_EPIC = """\
+# Epic: Plan Optimization
+
+## Goal
+
+Faster planning.
+
+## Motivation
+
+Speed.
+
+## Acceptance Criteria
+
+- [ ] All stories done
+
+## Stories
+
+| ID | Story | Size | Priority |
+|---|---|---|---|
+| PLANOPT-1 | [File dependency graph](story-planopt-1-file-dependency-graph.md) | M | P1 |
+| PLANOPT-2 | [Parallel execution](story-planopt-2-parallel-execution.md) | L | P2 |
+| PLANOPT-3 | [Cache invalidation](story-planopt-3-cache-invalidation.md) | S | P1 |
+"""
+
+_TABLE_STORY_MISSING_COLS_EPIC = """\
+# Epic: Minimal Table
+
+## Goal
+
+Test.
+
+## Motivation
+
+Test.
+
+## Acceptance Criteria
+
+- [ ] Done
+
+## Stories
+
+| ID | Story |
+|---|---|
+| T-1 | [First task](story-t1.md) |
+| T-2 | [Second task](story-t2.md) |
+"""
+
+_TABLE_PLAIN_TEXT_EPIC = """\
+# Epic: Plain Table
+
+## Goal
+
+Test.
+
+## Motivation
+
+Test.
+
+## Acceptance Criteria
+
+- [ ] Done
+
+## Stories
+
+| ID | Story | Size |
+|---|---|---|
+| PT-1 | No link here | M |
+| PT-2 | [Linked story](story-pt2.md) | L |
+"""
+
+_MIXED_HEADING_EPIC = """\
+# Epic 90: Mixed Formats
+
+## Goal
+
+Test mixed heading and inline stories.
+
+## Motivation
+
+Coverage.
+
+## Acceptance Criteria
+
+- [ ] Done
+
+## Stories
+
+### Story 90.1: Inline Story
+
+**Points:** 2 | **Size:** S | **Priority:** P1
+
+#### Acceptance Criteria
+
+- [ ] Works
+
+### [90.2](EPIC-90/story-90.2.md) -- Linked Story
+
+**Points:** 3 | **Size:** M | **Priority:** P2
+
+#### Acceptance Criteria
+
+- [ ] Works
+"""
+
+
+# ---------------------------------------------------------------------------
+# Tests — linked heading and table-linked story parsing (Story 90.2)
+# ---------------------------------------------------------------------------
+
+
+class TestLinkedHeadingParsing:
+    """Tests for ### [X.Y](path) -- Title format."""
+
+    def test_parse_linked_heading(self) -> None:
+        result = _parse_story_heading(
+            "### [88.1](EPIC-88/story-88.1-staleness-first-sort.md) -- Staleness-First Sort"
+        )
+        assert result is not None
+        assert len(result) == 3
+        assert result[0] == "88.1"
+        assert result[1] == "Staleness-First Sort"
+        assert result[2] == "EPIC-88/story-88.1-staleness-first-sort.md"
+
+    def test_linked_heading_epic_validates(self, tmp_path: Path) -> None:
+        fp = _write_epic(tmp_path, _LINKED_HEADING_EPIC)
+        report = EpicValidator().validate(fp)
+
+        assert report.total_stories == 2
+        assert report.stories[0].number == "88.1"
+        assert report.stories[0].linked_file == "EPIC-88/story-88.1-staleness-first-sort.md"
+        assert report.stories[1].number == "88.2"
+        assert report.stories[1].linked_file == "EPIC-88/story-88.2-response-truncation.md"
+
+    def test_linked_heading_metadata_extracted(self, tmp_path: Path) -> None:
+        fp = _write_epic(tmp_path, _LINKED_HEADING_EPIC)
+        report = EpicValidator().validate(fp)
+
+        s1 = report.stories[0]
+        assert s1.points == 3
+        assert s1.size == "M"
+        assert s1.priority == "P1"
+        assert s1.has_acceptance_criteria is True
+        assert s1.has_tasks is True
+
+    def test_classic_heading_still_works(self) -> None:
+        assert _parse_story_heading("### Story 99.1: Classic") == ("99.1", "Classic")
+
+    def test_docsmcp_heading_still_works(self) -> None:
+        assert _parse_story_heading("### 80.1 -- Fix hooks") == ("80.1", "Fix hooks")
+
+
+class TestTableLinkedStoryParsing:
+    """Tests for table-linked story rows."""
+
+    def test_table_story_epic_validates(self, tmp_path: Path) -> None:
+        fp = _write_epic(tmp_path, _TABLE_STORY_EPIC)
+        report = EpicValidator().validate(fp)
+
+        assert report.total_stories == 3
+        assert report.stories[0].number == "PLANOPT-1"
+        assert report.stories[0].title == "File dependency graph"
+        assert report.stories[0].linked_file == "story-planopt-1-file-dependency-graph.md"
+
+    def test_table_size_priority_extracted(self, tmp_path: Path) -> None:
+        fp = _write_epic(tmp_path, _TABLE_STORY_EPIC)
+        report = EpicValidator().validate(fp)
+
+        assert report.stories[0].size == "M"
+        assert report.stories[0].priority == "P1"
+        assert report.stories[1].size == "L"
+        assert report.stories[1].priority == "P2"
+        assert report.stories[2].size == "S"
+
+    def test_table_missing_columns(self, tmp_path: Path) -> None:
+        fp = _write_epic(tmp_path, _TABLE_STORY_MISSING_COLS_EPIC)
+        report = EpicValidator().validate(fp)
+
+        assert report.total_stories == 2
+        assert report.stories[0].number == "T-1"
+        assert report.stories[0].linked_file == "story-t1.md"
+        assert report.stories[0].size is None
+        assert report.stories[0].priority is None
+
+    def test_table_plain_text_not_matched(self, tmp_path: Path) -> None:
+        """Table rows without markdown links should not be matched."""
+        fp = _write_epic(tmp_path, _TABLE_PLAIN_TEXT_EPIC)
+        report = EpicValidator().validate(fp)
+
+        # Only PT-2 has a link, PT-1 is plain text
+        assert report.total_stories == 1
+        assert report.stories[0].number == "PT-2"
+
+    def test_parse_table_size_priority_helper(self) -> None:
+        size, prio = _parse_table_size_priority(" M | P1 |")
+        assert size == "M"
+        assert prio == "P1"
+
+        size, prio = _parse_table_size_priority(" Critical |")
+        assert size is None
+        assert prio is None
+
+        size, prio = _parse_table_size_priority("")
+        assert size is None
+        assert prio is None
+
+
+class TestMixedFormats:
+    """Tests for epics with mixed inline and linked headings."""
+
+    def test_mixed_heading_epic(self, tmp_path: Path) -> None:
+        fp = _write_epic(tmp_path, _MIXED_HEADING_EPIC)
+        report = EpicValidator().validate(fp)
+
+        assert report.total_stories == 2
+        numbers = {s.number for s in report.stories}
+        assert "90.1" in numbers
+        assert "90.2" in numbers
+
+    def test_mixed_inline_has_no_linked_file(self, tmp_path: Path) -> None:
+        fp = _write_epic(tmp_path, _MIXED_HEADING_EPIC)
+        report = EpicValidator().validate(fp)
+
+        inline = next(s for s in report.stories if s.number == "90.1")
+        linked = next(s for s in report.stories if s.number == "90.2")
+        assert inline.linked_file is None
+        assert linked.linked_file == "EPIC-90/story-90.2.md"
