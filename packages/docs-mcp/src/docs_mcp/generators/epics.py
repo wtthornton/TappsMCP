@@ -19,6 +19,45 @@ logger = structlog.get_logger(__name__)
 
 _MAX_COMMIT_DISPLAY_LEN = 50
 
+# Keyword → out-of-scope suggestion for context-aware non-goals placeholder.
+_NON_GOAL_KEYWORD_HINTS: dict[str, str] = {
+    "auth": "Multi-factor authentication",
+    "api": "Third-party API integrations",
+    "database": "Database migration tooling",
+    "db": "Database migration tooling",
+    "ui": "Mobile responsive design",
+    "frontend": "Mobile responsive design",
+    "test": "Performance benchmarking",
+    "deploy": "Multi-cloud deployment",
+    "search": "Full-text search optimization",
+    "security": "Penetration testing",
+    "monitor": "Real-time alerting",
+    "cache": "Distributed cache invalidation",
+    "migration": "Cross-platform migration support",
+    "performance": "Hardware-level optimization",
+    "logging": "Log aggregation platform integration",
+    "config": "Dynamic runtime reconfiguration",
+}
+
+
+def _derive_non_goal_hints(title: str) -> list[str]:
+    """Extract boundary suggestions from title keywords.
+
+    Returns up to 3 unique hints based on keyword matches in the title.
+    """
+    title_lower = title.lower()
+    tokens = set(re.split(r"[\s\-_/]+", title_lower))
+    seen: set[str] = set()
+    hints: list[str] = []
+    for keyword, hint in _NON_GOAL_KEYWORD_HINTS.items():
+        if keyword in tokens or keyword in title_lower:
+            if hint not in seen:
+                seen.add(hint)
+                hints.append(hint)
+                if len(hints) >= 3:
+                    break
+    return hints
+
 
 # ---------------------------------------------------------------------------
 # Models
@@ -243,6 +282,11 @@ class EpicGenerator:
 
         if config.goal:
             lines.append(config.goal)
+        elif config.title.strip():
+            lines.append(
+                f"Describe how **{config.title.strip()}** will change the system. "
+                "What measurable outcome proves this epic is complete?"
+            )
         else:
             lines.append(
                 "Describe the measurable outcome this epic achieves. "
@@ -267,6 +311,11 @@ class EpicGenerator:
 
         if config.motivation:
             lines.append(config.motivation)
+        elif config.title.strip():
+            lines.append(
+                f"Explain why **{config.title.strip()}** matters. "
+                "What pain point or opportunity does it address?"
+            )
         else:
             lines.append(
                 "Explain why this work matters. What customer pain point, "
@@ -287,6 +336,12 @@ class EpicGenerator:
         if config.acceptance_criteria:
             for criterion in config.acceptance_criteria:
                 lines.append(f"- [ ] {criterion}")
+        elif config.title.strip():
+            lines.append(
+                f"- [ ] Define verifiable criteria for **{config.title.strip()}**..."
+            )
+            lines.append("- [ ] All stories completed and passing tests")
+            lines.append("- [ ] Documentation updated")
         else:
             lines.append("- [ ] Define verifiable acceptance criteria...")
             lines.append("- [ ] All stories completed and passing tests")
@@ -385,7 +440,21 @@ class EpicGenerator:
             for note in config.technical_notes:
                 lines.append(f"- {note}")
         else:
-            lines.append("- Document architecture decisions and key dependencies...")
+            tech_stack = enrichment.get("tech_stack")
+            title = config.title.strip()
+            if title and tech_stack:
+                lines.append(
+                    f"- Document architecture decisions for **{title}**. "
+                    f"Key tech: **{tech_stack}**."
+                )
+            elif title:
+                lines.append(
+                    f"- Document architecture decisions for **{title}**..."
+                )
+            else:
+                lines.append(
+                    "- Document architecture decisions and key dependencies..."
+                )
 
         module_summary = enrichment.get("module_summary")
         if module_summary:
@@ -424,8 +493,23 @@ class EpicGenerator:
         if config.non_goals:
             for item in config.non_goals:
                 lines.append(f"- {item}")
+        elif config.title.strip():
+            title = config.title.strip()
+            # Derive boundary suggestions from title keywords.
+            hints = _derive_non_goal_hints(title)
+            if hints:
+                lines.append(
+                    f"- Define what is explicitly out of scope for "
+                    f"**{title}**. Consider: {', '.join(hints)}"
+                )
+            else:
+                lines.append(
+                    f"- Define what is explicitly out of scope for **{title}**..."
+                )
         else:
-            lines.append("- Define what is explicitly deferred to prevent scope creep...")
+            lines.append(
+                "- Define what is explicitly deferred to prevent scope creep..."
+            )
 
         lines.extend(["", "<!-- docsmcp:end:non-goals -->", ""])
         return lines

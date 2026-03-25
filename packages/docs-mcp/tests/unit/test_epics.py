@@ -125,7 +125,7 @@ class TestEpicGeneratorSections:
     def test_goal_placeholder(self) -> None:
         config = _make_config(goal="")
         content = self.gen.generate(config)
-        assert "Describe the measurable outcome" in content
+        assert "Describe how **Test Epic** will change the system" in content
 
     def test_motivation_with_text(self) -> None:
         config = _make_config(motivation="Users lose context across sessions.")
@@ -136,7 +136,7 @@ class TestEpicGeneratorSections:
     def test_motivation_placeholder(self) -> None:
         config = _make_config(motivation="")
         content = self.gen.generate(config)
-        assert "Explain why this work matters" in content
+        assert "Explain why **Test Epic** matters" in content
 
     def test_acceptance_criteria_rendered(self) -> None:
         config = _make_config(acceptance_criteria=["AC1", "AC2", "AC3"])
@@ -149,7 +149,7 @@ class TestEpicGeneratorSections:
     def test_acceptance_criteria_placeholder(self) -> None:
         config = _make_config(acceptance_criteria=[])
         content = self.gen.generate(config)
-        assert "- [ ] Define verifiable acceptance criteria" in content
+        assert "- [ ] Define verifiable criteria for **Test Epic**" in content
 
     def test_generate_with_timing_returns_phase_ms(self) -> None:
         config = _make_config()
@@ -203,7 +203,7 @@ class TestEpicGeneratorSections:
     def test_technical_notes_placeholder(self) -> None:
         config = _make_config(technical_notes=[])
         content = self.gen.generate(config)
-        assert "- Document architecture decisions" in content
+        assert "- Document architecture decisions for **Test Epic**" in content
 
     def test_non_goals_rendered(self) -> None:
         config = _make_config(non_goals=["Mobile app", "i18n"])
@@ -215,7 +215,110 @@ class TestEpicGeneratorSections:
     def test_non_goals_placeholder(self) -> None:
         config = _make_config(non_goals=[])
         content = self.gen.generate(config)
-        assert "- Define what is explicitly deferred" in content
+        assert "- Define what is explicitly out of scope for **Test Epic**" in content
+
+
+# ---------------------------------------------------------------------------
+# Context-aware placeholder prose (Story 91.1)
+# ---------------------------------------------------------------------------
+
+
+class TestContextAwarePlaceholders:
+    """Tests that placeholder text includes the epic title and context."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_goal_placeholder_includes_title(self) -> None:
+        config = _make_config(title="Auth Middleware Rewrite", goal="")
+        content = self.gen.generate(config)
+        assert "**Auth Middleware Rewrite**" in content
+        assert "will change the system" in content
+
+    def test_motivation_placeholder_includes_title(self) -> None:
+        config = _make_config(title="Memory Federation", motivation="")
+        content = self.gen.generate(config)
+        assert "**Memory Federation**" in content
+        assert "matters" in content
+
+    def test_technical_notes_placeholder_includes_title(self) -> None:
+        config = _make_config(title="Cache Layer", technical_notes=[])
+        content = self.gen.generate(config)
+        assert "architecture decisions for **Cache Layer**" in content
+
+    def test_technical_notes_placeholder_includes_tech_stack(self, tmp_path: Path) -> None:
+        """When auto_populate provides tech_stack, placeholder includes it."""
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "proj"\nversion = "0.1.0"\n',
+            encoding="utf-8",
+        )
+        config = _make_config(title="Cache Layer", technical_notes=[])
+        # Simulate enrichment with tech_stack via direct render call.
+        lines = self.gen._render_technical_notes(
+            config, {"tech_stack": "Python, Redis, FastAPI"}
+        )
+        joined = "\n".join(lines)
+        assert "**Cache Layer**" in joined
+        assert "**Python, Redis, FastAPI**" in joined
+
+    def test_non_goals_placeholder_includes_title(self) -> None:
+        config = _make_config(title="Graph Query Engine", non_goals=[])
+        content = self.gen.generate(config)
+        assert "**Graph Query Engine**" in content
+
+    def test_non_goals_keyword_hints_auth(self) -> None:
+        config = _make_config(title="Auth Service Upgrade", non_goals=[])
+        content = self.gen.generate(config)
+        assert "Multi-factor authentication" in content
+
+    def test_non_goals_keyword_hints_api(self) -> None:
+        config = _make_config(title="API Gateway Redesign", non_goals=[])
+        content = self.gen.generate(config)
+        assert "Third-party API integrations" in content
+
+    def test_non_goals_no_keyword_match(self) -> None:
+        config = _make_config(title="Improve Documentation", non_goals=[])
+        content = self.gen.generate(config)
+        # Should still reference title but no keyword hints.
+        assert "**Improve Documentation**" in content
+        assert "out of scope" in content
+
+    def test_acceptance_criteria_placeholder_includes_title(self) -> None:
+        config = _make_config(title="Session Persistence", acceptance_criteria=[])
+        content = self.gen.generate(config)
+        assert "**Session Persistence**" in content
+        assert "Define verifiable criteria" in content
+
+    def test_empty_title_falls_back_to_generic_goal(self) -> None:
+        config = _make_config(title="", goal="")
+        content = self.gen.generate(config)
+        assert "Describe the measurable outcome this epic achieves" in content
+
+    def test_empty_title_falls_back_to_generic_motivation(self) -> None:
+        config = _make_config(title="", motivation="")
+        content = self.gen.generate(config)
+        assert "Explain why this work matters" in content
+
+    def test_empty_title_falls_back_to_generic_acceptance(self) -> None:
+        config = _make_config(title="", acceptance_criteria=[])
+        content = self.gen.generate(config)
+        assert "Define verifiable acceptance criteria" in content
+
+    def test_empty_title_falls_back_to_generic_technical_notes(self) -> None:
+        config = _make_config(title="", technical_notes=[])
+        content = self.gen.generate(config)
+        assert "Document architecture decisions and key dependencies" in content
+
+    def test_empty_title_falls_back_to_generic_non_goals(self) -> None:
+        config = _make_config(title="", non_goals=[])
+        content = self.gen.generate(config)
+        assert "Define what is explicitly deferred" in content
+
+    def test_whitespace_title_falls_back_to_generic(self) -> None:
+        config = _make_config(title="   ", goal="", motivation="")
+        content = self.gen.generate(config)
+        assert "Describe the measurable outcome this epic achieves" in content
+        assert "Explain why this work matters" in content
 
 
 # ---------------------------------------------------------------------------

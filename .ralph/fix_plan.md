@@ -64,7 +64,7 @@
 <!-- Perf fix landed in commit 31237f1; these stories close remaining quality gaps -->
 <!-- Implementation order: 91.1 → 91.3 → 91.2 → 91.4 → 91.5 -->
 
-- [ ] 91.1: Execute story — docs/epics/stories/STORY-91.1-context-aware-placeholders.md
+- [x] 91.1: Execute story — docs/epics/stories/STORY-91.1-context-aware-placeholders.md ✓ Refactored `_render_goal`, `_render_motivation`, `_render_technical_notes`, `_render_non_goals`, `_render_acceptance_criteria` to interpolate `config.title` (and enrichment tech_stack) into placeholder text. Added `_NON_GOAL_KEYWORD_HINTS` dict and `_derive_non_goal_hints()` for keyword-based boundary suggestions. Empty/whitespace title falls back to generic text. Updated 5 existing tests, added 16 new tests in `TestContextAwarePlaceholders`.
 - [ ] 91.3: Execute story — docs/epics/stories/STORY-91.3-adaptive-detail-level.md
 - [ ] 91.2: Execute story — docs/epics/stories/STORY-91.2-quick-start-mode.md
 - [ ] 91.4: Execute story — docs/epics/stories/STORY-91.4-suggestion-engine.md
