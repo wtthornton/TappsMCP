@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-03-25
+
+### Changed
+
+- **tapps-brain upgraded from v1.3.1 to v1.4.3** — Picks up SQL hardening (f-string SQL eliminated), profile limit recalibration (research benchmarks), `ephemeral` and `session` tiers added to `MemoryTier` enum, sliding window rate limiter, source trust scoring, graph-boosted recall, integrity HMAC-SHA256, and OpenClaw SDK migration
+- Version bump: tapps-core 1.13.0 → 1.14.0, tapps-mcp 1.13.0 → 1.14.0, docs-mcp 1.13.0 → 1.14.0
+
 ## [1.13.0] - 2026-03-25
 
 ### Added
