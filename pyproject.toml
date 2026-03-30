@@ -2,7 +2,7 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v1.4.3" }
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v2.0.3" }
 
 [tool.uv]
 dev-dependencies = [
@@ -33,6 +33,12 @@ src = [
     "packages/tapps-mcp/src",
     "packages/docs-mcp/src",
 ]
+exclude = [
+    ".claude",
+    "build",
+    "dist",
+    "cursorTappMCPdisttest_env",
+]
 
 [tool.ruff.lint]
 select = [
@@ -58,16 +64,48 @@ ignore = [
     "S603",    # subprocess call - check for execution of untrusted input (we handle this)
     "S607",    # starting a process with a partial executable path
     "PLC0415", # import not at top-level — we use lazy imports intentionally
+    "PLC0414", # import-alias-not-renamed — `import X as X` is the standard re-export idiom
     "PLR0913", # too many arguments — acceptable for config-heavy tool runners
     "PLR0912", # too many branches — acceptable for multi-tool dispatch
     "PLR0915", # too many statements — acceptable for composite tool handlers
+    "PLR0911", # too many return statements
+    "PLR2004", # magic-value-comparison — too pervasive, low signal
+    "ANN401",  # dynamically-typed-expression (Any) — necessary for generic APIs
+    "E501",    # line-too-long — handled by ruff format; remaining are strings/comments
+    "E402",    # module-import-not-at-top — lazy/conditional imports are intentional
+    "PLW0603", # global-statement — used intentionally in several modules
+    "S110",    # try-except-pass — intentional in resilient error handling
+    "S101",    # assert — used in non-test validation code intentionally
+    "TCH003",  # typing-only-standard-library-import — refactoring suggestion, not a bug
+    "TCH002",  # typing-only-third-party-import — refactoring suggestion, not a bug
+    "TCH001",  # typing-only-first-party-import — refactoring suggestion, not a bug
+    "SIM102",  # collapsible-if — readability is subjective
+    "SIM103",  # needless-bool — readability is subjective
+    "SIM108",  # if-else-block-instead-of-if-exp — ternary not always clearer
+    "SIM105",  # suppressible-exception — contextlib.suppress not always clearer
+    "SIM110",  # reimplemented-builtin — any()/all() rewrite not always clearer
+    "SIM117",  # multiple-with-statements — multi-with not always clearer
+    "SIM201",  # negate-equal-op — style preference
+    "PLW0108", # unnecessary-lambda — sometimes clearer with lambda
+    "PLW2901", # redefined-loop-name — common pattern for stripping loop vars
+    "PLW1510", # subprocess-run-without-check — handled explicitly
+    "PLR1714", # repeated-equality-comparison — readability preference
+    "PLR0124", # comparison-with-itself — used intentionally in identity tests
+    "S112",    # try-except-continue — intentional in resilient loops
+    "S701",    # jinja2-autoescape-false — generating markdown, not HTML
+    "A002",    # builtin-argument-shadowing — `format`, `type`, `id` used as parameters
+    "E741",    # ambiguous-variable-name — single-char vars acceptable in comprehensions
+    "RUF012",  # mutable-class-default — acceptable in test fixtures
+    "RUF043",  # match-pattern-with-metacharacters — intentional in test patterns
+    "PLC0206", # dict-index-missing-items — style preference
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "examples/**/*.py" = ["T201", "PTH109"]
-"packages/*/tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007"]
+"packages/*/tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007", "B017", "F841", "PLW2901"]
 "packages/tapps-mcp/src/tapps_mcp/metrics/**/*.py" = ["PLR2004"]
-"scripts/**/*.py" = ["T201", "E501", "PLR2004", "ANN"]
+"scripts/**/*.py" = ["T201", "E501", "PLR2004", "ANN", "PTH"]
+"tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007", "B017", "F841"]
 
 [tool.mypy]
 python_version = "3.12"
