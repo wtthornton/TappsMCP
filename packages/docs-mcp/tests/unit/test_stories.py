@@ -285,7 +285,9 @@ class TestContextAwarePlaceholders:
     # -- tasks --------------------------------------------------------------
 
     def test_tasks_placeholder_uses_title(self) -> None:
-        config = _make_config(tasks=[], title="Rate Limiter")
+        # Clear description so keyword matching falls through to the
+        # title-derived generic fallback ("Implement <title>").
+        config = _make_config(tasks=[], title="Rate Limiter", description="")
         content = self.gen.generate(config)
         assert "- [ ] Implement rate limiter" in content
 

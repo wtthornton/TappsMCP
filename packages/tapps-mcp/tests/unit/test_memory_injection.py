@@ -54,6 +54,9 @@ def _make_entry(
 
 def _make_store(entries: list[MemoryEntry] | None = None) -> MagicMock:
     store = MagicMock()
+    # Avoid MagicMock cascade into scoring weights (tapps-brain validates
+    # that profile.scoring weights sum to ~1.0 when set).
+    store.profile = None
     entries = entries or []
     store.search.return_value = entries
     store.list_all.return_value = entries

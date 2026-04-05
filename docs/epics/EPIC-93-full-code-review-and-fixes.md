@@ -24,7 +24,9 @@
 - ✅ `uv run ruff check packages/*/src/` — All checks passed!
 - ✅ `bandit -r packages/*/src/ -ll` — 0 HIGH/MEDIUM
 - ❌ `mypy --strict` — ~60 pre-existing type errors remain (requires per-site API investigation)
-- ✅ No new test regressions (pre-existing failures: 89 in tapps-mcp, 1 in docs-mcp)
+- ✅ No new test regressions
+- ✅ docs-mcp: 0 failures (was 1 — fixed keyword-match disambiguation in test_stories)
+- 🟡 tapps-mcp: 82 failures (was 89 — fixed 12 MagicMock cascade / verify_integrity mock issues)
 
 <!-- docsmcp:end:metadata -->
 

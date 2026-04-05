@@ -114,6 +114,15 @@ class TestVerifyIntegrityAction:
         mock_store = MagicMock()
         mock_store.list_all.return_value = []
         mock_store.snapshot.return_value = MagicMock(total_count=0, tier_counts={})
+        mock_store.verify_integrity.return_value = {
+            "total": 0,
+            "verified": 0,
+            "tampered": 0,
+            "no_hash": 0,
+            "tampered_keys": [],
+            "missing_hash_keys": [],
+            "tampered_details": [],
+        }
 
         with patch("tapps_mcp.server_memory_tools._record_call"), patch(
             "tapps_mcp.server_memory_tools.ensure_session_initialized",
@@ -146,6 +155,15 @@ class TestVerifyIntegrityAction:
         mock_store.list_all.return_value = [entry]
         mock_store.get.return_value = entry
         mock_store.snapshot.return_value = MagicMock(total_count=1, tier_counts={"pattern": 1})
+        mock_store.verify_integrity.return_value = {
+            "total": 1,
+            "verified": 1,
+            "tampered": 0,
+            "no_hash": 0,
+            "tampered_keys": [],
+            "missing_hash_keys": [],
+            "tampered_details": [],
+        }
 
         with patch("tapps_mcp.server_memory_tools._record_call"), patch(
             "tapps_mcp.server_memory_tools.ensure_session_initialized",
@@ -177,6 +195,15 @@ class TestVerifyIntegrityAction:
         mock_store.list_all.return_value = [entry]
         mock_store.get.return_value = None  # Entry not found on re-fetch
         mock_store.snapshot.return_value = MagicMock(total_count=1, tier_counts={"pattern": 1})
+        mock_store.verify_integrity.return_value = {
+            "total": 1,
+            "verified": 0,
+            "tampered": 1,
+            "no_hash": 0,
+            "tampered_keys": ["missing-key"],
+            "missing_hash_keys": [],
+            "tampered_details": [],
+        }
 
         with patch("tapps_mcp.server_memory_tools._record_call"), patch(
             "tapps_mcp.server_memory_tools.ensure_session_initialized",

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-04-05
+
+### Changed
+
+- **Epic 93: Full Code Review — first pass across monorepo**
+  - **Security (93.1)**: Bandit 0 HIGH/MEDIUM (was 2 HIGH + 1 MEDIUM). Fixed Jinja `autoescape=False` annotations in `docs-mcp` generators (markdown output, safe) and added configurable `dataset_revision` pinning for HuggingFace benchmark loader
+  - **Async I/O (93.4)**: Wrapped all 26 blocking file-I/O calls in async MCP tool handlers with `asyncio.to_thread`. Covers `docs-mcp` generators, `docs_config`, scoring (py/go/rust/ts), pipeline wizard, and knowledge lookup
+  - **Type safety (93.2, partial)**: Removed 70 unused `# type: ignore` comments surfaced by `mypy --strict`; added missing module overrides for `datasets`/`pyarrow`/`pandas`; replaced broken `tapps_core.project.models` import with local `TechStack` Protocol; fixed tree-sitter `Language = None` guards; hoisted dispatcher extractor type annotations; fixed `ClassVar` at module scope; fixed `FastMCP` forward references; fixed broken `click.echo(...) or ctx.exit()` pattern
+  - **Ruff hygiene**: Cleaned 218 lint issues to 0; normalized CRLF → LF on touched files
+  - **Dependencies (93.7)**: `pip-audit` clean (0 CVEs)
+  - **Tests**: Fixed 12 memory test failures from `MagicMock` cascade into `MemoryRetriever` scoring weights and stale `verify_integrity` mock expectations. `docs-mcp` test_stories keyword-match fallback disambiguated
+  - **Docs (93.8)**: Corrected `CLAUDE.md` tapps-brain pin reference (v1.4.3 → v2.0.3); verified MCP tool counts (tapps-mcp=30, docs-mcp=32)
+- Version bump: tapps-core 1.14.0 → 1.15.0, tapps-mcp 1.14.0 → 1.15.0, docs-mcp 1.14.0 → 1.15.0
+
+### Known Issues (deferred from Epic 93)
+
+- **mypy --strict**: ~60 genuine type errors remain (mostly `attr-defined`/`call-arg` against drifted `tapps-brain` v2.0.3 API surface). Each requires per-site investigation and is tracked as follow-up work
+- **tapps-mcp tests**: ~80 pre-existing failures remain, concentrated in memory-related tests with stale `MagicMock` expectations against `tapps-brain` v2.0.3. `test_memory_safety_enforcement.py` also exhibits test pollution (passes in isolation)
+- **Broad `except Exception:` catches**: 144 occurrences remain as defensive patterns at MCP tool boundaries; per-case narrowing deferred
+- **High cyclomatic complexity**: 81 functions at CC > 20 identified; individual refactors deferred to dedicated stories
+
 ## [1.14.0] - 2026-03-25
 
 ### Changed
