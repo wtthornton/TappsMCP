@@ -878,6 +878,52 @@ def _build_requirements_summary(
 # ---------------------------------------------------------------------------
 
 
+def check_plaintext_secrets(project_root: Path) -> CheckResult:
+    """Warn when ``.mcp.json`` stores secrets (API keys/tokens) in plaintext (Issue #80.3)."""
+    from tapps_mcp.distribution.setup_generator import _collect_plaintext_secrets
+
+    candidates: list[Path] = [
+        project_root / ".mcp.json",
+        project_root / ".cursor" / "mcp.json",
+        project_root / ".vscode" / "mcp.json",
+    ]
+    findings: list[str] = []
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            raw = path.read_text(encoding="utf-8")
+            data = json.loads(raw) if raw.strip() else {}
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for servers_key in ("mcpServers", "servers"):
+            servers = data.get(servers_key) or {}
+            if not isinstance(servers, dict):
+                continue
+            for server_name, entry in servers.items():
+                if isinstance(entry, dict):
+                    secrets = _collect_plaintext_secrets(entry)
+                    if secrets:
+                        findings.append(
+                            f"{path.name} ({server_name}): {', '.join(secrets)}"
+                        )
+    if not findings:
+        return CheckResult(
+            "MCP secrets",
+            True,
+            "No plaintext secrets detected in MCP configs",
+        )
+    return CheckResult(
+        "MCP secrets",
+        False,
+        "Plaintext secret(s) detected in MCP config: " + "; ".join(findings),
+        "Use ${VAR} env-var interpolation (Claude Code/Cursor support it) "
+        "and add the config file to .gitignore.",
+    )
+
+
 def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     """Collect all diagnostic checks for the given project root.
 
@@ -903,6 +949,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_tapps_brain())
     checks.append(check_memory_pipeline_config(root))
     checks.append(check_dual_memory_server(root))
+    checks.append(check_plaintext_secrets(root))
     if quick:
         checks.append(CheckResult(
             "Quality tools",

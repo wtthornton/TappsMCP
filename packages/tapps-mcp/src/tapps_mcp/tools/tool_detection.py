@@ -74,6 +74,57 @@ def _reset_tools_cache() -> None:
     _cached_tools = None
 
 
+def _venv_bin_dirs() -> list[Path]:
+    """Return candidate ``bin``/``Scripts`` directories for the current Python env.
+
+    Used to locate checkers that live in the MCP server's own venv even when
+    PATH does not include them (Issue #80.1). Includes both ``sys.prefix`` and
+    ``sys.base_prefix`` to cover uv tool installs.
+    """
+    candidates: list[Path] = []
+    for prefix in {Path(sys.prefix), Path(sys.base_prefix)}:
+        candidates.append(prefix / "bin")
+        candidates.append(prefix / "Scripts")
+    return [p for p in candidates if p.is_dir()]
+
+
+def _find_tool_executable(name: str) -> str | None:
+    """Return the path to *name* on PATH, falling back to this venv's bin dirs.
+
+    On Windows, probes ``<name>.exe``/``.cmd``/``.bat`` in addition to bare
+    ``<name>``. Returns the first hit.
+    """
+    hit = shutil.which(name)
+    if hit is not None:
+        return hit
+    suffixes = ("", ".exe", ".cmd", ".bat") if sys.platform == "win32" else ("",)
+    for bin_dir in _venv_bin_dirs():
+        for suffix in suffixes:
+            candidate = bin_dir / f"{name}{suffix}"
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
+def _venv_receipt_mtime() -> float | None:
+    """Return the newest mtime of common uv/venv receipt files, or ``None``.
+
+    Used to invalidate the on-disk checker cache after ``uv tool install --with``
+    changes the installed tool set (Issue #80.1).
+    """
+    latest: float | None = None
+    for prefix in {Path(sys.prefix), Path(sys.base_prefix)}:
+        for fname in ("uv-receipt.toml", "pyvenv.cfg"):
+            p = prefix / fname
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                continue
+            if latest is None or mtime > latest:
+                latest = mtime
+    return latest
+
+
 def _get_disk_cache_path() -> Path | None:
     """Return the path to the disk cache file, or None if unavailable."""
     try:
@@ -133,6 +184,19 @@ def _read_disk_cache() -> list[InstalledTool] | None:
             _logger.debug("disk_cache_platform_mismatch")
             return None
 
+        # Issue #80.1: invalidate when the venv changed since the cache was
+        # written (e.g. ``uv tool install tapps-mcp --with bandit`` touches
+        # uv-receipt.toml / pyvenv.cfg).
+        cache_epoch = float(data["timestamp_epoch"])
+        receipt_mtime = _venv_receipt_mtime()
+        if receipt_mtime is not None and receipt_mtime > cache_epoch:
+            _logger.debug(
+                "disk_cache_stale_venv_changed",
+                receipt_mtime=receipt_mtime,
+                cache_epoch=cache_epoch,
+            )
+            return None
+
         tools = [InstalledTool(**t) for t in data["tools"]]
         _logger.debug("disk_cache_hit", tool_count=len(tools))
         return tools
@@ -170,12 +234,13 @@ def detect_installed_tools(*, force_refresh: bool = False) -> list[InstalledTool
 
     for spec in _TOOL_SPECS:
         name = spec["name"]
-        available = shutil.which(name) is not None
+        tool_path = _find_tool_executable(name)
+        available = tool_path is not None
         version: str | None = None
 
-        if available:
+        if available and tool_path is not None:
             result = run_command(
-                [name, spec["version_flag"]],
+                [tool_path, spec["version_flag"]],
                 timeout=_TOOL_TIMEOUTS.get(name, 10),
             )
             if result.success:
@@ -201,12 +266,13 @@ def detect_installed_tools(*, force_refresh: bool = False) -> list[InstalledTool
 async def _check_tool_async(spec: dict[str, str]) -> InstalledTool:
     """Check a single tool asynchronously."""
     name = spec["name"]
-    available = shutil.which(name) is not None
+    tool_path = _find_tool_executable(name)
+    available = tool_path is not None
     version: str | None = None
 
-    if available:
+    if available and tool_path is not None:
         result = await run_command_async(
-            [name, spec["version_flag"]],
+            [tool_path, spec["version_flag"]],
             timeout=_TOOL_TIMEOUTS.get(name, 10),
         )
         if result.success:

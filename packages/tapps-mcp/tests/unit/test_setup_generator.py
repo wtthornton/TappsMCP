@@ -10,14 +10,22 @@ from click.testing import CliRunner
 
 from tapps_mcp.cli import main
 from tapps_mcp.distribution.setup_generator import (
+    _build_uv_run_tapps_launch,
     _check_config,
+    _collect_plaintext_secrets,
     _configure_multiple_hosts,
     _detect_hosts,
+    _detect_uv_context,
+    _ensure_gitignore_entry,
     _generate_config,
     _generate_rules,
     _get_config_path,
     _get_servers_key,
+    _load_existing_env_from_other_scope,
+    _looks_like_secret_key,
     _merge_config,
+    _should_use_uv_launch,
+    _value_is_plaintext_secret,
     is_tapps_mcp_package_layout,
     run_init,
     run_upgrade,
@@ -1158,3 +1166,251 @@ class TestUpgradeScope:
                 scope="project",
             )
         assert ok
+
+
+# ---------------------------------------------------------------------------
+# Issue #80.2: env var migration across scopes
+# ---------------------------------------------------------------------------
+
+
+class TestEnvMigrationAcrossScopes:
+    """Issue #80.2 — init --scope project preserves env from user-scope config."""
+
+    def test_load_existing_env_from_other_scope_user_to_project(self, tmp_path):
+        """Project-scope init picks up env vars from ~/.claude.json."""
+        home = tmp_path / "home"
+        home.mkdir()
+        user_cfg = home / ".claude.json"
+        user_cfg.write_text(
+            json.dumps({
+                "mcpServers": {
+                    "tapps-mcp": {
+                        "command": "tapps-mcp",
+                        "args": ["serve"],
+                        "env": {
+                            "CONTEXT7_API_KEY": "ctx7sk-test",
+                            "TAPPS_MCP_PROJECT_ROOT": "/old/path",
+                        },
+                    }
+                }
+            }),
+            encoding="utf-8",
+        )
+        project = tmp_path / "proj"
+        project.mkdir()
+        with patch(
+            "tapps_mcp.distribution.setup_generator.Path.home", return_value=home
+        ):
+            env = _load_existing_env_from_other_scope("claude-code", project, "project")
+        assert env == {"CONTEXT7_API_KEY": "ctx7sk-test"}
+
+    def test_load_existing_env_returns_empty_when_missing(self, tmp_path):
+        """Missing other-scope file → empty dict."""
+        home = tmp_path / "home"
+        home.mkdir()
+        with patch(
+            "tapps_mcp.distribution.setup_generator.Path.home", return_value=home
+        ):
+            env = _load_existing_env_from_other_scope(
+                "claude-code", tmp_path / "proj", "project"
+            )
+        assert env == {}
+
+    def test_load_existing_env_skips_non_claude_hosts(self, tmp_path):
+        """Non-claude hosts have no alternate scope."""
+        assert (
+            _load_existing_env_from_other_scope("cursor", tmp_path, "project") == {}
+        )
+
+    def test_generate_config_migrates_env_from_user_scope(self, tmp_path):
+        """Creating new project .mcp.json merges env from ~/.claude.json."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".claude.json").write_text(
+            json.dumps({
+                "mcpServers": {
+                    "tapps-mcp": {
+                        "command": "tapps-mcp",
+                        "args": ["serve"],
+                        "env": {"CONTEXT7_API_KEY": "ctx7sk-migrated"},
+                    }
+                }
+            }),
+            encoding="utf-8",
+        )
+        project = tmp_path / "proj"
+        project.mkdir()
+        with patch(
+            "tapps_mcp.distribution.setup_generator.Path.home", return_value=home
+        ):
+            ok = _generate_config("claude-code", project, scope="project", force=True)
+        assert ok
+        data = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
+        env = data["mcpServers"]["tapps-mcp"]["env"]
+        assert env["CONTEXT7_API_KEY"] == "ctx7sk-migrated"
+        # Scope-specific key still set
+        assert env["TAPPS_MCP_PROJECT_ROOT"] == "."
+
+
+# ---------------------------------------------------------------------------
+# Issue #80.3: plaintext secret detection
+# ---------------------------------------------------------------------------
+
+
+class TestPlaintextSecretDetection:
+    def test_looks_like_secret_key_matches_common_patterns(self):
+        assert _looks_like_secret_key("CONTEXT7_API_KEY")
+        assert _looks_like_secret_key("GITHUB_TOKEN")
+        assert _looks_like_secret_key("my_secret")
+        assert _looks_like_secret_key("db_password")
+
+    def test_looks_like_secret_key_ignores_known_benign(self):
+        assert not _looks_like_secret_key("TAPPS_MCP_PROJECT_ROOT")
+        assert not _looks_like_secret_key("DOCS_MCP_PROJECT_ROOT")
+        assert not _looks_like_secret_key("VIRTUAL_ENV")
+        assert not _looks_like_secret_key("FOO")
+
+    def test_value_is_plaintext_secret_excludes_interpolation(self):
+        assert _value_is_plaintext_secret("ctx7sk-abc123")
+        assert not _value_is_plaintext_secret("${CONTEXT7_API_KEY}")
+        assert not _value_is_plaintext_secret("$CONTEXT7_API_KEY")
+        assert not _value_is_plaintext_secret("")
+        assert not _value_is_plaintext_secret(None)
+
+    def test_collect_plaintext_secrets(self):
+        entry = {
+            "env": {
+                "TAPPS_MCP_PROJECT_ROOT": ".",
+                "CONTEXT7_API_KEY": "ctx7sk-xyz",
+                "SAFE_TOKEN": "${SAFE_TOKEN}",
+            }
+        }
+        secrets = _collect_plaintext_secrets(entry)
+        assert secrets == ["CONTEXT7_API_KEY"]
+
+    def test_generate_config_warns_on_plaintext_secret(self, tmp_path, capsys):
+        """_generate_config prints a warning when env has plaintext secrets."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        existing = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "tapps-mcp",
+                    "args": ["serve"],
+                    "env": {
+                        "TAPPS_MCP_PROJECT_ROOT": ".",
+                        "CONTEXT7_API_KEY": "ctx7sk-plain",
+                    },
+                }
+            }
+        }
+        (project / ".mcp.json").write_text(json.dumps(existing), encoding="utf-8")
+        ok = _generate_config("claude-code", project, scope="project", force=True)
+        assert ok
+        out = capsys.readouterr().out
+        assert "plaintext secret" in out.lower()
+        assert "CONTEXT7_API_KEY" in out
+
+    def test_ensure_gitignore_entry_appends(self, tmp_path):
+        gi = tmp_path / ".gitignore"
+        gi.write_text("node_modules\n", encoding="utf-8")
+        result = _ensure_gitignore_entry(tmp_path, ".mcp.json")
+        assert result is True
+        assert ".mcp.json" in gi.read_text(encoding="utf-8")
+
+    def test_ensure_gitignore_entry_detects_existing(self, tmp_path):
+        gi = tmp_path / ".gitignore"
+        gi.write_text(".mcp.json\n", encoding="utf-8")
+        assert _ensure_gitignore_entry(tmp_path, ".mcp.json") is False
+
+    def test_ensure_gitignore_entry_returns_none_when_missing(self, tmp_path):
+        assert _ensure_gitignore_entry(tmp_path, ".mcp.json") is None
+
+
+# ---------------------------------------------------------------------------
+# Issue #77: uv context detection
+# ---------------------------------------------------------------------------
+
+
+class TestUvContextDetection:
+    def test_returns_none_when_no_pyproject(self, tmp_path):
+        assert _detect_uv_context(tmp_path) is None
+
+    def test_detects_uv_lock_and_extra(self, tmp_path):
+        (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\n'
+            "[project.optional-dependencies]\n"
+            'mcp = ["tapps-mcp @ git+https://github.com/wtthornton/tapps-mcp"]\n',
+            encoding="utf-8",
+        )
+        info = _detect_uv_context(tmp_path)
+        assert info is not None
+        assert info["has_uv_lock"] is True
+        assert info["tapps_mcp_extra"] == "mcp"
+
+    def test_detects_dependency_groups(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\n'
+            "[dependency-groups]\n"
+            'tapps-mcp = ["tapps-mcp>=1.0"]\n',
+            encoding="utf-8",
+        )
+        info = _detect_uv_context(tmp_path)
+        assert info is not None
+        assert info["tapps_mcp_extra"] == "tapps-mcp"
+
+    def test_no_extra_when_tapps_mcp_absent(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\n'
+            "[project.optional-dependencies]\n"
+            'dev = ["pytest"]\n',
+            encoding="utf-8",
+        )
+        info = _detect_uv_context(tmp_path)
+        assert info is not None
+        assert info["tapps_mcp_extra"] is None
+
+    def test_should_use_uv_launch_off_disables(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\n'
+            "[project.optional-dependencies]\n"
+            'mcp = ["tapps-mcp"]\n',
+            encoding="utf-8",
+        )
+        use_uv, _, _ = _should_use_uv_launch(tmp_path, uv_mode="off")
+        assert use_uv is False
+
+    def test_should_use_uv_launch_on_forces(self, tmp_path):
+        use_uv, extra, _ = _should_use_uv_launch(tmp_path, uv_mode="on")
+        assert use_uv is True
+        assert extra is None
+
+    def test_build_uv_run_tapps_launch_with_extra(self):
+        cmd, args = _build_uv_run_tapps_launch("mcp")
+        assert cmd == "uv"
+        assert args == ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"]
+
+    def test_build_uv_run_tapps_launch_without_extra(self):
+        cmd, args = _build_uv_run_tapps_launch(None)
+        assert cmd == "uv"
+        assert args == ["run", "--no-sync", "tapps-mcp", "serve"]
+
+    def test_generate_config_uses_uv_launch(self, tmp_path):
+        project = tmp_path / "proj"
+        project.mkdir()
+        uv_launch = ("uv", ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"])
+        _generate_config("cursor", project, uv_launch=uv_launch, force=True)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        entry = data["mcpServers"]["tapps-mcp"]
+        assert entry["command"] == "uv"
+        assert "--extra" in entry["args"]
+        assert "mcp" in entry["args"]
+
+    def test_cli_init_has_uv_flags(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", "--help"])
+        assert result.exit_code == 0
+        assert "--uv" in result.output
+        assert "--no-uv" in result.output
+        assert "--uv-extra" in result.output

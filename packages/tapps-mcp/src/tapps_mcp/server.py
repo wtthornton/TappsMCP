@@ -321,6 +321,24 @@ def _get_available_tools() -> list[str]:
         return list(_FALLBACK_TOOL_LIST)
 
 
+def _current_docs_provider_summary() -> dict[str, Any]:
+    """Return the active docs-lookup provider summary (Issue #79)."""
+    has_key = bool(
+        os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY")
+        or os.environ.get("CONTEXT7_API_KEY")
+    )
+    summary: dict[str, Any] = {
+        "primary": "context7" if has_key else "llmstxt",
+        "context7_configured": has_key,
+    }
+    if not has_key:
+        summary["hint"] = (
+            "Set TAPPS_MCP_CONTEXT7_API_KEY for richer docs via Context7. "
+            "https://context7.com"
+        )
+    return summary
+
+
 def _build_server_info_data(
     settings: TappsMCPSettings,
     installed: list[InstalledTool],
@@ -348,6 +366,7 @@ def _build_server_info_data(
             "Checker availability reflects the MCP server process environment. "
             "Target project may have different tools installed."
         ),
+        "docs_provider": _current_docs_provider_summary(),
         "diagnostics": diagnostics.model_dump(),
         "recommended_workflow": RECOMMENDED_WORKFLOW_TEXT,
         "quick_start": list(DAILY_STEPS),
@@ -686,6 +705,19 @@ def _build_lookup_data(result: LookupResult) -> dict[str, Any]:
         data["context7_id"] = result.context7_id
     if result.fuzzy_score is not None:
         data["fuzzy_score"] = result.fuzzy_score
+    # Issue #79: surface a hint when Context7 is not configured and we're
+    # serving from the LlmsTxt fallback — users often don't realize they're
+    # running in degraded mode.
+    source_str = str(result.source or "").lower()
+    has_key = bool(
+        os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY")
+        or os.environ.get("CONTEXT7_API_KEY")
+    )
+    if not has_key and ("llmstxt" in source_str or source_str == "fallback"):
+        data["context7_hint"] = (
+            "Set TAPPS_MCP_CONTEXT7_API_KEY for richer docs via Context7 "
+            "(currently using LlmsTxt fallback)."
+        )
     return data
 
 

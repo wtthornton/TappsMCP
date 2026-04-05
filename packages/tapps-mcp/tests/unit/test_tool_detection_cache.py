@@ -282,6 +282,10 @@ class TestForceRefresh:
                 return_value=cache_file,
             ),
             patch(
+                "tapps_mcp.tools.tool_detection._venv_bin_dirs",
+                return_value=[],
+            ),
+            patch(
                 "tapps_mcp.tools.tool_detection.shutil.which",
                 return_value=None,
             ) as mock_which,

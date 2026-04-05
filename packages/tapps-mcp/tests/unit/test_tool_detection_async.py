@@ -51,19 +51,24 @@ class TestToolTimeouts:
             command=["mypy", "--version"],
         )
         await detect_installed_tools_async()
-        # Find the call for mypy
-        mypy_call = next(
-            c for c in mock_run.call_args_list if c[0][0][0] == "mypy"
-        )
-        assert mypy_call[1]["timeout"] == 20
+        # Each spec runs once; exactly one call (for mypy) should use the
+        # elevated 20s timeout. The resolved path may differ across specs
+        # because shutil.which is mocked to return the same path for every
+        # tool name, so we match on the timeout value instead.
+        timeouts = sorted(c[1]["timeout"] for c in mock_run.call_args_list)
+        assert 20 in timeouts
+        assert timeouts.count(20) == 1
 
 
 class TestDetectInstalledToolsAsync:
     """Tests for the async parallel tool detection."""
 
     @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.tool_detection._venv_bin_dirs", return_value=[])
     @patch("tapps_mcp.tools.tool_detection.shutil.which", return_value=None)
-    async def test_no_tools_available(self, mock_which: object) -> None:
+    async def test_no_tools_available(
+        self, mock_which: object, mock_venv: object
+    ) -> None:
         """All tools missing returns unavailable entries."""
         results = await detect_installed_tools_async()
         assert len(results) == 6
@@ -115,10 +120,11 @@ class TestDetectInstalledToolsAsync:
         assert len(results_async) == len(results_sync)
 
     @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.tool_detection._venv_bin_dirs", return_value=[])
     @patch("tapps_mcp.tools.tool_detection.run_command_async")
     @patch("tapps_mcp.tools.tool_detection.shutil.which")
     async def test_mixed_availability(
-        self, mock_which: object, mock_run: AsyncMock
+        self, mock_which: object, mock_run: AsyncMock, mock_venv: object
     ) -> None:
         """Some tools available, some missing."""
 

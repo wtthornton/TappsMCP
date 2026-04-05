@@ -48,24 +48,60 @@ _DOCS_SERVER_INSTRUCTIONS = (
 _TAPPS_MCP_UV_ROOT_PLACEHOLDER = "<PATH_TO_TAPPS_MCP_MONOREPO_ROOT>"
 
 
+def _resolve_tapps_mcp_monorepo_root() -> str | None:
+    """Best-effort lookup of the tapps-mcp monorepo root on disk (Issue #79 sub).
+
+    Resolution order:
+    1. Walk up from ``tapps_mcp.__file__`` looking for a ``packages/tapps-mcp``
+       layout plus a ``pyproject.toml`` at the workspace root.
+    2. Return ``None`` if no monorepo layout is detected (e.g. pip install).
+    """
+    try:
+        import tapps_mcp as _pkg
+    except Exception:
+        return None
+    pkg_file = getattr(_pkg, "__file__", None)
+    if not pkg_file:
+        return None
+    # Expect ``<root>/packages/tapps-mcp/src/tapps_mcp/__init__.py``:
+    # parents[0]=tapps_mcp, [1]=src, [2]=packages/tapps-mcp, [3]=packages, [4]=monorepo root.
+    try:
+        resolved = Path(pkg_file).resolve()
+        pkg_dir = resolved.parents[2]
+        packages_dir = resolved.parents[3]
+        monorepo = resolved.parents[4]
+    except IndexError:
+        return None
+    if (
+        pkg_dir.name == "tapps-mcp"
+        and packages_dir.name == "packages"
+        and (monorepo / "pyproject.toml").exists()
+    ):
+        return str(monorepo)
+    return None
+
+
 def _resolve_tapps_mcp_launch() -> tuple[str, list[str]]:
     """Return ``command`` and ``args`` to launch ``tapps-mcp serve``.
 
     Resolution order:
     1. PyInstaller frozen exe: ``sys.executable`` + ``["serve"]``.
     2. ``tapps-mcp`` on PATH: ``"tapps-mcp"`` + ``["serve"]``.
-    3. Fallback: ``uv run --directory <placeholder> tapps-mcp serve`` for checkout installs.
+    3. Monorepo checkout: ``uv run --directory <monorepo-root> tapps-mcp serve``
+       when the installed ``tapps_mcp`` package lives inside a monorepo layout.
+    4. Fallback: ``uv run --directory <placeholder> tapps-mcp serve``.
     """
     if getattr(sys, "frozen", False):
         return sys.executable, ["serve"]
     if shutil.which("tapps-mcp") is not None:
         return "tapps-mcp", ["serve"]
+    directory = _resolve_tapps_mcp_monorepo_root() or _TAPPS_MCP_UV_ROOT_PLACEHOLDER
     return (
         "uv",
         [
             "run",
             "--directory",
-            _TAPPS_MCP_UV_ROOT_PLACEHOLDER,
+            directory,
             "tapps-mcp",
             "serve",
         ],
@@ -76,16 +112,115 @@ def _resolve_docsmcp_launch() -> tuple[str, list[str]]:
     """Return command + args to launch DocsMCP (``docsmcp serve``)."""
     if shutil.which("docsmcp") is not None:
         return "docsmcp", ["serve"]
+    directory = _resolve_tapps_mcp_monorepo_root() or _TAPPS_MCP_UV_ROOT_PLACEHOLDER
     return (
         "uv",
         [
             "run",
             "--directory",
-            _TAPPS_MCP_UV_ROOT_PLACEHOLDER,
+            directory,
             "docsmcp",
             "serve",
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# uv / pyproject detection for consumer projects (Issue #77)
+# ---------------------------------------------------------------------------
+
+_UV_AUTO_EXTRA_CANDIDATES = ("mcp", "tapps-mcp", "tapps")
+
+
+def _detect_uv_context(project_root: Path) -> dict[str, Any] | None:
+    """Detect whether *project_root* is a uv-managed project that ships tapps-mcp.
+
+    Returns a dict with ``has_uv_lock``, ``has_pyproject``, ``tapps_mcp_extra``
+    (name of an optional-dependency group that references ``tapps-mcp``, or
+    ``None``), and ``uv_available``. Returns ``None`` when no pyproject.toml
+    exists at all.
+    """
+    pyproject = project_root / "pyproject.toml"
+    if not pyproject.exists():
+        return None
+
+    info: dict[str, Any] = {
+        "has_uv_lock": (project_root / "uv.lock").exists(),
+        "has_pyproject": True,
+        "tapps_mcp_extra": None,
+        "uv_available": shutil.which("uv") is not None,
+    }
+
+    try:
+        import tomllib
+
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+
+    # Look through [project.optional-dependencies] + [dependency-groups]
+    def _has_tapps(entries: Any) -> bool:
+        if not isinstance(entries, list):
+            return False
+        return any(isinstance(e, str) and "tapps-mcp" in e.lower() for e in entries)
+
+    opt = data.get("project", {}).get("optional-dependencies") or {}
+    dep_groups = data.get("dependency-groups") or {}
+
+    found_extra: str | None = None
+    for name in _UV_AUTO_EXTRA_CANDIDATES:
+        if _has_tapps(opt.get(name)) or _has_tapps(dep_groups.get(name)):
+            found_extra = name
+            break
+    if found_extra is None:
+        # Fall back: any group that mentions tapps-mcp.
+        for name, entries in {**opt, **dep_groups}.items():
+            if _has_tapps(entries):
+                found_extra = str(name)
+                break
+
+    info["tapps_mcp_extra"] = found_extra
+    return info
+
+
+def _should_use_uv_launch(
+    project_root: Path,
+    *,
+    uv_mode: str | None,
+) -> tuple[bool, str | None, dict[str, Any] | None]:
+    """Decide whether to emit a ``uv run`` launcher for *project_root*.
+
+    Args:
+        project_root: Consumer project root.
+        uv_mode: One of ``"on"`` (force), ``"off"`` (force classic), or
+            ``None`` (auto-detect).
+
+    Returns:
+        ``(use_uv, extra_name, detection_info)`` tuple.
+    """
+    if uv_mode == "off":
+        return False, None, None
+    ctx = _detect_uv_context(project_root)
+    if uv_mode == "on":
+        # Forced: emit uv-run even if we couldn't find a group.
+        extra = (ctx or {}).get("tapps_mcp_extra") if ctx else None
+        return True, extra, ctx
+    if ctx is None:
+        return False, None, None
+    # Auto: only flip to uv when pyproject lists tapps-mcp in a known extra
+    # AND uv is available (or uv.lock is present → likely to be available).
+    if ctx["tapps_mcp_extra"] is not None and (ctx["uv_available"] or ctx["has_uv_lock"]):
+        return True, ctx["tapps_mcp_extra"], ctx
+    return False, None, ctx
+
+
+def _build_uv_run_tapps_launch(extra: str | None) -> tuple[str, list[str]]:
+    """Return (command, args) for ``uv run --extra <extra> --no-sync tapps-mcp serve``."""
+    args = ["run"]
+    if extra:
+        args.extend(["--extra", extra])
+    args.extend(["--no-sync", "tapps-mcp", "serve"])
+    return "uv", args
 
 
 def _detect_command_path() -> str:
@@ -97,7 +232,11 @@ def _detect_command_path() -> str:
     return cmd
 
 
-def _build_server_entry(host: str) -> dict[str, Any]:
+def _build_server_entry(
+    host: str,
+    *,
+    uv_launch: tuple[str, list[str]] | None = None,
+) -> dict[str, Any]:
     """Build the tapps-mcp server config entry for the given host.
 
     Claude Code gets an extra ``instructions`` field for Tool Search discovery.
@@ -108,9 +247,13 @@ def _build_server_entry(host: str) -> dict[str, Any]:
     ``${workspaceFolder}``.  Cursor and VS Code resolve ``${workspaceFolder}``
     natively so it is used there.
 
-    Uses :func:`_resolve_tapps_mcp_launch` for command and args.
+    Uses :func:`_resolve_tapps_mcp_launch` for command and args unless
+    *uv_launch* is provided (Issue #77 — consumer uv projects).
     """
-    command, args = _resolve_tapps_mcp_launch()
+    if uv_launch is not None:
+        command, args = uv_launch
+    else:
+        command, args = _resolve_tapps_mcp_launch()
     # Claude Code CWD == project root; VS Code/Cursor resolve ${workspaceFolder}
     project_root_value = "." if host == "claude-code" else "${workspaceFolder}"
     entry: dict[str, Any] = {
@@ -257,6 +400,7 @@ def _merge_config(
     host: str,
     *,
     upgrade_mode: bool = False,
+    uv_launch: tuple[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """Merge the tapps-mcp entry into an existing config dict.
 
@@ -282,7 +426,7 @@ def _merge_config(
     if servers_key not in merged:
         merged[servers_key] = {}
 
-    new_entry = _build_server_entry(host)
+    new_entry = _build_server_entry(host, uv_launch=uv_launch)
     old_entry = merged[servers_key].get("tapps-mcp")
     if isinstance(old_entry, dict):
         if upgrade_mode and "command" in old_entry:
@@ -302,6 +446,128 @@ def _merge_config(
 
 
 # ---------------------------------------------------------------------------
+# Env migration (Issue #80.2) + secret detection (Issue #80.3)
+# ---------------------------------------------------------------------------
+
+# Keys that look secret-ish. Values matching these (substring, case-insensitive)
+# are treated as secrets when written in plaintext to .mcp.json.
+_SECRET_KEY_PATTERNS = ("key", "token", "secret", "password", "passwd", "credential")
+# Known non-secret env keys TappsMCP itself emits — skip these.
+_NON_SECRET_ENV_KEYS = frozenset({
+    "TAPPS_MCP_PROJECT_ROOT",
+    "DOCS_MCP_PROJECT_ROOT",
+    "VIRTUAL_ENV",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+})
+
+
+def _looks_like_secret_key(name: str) -> bool:
+    """Return ``True`` if env var *name* looks like a secret (case-insensitive)."""
+    if name in _NON_SECRET_ENV_KEYS:
+        return False
+    lowered = name.lower()
+    return any(pat in lowered for pat in _SECRET_KEY_PATTERNS)
+
+
+def _value_is_plaintext_secret(value: Any) -> bool:
+    """Return ``True`` when *value* is a non-empty string not using env-var interpolation."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    # ${VAR} or $VAR references → not plaintext secret (interpolation)
+    stripped = value.strip()
+    return not (stripped.startswith("${") or stripped.startswith("$"))
+
+
+def _collect_plaintext_secrets(entry: dict[str, Any]) -> list[str]:
+    """Return env var names in *entry*'s ``env`` block that look like plaintext secrets."""
+    env = entry.get("env")
+    if not isinstance(env, dict):
+        return []
+    found: list[str] = []
+    for key, value in env.items():
+        if _looks_like_secret_key(str(key)) and _value_is_plaintext_secret(value):
+            found.append(str(key))
+    return found
+
+
+def _other_scope_config_path(host: str, project_root: Path, scope: str) -> Path | None:
+    """Return the config path for the *other* scope, when migration applies.
+
+    Only Claude Code has distinct project/user scopes. Returns ``None`` for
+    other hosts or when *scope* is unrecognized.
+    """
+    if host != "claude-code":
+        return None
+    if scope == "project":
+        return _get_config_path(host, project_root, scope="user")
+    if scope == "user":
+        return _get_config_path(host, project_root, scope="project")
+    return None
+
+
+def _load_existing_env_from_other_scope(
+    host: str,
+    project_root: Path,
+    scope: str,
+) -> dict[str, str]:
+    """Return env vars registered for tapps-mcp in the *other* scope, if any.
+
+    Used to migrate env (e.g. ``CONTEXT7_API_KEY``) when the user re-scopes
+    their config (Issue #80.2). Never raises.
+    """
+    other = _other_scope_config_path(host, project_root, scope)
+    if other is None or not other.exists():
+        return {}
+    try:
+        raw = other.read_text(encoding="utf-8")
+        data = json.loads(raw) if raw.strip() else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    servers_key = _get_servers_key(host)
+    servers = data.get(servers_key) or {}
+    if not isinstance(servers, dict):
+        return {}
+    entry = servers.get("tapps-mcp")
+    if not isinstance(entry, dict):
+        return {}
+    env = entry.get("env")
+    if not isinstance(env, dict):
+        return {}
+    # Keep only string→string pairs; drop TAPPS_MCP_PROJECT_ROOT (scope-specific).
+    return {
+        str(k): str(v)
+        for k, v in env.items()
+        if isinstance(v, str) and str(k) != "TAPPS_MCP_PROJECT_ROOT"
+    }
+
+
+def _ensure_gitignore_entry(project_root: Path, entry: str) -> bool | None:
+    """Append *entry* to ``.gitignore`` if missing (best-effort).
+
+    Returns ``True`` if appended, ``False`` if already present, ``None`` on error
+    or when ``.gitignore`` does not exist (we do not create one here).
+    """
+    gitignore = project_root / ".gitignore"
+    if not gitignore.exists():
+        return None
+    try:
+        text = gitignore.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    lines = {line.strip() for line in text.splitlines()}
+    if entry in lines:
+        return False
+    try:
+        suffix = "" if text.endswith("\n") else "\n"
+        gitignore.write_text(f"{text}{suffix}{entry}\n", encoding="utf-8")
+    except OSError:
+        return None
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Config generation
 # ---------------------------------------------------------------------------
 
@@ -315,6 +581,7 @@ def _generate_config(
     dry_run: bool = False,
     upgrade_mode: bool = False,
     with_docs_mcp: bool = False,
+    uv_launch: tuple[str, list[str]] | None = None,
 ) -> bool:
     """Generate (or merge) the MCP config for the given host.
 
@@ -380,10 +647,43 @@ def _generate_config(
                         )
                         return True
 
-        merged = _merge_config(existing, host, upgrade_mode=upgrade_mode)
+        merged = _merge_config(
+            existing, host, upgrade_mode=upgrade_mode, uv_launch=uv_launch
+        )
     else:
         servers_key_new = _get_servers_key(host)
-        merged = {servers_key_new: {"tapps-mcp": _build_server_entry(host)}}
+        merged = {
+            servers_key_new: {
+                "tapps-mcp": _build_server_entry(host, uv_launch=uv_launch),
+            }
+        }
+
+    # Issue #80.2: When creating a new config for claude-code, migrate env vars
+    # (e.g. CONTEXT7_API_KEY) from the *other* scope so the user doesn't silently
+    # lose them after re-scoping.
+    migrated_env = _load_existing_env_from_other_scope(host, project_root, scope)
+    if migrated_env:
+        servers_key_m = _get_servers_key(host)
+        entry = merged[servers_key_m].get("tapps-mcp")
+        if isinstance(entry, dict):
+            cur_env = entry.get("env")
+            if not isinstance(cur_env, dict):
+                cur_env = {}
+            # Keep scope-specific TAPPS_MCP_PROJECT_ROOT from the new entry;
+            # pull in any other keys from the old scope that are not already set.
+            entry["env"] = {**migrated_env, **cur_env}
+            other_path = _other_scope_config_path(host, project_root, scope)
+            migrated_keys = sorted(
+                k for k in migrated_env if k not in (cur_env or {})
+            )
+            if migrated_keys and not dry_run:
+                click.echo(
+                    click.style(
+                        f"  Migrated env vars from {other_path}: "
+                        f"{', '.join(migrated_keys)}",
+                        fg="cyan",
+                    )
+                )
 
     if with_docs_mcp:
         merged.setdefault(servers_key, {})
@@ -415,15 +715,85 @@ def _generate_config(
     )
 
     click.echo(click.style(f"Configuration written to {config_path}", fg="green"))
-    _print_next_steps(host)
+
+    # Issue #80.3: warn when plaintext secrets end up in the config file,
+    # and offer to append the project-scope file to .gitignore.
+    _warn_plaintext_secrets(config_path, merged, host, project_root, scope)
+
+    _print_next_steps(host, project_root=project_root)
     return True
 
 
-def _print_next_steps(host: str) -> None:
+def _warn_plaintext_secrets(
+    config_path: Path,
+    merged: dict[str, Any],
+    host: str,
+    project_root: Path,
+    scope: str,
+) -> None:
+    """Warn when the written MCP config contains plaintext secret values (Issue #80.3)."""
+    servers_key = _get_servers_key(host)
+    servers = merged.get(servers_key) or {}
+    if not isinstance(servers, dict):
+        return
+    flagged: dict[str, list[str]] = {}
+    for server_name, entry in servers.items():
+        if isinstance(entry, dict):
+            secrets = _collect_plaintext_secrets(entry)
+            if secrets:
+                flagged[str(server_name)] = secrets
+    if not flagged:
+        return
+
+    names = sorted({name for vals in flagged.values() for name in vals})
+    click.echo(
+        click.style(
+            f"  WARNING: {config_path.name} contains plaintext secret(s): "
+            f"{', '.join(names)}",
+            fg="yellow",
+        )
+    )
+    click.echo(
+        "    Use env-var interpolation instead (Claude Code supports ${VAR}):"
+    )
+    example = names[0]
+    click.echo(f"      export {example}=...   # in ~/.bashrc or ~/.zshrc")
+    click.echo(f'      "{example}": "${{{example}}}"   # in {config_path.name}')
+
+    # Only nudge .gitignore for project-scope files inside the repo.
+    if host == "claude-code" and scope != "project":
+        return
+    rel_name = config_path.name
+    if config_path.parent not in (project_root, project_root / ".cursor", project_root / ".vscode"):
+        return
+    # Compute the gitignore path relative to project_root.
+    try:
+        gi_entry = str(config_path.relative_to(project_root))
+    except ValueError:
+        gi_entry = rel_name
+    result = _ensure_gitignore_entry(project_root, gi_entry)
+    if result is True:
+        click.echo(
+            click.style(
+                f"  Added '{gi_entry}' to .gitignore (contains plaintext secrets).",
+                fg="cyan",
+            )
+        )
+    elif result is None and not (project_root / ".gitignore").exists():
+        click.echo(
+            click.style(
+                f"  No .gitignore found; consider ignoring '{gi_entry}'.",
+                fg="yellow",
+            )
+        )
+
+
+def _print_next_steps(host: str, *, project_root: Path | None = None) -> None:
     """Print helpful next-steps after config generation.
 
     Args:
         host: The host that was configured.
+        project_root: Consumer project root (for Context7 hint context).
     """
     click.echo("")
     click.echo("Next steps:")
@@ -436,6 +806,24 @@ def _print_next_steps(host: str) -> None:
     elif host == "vscode":
         click.echo("  1. Restart VS Code (or reload the window)")
         click.echo("  2. The MCP tools will be available in Copilot chat")
+    _print_context7_hint_if_missing()
+
+
+def _print_context7_hint_if_missing() -> None:
+    """Print a one-time hint about TAPPS_MCP_CONTEXT7_API_KEY (Issue #79)."""
+    if os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY") or os.environ.get("CONTEXT7_API_KEY"):
+        return
+    click.echo("")
+    click.echo(
+        click.style(
+            "Optional: set TAPPS_MCP_CONTEXT7_API_KEY for live docs via Context7.",
+            fg="cyan",
+        )
+    )
+    click.echo(
+        "  Without it, tapps_lookup_docs falls back to LlmsTxt (reduced coverage)."
+    )
+    click.echo("  Get a key: https://context7.com")
 
 
 # ---------------------------------------------------------------------------
@@ -531,6 +919,7 @@ def _configure_multiple_hosts(
     rules: bool = True,
     dry_run: bool = False,
     with_docs_mcp: bool = False,
+    uv_launch: tuple[str, list[str]] | None = None,
 ) -> bool:
     """Configure (or check) multiple hosts, reporting per-host results.
 
@@ -550,6 +939,7 @@ def _configure_multiple_hosts(
                 scope=scope,
                 dry_run=dry_run,
                 with_docs_mcp=with_docs_mcp,
+                uv_launch=uv_launch,
             )
             if ok and rules and not dry_run:
                 _generate_rules(host, project_root)
@@ -813,6 +1203,8 @@ def run_init(
     engagement_level: str | None = None,
     allow_package_init: bool = False,
     with_docs_mcp: bool = False,
+    uv_mode: str | None = None,
+    uv_extra: str | None = None,
 ) -> bool:
     """Run the init command logic.
 
@@ -875,6 +1267,19 @@ def run_init(
         )
         return False
 
+    # Issue #77: decide launch form (classic tapps-mcp vs `uv run --extra ...`).
+    use_uv, extra_auto, _uv_ctx = _should_use_uv_launch(root, uv_mode=uv_mode)
+    uv_launch: tuple[str, list[str]] | None = None
+    if use_uv:
+        chosen_extra = uv_extra or extra_auto
+        uv_launch = _build_uv_run_tapps_launch(chosen_extra)
+        click.echo(
+            click.style(
+                f"uv project detected — emitting '{' '.join([uv_launch[0], *uv_launch[1]])}'",
+                fg="cyan",
+            )
+        )
+
     if mcp_host == "auto":
         hosts = _detect_hosts()
         if not hosts:
@@ -896,6 +1301,7 @@ def run_init(
             rules=rules,
             dry_run=dry_run,
             with_docs_mcp=with_docs_mcp,
+            uv_launch=uv_launch,
         )
 
     if check:
@@ -911,6 +1317,7 @@ def run_init(
         scope=scope,
         dry_run=dry_run,
         with_docs_mcp=with_docs_mcp,
+        uv_launch=uv_launch,
     )
     if ok and rules and not dry_run:
         _generate_rules(mcp_host, root, engagement_level=engagement_level)

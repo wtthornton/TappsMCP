@@ -13,6 +13,7 @@ from tapps_mcp.distribution.doctor import (
     _collect_checks,
     _read_engagement_level,
     check_agents_md,
+    check_plaintext_secrets,
     check_binary_on_path,
     check_claude_code_project,
     check_claude_code_user,
@@ -989,3 +990,60 @@ class TestDoctorQuickMode:
             result = runner.invoke(main, ["doctor"])
         assert result.exit_code == 0
         mock_run.assert_called_once_with(project_root=".", quick=False)
+
+
+class TestCheckPlaintextSecrets:
+    """Issue #80.3 — doctor flags plaintext secrets in MCP config files."""
+
+    def test_clean_config_passes(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps({
+                "mcpServers": {
+                    "tapps-mcp": {
+                        "command": "tapps-mcp",
+                        "args": ["serve"],
+                        "env": {"TAPPS_MCP_PROJECT_ROOT": "."},
+                    }
+                }
+            }),
+            encoding="utf-8",
+        )
+        result = check_plaintext_secrets(tmp_path)
+        assert result.ok is True
+
+    def test_plaintext_api_key_fails(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps({
+                "mcpServers": {
+                    "tapps-mcp": {
+                        "command": "tapps-mcp",
+                        "args": ["serve"],
+                        "env": {"CONTEXT7_API_KEY": "ctx7sk-plain"},
+                    }
+                }
+            }),
+            encoding="utf-8",
+        )
+        result = check_plaintext_secrets(tmp_path)
+        assert result.ok is False
+        assert "CONTEXT7_API_KEY" in result.message
+
+    def test_interpolated_value_passes(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps({
+                "mcpServers": {
+                    "tapps-mcp": {
+                        "command": "tapps-mcp",
+                        "args": ["serve"],
+                        "env": {"CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"},
+                    }
+                }
+            }),
+            encoding="utf-8",
+        )
+        result = check_plaintext_secrets(tmp_path)
+        assert result.ok is True
+
+    def test_no_config_passes(self, tmp_path):
+        result = check_plaintext_secrets(tmp_path)
+        assert result.ok is True

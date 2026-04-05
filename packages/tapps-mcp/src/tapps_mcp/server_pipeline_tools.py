@@ -39,6 +39,30 @@ if TYPE_CHECKING:
 
 _logger = structlog.get_logger(__name__)
 
+
+def _current_docs_provider() -> dict[str, Any]:
+    """Return a summary of the active docs-lookup provider (Issue #79).
+
+    Gives agents a way to see at a glance whether ``tapps_lookup_docs``
+    will use Context7 (full coverage) or the LlmsTxt fallback (reduced).
+    """
+    import os as _os
+
+    has_key = bool(
+        _os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY")
+        or _os.environ.get("CONTEXT7_API_KEY")
+    )
+    info: dict[str, Any] = {
+        "primary": "context7" if has_key else "llmstxt",
+        "context7_configured": has_key,
+    }
+    if not has_key:
+        info["hint"] = (
+            "Set TAPPS_MCP_CONTEXT7_API_KEY for richer docs via Context7. "
+            "https://context7.com"
+        )
+    return info
+
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
 _VALIDATE_CONCURRENCY = 10
 
@@ -1389,6 +1413,7 @@ async def tapps_session_start(
             "Checker availability reflects the MCP server process environment. "
             "Target project may have different tools installed.",
         ),
+        "docs_provider": info["data"].get("docs_provider", _current_docs_provider()),
         "diagnostics": info["data"]["diagnostics"],
         "quick_start": info["data"].get("quick_start", []),
         "critical_rules": info["data"].get("critical_rules", []),
@@ -1510,6 +1535,7 @@ async def _session_start_quick(
             "Checker availability reflects the MCP server process environment. "
             "Target project may have different tools installed."
         ),
+        "docs_provider": _current_docs_provider(),
         "cache": _cache_info_dict(cache_dir, cache_fallback),
         "quick": True,
         "checklist_session_id": checklist_sid_q,

@@ -114,6 +114,20 @@ def serve(transport: str, host: str, port: int) -> None:
     default=False,
     help="Also register the docs-mcp server in generated MCP JSON (Epic 80.7).",
 )
+@click.option(
+    "--uv/--no-uv",
+    "uv_flag",
+    default=None,
+    help=(
+        "Force (or disable) 'uv run --extra ... tapps-mcp serve' style MCP config. "
+        "Default: auto-detect uv.lock + pyproject.toml extras."
+    ),
+)
+@click.option(
+    "--uv-extra",
+    default=None,
+    help="Optional-dependency group for 'uv run --extra <name>' (default: auto).",
+)
 def init(
     mcp_host: str,
     project_root: str,
@@ -126,6 +140,8 @@ def init(
     overwrite_tech_stack: bool,
     allow_package_init: bool,
     with_docs_mcp: bool,
+    uv_flag: bool | None,
+    uv_extra: str | None,
 ) -> None:
     """Bootstrap TappsMCP in a project (MCP config, AGENTS.md, hooks, agents, skills, rules).
 
@@ -134,6 +150,14 @@ def init(
     come from shipped `default.yaml` unless your YAML overrides them — see docs/MEMORY_REFERENCE.md.
     """
     from tapps_mcp.distribution.setup_generator import run_init
+
+    uv_mode: str | None
+    if uv_flag is None:
+        uv_mode = None
+    elif uv_flag:
+        uv_mode = "on"
+    else:
+        uv_mode = "off"
 
     success = run_init(
         mcp_host=mcp_host,
@@ -146,6 +170,8 @@ def init(
         engagement_level=engagement_level,
         allow_package_init=allow_package_init,
         with_docs_mcp=with_docs_mcp,
+        uv_mode=uv_mode,
+        uv_extra=uv_extra,
     )
     if not success:
         raise SystemExit(1)
