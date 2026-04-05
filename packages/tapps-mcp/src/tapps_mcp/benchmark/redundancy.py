@@ -307,7 +307,7 @@ class RedundancyAnalyzerV2:
             max_cosine = 0.0
             for doc_name, doc_vec in zip(doc_names, repo_tfidf_vectors, strict=True):
                 sim = _cosine_similarity(section_tfidf, doc_vec)
-                if sim > 0.1:  # noqa: PLR2004
+                if sim > 0.1:
                     overlapping.append(doc_name)
                 max_cosine = max(max_cosine, sim)
 

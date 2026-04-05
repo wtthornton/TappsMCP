@@ -14,7 +14,7 @@ from typing import ClassVar
 import structlog
 from pydantic import BaseModel
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 # Directories to skip when scanning.
 _SKIP_DIRS: frozenset[str] = frozenset({
@@ -254,7 +254,7 @@ class CrossRefValidator:
             return None
 
         # Strip anchor
-        target = target.split("#")[0]
+        target = target.split("#", maxsplit=1)[0]
         if not target:
             return None
 

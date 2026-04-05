@@ -16,7 +16,7 @@ import os
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import structlog
 
@@ -27,9 +27,6 @@ from tapps_core.adaptive.models import (
     ExpertPerformance,
     _utc_now_iso,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = structlog.get_logger(__name__)
 

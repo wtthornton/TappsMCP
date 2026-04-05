@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -109,7 +109,10 @@ class DatasetLoader:
         elif path.exists() and path.suffix == ".jsonl":
             raw = _load_from_jsonl(path)
         else:
-            raw = _load_from_huggingface(dataset_name)
+            raw = _load_from_huggingface(
+                dataset_name,
+                revision=self._config.dataset_revision,
+            )
 
         instances = [_map_to_instance(row) for row in raw]
         logger.info(
@@ -173,15 +176,22 @@ class DatasetLoader:
 
 def _load_from_huggingface(
     dataset_name: str,
+    revision: str | None = None,
 ) -> list[dict[str, Any]]:
     """Load dataset from HuggingFace datasets library.
+
+    Args:
+        dataset_name: HuggingFace dataset identifier.
+        revision: Optional commit hash or tag to pin for reproducibility.
+            When None, the latest revision is fetched (caller accepts
+            supply-chain risk).
 
     Raises:
         DependencyMissingError: If ``datasets`` is not installed.
         DatasetNotFoundError: If the dataset cannot be fetched.
     """
     try:
-        from datasets import (  # type: ignore[import-untyped]
+        from datasets import (
             load_dataset,
         )
     except ImportError as exc:
@@ -193,10 +203,14 @@ def _load_from_huggingface(
         raise DependencyMissingError(msg) from exc
 
     try:
-        ds = load_dataset(dataset_name, split="test")
-        return [  # type: ignore[union-attr]
+        ds = load_dataset(  # nosec B615 — revision pinning is caller-controlled
+            dataset_name,
+            split="test",
+            revision=revision,
+        )
+        return [
             dict(row)
-            for row in ds  # type: ignore[union-attr]
+            for row in ds
         ]
     except Exception as exc:
         msg = f"Failed to load dataset '{dataset_name}' from HuggingFace: {exc}"
@@ -217,7 +231,7 @@ def _load_from_parquet(path: Path) -> list[dict[str, Any]]:
         raise DatasetNotFoundError(msg)
 
     try:
-        import pyarrow.parquet as pq  # type: ignore[import-untyped]
+        import pyarrow.parquet as pq
 
         table = pq.read_table(str(path))
         col_dict: dict[str, list[Any]] = table.to_pydict()
@@ -229,12 +243,10 @@ def _load_from_parquet(path: Path) -> list[dict[str, Any]]:
         pass
 
     try:
-        import pandas as pd  # type: ignore[import-untyped]
+        import pandas as pd
 
         df = pd.read_parquet(path)
-        return df.to_dict(  # type: ignore[return-value]
-            orient="records",
-        )
+        return cast("list[dict[str, Any]]", df.to_dict(orient="records"))
     except ImportError as exc:
         msg = (
             "Either 'pyarrow' or 'pandas' is required to "
@@ -261,7 +273,7 @@ def _load_from_json(path: Path) -> list[dict[str, Any]]:
         data = json.load(f)
 
     if isinstance(data, list):
-        return data  # type: ignore[return-value]
+        return data
     msg = f"Expected JSON array, got {type(data).__name__}"
     raise DatasetLoadError(msg)
 

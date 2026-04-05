@@ -290,7 +290,7 @@ class OnboardingGuideGenerator:
                     continue
 
                 count += 1
-                if count > 30:  # noqa: PLR2004
+                if count > 30:
                     break
 
                 try:
@@ -298,7 +298,7 @@ class OnboardingGuideGenerator:
                     for cls in result.classes:
                         doc = cls.docstring_summary or ""
                         all_classes.append((cls.name, doc))
-                except Exception:  # noqa: S112
+                except Exception:
                     continue
 
             if not all_classes:

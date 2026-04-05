@@ -103,7 +103,7 @@ def _extract_repo(instance_id: str) -> str:
     Supports ``org__repo__number`` and ``org/repo-number`` formats.
     """
     parts = instance_id.split("__")
-    if len(parts) >= 2:  # noqa: PLR2004
+    if len(parts) >= 2:
         return f"{parts[0]}/{parts[1]}"
 
     if "/" in instance_id:

@@ -203,7 +203,7 @@ class DriftDetector:
                 continue
 
             # Check if the module name is mentioned in docs
-            module_stem = py_file.stem.lower()
+            py_file.stem.lower()
 
             # Check each public name against doc content
             undocumented: list[str] = []

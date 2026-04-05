@@ -1,11 +1,30 @@
 # Epic 93: Full Code Review and Fixes
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** In Progress (first pass complete)
 **Priority:** P1 - High
 **Estimated LOE:** ~2-3 weeks (1 developer)
 **Dependencies:** None
 **Blocks:** None
+
+## First-Pass Execution Summary (2026-04-05)
+
+| Story | Status | Outcome |
+|---|---|---|
+| 93.1 Security | ✅ Complete | 0 HIGH/MEDIUM bandit findings (was 2H/1M). Fixed 2 Jinja autoescape, added HF dataset `revision` pinning. |
+| 93.7 Dependencies | ✅ Complete | pip-audit: 0 CVEs. tapps-brain pinned to latest v2.0.3. |
+| 93.2 Type Safety | 🟡 Partial | Removed 70 unused `type: ignore` comments, added missing module overrides (datasets/pyarrow/pandas), fixed TechStack Protocol, tree-sitter Language guards, ClassVar at module scope, FastMCP forward refs. ~60 genuine type errors remain (attr-defined/call-arg on drifted tapps-brain APIs) — each requires per-site investigation. |
+| 93.4 Async I/O | ✅ Complete | 0 blocking file-I/O calls in async handlers (was 26). Wrapped all via `asyncio.to_thread`. |
+| 93.5 Err Handling | 🟡 Audit only | No `print()` or stdlib `logging` outside templates/knowledge docs. 144 broad `except Exception` are defensive patterns at MCP boundaries — per-case narrowing deferred. |
+| 93.3 Complexity | 🟡 Baseline only | 81 functions at CC > 20 identified; minimal dead code found. Refactoring deferred — each function needs individual analysis. |
+| 93.6 Coverage | ✅ Meets target | tapps-core 87%, docs-mcp 85%. tapps-mcp has 89 pre-existing test failures blocking accurate measurement. |
+| 93.8 Docs Drift | ✅ Complete | Tool counts verified (tapps-mcp 30, docs-mcp 32). Fixed CLAUDE.md tapps-brain version (v1.4.3 → v2.0.3). |
+
+**Quality gates after first pass:**
+- ✅ `uv run ruff check packages/*/src/` — All checks passed!
+- ✅ `bandit -r packages/*/src/ -ll` — 0 HIGH/MEDIUM
+- ❌ `mypy --strict` — ~60 pre-existing type errors remain (requires per-site API investigation)
+- ✅ No new test regressions (pre-existing failures: 89 in tapps-mcp, 1 in docs-mcp)
 
 <!-- docsmcp:end:metadata -->
 

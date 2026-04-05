@@ -254,7 +254,7 @@ class WizardResult:
         self.completed: bool = False
 
 
-async def run_init_wizard(  # type: ignore[type-arg]
+async def run_init_wizard(
     ctx: Context,
     *,
     claude_code_detected: bool = True,
@@ -274,7 +274,7 @@ async def run_init_wizard(  # type: ignore[type-arg]
 
     _t = _ELICITATION_TIMEOUT_SEC
 
-    async def _ask(message: str, schema: type) -> Any:  # type: ignore[type-arg]
+    async def _ask(message: str, schema: type) -> Any:
         return await asyncio.wait_for(
             ctx.elicit(message=message, schema=schema),
             timeout=_t,
@@ -348,6 +348,6 @@ async def run_init_wizard(  # type: ignore[type-arg]
             result.add_other_mcps = r6.data.enabled
 
         result.completed = True
-    except Exception:  # noqa: S110 - graceful degradation for unsupported clients
+    except Exception:
         pass
     return result

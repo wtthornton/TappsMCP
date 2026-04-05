@@ -9,16 +9,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from tapps_brain.injection import InjectionConfig as InjectionConfig
-from tapps_brain.injection import append_memory_to_answer as append_memory_to_answer
-from tapps_brain.injection import estimate_tokens as estimate_tokens
-from tapps_brain.injection import inject_memories as _brain_inject_memories
-
 # Re-export constants for backward compat (tapps-mcp re-exports these)
 from tapps_brain.injection import _MAX_INJECT_HIGH as _MAX_INJECT_HIGH
 from tapps_brain.injection import _MAX_INJECT_MEDIUM as _MAX_INJECT_MEDIUM
 from tapps_brain.injection import _MIN_CONFIDENCE_MEDIUM as _MIN_CONFIDENCE_MEDIUM
 from tapps_brain.injection import _MIN_SCORE as _MIN_SCORE
+from tapps_brain.injection import InjectionConfig as InjectionConfig
+from tapps_brain.injection import append_memory_to_answer as append_memory_to_answer
+from tapps_brain.injection import estimate_tokens as estimate_tokens
+from tapps_brain.injection import inject_memories as _brain_inject_memories
 
 if __builtins__:  # always true — silences type checkers for TYPE_CHECKING imports
     from tapps_brain.decay import DecayConfig

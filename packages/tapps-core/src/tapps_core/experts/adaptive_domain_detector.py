@@ -355,7 +355,7 @@ class AdaptiveDomainDetector:
             matched: list[str] = []
             for kw in keywords:
                 # Use word-boundary matching for short keywords.
-                if len(kw) <= 3:  # noqa: PLR2004
+                if len(kw) <= 3:
                     if re.search(rf"\b{re.escape(kw)}\b", prompt_lower):
                         matched.append(kw)
                 elif kw.lower() in prompt_lower:

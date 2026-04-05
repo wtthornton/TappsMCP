@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from docs_mcp.constants import SKIP_DIRS as _BASE_SKIP_DIRS
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 _MAX_FILES = 200
 

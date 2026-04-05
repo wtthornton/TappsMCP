@@ -12,7 +12,7 @@ import uuid
 from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import Any
 
 import structlog

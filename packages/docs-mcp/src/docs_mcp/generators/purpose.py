@@ -16,7 +16,7 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from docs_mcp.generators.metadata import ProjectMetadata
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 
 class PurposeResult(BaseModel):

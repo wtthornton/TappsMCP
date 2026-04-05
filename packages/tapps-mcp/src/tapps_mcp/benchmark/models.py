@@ -93,6 +93,10 @@ class BenchmarkConfig(BaseModel):
         default="eth-sri/agentbench",
         description="HuggingFace dataset ID or local path.",
     )
+    dataset_revision: str | None = Field(
+        default=None,
+        description="HuggingFace dataset revision (commit/tag) to pin for reproducibility.",
+    )
     context_mode: ContextMode = Field(
         default=ContextMode.NONE,
         description="Context injection mode.",

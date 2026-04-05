@@ -39,7 +39,7 @@ def _get_version() -> str:
     is_eager=True,
     expose_value=False,
     callback=lambda ctx, _param, value: (
-        click.echo(_get_version()) or ctx.exit() if value else None
+        (click.echo(_get_version()), ctx.exit()) if value else None
     ),
     help="Show platform version.",
 )
@@ -76,7 +76,7 @@ def serve_tapps(transport: str, host: str, port: int) -> None:
 def serve_docs(transport: str, host: str, port: int) -> None:
     """Start DocsMCP only (documentation tools)."""
     try:
-        from docs_mcp.server import run_server  # type: ignore[import-untyped]
+        from docs_mcp.server import run_server
 
         run_server(transport=transport, host=host, port=port)
     except ImportError:

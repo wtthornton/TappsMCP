@@ -8,7 +8,7 @@ weights accordingly.
 from __future__ import annotations
 
 import math
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -187,7 +187,7 @@ class AdaptiveScoringEngine:
                     values.append(score)
                     successes.append(o.first_pass_success)
 
-            if len(values) >= 5:  # noqa: PLR2004
+            if len(values) >= 5:
                 corr = _pearson_correlation(values, successes)
                 correlations[metric] = round(corr, 6)
 
@@ -206,7 +206,7 @@ class AdaptiveScoringEngine:
             raw[weight_key] = max(corr, 0.0)
 
         # Fill in any weight keys not in correlations.
-        for wk in current_weights:  # noqa: PLC0206
+        for wk in current_weights:
             if wk not in raw:
                 raw[wk] = current_weights[wk]
 
@@ -270,7 +270,7 @@ def _pearson_correlation(x: list[float], y: list[bool]) -> float:
     Returns 0.0 when the correlation is undefined (zero variance).
     """
     n = len(x)
-    if n < 2:  # noqa: PLR2004
+    if n < 2:
         return 0.0
 
     y_float = [1.0 if v else 0.0 for v in y]

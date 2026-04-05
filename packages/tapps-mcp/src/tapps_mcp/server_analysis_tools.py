@@ -14,12 +14,12 @@ import contextlib
 import dataclasses
 import json as _json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from mcp.server.fastmcp import Context  # noqa: TC002 - MCP SDK needs runtime access
+from mcp.server.fastmcp import Context
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
@@ -351,7 +351,7 @@ class _ReportProgressTracker:
         try:
             sidecar_dir.mkdir(parents=True, exist_ok=True)
             self._sidecar_path = sidecar_dir / ".report-progress.json"
-            self._started_at = datetime.now(tz=timezone.utc).isoformat()
+            self._started_at = datetime.now(tz=UTC).isoformat()
             self._write_sidecar({})
         except Exception:
             self._sidecar_path = None

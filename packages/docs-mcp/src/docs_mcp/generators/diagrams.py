@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from docs_mcp.analyzers.models import ModuleMap, ModuleNode
     from docs_mcp.extractors.models import ClassInfo
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 # Maximum number of nodes before truncation in dependency/module diagrams.
 _MAX_DEPENDENCY_NODES = 50
@@ -1607,10 +1607,10 @@ class DiagramGenerator:
 
         # Track which group indices are active
         group_starts: dict[int, dict[str, object]] = {
-            int(g.get("start", -1)): g for g in groups  # type: ignore[arg-type]
+            int(g.get("start", -1)): g for g in groups
         }
         group_ends: set[int] = {
-            int(g.get("end", -1)) for g in groups  # type: ignore[arg-type]
+            int(g.get("end", -1)) for g in groups
         }
 
         # Render messages with interleaved notes and groups
@@ -1676,10 +1676,10 @@ class DiagramGenerator:
         lines.append("")
 
         group_starts: dict[int, dict[str, object]] = {
-            int(g.get("start", -1)): g for g in groups  # type: ignore[arg-type]
+            int(g.get("start", -1)): g for g in groups
         }
         group_ends: set[int] = {
-            int(g.get("end", -1)) for g in groups  # type: ignore[arg-type]
+            int(g.get("end", -1)) for g in groups
         }
 
         note_map: dict[str, str] = {
@@ -2014,7 +2014,7 @@ class DiagramGenerator:
         lines.append("}")
         lines.append("")
 
-        for actor_name, actor_desc in actors:
+        for actor_name, _actor_desc in actors:
             aid = self._sanitize_id(actor_name)
             if actor_name in ("Database",):
                 lines.append(f"{aid}: {actor_name} {{shape: cylinder}}")

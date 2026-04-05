@@ -9,6 +9,7 @@ Story 56.3: TypeScript/JavaScript Scorer
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -25,17 +26,17 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 # Guard tree-sitter imports for graceful degradation
+_TS_LANGUAGE: Any = None
+_TSX_LANGUAGE: Any = None
 try:
-    import tree_sitter  # type: ignore[import-untyped]
-    import tree_sitter_typescript  # type: ignore[import-untyped]
+    import tree_sitter
+    import tree_sitter_typescript
 
     _TS_LANGUAGE = tree_sitter.Language(tree_sitter_typescript.language_typescript())
     _TSX_LANGUAGE = tree_sitter.Language(tree_sitter_typescript.language_tsx())
     HAS_TREE_SITTER = True
 except ImportError:
     tree_sitter = None  # type: ignore[assignment]
-    _TS_LANGUAGE = None
-    _TSX_LANGUAGE = None
     HAS_TREE_SITTER = False
 
 # Categories supported by the TypeScript scorer
@@ -182,7 +183,9 @@ class TypeScriptScorer(ScorerBase):
 
         # Read file content
         try:
-            code = resolved.read_text(encoding="utf-8", errors="replace")
+            code = await asyncio.to_thread(
+                resolved.read_text, encoding="utf-8", errors="replace"
+            )
         except (OSError, PermissionError) as exc:
             logger.error("file_read_failed", path=str_path, error=str(exc))
             return self._error_result(str_path)

@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import ast
 import asyncio
-import structlog
 import time
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from mcp.server.fastmcp import (
     Context,
 )
@@ -20,9 +20,7 @@ from mcp.types import ToolAnnotations
 from tapps_core.config.settings import load_settings
 from tapps_mcp.quick_check_recurring import record_quick_check_recurring
 from tapps_mcp.server_helpers import (
-    _get_scorer,
     _get_scorer_for_file,
-    _is_scorable_file,
     ensure_session_initialized,
     error_response,
     serialize_issues,

@@ -439,8 +439,8 @@ def validate_skills_cmd(skills_path: str, platform: str) -> None:
     if errors:
         for path_str, err_list in errors:
             click.echo(f"{path_str}:", err=True)
-            for e in err_list:
-                click.echo(f"  - {e}", err=True)
+            for err_msg in err_list:
+                click.echo(f"  - {err_msg}", err=True)
         raise SystemExit(1)
     click.echo("All skills passed spec validation.")
 
@@ -533,7 +533,7 @@ def show_config(project_root: str) -> None:
     click.echo(yaml.dump(data, default_flow_style=False, sort_keys=False))
 
 
-def _get_project_root() -> "Path":
+def _get_project_root() -> Path:
     """Resolve project root from TAPPS_MCP_PROJECT_ROOT env var or cwd."""
     from pathlib import Path
 

@@ -92,7 +92,7 @@ class Evaluator:
         self,
         instances: list[BenchmarkInstance],
         context_mode: ContextMode,
-        progress_callback: Any = None,  # noqa: ANN401
+        progress_callback: Any = None,
         template_override: str | None = None,
     ) -> list[BenchmarkResult]:
         """Evaluate a batch with configurable parallelism.

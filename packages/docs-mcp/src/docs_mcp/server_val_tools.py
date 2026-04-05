@@ -136,7 +136,7 @@ async def docs_check_drift(
                         if s.overall_score < _SCORE_THRESHOLD_MEDIUM
                     ],
                 }
-    except Exception:  # noqa: S110 — TappsMCP enrichment is optional
+    except Exception:
         pass
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

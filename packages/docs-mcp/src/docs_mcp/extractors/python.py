@@ -19,7 +19,7 @@ from docs_mcp.extractors.models import (
     ParameterInfo,
 )
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 _PYTHON_SUFFIXES = frozenset({".py", ".pyi"})
 

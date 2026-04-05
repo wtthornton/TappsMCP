@@ -161,7 +161,7 @@ class GenericExtractor:
     # Protocol methods
     # ------------------------------------------------------------------
 
-    def can_handle(self, file_path: Path) -> bool:  # noqa: ARG002
+    def can_handle(self, file_path: Path) -> bool:
         """Accept any file — this is the universal fallback."""
         return True
 
@@ -175,7 +175,7 @@ class GenericExtractor:
         rel_path = _relative_path(file_path, project_root)
         try:
             return self._do_extract(file_path, rel_path)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return ModuleInfo(path=rel_path)
 
     # ------------------------------------------------------------------

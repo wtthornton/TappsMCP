@@ -7,7 +7,7 @@ in style rules (jargon, heading case) for names that legitimately appear in docs
 from __future__ import annotations
 
 import re
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 
 from docs_mcp.constants import SKIP_DIRS
 

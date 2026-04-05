@@ -253,7 +253,6 @@ def _upgrade_platform_content_return(
 
     Returns ``(file_ops, result_dict)`` with platform-specific file operations.
     """
-    from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_cursor
     from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
     ops: list[FileOperation] = []
@@ -351,7 +350,6 @@ def _upgrade_content_return(
     and returns a :class:`FileManifest` the AI client can apply.
     """
     from tapps_core.config.settings import load_settings
-
     from tapps_mcp import __version__
 
     file_ops: list[FileOperation] = []

@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 from mcp.types import ToolAnnotations
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _VALID_ACTIONS = {"list", "add", "remove", "scaffold", "validate", "auto_generate"}
 

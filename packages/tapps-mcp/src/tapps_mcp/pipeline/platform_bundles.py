@@ -25,9 +25,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_rules import (
     CURSOR_RULE_TEMPLATES,
-    generate_bugbot_rules,
-    generate_copilot_instructions,
-    generate_cursor_rules,
 )
 from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, CURSOR_SKILLS
 from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS, CURSOR_AGENTS

@@ -6,15 +6,14 @@ index/map with categories, descriptions, and freshness indicators.
 
 from __future__ import annotations
 
-import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
 
 import structlog
 from pydantic import BaseModel
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 # Directories to skip when scanning.
 _SKIP_DIRS: frozenset[str] = frozenset({
@@ -156,7 +155,7 @@ class DocIndexGenerator:
         # Last modified
         try:
             mtime = file_path.stat().st_mtime
-            last_modified = datetime.fromtimestamp(mtime, tz=timezone.utc).strftime(
+            last_modified = datetime.fromtimestamp(mtime, tz=UTC).strftime(
                 "%Y-%m-%d"
             )
         except OSError:

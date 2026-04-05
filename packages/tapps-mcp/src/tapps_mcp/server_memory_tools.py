@@ -182,7 +182,7 @@ async def tapps_memory(
     include_hub: bool = True,
     stale_only: bool = False,
     max_entries: int = 10,
-    format: str = "json",  # noqa: A002
+    format: str = "json",
     include_frontmatter: bool = True,
     group_by: str = "tier",
     include_session_index: bool = False,
@@ -1091,7 +1091,7 @@ def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
             if not getattr(e, "is_consolidated", False) and not e.contradicted
         ]
 
-        if len(active_entries) < 2:  # noqa: PLR2004
+        if len(active_entries) < 2:
             return {
                 "action": "consolidate",
                 "consolidated": False,
@@ -1116,7 +1116,7 @@ def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
         entries_to_consolidate = [entry_by_key[k] for k in groups[0] if k in entry_by_key]
         discovery_method = "auto"
 
-    if len(entries_to_consolidate) < 2:  # noqa: PLR2004
+    if len(entries_to_consolidate) < 2:
         return {
             "action": "consolidate",
             "consolidated": False,
@@ -1311,7 +1311,6 @@ def _find_entries_by_query(
         get_reranker(
             enabled=rr.enabled,
             provider=rr.provider,
-            top_k=rr.top_k,
             api_key=rr.api_key,
         )
         if rr.enabled
@@ -1333,7 +1332,7 @@ def _find_entries_by_query(
     # Search for related entries
     scored = retriever.search(query, store, limit=effective_limit)
 
-    if len(scored) < 2:  # noqa: PLR2004
+    if len(scored) < 2:
         return {
             "action": "consolidate",
             "consolidated": False,
@@ -2226,10 +2225,9 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
 
 async def _handle_validate(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Validate memory entries against authoritative documentation."""
+    from tapps_core.config.settings import load_settings
     from tapps_core.knowledge.lookup import LookupEngine
     from tapps_core.memory.doc_validation import MemoryDocValidator
-
-    from tapps_core.config.settings import load_settings
 
     settings = load_settings()
     lookup = LookupEngine(settings=settings)
@@ -2336,7 +2334,6 @@ def _ranked_search(
         get_reranker(
             enabled=rr.enabled,
             provider=rr.provider,
-            top_k=rr.top_k,
             api_key=rr.api_key,
         )
         if rr.enabled

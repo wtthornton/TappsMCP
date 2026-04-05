@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 import structlog
 from pydantic import BaseModel
 
-log: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+log: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 _EXPORT_FILENAME = "docsmcp-export.json"
 _SUPPORTED_VERSION = "1.0"

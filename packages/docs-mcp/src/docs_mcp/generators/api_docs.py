@@ -717,7 +717,7 @@ class APIDocGenerator:
                 continue
             try:
                 content = test_file.read_text(encoding="utf-8")
-            except Exception:  # noqa: S112
+            except Exception:
                 continue
 
             if func_name not in content:

@@ -329,7 +329,7 @@ class KBCache:
             if total <= limit_bytes:
                 break
             parts = key.split("/", 1)
-            if len(parts) != 2:  # noqa: PLR2004
+            if len(parts) != 2:
                 continue
             library, topic = parts
 

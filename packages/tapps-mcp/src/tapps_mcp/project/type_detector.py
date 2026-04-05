@@ -224,7 +224,7 @@ def _has_heavy_docs(root: Path) -> bool:
     import os
 
     md_count = 0
-    for dirpath, dirnames, filenames in os.walk(root):
+    for _dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [
             d for d in dirnames
             if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")
@@ -251,7 +251,7 @@ def _has_few_source_files(root: Path) -> bool:
 
     code_count = 0
     code_exts = {".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".cs", ".sh"}
-    for dirpath, dirnames, filenames in os.walk(root):
+    for _dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [
             d for d in dirnames
             if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")

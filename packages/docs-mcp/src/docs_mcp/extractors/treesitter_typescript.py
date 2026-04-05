@@ -15,17 +15,18 @@ from docs_mcp.extractors.models import (
 )
 from docs_mcp.extractors.treesitter_base import TreeSitterExtractor
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+_TS_LANGUAGE: Any = None
+_TSX_LANGUAGE: Any = None
 try:
-    import tree_sitter  # type: ignore[import-untyped]
-    import tree_sitter_typescript  # type: ignore[import-untyped]
+    import tree_sitter
+    import tree_sitter_typescript
 
     _TS_LANGUAGE = tree_sitter.Language(tree_sitter_typescript.language_typescript())
     _TSX_LANGUAGE = tree_sitter.Language(tree_sitter_typescript.language_tsx())
 except ImportError:
-    _TS_LANGUAGE = None
-    _TSX_LANGUAGE = None
+    pass
 
 
 class TypeScriptExtractor(TreeSitterExtractor):

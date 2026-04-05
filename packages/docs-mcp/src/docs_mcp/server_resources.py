@@ -56,9 +56,9 @@ def _docs_status() -> str:
     from docs_mcp.server import _CRITICAL_DOCS
 
     existing_basenames = {
-        d["path"].rsplit("/", 1)[-1].lower() for d in all_docs  # type: ignore[union-attr]
+        d["path"].rsplit("/", 1)[-1].lower() for d in all_docs
     }
-    existing_paths = {d["path"].lower() for d in all_docs}  # type: ignore[union-attr]
+    existing_paths = {d["path"].lower() for d in all_docs}
 
     critical_docs: dict[str, dict[str, object]] = {}
     for doc_name in _CRITICAL_DOCS:
@@ -71,7 +71,7 @@ def _docs_status() -> str:
         )
         critical_docs[doc_name] = {"exists": found}
 
-    score = _calculate_completeness(categories, critical_docs, all_docs)  # type: ignore[arg-type]
+    score = _calculate_completeness(categories, critical_docs, all_docs)
 
     # Build markdown summary
     lines = [

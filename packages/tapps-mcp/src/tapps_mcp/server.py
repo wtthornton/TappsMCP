@@ -50,7 +50,6 @@ from tapps_mcp.server_helpers import (
     success_response,
 )
 from tapps_mcp.tools.tool_detection import (
-    detect_installed_tools,
     detect_installed_tools_async,
 )
 
@@ -1648,7 +1647,7 @@ def run_server(
         mcp.run(transport="stdio")
     elif transport == "http":
         import uvicorn
-        from starlette.requests import Request  # noqa: TC002
+        from starlette.requests import Request
         from starlette.responses import HTMLResponse
         from starlette.routing import Route
 

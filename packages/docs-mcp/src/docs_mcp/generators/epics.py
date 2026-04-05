@@ -235,7 +235,6 @@ class EpicGenerator:
         are populated.
         """
         title = config.title.strip()
-        number = config.number
 
         updates: dict[str, Any] = {}
 

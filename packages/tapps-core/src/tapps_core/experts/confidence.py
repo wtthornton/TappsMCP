@@ -12,7 +12,7 @@ with the ``ProjectProfile`` and agent-threshold dependencies removed.
 
 from __future__ import annotations
 
-from tapps_core.experts.models import ConfidenceFactors  # noqa: TC001 — used at runtime
+from tapps_core.experts.models import ConfidenceFactors
 from tapps_core.experts.registry import ExpertRegistry
 
 # Weights — must sum to 1.0.

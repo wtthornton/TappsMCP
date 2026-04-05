@@ -197,7 +197,7 @@ _IMPACT_MEMORY_SUMMARY_MAX = 200
 def build_impact_memory_context(
     resolved_file: Path,
     project_root: Path,
-    settings: "TappsMCPSettings",
+    settings: TappsMCPSettings,
 ) -> dict[str, Any]:
     """BM25 memory hits for :func:`tapps_impact_analysis` (Epic M4.4).
 
@@ -289,7 +289,7 @@ def _expert_consultation_memory_key(domain: str, question: str) -> str:
     return f"expert-{dom_slug}-{qhash}"
 
 
-def _auto_save_expert_consultation_memory(  # noqa: PLR0911
+def _auto_save_expert_consultation_memory(
     settings: TappsMCPSettings,
     *,
     question: str,
@@ -497,7 +497,7 @@ def initial_session_hive_status() -> dict[str, Any]:
     return {"enabled": False, "propagation_config": _hive_propagation_config_payload()}
 
 
-def collect_session_hive_status(settings: "TappsMCPSettings") -> dict[str, Any]:
+def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, Any]:
     """Build ``hive_status`` payload for :func:`tapps_session_start`.
 
     When ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` is unset, returns

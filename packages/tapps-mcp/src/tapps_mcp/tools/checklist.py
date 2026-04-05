@@ -278,8 +278,8 @@ _engagement_maps_extras_fp: str | None = None
 
 def invalidate_engagement_maps_cache() -> None:
     """Clear merged policy cache (tests / policy file edits)."""
-    global _engagement_maps_cache, _engagement_maps_version, _engagement_maps_root  # noqa: PLW0603
-    global _engagement_maps_extras_fp  # noqa: PLW0603
+    global _engagement_maps_cache, _engagement_maps_version, _engagement_maps_root
+    global _engagement_maps_extras_fp
     _engagement_maps_cache = None
     _engagement_maps_version = ""
     _engagement_maps_root = None
@@ -295,8 +295,8 @@ def _get_merged_engagement_maps(
         merge_engagement_maps,
     )
 
-    global _engagement_maps_cache, _engagement_maps_version, _engagement_maps_root  # noqa: PLW0603
-    global _engagement_maps_extras_fp  # noqa: PLW0603
+    global _engagement_maps_cache, _engagement_maps_version, _engagement_maps_root
+    global _engagement_maps_extras_fp
     root = (project_root or Path.cwd()).resolve()
     extras = load_checklist_policy_extras(root)
     fp = extras.content_fingerprint if extras else ""
@@ -704,7 +704,7 @@ class CallTracker:
         cls,
         file_path: str | None = None,
         engagement_level: str | None = None,
-        **eval_kwargs: Any,  # noqa: ANN401
+        **eval_kwargs: Any,
     ) -> EpicChecklistResult:
         """Evaluate the epic checklist, optionally validating an epic file.
 

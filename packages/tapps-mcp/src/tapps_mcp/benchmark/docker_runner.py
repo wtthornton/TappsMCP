@@ -46,7 +46,7 @@ class DockerRunner:
         self._timeout = timeout
         self._client: Any = None
 
-    def _get_client(self) -> Any:  # noqa: ANN401
+    def _get_client(self) -> Any:
         """Lazy-initialize Docker client.
 
         Raises:

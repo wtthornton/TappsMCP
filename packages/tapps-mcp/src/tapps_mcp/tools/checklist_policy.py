@@ -10,7 +10,7 @@ import copy
 import hashlib
 import json
 from dataclasses import dataclass
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 
 import structlog
 import yaml

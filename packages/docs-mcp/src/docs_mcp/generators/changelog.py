@@ -443,7 +443,7 @@ class ChangelogGenerator:
 
             env = jinja2.Environment(
                 loader=jinja2.FileSystemLoader(str(template_dir)),
-                autoescape=False,
+                autoescape=False,  # nosec B701 — Markdown output, not HTML
                 keep_trailing_newline=True,
                 trim_blocks=True,
                 lstrip_blocks=True,

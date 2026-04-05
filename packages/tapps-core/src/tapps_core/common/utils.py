@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
 SKIP_DIRS: frozenset[str] = frozenset(
     {
         ".git",

@@ -86,7 +86,7 @@ class GovernanceLayer:
                     # Patterns with 2+ groups: keep group 1 (label), redact group 2 (value)
                     # Patterns with 0-1 groups: replace entire match
                     compiled = re.compile(pattern)
-                    if compiled.groups >= 2:  # noqa: PLR2004
+                    if compiled.groups >= 2:
                         filtered = compiled.sub(r"\1 = [REDACTED]", filtered)
                     else:
                         filtered = compiled.sub("[REDACTED]", filtered)

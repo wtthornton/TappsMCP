@@ -9,10 +9,13 @@ from __future__ import annotations
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call, mcp
+from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call
 from docs_mcp.server_helpers import _get_settings, error_response, success_response
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
 
 
 async def docs_git_summary(
@@ -124,7 +127,7 @@ async def docs_git_summary(
 # ---------------------------------------------------------------------------
 
 
-def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
+def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register git tools on the shared mcp instance (Epic 79.2: conditional)."""
     if "docs_git_summary" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_git_summary)

@@ -39,7 +39,7 @@ class ReadmeGenerator:
         self._style = style
         self._env = jinja2.Environment(
             loader=jinja2.FileSystemLoader(str(_TEMPLATES_DIR)),
-            autoescape=False,  # noqa: S701 — Markdown output, not HTML
+            autoescape=False,  # nosec B701 — Markdown output, not HTML
             keep_trailing_newline=True,
             trim_blocks=True,
             lstrip_blocks=True,
@@ -343,15 +343,15 @@ class ReadmeGenerator:
                     continue
 
                 count += 1
-                if count > 50:  # noqa: PLR2004
+                if count > 50:
                     break
 
                 try:
                     content = py_file.read_text(encoding="utf-8")
-                except Exception:  # noqa: S112
+                except Exception:
                     continue
 
-                for module, label in framework_markers.items():
+                for module, _label in framework_markers.items():
                     if module not in detected and (
                         f"import {module}" in content
                         or f"from {module}" in content

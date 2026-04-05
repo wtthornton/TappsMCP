@@ -42,8 +42,8 @@ class _EvaluatorProtocol(Protocol):
 
     async def evaluate_batch(
         self,
-        instances: Any,  # noqa: ANN401
-        context_mode: Any,  # noqa: ANN401
+        instances: Any,
+        context_mode: Any,
         engagement_level: str,
     ) -> list[BenchmarkResult]: ...
 

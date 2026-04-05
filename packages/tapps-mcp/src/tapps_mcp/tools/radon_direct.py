@@ -22,7 +22,7 @@ def is_available() -> bool:
 
     Delegates to :data:`tapps_core.config.feature_flags.feature_flags`.
     """
-    global _RADON_AVAILABLE  # noqa: PLW0603
+    global _RADON_AVAILABLE
     if _RADON_AVAILABLE is None:
         _RADON_AVAILABLE = _ff.radon
     return _RADON_AVAILABLE

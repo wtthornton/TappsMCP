@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 import structlog
 from pydantic import BaseModel, ConfigDict, Field
 
-from tapps_mcp.benchmark.tool_evaluator import ToolRanking  # noqa: TC001
+from tapps_mcp.benchmark.tool_evaluator import ToolRanking
 
 if TYPE_CHECKING:
     from tapps_mcp.benchmark.call_patterns import CallPatternReport

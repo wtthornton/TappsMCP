@@ -13,7 +13,7 @@ from typing import Any, Protocol
 import structlog
 from pydantic import BaseModel, ConfigDict, Field
 
-from tapps_mcp.benchmark.models import BenchmarkConfig, BenchmarkResult  # noqa: TC001
+from tapps_mcp.benchmark.models import BenchmarkConfig, BenchmarkResult
 
 __all__ = [
     "AblationConfig",
@@ -44,8 +44,8 @@ class _EvaluatorProtocol(Protocol):
 
     async def evaluate_batch(
         self,
-        instances: Any,  # noqa: ANN401
-        context_mode: Any,  # noqa: ANN401
+        instances: Any,
+        context_mode: Any,
         engagement_level: str,
         template_override: str | None = None,
     ) -> list[BenchmarkResult]: ...

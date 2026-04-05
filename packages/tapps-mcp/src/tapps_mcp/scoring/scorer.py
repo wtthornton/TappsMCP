@@ -12,6 +12,7 @@ inverted (10 - score) because lower complexity is better.
 from __future__ import annotations
 
 import ast
+import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -230,7 +231,9 @@ class CodeScorer(ScorerBase):
 
         # Read code for AST-based analysis
         try:
-            code = resolved.read_text(encoding="utf-8", errors="replace")
+            code = await asyncio.to_thread(
+                resolved.read_text, encoding="utf-8", errors="replace"
+            )
         except (OSError, PermissionError) as exc:
             logger.error("file_read_failed", path=str_path, error=str(exc))
             return self._error_result(str_path)
@@ -670,11 +673,23 @@ _EXPENSIVE_CALL_THRESHOLD = 5
 
 from tapps_mcp.scoring.suggestions import (
     suggest_complexity as _suggest_complexity,
+)
+from tapps_mcp.scoring.suggestions import (
     suggest_devex as _suggest_devex,
+)
+from tapps_mcp.scoring.suggestions import (
     suggest_maintainability as _suggest_maintainability,
+)
+from tapps_mcp.scoring.suggestions import (
     suggest_performance as _suggest_performance,
+)
+from tapps_mcp.scoring.suggestions import (
     suggest_security as _suggest_security,
+)
+from tapps_mcp.scoring.suggestions import (
     suggest_structure as _suggest_structure,
+)
+from tapps_mcp.scoring.suggestions import (
     suggest_test_coverage as _suggest_test_coverage,
 )
 

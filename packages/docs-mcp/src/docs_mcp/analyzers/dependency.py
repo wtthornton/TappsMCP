@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 import structlog
 from pydantic import BaseModel
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 
 class ImportEdge(BaseModel):
@@ -519,7 +519,7 @@ class ImportGraphBuilder:
     def _block_end_line(node: ast.AST) -> int:
         """Get the end line of an AST node, with fallback."""
         if hasattr(node, "end_lineno") and node.end_lineno is not None:
-            return node.end_lineno  # type: ignore[return-value]
+            return node.end_lineno
         return getattr(node, "lineno", 0)
 
     @staticmethod

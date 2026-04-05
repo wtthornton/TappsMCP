@@ -46,7 +46,7 @@ def sanitize_domain_for_path(domain: str) -> str:
                 path_parts = [p for p in parsed.path.strip("/").split("/") if p]
                 parts.extend(path_parts)
             domain = "-".join(parts)
-    except Exception:  # noqa: S110
+    except Exception:
         pass  # Not a valid URL — use as-is.
 
     # Replace invalid filename characters with hyphens.

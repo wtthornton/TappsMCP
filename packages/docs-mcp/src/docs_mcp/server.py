@@ -6,10 +6,11 @@ Creates the FastMCP server instance, registers tools, and provides
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 import structlog
 from mcp.server.fastmcp import FastMCP
@@ -161,7 +162,7 @@ def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -
 # ---------------------------------------------------------------------------
 
 # Documentation file categories and their typical filenames/patterns.
-_CRITICAL_DOCS: ClassVar[list[str]] = [
+_CRITICAL_DOCS: list[str] = [
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
@@ -170,7 +171,7 @@ _CRITICAL_DOCS: ClassVar[list[str]] = [
 
 _DOC_EXTENSIONS: frozenset[str] = frozenset({".md", ".rst", ".txt"})
 
-_RECOMMENDED_DOCS: ClassVar[list[str]] = [
+_RECOMMENDED_DOCS: list[str] = [
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
@@ -326,7 +327,7 @@ def _count_source_files(project_root: Path) -> dict[str, int]:
     if not project_root.is_dir():
         return counts
 
-    for dirpath, dirnames, filenames in os.walk(project_root):
+    for _dirpath, dirnames, filenames in os.walk(project_root):
         dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
         for fname in filenames:
             suffix = Path(fname).suffix.lower()
@@ -583,7 +584,7 @@ async def docs_project_scan(
                     "aggregate_score": style_report.aggregate_score,
                     "top_issues": style_report.top_issues[:5],
                 }
-        except Exception:  # noqa: S110 — style check is optional enrichment
+        except Exception:
             pass
 
     # Optional TappsMCP enrichment
@@ -602,7 +603,7 @@ async def docs_project_scan(
                     "test_frameworks": profile.test_frameworks,
                     "package_managers": profile.package_managers,
                 }
-    except Exception:  # noqa: S110 — TappsMCP enrichment is optional
+    except Exception:
         pass
 
     return success_response("docs_project_scan", elapsed_ms, data)
@@ -794,8 +795,10 @@ async def docs_config(
     existing_data: dict[str, Any] = {}
     if config_path.exists():
         try:
-            with config_path.open(encoding="utf-8-sig") as f:
-                raw = yaml.safe_load(f)
+            raw_text = await asyncio.to_thread(
+                config_path.read_text, encoding="utf-8-sig"
+            )
+            raw = yaml.safe_load(raw_text)
             if isinstance(raw, dict):
                 existing_data = raw
         except Exception as exc:
@@ -828,9 +831,12 @@ async def docs_config(
     if can_write_to_project(root):
         # Write back
         try:
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            with config_path.open("w", encoding="utf-8") as f:
-                f.write(yaml_content)
+            await asyncio.to_thread(
+                config_path.parent.mkdir, parents=True, exist_ok=True
+            )
+            await asyncio.to_thread(
+                config_path.write_text, yaml_content, encoding="utf-8"
+            )
         except OSError as exc:
             return error_response(
                 "docs_config",
@@ -881,9 +887,8 @@ def run_server(
     port: int = 8000,
 ) -> None:
     """Start the DocsMCP MCP server."""
-    from tapps_core.common.logging import setup_logging
-
     from docs_mcp.config.settings import load_docs_settings
+    from tapps_core.common.logging import setup_logging
 
     settings = load_docs_settings()
     setup_logging(level=settings.log_level, json_output=settings.log_json)

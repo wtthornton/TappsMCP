@@ -158,10 +158,10 @@ class CircuitBreaker:
     async def call(
         self,
         func: Callable[..., Any],
-        *args: Any,  # noqa: ANN401
-        fallback: Any = None,  # noqa: ANN401
-        **kwargs: Any,  # noqa: ANN401
-    ) -> Any:  # noqa: ANN401
+        *args: Any,
+        fallback: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """Execute *func* with circuit breaker protection.
 
         Args:
@@ -219,7 +219,7 @@ _singleton_lock = threading.Lock()
 
 def get_context7_circuit_breaker() -> CircuitBreaker:
     """Return the global Context7 circuit breaker singleton."""
-    global _context7_breaker  # noqa: PLW0603
+    global _context7_breaker
     if _context7_breaker is None:
         with _singleton_lock:
             if _context7_breaker is None:

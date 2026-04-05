@@ -329,10 +329,10 @@ except Exception:
 # Blocklist (substring match, case-insensitive for format/del)
 BLOCK=0
 case "$CMD" in
-  *rm\ -rf*|*rm\ -fr*|*rm\ -r\ -f*|*rm\ -rf\ /*) BLOCK=1 ;;
-  *format\ c:*|*format\ c:/*|*format\ C:*|*format\ C:/*) BLOCK=1 ;;
-  *del\ /f\ /s\ /q*|*del\ /s\ /q*|*rd\ /s\ /q*) BLOCK=1 ;;
-  *:(){*:\|:&*}\;:*) BLOCK=1 ;;
+  *rm\\ -rf*|*rm\\ -fr*|*rm\\ -r\\ -f*|*rm\\ -rf\\ /*) BLOCK=1 ;;
+  *format\\ c:*|*format\\ c:/*|*format\\ C:*|*format\\ C:/*) BLOCK=1 ;;
+  *del\\ /f\\ /s\\ /q*|*del\\ /s\\ /q*|*rd\\ /s\\ /q*) BLOCK=1 ;;
+  *:(){*:\\|:&*}\\;:*) BLOCK=1 ;;
 esac
 if [ "$BLOCK" = 1 ]; then
   echo "TappsMCP: Blocked potentially destructive command." >&2

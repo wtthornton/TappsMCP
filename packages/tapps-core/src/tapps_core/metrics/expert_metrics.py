@@ -10,7 +10,7 @@ import json
 import threading
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import Any
 
 import structlog

@@ -6,12 +6,14 @@ module propagate to the core implementation.
 
 from __future__ import annotations
 
+from typing import Any
+
 import tapps_core.adaptive.voting_engine as _core_voting
 from tapps_core.adaptive.voting_engine import AdaptiveVotingEngine as AdaptiveVotingEngine
 from tapps_core.adaptive.weight_distributor import WeightDistributor as WeightDistributor
 
 
-def _build_default_matrix():  # type: ignore[no-untyped-def]
+def _build_default_matrix() -> Any:
     """Build a default weight matrix from :class:`ExpertRegistry`.
 
     This wrapper lives in tapps_mcp so that patches against
@@ -35,4 +37,4 @@ def _build_default_matrix():  # type: ignore[no-untyped-def]
 # version. This allows tests patching tapps_mcp.adaptive.voting_engine._build_default_matrix
 # to also affect the core.  We redirect via a lambda that calls the function
 # from *this* module's globals, so mock.patch on this module works correctly.
-_core_voting._build_default_matrix = lambda: globals()["_build_default_matrix"]()  # type: ignore[attr-defined]
+_core_voting._build_default_matrix = lambda: globals()["_build_default_matrix"]()

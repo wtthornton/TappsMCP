@@ -15,15 +15,16 @@ from docs_mcp.extractors.models import (
 )
 from docs_mcp.extractors.treesitter_base import TreeSitterExtractor
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+_GO_LANGUAGE: Any = None
 try:
-    import tree_sitter  # type: ignore[import-untyped]
-    import tree_sitter_go  # type: ignore[import-untyped]
+    import tree_sitter
+    import tree_sitter_go
 
     _GO_LANGUAGE = tree_sitter.Language(tree_sitter_go.language())
 except ImportError:
-    _GO_LANGUAGE = None
+    pass
 
 
 class GoExtractor(TreeSitterExtractor):
@@ -168,11 +169,7 @@ class GoExtractor(TreeSitterExtractor):
 
         result: list[ParameterInfo] = []
         for child in params_node.children:
-            if child.type == "parameter_declaration":
-                p = self._parse_go_param(child, source)
-                if p:
-                    result.append(p)
-            elif child.type == "variadic_parameter_declaration":
+            if child.type == "parameter_declaration" or child.type == "variadic_parameter_declaration":
                 p = self._parse_go_param(child, source)
                 if p:
                     result.append(p)

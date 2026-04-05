@@ -14,7 +14,7 @@ import structlog
 
 from docs_mcp.analyzers.diataxis import DiataxisClassifier, DiataxisCoverage, DiataxisResult
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 _MAX_FILES = 200
 
@@ -153,9 +153,9 @@ class DiataxisValidator:
 
         # Penalise missing quadrants heavily
         missing_count = sum(1 for v in actual.values() if v == 0)
-        if missing_count >= 3:  # noqa: PLR2004
+        if missing_count >= 3:
             return 10.0
-        if missing_count == 2:  # noqa: PLR2004
+        if missing_count == 2:
             return 25.0
 
         # Calculate deviation from ideal
@@ -197,14 +197,14 @@ class DiataxisValidator:
         # Identify over-represented quadrants
         for quadrant, label in quadrant_labels.items():
             pct = counts.get(quadrant, 0) / total * 100 if total > 0 else 0
-            if pct > 60:  # noqa: PLR2004
+            if pct > 60:
                 recs.append(
                     f"Over-represented: {label} ({pct:.0f}%). "
                     f"Consider adding other content types for balance."
                 )
 
         # General balance advice
-        if coverage.balance_score < 50:  # noqa: PLR2004
+        if coverage.balance_score < 50:
             recs.append(
                 "Documentation is heavily skewed toward one content type. "
                 "The Diataxis framework recommends a mix of all four types."

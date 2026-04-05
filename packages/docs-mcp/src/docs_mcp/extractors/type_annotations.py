@@ -61,7 +61,7 @@ def resolve_annotation(node: ast.expr | None) -> TypeInfo:
 
     try:
         return _resolve_node(node, raw)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return TypeInfo(raw=raw, resolved=raw, base_type=raw)
 
 
@@ -115,7 +115,7 @@ def _node_to_string(node: ast.expr) -> str:
     """Convert an AST node to its string representation."""
     try:
         return ast.unparse(node)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return ""
 
 
@@ -303,7 +303,7 @@ def _resolve_callable(slice_node: ast.expr, raw: str) -> TypeInfo:
         resolved_args.append(resolve_annotation(a).resolved)
 
     # Reconstruct normalized form
-    if len(resolved_args) >= 2:  # noqa: PLR2004
+    if len(resolved_args) >= 2:
         param_part = resolved_args[0]
         return_part = resolved_args[1]
         resolved = f"Callable[{param_part}, {return_part}]"

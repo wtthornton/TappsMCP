@@ -15,15 +15,16 @@ from docs_mcp.extractors.models import (
 )
 from docs_mcp.extractors.treesitter_base import TreeSitterExtractor
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+_JAVA_LANGUAGE: Any = None
 try:
-    import tree_sitter  # type: ignore[import-untyped]
-    import tree_sitter_java  # type: ignore[import-untyped]
+    import tree_sitter
+    import tree_sitter_java
 
     _JAVA_LANGUAGE = tree_sitter.Language(tree_sitter_java.language())
 except ImportError:
-    _JAVA_LANGUAGE = None
+    pass
 
 
 class JavaExtractor(TreeSitterExtractor):
@@ -275,11 +276,7 @@ class JavaExtractor(TreeSitterExtractor):
 
         result: list[ParameterInfo] = []
         for child in params_node.children:
-            if child.type == "formal_parameter":
-                p = self._parse_java_param(child, source)
-                if p:
-                    result.append(p)
-            elif child.type == "spread_parameter":
+            if child.type == "formal_parameter" or child.type == "spread_parameter":
                 p = self._parse_java_param(child, source)
                 if p:
                     result.append(p)

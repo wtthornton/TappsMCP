@@ -115,7 +115,7 @@ def run_benchmark(
 
 
 async def _run_benchmark_async(
-    config: Any,  # noqa: ANN401
+    config: Any,
     run_id: str,
     use_mock: bool,
 ) -> None:
@@ -154,7 +154,7 @@ async def _run_benchmark_async(
         # When a real Evaluator is available, import and use it.
         # For now, fall back to MockEvaluator with a warning.
         try:
-            from tapps_mcp.benchmark.evaluator import (  # type: ignore[import-not-found]
+            from tapps_mcp.benchmark.evaluator import (
                 Evaluator as _RealEvaluator,
             )
 
@@ -242,14 +242,14 @@ def analyze_results(
 
 def _analyze_compare(
     compare: str,
-    persistence: Any,  # noqa: ANN401
-    analyzer: Any,  # noqa: ANN401
-    reporter: Any,  # noqa: ANN401
+    persistence: Any,
+    analyzer: Any,
+    reporter: Any,
     output_format: str,
 ) -> None:
     """Compare two benchmark runs."""
     run_ids = [r.strip() for r in compare.split(",")]
-    if len(run_ids) != 2:  # noqa: PLR2004
+    if len(run_ids) != 2:
         click.echo(
             "Error: --compare requires exactly 2 comma-separated run IDs",
             err=True,
@@ -288,8 +288,8 @@ def _analyze_compare(
 
 def _analyze_single(
     run_id: str,
-    persistence: Any,  # noqa: ANN401
-    analyzer: Any,  # noqa: ANN401
+    persistence: Any,
+    analyzer: Any,
 ) -> None:
     """Analyze a single benchmark run."""
     target_run = run_id
@@ -632,8 +632,8 @@ def template_optimize(
 
 
 async def _run_template_benchmark(
-    version: Any,  # noqa: ANN401
-    store: Any,  # noqa: ANN401
+    version: Any,
+    store: Any,
     engagement_level: str,
 ) -> None:
     """Run mock benchmark evaluation for a template version."""

@@ -23,25 +23,25 @@ from tapps_mcp.scoring.models import CategoryScore, ScoreResult
 from tapps_mcp.scoring.scorer_base import STANDARD_CATEGORIES, ScorerBase
 
 __all__ = [
+    "EXTENSION_TO_LANGUAGE",
+    "STANDARD_CATEGORIES",
+    "SUPPORTED_LANGUAGES",
     # Models
     "CategoryScore",
+    # Language scorers (lazy-loaded to avoid circular imports with tools/)
+    "CodeScorer",
+    "GoScorer",
+    "RustScorer",
     "ScoreResult",
     # Base class
     "ScorerBase",
-    "STANDARD_CATEGORIES",
-    # Language scorers (lazy-loaded to avoid circular imports with tools/)
-    "CodeScorer",
     "TypeScriptScorer",
-    "GoScorer",
-    "RustScorer",
     # Language detection
     "detect_language",
     "get_scorer",
     "get_scorer_for_language",
-    "is_language_supported",
     "get_supported_extensions",
-    "EXTENSION_TO_LANGUAGE",
-    "SUPPORTED_LANGUAGES",
+    "is_language_supported",
 ]
 
 # Lazy-load scorer classes to break circular import:

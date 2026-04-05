@@ -96,7 +96,7 @@ def make_test_result(
     instance_id: str = "test-001",
     context_mode: ContextMode = ContextMode.NONE,
     resolved: bool = True,
-    **kwargs: Any,  # noqa: ANN401
+    **kwargs: Any,
 ) -> BenchmarkResult:
     """Factory for creating BenchmarkResult instances in tests."""
     defaults: dict[str, Any] = {

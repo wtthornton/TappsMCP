@@ -5,7 +5,7 @@ resolved path and gate category trigger a procedural memory save (or reinforce i
 key already exists).
 """
 
-# ruff: noqa: TC001, TC003 — runtime Path/settings/GateFailure used in hot path; not TYPE_CHECKING-only.
+
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ def _recurring_memory_key(path_fp: str, category: str) -> str:
     return f"recurring-qc-{path_fp}-{_sanitize_category(category)}"
 
 
-def _persist_recurring_procedural(  # noqa: PLR0911
+def _persist_recurring_procedural(
     settings: TappsMCPSettings,
     *,
     key: str,

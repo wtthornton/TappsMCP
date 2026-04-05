@@ -849,7 +849,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                     state.result["memory_auto_capture"] = generate_memory_auto_capture_hook(
                         state.project_root
                     )
-            except Exception:  # noqa: S110
+            except Exception:
                 pass  # Non-critical; settings may not have memory_hooks yet
             state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
             state.result["copilot_instructions"] = generate_copilot_instructions(

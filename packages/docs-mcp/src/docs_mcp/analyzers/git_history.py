@@ -9,13 +9,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import structlog
 from pydantic import BaseModel
-
-if TYPE_CHECKING:
-    pass
 
 logger = structlog.get_logger(__name__)
 

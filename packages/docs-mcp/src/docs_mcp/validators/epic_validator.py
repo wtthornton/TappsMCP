@@ -8,7 +8,7 @@ files-affected coverage.
 from __future__ import annotations
 
 import re
-from pathlib import Path  # noqa: TC003 — used at runtime
+from pathlib import Path
 
 import structlog
 from pydantic import BaseModel
@@ -321,7 +321,7 @@ def _parse_implementation_order(lines: list[str]) -> list[tuple[str, list[str]]]
             continue
 
         refs = _STORY_REF_RE.findall(stripped)
-        if len(refs) < 2:  # noqa: PLR2004
+        if len(refs) < 2:
             continue
 
         # Heuristic: if line contains "depends on", "after", "requires",
@@ -591,7 +591,7 @@ class EpicValidator:
                     story.linked_file = current_linked_file
                     report.stories.append(story)
 
-                if len(parsed) == 3:  # noqa: PLR2004
+                if len(parsed) == 3:
                     current_number, current_title, current_linked_file = parsed
                 else:
                     current_number, current_title = parsed
@@ -849,4 +849,4 @@ class EpicValidator:
             # info issues don't deduct
 
         report.score = max(score, 0)
-        report.passed = report.score >= 50  # noqa: PLR2004
+        report.passed = report.score >= 50

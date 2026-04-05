@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import ast
 import importlib.util
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any

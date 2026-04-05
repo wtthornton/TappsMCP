@@ -7,14 +7,14 @@ preserving existing fields while merging auto-detected values.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
 import structlog
 from pydantic import BaseModel
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 _FRONTMATTER_PATTERN = re.compile(
     r"\A---\s*\n(.*?)\n---\s*\n",
@@ -79,7 +79,7 @@ class FrontmatterGenerator:
         if file_path is not None:
             auto["tags"] = self._detect_tags(body, file_path)
         auto["diataxis_type"] = self._detect_diataxis_type(body)
-        auto["last_modified"] = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        auto["last_modified"] = datetime.now(tz=UTC).strftime("%Y-%m-%d")
 
         # Merge: existing fields take precedence over auto-detected
         merged: dict[str, Any] = {}
@@ -248,7 +248,7 @@ class FrontmatterGenerator:
             if part_lower.endswith(".md"):
                 # Use filename without extension as tag
                 name = part_lower[:-3].replace("_", "-").replace(" ", "-")
-                if len(name) > 2 and name not in ("readme", "index"):  # noqa: PLR2004
+                if len(name) > 2 and name not in ("readme", "index"):
                     tags.add(name)
 
         # Tags from content keywords

@@ -266,7 +266,7 @@ def check_claude_hook_scripts(project_root: Path) -> CheckResult:
             continue
         if not isinstance(data, dict):
             continue
-        rels = _hook_paths_from_claude_settings(cast(dict[str, object], data))
+        rels = _hook_paths_from_claude_settings(cast("dict[str, object]", data))
         root_res = project_root.resolve()
         for rel in rels:
             candidate = (project_root / rel).resolve()
@@ -654,7 +654,7 @@ def check_tapps_brain() -> CheckResult:
     missing, memory operations will fail at runtime.
     """
     try:
-        import tapps_brain  # noqa: F811
+        import tapps_brain
 
         version = getattr(tapps_brain, "__version__", "(unknown)")
         return CheckResult(
@@ -699,7 +699,7 @@ def check_memory_pipeline_config(root: Path) -> CheckResult:
             "Override under `memory:` and `memory_hooks:` in .tapps-mcp.yaml. "
             "See docs/MEMORY_REFERENCE.md.",
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return CheckResult(
             "Memory pipeline (effective config)",
             True,

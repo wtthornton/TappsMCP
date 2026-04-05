@@ -150,7 +150,7 @@ class MockToolEvaluator:
 
         return ToolTaskResult(
             task_id=task.task_id,
-            condition="all_tools" if len(available_tools) > 5 else "all_minus_one",  # noqa: PLR2004
+            condition="all_tools" if len(available_tools) > 5 else "all_minus_one",
             tool_name=None,
             resolved=resolved,
             tools_called=tools_called,

@@ -8,7 +8,7 @@ dependency required).
 from __future__ import annotations
 
 import html
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -98,7 +98,7 @@ def _build_summary(
         "total_lint_issues": total_lint,
         "total_type_issues": total_type,
         "total_security_issues": total_security,
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
     }
 
 

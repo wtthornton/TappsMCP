@@ -10,7 +10,7 @@ import structlog
 if TYPE_CHECKING:
     from docs_mcp.extractors.base import Extractor
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 
 def get_extractor(file_path: Path) -> Extractor:
@@ -41,14 +41,15 @@ def get_extractor(file_path: Path) -> Extractor:
 
 def _get_treesitter_extractor(suffix: str) -> Extractor | None:
     """Return a tree-sitter extractor for *suffix*, or None if unavailable."""
+    ext: Extractor
     if suffix in {".ts", ".tsx"}:
         try:
             from docs_mcp.extractors.treesitter_typescript import TypeScriptExtractor
 
             ext = TypeScriptExtractor()
             if ext.can_handle(Path(f"file{suffix}")):
-                return ext  # type: ignore[return-value]
-        except Exception:  # noqa: BLE001
+                return ext
+        except Exception:
             pass
 
     elif suffix == ".go":
@@ -57,8 +58,8 @@ def _get_treesitter_extractor(suffix: str) -> Extractor | None:
 
             ext = GoExtractor()
             if ext.can_handle(Path(f"file{suffix}")):
-                return ext  # type: ignore[return-value]
-        except Exception:  # noqa: BLE001
+                return ext
+        except Exception:
             pass
 
     elif suffix == ".rs":
@@ -67,8 +68,8 @@ def _get_treesitter_extractor(suffix: str) -> Extractor | None:
 
             ext = RustExtractor()
             if ext.can_handle(Path(f"file{suffix}")):
-                return ext  # type: ignore[return-value]
-        except Exception:  # noqa: BLE001
+                return ext
+        except Exception:
             pass
 
     elif suffix == ".java":
@@ -77,8 +78,8 @@ def _get_treesitter_extractor(suffix: str) -> Extractor | None:
 
             ext = JavaExtractor()
             if ext.can_handle(Path(f"file{suffix}")):
-                return ext  # type: ignore[return-value]
-        except Exception:  # noqa: BLE001
+                return ext
+        except Exception:
             pass
 
     return None

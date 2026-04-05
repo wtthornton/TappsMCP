@@ -7,7 +7,7 @@ MCP tool handlers use for recording metrics.
 from __future__ import annotations
 
 import uuid
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 
 from tapps_core.metrics.business_metrics import BusinessMetricsCollector
 from tapps_core.metrics.confidence_metrics import ConfidenceMetricsTracker
@@ -76,7 +76,7 @@ _hub: MetricsHub | None = None
 
 def get_metrics_hub() -> MetricsHub:
     """Get or create the global MetricsHub."""
-    global _hub  # noqa: PLW0603
+    global _hub
     if _hub is None:
         from tapps_core.config.settings import load_settings
 
@@ -87,5 +87,5 @@ def get_metrics_hub() -> MetricsHub:
 
 def reset_metrics_hub() -> None:
     """Reset the global hub (for testing)."""
-    global _hub  # noqa: PLW0603
+    global _hub
     _hub = None

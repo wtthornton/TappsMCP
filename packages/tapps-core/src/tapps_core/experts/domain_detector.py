@@ -624,7 +624,7 @@ class DomainDetector:
                     DomainMapping(
                         domain=mapping.domain,
                         confidence=round(adjusted_confidence, 3),
-                        signals=mapping.signals + [f"weight:{weight:.2f}"],
+                        signals=[*mapping.signals, f"weight:{weight:.2f}"],
                         reasoning=mapping.reasoning,
                     )
                 )

@@ -9,7 +9,7 @@ import json
 import threading
 from dataclasses import asdict, dataclass
 from datetime import timedelta
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import Any
 
 import structlog

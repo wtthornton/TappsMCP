@@ -11,7 +11,7 @@ from __future__ import annotations
 import html
 import math
 import re
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import structlog
@@ -812,9 +812,9 @@ class ArchitectureGenerator:
 
         if edges:
             svg = self._build_dependency_svg(packages, edges)
-            parts.append(f'<figure role="figure" aria-labelledby="dep-flow-figcaption">')
+            parts.append('<figure role="figure" aria-labelledby="dep-flow-figcaption">')
             parts.append(f'<div class="diagram-container">{svg}</div>')
-            parts.append(f'<figcaption id="dep-flow-figcaption">Package import relationships</figcaption>')
+            parts.append('<figcaption id="dep-flow-figcaption">Package import relationships</figcaption>')
             parts.append("</figure>")
         else:
             parts.append(
@@ -990,9 +990,9 @@ class ArchitectureGenerator:
         else:
             svg = self._build_flow_pipeline_svg(packages)
             if svg:
-                parts.append(f'<figure role="figure" aria-labelledby="data-flow-figcaption">')
+                parts.append('<figure role="figure" aria-labelledby="data-flow-figcaption">')
                 parts.append(f'<div class="diagram-container">{svg}</div>')
-                parts.append(f'<figcaption id="data-flow-figcaption">Data flow pipeline</figcaption>')
+                parts.append('<figcaption id="data-flow-figcaption">Data flow pipeline</figcaption>')
                 parts.append("</figure>")
             else:
                 parts.append(

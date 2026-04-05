@@ -19,13 +19,12 @@ import structlog
 from tapps_core.experts.business_config import (
     BusinessExpertEntry,
     BusinessExpertsConfig,
-    load_business_experts,
 )
 from tapps_core.experts.business_knowledge import scaffold_knowledge_directory
 from tapps_core.experts.models import ExpertConfig
 from tapps_core.experts.registry import ExpertRegistry
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Framework-to-domain mapping rules

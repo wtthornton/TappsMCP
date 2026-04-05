@@ -9,12 +9,12 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import date, datetime
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import Any
 
 import structlog
 
-from tapps_core.metrics.execution_metrics import ToolCallMetric  # noqa: TC001
+from tapps_core.metrics.execution_metrics import ToolCallMetric
 
 logger = structlog.get_logger(__name__)
 

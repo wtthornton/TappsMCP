@@ -17,7 +17,7 @@ from tapps_core.experts.business_templates import (
 from tapps_core.experts.domain_utils import sanitize_domain_for_path
 from tapps_core.experts.models import ExpertConfig
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 @dataclass

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from docs_mcp.config.settings import DocsMCPSettings  # noqa: TC001
+from docs_mcp.config.settings import DocsMCPSettings
 
 if TYPE_CHECKING:
     from docs_mcp.validators.style import StyleChecker
@@ -20,7 +20,7 @@ _settings: DocsMCPSettings | None = None
 
 def _get_settings() -> DocsMCPSettings:
     """Return a lazily-initialized :class:`DocsMCPSettings` singleton."""
-    global _settings  # noqa: PLW0603
+    global _settings
     if _settings is None:
         from docs_mcp.config.settings import load_docs_settings
 
@@ -30,7 +30,7 @@ def _get_settings() -> DocsMCPSettings:
 
 def _reset_settings_cache() -> None:
     """Reset the cached :class:`DocsMCPSettings` singleton (for testing)."""
-    global _settings  # noqa: PLW0603
+    global _settings
     _settings = None
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import abc
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 
@@ -16,10 +16,7 @@ from docs_mcp.extractors.models import (
     ParameterInfo,
 )
 
-if TYPE_CHECKING:
-    pass
-
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 # Guard tree-sitter imports for graceful degradation.
 try:
@@ -69,7 +66,7 @@ class TreeSitterExtractor(abc.ABC):
         rel_path = _relative_path(file_path, project_root)
         try:
             return self._do_extract(file_path, rel_path)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("treesitter_extract_failed", path=str(file_path))
             return ModuleInfo(path=rel_path)
 

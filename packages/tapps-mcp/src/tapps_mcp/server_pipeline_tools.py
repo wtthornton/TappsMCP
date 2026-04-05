@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from mcp.server.fastmcp import Context  # noqa: TC002 - MCP SDK needs runtime access
+from mcp.server.fastmcp import Context
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
@@ -250,7 +250,7 @@ async def _maybe_run_wizard(
     )
     yaml_path = proj / ".tapps-mcp.yaml"
     with contextlib.suppress(OSError):
-        yaml_path.write_text(yaml_content, encoding="utf-8")
+        await asyncio.to_thread(yaml_path.write_text, yaml_content, encoding="utf-8")
 
     return wizard
 
@@ -839,7 +839,7 @@ def _collect_results(
         if isinstance(raw, BaseException):
             results.append({"file_path": str(paths[i]), "errors": [str(raw)]})
         else:
-            results.append(raw)  # type: ignore[arg-type]
+            results.append(raw)
     return results
 
 
@@ -911,16 +911,16 @@ def _maybe_auto_gc(
         config = DecayConfig()
         gc = MemoryGarbageCollector(config)
 
-        snapshot = store.snapshot()  # type: ignore[union-attr]
+        snapshot = store.snapshot()
         candidates = gc.identify_candidates(snapshot.entries)
 
         archived_keys: list[str] = []
         for candidate in candidates:
-            deleted = store.delete(candidate.key)  # type: ignore[union-attr]
+            deleted = store.delete(candidate.key)
             if deleted:
                 archived_keys.append(candidate.key)
 
-        remaining = store.count()  # type: ignore[union-attr]
+        remaining = store.count()
 
         _logger.info(
             "session_auto_gc_completed",
@@ -1926,13 +1926,11 @@ async def tapps_upgrade(
         for plat_result in components.get("platforms", []):
             host = plat_result.get("host", "unknown")
             for comp_name, comp_val in plat_result.get("components", {}).items():
-                if isinstance(comp_val, str) and comp_val in ("created", "updated", "regenerated"):
-                    await emit_ctx_info(ctx, f"Updated {host}/{comp_name}")
-                elif isinstance(comp_val, dict) and comp_val.get("action") in (
+                if (isinstance(comp_val, str) and comp_val in ("created", "updated", "regenerated")) or (isinstance(comp_val, dict) and comp_val.get("action") in (
                     "created",
                     "updated",
                     "regenerated",
-                ):
+                )):
                     await emit_ctx_info(ctx, f"Updated {host}/{comp_name}")
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -2002,7 +2000,7 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
     data["llm_engagement_level"] = level
 
     # Epic 87: content-return mode for Docker/read-only
-    from tapps_core.common.file_operations import detect_write_mode, WriteMode
+    from tapps_core.common.file_operations import WriteMode, detect_write_mode
 
     write_mode = detect_write_mode(root)
     yaml_content = yaml.dump(data, default_flow_style=False, sort_keys=False)

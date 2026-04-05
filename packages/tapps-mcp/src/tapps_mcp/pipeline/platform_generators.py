@@ -128,8 +128,6 @@ from tapps_mcp.pipeline.platform_subagents import generate_subagent_definitions
 
 # Re-export private names used by tests (backward compat)
 __all__ = [
-    "_add_version_marker",
-    "_check_version_marker",
     "_AGENT_TEAMS_CLAUDE_MD_SECTION",
     "_AGENT_TEAMS_HOOKS_CONFIG",
     "_AGENT_TEAMS_HOOK_SCRIPTS",
@@ -145,6 +143,8 @@ __all__ = [
     "_CURSOR_HOOK_SCRIPTS_PS",
     "_ENGAGEMENT_HOOK_EVENTS",
     "_PROMPT_HOOK_CONFIG",
+    "_add_version_marker",
+    "_check_version_marker",
     "generate_agent_teams_hooks",
     "generate_bugbot_rules",
     "generate_ci_workflow",

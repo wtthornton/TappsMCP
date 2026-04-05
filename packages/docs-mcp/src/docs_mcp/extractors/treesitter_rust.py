@@ -15,15 +15,16 @@ from docs_mcp.extractors.models import (
 )
 from docs_mcp.extractors.treesitter_base import TreeSitterExtractor
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+_RUST_LANGUAGE: Any = None
 try:
-    import tree_sitter  # type: ignore[import-untyped]
-    import tree_sitter_rust  # type: ignore[import-untyped]
+    import tree_sitter
+    import tree_sitter_rust
 
     _RUST_LANGUAGE = tree_sitter.Language(tree_sitter_rust.language())
 except ImportError:
-    _RUST_LANGUAGE = None
+    pass
 
 
 class RustExtractor(TreeSitterExtractor):
@@ -128,7 +129,7 @@ class RustExtractor(TreeSitterExtractor):
             return None
         name = self._node_text(name_node, source)
 
-        visibility = self._get_visibility(node, source)
+        self._get_visibility(node, source)
         is_async = any(
             c.type in ("async", "function_modifiers")
             and "async" in self._node_text(c, source)

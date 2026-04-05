@@ -332,13 +332,13 @@ _cached_tech_stack_domains: set[str] | None = None
 
 def set_tech_stack_domains(domains: set[str]) -> None:
     """Set the cached tech stack domains (called once during session start)."""
-    global _cached_tech_stack_domains  # noqa: PLW0603
+    global _cached_tech_stack_domains
     _cached_tech_stack_domains = domains
 
 
 def _reset_tech_stack_domains_cache() -> None:
     """Reset the cached tech stack domains (for testing)."""
-    global _cached_tech_stack_domains  # noqa: PLW0603
+    global _cached_tech_stack_domains
     _cached_tech_stack_domains = None
 
 

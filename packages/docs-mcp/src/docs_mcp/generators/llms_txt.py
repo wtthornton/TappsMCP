@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from docs_mcp.generators.metadata import MetadataExtractor, ProjectMetadata
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 _MAX_KEY_FILES = 30
 _MAX_ENTRY_POINTS = 20

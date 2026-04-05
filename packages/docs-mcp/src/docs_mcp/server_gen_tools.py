@@ -8,6 +8,7 @@ and user stories.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -118,7 +119,7 @@ async def docs_generate_changelog(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(output_path)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -223,7 +224,7 @@ async def docs_generate_release_notes(
     return success_response("docs_generate_release_notes", elapsed_ms, data)
 
 
-async def docs_generate_readme(  # noqa: PLR0911
+async def docs_generate_readme(
     style: str = "standard",
     output_path: str = "",
     merge: bool = True,
@@ -301,7 +302,7 @@ async def docs_generate_readme(  # noqa: PLR0911
         from docs_mcp.generators.smart_merge import SmartMerger
 
         try:
-            existing = out.read_text(encoding="utf-8")
+            existing = await asyncio.to_thread(out.read_text, encoding="utf-8")
             merger = SmartMerger()
             result = merger.merge(existing, generated)
             final_content = result.content
@@ -327,7 +328,7 @@ async def docs_generate_readme(  # noqa: PLR0911
     if can_write_to_project(root):
         try:
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(final_content, encoding="utf-8")
+            await asyncio.to_thread(out.write_text, final_content, encoding="utf-8")
             written = True
         except OSError as exc:
             return error_response("docs_generate_readme", "WRITE_ERROR", str(exc))
@@ -439,7 +440,7 @@ async def docs_generate_api(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(output_path)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -549,7 +550,7 @@ async def docs_generate_adr(
             )
             write_path = validator.validate_write_path(str(full_path))
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -638,7 +639,7 @@ async def docs_generate_onboarding(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(target)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -720,7 +721,7 @@ async def docs_generate_contributing(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(target)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -884,7 +885,7 @@ async def docs_generate_prd(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(output_path)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -1090,7 +1091,7 @@ async def docs_generate_architecture(
             if not out.is_absolute():
                 out = root / out
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(result.content, encoding="utf-8")
+            await asyncio.to_thread(out.write_text, result.content, encoding="utf-8")
             written_path = str(out)
         except Exception as exc:
             return error_response(
@@ -1339,7 +1340,7 @@ async def docs_generate_epic(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(output_path)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -1564,7 +1565,7 @@ async def docs_generate_story(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(output_path)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -1739,7 +1740,7 @@ async def docs_generate_prompt(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(rel)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -1851,7 +1852,7 @@ async def docs_generate_llms_txt(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(output_path)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -1940,7 +1941,7 @@ async def docs_generate_frontmatter(
     from docs_mcp.generators.frontmatter import FrontmatterGenerator
 
     try:
-        original = target.read_text(encoding="utf-8")
+        original = await asyncio.to_thread(target.read_text, encoding="utf-8")
         generator = FrontmatterGenerator()
         result = generator.generate(original, file_path=target)
         content = result.content
@@ -1955,7 +1956,7 @@ async def docs_generate_frontmatter(
     written_path = ""
     if can_write_to_project(root):
         try:
-            target.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(target.write_text, content, encoding="utf-8")
             written_path = str(target.relative_to(root)).replace("\\", "/")
         except OSError as exc:
             return error_response(
@@ -2093,7 +2094,7 @@ async def docs_generate_interactive_diagrams(
             validator = PathValidator(root)
             write_path = validator.validate_write_path(output_path)
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -2192,7 +2193,7 @@ async def docs_generate_purpose(
         write_path = root / output_path
         try:
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(
@@ -2289,7 +2290,7 @@ async def docs_generate_doc_index(
         write_path = root / output_path
         try:
             write_path.parent.mkdir(parents=True, exist_ok=True)
-            write_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
             written_path = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(

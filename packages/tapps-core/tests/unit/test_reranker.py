@@ -72,7 +72,7 @@ class TestGetReranker:
         assert isinstance(r, NoopReranker)
 
     def test_provider_noop_returns_noop(self) -> None:
-        r = get_reranker(enabled=True, provider="noop", top_k=10)
+        r = get_reranker(enabled=True, provider="noop")
         assert isinstance(r, NoopReranker)
 
     def test_provider_cohere_no_key_returns_noop(self) -> None:

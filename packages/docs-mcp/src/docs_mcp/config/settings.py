@@ -219,7 +219,7 @@ def _reset_docs_settings_cache() -> None:
 
     Call in test teardown or when environment/YAML config changes mid-process.
     """
-    global _cached_settings  # noqa: PLW0603
+    global _cached_settings
     _cached_settings = None
 
 
@@ -248,8 +248,7 @@ def _expand_path(raw: str) -> Path:
     import os
 
     expanded = os.path.expandvars(raw)
-    expanded = os.path.expanduser(expanded)
-    return Path(expanded)
+    return Path(expanded).expanduser()
 
 
 def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
@@ -265,7 +264,7 @@ def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
     Returns:
         Fully resolved ``DocsMCPSettings``.
     """
-    global _cached_settings  # noqa: PLW0603
+    global _cached_settings
 
     if project_root is None and _cached_settings is not None:
         return _cached_settings

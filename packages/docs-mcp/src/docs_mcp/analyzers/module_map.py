@@ -17,7 +17,7 @@ from docs_mcp.extractors.models import ModuleInfo
 if TYPE_CHECKING:
     from docs_mcp.extractors.base import Extractor
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 # Source file extensions handled by extractors (Python always, others via tree-sitter).
 _SOURCE_EXTENSIONS: frozenset[str] = frozenset({

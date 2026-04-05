@@ -9,6 +9,7 @@ Story 56.4: Go Scorer
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -25,15 +26,15 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 # Guard tree-sitter imports for graceful degradation
+_GO_LANGUAGE: Any = None
 try:
-    import tree_sitter  # type: ignore[import-untyped]
-    import tree_sitter_go  # type: ignore[import-untyped]
+    import tree_sitter
+    import tree_sitter_go
 
     _GO_LANGUAGE = tree_sitter.Language(tree_sitter_go.language())
     HAS_TREE_SITTER = True
 except ImportError:
     tree_sitter = None  # type: ignore[assignment]
-    _GO_LANGUAGE = None
     HAS_TREE_SITTER = False
 
 # Categories supported by the Go scorer
@@ -175,7 +176,9 @@ class GoScorer(ScorerBase):
 
         # Read file content
         try:
-            code = resolved.read_text(encoding="utf-8", errors="replace")
+            code = await asyncio.to_thread(
+                resolved.read_text, encoding="utf-8", errors="replace"
+            )
         except (OSError, PermissionError) as exc:
             logger.error("file_read_failed", path=str_path, error=str(exc))
             return self._error_result(str_path)

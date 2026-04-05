@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from tapps_core.experts.models import ExpertConfig
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 _MAX_BUSINESS_EXPERTS: int = 20
 _MAX_KEYWORDS_PER_EXPERT: int = 50

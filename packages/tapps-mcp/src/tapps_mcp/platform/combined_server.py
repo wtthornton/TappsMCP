@@ -30,7 +30,7 @@ logger: Any = structlog.get_logger(__name__)
 # Detect docs-mcp availability at import time
 _DOCS_MCP_AVAILABLE = True
 try:
-    from docs_mcp.server import mcp as docs_server  # type: ignore[import-untyped]
+    from docs_mcp.server import mcp as docs_server
 except ImportError:
     _DOCS_MCP_AVAILABLE = False
     docs_server = None  # type: ignore[assignment]
@@ -82,7 +82,7 @@ def create_combined_server() -> FastMCP:
     Raises:
         RuntimeError: If tool name collisions are detected.
     """
-    from mcp.server.fastmcp import FastMCP  # type: ignore[import-untyped]
+    from mcp.server.fastmcp import FastMCP
 
     from tapps_mcp.server import mcp as tapps_server
 
@@ -223,7 +223,7 @@ def run_combined_server(
     if transport == "stdio":
         combined.run(transport="stdio")
     elif transport == "http":
-        import uvicorn  # type: ignore[import-untyped]
+        import uvicorn
 
         app = combined.streamable_http_app()
         uvicorn.run(app, host=host, port=port)

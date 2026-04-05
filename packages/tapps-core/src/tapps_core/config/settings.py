@@ -778,7 +778,7 @@ def _reset_settings_cache() -> None:
 
     Call in test teardown or when environment/YAML config changes mid-process.
     """
-    global _cached_settings  # noqa: PLW0603
+    global _cached_settings
     _cached_settings = None
 
 
@@ -810,7 +810,7 @@ def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
     Returns:
         Fully resolved ``TappsMCPSettings``.
     """
-    global _cached_settings  # noqa: PLW0603
+    global _cached_settings
 
     if project_root is None and _cached_settings is not None:
         return _cached_settings

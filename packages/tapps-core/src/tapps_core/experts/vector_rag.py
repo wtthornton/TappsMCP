@@ -537,7 +537,7 @@ class VectorKnowledgeBase:
         max_results: int,
     ) -> list[KnowledgeChunk]:
         """Search using the vector index and return KnowledgeChunk objects."""
-        from tapps_core.experts.rag_index import VectorIndex  # noqa: TC001
+        from tapps_core.experts.rag_index import VectorIndex
 
         vi: VectorIndex = self._vector_index  # type: ignore[assignment]
         threshold = self._similarity_threshold

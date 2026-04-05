@@ -12,7 +12,7 @@ from typing import Any
 
 import structlog
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 
 # ---------------------------------------------------------------------------

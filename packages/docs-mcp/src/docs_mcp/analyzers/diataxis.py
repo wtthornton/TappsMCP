@@ -19,7 +19,7 @@ from typing import ClassVar
 import structlog
 from pydantic import BaseModel
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger()  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 
 class DiataxisResult(BaseModel):
@@ -186,23 +186,23 @@ class DiataxisClassifier:
         param_tables = len(self._PARAM_TABLE_RE.findall(content))
 
         # Tutorials have many numbered steps + code blocks
-        if numbered_steps >= 3:  # noqa: PLR2004
+        if numbered_steps >= 3:
             scores["tutorial"] += 2.0
             indicators["tutorial"].append(f"structure:numbered_steps({numbered_steps})")
-        if code_blocks >= 3 and numbered_steps >= 2:  # noqa: PLR2004
+        if code_blocks >= 3 and numbered_steps >= 2:
             scores["tutorial"] += 1.5
             indicators["tutorial"].append("structure:code_with_steps")
 
         # How-to has code blocks but fewer steps
-        if code_blocks >= 1 and numbered_steps < 3:  # noqa: PLR2004
+        if code_blocks >= 1 and numbered_steps < 3:
             scores["how-to"] += 1.0
             indicators["how-to"].append("structure:code_blocks")
 
         # Reference has parameter tables
-        if param_tables >= 2:  # noqa: PLR2004
+        if param_tables >= 2:
             scores["reference"] += 3.0
             indicators["reference"].append(f"structure:param_tables({param_tables})")
-        elif tables >= 2:  # noqa: PLR2004
+        elif tables >= 2:
             scores["reference"] += 1.5
             indicators["reference"].append(f"structure:tables({tables})")
 
@@ -212,7 +212,7 @@ class DiataxisClassifier:
             1 for l in lines
             if l.strip() and not l.strip().startswith(("#", "-", "*", "|", "`", ">"))
         )
-        if prose_lines > len(lines) * 0.6 and code_blocks < 2:  # noqa: PLR2004
+        if prose_lines > len(lines) * 0.6 and code_blocks < 2:
             scores["explanation"] += 1.5
             indicators["explanation"].append("structure:prose_heavy")
 

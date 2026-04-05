@@ -42,9 +42,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     CURSOR_HOOKS_CONFIG_PS as _CURSOR_HOOKS_CONFIG_PS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
-    SUPPORTED_CURSOR_HOOK_KEYS as _SUPPORTED_CURSOR_HOOK_KEYS,
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
     DESTRUCTIVE_GUARD_HOOKS_CONFIG as _DESTRUCTIVE_GUARD_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -52,9 +49,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     ENGAGEMENT_HOOK_EVENTS as _ENGAGEMENT_HOOK_EVENTS,
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
-    SUPPORTED_CLAUDE_HOOK_KEYS as _SUPPORTED_CLAUDE_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_AUTO_CAPTURE_HOOKS_CONFIG as _MEMORY_AUTO_CAPTURE_HOOKS_CONFIG,
@@ -76,6 +70,12 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     PROMPT_HOOK_CONFIG as _PROMPT_HOOK_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    SUPPORTED_CLAUDE_HOOK_KEYS as _SUPPORTED_CLAUDE_HOOK_KEYS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    SUPPORTED_CURSOR_HOOK_KEYS as _SUPPORTED_CURSOR_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     _memory_auto_recall_script as _memory_auto_recall_script_fn,

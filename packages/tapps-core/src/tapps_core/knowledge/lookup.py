@@ -93,10 +93,10 @@ def _is_toc_only(content: str) -> bool:
 
 
 def _build_provider_registry(
-    api_key: "SecretStr | None" = None,
+    api_key: SecretStr | None = None,
     *,
-    settings: "TappsMCPSettings | None" = None,
-) -> "ProviderRegistry":
+    settings: TappsMCPSettings | None = None,
+) -> ProviderRegistry:
     """Build provider registry: Context7 (if key), LlmsTxt (always)."""
     from tapps_core.knowledge.providers.context7_provider import Context7Provider
     from tapps_core.knowledge.providers.llms_txt_provider import LlmsTxtProvider
@@ -128,8 +128,8 @@ class LookupEngine:
         *,
         circuit_breaker: CircuitBreaker | None = None,
         client: Context7Client | None = None,
-        registry: "ProviderRegistry | None" = None,
-        settings: "TappsMCPSettings | None" = None,
+        registry: ProviderRegistry | None = None,
+        settings: TappsMCPSettings | None = None,
     ) -> None:
         self._cache = cache
         self._api_key = api_key if settings is None else settings.context7_api_key
@@ -152,7 +152,7 @@ class LookupEngine:
         self._background_tasks.clear()
         await self._client.close()
 
-    async def lookup(  # noqa: PLR0911
+    async def lookup(
         self,
         library: str,
         topic: str = "overview",
@@ -441,7 +441,9 @@ class LookupEngine:
 
                 file_path = self._settings.project_root / Path(doc_config.file)
                 if file_path.exists() and file_path.is_file():
-                    content = file_path.read_text(encoding="utf-8")
+                    content = await asyncio.to_thread(
+                        file_path.read_text, encoding="utf-8"
+                    )
                     source_label = "custom_file"
                     logger.debug(
                         "custom_doc_source_file",

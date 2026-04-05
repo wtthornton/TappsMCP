@@ -19,7 +19,7 @@ from tapps_core.experts.business_knowledge import (
 )
 from tapps_core.experts.registry import ExpertRegistry
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)  # type: ignore[assignment]
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 @dataclass

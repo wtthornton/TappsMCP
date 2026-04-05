@@ -18,8 +18,19 @@ from tapps_core.experts.domain_utils import sanitize_domain_for_path
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Protocol
 
-    from tapps_core.project.models import TechStack
+    class TechStack(Protocol):
+        """Structural type for tech-stack objects passed into warming helpers.
+
+        Avoids a reverse-dependency on tapps_mcp, which owns the concrete
+        TechStack pydantic model.
+        """
+
+        languages: list[str]
+        libraries: list[str]
+        frameworks: list[str]
+        domains: list[str]
 
 logger = structlog.get_logger(__name__)
 

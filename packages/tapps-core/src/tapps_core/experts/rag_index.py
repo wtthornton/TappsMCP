@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from tapps_core.config.feature_flags import feature_flags as _ff
 from tapps_core.experts.rag_chunker import Chunk
-from tapps_core.experts.rag_embedder import Embedder  # noqa: TC001
+from tapps_core.experts.rag_embedder import Embedder
 
 logger = structlog.get_logger(__name__)
 
