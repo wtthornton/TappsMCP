@@ -445,7 +445,7 @@ wheels = [
 
 [[package]]
 name = "docs-mcp"
-version = "1.16.0"
+version = "1.17.0"
 source = { editable = "packages/docs-mcp" }
 dependencies = [
     { name = "click" },

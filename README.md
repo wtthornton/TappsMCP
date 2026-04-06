@@ -6,12 +6,13 @@
 
 Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs deterministic tools for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and domain expert consultation.
 
-[![CI](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tapps-mcp/tapps-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/tests-7%2C900%2B_passing-brightgreen.svg)](#development)
 [![Tools](https://img.shields.io/badge/MCP_tools-62-blue.svg)](#tools-reference)
+[![Version](https://img.shields.io/badge/version-1.17.0-informational.svg)](#)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
@@ -24,6 +25,14 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 ## Overview
 
 **Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, experts, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **62 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
+
+### What's new in v1.17.0
+
+- **Three-tier generator output** (DocsMCP) — write-first on writable filesystems (no content in response), inline for small read-only content, `FileManifest` for large. Saves client context window.
+- **Auto-computed output paths** — all DocsMCP generators compute sensible defaults when `output_path` is omitted
+- **~300 lines of boilerplate eliminated** — consolidated into `server_helpers.finalize_output()`
+
+See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 **Memory & pipeline defaults** are POC-oriented: expert/research auto-save, recurring `tapps_quick_check` memory, architectural **supersede**, impact-analysis enrichment, and **memory_hooks** (auto-recall / auto-capture) default **on** in shipped `default.yaml`. Override under `memory:` and `memory_hooks:` in `.tapps-mcp.yaml`, or inspect effective values with `tapps-mcp doctor`. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md).
 
@@ -54,7 +63,7 @@ tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp
 - **Platform generation** - auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** - `tapps_init` sets up quality infrastructure in any project with one call
 - **Docker distribution** - Docker images for external distribution and CI/CD
-- **7,200+ tests** across 3 packages with strict mypy and ruff enforcement, parallel execution (pytest-xdist), and randomized ordering (pytest-randomly)
+- **7,900+ tests** across 3 packages with strict mypy and ruff enforcement, parallel execution (pytest-xdist), and randomized ordering (pytest-randomly)
 - **Benchmark infrastructure** - AGENTBench evaluation, template optimization, tool effectiveness measurement
 
 ---
@@ -239,7 +248,7 @@ If `npx` fails or the package is unavailable, use [PyPI](#install-from-pypi) or 
 Clone the repo and install in editable mode with [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-git clone https://github.com/tapps-mcp/tapps-mcp.git
+git clone https://github.com/wtthornton/TappsMCP.git
 cd tapps-mcp
 ```
 
@@ -263,7 +272,7 @@ pip install -e packages/tapps-mcp
 From the repo root (or use the image from a registry):
 
 ```bash
-git clone https://github.com/tapps-mcp/tapps-mcp.git
+git clone https://github.com/wtthornton/TappsMCP.git
 cd tapps-mcp
 docker compose up --build -d
 ```
@@ -1132,9 +1141,9 @@ This is a **uv workspace monorepo** with four packages. All commands run from th
 uv sync --all-packages
 
 # Run tests per package (recommended - avoids conftest collisions)
-uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1,600+ tests)
+uv run pytest packages/tapps-core/tests/ -v      # tapps-core (1,650+ tests)
 uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (4,500+ tests)
-uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (1,750+ tests)
+uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (2,060+ tests)
 
 # Run a single test file
 uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v
@@ -1273,6 +1282,8 @@ DocsMCP is a companion MCP server for documentation generation, drift detection,
 | `docs_generate_purpose` | Generate purpose/intent architecture template with design principles and quality attributes. |
 | `docs_generate_doc_index` | Generate documentation index/map with categorized files and freshness indicators. |
 
+> **Three-tier output (v1.17.0):** All generators use a write-first strategy. On writable filesystems, content is written to disk and only metadata is returned (saving context window). On read-only/Docker filesystems, small content (<20K) is inlined; large content uses `FileManifest` for client-side apply. All generators auto-compute a default `output_path` when omitted.
+
 #### Validation & Checking
 
 | Tool | Description |
@@ -1284,6 +1295,7 @@ DocsMCP is a companion MCP server for documentation generation, drift detection,
 | `docs_check_diataxis` | Check Diataxis content balance (Tutorial/How-to/Reference/Explanation) across all markdown files. |
 | `docs_check_cross_refs` | Validate cross-references between docs. Detects orphan documents, broken references, missing backlinks. |
 | `docs_validate_epic` | Validate epic document structure: required sections, story completeness, dependency cycles, files coverage. |
+| `docs_check_style` | Deterministic markdown style/tone checks (passive voice, jargon, sentence length, heading consistency). |
 
 ### CLI
 
@@ -1321,7 +1333,7 @@ disabled_tools: []                    # Deny list — excluded from the exposed 
 
 ### Roadmap
 
-DocsMCP is feature-complete with 32 MCP tools covering README generation, API documentation, changelog/release notes, ADRs, onboarding/contributing guides, PRD/epic/story generation, LLM prompt artifacts, Mermaid/PlantUML/D2 diagrams (8 types, 3 formats, D2 themes), interactive HTML diagrams, llms.txt generation, frontmatter management, Diataxis classification, drift detection, completeness validation, link/cross-ref checking, freshness analysis, purpose/intent templates, and documentation indexing. See [docs/archive/planning/DOCSMCP_PRD.md](docs/archive/planning/DOCSMCP_PRD.md) for the original specification.
+DocsMCP is feature-complete with 32 MCP tools covering README generation, API documentation, changelog/release notes, ADRs, onboarding/contributing guides, PRD/epic/story generation, LLM prompt artifacts, Mermaid/PlantUML/D2 diagrams (8 types, 3 formats, D2 themes), interactive HTML diagrams, llms.txt generation, frontmatter management, Diataxis classification, drift detection, completeness validation, link/cross-ref checking, freshness analysis, style checking, purpose/intent templates, and documentation indexing. All generators use three-tier output (write-first/inline/manifest) with auto-computed default paths. See [docs/archive/planning/DOCSMCP_PRD.md](docs/archive/planning/DOCSMCP_PRD.md) for the original specification.
 
 ---
 

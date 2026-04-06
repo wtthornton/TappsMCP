@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-04-06
+
+### Changed
+
+- **docs-mcp: Three-tier output for all generator tools** — generators now use `finalize_output()` for consistent output handling:
+  - **Tier 1 (write-first):** writable filesystem — write to disk, return metadata only (`written_to`, `output_path`, `content_length`, `section_count`). Never returns `content` key, saving client context window.
+  - **Tier 2 (inline):** read-only + content < 20K chars — return `content` directly.
+  - **Tier 3 (manifest):** read-only + content >= 20K chars — return `FileManifest` for client-side apply.
+- **docs-mcp: Auto-computed output paths** — all 15 file-writing generators now compute sensible default paths when `output_path` is omitted (e.g. `CHANGELOG.md`, `docs/api/reference.md`, `docs/epics/EPIC-{number}.md`, `docs/PURPOSE.md`, `docs/INDEX.md`).
+- **docs-mcp: ~300 lines of duplicated write/response boilerplate eliminated** — consolidated into `server_helpers.finalize_output()`.
+- Version bump: tapps-core 1.16.0 → 1.17.0, tapps-mcp 1.16.0 → 1.17.0, docs-mcp 1.16.0 → 1.17.0
+
 ## [1.16.0] - 2026-04-06
 
 ### Changed
