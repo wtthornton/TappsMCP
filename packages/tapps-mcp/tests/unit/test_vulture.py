@@ -33,7 +33,14 @@ app.py:70: unused attribute 'legacy_flag' (80% confidence)
 """
 
 UNREACHABLE_CODE_OUTPUT = """\
-app.py:100: unused function 'dead_branch' (60% confidence)
+app.py:100: unreachable code after 'return' (100% confidence)
+"""
+
+MIXED_WITH_UNREACHABLE = """\
+app.py:10: unused function 'helper' (90% confidence)
+app.py:15: unreachable code after 'return' (100% confidence)
+app.py:20: unused import 'os' (90% confidence)
+app.py:30: unreachable code after 'raise' (100% confidence)
 """
 
 
@@ -150,6 +157,37 @@ class TestParseVultureOutput:
         raw = "x.py:1: unused attribute 'attr' (60% confidence)\n"
         findings = parse_vulture_output(raw)
         assert findings[0].finding_type == "attribute"
+
+    def test_unreachable_code_after_return(self) -> None:
+        findings = parse_vulture_output(UNREACHABLE_CODE_OUTPUT)
+        assert len(findings) == 1
+        assert findings[0].finding_type == "unreachable_code"
+        assert findings[0].name == "return"
+        assert findings[0].line == 100
+        assert findings[0].confidence == 100
+        assert "unreachable code after 'return'" in findings[0].message
+
+    def test_unreachable_code_after_raise(self) -> None:
+        raw = "x.py:5: unreachable code after 'raise' (100% confidence)\n"
+        findings = parse_vulture_output(raw)
+        assert len(findings) == 1
+        assert findings[0].finding_type == "unreachable_code"
+        assert findings[0].name == "raise"
+
+    def test_mixed_unused_and_unreachable(self) -> None:
+        findings = parse_vulture_output(MIXED_WITH_UNREACHABLE)
+        assert len(findings) == 4
+        assert findings[0].finding_type == "function"
+        assert findings[1].finding_type == "unreachable_code"
+        assert findings[1].name == "return"
+        assert findings[2].finding_type == "import"
+        assert findings[3].finding_type == "unreachable_code"
+        assert findings[3].name == "raise"
+
+    def test_unreachable_code_confidence_filtering(self) -> None:
+        raw = "x.py:5: unreachable code after 'return' (50% confidence)\n"
+        findings = parse_vulture_output(raw, min_confidence=80)
+        assert len(findings) == 0
 
 
 # ---------------------------------------------------------------------------

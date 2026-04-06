@@ -24,6 +24,12 @@ logger = structlog.get_logger(__name__)
 # Format: "path.py:42: unused function 'helper' (60% confidence)"
 _VULTURE_LINE_RE = re.compile(r"^(.+):(\d+): unused ([\w\s]+) '([^']+)' \((\d+)% confidence\)$")
 
+# Unreachable code has a different format:
+# "path.py:42: unreachable code after 'return' (100% confidence)"
+_VULTURE_UNREACHABLE_RE = re.compile(
+    r"^(.+):(\d+): unreachable code after '([^']+)' \((\d+)% confidence\)$"
+)
+
 # Map vulture description words to normalised finding types.
 _TYPE_MAP: dict[str, str] = {
     "function": "function",
@@ -82,29 +88,54 @@ def parse_vulture_output(
         stripped = raw_line.strip()
         if not stripped:
             continue
+
+        # Try the standard "unused <type> '<name>'" pattern first
         match = _VULTURE_LINE_RE.match(stripped)
-        if not match:
-            continue
-        file_path = match.group(1)
-        line_no = int(match.group(2))
-        raw_type = match.group(3)
-        name = match.group(4)
-        confidence = int(match.group(5))
+        if match:
+            file_path = match.group(1)
+            line_no = int(match.group(2))
+            raw_type = match.group(3)
+            name = match.group(4)
+            confidence = int(match.group(5))
 
-        if confidence < min_confidence:
-            continue
+            if confidence < min_confidence:
+                continue
 
-        finding_type = _normalise_finding_type(raw_type)
-        findings.append(
-            DeadCodeFinding(
-                file_path=file_path,
-                line=line_no,
-                name=name,
-                finding_type=finding_type,
-                confidence=confidence,
-                message=f"unused {raw_type.strip()} '{name}' ({confidence}% confidence)",
+            finding_type = _normalise_finding_type(raw_type)
+            findings.append(
+                DeadCodeFinding(
+                    file_path=file_path,
+                    line=line_no,
+                    name=name,
+                    finding_type=finding_type,
+                    confidence=confidence,
+                    message=f"unused {raw_type.strip()} '{name}' ({confidence}% confidence)",
+                )
             )
-        )
+            continue
+
+        # Try the "unreachable code after '<keyword>'" pattern
+        unreach = _VULTURE_UNREACHABLE_RE.match(stripped)
+        if unreach:
+            file_path = unreach.group(1)
+            line_no = int(unreach.group(2))
+            keyword = unreach.group(3)
+            confidence = int(unreach.group(4))
+
+            if confidence < min_confidence:
+                continue
+
+            findings.append(
+                DeadCodeFinding(
+                    file_path=file_path,
+                    line=line_no,
+                    name=keyword,
+                    finding_type="unreachable_code",
+                    confidence=confidence,
+                    message=f"unreachable code after '{keyword}' ({confidence}% confidence)",
+                )
+            )
+
     return findings
 
 

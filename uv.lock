@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "tapps-core"
-version = "1.16.0"
+version = "1.17.0"
 source = { editable = "packages/tapps-core" }
 dependencies = [
     { name = "httpx" },
@@ -2270,7 +2270,7 @@ provides-extras = ["vector", "reranker"]
 
 [[package]]
 name = "tapps-mcp"
-version = "1.16.0"
+version = "1.17.0"
 source = { editable = "packages/tapps-mcp" }
 dependencies = [
     { name = "anyio" },

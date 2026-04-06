@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-04-06
+
+### Fixed
+
+- **tapps-mcp: Fix unreachable code detection in `tapps_dead_code`** — vulture's `unreachable code after 'return'` findings were silently dropped because the parser regex only matched the `unused <type> '<name>'` format. Added `_VULTURE_UNREACHABLE_RE` pattern to catch `unreachable code after '<keyword>'` findings. These now correctly parse as `finding_type="unreachable_code"` and feed into the scoring pipeline's unreachable code penalty.
+- Version bump: tapps-core 1.17.0 → 1.17.1, tapps-mcp 1.17.0 → 1.17.1, docs-mcp 1.17.0 → 1.17.1
+
 ## [1.17.0] - 2026-04-06
 
 ### Changed
