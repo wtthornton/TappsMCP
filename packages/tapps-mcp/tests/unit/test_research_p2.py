@@ -45,6 +45,9 @@ def _settings_mock() -> MagicMock:
     s.project_root.__truediv__ = MagicMock(return_value=MagicMock())
     s.context7_api_key = ""
     s.expert_fallback_max_chars = 5000
+    s.memory.write_rules.max_value_length = 4096
+    s.memory.write_rules.min_value_length = 20
+    s.memory.enabled = True
     return s
 
 

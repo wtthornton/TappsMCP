@@ -503,6 +503,7 @@ class TestRunInit:
         with (
             patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path),
             patch("tapps_mcp.distribution.setup_generator.sys.platform", "win32"),
+            patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value=None),
         ):
             run_init(
                 mcp_host="auto",
@@ -521,6 +522,7 @@ class TestRunInit:
         with (
             patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path),
             patch("tapps_mcp.distribution.setup_generator.sys.platform", "win32"),
+            patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value=None),
         ):
             run_init(mcp_host="auto", project_root=str(tmp_path), force=True, rules=False)
         captured = capsys.readouterr()

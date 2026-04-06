@@ -870,8 +870,8 @@ def _is_valid_tapps_command(command: str, args: list[str] | None = None) -> bool
     # uv / npx are valid launchers when args route to tapps-mcp serve
     if command in ("uv", "npx") and args is not None:
         return "tapps-mcp" in args and "serve" in args
-    # Check if the filename portion matches
-    name = Path(command).name.lower()
+    # Check if the filename portion matches (handle both / and \ separators)
+    name = Path(command.replace("\\", "/")).name.lower()
     return name in ("tapps-mcp", "tapps-mcp.exe")
 
 

@@ -87,7 +87,7 @@ def _make_security_scan_result(
 # are imported inside function bodies from tapps_mcp.server, so we patch at source.
 # ensure_session_initialized and _get_scorer_for_file are imported at module level from server_helpers.
 _PATCH_RECORD_CALL = patch(
-    "tapps_mcp.server._record_call", side_effect=lambda _: None
+    "tapps_mcp.server._record_call", side_effect=lambda *a, **kw: None
 )
 _PATCH_RECORD_EXEC = patch(
     "tapps_mcp.server._record_execution", side_effect=lambda *a, **kw: None

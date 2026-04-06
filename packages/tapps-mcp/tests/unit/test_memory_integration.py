@@ -69,6 +69,9 @@ def _make_mock_store(entries: list[MemoryEntry] | None = None) -> MagicMock:
     entry_map = {e.key: e for e in entries}
     store.get.side_effect = lambda k, **kw: entry_map.get(k)
 
+    # v2.0.4: MemoryRetriever validates scoring weights from store.profile
+    store.profile = None
+
     store.snapshot.return_value = MemorySnapshot(
         project_root="/test/project",
         entries=entries,

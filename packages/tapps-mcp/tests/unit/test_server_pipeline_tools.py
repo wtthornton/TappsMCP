@@ -1376,9 +1376,15 @@ class TestSessionStartProjectRoot:
         mock_settings.memory.enabled = False
         mock_settings.business_experts_enabled = False
 
-        with patch(
-            "tapps_mcp.server_pipeline_tools.load_settings",
-            return_value=mock_settings,
+        with (
+            patch(
+                "tapps_mcp.server_pipeline_tools.load_settings",
+                return_value=mock_settings,
+            ),
+            patch(
+                "tapps_mcp.server.load_settings",
+                return_value=mock_settings,
+            ),
         ):
             result = await tapps_session_start()
 

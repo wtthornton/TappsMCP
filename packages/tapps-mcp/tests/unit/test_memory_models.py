@@ -26,7 +26,7 @@ class TestMemoryTier:
         assert MemoryTier.context == "context"
 
     def test_member_count(self) -> None:
-        assert len(MemoryTier) == 4
+        assert len(MemoryTier) == 6
 
 
 class TestMemorySource:
@@ -51,7 +51,7 @@ class TestMemoryScope:
         assert MemoryScope.session == "session"
 
     def test_member_count(self) -> None:
-        assert len(MemoryScope) == 4
+        assert len(MemoryScope) == 5
 
 
 class TestMemoryEntry:

@@ -51,7 +51,14 @@ def _make_store(count: int = 0, entries: list[MemoryEntry] | None = None) -> Mag
     store = MagicMock()
     store.project_root = Path("/test/project")
     store.count.return_value = count
-    store.list_all.return_value = entries or []
+    all_entries = entries or []
+
+    def _list_all_side_effect(*, tags: list[str] | None = None, **kw: object) -> list[MemoryEntry]:
+        if tags:
+            return [e for e in all_entries if any(t in (e.tags or []) for t in tags)]
+        return list(all_entries)
+
+    store.list_all.side_effect = _list_all_side_effect
     store.get.return_value = None
     return store
 

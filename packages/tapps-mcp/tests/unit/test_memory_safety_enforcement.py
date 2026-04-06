@@ -107,7 +107,7 @@ def _run_save(
             return_value=settings,
         ),
     ):
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tapps_memory(
                 action="save",
                 key="test-key",
@@ -156,7 +156,7 @@ def _run_save_bulk(
             return_value=settings,
         ),
     ):
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tapps_memory(
                 action="save_bulk",
                 entries=entries_json,

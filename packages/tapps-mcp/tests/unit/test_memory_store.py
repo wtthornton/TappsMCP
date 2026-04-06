@@ -167,21 +167,26 @@ class TestMemoryStoreEviction:
     """Tests for max entries eviction."""
 
     def test_evicts_lowest_confidence_at_max(self, tmp_path: Path) -> None:
+        # v2.0.4: auto-loads repo-brain profile with max_entries=5000.
+        # Override via profile.limits.max_entries to use a small cap.
+        _SMALL_MAX = 50
         store = MemoryStore(tmp_path)
+        if store._profile is not None:
+            store._profile.limits.max_entries = _SMALL_MAX
         # Fill to max with confidence 0.5
-        for i in range(_MAX_ENTRIES):
+        for i in range(_SMALL_MAX):
             store.save(
                 key=f"entry-{i:04d}",
                 value=f"value {i}",
                 source="agent",
                 confidence=0.5,
             )
-        assert store.count() == _MAX_ENTRIES
+        assert store.count() == _SMALL_MAX
 
         # Add one with low confidence first to be the eviction target
         store.save(key="low-conf", value="low", source="inferred", confidence=0.1)
         # Now at max, the lowest was evicted (could be low-conf or entry-0000)
-        assert store.count() == _MAX_ENTRIES
+        assert store.count() == _SMALL_MAX
 
 
 class TestMemoryStoreRAGSafety:

@@ -124,10 +124,11 @@ class TestEdgeCases:
         assert isinstance(result, MemoryEntry)
         assert len(result.tags) == 10
 
-    def test_invalid_tier_rejected(self, tmp_path: Path) -> None:
+    def test_invalid_tier_accepted_with_default(self, tmp_path: Path) -> None:
+        """v2.0.4+: unknown tier is silently normalized to a default."""
         store = MemoryStore(tmp_path)
-        with pytest.raises(Exception):
-            store.save(key="bad-tier", value="v", tier="nonexistent")
+        entry = store.save(key="bad-tier", value="v", tier="nonexistent")
+        assert entry is not None
 
     def test_invalid_scope_rejected(self, tmp_path: Path) -> None:
         store = MemoryStore(tmp_path)
@@ -198,11 +199,11 @@ class TestPersistenceEdgeCases:
 
     def test_schema_version_persists(self, tmp_path: Path) -> None:
         p1 = MemoryPersistence(tmp_path)
-        assert p1.get_schema_version() == 4
+        assert p1.get_schema_version() == 17
         p1.close()
 
         p2 = MemoryPersistence(tmp_path)
-        assert p2.get_schema_version() == 4
+        assert p2.get_schema_version() == 17
         p2.close()
 
     def test_fts_special_chars_no_crash(self, tmp_path: Path) -> None:

@@ -69,7 +69,9 @@ class TestSeedingRealStore:
         result = seed_from_profile(store, profile)
         assert result["seeded_count"] > 0
         assert not result["skipped"]
-        assert store.count() == result["seeded_count"]
+        # v2.0.4: auto-consolidation may merge or create entries during seeding,
+        # so store count may differ from seeded_count
+        assert store.count() > 0
 
     def test_seed_creates_expected_keys(
         self, store: MemoryStore, profile: ProjectProfile

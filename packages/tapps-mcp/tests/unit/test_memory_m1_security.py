@@ -38,7 +38,7 @@ class TestSafetyCheckAction:
             "tapps_mcp.server_memory_tools._get_memory_store"
         ) as mock_store:
             mock_store.return_value = MagicMock()
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="safety_check", value="Normal project documentation")
             )
 
@@ -67,7 +67,7 @@ class TestSafetyCheckAction:
             "tapps_mcp.server_memory_tools._get_memory_store"
         ) as mock_store:
             mock_store.return_value = MagicMock()
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="safety_check", value=malicious)
             )
 
@@ -89,7 +89,7 @@ class TestSafetyCheckAction:
             "tapps_mcp.server_memory_tools._get_memory_store"
         ) as mock_store:
             mock_store.return_value = MagicMock()
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="safety_check", value="")
             )
 
@@ -131,7 +131,7 @@ class TestVerifyIntegrityAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="verify_integrity")
             )
 
@@ -172,7 +172,7 @@ class TestVerifyIntegrityAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="verify_integrity")
             )
 
@@ -212,7 +212,7 @@ class TestVerifyIntegrityAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="verify_integrity")
             )
 

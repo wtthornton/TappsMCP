@@ -100,7 +100,7 @@ class TestProfileInfoAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_info")
             )
 
@@ -129,7 +129,7 @@ class TestProfileInfoAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_info")
             )
 
@@ -160,7 +160,7 @@ class TestProfileInfoAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_info")
             )
 
@@ -190,7 +190,7 @@ class TestProfileListAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_list")
             )
 
@@ -216,7 +216,7 @@ class TestProfileListAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_list")
             )
 
@@ -250,7 +250,7 @@ class TestProfileSwitchAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_switch", value="")
             )
 
@@ -272,7 +272,7 @@ class TestProfileSwitchAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_switch", value="nonexistent-profile")
             )
 
@@ -296,7 +296,7 @@ class TestProfileSwitchAction:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_switch", value="repo-brain")
             )
 
@@ -335,7 +335,7 @@ class TestProfileSwitchAction:
         ), patch(
             "tapps_mcp.server_helpers._reset_memory_store_cache"
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_switch", value="research-knowledge")
             )
 
@@ -362,7 +362,7 @@ class TestProfileSwitchAction:
             return_value=mock_store,
         ):
             # Don't mock tapps_brain.profile -- let the ImportError happen naturally
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="profile_switch", value="research-knowledge")
             )
 
@@ -403,7 +403,7 @@ class TestReinforcePromotionSurfacing:
             "tapps_mcp.server_memory_tools._get_memory_store",
             return_value=mock_store,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tapps_memory(action="reinforce", key="test-key")
             )
 
@@ -448,7 +448,7 @@ class TestReinforcePromotionSurfacing:
                 "tapps_mcp.server_memory_tools._get_memory_store",
                 return_value=mock_store,
             ):
-                result = asyncio.get_event_loop().run_until_complete(
+                result = asyncio.run(
                     tapps_memory(action="reinforce", key="test-key")
                 )
 

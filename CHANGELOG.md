@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-04-06
+
+### Changed
+
+- **deps: upgrade tapps-brain v2.0.3 → v2.0.4**
+  - EPIC-052 code review sweep: write-through consistency + hygiene fixes
+  - EPIC-042–050: Embeddings v17, hybrid profile RRF, SQLite busy tuning, decay/FSRS, injection tokenizer hook, consolidation sweep CLI, GC metrics, save-conflict export, merge undo, per-group entry caps
+  - Hive: group agent_scope, recall union, publisher memory_group propagation
+  - Observability: Save-path phase latency histograms, operator docs
+- **tapps-core**: Removed stale `_RAG_BLOCK_THRESHOLD` re-export from `memory/store.py` (removed upstream in v2.0.4)
+- **tapps-mcp**: Fixed cross-platform Windows path parsing in `_is_valid_tapps_command`
+- **tapps_mcp.spec**: Added 2 missing hidden imports (`quick_check_recurring`, `tools.checklist_policy`)
+- **tests**: Fixed 89 test failures caused by tapps-brain v2.0.4 API changes:
+  - Updated enum counts (MemoryTier 4→6, MemoryScope 4→5), schema version (4→17)
+  - Fixed `_frequency_score`/`_normalize_relevance` calls (staticmethod → instance method)
+  - Fixed `detect_installed_tools` → `detect_installed_tools_async` mock patch
+  - Fixed `_get_scorer` → `_get_scorer_for_file` rename
+  - Fixed `_record_call` mock to accept new `success` kwarg
+  - Fixed event loop pollution (`asyncio.get_event_loop()` → `asyncio.run()`)
+  - Fixed mock stores/settings with real numeric values for v2.0.4 validation
+  - Updated error response format (`error_code` → `error.code`)
+  - Relaxed seeding/eviction assertions for auto-consolidation and profile-based caps
+- Version bump: tapps-core 1.15.0 → 1.16.0, tapps-mcp 1.15.0 → 1.16.0, docs-mcp 1.15.0 → 1.16.0
+
 ## [1.15.0] - 2026-04-05
 
 ### Changed

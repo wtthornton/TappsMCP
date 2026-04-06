@@ -119,7 +119,7 @@ async def test_file_outside_custom_project_root_rejected(
         str(outside), project_root=str(ext_project)
     )
     assert result["success"] is False
-    assert result["error_code"] == "path_denied"
+    assert result["error"]["code"] == "path_denied"
 
 
 @pytest.mark.asyncio()
@@ -137,5 +137,5 @@ async def test_nonexistent_project_root_returns_error(
         "foo.py", project_root=str(tmp_path / "does_not_exist")
     )
     assert result["success"] is False
-    assert result["error_code"] == "invalid_project_root"
-    assert "not an existing directory" in result["error"]
+    assert result["error"]["code"] == "invalid_project_root"
+    assert "not an existing directory" in result["error"]["message"]

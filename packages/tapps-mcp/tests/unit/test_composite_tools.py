@@ -121,11 +121,7 @@ def _mock_tool_detection() -> Generator[None, None, None]:
             new_callable=AsyncMock,
             return_value=mock_info,
         ),
-        # Mock sync tool detection (used by tapps_server_info sync path)
-        patch(
-            "tapps_mcp.server.detect_installed_tools",
-            return_value=_MOCK_TOOLS,
-        ),
+        # Mock async tool detection (used by tapps_session_start)
         patch(
             "tapps_mcp.server.detect_installed_tools_async",
             new_callable=AsyncMock,
@@ -1007,6 +1003,9 @@ class TestTappsQuickCheck:
         mock_settings.return_value.project_root = tmp_path
         mock_settings.return_value.quality_preset = "strict"
         mock_settings.return_value.tool_timeout = 30
+        mock_settings.return_value.memory.write_rules.max_value_length = 4096
+        mock_settings.return_value.memory.write_rules.min_value_length = 20
+        mock_settings.return_value.memory.enabled = True
 
         # Create a low-scoring result to fail the gate
         low_result = ScoreResult(
@@ -1020,9 +1019,10 @@ class TestTappsQuickCheck:
         )
 
         with patch(
-            "tapps_mcp.server_scoring_tools._get_scorer"
+            "tapps_mcp.server_scoring_tools._get_scorer_for_file"
         ) as mock_scorer_fn:
             mock_scorer = MagicMock()
+            mock_scorer.language = "python"
             mock_scorer.score_file_quick_enriched.return_value = low_result
             mock_scorer_fn.return_value = mock_scorer
             result = await tapps_quick_check(str(f), preset="strict")
