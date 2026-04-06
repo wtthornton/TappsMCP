@@ -28,7 +28,11 @@ jobs:
       - run: uv sync --frozen --dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run mypy --strict src/
+      - name: MyPy strict (all packages)
+        run: |
+          uv run mypy --strict packages/tapps-mcp/src/tapps_mcp/
+          uv run mypy --strict packages/tapps-core/src/tapps_core/
+          uv run mypy --strict packages/docs-mcp/src/docs_mcp/
 
   test:
     needs: lint

@@ -18,16 +18,20 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
         with:
           python-version: "3.12"
-      - name: Verify tag matches tapps-mcp version
+      - name: Verify tag matches all package versions
         run: |
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-          PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('packages/tapps-mcp/pyproject.toml','rb'))['project']['version'])")
           echo "Git tag version: $TAG_VERSION"
-          echo "Package version (tapps-mcp): $PKG_VERSION"
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag version ($TAG_VERSION) does not match packages/tapps-mcp/pyproject.toml version ($PKG_VERSION)"
-            exit 1
-          fi
+          FAILED=0
+          for pkg in tapps-mcp tapps-core docs-mcp; do
+            PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('packages/${pkg}/pyproject.toml','rb'))['project']['version'])")
+            echo "  ${pkg}: $PKG_VERSION"
+            if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+              echo "::error::Tag version ($TAG_VERSION) does not match packages/${pkg}/pyproject.toml version ($PKG_VERSION)"
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" = "1" ]; then exit 1; fi
 
   build:
     needs: validate

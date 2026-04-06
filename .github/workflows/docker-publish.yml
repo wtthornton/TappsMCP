@@ -122,7 +122,7 @@ jobs:
           docker pull "$IMAGE"
           docker tag "$IMAGE" "${{ matrix.name }}:scan"
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@ab6606b76e5a054be08cab3d07da323e90e751e8  # 0.34.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
         with:
           image-ref: ${{ matrix.name }}:scan
           format: sarif
@@ -146,9 +146,11 @@ jobs:
           - name: tapps-mcp
             image_env: TAPPS_IMAGE
             version_cmd: "tapps-mcp --version"
+            expected_tools: 30
           - name: docs-mcp
             image_env: DOCS_IMAGE
             version_cmd: "docsmcp --version"
+            expected_tools: 32
     steps:
       - name: Pull and verify image
         run: |
