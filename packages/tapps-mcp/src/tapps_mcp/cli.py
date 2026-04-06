@@ -128,6 +128,15 @@ def serve(transport: str, host: str, port: int) -> None:
     default=None,
     help="Optional-dependency group for 'uv run --extra <name>' (default: auto).",
 )
+@click.option(
+    "--with-context7",
+    default=None,
+    metavar="KEY",
+    help=(
+        "Set TAPPS_MCP_CONTEXT7_API_KEY in the MCP env block for live docs "
+        "via Context7. Pass the key value, or 'prompt' to be asked interactively."
+    ),
+)
 def init(
     mcp_host: str,
     project_root: str,
@@ -142,6 +151,7 @@ def init(
     with_docs_mcp: bool,
     uv_flag: bool | None,
     uv_extra: str | None,
+    with_context7: str | None,
 ) -> None:
     """Bootstrap TappsMCP in a project (MCP config, AGENTS.md, hooks, agents, skills, rules).
 
@@ -159,6 +169,18 @@ def init(
     else:
         uv_mode = "off"
 
+    # Issue #79: resolve --with-context7 (interactive prompt or literal key).
+    context7_key: str | None = None
+    if with_context7 is not None:
+        if with_context7.lower() == "prompt":
+            context7_key = click.prompt(
+                "TAPPS_MCP_CONTEXT7_API_KEY",
+                hide_input=True,
+                default="",
+            ).strip() or None
+        else:
+            context7_key = with_context7.strip() or None
+
     success = run_init(
         mcp_host=mcp_host,
         project_root=project_root,
@@ -172,6 +194,7 @@ def init(
         with_docs_mcp=with_docs_mcp,
         uv_mode=uv_mode,
         uv_extra=uv_extra,
+        context7_api_key=context7_key,
     )
     if not success:
         raise SystemExit(1)

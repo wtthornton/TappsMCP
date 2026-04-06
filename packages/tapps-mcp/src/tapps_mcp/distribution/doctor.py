@@ -878,6 +878,64 @@ def _build_requirements_summary(
 # ---------------------------------------------------------------------------
 
 
+def check_uv_path_mismatch(project_root: Path) -> CheckResult:
+    """Warn when MCP config uses bare ``tapps-mcp`` but project is uv-managed (Issue #77).
+
+    If the project has ``uv.lock`` or a pyproject.toml extra that references
+    ``tapps-mcp``, the MCP config should use ``uv run`` to ensure the server
+    can start without ``tapps-mcp`` on global PATH.
+    """
+    from tapps_mcp.distribution.setup_generator import _detect_uv_context
+
+    ctx = _detect_uv_context(project_root)
+    if ctx is None or not ctx.get("tapps_mcp_extra"):
+        return CheckResult(
+            "uv PATH check",
+            True,
+            "Not a uv consumer project (check skipped)",
+        )
+
+    # Scan MCP configs for bare tapps-mcp command.
+    candidates: list[tuple[Path, str]] = [
+        (project_root / ".mcp.json", "mcpServers"),
+        (project_root / ".cursor" / "mcp.json", "mcpServers"),
+        (project_root / ".vscode" / "mcp.json", "servers"),
+    ]
+    warnings: list[str] = []
+    for path, servers_key in candidates:
+        if not path.exists():
+            continue
+        try:
+            raw = path.read_text(encoding="utf-8")
+            data = json.loads(raw) if raw.strip() else {}
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        servers = data.get(servers_key) or {}
+        if not isinstance(servers, dict):
+            continue
+        entry = servers.get("tapps-mcp")
+        if isinstance(entry, dict) and entry.get("command") == "tapps-mcp":
+            warnings.append(path.name)
+
+    if not warnings:
+        return CheckResult(
+            "uv PATH check",
+            True,
+            "MCP configs use uv-compatible launch (or no tapps-mcp entry found)",
+        )
+    extra = ctx["tapps_mcp_extra"]
+    return CheckResult(
+        "uv PATH check",
+        False,
+        f"MCP config(s) use bare 'tapps-mcp' command but project has "
+        f"tapps-mcp in uv extra '{extra}': {', '.join(warnings)}",
+        f"Re-run: tapps-mcp init --force (auto-detects uv) "
+        f"or use --uv --uv-extra {extra}",
+    )
+
+
 def check_plaintext_secrets(project_root: Path) -> CheckResult:
     """Warn when ``.mcp.json`` stores secrets (API keys/tokens) in plaintext (Issue #80.3)."""
     from tapps_mcp.distribution.setup_generator import _collect_plaintext_secrets
@@ -950,6 +1008,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_memory_pipeline_config(root))
     checks.append(check_dual_memory_server(root))
     checks.append(check_plaintext_secrets(root))
+    checks.append(check_uv_path_mismatch(root))
     if quick:
         checks.append(CheckResult(
             "Quality tools",

@@ -17,39 +17,40 @@ from tapps_mcp.tools.subprocess_runner import run_command, run_command_async
 
 _logger = structlog.get_logger(__name__)
 
-# Tools we check for, with their version flags and install hints
+# Tools we check for, with their version flags.
+# Install hints are generated dynamically by :func:`_install_hint` based on
+# the runtime environment (uv tool venv vs plain pip).
 _TOOL_SPECS: list[dict[str, str]] = [
-    {
-        "name": "ruff",
-        "version_flag": "--version",
-        "install_hint": "pip install ruff",
-    },
-    {
-        "name": "mypy",
-        "version_flag": "--version",
-        "install_hint": "pip install mypy",
-    },
-    {
-        "name": "bandit",
-        "version_flag": "--version",
-        "install_hint": "pip install bandit",
-    },
-    {
-        "name": "radon",
-        "version_flag": "--version",
-        "install_hint": "pip install radon",
-    },
-    {
-        "name": "vulture",
-        "version_flag": "--version",
-        "install_hint": "pip install vulture",
-    },
-    {
-        "name": "pip-audit",
-        "version_flag": "--version",
-        "install_hint": "pip install pip-audit",
-    },
+    {"name": "ruff", "version_flag": "--version"},
+    {"name": "mypy", "version_flag": "--version"},
+    {"name": "bandit", "version_flag": "--version"},
+    {"name": "radon", "version_flag": "--version"},
+    {"name": "vulture", "version_flag": "--version"},
+    {"name": "pip-audit", "version_flag": "--version"},
 ]
+
+
+def _is_uv_tool_env() -> bool:
+    """Return ``True`` when the MCP server is running inside a uv tool venv.
+
+    Detection: ``<sys.prefix>/uv-receipt.toml`` exists (written by
+    ``uv tool install``).  Cached for the process lifetime.
+    """
+    if not hasattr(_is_uv_tool_env, "_cached"):
+        _is_uv_tool_env._cached = (Path(sys.prefix) / "uv-receipt.toml").exists()  # type: ignore[attr-defined]
+    return _is_uv_tool_env._cached  # type: ignore[attr-defined]
+
+
+def _install_hint(tool_name: str) -> str:
+    """Return a context-aware install hint for *tool_name* (Issue #80.1).
+
+    When the server runs inside a uv tool venv the hint tells the user to
+    ``uv tool install tapps-mcp --with <tool>``.  Otherwise falls back to
+    ``pip install <tool>``.
+    """
+    if _is_uv_tool_env():
+        return f"uv tool install tapps-mcp --with {tool_name}"
+    return f"pip install {tool_name}"
 
 # Per-tool timeout overrides for version checks (seconds).
 # mypy can be slow on first run in cold environments.
@@ -254,7 +255,7 @@ def detect_installed_tools(*, force_refresh: bool = False) -> list[InstalledTool
                 name=name,
                 version=version,
                 available=available,
-                install_hint=spec["install_hint"] if not available else None,
+                install_hint=_install_hint(name) if not available else None,
             )
         )
 
@@ -283,7 +284,7 @@ async def _check_tool_async(spec: dict[str, str]) -> InstalledTool:
         name=name,
         version=version,
         available=available,
-        install_hint=spec["install_hint"] if not available else None,
+        install_hint=_install_hint(name) if not available else None,
     )
 
 

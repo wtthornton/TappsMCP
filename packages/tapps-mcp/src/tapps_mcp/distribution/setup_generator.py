@@ -267,9 +267,24 @@ def _build_server_entry(
     return entry
 
 
-def _build_docsmcp_server_entry(host: str) -> dict[str, Any]:
-    """Build the docs-mcp server entry (optional ``--with-docs-mcp``, Epic 80.7)."""
-    command, args = _resolve_docsmcp_launch()
+def _build_docsmcp_server_entry(
+    host: str,
+    *,
+    uv_launch: tuple[str, list[str]] | None = None,
+) -> dict[str, Any]:
+    """Build the docs-mcp server entry (optional ``--with-docs-mcp``, Epic 80.7).
+
+    When *uv_launch* is provided (consumer uv project, Issue #79 sub-issue),
+    mirrors the same ``uv run`` pattern but launches ``docsmcp serve`` instead
+    of ``tapps-mcp serve``.
+    """
+    if uv_launch is not None:
+        # Derive a docs-mcp equivalent: replace 'tapps-mcp' with 'docsmcp' in args.
+        command = uv_launch[0]
+        args = [("docsmcp" if a == "tapps-mcp" else a) for a in uv_launch[1]]
+        # Replace 'serve' keyword coming after the tool name — already present.
+    else:
+        command, args = _resolve_docsmcp_launch()
     project_root_value = "." if host == "claude-code" else "${workspaceFolder}"
     entry: dict[str, Any] = {
         "type": "stdio",
@@ -582,6 +597,7 @@ def _generate_config(
     upgrade_mode: bool = False,
     with_docs_mcp: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> bool:
     """Generate (or merge) the MCP config for the given host.
 
@@ -685,10 +701,19 @@ def _generate_config(
                     )
                 )
 
+    # Issue #79: inject extra env vars (e.g. Context7 API key) into tapps-mcp entry.
+    if extra_env:
+        tapps_entry = merged.get(servers_key, {}).get("tapps-mcp")
+        if isinstance(tapps_entry, dict):
+            env = tapps_entry.get("env")
+            if not isinstance(env, dict):
+                env = {}
+            tapps_entry["env"] = {**env, **extra_env}
+
     if with_docs_mcp:
         merged.setdefault(servers_key, {})
         old_docs = merged[servers_key].get("docs-mcp")
-        new_docs = _build_docsmcp_server_entry(host)
+        new_docs = _build_docsmcp_server_entry(host, uv_launch=uv_launch)
         if isinstance(old_docs, dict):
             old_env = old_docs.get("env")
             new_env = new_docs.get("env") or {}
@@ -920,6 +945,7 @@ def _configure_multiple_hosts(
     dry_run: bool = False,
     with_docs_mcp: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> bool:
     """Configure (or check) multiple hosts, reporting per-host results.
 
@@ -940,6 +966,7 @@ def _configure_multiple_hosts(
                 dry_run=dry_run,
                 with_docs_mcp=with_docs_mcp,
                 uv_launch=uv_launch,
+                extra_env=extra_env,
             )
             if ok and rules and not dry_run:
                 _generate_rules(host, project_root)
@@ -1205,6 +1232,7 @@ def run_init(
     with_docs_mcp: bool = False,
     uv_mode: str | None = None,
     uv_extra: str | None = None,
+    context7_api_key: str | None = None,
 ) -> bool:
     """Run the init command logic.
 
@@ -1224,6 +1252,9 @@ def run_init(
             use for platform rules. When ``None``, rules use medium or existing config.
         allow_package_init: Allow init when ``project_root`` is ``.../packages/tapps-mcp``.
         with_docs_mcp: Also register the docs-mcp server (Epic 80.7).
+        context7_api_key: When set, write ``TAPPS_MCP_CONTEXT7_API_KEY`` into the
+            MCP env block using ``${TAPPS_MCP_CONTEXT7_API_KEY}`` interpolation and
+            print an export reminder (Issue #79).
     """
     root = Path(project_root).resolve()
     log.info(
@@ -1280,6 +1311,22 @@ def run_init(
             )
         )
 
+    # Issue #79: build extra_env dict for Context7 key (uses ${VAR} interpolation
+    # so the literal key is never written to the config file).
+    extra_env: dict[str, str] | None = None
+    if context7_api_key:
+        extra_env = {"TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}"}
+        click.echo(
+            click.style(
+                "  Context7 configured — using ${TAPPS_MCP_CONTEXT7_API_KEY} interpolation.",
+                fg="cyan",
+            )
+        )
+        click.echo(
+            f"  Add to your shell profile:  "
+            f"export TAPPS_MCP_CONTEXT7_API_KEY='{context7_api_key}'"
+        )
+
     if mcp_host == "auto":
         hosts = _detect_hosts()
         if not hosts:
@@ -1302,6 +1349,7 @@ def run_init(
             dry_run=dry_run,
             with_docs_mcp=with_docs_mcp,
             uv_launch=uv_launch,
+            extra_env=extra_env,
         )
 
     if check:
@@ -1318,6 +1366,7 @@ def run_init(
         dry_run=dry_run,
         with_docs_mcp=with_docs_mcp,
         uv_launch=uv_launch,
+        extra_env=extra_env,
     )
     if ok and rules and not dry_run:
         _generate_rules(mcp_host, root, engagement_level=engagement_level)

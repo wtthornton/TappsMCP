@@ -1416,3 +1416,38 @@ class TestUvContextDetection:
         assert "--uv" in result.output
         assert "--no-uv" in result.output
         assert "--uv-extra" in result.output
+
+    def test_docsmcp_entry_uses_uv_launch(self, tmp_path):
+        """docs-mcp entry should use uv launch when provided (Issue #79 sub)."""
+        from tapps_mcp.distribution.setup_generator import _build_docsmcp_server_entry
+
+        uv_launch = ("uv", ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"])
+        entry = _build_docsmcp_server_entry("cursor", uv_launch=uv_launch)
+        assert entry["command"] == "uv"
+        # tapps-mcp should be replaced with docsmcp in args
+        assert "docsmcp" in entry["args"]
+        assert "tapps-mcp" not in entry["args"]
+        assert "serve" in entry["args"]
+
+    def test_generate_config_with_extra_env(self, tmp_path):
+        """extra_env should inject env vars into the tapps-mcp entry (Issue #79)."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        _generate_config(
+            "cursor",
+            project,
+            force=True,
+            extra_env={"TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}"},
+        )
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        entry = data["mcpServers"]["tapps-mcp"]
+        assert entry["env"]["TAPPS_MCP_CONTEXT7_API_KEY"] == "${TAPPS_MCP_CONTEXT7_API_KEY}"
+        # TAPPS_MCP_PROJECT_ROOT should still be present
+        assert "TAPPS_MCP_PROJECT_ROOT" in entry["env"]
+
+    def test_cli_init_has_with_context7_flag(self):
+        """CLI init should have --with-context7 flag."""
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", "--help"])
+        assert result.exit_code == 0
+        assert "--with-context7" in result.output

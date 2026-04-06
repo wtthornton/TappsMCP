@@ -27,6 +27,7 @@ from tapps_mcp.distribution.doctor import (
     check_mcp_client_config,
     check_scope_recommendation,
     check_stale_exe_backups,
+    check_uv_path_mismatch,
     check_vscode_config,
     run_doctor,
     run_doctor_structured,
@@ -1047,3 +1048,68 @@ class TestCheckPlaintextSecrets:
     def test_no_config_passes(self, tmp_path):
         result = check_plaintext_secrets(tmp_path)
         assert result.ok is True
+
+
+# ---------------------------------------------------------------------------
+# check_uv_path_mismatch (Issue #77)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckUvPathMismatch:
+    """Tests for the uv PATH mismatch doctor check."""
+
+    def test_passes_when_not_uv_project(self, tmp_path):
+        """Non-uv projects should pass (check skipped)."""
+        result = check_uv_path_mismatch(tmp_path)
+        assert result.ok is True
+
+    def test_passes_when_config_uses_uv_command(self, tmp_path):
+        """uv-managed project with uv command in MCP config should pass."""
+        # Create a uv project with tapps-mcp extra
+        (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "test"\n[project.optional-dependencies]\n'
+            'mcp = ["tapps-mcp"]\n',
+            encoding="utf-8",
+        )
+        # MCP config uses uv command
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps({
+                "mcpServers": {
+                    "tapps-mcp": {
+                        "command": "uv",
+                        "args": ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"],
+                    }
+                }
+            }),
+            encoding="utf-8",
+        )
+        with patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/usr/bin/uv"):
+            result = check_uv_path_mismatch(tmp_path)
+        assert result.ok is True
+
+    def test_warns_when_config_uses_bare_tapps_mcp(self, tmp_path):
+        """uv-managed project with bare tapps-mcp command should warn."""
+        (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "test"\n[project.optional-dependencies]\n'
+            'mcp = ["tapps-mcp"]\n',
+            encoding="utf-8",
+        )
+        # MCP config uses bare tapps-mcp command
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps({
+                "mcpServers": {
+                    "tapps-mcp": {
+                        "command": "tapps-mcp",
+                        "args": ["serve"],
+                    }
+                }
+            }),
+            encoding="utf-8",
+        )
+        with patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/usr/bin/uv"):
+            result = check_uv_path_mismatch(tmp_path)
+        assert result.ok is False
+        assert "bare" in result.message
+        assert ".mcp.json" in result.message

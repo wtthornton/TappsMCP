@@ -476,6 +476,10 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 | `--rules` / `--no-rules` | Generate platform rule files (default: yes). |
 | `--project-root PATH` | Project root (default: current dir). |
 | `--overwrite-tech-stack` | Overwrite existing TECH_STACK.md (default: skip if present). |
+| `--with-docs-mcp` | Also register the docs-mcp server in the generated MCP config. |
+| `--with-context7 KEY` | Write `TAPPS_MCP_CONTEXT7_API_KEY` to the env block (uses `${VAR}` interpolation). Pass `prompt` to be asked interactively. |
+| `--uv` / `--no-uv` | Force or disable `uv run` style MCP config (default: auto-detect from `uv.lock` + `pyproject.toml`). |
+| `--uv-extra NAME` | Optional-dependency group for `uv run --extra <name>` (default: auto-detect). |
 
 **What `tapps-mcp init` creates:**
 

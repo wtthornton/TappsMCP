@@ -12,6 +12,8 @@ import pytest
 from tapps_core.common.models import InstalledTool
 from tapps_mcp.tools.tool_detection import (
     _DISK_CACHE_MAX_AGE_SECONDS,
+    _install_hint,
+    _is_uv_tool_env,
     _read_disk_cache,
     _reset_tools_cache,
     _write_disk_cache,
@@ -355,3 +357,58 @@ class TestDiskCacheIntegration:
             # Second call uses memory cache (disk not even read)
             result2 = detect_installed_tools()
             assert len(result2) == 2
+
+
+# ---------------------------------------------------------------------------
+# Context-aware install hints (Issue #80.1)
+# ---------------------------------------------------------------------------
+
+
+class TestInstallHints:
+    """Tests for context-aware install hints."""
+
+    def test_pip_hint_when_not_uv(self, tmp_path: Path) -> None:
+        """Returns pip install hint when not in a uv tool environment."""
+        # Clear the cached value so our mock takes effect
+        if hasattr(_is_uv_tool_env, "_cached"):
+            delattr(_is_uv_tool_env, "_cached")
+        with patch("tapps_mcp.tools.tool_detection.Path") as mock_path:
+            mock_path.return_value.__truediv__ = lambda self, x: tmp_path / x
+            # uv-receipt.toml does not exist
+            (tmp_path / "uv-receipt.toml").unlink(missing_ok=True)
+            # Need to patch Path(sys.prefix) to return tmp_path
+            mock_path.side_effect = lambda x: tmp_path if x == sys.prefix else Path(x)
+            # Simplest: just clear and re-check
+            if hasattr(_is_uv_tool_env, "_cached"):
+                delattr(_is_uv_tool_env, "_cached")
+            # Patch at the function level
+            with patch(
+                "tapps_mcp.tools.tool_detection._is_uv_tool_env", return_value=False,
+            ):
+                hint = _install_hint("bandit")
+            assert hint == "pip install bandit"
+        # Clean up
+        if hasattr(_is_uv_tool_env, "_cached"):
+            delattr(_is_uv_tool_env, "_cached")
+
+    def test_uv_hint_when_in_uv_env(self) -> None:
+        """Returns uv tool install hint when in a uv tool environment."""
+        if hasattr(_is_uv_tool_env, "_cached"):
+            delattr(_is_uv_tool_env, "_cached")
+        with patch(
+            "tapps_mcp.tools.tool_detection._is_uv_tool_env", return_value=True,
+        ):
+            hint = _install_hint("bandit")
+        assert hint == "uv tool install tapps-mcp --with bandit"
+        if hasattr(_is_uv_tool_env, "_cached"):
+            delattr(_is_uv_tool_env, "_cached")
+
+    def test_uv_hint_for_pip_audit(self) -> None:
+        """Hyphenated tool names preserved in hint."""
+        with patch(
+            "tapps_mcp.tools.tool_detection._is_uv_tool_env", return_value=True,
+        ):
+            hint = _install_hint("pip-audit")
+        assert hint == "uv tool install tapps-mcp --with pip-audit"
+        if hasattr(_is_uv_tool_env, "_cached"):
+            delattr(_is_uv_tool_env, "_cached")

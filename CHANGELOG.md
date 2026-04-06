@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-04-06
+
+### Fixed
+
+- **tapps-mcp: Context-aware install hints (#80.1)** — When running in a uv tool venv, checker install hints now say `uv tool install tapps-mcp --with bandit` instead of the incorrect `pip install bandit`. Detects uv environment via `uv-receipt.toml` in `sys.prefix`.
+- **tapps-mcp: docs-mcp init path placeholder (#79 sub-issue)** — `--with-docs-mcp` now uses the same `uv run` launch pattern as the tapps-mcp entry for consumer uv projects, instead of falling back to an unresolved `<PATH_TO_TAPPS_MCP_MONOREPO_ROOT>` placeholder.
+
+### Added
+
+- **tapps-mcp: `--with-context7` init flag (#79)** — New `tapps-mcp init --with-context7 KEY` option writes `${TAPPS_MCP_CONTEXT7_API_KEY}` env-var interpolation to the MCP config (never stores plaintext) and prints an `export` reminder. Pass `prompt` for interactive input.
+- **tapps-mcp: Doctor uv PATH mismatch check (#77)** — `tapps_doctor` now warns when MCP config uses bare `tapps-mcp` command but the project has `tapps-mcp` in a uv optional-dependency extra. Suggests re-running `init --force` for auto-detection.
+- Version bump: tapps-core 1.17.1 → 1.18.0, tapps-mcp 1.17.1 → 1.18.0, docs-mcp 1.17.1 → 1.18.0
+
 ## [1.17.1] - 2026-04-06
 
 ### Fixed
