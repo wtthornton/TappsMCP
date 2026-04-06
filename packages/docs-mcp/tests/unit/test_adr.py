@@ -373,7 +373,6 @@ class TestADRMCPTool:
         data = result["data"]
         assert data["template"] == "madr"
         assert data["filename"].startswith("0001-")
-        assert "content" in data
         assert "written_to" in data
 
     async def test_generate_adr_nygard_template(self, tmp_path: Path) -> None:
@@ -395,7 +394,8 @@ class TestADRMCPTool:
 
         assert result["success"] is True
         assert result["data"]["template"] == "nygard"
-        assert "What is the issue" in result["data"]["content"]
+        written = (root / result["data"]["written_to"]).read_text()
+        assert "What is the issue" in written
 
     async def test_generate_adr_invalid_root(self, tmp_path: Path) -> None:
         """Non-existent project root returns an error."""

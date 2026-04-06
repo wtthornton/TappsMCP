@@ -738,7 +738,9 @@ class TestDocsGenerateStoryTool:
         assert result["data"]["title"] == "My Story"
         assert result["data"]["epic_number"] == 10
         assert result["data"]["story_number"] == 1
-        assert "# Story 10.1 -- My Story" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        written = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        assert "# Story 10.1 -- My Story" in written
 
     async def test_invalid_root(self, tmp_path: Path) -> None:
         bad_root = tmp_path / "does_not_exist"
@@ -802,7 +804,9 @@ class TestDocsGenerateStoryTool:
             )
 
         assert result["success"] is True
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "**As a** developer" in content
         assert "**I want** to test features" in content
         assert "**so that** quality improves" in content
@@ -823,7 +827,10 @@ class TestDocsGenerateStoryTool:
             )
 
         assert result["success"] is True
-        assert "```gherkin" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        written = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        assert "```gherkin" in written
         assert result["data"]["criteria_format"] == "gherkin"
 
     async def test_comprehensive_style(self, tmp_path: Path) -> None:
@@ -841,7 +848,10 @@ class TestDocsGenerateStoryTool:
             )
 
         assert result["success"] is True
-        assert "## INVEST Checklist" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        written = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        assert "## INVEST Checklist" in written
 
     async def test_write_to_file(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
@@ -885,7 +895,9 @@ class TestDocsGenerateStoryTool:
 
         assert result["success"] is True
         assert result["data"]["task_count"] == 2
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "Create model (`src/models.py`)" in content
         assert "Write tests" in content
 
@@ -907,7 +919,9 @@ class TestDocsGenerateStoryTool:
             )
 
         assert result["success"] is True
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "- [ ] AC1" in content
         assert "`src/a.py`" in content
 
@@ -1407,7 +1421,9 @@ class TestDocsGenerateStoryQuickStart:
 
         assert result["success"] is True
         assert result["data"]["quick_start"] is True
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "**As a** developer" in content
         assert "**I want** to login validation" in content
         assert "**Points:** 3" in content
@@ -1432,7 +1448,9 @@ class TestDocsGenerateStoryQuickStart:
             )
 
         assert result["success"] is True
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "**As a** admin" in content
         assert "**As a** developer" not in content
 

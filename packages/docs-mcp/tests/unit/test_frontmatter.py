@@ -217,7 +217,7 @@ class TestDocsGenerateFrontmatterTool:
 
         with (
             patch("docs_mcp.server_gen_tools._get_settings") as mock_settings,
-            patch("docs_mcp.server_gen_tools.can_write_to_project", return_value=True),
+            patch("docs_mcp.server_helpers.can_write_to_project", return_value=True),
         ):
             mock_settings.return_value = make_settings(tmp_path)
             result = await docs_generate_frontmatter(
@@ -236,7 +236,7 @@ class TestDocsGenerateFrontmatterTool:
 
         with (
             patch("docs_mcp.server_gen_tools._get_settings") as mock_settings,
-            patch("docs_mcp.server_gen_tools.can_write_to_project", return_value=False),
+            patch("docs_mcp.server_helpers.can_write_to_project", return_value=False),
         ):
             mock_settings.return_value = make_settings(tmp_path)
             result = await docs_generate_frontmatter(
@@ -245,4 +245,4 @@ class TestDocsGenerateFrontmatterTool:
             )
 
         assert result["success"] is True
-        assert result["data"].get("content_return") is True
+        assert "content" in result["data"]

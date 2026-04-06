@@ -211,7 +211,8 @@ class TestDocsGenerateLlmsTxtTool:
 
         assert result["success"] is True
         assert result["data"]["mode"] == "compact"
-        assert "content" in result["data"]
+        # Tier 1 (written_to) or Tier 2 (content inline) depending on write mode
+        assert "written_to" in result["data"] or "content" in result["data"]
 
     async def test_full_mode(self, tmp_path: Path) -> None:
         _make_pyproject(tmp_path)
@@ -245,7 +246,7 @@ class TestDocsGenerateLlmsTxtTool:
 
         with (
             patch("docs_mcp.server_gen_tools._get_settings") as mock_settings,
-            patch("docs_mcp.server_gen_tools.can_write_to_project", return_value=False),
+            patch("docs_mcp.server_helpers.can_write_to_project", return_value=False),
         ):
             mock_settings.return_value = make_settings(tmp_path)
             result = await docs_generate_llms_txt(
@@ -255,5 +256,4 @@ class TestDocsGenerateLlmsTxtTool:
             )
 
         assert result["success"] is True
-        assert result["data"].get("content_return") is True
-        assert "file_manifest" in result["data"]
+        assert "content" in result["data"]

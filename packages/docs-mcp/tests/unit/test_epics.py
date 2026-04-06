@@ -1068,7 +1068,9 @@ class TestDocsGenerateEpicTool:
         assert result["success"] is True
         assert result["data"]["title"] == "My Feature"
         assert result["data"]["number"] == 10
-        assert "# Epic 10: My Feature" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        written = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        assert "# Epic 10: My Feature" in written
         assert "timing_ms" in result["data"]
         assert "total_ms" in result["data"]["timing_ms"]
 
@@ -1119,7 +1121,9 @@ class TestDocsGenerateEpicTool:
             )
 
         assert result["success"] is True
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "Epic 0, Epic 4" in content
         assert "- [ ] AC1" in content
         assert "- [ ] AC2" in content
@@ -1141,7 +1145,10 @@ class TestDocsGenerateEpicTool:
             )
 
         assert result["success"] is True
-        assert "## Implementation Order" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        written = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        assert "## Implementation Order" in written
 
     async def test_write_to_file(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
@@ -1185,8 +1192,11 @@ class TestDocsGenerateEpicTool:
 
         assert result["success"] is True
         assert result["data"]["story_count"] == 2
-        assert "### 10.1 -- Data Models" in result["data"]["content"]
-        assert "### 10.2 -- API" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        assert "### 10.1 -- Data Models" in content
+        assert "### 10.2 -- API" in content
 
     async def test_generation_error_handling(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
@@ -1252,7 +1262,9 @@ class TestDocsGenerateEpicQuickStart:
 
         assert result["success"] is True
         assert result["data"]["quick_start"] is True
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "Implement Auth System" in content
         assert "Foundation & Setup" in content
         assert "Core Implementation" in content
@@ -1276,7 +1288,9 @@ class TestDocsGenerateEpicQuickStart:
             )
 
         assert result["success"] is True
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        root = tmp_path / "proj"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "Custom goal text" in content
         assert "Implement Auth System" not in content
 
@@ -1817,7 +1831,8 @@ class TestEpicFileHintsMCPTool:
                 project_root=str(tmp_path),
             )
 
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        content = (tmp_path / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "## Files Affected" in content
         assert "`setup.py`" in content
 
@@ -1833,7 +1848,8 @@ class TestEpicFileHintsMCPTool:
             )
 
         # Should not have file-hint style table
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        content = (tmp_path / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "Public Symbols" not in content
 
     async def test_tool_files_without_auto_populate(self, tmp_path: Path) -> None:
@@ -1851,7 +1867,8 @@ class TestEpicFileHintsMCPTool:
                 project_root=str(tmp_path),
             )
 
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        content = (tmp_path / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "## Files Affected" in content
         assert "`README.md`" in content
 

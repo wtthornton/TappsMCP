@@ -575,7 +575,9 @@ class TestDocsGenerateInteractiveDiagramsTool:
 
         assert result["success"] is True
         assert result["data"]["diagram_count"] >= 1
-        assert "<!DOCTYPE html>" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        written = (tmp_path / result["data"]["written_to"]).read_text()
+        assert "<!DOCTYPE html>" in written
 
     async def test_no_types(self, tmp_path: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_interactive_diagrams

@@ -57,7 +57,9 @@ class TestDocsGenerateReadme:
         data = result["data"]
         assert data["style"] == "standard"
         assert data["content_length"] > 0
-        assert "# test-proj" in data["content"]
+        assert "written_to" in data
+        written = (root / data["written_to"]).read_text(encoding="utf-8")
+        assert "# test-proj" in written
 
     async def test_generate_readme_minimal(self, tmp_path: Path) -> None:
         """Minimal style generates a simpler README."""
@@ -78,11 +80,12 @@ class TestDocsGenerateReadme:
             result = await docs_generate_readme(style="minimal", project_root=str(root))
 
         assert result["success"] is True
-        content = result["data"]["content"]
-        assert "# mini" in content
-        assert "## Installation" in content
+        assert "written_to" in result["data"]
+        written = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        assert "# mini" in written
+        assert "## Installation" in written
         # Minimal should not have Features
-        assert "## Features" not in content
+        assert "## Features" not in written
 
     async def test_generate_readme_invalid_style(self, tmp_path: Path) -> None:
         """Invalid style returns an error response."""
@@ -130,7 +133,9 @@ class TestDocsGenerateReadme:
         data = result["data"]
         assert data["merged"] is True
         # User content should be preserved
-        assert "User content here" in data["content"]
+        assert "written_to" in data
+        written = (root / data["written_to"]).read_text(encoding="utf-8")
+        assert "User content here" in written
 
     async def test_generate_readme_no_merge(self, tmp_path: Path) -> None:
         """When merge=False, existing content is replaced entirely."""
@@ -157,7 +162,9 @@ class TestDocsGenerateReadme:
         assert result["success"] is True
         data = result["data"]
         assert data["merged"] is False
-        assert "# no-merge" in data["content"]
+        assert "written_to" in data
+        written = (root / data["written_to"]).read_text()
+        assert "# no-merge" in written
 
     async def test_generate_readme_response_envelope(self, tmp_path: Path) -> None:
         """Response has the standard success_response envelope."""
@@ -272,7 +279,9 @@ class TestDocsGenerateChangelog:
 
         assert result["success"] is True
         assert result["data"]["version_count"] == 1
-        assert "# Changelog" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        written = (root / result["data"]["written_to"]).read_text()
+        assert "# Changelog" in written
 
     async def test_generate_changelog_response_envelope(self, tmp_path: Path) -> None:
         """Response has correct structure."""
@@ -305,7 +314,7 @@ class TestDocsGenerateChangelog:
         assert result["success"] is True
         assert result["elapsed_ms"] >= 0
         assert "format" in result["data"]
-        assert "content" in result["data"]
+        assert "written_to" in result["data"] or "content" in result["data"]
 
     async def test_generate_changelog_conventional_format(self, tmp_path: Path) -> None:
         """Conventional format works correctly."""
@@ -343,7 +352,9 @@ class TestDocsGenerateChangelog:
 
         assert result["success"] is True
         assert result["data"]["format"] == "conventional"
-        assert "# Changelog" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        written = (root / result["data"]["written_to"]).read_text()
+        assert "# Changelog" in written
 
 
 # ---------------------------------------------------------------------------

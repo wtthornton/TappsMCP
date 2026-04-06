@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -177,6 +178,87 @@ def _get_docsmcp_version() -> str:
         return __version__
     except (ImportError, AttributeError):
         return "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Three-tier output helper (write-first / inline / manifest)
+# ---------------------------------------------------------------------------
+
+_INLINE_THRESHOLD = 20_000  # 20K chars
+
+
+def _count_sections(content: str) -> int:
+    """Count markdown heading sections in content."""
+    count = 0
+    if content.startswith("# "):
+        count += 1
+    count += content.count("\n# ")
+    count += content.count("\n## ")
+    return count
+
+
+async def finalize_output(
+    tool_name: str,
+    content: str,
+    output_path: str,
+    root: Path,
+    *,
+    description: str = "",
+) -> dict[str, Any]:
+    """Three-tier output handler for generator tools.
+
+    **Tier 1 — write-first** (writable filesystem): write to disk, return
+    summary only (path, size, section_count).  Never includes ``content``.
+
+    **Tier 2 — inline** (read-only, content < 20 K chars): return content
+    directly in the response.
+
+    **Tier 3 — manifest** (read-only, content >= 20 K chars): return a
+    ``FileManifest`` so the AI client can apply the file.
+
+    Returns a dict fragment to **merge** into the tool's ``data`` dict.
+    If a write error occurs the returned dict is a full ``error_response``
+    (has ``"success": False``).
+    """
+    fragment: dict[str, Any] = {
+        "output_path": output_path,
+        "content_length": len(content),
+    }
+
+    # Section count is meaningful for markdown, not HTML
+    if not output_path.endswith((".html", ".htm", ".txt")):
+        fragment["section_count"] = _count_sections(content)
+
+    if can_write_to_project(root):
+        # Tier 1: write to disk, return metadata only
+        try:
+            from tapps_core.security.path_validator import PathValidator
+
+            validator = PathValidator(root)
+            write_path = validator.validate_write_path(output_path)
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
+            fragment["written_to"] = str(write_path.relative_to(root)).replace(
+                "\\", "/"
+            )
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            return error_response(
+                tool_name, "WRITE_ERROR", f"Failed to write: {exc}"
+            )
+    elif len(content) < _INLINE_THRESHOLD:
+        # Tier 2: small content, inline it
+        fragment["content"] = content
+    else:
+        # Tier 3: large content, use FileManifest
+        fragment["content_return"] = True
+        fragment["file_manifest"] = build_generator_manifest(
+            tool_name,
+            content,
+            output_path,
+            description=description,
+        )
+
+    return fragment
 
 
 def build_custom_terms_for_style(

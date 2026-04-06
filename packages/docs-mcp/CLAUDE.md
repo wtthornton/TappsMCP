@@ -134,7 +134,19 @@ The MCP server is split across five tool files sharing the same `mcp` FastMCP in
 - **`server_git_tools.py`** -- `docs_git_summary`
 - **`server_gen_tools.py`** -- `docs_generate_readme`, `docs_generate_changelog`, `docs_generate_release_notes`, `docs_generate_api`, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing`, `docs_generate_prd`, `docs_generate_diagram`, `docs_generate_architecture`, `docs_generate_epic`, `docs_generate_story`, `docs_generate_prompt`, `docs_generate_llms_txt`, `docs_generate_frontmatter`, `docs_generate_interactive_diagrams`, `docs_generate_purpose`, `docs_generate_doc_index`
 - **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`, `docs_validate_epic`, `docs_check_diataxis`, `docs_check_cross_refs`, `docs_check_style`
-- **`server_helpers.py`** -- Response builders (`error_response`, `success_response`), settings singleton (`_get_settings`)
+- **`server_helpers.py`** -- Response builders (`error_response`, `success_response`), settings singleton (`_get_settings`), three-tier output helper (`finalize_output`)
+
+### Generator output behavior (three-tier)
+
+All generator tools use `finalize_output()` from `server_helpers.py` for a consistent output strategy:
+
+| Tier | Condition | Behavior |
+|------|-----------|----------|
+| **1 — Write-first** | Writable filesystem | Write to disk, return summary only (`written_to`, `output_path`, `content_length`, `section_count`). **No `content` key.** |
+| **2 — Inline** | Read-only + content < 20K chars | Return `content` directly in the response |
+| **3 — Manifest** | Read-only + content >= 20K chars | Return `FileManifest` via `build_generator_manifest()` |
+
+All generators auto-compute a default `output_path` when the caller omits it (e.g. `CHANGELOG.md`, `docs/api/reference.md`, `docs/epics/EPIC-{number}.md`). `docs_generate_diagram` is exempt (returns inline diagram code).
 
 ### Configuration
 

@@ -742,7 +742,7 @@ class TestAPIDocMCPTool:
         assert data["format"] == "markdown"
         assert data["depth"] == "public"
         assert data["content_length"] > 0
-        assert "content" in data
+        assert "written_to" in data
 
     async def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
         """Non-existent project root returns an error."""

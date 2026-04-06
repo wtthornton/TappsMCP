@@ -567,8 +567,8 @@ class TestDocsGenerateOnboarding:
         data = result["data"]
         assert data["content_length"] > 0
         assert "written_to" in data
-        assert "content" in data
-        assert "Getting Started" in data["content"]
+        written = (root / data["written_to"]).read_text()
+        assert "Getting Started" in written
 
     async def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
         """Non-existent project root returns error with INVALID_ROOT code."""
@@ -618,8 +618,8 @@ class TestDocsGenerateContributing:
         data = result["data"]
         assert data["content_length"] > 0
         assert "written_to" in data
-        assert "content" in data
-        assert "Contributing to" in data["content"]
+        written = (root / data["written_to"]).read_text()
+        assert "Contributing to" in written
 
     async def test_invalid_root_returns_error(self, tmp_path: Path) -> None:
         """Non-existent project root returns error with INVALID_ROOT code."""

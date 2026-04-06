@@ -22,9 +22,8 @@ from docs_mcp.server import (
 )
 from docs_mcp.server_helpers import (
     _get_settings,
-    build_generator_manifest,
-    can_write_to_project,
     error_response,
+    finalize_output,
     success_response,
 )
 
@@ -110,39 +109,24 @@ async def docs_generate_changelog(
             f"Failed to generate changelog: {exc}",
         )
 
-    # Optionally write to file (or content-return in Docker mode)
-    written_path = ""
-    if output_path and can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    # Auto-compute output_path when not provided
+    target = output_path.strip() or "CHANGELOG.md"
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(output_path)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_changelog",
-                "WRITE_ERROR",
-                f"Failed to write changelog: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_changelog", content, target, root,
+        description="CHANGELOG file.",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
     data: dict[str, Any] = {
         "format": format,
         "version_count": len(versions),
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_changelog", content, output_path,
-            description="CHANGELOG file.",
-        )
 
     return success_response("docs_generate_changelog", elapsed_ms, data)
 
@@ -318,36 +302,27 @@ async def docs_generate_readme(
         final_content = generated
         merge_stats = {"merged": False}
 
-    # Write output (or content-return in Docker mode)
+    # Resolve relative path for output
     if out.is_relative_to(root):
         rel_path = str(out.relative_to(root)).replace("\\", "/")
     else:
         rel_path = str(out)
 
-    written = False
-    if can_write_to_project(root):
-        try:
-            out.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(out.write_text, final_content, encoding="utf-8")
-            written = True
-        except OSError as exc:
-            return error_response("docs_generate_readme", "WRITE_ERROR", str(exc))
+    # Three-tier output: write-first / inline / manifest
+    out_result = await finalize_output(
+        "docs_generate_readme", final_content, rel_path, root,
+        description="Project README.",
+    )
+    if not out_result.get("success", True):
+        return out_result
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
     data: dict[str, Any] = {
-        "output_path": rel_path,
         "style": style,
-        "content_length": len(final_content),
-        "content": final_content,
         **merge_stats,
+        **out_result,
     }
-    if not written:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_readme", final_content, rel_path,
-            description="Project README.",
-        )
 
     return success_response(
         "docs_generate_readme",
@@ -431,40 +406,30 @@ async def docs_generate_api(
             "No documentable content found in the source path.",
         )
 
-    # Optionally write to file (or content-return in Docker mode)
-    written_path = ""
-    if output_path and can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    # Auto-compute output_path when not provided
+    if output_path.strip():
+        target = output_path.strip()
+    else:
+        # Derive from source_path: docs/api/{source}.md
+        slug = Path(source_path).stem if source_path else "reference"
+        ext = ".rst" if format == "sphinx_rst" else ".md"
+        target = f"docs/api/{slug}{ext}"
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(output_path)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_api",
-                "WRITE_ERROR",
-                f"Failed to write API docs: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_api", content, target, root,
+        description="API reference documentation.",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
     data: dict[str, Any] = {
         "format": format,
         "depth": depth,
-        "content_length": len(content),
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_api", content, output_path,
-            description="API reference documentation.",
-        )
 
     return success_response("docs_generate_api", elapsed_ms, data)
 
@@ -534,52 +499,29 @@ async def docs_generate_adr(
             f"Failed to generate ADR: {exc}",
         )
 
-    # Write the ADR file (or content-return in Docker mode)
+    # Resolve the target path
     write_target = output_path if output_path else filename
-    written_path = ""
-    if can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    if not Path(write_target).is_absolute():
+        adr_base = str(adr_dir) if adr_dir else "docs/decisions"
+        adr_rel = f"{adr_base}/{write_target}"
+    else:
+        adr_rel = write_target
 
-            validator = PathValidator(root)
-            actual_dir = adr_dir if adr_dir else root / "docs" / "decisions"
-            full_path = (
-                actual_dir / write_target
-                if not Path(write_target).is_absolute()
-                else Path(write_target)
-            )
-            write_path = validator.validate_write_path(str(full_path))
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_adr",
-                "WRITE_ERROR",
-                f"Failed to write ADR: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_adr", content, adr_rel, root,
+        description=f"Architecture Decision Record: {title}",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-
-    # Build relative path for content-return mode
-    adr_rel = write_target
-    if not written_path and not Path(write_target).is_absolute():
-        adr_base = "docs/decisions" if not adr_dir else str(adr_dir)
-        adr_rel = f"{adr_base}/{write_target}"
 
     data: dict[str, Any] = {
         "template": template,
         "filename": filename,
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    else:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_adr", content, adr_rel,
-            description=f"Architecture Decision Record: {title}",
-        )
 
     return success_response("docs_generate_adr", elapsed_ms, data)
 
@@ -629,39 +571,20 @@ async def docs_generate_onboarding(
             "Could not generate onboarding content for this project.",
         )
 
-    # Write to file (or content-return in Docker mode)
-    target = output_path if output_path else "docs/ONBOARDING.md"
-    written_path = ""
-    if can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    # Auto-compute output_path when not provided
+    target = output_path.strip() or "docs/ONBOARDING.md"
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(target)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_onboarding",
-                "WRITE_ERROR",
-                f"Failed to write onboarding guide: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_onboarding", content, target, root,
+        description="Getting-started / onboarding guide.",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
-    data: dict[str, Any] = {
-        "content_length": len(content),
-        "content": content,
-    }
-    if written_path:
-        data["written_to"] = written_path
-    else:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_onboarding", content, target,
-            description="Getting-started / onboarding guide.",
-        )
+    data: dict[str, Any] = {**out}
 
     return success_response("docs_generate_onboarding", elapsed_ms, data)
 
@@ -711,39 +634,20 @@ async def docs_generate_contributing(
             "Could not generate contributing content for this project.",
         )
 
-    # Write to file (or content-return in Docker mode)
-    target = output_path if output_path else "CONTRIBUTING.md"
-    written_path = ""
-    if can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    # Auto-compute output_path when not provided
+    target = output_path.strip() or "CONTRIBUTING.md"
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(target)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_contributing",
-                "WRITE_ERROR",
-                f"Failed to write contributing guide: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_contributing", content, target, root,
+        description="Contribution guide with development setup and PR workflow.",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
-    data: dict[str, Any] = {
-        "content_length": len(content),
-        "content": content,
-    }
-    if written_path:
-        data["written_to"] = written_path
-    else:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_contributing", content, target,
-            description="Contribution guide with development setup and PR workflow.",
-        )
+    data: dict[str, Any] = {**out}
 
     return success_response("docs_generate_contributing", elapsed_ms, data)
 
@@ -876,23 +780,20 @@ async def docs_generate_prd(
     else:
         merge_stats = {"merged": False}
 
-    # Optionally write to file (or content-return in Docker mode)
-    written_path = ""
-    if output_path and can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    # Auto-compute output_path when not provided
+    if output_path.strip():
+        target = output_path.strip()
+    else:
+        slug = title.strip().replace(" ", "-").lower()[:60]
+        target = f"docs/PRD-{slug}.md"
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(output_path)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_prd",
-                "WRITE_ERROR",
-                f"Failed to write PRD: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_prd", content, target, root,
+        description=f"Product Requirements Document: {title}",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -900,18 +801,9 @@ async def docs_generate_prd(
         "title": title,
         "style": style,
         "auto_populated": auto_populate,
-        "content_length": len(content),
-        "content": content,
         **merge_stats,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_prd", content, output_path,
-            description=f"Product Requirements Document: {title}",
-        )
 
     return success_response(
         "docs_generate_prd",
@@ -1083,22 +975,16 @@ async def docs_generate_architecture(
             "No content generated for architecture report.",
         )
 
-    # Optionally write to disk (or content-return in Docker mode)
-    written_path = ""
-    if output_path and can_write_to_project(root):
-        try:
-            out = Path(output_path)
-            if not out.is_absolute():
-                out = root / out
-            out.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(out.write_text, result.content, encoding="utf-8")
-            written_path = str(out)
-        except Exception as exc:
-            return error_response(
-                "docs_generate_architecture",
-                "WRITE_ERROR",
-                f"Failed to write architecture report: {exc}",
-            )
+    # Auto-compute output_path when not provided
+    target = output_path.strip() or "docs/architecture.html"
+
+    # Three-tier output: write-first / inline / manifest
+    out_data = await finalize_output(
+        "docs_generate_architecture", result.content, target, root,
+        description="Architecture report (HTML with SVG diagrams).",
+    )
+    if not out_data.get("success", True):
+        return out_data
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -1108,16 +994,8 @@ async def docs_generate_architecture(
         "module_count": result.module_count,
         "edge_count": result.edge_count,
         "class_count": result.class_count,
-        "content": result.content,
+        **out_data,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_architecture", result.content, output_path,
-            description="Architecture report (HTML with SVG diagrams).",
-        )
 
     return success_response(
         "docs_generate_architecture",
@@ -1331,23 +1209,22 @@ async def docs_generate_epic(
             f"Failed to generate epic: {exc}",
         )
 
-    # Optionally write to file (or content-return in Docker mode)
-    written_path = ""
-    if output_path and can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    # Auto-compute output_path when not provided
+    if output_path.strip():
+        target = output_path.strip()
+    elif number:
+        target = f"docs/epics/EPIC-{number}.md"
+    else:
+        slug = title.strip().replace(" ", "-").lower()[:60]
+        target = f"docs/epics/EPIC-{slug}.md"
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(output_path)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_epic",
-                "WRITE_ERROR",
-                f"Failed to write epic: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_epic", content, target, root,
+        description=f"Epic planning document: {title}",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -1358,18 +1235,9 @@ async def docs_generate_epic(
         "story_count": len(story_list),
         "auto_populated": auto_populate,
         "quick_start": quick_start,
-        "content_length": len(content),
-        "content": content,
         "timing_ms": timing_ms,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_epic", content, output_path,
-            description=f"Epic planning document: {title}",
-        )
 
     return success_response(
         "docs_generate_epic",
@@ -1556,23 +1424,22 @@ async def docs_generate_story(
             f"Failed to generate story: {exc}",
         )
 
-    # Optionally write to file (or content-return in Docker mode)
-    written_path = ""
-    if output_path and can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    # Auto-compute output_path when not provided
+    if output_path.strip():
+        target = output_path.strip()
+    elif epic_number and story_number:
+        target = f"docs/epics/stories/STORY-{epic_number}.{story_number}.md"
+    else:
+        slug = title.strip().replace(" ", "-").lower()[:60]
+        target = f"docs/epics/stories/STORY-{slug}.md"
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(output_path)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_story",
-                "WRITE_ERROR",
-                f"Failed to write story: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_story", content, target, root,
+        description=f"User story: {title}",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -1585,17 +1452,8 @@ async def docs_generate_story(
         "task_count": len(task_list),
         "auto_populated": auto_populate,
         "quick_start": quick_start,
-        "content_length": len(content),
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_story", content, output_path,
-            description=f"User story: {title}",
-        )
 
     return success_response(
         "docs_generate_story",
@@ -1726,44 +1584,28 @@ async def docs_generate_prompt(
         gen.generate_compact(config) if compact_llm_view else gen.generate(config)
     )
 
-    written_path = ""
+    # Auto-compute output_path when not provided
     slug = name.strip().replace(" ", "-").lower()
     if not slug.endswith(".md"):
         slug += ".md"
     rel = output_path.strip() or f"docs/prompts/{slug}"
     if not rel.endswith(".md"):
         rel += ".md"
-    if can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(rel)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_prompt",
-                "WRITE_ERROR",
-                f"Failed to write prompt: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_prompt", content, rel, root,
+        description=f"Prompt template: {name}",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     data: dict[str, Any] = {
         "name": name,
         "style": style,
-        "content_length": len(content),
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    else:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_prompt", content, rel,
-            description=f"Prompt template: {name}",
-        )
 
     return success_response(
         "docs_generate_prompt",
@@ -1843,40 +1685,27 @@ async def docs_generate_llms_txt(
             f"Failed to generate llms.txt: {exc}",
         )
 
-    # Optionally write to file
-    written_path = ""
-    if output_path and can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    # Auto-compute output_path when not provided
+    if output_path.strip():
+        target = output_path.strip()
+    else:
+        target = "llms-full.txt" if mode == "full" else "llms.txt"
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(output_path)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_llms_txt",
-                "WRITE_ERROR",
-                f"Failed to write llms.txt: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_llms_txt", content, target, root,
+        description="Machine-readable llms.txt project summary for AI assistants.",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
     data: dict[str, Any] = {
         "mode": result.mode,
-        "section_count": result.section_count,
         "project_name": result.project_name,
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_llms_txt", content, output_path,
-            description="Machine-readable llms.txt project summary for AI assistants.",
-        )
 
     return success_response(
         "docs_generate_llms_txt",
@@ -1952,18 +1781,13 @@ async def docs_generate_frontmatter(
             f"Failed to generate frontmatter: {exc}",
         )
 
-    # Write back if we can
-    written_path = ""
-    if can_write_to_project(root):
-        try:
-            await asyncio.to_thread(target.write_text, content, encoding="utf-8")
-            written_path = str(target.relative_to(root)).replace("\\", "/")
-        except OSError as exc:
-            return error_response(
-                "docs_generate_frontmatter",
-                "WRITE_ERROR",
-                f"Failed to write frontmatter: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_frontmatter", content, file_path, root,
+        description=f"Markdown file with updated YAML frontmatter: {file_path}",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -1972,16 +1796,8 @@ async def docs_generate_frontmatter(
         "fields_added": result.fields_added,
         "fields_preserved": result.fields_preserved,
         "had_existing": result.had_existing,
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif not can_write_to_project(root):
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_frontmatter", content, file_path,
-            description=f"Markdown file with updated YAML frontmatter: {file_path}",
-        )
 
     return success_response(
         "docs_generate_frontmatter",
@@ -2085,40 +1901,24 @@ async def docs_generate_interactive_diagrams(
     )
     content = html_result.content
 
-    # Optionally write to file
-    written_path = ""
-    if output_path and can_write_to_project(root):
-        try:
-            from tapps_core.security.path_validator import PathValidator
+    # Auto-compute output_path when not provided
+    target = output_path.strip() or "docs/architecture-diagrams.html"
 
-            validator = PathValidator(root)
-            write_path = validator.validate_write_path(output_path)
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_interactive_diagrams",
-                "WRITE_ERROR",
-                f"Failed to write interactive diagrams: {exc}",
-            )
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_interactive_diagrams", content, target, root,
+        description="Interactive HTML architecture diagrams with Mermaid.js.",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
     data: dict[str, Any] = {
         "diagram_count": html_result.diagram_count,
         "title": html_result.title,
-        "content_length": len(content),
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_interactive_diagrams", content, output_path,
-            description="Interactive HTML architecture diagrams with Mermaid.js.",
-        )
 
     return success_response(
         "docs_generate_interactive_diagrams",
@@ -2187,37 +1987,25 @@ async def docs_generate_purpose(
         )
 
     content = result.content
-    written_path = ""
 
-    if output_path and can_write_to_project(root):
-        write_path = root / output_path
-        try:
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_purpose",
-                "WRITE_ERROR",
-                f"Failed to write purpose template: {exc}",
-            )
+    # Auto-compute output_path when not provided
+    target = output_path.strip() or "docs/PURPOSE.md"
+
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_purpose", content, target, root,
+        description="Architecture purpose/intent template.",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
     data: dict[str, Any] = {
         "sections": result.sections,
         "degraded": result.degraded,
-        "content_length": len(content),
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_purpose", content, output_path,
-            description="Architecture purpose/intent template.",
-        )
 
     return success_response(
         "docs_generate_purpose",
@@ -2284,37 +2072,25 @@ async def docs_generate_doc_index(
         )
 
     content = result.content
-    written_path = ""
 
-    if output_path and can_write_to_project(root):
-        write_path = root / output_path
-        try:
-            write_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            written_path = str(write_path.relative_to(root)).replace("\\", "/")
-        except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                "docs_generate_doc_index",
-                "WRITE_ERROR",
-                f"Failed to write doc index: {exc}",
-            )
+    # Auto-compute output_path when not provided
+    target = output_path.strip() or "docs/INDEX.md"
+
+    # Three-tier output: write-first / inline / manifest
+    out = await finalize_output(
+        "docs_generate_doc_index", content, target, root,
+        description="Documentation index/map.",
+    )
+    if not out.get("success", True):
+        return out
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
     data: dict[str, Any] = {
         "total_files": result.total_files,
         "categories": result.categories,
-        "content_length": len(content),
-        "content": content,
+        **out,
     }
-    if written_path:
-        data["written_to"] = written_path
-    elif output_path:
-        data["content_return"] = True
-        data["file_manifest"] = build_generator_manifest(
-            "docs_generate_doc_index", content, output_path,
-            description="Documentation index/map.",
-        )
 
     return success_response(
         "docs_generate_doc_index",

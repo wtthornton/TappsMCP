@@ -345,20 +345,22 @@ class TestDocsGenerateArchitectureTool:
         assert result["tool"] == "docs_generate_architecture"
         assert "data" in result
         assert result["data"]["format"] == "html"
-        assert "<!DOCTYPE html>" in result["data"]["content"]
+        assert "written_to" in result["data"]
+        written = (arch_project / result["data"]["written_to"]).read_text()
+        assert "<!DOCTYPE html>" in written
 
     def test_write_to_file(self, arch_project: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_architecture
 
-        out_path = arch_project / "docs" / "ARCHITECTURE.html"
         result = asyncio.run(
             docs_generate_architecture(
                 project_root=str(arch_project),
-                output_path=str(out_path),
+                output_path="docs/ARCHITECTURE.html",
             )
         )
         assert result["success"] is True
-        assert result["data"]["written_to"] == str(out_path)
+        assert result["data"]["written_to"] == "docs/ARCHITECTURE.html"
+        out_path = arch_project / "docs" / "ARCHITECTURE.html"
         assert out_path.exists()
         content = out_path.read_text(encoding="utf-8")
         assert "<!DOCTYPE html>" in content
@@ -373,7 +375,8 @@ class TestDocsGenerateArchitectureTool:
             )
         )
         assert result["success"] is True
-        assert "My Custom Report" in result["data"]["content"]
+        written = (arch_project / result["data"]["written_to"]).read_text()
+        assert "My Custom Report" in written
 
     def test_relative_output_path(self, arch_project: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_architecture

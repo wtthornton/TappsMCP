@@ -622,7 +622,8 @@ class TestDocsGeneratePrdTool:
 
         assert result["success"] is True
         assert result["data"]["title"] == "My Feature"
-        assert "# PRD: My Feature" in result["data"]["content"]
+        written = (root / result["data"]["written_to"]).read_text()
+        assert "# PRD: My Feature" in written
 
     async def test_invalid_root(self, tmp_path: Path) -> None:
         bad_root = tmp_path / "does_not_exist"
@@ -667,7 +668,8 @@ class TestDocsGeneratePrdTool:
             )
 
         assert result["success"] is True
-        content = result["data"]["content"]
+        assert "written_to" in result["data"]
+        content = (root / result["data"]["written_to"]).read_text()
         assert "**Admin**" in content
         assert "**Developer**" in content
         assert "**Viewer**" in content
@@ -687,7 +689,8 @@ class TestDocsGeneratePrdTool:
             )
 
         assert result["success"] is True
-        assert "Boundary System" in result["data"]["content"]
+        content = (root / result["data"]["written_to"]).read_text()
+        assert "Boundary System" in content
 
     async def test_write_to_file(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
@@ -763,8 +766,9 @@ class TestDocsGeneratePrdTool:
             )
 
         assert result["success"] is True
-        assert "Phase 1: Alpha" in result["data"]["content"]
-        assert "Feature A" in result["data"]["content"]
+        content = (root / result["data"]["written_to"]).read_text()
+        assert "Phase 1: Alpha" in content
+        assert "Feature A" in content
 
     async def test_constraints_and_non_goals_comma_parsing(self, tmp_path: Path) -> None:
         root = tmp_path / "proj"
@@ -782,7 +786,7 @@ class TestDocsGeneratePrdTool:
             )
 
         assert result["success"] is True
-        content = result["data"]["content"]
+        content = (root / result["data"]["written_to"]).read_text()
         assert "- Python 3.12+" in content
         assert "- No Redis" in content
         assert "- Mobile" in content

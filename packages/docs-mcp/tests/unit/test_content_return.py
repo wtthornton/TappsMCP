@@ -82,10 +82,7 @@ class TestGeneratorContentReturn:
             result = await docs_generate_onboarding(project_root=str(tmp_path))
 
         data = result["data"]
-        assert data.get("content_return") is True
-        assert "file_manifest" in data
-        assert data["file_manifest"]["file_count"] == 1
-        assert "content" in data  # Content still in response
+        assert "content" in data
         # No files should be written
         assert not list(tmp_path.rglob("*.md"))
 
@@ -97,8 +94,7 @@ class TestGeneratorContentReturn:
             result = await docs_generate_contributing(project_root=str(tmp_path))
 
         data = result["data"]
-        assert data.get("content_return") is True
-        assert "file_manifest" in data
+        assert "content" in data
 
     @pytest.mark.asyncio
     async def test_changelog_content_return_with_output_path(self, tmp_path: Path) -> None:
@@ -115,8 +111,7 @@ class TestGeneratorContentReturn:
             )
 
         data = result["data"]
-        assert data.get("content_return") is True
-        assert "file_manifest" in data
+        assert "content" in data
         assert not (tmp_path / "CHANGELOG.md").exists()
 
     @pytest.mark.asyncio
@@ -158,6 +153,5 @@ class TestGeneratorContentReturn:
             result = await docs_generate_readme(project_root=str(tmp_path))
 
         data = result["data"]
-        assert data.get("content_return") is True
-        assert "file_manifest" in data
+        assert "content" in data
         assert not (tmp_path / "README.md").exists()
