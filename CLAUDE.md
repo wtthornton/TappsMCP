@@ -28,9 +28,9 @@ For detailed module maps and internal architecture, see [docs/ARCHITECTURE.md](d
 uv sync --all-packages
 
 # Run tests per package (recommended -- avoids conftest collisions)
-uv run pytest packages/tapps-core/tests/ -v      # 1,650+ tests
-uv run pytest packages/tapps-mcp/tests/ -v        # 3,780+ tests
-uv run pytest packages/docs-mcp/tests/ -v         # 1,800+ tests
+uv run pytest packages/tapps-core/tests/ -v      # 1,660+ tests
+uv run pytest packages/tapps-mcp/tests/ -v        # 3,940+ tests
+uv run pytest packages/docs-mcp/tests/ -v         # 2,070+ tests
 
 # Run tests excluding slow integration tests (fast local feedback)
 uv run pytest packages/tapps-core/tests/ -m "not slow" -v
