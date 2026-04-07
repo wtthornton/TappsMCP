@@ -43,6 +43,9 @@ treesitter = [
     "tree-sitter-rust>=0.23.2,<1",
     "tree-sitter-java>=0.23.5,<1",
 ]
+agents = [
+    "sentence-transformers>=5.2.3,<6",
+]
 
 [tool.uv.sources]
 tapps-core = { workspace = true }

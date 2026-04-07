@@ -459,6 +459,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+agents = [
+    { name = "sentence-transformers" },
+]
 treesitter = [
     { name = "tree-sitter" },
     { name = "tree-sitter-go" },
@@ -475,6 +478,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"], specifier = ">=1.26.0,<2" },
     { name = "pydantic", specifier = ">=2.12.5,<3" },
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
+    { name = "sentence-transformers", marker = "extra == 'agents'", specifier = ">=5.2.3,<6" },
     { name = "structlog", specifier = ">=25.5.0,<26" },
     { name = "tapps-core", editable = "packages/tapps-core" },
     { name = "tree-sitter", marker = "extra == 'treesitter'", specifier = ">=0.24.0,<1" },
@@ -483,7 +487,7 @@ requires-dist = [
     { name = "tree-sitter-rust", marker = "extra == 'treesitter'", specifier = ">=0.23.2,<1" },
     { name = "tree-sitter-typescript", marker = "extra == 'treesitter'", specifier = ">=0.23.2,<1" },
 ]
-provides-extras = ["treesitter"]
+provides-extras = ["treesitter", "agents"]
 
 [[package]]
 name = "execnet"
@@ -2222,8 +2226,8 @@ wheels = [
 
 [[package]]
 name = "tapps-brain"
-version = "2.0.4"
-source = { git = "https://github.com/wtthornton/tapps-brain.git?tag=v2.0.4#b305200b915f9c0ff8a1909a580cb6037436c55c" }
+version = "2.1.0"
+source = { git = "https://github.com/wtthornton/tapps-brain.git?tag=v2.1.0#c82937f397d3281d4c5134420a16d827a8f62e0a" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -2264,7 +2268,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
     { name = "sentence-transformers", marker = "extra == 'vector'", specifier = ">=5.2.3,<6" },
     { name = "structlog", specifier = ">=25.5.0,<26" },
-    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?tag=v2.0.4" },
+    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?tag=v2.1.0" },
 ]
 provides-extras = ["vector", "reranker"]
 
