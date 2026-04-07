@@ -47,8 +47,60 @@ _STALE_KNOWLEDGE_DAYS = 365
 logger = structlog.get_logger(__name__)
 
 
+def _is_architectural_question(question: str, domain: str) -> bool:
+    """Detect questions that are architectural/conceptual rather than API-specific.
+
+    Architectural questions benefit from expert RAG knowledge, not library API docs.
+    Returns ``True`` when docs lookup should be skipped or deprioritized.
+    """
+    q = question.lower()
+
+    # Domains where questions are typically conceptual, not API-specific.
+    architectural_domains: frozenset[str] = frozenset({
+        "software-architecture",
+        "agent-learning",
+        "ai-frameworks",
+        "data-privacy-compliance",
+        "documentation-knowledge-management",
+    })
+
+    # Strong architectural signal keywords — patterns, strategies, approaches.
+    architectural_signals: list[str] = [
+        "pattern", "architecture", "design", "strategy", "approach",
+        "orchestrat", "coordinat", "best practice", "trade-off", "tradeoff",
+        "when to use", "how to architect", "multi-agent", "agent memory",
+        "hive", "federation", "prompt composition", "memory injection",
+        "memory sharing", "cross-session", "cross-agent",
+    ]
+
+    # Count architectural signal matches.
+    signal_count = sum(1 for sig in architectural_signals if sig in q)
+
+    if domain in architectural_domains and signal_count >= 1:
+        # In an architectural domain with at least one conceptual signal,
+        # skip docs if there are no library-specific signals.
+        library_signals = [
+            "pytest", "fastapi", "flask", "django", "sqlalchemy", "pydantic",
+            "requests", "docker", "kubernetes", "prometheus", "langchain",
+            "openai", "asyncio", "uvicorn",
+        ]
+        if not any(sig in q for sig in library_signals):
+            return True
+
+    # In any domain, 2+ architectural signals indicate a conceptual question.
+    return signal_count >= 2
+
+
 def _infer_lookup_hints(question: str, domain: str) -> tuple[str, str]:
-    """Infer best-effort library/topic hints for docs lookup."""
+    """Infer best-effort library/topic hints for docs lookup.
+
+    Returns ``("", "")`` when the question is architectural/conceptual and
+    library docs would be off-topic (caller should skip docs lookup).
+    """
+    # Skip docs entirely for architectural questions.
+    if _is_architectural_question(question, domain):
+        return "", ""
+
     q = question.lower()
 
     library_candidates: list[tuple[str, list[str]]] = [
@@ -62,6 +114,7 @@ def _infer_lookup_hints(question: str, domain: str) -> tuple[str, str]:
         ("docker", ["docker", "dockerfile", "compose"]),
         ("kubernetes", ["kubernetes", "k8s", "kubectl"]),
         ("prometheus", ["prometheus", "metrics", "exporter"]),
+        ("langchain", ["langchain", "lcel", "runnable"]),
     ]
 
     library = "python"
@@ -76,8 +129,14 @@ def _infer_lookup_hints(question: str, domain: str) -> tuple[str, str]:
             "database-data-management": "sqlalchemy",
             "cloud-infrastructure": "docker",
             "observability-monitoring": "prometheus",
+            "agent-learning": "",
+            "ai-frameworks": "",
         }
         library = domain_defaults.get(domain, "python")
+
+    # If library resolved to empty, skip docs.
+    if not library:
+        return "", ""
 
     topic = "overview"
     topic_signals = [
@@ -616,20 +675,32 @@ def _build_answer(
             f"{knowledge.context}"
         )
     else:
-        result.suggested_tool = "tapps_lookup_docs"
         result.suggested_library, result.suggested_topic = _infer_lookup_hints(
             question, resolved_domain
         )
-        result.answer = (
-            f"## {expert.expert_name} \u2014 {resolved_domain}\n\n"
-            f"No specific knowledge found for this query in the "
-            f"{resolved_domain} knowledge base. The expert can still "
-            f"provide general guidance based on domain principles.\n\n"
-            f"Suggested next step: call {result.suggested_tool}"
-            f"(library='{result.suggested_library}', "
-            f"topic='{result.suggested_topic}')."
-        )
-        _try_fallback_docs(result)
+        # Only suggest docs lookup when the question is API-specific (non-empty hints).
+        if result.suggested_library:
+            result.suggested_tool = "tapps_lookup_docs"
+            result.answer = (
+                f"## {expert.expert_name} \u2014 {resolved_domain}\n\n"
+                f"No specific knowledge found for this query in the "
+                f"{resolved_domain} knowledge base. The expert can still "
+                f"provide general guidance based on domain principles.\n\n"
+                f"Suggested next step: call {result.suggested_tool}"
+                f"(library='{result.suggested_library}', "
+                f"topic='{result.suggested_topic}')."
+            )
+            _try_fallback_docs(result)
+        else:
+            # Architectural question — docs lookup would return off-topic results.
+            result.answer = (
+                f"## {expert.expert_name} \u2014 {resolved_domain}\n\n"
+                f"No specific knowledge found for this query in the "
+                f"{resolved_domain} knowledge base. This appears to be an "
+                f"architectural/conceptual question — consider adding domain "
+                f"knowledge files to `experts/knowledge/{resolved_domain}/` "
+                f"for better coverage."
+            )
 
     # Low-confidence nudge
     if conf.confidence < LOW_CONFIDENCE_THRESHOLD:

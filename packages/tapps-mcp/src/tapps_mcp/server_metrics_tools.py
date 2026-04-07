@@ -751,9 +751,17 @@ async def tapps_research(
         lookup_library = library or result.suggested_library or "python"
         lookup_topic = topic or result.suggested_topic or "overview"
 
-        docs_content, docs_source, docs_library, docs_topic, docs_error = (
-            await _fetch_docs_for_research(lookup_library, lookup_topic)
-        )
+        # Skip docs lookup when the expert signals an architectural/conceptual
+        # question (suggested_library == "" means "no docs needed").
+        # This prevents off-topic results like asyncio docs for
+        # "multi-agent memory pattern" questions.
+        skip_docs = result.suggested_library == ""
+        if not skip_docs:
+            docs_content, docs_source, docs_library, docs_topic, docs_error = (
+                await _fetch_docs_for_research(lookup_library, lookup_topic)
+            )
+        else:
+            docs_content = docs_source = docs_library = docs_topic = docs_error = None
 
         answer = _append_docs_to_answer(
             result.answer, docs_content, docs_library, docs_topic, docs_source,

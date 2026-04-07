@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-session-start.ps1"
+            "command": "bash .claude/hooks/tapps-session-start.sh"
           }
         ]
       },
@@ -48,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-session-compact.ps1"
+            "command": "bash .claude/hooks/tapps-session-compact.sh"
           }
         ]
       },
@@ -69,7 +69,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-pre-tooluse.ps1"
+            "command": "bash .claude/hooks/tapps-pre-tooluse.sh"
           }
         ]
       },
@@ -84,12 +84,12 @@
         ]
       },
       {
-        "matcher": "Edit\\",
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "Write",
-            "statusMessage": "bash .ralph/hooks/protect-ralph-files.sh|Checking file protection..."
+            "command": "bash .ralph/hooks/protect-ralph-files.sh",
+            "statusMessage": "Checking file protection..."
           }
         ]
       }
@@ -100,7 +100,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-post-edit.ps1"
+            "command": "bash .claude/hooks/tapps-post-edit.sh"
           }
         ]
       },
@@ -109,7 +109,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-stop.ps1"
+            "command": "bash .claude/hooks/tapps-stop.sh"
           }
         ]
       },
@@ -118,7 +118,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-post-validate.ps1",
+            "command": "bash .claude/hooks/tapps-post-validate.sh",
             "timeout": 10
           }
         ]
@@ -128,7 +128,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-post-report.ps1",
+            "command": "bash .claude/hooks/tapps-post-report.sh",
             "timeout": 10
           }
         ]
@@ -139,7 +139,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-stop.ps1"
+            "command": "bash .claude/hooks/tapps-stop.sh"
           }
         ]
       },
@@ -147,7 +147,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-memory-capture.ps1"
+            "command": "bash .claude/hooks/tapps-memory-capture.sh"
           }
         ]
       },
@@ -166,7 +166,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-task-completed.ps1"
+            "command": "bash .claude/hooks/tapps-task-completed.sh"
           }
         ]
       },
@@ -185,7 +185,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-pre-compact.ps1"
+            "command": "bash .claude/hooks/tapps-pre-compact.sh"
           }
         ]
       }
@@ -195,7 +195,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-subagent-start.ps1"
+            "command": "bash .claude/hooks/tapps-subagent-start.sh"
           }
         ]
       }
@@ -205,7 +205,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tapps-subagent-stop.ps1"
+            "command": "bash .claude/hooks/tapps-subagent-stop.sh"
           }
         ]
       },
@@ -220,12 +220,12 @@
     ],
     "StopFailure": [
       {
-        "matcher": "rate_limit\\",
+        "matcher": "rate_limit|server_error",
         "hooks": [
           {
             "type": "command",
-            "command": "server_error",
-            "statusMessage": "bash .ralph/hooks/on-stop-failure.sh|Handling API error..."
+            "command": "bash .ralph/hooks/on-stop-failure.sh",
+            "statusMessage": "Handling API error..."
           }
         ]
       }
