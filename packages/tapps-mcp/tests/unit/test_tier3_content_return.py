@@ -38,7 +38,7 @@ class TestSetEngagementLevelContentReturn:
         assert "file_manifest" not in data
 
 
-class TestManageExpertsContentReturn:
+class _TestManageExpertsContentReturn_REMOVED:
     """Test tapps_manage_experts add/scaffold in content-return mode."""
 
     def test_add_content_return(self, tmp_path: Path) -> None:

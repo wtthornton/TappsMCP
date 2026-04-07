@@ -9,12 +9,10 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from tapps_core.metrics.business_metrics import BusinessMetricsCollector
 from tapps_core.metrics.confidence_metrics import ConfidenceMetricsTracker
 from tapps_core.metrics.consultation_logger import ConsultationLogger
 from tapps_core.metrics.dashboard import DashboardGenerator
 from tapps_core.metrics.execution_metrics import ToolCallMetricsCollector
-from tapps_core.metrics.expert_metrics import ExpertPerformanceTracker
 from tapps_core.metrics.outcome_tracker import OutcomeTracker
 from tapps_core.metrics.rag_metrics import RAGMetricsTracker
 
@@ -36,18 +34,9 @@ class MetricsHub:
 
         self.execution = ToolCallMetricsCollector(self._metrics_dir)
         self.outcomes = OutcomeTracker(self._metrics_dir)
-        self.experts = ExpertPerformanceTracker(self._metrics_dir)
         self.confidence = ConfidenceMetricsTracker(self._metrics_dir)
         self.rag = RAGMetricsTracker(self._metrics_dir)
         self.consultations = ConsultationLogger(self._metrics_dir)
-        self.business = BusinessMetricsCollector(
-            self._metrics_dir,
-            execution_collector=self.execution,
-            outcome_tracker=self.outcomes,
-            expert_tracker=self.experts,
-            confidence_tracker=self.confidence,
-            rag_tracker=self.rag,
-        )
 
     def get_dashboard_generator(
         self,
@@ -58,10 +47,8 @@ class MetricsHub:
             self._metrics_dir,
             execution_collector=self.execution,
             outcome_tracker=self.outcomes,
-            expert_tracker=self.experts,
             confidence_tracker=self.confidence,
             rag_tracker=self.rag,
-            business_collector=self.business,
             memory_store=memory_store,  # type: ignore[arg-type]
         )
 

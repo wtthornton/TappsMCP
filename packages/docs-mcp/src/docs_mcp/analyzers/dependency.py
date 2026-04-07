@@ -311,130 +311,151 @@ class ImportGraphBuilder:
             )
 
             if isinstance(node, ast.Import):
-                for alias in node.names:
-                    top_level = alias.name.split(".")[0]
-                    target_path = self._resolve_import(
-                        alias.name,
-                        source_module,
-                        module_paths,
-                        project_root,
-                    )
-                    if target_path is not None:
-                        edges.append(
-                            ImportEdge(
-                                source=source_rel,
-                                target=target_path,
-                                import_type=import_type,
-                                line=node.lineno,
-                                names=[],
-                            )
-                        )
-                    elif top_level not in self.STDLIB_TOP_LEVEL:
-                        externals.append(alias.name)
-
+                self._process_plain_import(
+                    node, import_type, source_rel, source_module,
+                    module_paths, project_root, edges, externals,
+                )
             elif isinstance(node, ast.ImportFrom):
-                if node.module is None and node.level > 0:
-                    # Relative import: from . import X
-                    resolved_module = self._resolve_relative_import(
-                        "",
-                        node.level,
-                        source_module,
-                    )
-                else:
-                    module_name = node.module or ""
-                    if node.level > 0:
-                        resolved_module = self._resolve_relative_import(
-                            module_name,
-                            node.level,
-                            source_module,
-                        )
-                    else:
-                        resolved_module = module_name
-
-                names = [alias.name for alias in (node.names or []) if alias.name != "*"]
-
-                target_path = self._resolve_import(
-                    resolved_module,
-                    source_module,
-                    module_paths,
-                    project_root,
+                self._process_from_import(
+                    node, import_type, source_rel, source_module,
+                    module_paths, project_root, edges, externals,
                 )
 
-                # If the target is a package (__init__.py), imported names
-                # might be submodules. Try resolving each name as pkg.name.
-                is_package = target_path is not None and target_path.endswith("__init__.py")
-                if is_package and names:
-                    for name in names:
-                        sub_module = f"{resolved_module}.{name}" if resolved_module else name
-                        sub_path = self._resolve_import(
-                            sub_module,
-                            source_module,
-                            module_paths,
-                            project_root,
-                        )
-                        if sub_path is not None:
-                            edges.append(
-                                ImportEdge(
-                                    source=source_rel,
-                                    target=sub_path,
-                                    import_type=import_type,
-                                    line=node.lineno,
-                                    names=[name],
-                                )
-                            )
-                        else:
-                            # Name is an attribute of the package, not a submodule
-                            # target_path is non-None here because is_package guards this block
-                            edges.append(
-                                ImportEdge(
-                                    source=source_rel,
-                                    target=str(target_path),
-                                    import_type=import_type,
-                                    line=node.lineno,
-                                    names=[name],
-                                )
-                            )
-                elif target_path is not None:
-                    edges.append(
-                        ImportEdge(
-                            source=source_rel,
-                            target=target_path,
-                            import_type=import_type,
-                            line=node.lineno,
-                            names=names,
-                        )
-                    )
-                else:
-                    # Module didn't resolve at all. Try imported names as
-                    # submodules (e.g. `from . import beta` resolving to
-                    # a package that has no __init__.py).
-                    resolved_any = False
-                    for name in names:
-                        sub_module = f"{resolved_module}.{name}" if resolved_module else name
-                        sub_path = self._resolve_import(
-                            sub_module,
-                            source_module,
-                            module_paths,
-                            project_root,
-                        )
-                        if sub_path is not None:
-                            edges.append(
-                                ImportEdge(
-                                    source=source_rel,
-                                    target=sub_path,
-                                    import_type=import_type,
-                                    line=node.lineno,
-                                    names=[name],
-                                )
-                            )
-                            resolved_any = True
-
-                    if not resolved_any:
-                        top_level = resolved_module.split(".")[0] if resolved_module else ""
-                        if top_level and top_level not in self.STDLIB_TOP_LEVEL:
-                            externals.append(resolved_module)
-
         return edges, externals
+
+    def _process_plain_import(
+        self,
+        node: ast.Import,
+        import_type: str,
+        source_rel: str,
+        source_module: str,
+        module_paths: dict[str, str],
+        project_root: Path,
+        edges: list[ImportEdge],
+        externals: list[str],
+    ) -> None:
+        """Process a plain ``import X`` node, appending results to edges/externals."""
+        for alias in node.names:
+            top_level = alias.name.split(".")[0]
+            target_path = self._resolve_import(
+                alias.name, source_module, module_paths, project_root,
+            )
+            if target_path is not None:
+                edges.append(ImportEdge(
+                    source=source_rel, target=target_path,
+                    import_type=import_type, line=node.lineno, names=[],
+                ))
+            elif top_level not in self.STDLIB_TOP_LEVEL:
+                externals.append(alias.name)
+
+    def _process_from_import(
+        self,
+        node: ast.ImportFrom,
+        import_type: str,
+        source_rel: str,
+        source_module: str,
+        module_paths: dict[str, str],
+        project_root: Path,
+        edges: list[ImportEdge],
+        externals: list[str],
+    ) -> None:
+        """Process a ``from X import Y`` node, appending results to edges/externals."""
+        if node.module is None and node.level > 0:
+            resolved_module = self._resolve_relative_import("", node.level, source_module)
+        else:
+            module_name = node.module or ""
+            if node.level > 0:
+                resolved_module = self._resolve_relative_import(
+                    module_name, node.level, source_module,
+                )
+            else:
+                resolved_module = module_name
+
+        names = [alias.name for alias in (node.names or []) if alias.name != "*"]
+        target_path = self._resolve_import(
+            resolved_module, source_module, module_paths, project_root,
+        )
+
+        is_package = target_path is not None and target_path.endswith("__init__.py")
+        if is_package and names and target_path is not None:
+            self._resolve_package_names(
+                names, resolved_module, target_path, source_rel,
+                import_type, node.lineno, source_module, module_paths,
+                project_root, edges,
+            )
+        elif target_path is not None:
+            edges.append(ImportEdge(
+                source=source_rel, target=target_path,
+                import_type=import_type, line=node.lineno, names=names,
+            ))
+        else:
+            self._resolve_fallback_names(
+                names, resolved_module, source_rel, import_type, node.lineno,
+                source_module, module_paths, project_root, edges, externals,
+            )
+
+    def _resolve_package_names(
+        self,
+        names: list[str],
+        resolved_module: str,
+        target_path: str,
+        source_rel: str,
+        import_type: str,
+        lineno: int,
+        source_module: str,
+        module_paths: dict[str, str],
+        project_root: Path,
+        edges: list[ImportEdge],
+    ) -> None:
+        """Resolve imported names when the target is a package (__init__.py)."""
+        for name in names:
+            sub_module = f"{resolved_module}.{name}" if resolved_module else name
+            sub_path = self._resolve_import(
+                sub_module, source_module, module_paths, project_root,
+            )
+            if sub_path is not None:
+                edges.append(ImportEdge(
+                    source=source_rel, target=sub_path,
+                    import_type=import_type, line=lineno, names=[name],
+                ))
+            else:
+                # Name is an attribute of the package, not a submodule
+                edges.append(ImportEdge(
+                    source=source_rel, target=target_path,
+                    import_type=import_type, line=lineno, names=[name],
+                ))
+
+    def _resolve_fallback_names(
+        self,
+        names: list[str],
+        resolved_module: str,
+        source_rel: str,
+        import_type: str,
+        lineno: int,
+        source_module: str,
+        module_paths: dict[str, str],
+        project_root: Path,
+        edges: list[ImportEdge],
+        externals: list[str],
+    ) -> None:
+        """Try each imported name as a submodule when the parent module didn't resolve."""
+        resolved_any = False
+        for name in names:
+            sub_module = f"{resolved_module}.{name}" if resolved_module else name
+            sub_path = self._resolve_import(
+                sub_module, source_module, module_paths, project_root,
+            )
+            if sub_path is not None:
+                edges.append(ImportEdge(
+                    source=source_rel, target=sub_path,
+                    import_type=import_type, line=lineno, names=[name],
+                ))
+                resolved_any = True
+
+        if not resolved_any:
+            top_level = resolved_module.split(".", maxsplit=1)[0] if resolved_module else ""
+            if top_level and top_level not in self.STDLIB_TOP_LEVEL:
+                externals.append(resolved_module)
 
     def _classify_import_type(
         self,

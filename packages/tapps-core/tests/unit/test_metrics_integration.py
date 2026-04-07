@@ -66,50 +66,6 @@ class TestEndToEndMetrics:
 
         stats = hub.outcomes.get_statistics()
         assert stats["total_outcomes"] == 1
-        assert "security" in stats["expert_usage"]
-
-    def test_expert_consultation_flow(self, hub):
-        """Simulate expert consultation with confidence tracking."""
-        hub.experts.track_consultation("sec_expert", "security", 0.85, "test query")
-        hub.confidence.record("security", 0.85, 0.6, agreement_level=0.9)
-        hub.consultations.log_consultation(
-            "sec_expert",
-            "security",
-            0.85,
-            "Used OWASP patterns",
-        )
-
-        # Verify all trackers got the data
-        perf = hub.experts.get_performance()
-        assert len(perf) == 1
-
-        conf_stats = hub.confidence.get_statistics()
-        assert conf_stats.total_records == 1
-
-        consult_stats = hub.consultations.get_statistics()
-        assert consult_stats["total_consultations"] == 1
-
-    def test_business_metrics_collection(self, hub):
-        """Collect business metrics after populating other trackers."""
-        now = datetime.now(tz=UTC)
-
-        # Populate execution data
-        for i in range(5):
-            hub.execution.record(
-                "tapps_score_file",
-                now,
-                now + timedelta(milliseconds=100),
-                status="success" if i < 4 else "failed",
-                score=70.0 + i * 5,
-            )
-
-        # Populate confidence data
-        hub.confidence.record("security", 0.8, 0.6)
-
-        # Collect business metrics
-        biz = hub.business.collect()
-        assert biz.adoption.total_consultations == 5
-        assert biz.operational.error_rate > 0
 
     def test_full_dashboard_with_all_data(self, hub):
         """Generate a complete dashboard with data from all subsystems."""
@@ -125,8 +81,6 @@ class TestEndToEndMetrics:
             gate_passed=True,
         )
 
-        # Expert data
-        hub.experts.track_consultation("exp1", "security", 0.8)
         hub.confidence.record("security", 0.8, 0.6)
         hub.rag.record_query("test", "security", 20.0, 3, [0.8], True)
 

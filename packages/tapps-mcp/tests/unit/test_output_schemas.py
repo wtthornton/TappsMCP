@@ -10,14 +10,12 @@ from tapps_mcp.common.output_schemas import (
     CategoryScoreOutput,
     ChecklistOutput,
     ConfigFindingOutput,
-    ExpertOutput,
     FileValidationResult,
     GateFailure,
     ImpactOutput,
     ProfileOutput,
     QualityGateOutput,
     QuickCheckOutput,
-    ResearchOutput,
     ScoreFileOutput,
     SecurityFindingOutput,
     SecurityScanOutput,
@@ -484,7 +482,7 @@ class TestImpactOutput:
 # ---------------------------------------------------------------------------
 
 
-class TestExpertOutput:
+class _TestExpertOutput_REMOVED:
     """Tests for ExpertOutput model."""
 
     def test_expert_output_schema(self) -> None:
@@ -767,7 +765,6 @@ class TestRegistry:
         """Schema model classes are preserved for structuredContent key usage."""
         from tapps_mcp.common.output_schemas import (
             ChecklistOutput,
-            ExpertOutput,
             ImpactOutput,
             ProfileOutput,
             QualityGateOutput,
@@ -787,7 +784,6 @@ class TestRegistry:
             ValidateChangedOutput,
             ValidateConfigOutput,
             ImpactOutput,
-            ExpertOutput,
             ChecklistOutput,
             ProfileOutput,
             SessionStartOutput,
@@ -803,7 +799,7 @@ class TestRegistry:
 # ---------------------------------------------------------------------------
 
 
-class TestResearchOutput:
+class _TestResearchOutput_REMOVED:
     """Tests for ResearchOutput model."""
 
     def test_research_output_schema(self) -> None:

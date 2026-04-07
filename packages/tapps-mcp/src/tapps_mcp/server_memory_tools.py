@@ -957,12 +957,12 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "error": "invalid_format",
             "message": f'format must be "json" or "markdown", got {p.export_format!r}.',
         }
-    fmt = cast(Literal["json", "markdown"], fmt_raw)
+    fmt = cast("Literal['json', 'markdown']", fmt_raw)
 
     group_by_raw = (p.export_group_by or "tier").lower()
     if group_by_raw not in ("tier", "tag", "none"):
         group_by_raw = "tier"
-    group_by_val = cast(Literal["tier", "tag", "none"], group_by_raw)
+    group_by_val = cast("Literal['tier', 'tag', 'none']", group_by_raw)
 
     settings = load_settings()
     validator = PathValidator(settings.project_root)

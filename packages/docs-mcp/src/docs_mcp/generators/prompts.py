@@ -94,81 +94,30 @@ class PromptGenerator:
         sections: list[str] = []
 
         # Identity
-        sections.append(_section("metadata", f"# Prompt: {config.name}\n\n**When to use:** {config.when_to_use or '(not specified)'}"))
+        sections.append(_section(
+            "metadata",
+            f"# Prompt: {config.name}\n\n**When to use:** {config.when_to_use or '(not specified)'}",
+        ))
 
         # Purpose & Intent (required)
-        p_intent = config.purpose_and_intent.strip() or "This prompt is for the given task so that success criteria are met."
+        p_intent = (
+            config.purpose_and_intent.strip()
+            or "This prompt is for the given task so that success criteria are met."
+        )
         sections.append(_section("purpose-intent", f"## Purpose & Intent\n\n{p_intent}"))
 
-        # Task
-        if config.task or config.success_criteria:
-            task_block = []
-            if config.task:
-                task_block.append(f"**Task:** {config.task}")
-            if config.success_criteria:
-                task_block.append(f"**Success criteria:** {config.success_criteria}")
-            sections.append(_section("task", "## Task\n\n" + "\n\n".join(task_block)))
+        _append_task_section(sections, config)
+        _append_context_files_section(sections, config)
 
-        # Context files
-        if config.context_files:
-            lines = ["## Context files\n\nRead these files completely before responding:\n"]
-            for cf in config.context_files:
-                lines.append(f"- `{cf.path}` — {cf.description or '(no description)'}")
-            sections.append(_section("context-files", "\n".join(lines)))
-
-        # Reference (optional)
         if config.reference_notes:
             sections.append(_section("reference", f"## Reference\n\n{config.reference_notes}"))
 
-        # Success brief
-        if config.success_brief and any([
-            config.success_brief.output_type,
-            config.success_brief.recipient_reaction,
-            config.success_brief.does_not_sound_like,
-            config.success_brief.success_means,
-        ]):
-            sb = config.success_brief
-            lines = ["## Success brief\n"]
-            if sb.output_type:
-                lines.append(f"- **Output type:** {sb.output_type}")
-            if sb.recipient_reaction:
-                lines.append(f"- **Recipient reaction:** {sb.recipient_reaction}")
-            if sb.does_not_sound_like:
-                lines.append(f"- **Does NOT sound like:** {sb.does_not_sound_like}")
-            if sb.success_means:
-                lines.append(f"- **Success means:** {sb.success_means}")
-            sections.append(_section("success-brief", "\n".join(lines)))
+        _append_success_brief_section(sections, config)
 
-        # Rules
         if config.rules:
             sections.append(_section("rules", f"## Rules\n\n{config.rules}"))
 
-        # Conversation (optional)
-        if config.conversation_first:
-            sections.append(_section("conversation", "## Conversation\n\nDo not start executing yet; ask clarifying questions to refine approach step by step."))
-
-        # Plan (optional)
-        if config.plan_steps is not False:
-            n = config.plan_steps if isinstance(config.plan_steps, int) else 5
-            sections.append(_section("plan", f"## Plan\n\nBefore writing: list the key rules from context that matter most; then give execution plan ({n} steps max)."))
-
-        # Alignment (optional)
-        if config.alignment_required:
-            sections.append(_section("alignment", "## Alignment\n\nOnly begin work once we've aligned."))
-
-        # Allowed tools
-        if config.allowed_tools:
-            tools_list = "\n".join(f"- {t}" for t in config.allowed_tools)
-            sections.append(_section("allowed-tools", f"## Allowed tools\n\n{tools_list}"))
-
-        # Output format
-        if config.output_format:
-            sections.append(_section("output-format", f"## Output format\n\n{config.output_format}"))
-
-        # Don't (out of scope)
-        if config.dont:
-            lines = ["## Don't\n\n"] + [f"- {d}" for d in config.dont]
-            sections.append(_section("dont", "\n".join(lines)))
+        _append_tail_sections(sections, config)
 
         return "\n\n---\n\n".join(sections) + "\n"
 
@@ -228,6 +177,75 @@ class PromptGenerator:
             for d in config.dont:
                 lines.append(f"- {d}")
         return "\n".join(lines).strip() + "\n"
+
+
+def _append_task_section(sections: list[str], config: PromptConfig) -> None:
+    """Append the task section if task or success_criteria are set."""
+    if config.task or config.success_criteria:
+        task_block = []
+        if config.task:
+            task_block.append(f"**Task:** {config.task}")
+        if config.success_criteria:
+            task_block.append(f"**Success criteria:** {config.success_criteria}")
+        sections.append(_section("task", "## Task\n\n" + "\n\n".join(task_block)))
+
+
+def _append_context_files_section(sections: list[str], config: PromptConfig) -> None:
+    """Append the context-files section if context_files are set."""
+    if config.context_files:
+        lines = ["## Context files\n\nRead these files completely before responding:\n"]
+        for cf in config.context_files:
+            lines.append(f"- `{cf.path}` — {cf.description or '(no description)'}")
+        sections.append(_section("context-files", "\n".join(lines)))
+
+
+def _append_success_brief_section(sections: list[str], config: PromptConfig) -> None:
+    """Append the success-brief section if success_brief has any filled fields."""
+    if not config.success_brief:
+        return
+    sb = config.success_brief
+    if not any([sb.output_type, sb.recipient_reaction, sb.does_not_sound_like, sb.success_means]):
+        return
+    lines = ["## Success brief\n"]
+    if sb.output_type:
+        lines.append(f"- **Output type:** {sb.output_type}")
+    if sb.recipient_reaction:
+        lines.append(f"- **Recipient reaction:** {sb.recipient_reaction}")
+    if sb.does_not_sound_like:
+        lines.append(f"- **Does NOT sound like:** {sb.does_not_sound_like}")
+    if sb.success_means:
+        lines.append(f"- **Success means:** {sb.success_means}")
+    sections.append(_section("success-brief", "\n".join(lines)))
+
+
+def _append_tail_sections(sections: list[str], config: PromptConfig) -> None:
+    """Append conversation, plan, alignment, allowed-tools, output-format, and don't sections."""
+    if config.conversation_first:
+        sections.append(_section(
+            "conversation",
+            "## Conversation\n\nDo not start executing yet; ask clarifying questions to refine approach step by step.",
+        ))
+
+    if config.plan_steps is not False:
+        n = config.plan_steps if isinstance(config.plan_steps, int) else 5
+        sections.append(_section(
+            "plan",
+            f"## Plan\n\nBefore writing: list the key rules from context that matter most; then give execution plan ({n} steps max).",
+        ))
+
+    if config.alignment_required:
+        sections.append(_section("alignment", "## Alignment\n\nOnly begin work once we've aligned."))
+
+    if config.allowed_tools:
+        tools_list = "\n".join(f"- {t}" for t in config.allowed_tools)
+        sections.append(_section("allowed-tools", f"## Allowed tools\n\n{tools_list}"))
+
+    if config.output_format:
+        sections.append(_section("output-format", f"## Output format\n\n{config.output_format}"))
+
+    if config.dont:
+        dont_lines = ["## Don't\n\n"] + [f"- {d}" for d in config.dont]
+        sections.append(_section("dont", "\n".join(dont_lines)))
 
 
 def _section(name: str, content: str) -> str:

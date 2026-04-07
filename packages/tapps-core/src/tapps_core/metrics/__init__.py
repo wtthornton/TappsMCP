@@ -9,13 +9,6 @@ from tapps_core.metrics.alerts import Alert as Alert
 from tapps_core.metrics.alerts import AlertCondition as AlertCondition
 from tapps_core.metrics.alerts import AlertManager as AlertManager
 from tapps_core.metrics.alerts import AlertSeverity as AlertSeverity
-from tapps_core.metrics.business_metrics import AdoptionMetrics as AdoptionMetrics
-from tapps_core.metrics.business_metrics import BusinessMetricsCollector as BusinessMetricsCollector
-from tapps_core.metrics.business_metrics import BusinessMetricsData as BusinessMetricsData
-from tapps_core.metrics.business_metrics import EffectivenessMetrics as EffectivenessMetrics
-from tapps_core.metrics.business_metrics import OperationalMetrics as OperationalMetrics
-from tapps_core.metrics.business_metrics import QualityMetrics as QualityMetrics
-from tapps_core.metrics.business_metrics import ROIMetrics as ROIMetrics
 from tapps_core.metrics.collector import MetricsHub as MetricsHub
 from tapps_core.metrics.collector import get_metrics_hub as get_metrics_hub
 from tapps_core.metrics.collector import reset_metrics_hub as reset_metrics_hub
@@ -33,16 +26,6 @@ from tapps_core.metrics.execution_metrics import (
     ToolCallMetricsCollector as ToolCallMetricsCollector,
 )
 from tapps_core.metrics.execution_metrics import ToolCallSummary as ToolCallSummary
-from tapps_core.metrics.expert_metrics import ConsultationRecord as ConsultationRecord
-from tapps_core.metrics.expert_metrics import (
-    ExpertPerformanceRecord as ExpertPerformanceRecord,
-)
-from tapps_core.metrics.expert_metrics import (
-    ExpertPerformanceTracker as ExpertPerformanceTracker,
-)
-from tapps_core.metrics.expert_observability import ImprovementProposal as ImprovementProposal
-from tapps_core.metrics.expert_observability import ObservabilitySystem as ObservabilitySystem
-from tapps_core.metrics.expert_observability import WeakArea as WeakArea
 from tapps_core.metrics.feedback import FeedbackRecord as FeedbackRecord
 from tapps_core.metrics.feedback import FeedbackTracker as FeedbackTracker
 from tapps_core.metrics.otel_export import export_otel_trace as export_otel_trace

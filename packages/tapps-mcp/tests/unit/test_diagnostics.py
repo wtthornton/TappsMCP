@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 from pydantic import SecretStr
 
@@ -97,39 +95,12 @@ class TestCheckCache:
 
 
 class TestCheckVectorRag:
-    @patch("tapps_mcp.experts.rag_embedder.SENTENCE_TRANSFORMERS_AVAILABLE", True)
-    @patch("tapps_mcp.experts.rag_index.FAISS_AVAILABLE", True)
-    def test_all_available(self) -> None:
-        result = check_vector_rag()
-        assert result.faiss_available is True
-        assert result.sentence_transformers_available is True
-        # numpy may or may not be installed in test env
-        if result.numpy_available:
-            assert result.status == "full_vector"
-        else:
-            assert result.status == "keyword_only"
-
-    @patch("tapps_mcp.experts.rag_embedder.SENTENCE_TRANSFORMERS_AVAILABLE", True)
-    @patch("tapps_mcp.experts.rag_index.FAISS_AVAILABLE", False)
-    def test_faiss_missing(self) -> None:
-        result = check_vector_rag()
-        assert result.faiss_available is False
-        assert result.status == "keyword_only"
-
-    @patch("tapps_mcp.experts.rag_embedder.SENTENCE_TRANSFORMERS_AVAILABLE", False)
-    @patch("tapps_mcp.experts.rag_index.FAISS_AVAILABLE", True)
-    def test_sentence_transformers_missing(self) -> None:
-        result = check_vector_rag()
-        assert result.sentence_transformers_available is False
-        assert result.status == "keyword_only"
-
-    @patch("tapps_mcp.experts.rag_embedder.SENTENCE_TRANSFORMERS_AVAILABLE", False)
-    @patch("tapps_mcp.experts.rag_index.FAISS_AVAILABLE", False)
-    def test_all_missing(self) -> None:
+    def test_keyword_only_status(self) -> None:
+        """Expert system removed — vector RAG always reports removed."""
         result = check_vector_rag()
         assert result.faiss_available is False
         assert result.sentence_transformers_available is False
-        assert result.status == "keyword_only"
+        assert result.status == "removed"
 
     def test_returns_vector_rag_diagnostic(self) -> None:
         result = check_vector_rag()
@@ -137,23 +108,17 @@ class TestCheckVectorRag:
 
 
 class TestCheckKnowledgeBase:
-    def test_all_domains_present(self) -> None:
+    def test_expert_system_removed(self) -> None:
+        """Expert system removed (EPIC-94) — knowledge base returns zero counts."""
         result = check_knowledge_base()
-        assert result.expected_domains == 17
-        assert result.total_domains == 17
+        assert result.expected_domains == 0
+        assert result.total_domains == 0
         assert result.missing_domains == []
-        assert result.total_files > 0
+        assert result.total_files == 0
 
-    def test_reports_per_domain_counts(self) -> None:
+    def test_returns_empty_domains_list(self) -> None:
         result = check_knowledge_base()
-        assert len(result.domains) == 17
-        for domain_info in result.domains:
-            assert domain_info.file_count > 0
-
-    def test_domains_sorted_alphabetically(self) -> None:
-        result = check_knowledge_base()
-        domain_names = [d.domain for d in result.domains]
-        assert domain_names == sorted(domain_names)
+        assert result.domains == []
 
     def test_returns_knowledge_base_diagnostic(self) -> None:
         result = check_knowledge_base()
@@ -228,10 +193,11 @@ class TestServerInfoDiagnostics:
 
     @pytest.mark.asyncio
     async def test_diagnostics_knowledge_base_reports_domains(self) -> None:
+        """Expert system removed (EPIC-94) — knowledge base returns zero counts."""
         from tapps_mcp.server import tapps_server_info
 
         result = await tapps_server_info()
         kb = result["data"]["diagnostics"]["knowledge_base"]
-        assert kb["expected_domains"] == 17
-        assert kb["total_files"] > 0
+        assert kb["expected_domains"] == 0
+        assert kb["total_files"] == 0
         assert isinstance(kb["domains"], list)

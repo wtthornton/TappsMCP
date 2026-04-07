@@ -524,6 +524,104 @@ async def docs_check_cross_refs(
 # ---------------------------------------------------------------------------
 
 
+def _read_style_settings(settings: Any) -> tuple[list[str], str, int, list[str]]:
+    """Read style settings safely, guarding against mocks with missing or wrong-typed attrs."""
+    s_rules: list[str] = getattr(settings, "style_enabled_rules", []) or []
+    s_heading: str = getattr(settings, "style_heading", "") or ""
+    s_max_words: int = getattr(settings, "style_max_sentence_words", 0) or 0
+    s_jargon: list[str] = getattr(settings, "style_jargon_terms", []) or []
+
+    # Guard against mocks returning wrong types
+    if not isinstance(s_rules, list):
+        s_rules = []
+    if not isinstance(s_heading, str):
+        s_heading = ""
+    if not isinstance(s_max_words, int):
+        s_max_words = 0
+    if not isinstance(s_jargon, list):
+        s_jargon = []
+
+    return s_rules, s_heading, s_max_words, s_jargon
+
+
+def _build_style_config(
+    rules: str,
+    heading_style: str,
+    max_sentence_words: int,
+    custom_terms: str,
+    root: Path,
+    settings: Any,
+) -> Any:
+    """Build a StyleConfig from explicit params (override) + settings (fallback)."""
+    from docs_mcp.validators.style import StyleConfig
+
+    s_rules, s_heading, s_max_words, s_jargon = _read_style_settings(settings)
+    config_kwargs: dict[str, Any] = {}
+
+    # Rules: explicit param > settings > default
+    if rules.strip():
+        config_kwargs["enabled_rules"] = [r.strip() for r in rules.split(",") if r.strip()]
+    elif s_rules:
+        config_kwargs["enabled_rules"] = s_rules
+
+    # Heading style: explicit param > settings
+    if heading_style.strip() in ("sentence", "title"):
+        config_kwargs["heading_style"] = heading_style.strip()
+    elif s_heading in ("sentence", "title"):
+        config_kwargs["heading_style"] = s_heading
+
+    # Max sentence words: explicit param > settings
+    if max_sentence_words > 0:
+        config_kwargs["max_sentence_words"] = max_sentence_words
+    elif s_max_words > 0:
+        config_kwargs["max_sentence_words"] = s_max_words
+
+    # Custom terms: param + settings + .docsmcp-terms.txt
+    extra: list[str] | None = None
+    if custom_terms.strip():
+        extra = [t.strip() for t in custom_terms.split(",") if t.strip()]
+    merged_terms = build_custom_terms_for_style(root, settings, extra_terms=extra)
+    if merged_terms:
+        config_kwargs["custom_terms"] = merged_terms
+
+    if s_jargon:
+        config_kwargs["jargon_terms"] = s_jargon
+
+    return StyleConfig(**config_kwargs)
+
+
+def _run_style_check_files(
+    checker: Any,
+    file_list: list[str],
+    root: Path,
+) -> Any:
+    """Run style check on a specific list of files and return a StyleReport."""
+    from docs_mcp.validators.style import FileStyleResult, StyleReport
+
+    results: list[FileStyleResult] = []
+    for file_str in file_list:
+        fp = Path(file_str)
+        if not fp.is_absolute():
+            fp = root / fp
+        if fp.exists():
+            results.append(checker.check_file(fp, relative_to=root))
+
+    total_issues = sum(len(r.issues) for r in results)
+    agg_score = sum(r.score for r in results) / len(results) if results else 100.0
+    issue_counts: dict[str, int] = {}
+    for r in results:
+        for issue in r.issues:
+            issue_counts[issue.rule] = issue_counts.get(issue.rule, 0) + 1
+
+    return StyleReport(
+        total_files=len(results),
+        total_issues=total_issues,
+        files=results,
+        aggregate_score=round(agg_score, 1),
+        issue_counts=issue_counts,
+    )
+
+
 async def docs_check_style(
     files: str = "",
     rules: str = "",
@@ -567,93 +665,17 @@ async def docs_check_style(
             f"Project root does not exist: {root}",
         )
 
-    from docs_mcp.validators.style import StyleChecker, StyleConfig, StyleReport
+    from docs_mcp.validators.style import StyleChecker
 
-    # Build config: explicit params override settings, which override defaults.
-    config_kwargs: dict[str, Any] = {}
-
-    # Read settings safely (may be a mock without these attrs)
-    s_rules: list[str] = getattr(settings, "style_enabled_rules", []) or []
-    s_heading: str = getattr(settings, "style_heading", "") or ""
-    s_max_words: int = getattr(settings, "style_max_sentence_words", 0) or 0
-    s_jargon: list[str] = getattr(settings, "style_jargon_terms", []) or []
-
-    # Ensure settings values are the right types (guard against mocks)
-    if not isinstance(s_rules, list):
-        s_rules = []
-    if not isinstance(s_heading, str):
-        s_heading = ""
-    if not isinstance(s_max_words, int):
-        s_max_words = 0
-    if not isinstance(s_jargon, list):
-        s_jargon = []
-
-    # Rules: explicit param > settings > default
-    if rules.strip():
-        config_kwargs["enabled_rules"] = [r.strip() for r in rules.split(",") if r.strip()]
-    elif s_rules:
-        config_kwargs["enabled_rules"] = s_rules
-
-    # Heading style
-    if heading_style.strip() in ("sentence", "title"):
-        config_kwargs["heading_style"] = heading_style.strip()
-    elif s_heading in ("sentence", "title"):
-        config_kwargs["heading_style"] = s_heading
-
-    # Max sentence words
-    if max_sentence_words > 0:
-        config_kwargs["max_sentence_words"] = max_sentence_words
-    elif s_max_words > 0:
-        config_kwargs["max_sentence_words"] = s_max_words
-
-    # Custom terms: param + settings + .docsmcp-terms.txt + optional auto-detect
-    extra: list[str] | None = None
-    if custom_terms.strip():
-        extra = [t.strip() for t in custom_terms.split(",") if t.strip()]
-    merged_terms = build_custom_terms_for_style(root, settings, extra_terms=extra)
-    if merged_terms:
-        config_kwargs["custom_terms"] = merged_terms
-
-    # Custom jargon terms from settings
-    if s_jargon:
-        config_kwargs["jargon_terms"] = s_jargon
-
-    config = StyleConfig(**config_kwargs)
+    config = _build_style_config(rules, heading_style, max_sentence_words, custom_terms, root, settings)
     checker = StyleChecker(config)
 
-    # Check specific files or whole project
     if files.strip():
         file_list = [f.strip() for f in files.split(",") if f.strip()]
-        from docs_mcp.validators.style import FileStyleResult
-
-        results: list[FileStyleResult] = []
-        for file_str in file_list:
-            fp = Path(file_str)
-            if not fp.is_absolute():
-                fp = root / fp
-            if fp.exists():
-                results.append(checker.check_file(fp, relative_to=root))
-
-        total_issues = sum(len(r.issues) for r in results)
-        agg_score = (
-            sum(r.score for r in results) / len(results) if results else 100.0
-        )
-        issue_counts: dict[str, int] = {}
-        for r in results:
-            for issue in r.issues:
-                issue_counts[issue.rule] = issue_counts.get(issue.rule, 0) + 1
-
-        report = StyleReport(
-            total_files=len(results),
-            total_issues=total_issues,
-            files=results,
-            aggregate_score=round(agg_score, 1),
-            issue_counts=issue_counts,
-        )
+        report = _run_style_check_files(checker, file_list, root)
     else:
         report = checker.check_project(root)
 
-    # Build response
     if output_format.strip().lower() == "vale":
         data = _style_report_vale(report)
     else:

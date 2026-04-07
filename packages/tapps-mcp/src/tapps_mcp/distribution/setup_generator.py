@@ -1233,6 +1233,7 @@ def run_init(
     uv_mode: str | None = None,
     uv_extra: str | None = None,
     context7_api_key: str | None = None,
+    overwrite_tech_stack: bool = False,
 ) -> bool:
     """Run the init command logic.
 

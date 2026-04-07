@@ -478,83 +478,11 @@ async def docs_project_scan(
 
     root = settings.project_root
 
-    # Scan all documentation files
     all_docs = _scan_doc_files(root)
-
-    # Categorize documents
-    categories: dict[str, list[dict[str, Any]]] = {
-        "readme": [],
-        "changelog": [],
-        "contributing": [],
-        "license": [],
-        "security": [],
-        "code_of_conduct": [],
-        "api_docs": [],
-        "adr": [],
-        "guides": [],
-        "other": [],
-    }
-
-    total_size = 0
-    for doc in all_docs:
-        cat = doc.get("category", "other")
-        if cat not in categories:
-            cat = "other"
-        categories[cat].append(doc)
-        total_size += doc.get("size_bytes", 0)
-
-    # Check critical docs
-    existing_basenames_lower = {
-        d["path"].rsplit("/", 1)[-1].lower() for d in all_docs
-    }
-    existing_names_lower = {d["path"].lower() for d in all_docs}
-
-    critical_docs: dict[str, dict[str, Any]] = {}
-    for doc_name in _CRITICAL_DOCS:
-        doc_lower = doc_name.lower()
-        name_without_ext = doc_lower.rsplit(".", 1)[0] if "." in doc_lower else doc_lower
-
-        found = (
-            doc_lower in existing_names_lower
-            or doc_lower in existing_basenames_lower
-            or name_without_ext in existing_basenames_lower
-        )
-
-        if found:
-            # Find the matching doc entry for size info
-            match = next(
-                (
-                    d
-                    for d in all_docs
-                    if d["path"].lower() == doc_lower
-                    or d["path"].rsplit("/", 1)[-1].lower() == doc_lower
-                    or d["path"].rsplit("/", 1)[-1].lower() == name_without_ext
-                ),
-                None,
-            )
-            critical_docs[doc_name] = {
-                "exists": True,
-                "size_bytes": match["size_bytes"] if match else 0,
-            }
-        else:
-            critical_docs[doc_name] = {"exists": False}
-
-    # Calculate completeness score (0-100)
+    categories, total_size = _categorize_docs(all_docs)
+    critical_docs = _check_critical_docs(all_docs)
     completeness_score = _calculate_completeness(categories, critical_docs, all_docs)
-
-    # Build recommendations
-    recommendations: list[str] = []
-    for doc_name, info in critical_docs.items():
-        if not info["exists"]:
-            recommendations.append(f"Missing critical document: {doc_name}")
-    if not categories["api_docs"]:
-        recommendations.append("No API documentation found. Consider adding API docs.")
-    if not categories["guides"]:
-        recommendations.append("No guides or tutorials found. Consider adding user guides.")
-    if len(all_docs) == 0:
-        recommendations.append(
-            "No documentation files found. Start by creating a README.md."
-        )
+    recommendations = _build_project_scan_recommendations(categories, critical_docs, all_docs)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -567,27 +495,116 @@ async def docs_project_scan(
         "recommendations": recommendations,
     }
 
-    # Language composition — count source files by extension.
     lang_counts = _count_source_files(root)
     if lang_counts:
         data["language_composition"] = lang_counts
 
-    # Optional style summary (Epic 84) — respects .docsmcp.yaml and .docsmcp-terms.txt
-    if settings.style_include_in_project_scan:
-        try:
-            style_checker = build_style_checker_for_project(root, settings)
-            style_report = style_checker.check_project(root)
-            if style_report.total_files > 0:
-                data["style_summary"] = {
-                    "total_files": style_report.total_files,
-                    "total_issues": style_report.total_issues,
-                    "aggregate_score": style_report.aggregate_score,
-                    "top_issues": style_report.top_issues[:5],
-                }
-        except Exception:
-            pass
+    _add_style_summary(data, root, settings)
+    _add_tapps_enrichment(data, root)
 
-    # Optional TappsMCP enrichment
+    return success_response("docs_project_scan", elapsed_ms, data)
+
+
+def _categorize_docs(
+    all_docs: list[dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, Any]]], int]:
+    """Bin documents into category buckets and sum total size."""
+    categories: dict[str, list[dict[str, Any]]] = {
+        "readme": [],
+        "changelog": [],
+        "contributing": [],
+        "license": [],
+        "security": [],
+        "code_of_conduct": [],
+        "api_docs": [],
+        "adr": [],
+        "guides": [],
+        "other": [],
+    }
+    total_size = 0
+    for doc in all_docs:
+        cat = doc.get("category", "other")
+        if cat not in categories:
+            cat = "other"
+        categories[cat].append(doc)
+        total_size += doc.get("size_bytes", 0)
+    return categories, total_size
+
+
+def _check_critical_docs(
+    all_docs: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Check which critical docs exist and return their metadata."""
+    existing_basenames_lower = {d["path"].rsplit("/", 1)[-1].lower() for d in all_docs}
+    existing_names_lower = {d["path"].lower() for d in all_docs}
+
+    critical_docs: dict[str, dict[str, Any]] = {}
+    for doc_name in _CRITICAL_DOCS:
+        doc_lower = doc_name.lower()
+        name_without_ext = doc_lower.rsplit(".", 1)[0] if "." in doc_lower else doc_lower
+        found = (
+            doc_lower in existing_names_lower
+            or doc_lower in existing_basenames_lower
+            or name_without_ext in existing_basenames_lower
+        )
+        if found:
+            match = next(
+                (
+                    d for d in all_docs
+                    if d["path"].lower() == doc_lower
+                    or d["path"].rsplit("/", 1)[-1].lower() == doc_lower
+                    or d["path"].rsplit("/", 1)[-1].lower() == name_without_ext
+                ),
+                None,
+            )
+            critical_docs[doc_name] = {
+                "exists": True,
+                "size_bytes": match["size_bytes"] if match else 0,
+            }
+        else:
+            critical_docs[doc_name] = {"exists": False}
+    return critical_docs
+
+
+def _build_project_scan_recommendations(
+    categories: dict[str, list[dict[str, Any]]],
+    critical_docs: dict[str, dict[str, Any]],
+    all_docs: list[dict[str, Any]],
+) -> list[str]:
+    """Build actionable recommendations for the project scan response."""
+    recommendations: list[str] = []
+    for doc_name, info in critical_docs.items():
+        if not info["exists"]:
+            recommendations.append(f"Missing critical document: {doc_name}")
+    if not categories["api_docs"]:
+        recommendations.append("No API documentation found. Consider adding API docs.")
+    if not categories["guides"]:
+        recommendations.append("No guides or tutorials found. Consider adding user guides.")
+    if len(all_docs) == 0:
+        recommendations.append("No documentation files found. Start by creating a README.md.")
+    return recommendations
+
+
+def _add_style_summary(data: dict[str, Any], root: Any, settings: Any) -> None:
+    """Optionally add style summary to project scan data (Epic 84)."""
+    if not settings.style_include_in_project_scan:
+        return
+    try:
+        style_checker = build_style_checker_for_project(root, settings)
+        style_report = style_checker.check_project(root)
+        if style_report.total_files > 0:
+            data["style_summary"] = {
+                "total_files": style_report.total_files,
+                "total_issues": style_report.total_issues,
+                "aggregate_score": style_report.aggregate_score,
+                "top_issues": style_report.top_issues[:5],
+            }
+    except Exception:
+        pass
+
+
+def _add_tapps_enrichment(data: dict[str, Any], root: Any) -> None:
+    """Optionally add TappsMCP enrichment data to project scan data."""
     try:
         from docs_mcp.integrations.tapps import TappsIntegration
 
@@ -605,8 +622,6 @@ async def docs_project_scan(
                 }
     except Exception:
         pass
-
-    return success_response("docs_project_scan", elapsed_ms, data)
 
 
 def _calculate_completeness(

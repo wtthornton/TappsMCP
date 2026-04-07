@@ -32,11 +32,6 @@ from tapps_mcp.benchmark.checklist_calibrator import (
     ChecklistCalibrator,
     ToolTierClassification,
 )
-from tapps_mcp.benchmark.expert_tracker import (
-    ExpertEffectiveness,
-    ExpertEffectivenessAnalyzer,
-    ExpertEffectivenessReport,
-)
 from tapps_mcp.benchmark.memory_tracker import (
     MemoryEffectiveness,
     MemoryEffectivenessAnalyzer,
@@ -635,100 +630,8 @@ class TestChecklistCalibrator:
 
 
 # ===========================================================================
-# Story 32.5: ExpertTracker and MemoryTracker
+# Story 32.5: MemoryTracker
 # ===========================================================================
-
-
-class TestExpertEffectiveness:
-    """Tests for ExpertEffectiveness model."""
-
-    def test_creation(self) -> None:
-        eff = ExpertEffectiveness(
-            domain="security",
-            consultations=10,
-            resolution_with=0.8,
-            resolution_without=0.5,
-            impact=0.3,
-            avg_confidence=0.7,
-        )
-        assert eff.impact == 0.3
-
-
-class TestExpertEffectivenessAnalyzer:
-    """Tests for ExpertEffectivenessAnalyzer."""
-
-    def test_analyze_basic(self) -> None:
-        results = [
-            _make_impact_result(
-                task_id="t-1",
-                condition=ToolCondition.ALL_TOOLS,
-                resolved=True,
-                tools_called=["tapps_consult_expert"],
-            ),
-            _make_impact_result(
-                task_id="t-1",
-                condition=ToolCondition.ALL_MINUS_ONE,
-                tool_name="tapps_consult_expert",
-                resolved=False,
-            ),
-        ]
-        tasks = [_make_task(task_id="t-1", category="security")]
-        analyzer = ExpertEffectivenessAnalyzer()
-        report = analyzer.analyze(results, tasks)
-        assert isinstance(report, ExpertEffectivenessReport)
-        assert len(report.per_domain) > 0
-        assert report.most_effective_domain != ""
-
-    def test_analyze_multiple_categories(self) -> None:
-        results = []
-        tasks = []
-        for i, category in enumerate(["security", "quality", "architecture"]):
-            tid = f"t-{i}"
-            results.append(
-                _make_impact_result(
-                    task_id=tid,
-                    condition=ToolCondition.ALL_TOOLS,
-                    resolved=True,
-                    tools_called=["tapps_consult_expert"],
-                ),
-            )
-            tasks.append(_make_task(task_id=tid, category=category))
-
-        analyzer = ExpertEffectivenessAnalyzer()
-        report = analyzer.analyze(results, tasks)
-        domains = {e.domain for e in report.per_domain}
-        assert len(domains) >= 2
-
-    def test_analyze_empty_results(self) -> None:
-        analyzer = ExpertEffectivenessAnalyzer()
-        report = analyzer.analyze([], [])
-        assert report.most_effective_domain == "none"
-        assert report.least_effective_domain == "none"
-
-    def test_report_sorted_by_impact(self) -> None:
-        results = [
-            _make_impact_result(
-                task_id="t-sec",
-                condition=ToolCondition.ALL_TOOLS,
-                resolved=True,
-                tools_called=["tapps_consult_expert"],
-            ),
-            _make_impact_result(
-                task_id="t-qual",
-                condition=ToolCondition.ALL_TOOLS,
-                resolved=False,
-                tools_called=["tapps_consult_expert"],
-            ),
-        ]
-        tasks = [
-            _make_task(task_id="t-sec", category="security"),
-            _make_task(task_id="t-qual", category="quality"),
-        ]
-        analyzer = ExpertEffectivenessAnalyzer()
-        report = analyzer.analyze(results, tasks)
-        # Sorted by impact descending
-        if len(report.per_domain) >= 2:
-            assert report.per_domain[0].impact >= report.per_domain[-1].impact
 
 
 class TestMemoryEffectiveness:

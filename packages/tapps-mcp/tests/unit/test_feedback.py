@@ -153,17 +153,8 @@ class TestStatsRecommendations:
         recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
         assert any("auto-security" in r for r in recs)
 
-    def test_research_never_called(self):
-        from tapps_mcp.server_metrics_tools import _generate_stats_recommendations
-
-        class FakeSummary:
-            gate_pass_rate = 0.8
-
-        breakdowns = [
-            {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
-        ]
-        recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
-        assert any("tapps_research" in r for r in recs)
+    def _test_research_never_called_REMOVED(self):
+        """tapps_research removed (EPIC-94)."""
 
     def test_high_gate_fail_rate(self):
         from tapps_mcp.server_metrics_tools import _generate_stats_recommendations
@@ -268,13 +259,8 @@ class TestDomainWeightAdjustment:
 
         _reset_settings_cache()
 
-    def test_expert_tools_defined(self):
-        """Expert tools should be defined for domain feedback."""
-        from tapps_mcp.server_metrics_tools import _EXPERT_TOOLS
-
-        assert "tapps_consult_expert" in _EXPERT_TOOLS
-        assert "tapps_research" in _EXPERT_TOOLS
-        assert "tapps_score_file" not in _EXPERT_TOOLS
+    def _test_expert_tools_defined_REMOVED(self):
+        """Expert tools removed (EPIC-94)."""
 
     def test_adjust_domain_weights_technical(self, tmp_path):
         """Technical domain feedback should update technical weights."""
@@ -284,14 +270,13 @@ class TestDomainWeightAdjustment:
         assert success is True
         assert domain_type == "technical"
 
-    def test_adjust_domain_weights_business(self, tmp_path):
-        """Unknown domain should be treated as business."""
+    def test_adjust_domain_weights_unknown(self, tmp_path):
+        """Unknown domain is treated as technical after expert removal (EPIC-94)."""
         from tapps_mcp.server_metrics_tools import _adjust_domain_weights
 
-        # Unregistered domain is assumed to be business
         success, domain_type = _adjust_domain_weights("acme-billing", helpful=True)
         assert success is True
-        assert domain_type == "business"
+        assert domain_type == "technical"
 
     def test_adjust_domain_weights_persists(self, tmp_path):
         """Domain weight adjustment should persist to disk."""
@@ -350,27 +335,8 @@ class TestDomainWeightAdjustment:
         assert entry.positive_count == 2
         assert entry.negative_count == 1
 
-    def test_registered_business_domain(self, tmp_path, monkeypatch):
-        """Registered business domain should be classified as business."""
-        from tapps_core.experts.models import ExpertConfig
-        from tapps_core.experts.registry import ExpertRegistry
-        from tapps_mcp.server_metrics_tools import _adjust_domain_weights
-
-        # Register a business expert
-        business_expert = ExpertConfig(
-            expert_id="acme-billing-expert",
-            expert_name="ACME Billing Expert",
-            primary_domain="acme-billing",
-            is_builtin=False,
-        )
-        ExpertRegistry.register_business_experts([business_expert])
-
-        try:
-            success, domain_type = _adjust_domain_weights("acme-billing", helpful=True)
-            assert success is True
-            assert domain_type == "business"
-        finally:
-            ExpertRegistry.clear_business_experts()
+    # Note: test_registered_business_domain removed — ExpertConfig/ExpertRegistry
+    # were removed in EPIC-94 (expert system removal).
 
 
 class TestFeedbackDomainIntegration:

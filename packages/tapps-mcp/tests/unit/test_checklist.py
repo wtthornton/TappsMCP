@@ -135,13 +135,6 @@ class TestCallTracker:
         assert "tapps_score_file" not in r.called
         assert "tapps_quality_gate" in r.called
 
-    def test_research_satisfies_consult_and_docs(self):
-        from tapps_mcp.tools.checklist import _compute_effective_tools
-
-        eff = _compute_effective_tools({"tapps_research"})
-        assert "tapps_consult_expert" in eff
-        assert "tapps_lookup_docs" in eff
-
     def test_evaluate_includes_recommended(self):
         result = CallTracker.evaluate("feature")
         assert "tapps_security_scan" in result.missing_recommended

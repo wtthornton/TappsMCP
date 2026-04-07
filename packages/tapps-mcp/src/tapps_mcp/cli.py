@@ -195,6 +195,7 @@ def init(
         uv_mode=uv_mode,
         uv_extra=uv_extra,
         context7_api_key=context7_key,
+        overwrite_tech_stack=overwrite_tech_stack,
     )
     if not success:
         raise SystemExit(1)
@@ -873,81 +874,18 @@ def lookup_docs_cmd(library: str, topic: str, mode: str, raw: bool) -> None:
 
 @main.command("research")
 @click.option("--question", required=True, help="Technical question to research.")
-@click.option("--domain", default=None, help="Expert domain override.")
-@click.option("--library", default=None, help="Library for docs supplement.")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
-def research_cmd(question: str, domain: str | None, library: str | None, as_json: bool) -> None:
-    """Combined expert consultation + docs lookup (no MCP server required)."""
-    import asyncio
-    import json
-
-    from tapps_core.experts.engine import consult_expert
-
-    result = consult_expert(question=question, domain=domain)
-
-    # Optionally supplement with docs lookup
-    docs_content: str | None = None
-    if library:
-        from tapps_core.config.settings import load_settings
-        from tapps_core.knowledge.cache import KBCache
-        from tapps_core.knowledge.lookup import LookupEngine
-
-        settings = load_settings()
-        cache = KBCache(settings.project_root / ".tapps-mcp-cache")
-
-        async def _lookup() -> str | None:
-            engine = LookupEngine(cache, settings=settings)
-            try:
-                lr = await engine.lookup(library=library, topic="overview", mode="code")
-            finally:
-                await engine.close()
-            return lr.content if lr.success else None
-
-        docs_content = asyncio.run(_lookup())
-
-    if as_json:
-        output = result.model_dump(mode="json")
-        if docs_content:
-            output["docs_supplement"] = docs_content[:2000]
-        click.echo(json.dumps(output, indent=2))
-        return
-
-    click.echo(f"Domain: {result.domain} | Expert: {result.expert_name}")
-    click.echo(f"Confidence: {result.confidence:.0%}")
-    click.echo(f"Sources: {', '.join(result.sources) if result.sources else 'none'}")
-    if result.recommendation:
-        click.echo(f"Recommendation: {result.recommendation}")
-    click.echo("---")
-    click.echo(result.answer)
-    if docs_content:
-        preview = docs_content[:1000]
-        click.echo("\n--- Documentation supplement ---")
-        click.echo(preview)
+def research_cmd(question: str) -> None:
+    """DEPRECATED — Expert system removed (EPIC-94). Use tapps_lookup_docs."""
+    click.echo(click.style("tapps-mcp research is deprecated (EPIC-94).", fg="yellow"))
+    click.echo("Use 'tapps-mcp lookup-docs' for documentation lookup.")
 
 
 @main.command("consult-expert")
 @click.option("--question", required=True, help="Technical question to ask.")
-@click.option("--domain", default=None, help="Expert domain override.")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
-def consult_expert_cmd(question: str, domain: str | None, as_json: bool) -> None:
-    """Consult a domain expert (no MCP server required)."""
-    import json
-
-    from tapps_core.experts.engine import consult_expert
-
-    result = consult_expert(question=question, domain=domain)
-
-    if as_json:
-        click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
-        return
-
-    click.echo(f"Domain: {result.domain} | Expert: {result.expert_name}")
-    click.echo(f"Confidence: {result.confidence:.0%}")
-    click.echo(f"Sources: {', '.join(result.sources) if result.sources else 'none'}")
-    if result.recommendation:
-        click.echo(f"Recommendation: {result.recommendation}")
-    click.echo("---")
-    click.echo(result.answer)
+def consult_expert_cmd(question: str) -> None:
+    """DEPRECATED — Expert system removed (EPIC-94)."""
+    click.echo(click.style("tapps-mcp consult-expert is deprecated (EPIC-94).", fg="yellow"))
+    click.echo("Expert system has been removed. Use AgentForge for expert consultation.")
 
 
 @main.command(name="replace-exe")

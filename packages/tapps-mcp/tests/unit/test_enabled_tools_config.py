@@ -17,7 +17,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = None
         allowed = _resolve_allowed_tools(settings)
         assert allowed == ALL_TOOL_NAMES
-        assert len(allowed) == 30
+        assert len(allowed) == 24
 
     def test_enabled_tools_subset(self) -> None:
         from tapps_mcp.server import _resolve_allowed_tools
@@ -61,7 +61,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "pipeline"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_PIPELINE
-        assert len(allowed) == 14
+        assert len(allowed) == 11
 
     def test_preset_full(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES, _resolve_allowed_tools
@@ -82,7 +82,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "reviewer"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_REVIEWER
-        assert len(allowed) == 10
+        assert len(allowed) == 9
 
     def test_preset_planner(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_PLANNER, _resolve_allowed_tools
@@ -93,7 +93,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "planner"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_PLANNER
-        assert len(allowed) == 8
+        assert len(allowed) == 6
 
     def test_preset_frontend(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_FRONTEND, _resolve_allowed_tools
@@ -104,7 +104,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "frontend"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_FRONTEND
-        assert len(allowed) == 7
+        assert len(allowed) == 5
 
     def test_preset_developer(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_DEVELOPER, _resolve_allowed_tools
@@ -115,7 +115,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "developer"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_DEVELOPER
-        assert len(allowed) == 12
+        assert len(allowed) == 10
 
     def test_enabled_tools_invalid_names_ignored(self) -> None:
         from tapps_mcp.server import _resolve_allowed_tools
@@ -200,17 +200,14 @@ class TestToolPresetConstants:
         assert TOOL_PRESET_CORE <= TOOL_PRESET_PIPELINE
         tier2 = {
             "tapps_score_file",
-            "tapps_consult_expert",
-            "tapps_research",
             "tapps_memory",
-            "tapps_project_profile",
             "tapps_impact_analysis",
             "tapps_validate_config",
         }
         assert tier2 <= TOOL_PRESET_PIPELINE
-        assert len(TOOL_PRESET_PIPELINE) == 14
+        assert len(TOOL_PRESET_PIPELINE) == 11
 
     def test_all_tool_names_count(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES
 
-        assert len(ALL_TOOL_NAMES) == 30
+        assert len(ALL_TOOL_NAMES) == 24

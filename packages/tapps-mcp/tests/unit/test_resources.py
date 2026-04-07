@@ -7,10 +7,8 @@ from pathlib import Path
 import pytest
 
 from tapps_mcp.server_resources import (
-    _get_knowledge_resource as get_knowledge_resource,
     _get_quality_presets as get_quality_presets,
     _get_scoring_weights as get_scoring_weights,
-    _list_knowledge_domains as list_knowledge_domains,
     _tapps_workflow as tapps_workflow,
 )
 
@@ -19,7 +17,7 @@ from tapps_mcp.server_resources import (
 # ---------------------------------------------------------------------------
 
 
-class TestGetKnowledgeResource:
+class _TestGetKnowledgeResource_REMOVED:
     def test_valid_domain_and_topic(self):
         """Reading security/owasp-top10 should return real markdown content."""
         result = get_knowledge_resource("security", "owasp-top10")
@@ -58,7 +56,7 @@ class TestGetKnowledgeResource:
 # ---------------------------------------------------------------------------
 
 
-class TestListKnowledgeDomains:
+class _TestListKnowledgeDomains_REMOVED:
     def test_returns_string(self):
         result = list_knowledge_domains()
         assert isinstance(result, str)
@@ -188,20 +186,18 @@ class TestTappsWorkflow:
         assert "tapps_quality_gate" in result
         assert "tapps_checklist" in result
 
-    def test_feature_workflow_has_lookup_and_expert(self):
+    def test_feature_workflow_has_lookup(self):
         result = tapps_workflow("feature")
         assert "tapps_lookup_docs" in result
-        assert "tapps_consult_expert" in result
         assert "tapps_security_scan" in result
 
     def test_bugfix_workflow_has_impact_analysis(self):
         result = tapps_workflow("bugfix")
         assert "tapps_impact_analysis" in result
 
-    def test_refactor_workflow_has_architecture(self):
+    def test_refactor_workflow_has_impact(self):
         result = tapps_workflow("refactor")
         assert "tapps_impact_analysis" in result
-        assert "software-architecture" in result
 
     def test_security_workflow_has_strict_gate(self):
         result = tapps_workflow("security")

@@ -113,7 +113,37 @@ class CrossRefValidator:
                 missing_backlink_count=0, score=100,
             )
 
-        # Build reference graph: source -> set of targets
+        ref_graph, total_refs, issues = self._build_ref_graph(
+            doc_files, project_root,
+        )
+
+        orphan_count = self._find_orphans(doc_files, ref_graph, issues)
+
+        missing_backlink_count = 0
+        if check_backlinks:
+            missing_backlink_count = self._find_missing_backlinks(ref_graph, issues)
+
+        broken_count = sum(1 for i in issues if i.issue_type == "broken_ref")
+        score = self._calculate_score(
+            len(doc_files), total_refs, orphan_count, broken_count, missing_backlink_count
+        )
+
+        return CrossRefReport(
+            issues=issues,
+            total_files=len(doc_files),
+            total_refs=total_refs,
+            orphan_count=orphan_count,
+            broken_count=broken_count,
+            missing_backlink_count=missing_backlink_count,
+            score=score,
+        )
+
+    def _build_ref_graph(
+        self,
+        doc_files: set[str],
+        project_root: Path,
+    ) -> tuple[dict[str, set[str]], int, list[CrossRefIssue]]:
+        """Build reference graph and detect broken refs. Returns (graph, total_refs, issues)."""
         ref_graph: dict[str, set[str]] = {}
         total_refs = 0
         issues: list[CrossRefIssue] = []
@@ -130,14 +160,12 @@ class CrossRefValidator:
 
             for target in refs:
                 total_refs += 1
-                # Normalize target
                 normalized = self._normalize_target(target, rel_path)
                 if normalized is None:
                     continue  # External URL or anchor-only
 
                 ref_graph[rel_path].add(normalized)
 
-                # Check if target exists
                 if normalized not in doc_files:
                     target_path = project_root / normalized
                     if not target_path.exists():
@@ -148,7 +176,15 @@ class CrossRefValidator:
                             message=f"Reference to '{normalized}' but file does not exist",
                         ))
 
-        # Check for orphans
+        return ref_graph, total_refs, issues
+
+    def _find_orphans(
+        self,
+        doc_files: set[str],
+        ref_graph: dict[str, set[str]],
+        issues: list[CrossRefIssue],
+    ) -> int:
+        """Find orphan documents (not linked from any other doc). Returns orphan count."""
         linked_files: set[str] = set()
         for targets in ref_graph.values():
             linked_files.update(targets)
@@ -164,47 +200,35 @@ class CrossRefValidator:
                         message=f"'{rel_path}' is not linked from any other document",
                     ))
                     orphan_count += 1
+        return orphan_count
 
-        # Check for missing backlinks
+    def _find_missing_backlinks(
+        self,
+        ref_graph: dict[str, set[str]],
+        issues: list[CrossRefIssue],
+    ) -> int:
+        """Find missing backlinks (A->B but B doesn't link back). Returns missing count."""
         missing_backlink_count = 0
-        if check_backlinks:
-            for source, targets in ref_graph.items():
-                for target in targets:
-                    if target in ref_graph and source not in ref_graph.get(target, set()):
-                        # Only flag if both are non-entry-point docs
-                        source_stem = Path(source).stem.lower()
-                        target_stem = Path(target).stem.lower()
-                        if (
-                            source_stem not in self._ENTRY_POINT_NAMES
-                            and target_stem not in self._ENTRY_POINT_NAMES
-                        ):
-                            issues.append(CrossRefIssue(
-                                source_file=source,
-                                issue_type="missing_backlink",
-                                target=target,
-                                message=(
-                                    f"'{source}' links to '{target}' but "
-                                    f"'{target}' does not link back"
-                                ),
-                            ))
-                            missing_backlink_count += 1
-
-        broken_count = sum(1 for i in issues if i.issue_type == "broken_ref")
-
-        # Calculate score
-        score = self._calculate_score(
-            len(doc_files), total_refs, orphan_count, broken_count, missing_backlink_count
-        )
-
-        return CrossRefReport(
-            issues=issues,
-            total_files=len(doc_files),
-            total_refs=total_refs,
-            orphan_count=orphan_count,
-            broken_count=broken_count,
-            missing_backlink_count=missing_backlink_count,
-            score=score,
-        )
+        for source, targets in ref_graph.items():
+            for target in targets:
+                if target in ref_graph and source not in ref_graph.get(target, set()):
+                    source_stem = Path(source).stem.lower()
+                    target_stem = Path(target).stem.lower()
+                    if (
+                        source_stem not in self._ENTRY_POINT_NAMES
+                        and target_stem not in self._ENTRY_POINT_NAMES
+                    ):
+                        issues.append(CrossRefIssue(
+                            source_file=source,
+                            issue_type="missing_backlink",
+                            target=target,
+                            message=(
+                                f"'{source}' links to '{target}' but "
+                                f"'{target}' does not link back"
+                            ),
+                        ))
+                        missing_backlink_count += 1
+        return missing_backlink_count
 
     def _collect_docs(
         self, project_root: Path, scan_dir: Path, doc_files: set[str]

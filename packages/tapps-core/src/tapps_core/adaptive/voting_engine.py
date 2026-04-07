@@ -17,7 +17,6 @@ from tapps_core.adaptive.models import (
     ExpertWeightsSnapshot,
 )
 from tapps_core.adaptive.persistence import save_json_atomic
-from tapps_core.adaptive.weight_distributor import WeightDistributor
 
 if TYPE_CHECKING:
     from tapps_core.adaptive.protocols import PerformanceTrackerProtocol
@@ -222,14 +221,8 @@ class AdaptiveVotingEngine:
 
 
 def _build_default_matrix() -> ExpertWeightMatrix:
-    """Build a default weight matrix from :class:`ExpertRegistry`."""
-    from tapps_core.experts.registry import ExpertRegistry
+    """Build a default weight matrix.
 
-    experts = ExpertRegistry.get_all_experts()
-    if not experts:
-        return ExpertWeightMatrix()
-
-    domains = [e.primary_domain for e in experts]
-    primary_map = {e.primary_domain: e.expert_id for e in experts}
-
-    return WeightDistributor.calculate_weights(domains, primary_map)
+    Expert registry removed (EPIC-94); returns empty matrix.
+    """
+    return ExpertWeightMatrix()

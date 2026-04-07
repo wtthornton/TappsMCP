@@ -158,7 +158,7 @@ class TestTappsSessionStart:
         assert result["tool"] == "tapps_session_start"
 
     @pytest.mark.asyncio
-    async def test_includes_server_data_and_profile_hint(self) -> None:
+    async def test_includes_server_data(self) -> None:
         from tapps_mcp.server import tapps_session_start
 
         result = await tapps_session_start()
@@ -168,9 +168,6 @@ class TestTappsSessionStart:
         assert "pipeline" in data
         assert "quick_start" in data
         assert "critical_rules" in data
-        assert data["project_profile"] is None
-        assert "project_profile_hint" in data
-        assert "tapps_project_profile" in data["project_profile_hint"]
 
     @pytest.mark.asyncio
     async def test_records_session_start_call(self) -> None:

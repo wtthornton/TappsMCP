@@ -33,6 +33,11 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
+def _split_csv(value: str) -> list[str]:
+    """Split a comma-separated string into a trimmed list, dropping blanks."""
+    return [item.strip() for item in value.split(",") if item.strip()] if value else []
+
+
 async def docs_generate_changelog(
     format: str = "keep-a-changelog",
     include_unreleased: bool = True,
@@ -1119,35 +1124,15 @@ async def docs_generate_epic(
     from docs_mcp.generators.epics import EpicConfig, EpicGenerator, EpicStoryStub
 
     # Parse comma-separated lists
-    dep_list = [d.strip() for d in dependencies.split(",") if d.strip()] if dependencies else []
-    blocks_list = [b.strip() for b in blocks.split(",") if b.strip()] if blocks else []
-    ac_list = (
-        [a.strip() for a in acceptance_criteria.split(",") if a.strip()]
-        if acceptance_criteria
-        else []
-    )
-    notes_list = (
-        [n.strip() for n in technical_notes.split(",") if n.strip()]
-        if technical_notes
-        else []
-    )
-    risks_list = [r.strip() for r in risks.split(",") if r.strip()] if risks else []
-    ng_list = [n.strip() for n in non_goals.split(",") if n.strip()] if non_goals else []
-    sm_list = (
-        [s.strip() for s in success_metrics.split(",") if s.strip()]
-        if success_metrics
-        else []
-    )
-    sh_list = (
-        [s.strip() for s in stakeholders.split(",") if s.strip()]
-        if stakeholders
-        else []
-    )
-    ref_list = (
-        [r.strip() for r in references.split(",") if r.strip()]
-        if references
-        else []
-    )
+    dep_list = _split_csv(dependencies)
+    blocks_list = _split_csv(blocks)
+    ac_list = _split_csv(acceptance_criteria)
+    notes_list = _split_csv(technical_notes)
+    risks_list = _split_csv(risks)
+    ng_list = _split_csv(non_goals)
+    sm_list = _split_csv(success_metrics)
+    sh_list = _split_csv(stakeholders)
+    ref_list = _split_csv(references)
 
     # Parse stories JSON
     story_list: list[EpicStoryStub] = []
@@ -1342,21 +1327,11 @@ async def docs_generate_story(
     from docs_mcp.generators.stories import StoryConfig, StoryGenerator, StoryTask
 
     # Parse comma-separated lists
-    ac_list = (
-        [a.strip() for a in acceptance_criteria.split(",") if a.strip()]
-        if acceptance_criteria
-        else []
-    )
-    tc_list = (
-        [t.strip() for t in test_cases.split(",") if t.strip()] if test_cases else []
-    )
-    dep_list = [d.strip() for d in dependencies.split(",") if d.strip()] if dependencies else []
-    file_list = [f.strip() for f in files.split(",") if f.strip()] if files else []
-    notes_list = (
-        [n.strip() for n in technical_notes.split(",") if n.strip()]
-        if technical_notes
-        else []
-    )
+    ac_list = _split_csv(acceptance_criteria)
+    tc_list = _split_csv(test_cases)
+    dep_list = _split_csv(dependencies)
+    file_list = _split_csv(files)
+    notes_list = _split_csv(technical_notes)
 
     # Parse tasks JSON (or pre-parsed list from MCP clients)
     task_list: list[StoryTask] = []

@@ -28,11 +28,9 @@ class TestMetricsHub:
     def test_has_all_trackers(self, hub):
         assert hub.execution is not None
         assert hub.outcomes is not None
-        assert hub.experts is not None
         assert hub.confidence is not None
         assert hub.rag is not None
         assert hub.consultations is not None
-        assert hub.business is not None
 
     def test_session_id(self, hub):
         assert len(hub.session_id) == 12

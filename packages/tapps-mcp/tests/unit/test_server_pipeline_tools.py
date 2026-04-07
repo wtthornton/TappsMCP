@@ -115,13 +115,8 @@ class TestTappsSessionStart:
         assert "tapps_session_start" in CallTracker.get_called_tools()
 
     @pytest.mark.asyncio
-    async def test_includes_project_profile_hint(self) -> None:
-        from tapps_mcp.server_pipeline_tools import tapps_session_start
-
-        result = await tapps_session_start()
-        data = result["data"]
-        assert "project_profile_hint" in data
-        assert "tapps_project_profile" in data["project_profile_hint"]
+    async def _test_includes_project_profile_hint_REMOVED(self) -> None:
+        """tapps_project_profile removed (EPIC-96)."""
 
     @pytest.mark.asyncio
     async def test_marks_session_initialized(self) -> None:
@@ -142,21 +137,14 @@ class TestTappsSessionStart:
         timings = data["timings"]
         assert "server_info_ms" in timings
         assert "memory_status_ms" in timings
-        assert "business_experts_ms" in timings
         assert "total_ms" in timings
         # All timings must be non-negative integers
         for key, val in timings.items():
             assert isinstance(val, int), f"timings[{key}] should be int"
 
     @pytest.mark.asyncio
-    async def test_populates_tech_stack_domains(self) -> None:
-        """Session start populates tech stack domains for expert boost (Epic 68)."""
-        from tapps_mcp.server_pipeline_tools import tapps_session_start
-
-        result = await tapps_session_start()
-        data = result["data"]
-        # tech_stack_domains_ms should be in timings
-        assert "tech_stack_domains_ms" in data["timings"]
+    async def _test_populates_tech_stack_domains_REMOVED(self) -> None:
+        """Expert system removed (EPIC-94). Tech stack domains no longer populated."""
 
     @pytest.mark.asyncio
     async def test_background_maintenance_fields(self) -> None:

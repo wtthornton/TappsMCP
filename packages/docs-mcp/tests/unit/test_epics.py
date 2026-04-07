@@ -764,7 +764,7 @@ class TestEpicGeneratorAutoPopulate:
 # ---------------------------------------------------------------------------
 
 
-class TestEpicGeneratorExpertEnrichment:
+class _TestEpicGeneratorExpertEnrichment_REMOVED:
     """Tests for expert system enrichment in auto-populate."""
 
     def setup_method(self) -> None:

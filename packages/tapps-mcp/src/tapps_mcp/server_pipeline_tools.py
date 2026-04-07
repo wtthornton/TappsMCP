@@ -1227,6 +1227,52 @@ def _schedule_background_maintenance(
     task.add_done_callback(_background_tasks.discard)
 
 
+def _collect_memory_status(settings: Any) -> dict[str, Any]:
+    """Collect memory subsystem status for session start."""
+    status: dict[str, Any] = {"enabled": False}
+    try:
+        if not settings.memory.enabled:
+            return status
+        from tapps_mcp.server_helpers import _get_memory_store
+
+        mem_store = _get_memory_store()
+        if mem_store is None:
+            return status
+
+        snapshot = mem_store.snapshot()
+        contradicted_count = sum(1 for entry in snapshot.entries if entry.contradicted)
+
+        by_tier: dict[str, int] = {
+            "architectural": 0, "pattern": 0, "procedural": 0, "context": 0,
+        }
+        confidences: list[float] = []
+        for entry in snapshot.entries:
+            tier_val = entry.tier if isinstance(entry.tier, str) else entry.tier.value
+            by_tier[tier_val] = by_tier.get(tier_val, 0) + 1
+            confidences.append(entry.confidence)
+
+        avg_conf = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
+        max_mem = settings.memory.max_memories
+        cap_pct = round((snapshot.total_count / max_mem) * 100, 1) if max_mem > 0 else 0.0
+
+        status = {
+            "enabled": True,
+            "total": snapshot.total_count,
+            "stale": 0,
+            "contradicted": contradicted_count,
+            "by_tier": by_tier,
+            "avg_confidence": avg_conf,
+            "capacity_pct": cap_pct,
+        }
+
+        _enrich_memory_profile_status(status, mem_store, settings)
+        _enrich_memory_status_hints(status, snapshot.entries, settings)
+        _schedule_background_maintenance(mem_store, snapshot, settings)
+    except Exception:
+        _logger.debug("memory_status_check_failed", exc_info=True)
+    return status
+
+
 async def tapps_session_start(
     project_root: str = "",
     quick: bool = False,
@@ -1269,60 +1315,7 @@ async def tapps_session_start(
 
     # Memory status (lazy, non-blocking)
     phase_start = time.perf_counter_ns()
-    memory_status: dict[str, Any] = {"enabled": False}
-    try:
-        if settings.memory.enabled:
-            from tapps_mcp.server_helpers import _get_memory_store
-
-            mem_store = _get_memory_store()
-            if mem_store is not None:
-                snapshot = mem_store.snapshot()
-                contradicted_count = sum(1 for entry in snapshot.entries if entry.contradicted)
-
-                # Tier breakdown
-                by_tier: dict[str, int] = {
-                    "architectural": 0, "pattern": 0, "procedural": 0, "context": 0,
-                }
-                confidences: list[float] = []
-                for entry in snapshot.entries:
-                    tier_val = (
-                        entry.tier if isinstance(entry.tier, str) else entry.tier.value
-                    )
-                    by_tier[tier_val] = by_tier.get(tier_val, 0) + 1
-                    confidences.append(entry.confidence)
-
-                avg_conf = (
-                    round(sum(confidences) / len(confidences), 4)
-                    if confidences
-                    else 0.0
-                )
-                max_mem = settings.memory.max_memories
-                cap_pct = (
-                    round((snapshot.total_count / max_mem) * 100, 1) if max_mem > 0 else 0.0
-                )
-
-                memory_status = {
-                    "enabled": True,
-                    "total": snapshot.total_count,
-                    "stale": 0,
-                    "contradicted": contradicted_count,
-                    "by_tier": by_tier,
-                    "avg_confidence": avg_conf,
-                    "capacity_pct": cap_pct,
-                }
-
-                # Epic M2.4: Profile info in memory status
-                _enrich_memory_profile_status(memory_status, mem_store, settings)
-
-                # Epic 65.1: Consolidation and federation hints when applicable
-                _enrich_memory_status_hints(memory_status, snapshot.entries, settings)
-
-                # Fire-and-forget background tasks for heavy maintenance ops
-                # (Epic 68.2: move GC, consolidation, doc validation, session capture
-                # out of the critical path to reduce session start latency)
-                _schedule_background_maintenance(mem_store, snapshot, settings)
-    except Exception:
-        _logger.debug("memory_status_check_failed", exc_info=True)
+    memory_status = _collect_memory_status(settings)
     timings["memory_status_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
 
     # Hive / Agent Teams (Epic M3)
@@ -1334,52 +1327,10 @@ async def tapps_session_start(
         _logger.debug("hive_status_check_failed", exc_info=True)
     timings["hive_status_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
 
-    # Business experts (Epic 43) - load from .tapps-mcp/experts.yaml
-    phase_start = time.perf_counter_ns()
-    business_experts_result: dict[str, Any] | None = None
-    try:
-        if settings.business_experts_enabled:
-            from tapps_core.experts.business_loader import load_and_register_business_experts
-
-            be_result = load_and_register_business_experts(settings.project_root)
-            if be_result.loaded > 0 or be_result.errors:
-                business_experts_result = {
-                    "loaded": be_result.loaded,
-                    "expert_ids": be_result.expert_ids,
-                    "errors": be_result.errors,
-                    "warnings": be_result.warnings,
-                    "knowledge_status": be_result.knowledge_status,
-                }
-    except Exception:
-        _logger.debug("business_experts_load_failed", exc_info=True)
-    timings["business_experts_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
-
-    # Populate tech stack domains for expert consultation boost (Epic 68).
-    # Uses the lightweight TECH_STACK_TO_EXPERT_DOMAINS mapping — no subprocess
-    # or file-system scan required, just reads the project's detected tech stack.
-    phase_start = time.perf_counter_ns()
-    try:
-        if settings.project_root.is_dir():
-            from tapps_core.experts.engine import set_tech_stack_domains
-            from tapps_core.experts.rag_warming import tech_stack_to_expert_domains
-            from tapps_mcp.project.profiler import detect_project_profile
-
-            _profile = detect_project_profile(settings.project_root)
-            domains = tech_stack_to_expert_domains(_profile.tech_stack)
-            if domains:
-                set_tech_stack_domains(set(domains))
-    except Exception:
-        _logger.debug("tech_stack_domains_population_failed", exc_info=True)
-    timings["tech_stack_domains_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
-
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)
     timings["total_ms"] = elapsed_ms
 
-    _project_profile_hint = (
-        "Call tapps_project_profile when you need project context"
-        " (tech stack, type, CI/Docker/tests)."
-    )
     # Docker path mapping (Story 75.1)
     path_mapping = None
     container_warning = None
@@ -1428,13 +1379,6 @@ async def tapps_session_start(
         "memory_consolidation": "background",
         "memory_doc_validation": "background",
         "session_capture": "background",
-        "business_experts": business_experts_result,
-        "project_profile": None,
-        "project_profile_hint": _project_profile_hint,
-        "recommended_next": (
-            "Call tapps_project_profile when you need project context "
-            "(tech stack, type, recommendations). Session start does not include profile."
-        ),
         "timings": timings,
         "path_mapping": path_mapping,
         "cache": info["data"].get("cache"),
@@ -1445,7 +1389,7 @@ async def tapps_session_start(
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
 
-    # Attach structured output (no project fields; call tapps_project_profile for those)
+    # Attach structured output
     try:
         from tapps_mcp.common.output_schemas import SessionStartOutput
 
@@ -1474,7 +1418,6 @@ async def tapps_session_start(
             "project_root": info["data"]["configuration"].get("project_root", ""),
             "quality_preset": info["data"]["configuration"].get("quality_preset", "standard"),
             "auto_initialized": False,
-            "project_profile": None,
         }
     )
 
@@ -1489,7 +1432,7 @@ async def _session_start_quick(
     """Quick session start: cached tool versions, no diagnostics or memory GC.
 
     Loads tool versions from disk cache (no subprocess calls). Skips
-    diagnostics, memory GC, contradiction checks, and business expert loading.
+    diagnostics, memory GC, and contradiction checks.
     """
     from tapps_mcp import __version__
     from tapps_mcp.server import _bootstrap_cache_dir, _cache_info_dict

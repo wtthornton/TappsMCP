@@ -106,13 +106,6 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_validate_config": (
         "Validate Dockerfile, docker-compose, or infra config against best practices."
     ),
-    "tapps_consult_expert": (
-        "Ask a domain expert when making security, testing, or architecture decisions."
-    ),
-    "tapps_research": (
-        "Expert + docs in one call. Use instead of consult_expert + lookup_docs when you need both domain guidance and library documentation."
-    ),
-    "tapps_list_experts": "List available expert domains before consulting one.",
     "tapps_checklist": (
         "Call before declaring work complete to verify no required steps were skipped."
     ),
@@ -134,9 +127,6 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_set_engagement_level": (
         "When the user requests to change enforcement intensity"
         " (e.g. 'set tappsmcp to high' or 'make checks optional')."
-    ),
-    "tapps_manage_experts": (
-        "Manage business experts: list, add, remove, scaffold knowledge dirs, validate."
     ),
     "tapps_get_canonical_persona": (
         "When the user requests a persona by name (e.g. 'use the Frontend Developer'), "
@@ -266,9 +256,7 @@ _ENGAGEMENT_TOOL_MAP: dict[str, dict[str, dict[str, list[str]]]] = {
 KNOWN_TASK_TYPES: frozenset[str] = frozenset(TASK_TOOL_MAP.keys())
 
 # Primary tool -> checklist tool names satisfied by calling the primary (success only).
-_TOOL_EQUIVALENTS: dict[str, frozenset[str]] = {
-    "tapps_research": frozenset({"tapps_consult_expert", "tapps_lookup_docs"}),
-}
+_TOOL_EQUIVALENTS: dict[str, frozenset[str]] = {}
 
 _engagement_maps_cache: dict[str, dict[str, dict[str, list[str]]]] | None = None
 _engagement_maps_version: str = ""

@@ -264,7 +264,7 @@ class TestBootstrapPipeline:
         assert "libraries" in cw
 
     def test_expert_rag_warming_in_result(self, tmp_path):
-        """Expert RAG warming runs and returns expected structure."""
+        """Expert RAG warming returns stub result after EPIC-94 removal."""
         (tmp_path / "pyproject.toml").write_text("[project]\ndependencies = []\n")
         result = bootstrap_pipeline(
             tmp_path,
@@ -278,10 +278,7 @@ class TestBootstrapPipeline:
         )
         assert "expert_rag_warming" in result
         erg = result["expert_rag_warming"]
-        assert "warmed" in erg
-        assert "attempted" in erg
-        assert "domains" in erg
-        assert isinstance(erg["domains"], list)
+        assert erg.get("status") == "removed"
 
 
 class TestAgentsMdIntegration:

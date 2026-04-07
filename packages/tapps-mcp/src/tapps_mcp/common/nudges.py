@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from tapps_core.common.constants import LOW_CONFIDENCE_THRESHOLD
 from tapps_core.common.pipeline_models import STAGE_ORDER, STAGE_TOOLS, PipelineStage
 
 # Lazy: avoid breaking when checklist module is missing (e.g. standalone binary).
@@ -112,26 +111,6 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
         (
             lambda called, _ctx: "tapps_lookup_docs" not in called,
             "NEXT: Call tapps_lookup_docs() for any external libraries you will use.",
-        ),
-    ],
-    "tapps_consult_expert": [
-        (
-            lambda _called, ctx: (ctx or {}).get("stale_knowledge") is True,
-            "Knowledge may be outdated. Call tapps_lookup_docs() for current documentation.",
-        ),
-        (
-            lambda _called, ctx: (
-                (ctx or {}).get("confidence", 1.0) < LOW_CONFIDENCE_THRESHOLD
-            ),
-            "Low confidence. Call tapps_research() for combined expert + docs lookup.",
-        ),
-    ],
-    "tapps_research": [
-        (
-            lambda called, _ctx: (
-                "tapps_score_file" not in called and "tapps_quick_check" not in called
-            ),
-            "NEXT: Write your code, then call tapps_score_file() or tapps_quick_check().",
         ),
     ],
     "tapps_lookup_docs": [

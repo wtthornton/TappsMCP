@@ -526,8 +526,8 @@ class TestStoryGeneratorAutoPopulate:
 # ---------------------------------------------------------------------------
 
 
-class TestStoryGeneratorExpertEnrichment:
-    """Tests for expert system enrichment in story auto-populate."""
+class _TestStoryGeneratorExpertEnrichment_REMOVED:
+    """Expert system removed (EPIC-94)."""
 
     def setup_method(self) -> None:
         self.gen = StoryGenerator()

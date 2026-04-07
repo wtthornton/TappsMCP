@@ -8,7 +8,7 @@ Supports markdown, mkdocs, and Sphinx RST output formats.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import structlog
 from pydantic import BaseModel
@@ -350,121 +350,20 @@ class APIDocGenerator:
         except ValueError:
             module_name = file_path.stem
 
-        # Track items for coverage calculation
-        total_items = 0
-        documented_items = 0
+        functions, func_total, func_documented = self._extract_module_functions(
+            module_info.functions, depth, include_private, include_examples, project_root,
+            parse_docstring,
+        )
+        classes, cls_total, cls_documented = self._extract_module_classes(
+            module_info.classes, depth, include_private, include_examples, project_root,
+            parse_docstring,
+        )
+        constants, const_total, const_documented = self._extract_module_constants(
+            module_info.constants, depth,
+        )
 
-        # --- Functions ---
-        functions: list[APIDocFunction] = []
-        for func_info in module_info.functions:
-            if not self._should_include_symbol(
-                func_info.name, depth, include_private, func_info.docstring,
-            ):
-                continue
-            total_items += 1
-            parsed = parse_docstring(func_info.docstring or "")
-            if func_info.docstring:
-                documented_items += 1
-
-            params = self._convert_params(func_info, parsed)
-            returns_text = _format_returns(parsed)
-
-            raises_list = [
-                f"{r.exception}: {r.description}" if r.description else r.exception
-                for r in parsed.raises
-            ]
-
-            examples: list[str] = [ex.code for ex in parsed.examples]
-            if include_examples and not examples:
-                examples = self._find_examples(func_info.name, project_root)
-
-            decorators = [d.name for d in func_info.decorators]
-
-            functions.append(
-                APIDocFunction(
-                    name=func_info.name,
-                    signature=func_info.signature,
-                    description=_full_description(parsed),
-                    params=params,
-                    returns=returns_text,
-                    return_type=func_info.return_annotation or "",
-                    raises=raises_list,
-                    examples=examples,
-                    decorators=decorators,
-                    is_async=func_info.is_async,
-                    is_property=func_info.is_property,
-                    is_classmethod=func_info.is_classmethod,
-                    is_staticmethod=func_info.is_staticmethod,
-                    line=func_info.line,
-                )
-            )
-
-        # --- Classes ---
-        classes: list[APIDocClass] = []
-        for class_info in module_info.classes:
-            if not self._should_include(class_info.name, depth):
-                continue
-            total_items += 1
-            parsed_cls = parse_docstring(class_info.docstring or "")
-            if class_info.docstring:
-                documented_items += 1
-
-            methods, m_total, m_documented = self._extract_class_methods(
-                class_info,
-                depth,
-                include_examples,
-                project_root,
-                parse_docstring,
-                include_private=include_private,
-            )
-            total_items += m_total
-            documented_items += m_documented
-
-            class_vars: list[APIDocParam] = []
-            for cv in class_info.class_variables:
-                if not self._should_include(cv.name, depth):
-                    continue
-                class_vars.append(
-                    APIDocParam(
-                        name=cv.name,
-                        type=cv.annotation or "",
-                        default=cv.value,
-                    )
-                )
-
-            decorators_cls = [d.name for d in class_info.decorators]
-
-            classes.append(
-                APIDocClass(
-                    name=class_info.name,
-                    bases=class_info.bases,
-                    description=_full_description(parsed_cls),
-                    methods=methods,
-                    class_variables=class_vars,
-                    decorators=decorators_cls,
-                    line=class_info.line,
-                )
-            )
-
-        # --- Constants (with noise filtering) ---
-        constants: list[APIDocParam] = []
-        for const_info in module_info.constants:
-            if not self._should_include(const_info.name, depth):
-                continue
-            if _is_noise_constant(const_info.name, const_info.value):
-                continue
-            total_items += 1
-            # Constants don't have docstrings, but if annotated, count it
-            if const_info.annotation or const_info.value:
-                documented_items += 1
-            constants.append(
-                APIDocParam(
-                    name=const_info.name,
-                    type=const_info.annotation or "",
-                    default=const_info.value,
-                )
-            )
-
+        total_items = func_total + cls_total + const_total
+        documented_items = func_documented + cls_documented + const_documented
         coverage = (documented_items / total_items * 100.0) if total_items > 0 else 0.0
 
         # Detect re-export modules (__init__.py with no original definitions)
@@ -490,6 +389,137 @@ class APIDocGenerator:
             missing_returns=missing_returns,
             missing_examples=missing_examples,
         )
+
+    def _extract_module_functions(
+        self,
+        func_infos: Any,
+        depth: str,
+        include_private: bool,
+        include_examples: bool,
+        project_root: Path,
+        parse_docstring: Any,
+    ) -> tuple[list[APIDocFunction], int, int]:
+        """Extract module-level functions. Returns (functions, total, documented)."""
+        if not callable(parse_docstring):
+            return [], 0, 0
+        functions: list[APIDocFunction] = []
+        total = 0
+        documented = 0
+        for func_info in func_infos:
+            if not self._should_include_symbol(
+                func_info.name, depth, include_private, func_info.docstring,
+            ):
+                continue
+            total += 1
+            parsed = parse_docstring(func_info.docstring or "")
+            if func_info.docstring:
+                documented += 1
+
+            params = self._convert_params(func_info, parsed)
+            returns_text = _format_returns(parsed)
+            raises_list = [
+                f"{r.exception}: {r.description}" if r.description else r.exception
+                for r in parsed.raises
+            ]
+            examples: list[str] = [ex.code for ex in parsed.examples]
+            if include_examples and not examples:
+                examples = self._find_examples(func_info.name, project_root)
+            decorators = [d.name for d in func_info.decorators]
+            functions.append(
+                APIDocFunction(
+                    name=func_info.name,
+                    signature=func_info.signature,
+                    description=_full_description(parsed),
+                    params=params,
+                    returns=returns_text,
+                    return_type=func_info.return_annotation or "",
+                    raises=raises_list,
+                    examples=examples,
+                    decorators=decorators,
+                    is_async=func_info.is_async,
+                    is_property=func_info.is_property,
+                    is_classmethod=func_info.is_classmethod,
+                    is_staticmethod=func_info.is_staticmethod,
+                    line=func_info.line,
+                )
+            )
+        return functions, total, documented
+
+    def _extract_module_classes(
+        self,
+        class_infos: Any,
+        depth: str,
+        include_private: bool,
+        include_examples: bool,
+        project_root: Path,
+        parse_docstring: Any,
+    ) -> tuple[list[APIDocClass], int, int]:
+        """Extract module-level classes. Returns (classes, total, documented)."""
+        if not callable(parse_docstring):
+            return [], 0, 0
+        classes: list[APIDocClass] = []
+        total = 0
+        documented = 0
+        for class_info in class_infos:
+            if not self._should_include(class_info.name, depth):
+                continue
+            total += 1
+            parsed_cls = parse_docstring(class_info.docstring or "")
+            if class_info.docstring:
+                documented += 1
+
+            methods, m_total, m_documented = self._extract_class_methods(
+                class_info, depth, include_examples, project_root, parse_docstring,
+                include_private=include_private,
+            )
+            total += m_total
+            documented += m_documented
+
+            class_vars: list[APIDocParam] = []
+            for cv in class_info.class_variables:
+                if not self._should_include(cv.name, depth):
+                    continue
+                class_vars.append(APIDocParam(name=cv.name, type=cv.annotation or "", default=cv.value))
+
+            decorators_cls = [d.name for d in class_info.decorators]
+            classes.append(
+                APIDocClass(
+                    name=class_info.name,
+                    bases=class_info.bases,
+                    description=_full_description(parsed_cls),
+                    methods=methods,
+                    class_variables=class_vars,
+                    decorators=decorators_cls,
+                    line=class_info.line,
+                )
+            )
+        return classes, total, documented
+
+    def _extract_module_constants(
+        self,
+        const_infos: Any,
+        depth: str,
+    ) -> tuple[list[APIDocParam], int, int]:
+        """Extract module-level constants with noise filtering. Returns (constants, total, documented)."""
+        constants: list[APIDocParam] = []
+        total = 0
+        documented = 0
+        for const_info in const_infos:
+            if not self._should_include(const_info.name, depth):
+                continue
+            if _is_noise_constant(const_info.name, const_info.value):
+                continue
+            total += 1
+            if const_info.annotation or const_info.value:
+                documented += 1
+            constants.append(
+                APIDocParam(
+                    name=const_info.name,
+                    type=const_info.annotation or "",
+                    default=const_info.value,
+                )
+            )
+        return constants, total, documented
 
     def _extract_class_methods(
         self,

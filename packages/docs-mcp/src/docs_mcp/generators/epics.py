@@ -1360,8 +1360,10 @@ class EpicGenerator:
         Runs consultations in parallel using a thread pool to avoid
         sequential latency across all 8 domains.
         """
+        # Expert system removed (EPIC-94) — skip enrichment
+        return
         try:
-            from tapps_core.experts.engine import consult_expert
+            from tapps_core.experts.engine import consult_expert  # type: ignore[import-not-found]
         except Exception:
             logger.debug("epic_expert_import_failed", exc_info=True)
             return

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tapps-core"
-version = "1.18.0"
-description = "Shared infrastructure library for Tapps platform (config, security, logging, knowledge, memory, experts, metrics)"
+version = "2.0.0"
+description = "Shared infrastructure library for Tapps platform (config, security, logging, knowledge, memory, metrics)"
 license = "MIT"
 requires-python = ">=3.12"
 authors = [

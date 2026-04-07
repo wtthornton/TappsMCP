@@ -172,16 +172,6 @@ class ImpactOutput(StructuredOutput):
     )
 
 
-class ExpertOutput(StructuredOutput):
-    """Structured output for tapps_consult_expert."""
-
-    domain: str
-    expert_name: str
-    answer: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    sources: list[str] = Field(default_factory=list)
-
-
 class ChecklistOutput(StructuredOutput):
     """Structured output for tapps_checklist."""
 
@@ -223,20 +213,6 @@ class DashboardOutput(StructuredOutput):
     total_tool_calls: int = 0
     gate_pass_rate: float = 0.0
     active_alerts: int = 0
-
-
-class ResearchOutput(StructuredOutput):
-    """Structured output for tapps_research."""
-
-    domain: str
-    expert_name: str
-    answer: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    sources: list[str] = Field(default_factory=list)
-    docs_supplemented: bool = False
-    docs_library: str | None = None
-    docs_topic: str | None = None
-    file_context: str | None = None
 
 
 class DeadCodeOutput(StructuredOutput):

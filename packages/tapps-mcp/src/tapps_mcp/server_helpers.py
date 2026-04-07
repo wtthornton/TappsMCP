@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import os
-import re
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -279,112 +277,6 @@ def build_impact_memory_context(
         "memory_context_enrichment": "ok",
         "memory_context_query": query,
     }
-
-
-def _expert_consultation_memory_key(domain: str, question: str) -> str:
-    """Build a stable, filesystem-safe key from domain and question text."""
-    raw_dom = (domain or "auto").strip().lower() or "auto"
-    dom_slug = re.sub(r"[^a-z0-9._-]+", "-", raw_dom).strip("-")[:48] or "auto"
-    qhash = hashlib.sha256(question.encode("utf-8")).hexdigest()[:16]
-    return f"expert-{dom_slug}-{qhash}"
-
-
-def _auto_save_expert_consultation_memory(
-    settings: TappsMCPSettings,
-    *,
-    question: str,
-    domain: str,
-    expert_answer: str,
-    expert_id: str,
-    expert_name: str,
-    confidence: float,
-) -> dict[str, Any]:
-    """Persist expert Q&A to pattern-tier memory when ``memory.auto_save_quality`` is True.
-
-    Uses the same content safety path as ``tapps_memory`` saves. Never raises; failures
-    are logged and summarized in the returned dict for tool payloads.
-    """
-    out: dict[str, Any] = {"quality_memory_saved": False}
-    if not settings.memory.auto_save_quality or not settings.memory.enabled:
-        out["quality_memory_skip"] = "feature_disabled"
-        return out
-
-    dom_display = (domain or "auto").strip() or "auto"
-    key = _expert_consultation_memory_key(dom_display, question)
-    label = expert_name or expert_id or dom_display
-    header = (
-        f"[{label}] domain={dom_display} confidence={round(float(confidence), 4)}\n"
-        f"Q: {question}\nA: "
-    )
-    max_total = settings.memory.write_rules.max_value_length
-    room = max_total - len(header)
-    if room < settings.memory.write_rules.min_value_length:
-        out["quality_memory_skip"] = "write_rules_length"
-        return out
-    body_a = expert_answer if len(expert_answer) <= room else f"{expert_answer[: room - 3]}..."
-    value = header + body_a
-
-    wr = settings.memory.write_rules
-    if wr.enforced:
-        if len(value) < wr.min_value_length:
-            out["quality_memory_skip"] = "write_rules_length"
-            return out
-        lowered_v = value.lower()
-        lowered_k = key.lower()
-        for kw in wr.block_sensitive_keywords:
-            klow = kw.lower()
-            if klow in lowered_v or klow in lowered_k:
-                out["quality_memory_skip"] = "write_rules_keyword"
-                return out
-
-    try:
-        from tapps_brain.safety import check_content_safety
-
-        safety_result = check_content_safety(value)
-        if not safety_result.safe and settings.memory.safety.enforcement == "block":
-            import structlog
-
-            structlog.get_logger(__name__).debug(
-                "expert_consultation_memory_skipped_safety",
-                key=key,
-                match_count=safety_result.match_count,
-            )
-            out["quality_memory_skip"] = "safety_blocked"
-            return out
-    except ImportError:
-        pass
-
-    tag_dom = re.sub(r"[^a-z0-9._-]+", "-", dom_display.lower()).strip("-")[:32] or "auto"
-    tags = [f"expert-{tag_dom}", "auto-captured"]
-
-    try:
-        store = _get_memory_store()
-        save_res = store.save(
-            key=key,
-            value=value,
-            tier="pattern",
-            source="agent",
-            source_agent="tapps-mcp",
-            scope="project",
-            tags=tags,
-            confidence=float(confidence),
-        )
-        if isinstance(save_res, dict) and save_res.get("error"):
-            out["quality_memory_skip"] = "save_rejected"
-            out["quality_memory_error"] = str(save_res.get("message", "unknown"))[:200]
-            return out
-        out["quality_memory_saved"] = True
-        out["quality_memory_key"] = key
-    except Exception as exc:
-        import structlog
-
-        structlog.get_logger(__name__).warning(
-            "expert_consultation_memory_failed", key=key, error=str(exc)[:200], exc_info=True
-        )
-        out["quality_memory_skip"] = "save_exception"
-        out["quality_memory_error"] = str(exc)[:200]
-
-    return out
 
 
 # ---------------------------------------------------------------------------

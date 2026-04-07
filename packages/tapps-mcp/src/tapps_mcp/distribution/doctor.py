@@ -440,6 +440,68 @@ def check_claude_settings(project_root: Path) -> CheckResult:
     )
 
 
+def _check_cursor_hooks_config(
+    project_root: Path, found: list[str],
+) -> CheckResult | None:
+    """Validate .cursor/hooks.json existence, format, and platform. Returns failure or None."""
+    cursor_hooks_json = project_root / ".cursor" / "hooks.json"
+    if not cursor_hooks_json.exists():
+        return CheckResult(
+            "Hooks",
+            False,
+            f"TappsMCP hooks found for: {', '.join(found)}, but .cursor/hooks.json missing",
+            "Run: tapps-mcp upgrade --host cursor or upgrade --force",
+        )
+
+    format_errors: list[str] = []
+    try:
+        data = json.loads(cursor_hooks_json.read_text(encoding="utf-8"))
+        if not isinstance(data.get("version"), (int, float)):
+            format_errors.append("missing or non-numeric 'version' field")
+        if isinstance(data.get("hooks"), list):
+            format_errors.append("'hooks' is an array (should be an object)")
+        elif not isinstance(data.get("hooks"), dict):
+            format_errors.append("'hooks' is not an object")
+        else:
+            hooks_obj = data.get("hooks", {})
+            invalid = [k for k in hooks_obj if k not in SUPPORTED_CURSOR_HOOK_KEYS]
+            if invalid:
+                format_errors.append(
+                    f"unsupported hook keys (Cursor may ignore file): {', '.join(sorted(invalid))}"
+                )
+    except (json.JSONDecodeError, OSError) as exc:
+        format_errors.append(f"could not parse: {exc}")
+
+    if format_errors:
+        return CheckResult(
+            "Hooks",
+            False,
+            f"TappsMCP hooks found for: {', '.join(found)}, "
+            f"but .cursor/hooks.json has invalid format: {'; '.join(format_errors)}",
+            "Run: tapps-mcp upgrade --host cursor or upgrade --force to write only supported hooks",
+        )
+
+    # On Windows, .sh hook commands open in the editor instead of running
+    if sys.platform == "win32":
+        hooks_obj = data.get("hooks", {})
+        for entries in hooks_obj.values():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                cmd = entry.get("command", "")
+                if "tapps-" in cmd and cmd.rstrip().endswith(".sh"):
+                    return CheckResult(
+                        "Hooks",
+                        False,
+                        "On Windows, Cursor hooks are configured as .sh (Bash); "
+                        "they open in the editor instead of running. Use PowerShell (.ps1) hooks.",
+                        "Run: tapps-mcp upgrade --host cursor (or uv run tapps-mcp upgrade --host cursor)",
+                    )
+    return None
+
+
 def check_hooks(project_root: Path) -> CheckResult:
     """Check TappsMCP hooks: directory, session-start script, and config validity.
 
@@ -484,65 +546,11 @@ def check_hooks(project_root: Path) -> CheckResult:
             "Run: tapps-mcp upgrade --force (or upgrade --host cursor)",
         )
 
-    # When Cursor hook scripts exist, .cursor/hooks.json must exist (parity with Claude settings)
-    cursor_hooks_json = project_root / ".cursor" / "hooks.json"
-    if "Cursor" in found and not cursor_hooks_json.exists():
-        return CheckResult(
-            "Hooks",
-            False,
-            f"TappsMCP hooks found for: {', '.join(found)}, but .cursor/hooks.json missing",
-            "Run: tapps-mcp upgrade --host cursor or upgrade --force",
-        )
-
-    # Validate .cursor/hooks.json format (Cursor requires version + object hooks)
-    if cursor_hooks_json.exists():
-        format_errors: list[str] = []
-        try:
-            data = json.loads(cursor_hooks_json.read_text(encoding="utf-8"))
-            if not isinstance(data.get("version"), (int, float)):
-                format_errors.append("missing or non-numeric 'version' field")
-            if isinstance(data.get("hooks"), list):
-                format_errors.append("'hooks' is an array (should be an object)")
-            elif not isinstance(data.get("hooks"), dict):
-                format_errors.append("'hooks' is not an object")
-            else:
-                hooks_obj = data.get("hooks", {})
-                invalid = [k for k in hooks_obj if k not in SUPPORTED_CURSOR_HOOK_KEYS]
-                if invalid:
-                    format_errors.append(
-                        f"unsupported hook keys (Cursor may ignore file): {', '.join(sorted(invalid))}"
-                    )
-        except (json.JSONDecodeError, OSError) as exc:
-            format_errors.append(f"could not parse: {exc}")
-
-        if format_errors:
-            return CheckResult(
-                "Hooks",
-                False,
-                f"TappsMCP hooks found for: {', '.join(found)}, "
-                f"but .cursor/hooks.json has invalid format: {'; '.join(format_errors)}",
-                "Run: tapps-mcp upgrade --host cursor or upgrade --force to write only supported hooks",
-            )
-
-        # On Windows, .sh hook commands open in the editor instead of running (no bash).
-        # Detect and suggest upgrade so hooks use PowerShell (.ps1).
-        if sys.platform == "win32" and "Cursor" in found:
-            hooks_obj = data.get("hooks", {})
-            for entries in hooks_obj.values():
-                if not isinstance(entries, list):
-                    continue
-                for entry in entries:
-                    if not isinstance(entry, dict):
-                        continue
-                    cmd = entry.get("command", "")
-                    if "tapps-" in cmd and cmd.rstrip().endswith(".sh"):
-                        return CheckResult(
-                            "Hooks",
-                            False,
-                            "On Windows, Cursor hooks are configured as .sh (Bash); "
-                            "they open in the editor instead of running. Use PowerShell (.ps1) hooks.",
-                            "Run: tapps-mcp upgrade --host cursor (or uv run tapps-mcp upgrade --host cursor)",
-                        )
+    # Validate cursor hooks config if present
+    if "Cursor" in found:
+        cursor_result = _check_cursor_hooks_config(project_root, found)
+        if cursor_result is not None:
+            return cursor_result
 
     return CheckResult(
         "Hooks",

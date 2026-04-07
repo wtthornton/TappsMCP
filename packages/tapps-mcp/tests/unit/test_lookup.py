@@ -10,7 +10,7 @@ from tapps_mcp.knowledge.cache import KBCache
 from tapps_mcp.knowledge.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from tapps_mcp.knowledge.lookup import LookupEngine
 from tapps_mcp.knowledge.models import CacheEntry, LibraryMatch
-from tapps_mcp.server import _library_to_domain
+# _library_to_domain removed (EPIC-94 expert extraction)
 
 
 class TestLookupCacheHit:
@@ -409,7 +409,9 @@ class TestLookupEdgeCases:
         await engine.close()
 
 
-class TestLibraryDomainMap:
+class _TestLibraryDomainMap_REMOVED:
+    """Removed: expert domain mapping (EPIC-94)."""
+
     """Verify _LIBRARY_DOMAIN_MAP includes new operational mappings."""
 
     @pytest.mark.parametrize(

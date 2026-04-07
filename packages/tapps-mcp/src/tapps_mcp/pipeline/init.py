@@ -380,89 +380,11 @@ def bootstrap_pipeline(
 
 
 def _load_business_experts(cfg: BootstrapConfig, state: _BootstrapState) -> None:
-    """Load and optionally scaffold business experts from experts.yaml."""
-    experts_yaml = state.project_root / ".tapps-mcp" / "experts.yaml"
-    if not experts_yaml.exists():
-        # Suggest auto-generation if profile has uncovered domains
-        _suggest_auto_generate(state)
-        return
-
-    try:
-        from tapps_core.experts.business_loader import load_and_register_business_experts
-
-        load_result = load_and_register_business_experts(state.project_root)
-    except Exception as exc:
-        state.errors.append(f"Business expert loading failed: {exc}")
-        state.result["business_experts"] = {"error": str(exc)}
-        return
-
-    summary: dict[str, Any] = {
-        "loaded": load_result.loaded,
-        "expert_ids": load_result.expert_ids,
-        "knowledge_status": load_result.knowledge_status,
-    }
-    if load_result.errors:
-        summary["errors"] = load_result.errors
-        state.errors.extend(load_result.errors)
-    if load_result.warnings:
-        summary["warnings"] = load_result.warnings
-
-    # Scaffold missing knowledge directories when requested.
-    if cfg.scaffold_experts and not cfg.dry_run and load_result.loaded > 0:
-        from tapps_core.experts.business_config import load_business_experts
-        from tapps_core.experts.business_knowledge import scaffold_knowledge_directory
-
-        try:
-            experts = load_business_experts(state.project_root)
-            scaffolded: list[str] = []
-            for expert in experts:
-                knowledge_status = load_result.knowledge_status.get(
-                    expert.primary_domain, "missing"
-                )
-                if knowledge_status in ("missing", "empty"):
-                    scaffold_knowledge_directory(state.project_root, expert)
-                    scaffolded.append(expert.primary_domain)
-            summary["scaffolded"] = scaffolded
-        except Exception as exc:
-            state.errors.append(f"Business expert scaffolding failed: {exc}")
-            summary["scaffold_error"] = str(exc)
-
-    state.result["business_experts"] = summary
+    """Expert system removed (EPIC-94). No-op."""
 
 
 def _suggest_auto_generate(state: _BootstrapState) -> None:
-    """Check if auto-generation would find useful expert suggestions."""
-    try:
-        profile_data = state.result.get("project_profile", {})
-        tech_stack = profile_data.get("tech_stack", {})
-        libraries = tech_stack.get("libraries", [])
-        frameworks = tech_stack.get("frameworks", [])
-        domains = tech_stack.get("domains", [])
-
-        if not (libraries or frameworks):
-            return
-
-        from tapps_core.experts.auto_generator import analyze_expert_gaps
-
-        suggestions = analyze_expert_gaps(
-            libraries=libraries,
-            frameworks=frameworks,
-            domains=domains,
-            project_root=state.project_root,
-        )
-
-        if suggestions:
-            state.result["auto_expert_suggestions"] = {
-                "available": True,
-                "suggestion_count": len(suggestions),
-                "domains": [s.domain for s in suggestions],
-                "hint": (
-                    "Run tapps_manage_experts(action='auto_generate') to create "
-                    f"business experts for {len(suggestions)} uncovered domain(s)."
-                ),
-            }
-    except Exception:
-        pass  # Non-critical; don't block init
+    """Expert system removed (EPIC-94). No-op."""
 
 
 
@@ -1219,15 +1141,8 @@ def _run_expert_rag_warming(
     project_root: Path,
     tech_stack: TechStack,
 ) -> dict[str, Any]:
-    """Pre-build expert RAG indices for domains relevant to tech stack."""
-    from tapps_core.experts.rag_warming import warm_expert_rag_indices
-
-    index_base = project_root / ".tapps-mcp" / "rag_index"
-    return warm_expert_rag_indices(
-        tech_stack,
-        max_domains=10,
-        index_base_dir=index_base,
-    )
+    """Expert RAG removed (EPIC-94). Returns empty result."""
+    return {"status": "removed", "note": "Expert RAG warming removed (EPIC-94)"}
 
 
 def _bootstrap_claude(

@@ -173,57 +173,16 @@ class LookupEngine:
         lib_clean = library.strip().lower()
 
         # 1. Exact cache hit
-        entry = self._cache.get(lib_clean, topic)
-        if entry is not None and entry.content:
-            elapsed = (time.monotonic() - start) * 1000
-
-            # Check staleness — if stale, return cached but trigger background refresh
-            if self._cache.is_stale(lib_clean, topic):
-                self._schedule_background_refresh(lib_clean, topic, mode)
-                return LookupResult(
-                    success=True,
-                    content=entry.content,
-                    source="stale_fallback",
-                    library=entry.library,
-                    topic=entry.topic,
-                    context7_id=entry.context7_id,
-                    response_time_ms=round(elapsed, 1),
-                    cache_hit=True,
-                    warning="Returning stale cached content; background refresh queued.",
-                )
-
-            return LookupResult(
-                success=True,
-                content=entry.content,
-                source="cache",
-                library=entry.library,
-                topic=entry.topic,
-                context7_id=entry.context7_id,
-                response_time_ms=round(elapsed, 1),
-                cache_hit=True,
-            )
+        cache_result = self._check_exact_cache(lib_clean, topic, mode, start)
+        if cache_result is not None:
+            return cache_result
 
         # 2. Fuzzy match against cached libraries
         cached_entries = self._cache.list_entries()
         known_libs = list({e.library for e in cached_entries})
-        fuzzy_results = fuzzy_match_library(lib_clean, known_libs, threshold=0.7)
-
-        if fuzzy_results:
-            best = fuzzy_results[0]
-            cached = self._cache.get(best.library, topic)
-            if cached is not None and cached.content:
-                elapsed = (time.monotonic() - start) * 1000
-                return LookupResult(
-                    success=True,
-                    content=cached.content,
-                    source="fuzzy_match",
-                    library=cached.library,
-                    topic=cached.topic,
-                    context7_id=cached.context7_id,
-                    response_time_ms=round(elapsed, 1),
-                    cache_hit=True,
-                    fuzzy_score=best.score,
-                )
+        fuzzy_result = self._check_fuzzy_cache(lib_clean, topic, known_libs, start)
+        if fuzzy_result is not None:
+            return fuzzy_result
 
         # 2b. Custom doc sources (take priority over providers)
         custom_result = await self._check_custom_doc_source(lib_clean, topic, start)
@@ -237,6 +196,108 @@ class LookupEngine:
                 return ops_result
 
         # 3. API resolve + fetch — try provider chain first, then legacy Context7
+        content, provider_source = await self._fetch_from_providers(
+            lib_clean, topic, mode, start
+        )
+        if isinstance(content, LookupResult):
+            # Provider step returned an error result (circuit breaker / API error)
+            return content
+
+        if content is None:
+            return self._not_found_result(lib_clean, topic, known_libs, start)
+
+        # 4. RAG safety check + TOC detection
+        safety_result = self._apply_rag_safety(content, lib_clean, topic, start)
+        if isinstance(safety_result, LookupResult):
+            return safety_result
+        safe_content, toc_warning = safety_result
+
+        # 5. Store in cache and return
+        return self._cache_and_return(
+            lib_clean, topic, safe_content, provider_source, toc_warning, start
+        )
+
+    def _check_exact_cache(
+        self,
+        lib_clean: str,
+        topic: str,
+        mode: str,
+        start: float,
+    ) -> LookupResult | None:
+        """Return a cached result if an exact match exists (fresh or stale)."""
+        entry = self._cache.get(lib_clean, topic)
+        if entry is None or not entry.content:
+            return None
+
+        elapsed = (time.monotonic() - start) * 1000
+
+        if self._cache.is_stale(lib_clean, topic):
+            self._schedule_background_refresh(lib_clean, topic, mode)
+            return LookupResult(
+                success=True,
+                content=entry.content,
+                source="stale_fallback",
+                library=entry.library,
+                topic=entry.topic,
+                context7_id=entry.context7_id,
+                response_time_ms=round(elapsed, 1),
+                cache_hit=True,
+                warning="Returning stale cached content; background refresh queued.",
+            )
+
+        return LookupResult(
+            success=True,
+            content=entry.content,
+            source="cache",
+            library=entry.library,
+            topic=entry.topic,
+            context7_id=entry.context7_id,
+            response_time_ms=round(elapsed, 1),
+            cache_hit=True,
+        )
+
+    def _check_fuzzy_cache(
+        self,
+        lib_clean: str,
+        topic: str,
+        known_libs: list[str],
+        start: float,
+    ) -> LookupResult | None:
+        """Return a cached result for the best fuzzy library match, if any."""
+        fuzzy_results = fuzzy_match_library(lib_clean, known_libs, threshold=0.7)
+        if not fuzzy_results:
+            return None
+
+        best = fuzzy_results[0]
+        cached = self._cache.get(best.library, topic)
+        if cached is None or not cached.content:
+            return None
+
+        elapsed = (time.monotonic() - start) * 1000
+        return LookupResult(
+            success=True,
+            content=cached.content,
+            source="fuzzy_match",
+            library=cached.library,
+            topic=cached.topic,
+            context7_id=cached.context7_id,
+            response_time_ms=round(elapsed, 1),
+            cache_hit=True,
+            fuzzy_score=best.score,
+        )
+
+    async def _fetch_from_providers(
+        self,
+        lib_clean: str,
+        topic: str,
+        mode: str,
+        start: float,
+    ) -> tuple[str | LookupResult | None, str | None]:
+        """Fetch content via the provider chain then legacy Context7.
+
+        Returns ``(content, provider_source)`` on success, or a ``LookupResult``
+        error packed in the first element when a circuit-breaker / API error occurs.
+        """
         content: str | None = None
         provider_source: str | None = None
 
@@ -250,74 +311,111 @@ class LookupEngine:
 
         # 3b. Legacy Context7 path (when no provider succeeded and API key set)
         if content is None and self._api_key is not None:
-            try:
-                content = await self._breaker.call(
-                    self._resolve_and_fetch,
-                    lib_clean,
-                    topic,
-                    mode,
-                )
-                if content:
-                    provider_source = "context7"
-            except CircuitBreakerOpenError:
-                stale = self._cache.get(lib_clean, topic)
-                elapsed = (time.monotonic() - start) * 1000
-                if stale is not None and stale.content:
-                    return LookupResult(
-                        success=True,
-                        content=stale.content,
-                        source="stale_fallback",
-                        library=stale.library,
-                        topic=stale.topic,
-                        response_time_ms=round(elapsed, 1),
-                        cache_hit=True,
-                        warning="Circuit breaker open; returning stale cached content.",
-                    )
-                return LookupResult(
-                    success=False,
-                    library=lib_clean,
-                    topic=topic,
-                    error="Context7 API unavailable (circuit breaker open).",
-                    response_time_ms=round(elapsed, 1),
-                )
-            except (Context7Error, TimeoutError) as exc:
-                stale = self._cache.get(lib_clean, topic)
-                elapsed = (time.monotonic() - start) * 1000
-                if stale is not None and stale.content:
-                    return LookupResult(
-                        success=True,
-                        content=stale.content,
-                        source="stale_fallback",
-                        library=stale.library,
-                        topic=stale.topic,
-                        response_time_ms=round(elapsed, 1),
-                        cache_hit=True,
-                        warning=f"API error: {exc}; returning stale cached content.",
-                    )
-                return LookupResult(
-                    success=False,
-                    library=lib_clean,
-                    topic=topic,
-                    error=f"Context7 API error: {exc}",
-                    response_time_ms=round(elapsed, 1),
-                )
+            legacy_result = await self._fetch_legacy_context7(
+                lib_clean, topic, mode, start
+            )
+            if isinstance(legacy_result, LookupResult):
+                return legacy_result, None
+            if legacy_result is not None:
+                content = legacy_result
+                provider_source = "context7"
 
-        if content is None:
+        return content, provider_source
+
+    async def _fetch_legacy_context7(
+        self,
+        lib_clean: str,
+        topic: str,
+        mode: str,
+        start: float,
+    ) -> str | LookupResult | None:
+        """Call the legacy Context7 circuit breaker and handle its errors.
+
+        Returns the raw content string on success, a ``LookupResult`` on a
+        recoverable error (circuit open or API error), or ``None`` if not fetched.
+        """
+        try:
+            result: str | LookupResult | None = await self._breaker.call(
+                self._resolve_and_fetch,
+                lib_clean,
+                topic,
+                mode,
+            )
+            return result
+        except CircuitBreakerOpenError:
+            stale = self._cache.get(lib_clean, topic)
             elapsed = (time.monotonic() - start) * 1000
-            # Offer "did you mean?" suggestions for the failed lookup.
-            suggestions = did_you_mean(lib_clean, known_libs)
-            hint = ""
-            if suggestions:
-                hint = f" Did you mean: {', '.join(suggestions)}?"
+            if stale is not None and stale.content:
+                return LookupResult(
+                    success=True,
+                    content=stale.content,
+                    source="stale_fallback",
+                    library=stale.library,
+                    topic=stale.topic,
+                    response_time_ms=round(elapsed, 1),
+                    cache_hit=True,
+                    warning="Circuit breaker open; returning stale cached content.",
+                )
             return LookupResult(
                 success=False,
                 library=lib_clean,
                 topic=topic,
-                error=f"No documentation found.{hint}",
+                error="Context7 API unavailable (circuit breaker open).",
+                response_time_ms=round(elapsed, 1),
+            )
+        except (Context7Error, TimeoutError) as exc:
+            stale = self._cache.get(lib_clean, topic)
+            elapsed = (time.monotonic() - start) * 1000
+            if stale is not None and stale.content:
+                return LookupResult(
+                    success=True,
+                    content=stale.content,
+                    source="stale_fallback",
+                    library=stale.library,
+                    topic=stale.topic,
+                    response_time_ms=round(elapsed, 1),
+                    cache_hit=True,
+                    warning=f"API error: {exc}; returning stale cached content.",
+                )
+            return LookupResult(
+                success=False,
+                library=lib_clean,
+                topic=topic,
+                error=f"Context7 API error: {exc}",
                 response_time_ms=round(elapsed, 1),
             )
 
-        # 4. RAG safety check
+    def _not_found_result(
+        self,
+        lib_clean: str,
+        topic: str,
+        known_libs: list[str],
+        start: float,
+    ) -> LookupResult:
+        """Build a failure result with optional 'did you mean?' suggestions."""
+        elapsed = (time.monotonic() - start) * 1000
+        suggestions = did_you_mean(lib_clean, known_libs)
+        hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        return LookupResult(
+            success=False,
+            library=lib_clean,
+            topic=topic,
+            error=f"No documentation found.{hint}",
+            response_time_ms=round(elapsed, 1),
+        )
+
+    def _apply_rag_safety(
+        self,
+        content: str,
+        lib_clean: str,
+        topic: str,
+        start: float,
+    ) -> LookupResult | tuple[str, str | None]:
+        """Run the RAG safety check and TOC-only detection on fetched content.
+
+        Returns a ``LookupResult`` error if content is blocked, otherwise a
+        ``(safe_content, toc_warning)`` tuple.
+        """
         safety = check_content_safety(content)
         if not safety.safe:
             elapsed = (time.monotonic() - start) * 1000
@@ -329,11 +427,9 @@ class LookupEngine:
                 response_time_ms=round(elapsed, 1),
             )
 
-        # Use sanitised content if available
         safe_content = safety.sanitised_content or content
-
-        # 4b. TOC-only detection — warn when content is thin
         toc_warning: str | None = safety.warning
+
         if _is_toc_only(safe_content):
             toc_msg = (
                 "Generic table-of-contents only; consider "
@@ -342,7 +438,18 @@ class LookupEngine:
             toc_warning = f"{toc_warning} {toc_msg}" if toc_warning else toc_msg
             logger.info("toc_only_content", library=lib_clean, topic=topic)
 
-        # 5. Store in cache
+        return safe_content, toc_warning
+
+    def _cache_and_return(
+        self,
+        lib_clean: str,
+        topic: str,
+        safe_content: str,
+        provider_source: str | None,
+        toc_warning: str | None,
+        start: float,
+    ) -> LookupResult:
+        """Store content in cache and build the final success result."""
         self._cache.put(
             CacheEntry(
                 library=lib_clean,
@@ -352,7 +459,6 @@ class LookupEngine:
                 provider_source=provider_source,
             )
         )
-
         elapsed = (time.monotonic() - start) * 1000
         return LookupResult(
             success=True,
@@ -371,46 +477,7 @@ class LookupEngine:
         topic: str,
         start: float,
     ) -> LookupResult | None:
-        """Try expert system first for operational libraries.
-
-        For libraries in ``_OPS_FIRST_LIBRARIES``, the expert system often
-        has better operational patterns than Context7's generic API reference.
-        Returns a ``LookupResult`` if the expert provides a confident answer,
-        ``None`` otherwise (falls through to normal provider chain).
-        """
-        try:
-            from tapps_core.experts.engine import consult_expert
-
-            cr = await asyncio.to_thread(
-                consult_expert,
-                question=f"How do I use {library} for {topic}? Best practices and patterns.",
-                domain=None,
-                max_chunks=5,
-                max_context_length=3000,
-            )
-            _min_expert_confidence = 0.4
-            if cr.confidence >= _min_expert_confidence and cr.answer:
-                elapsed = (time.monotonic() - start) * 1000
-                self._cache.put(
-                    CacheEntry(
-                        library=library,
-                        topic=topic,
-                        content=cr.answer,
-                        token_count=len(cr.answer) // 4,
-                        provider_source="expert_system",
-                    )
-                )
-                return LookupResult(
-                    success=True,
-                    content=cr.answer,
-                    source="expert_system",
-                    library=library,
-                    topic=topic,
-                    response_time_ms=round(elapsed, 1),
-                    cache_hit=False,
-                )
-        except Exception:
-            logger.debug("ops_first_expert_failed", library=library, topic=topic, exc_info=True)
+        """Expert system removed (EPIC-94). Always returns None."""
         return None
 
     async def _check_custom_doc_source(

@@ -218,6 +218,77 @@ def _filter_scripts(
     return filtered
 
 
+def _write_hook_scripts(
+    hooks_dir: Path,
+    script_templates: dict[str, str],
+    engagement_level: str,
+    win: bool,
+) -> list[str]:
+    """Write hook scripts to disk, returning names of scripts created."""
+    always_overwrite = {
+        "tapps-stop.ps1", "tapps-stop.sh",
+        "tapps-task-completed.ps1", "tapps-task-completed.sh",
+    }
+    created: list[str] = []
+    for name, content in script_templates.items():
+        script_path = hooks_dir / name
+        if not script_path.exists() or name in always_overwrite:
+            text = _hook_content_for_engagement(content, engagement_level)
+            script_path.write_text(text, encoding="utf-8")
+            if not win:
+                script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+            created.append(name)
+    return created
+
+
+def _cleanup_wrong_platform_scripts(hooks_dir: Path, win: bool) -> list[str]:
+    """Remove hook scripts with the wrong platform extension."""
+    wrong_ext = ".sh" if win else ".ps1"
+    removed: list[str] = []
+    for old_script in hooks_dir.glob(f"tapps-*{wrong_ext}"):
+        old_script.unlink()
+        removed.append(old_script.name)
+    return removed
+
+
+def _merge_hooks_config(
+    existing_hooks: dict[str, Any],
+    hooks_config: dict[str, Any],
+) -> int:
+    """Merge new hook entries into existing hooks, returning count of entries added."""
+    added = 0
+    for event, entries in hooks_config.items():
+        if event not in existing_hooks:
+            existing_hooks[event] = list(entries)
+            added += len(entries)
+        else:
+            existing_matchers = {
+                e.get("matcher") for e in existing_hooks[event] if isinstance(e, dict)
+            }
+            for entry in entries:
+                if entry.get("matcher") not in existing_matchers:
+                    existing_hooks[event].append(entry)
+                    added += 1
+    return added
+
+
+def _add_prompt_hooks(existing_hooks: dict[str, Any]) -> int:
+    """Add prompt-type PostToolUse hooks if not already present. Returns count added."""
+    prompt_entries = _PROMPT_HOOK_CONFIG.get("PostToolUse", [])
+    if "PostToolUse" not in existing_hooks:
+        existing_hooks["PostToolUse"] = list(prompt_entries)
+        return len(prompt_entries)
+    has_prompt = any(
+        e.get("type") == "prompt"
+        for e in existing_hooks["PostToolUse"]
+        if isinstance(e, dict)
+    )
+    if not has_prompt:
+        existing_hooks["PostToolUse"].extend(prompt_entries)
+        return len(prompt_entries)
+    return 0
+
+
 def generate_claude_hooks(
     project_root: Path,
     *,
@@ -279,31 +350,10 @@ def generate_claude_hooks(
     hooks_dir = project_root / ".claude" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
-    # Stop and task-completed hooks always overwrite (engagement change).
-    scripts_always_overwrite = {
-        "tapps-stop.ps1",
-        "tapps-stop.sh",
-        "tapps-task-completed.ps1",
-        "tapps-task-completed.sh",
-    }
-    scripts_created: list[str] = []
-    for name, content in script_templates.items():
-        script_path = hooks_dir / name
-        if not script_path.exists() or name in scripts_always_overwrite:
-            text = _hook_content_for_engagement(content, engagement_level)
-            script_path.write_text(text, encoding="utf-8")
-            if not win:
-                script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
-            scripts_created.append(name)
+    scripts_created = _write_hook_scripts(hooks_dir, script_templates, engagement_level, win)
+    scripts_removed = _cleanup_wrong_platform_scripts(hooks_dir, win)
 
-    # Clean up wrong-platform tapps scripts (e.g. .sh on Windows)
-    wrong_ext = ".sh" if win else ".ps1"
-    scripts_removed: list[str] = []
-    for old_script in hooks_dir.glob(f"tapps-*{wrong_ext}"):
-        old_script.unlink()
-        scripts_removed.append(old_script.name)
-
-    # Merge hooks config into .claude/settings.json
+    # Load or init .claude/settings.json
     settings_file = project_root / ".claude" / "settings.json"
     if settings_file.exists():
         raw = settings_file.read_text(encoding="utf-8")
@@ -312,55 +362,21 @@ def generate_claude_hooks(
         config = {}
 
     existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
-    hooks_added = 0
-    for event, entries in hooks_config.items():
-        if event not in existing_hooks:
-            # Copy to avoid mutating the module-level template lists
-            existing_hooks[event] = list(entries)
-            hooks_added += len(entries)
-        else:
-            # Merge: add entries whose matchers don't already exist
-            existing_matchers = {
-                e.get("matcher") for e in existing_hooks[event] if isinstance(e, dict)
-            }
-            for entry in entries:
-                if entry.get("matcher") not in existing_matchers:
-                    existing_hooks[event].append(entry)
-                    hooks_added += 1
+    hooks_added = _merge_hooks_config(existing_hooks, hooks_config)
 
     # Add prompt-type hook if opted-in
     if prompt_hooks and "PostToolUse" in allowed_events:
-        prompt_entries = _PROMPT_HOOK_CONFIG.get("PostToolUse", [])
-        if "PostToolUse" not in existing_hooks:
-            existing_hooks["PostToolUse"] = list(prompt_entries)
-        else:
-            # Check if prompt hook already exists
-            has_prompt = any(
-                e.get("type") == "prompt"
-                for e in existing_hooks["PostToolUse"]
-                if isinstance(e, dict)
-            )
-            if not has_prompt:
-                existing_hooks["PostToolUse"].extend(prompt_entries)
-                hooks_added += len(prompt_entries)
+        hooks_added += _add_prompt_hooks(existing_hooks)
 
-    # Replace wrong-platform commands in existing hook entries
-    hooks_migrated = _migrate_claude_hook_commands(
-        existing_hooks,
-        hooks_config,
-        win=win,
-    )
+    hooks_migrated = _migrate_claude_hook_commands(existing_hooks, hooks_config, win=win)
 
-    # Only write hook keys supported by Claude Code schema (e.g. no PostCompact)
+    # Only write hook keys supported by Claude Code schema
     config["hooks"] = {
         k: v for k, v in config["hooks"].items() if k in _SUPPORTED_CLAUDE_HOOK_KEYS
     }
 
     settings_file.parent.mkdir(parents=True, exist_ok=True)
-    settings_file.write_text(
-        json.dumps(config, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
     action = "migrated" if hooks_migrated > 0 else ("created" if hooks_added > 0 else "skipped")
     return {
@@ -401,22 +417,8 @@ def generate_cursor_hooks(
     hooks_dir = project_root / ".cursor" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
-    scripts_created: list[str] = []
-    for name, content in script_templates.items():
-        script_path = hooks_dir / name
-        if not script_path.exists():
-            text = _hook_content_for_engagement(content, engagement_level)
-            script_path.write_text(text, encoding="utf-8")
-            if not win:
-                script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
-            scripts_created.append(name)
-
-    # Clean up wrong-platform tapps scripts (e.g. .sh on Windows)
-    wrong_ext = ".sh" if win else ".ps1"
-    scripts_removed: list[str] = []
-    for old_script in hooks_dir.glob(f"tapps-*{wrong_ext}"):
-        old_script.unlink()
-        scripts_removed.append(old_script.name)
+    scripts_created = _write_hook_scripts(hooks_dir, script_templates, engagement_level, win)
+    scripts_removed = _cleanup_wrong_platform_scripts(hooks_dir, win)
 
     # Remove deprecated stop hook scripts (validation is via tapps-mcp validate-changed)
     for name in ("tapps-stop.ps1", "tapps-stop.sh"):

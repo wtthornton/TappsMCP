@@ -180,55 +180,11 @@ class DiataxisClassifier:
                     indicators[quadrant].append(f"keyword:{kw}")
 
         # 3. Structural scoring
-        numbered_steps = len(self._NUMBERED_STEP_RE.findall(content))
-        code_blocks = len(self._CODE_BLOCK_RE.findall(content)) // 2  # pairs
-        tables = len(self._TABLE_RE.findall(content))
-        param_tables = len(self._PARAM_TABLE_RE.findall(content))
-
-        # Tutorials have many numbered steps + code blocks
-        if numbered_steps >= 3:
-            scores["tutorial"] += 2.0
-            indicators["tutorial"].append(f"structure:numbered_steps({numbered_steps})")
-        if code_blocks >= 3 and numbered_steps >= 2:
-            scores["tutorial"] += 1.5
-            indicators["tutorial"].append("structure:code_with_steps")
-
-        # How-to has code blocks but fewer steps
-        if code_blocks >= 1 and numbered_steps < 3:
-            scores["how-to"] += 1.0
-            indicators["how-to"].append("structure:code_blocks")
-
-        # Reference has parameter tables
-        if param_tables >= 2:
-            scores["reference"] += 3.0
-            indicators["reference"].append(f"structure:param_tables({param_tables})")
-        elif tables >= 2:
-            scores["reference"] += 1.5
-            indicators["reference"].append(f"structure:tables({tables})")
-
-        # Explanation has fewer code blocks, more prose
-        lines = content.split("\n")
-        prose_lines = sum(
-            1 for l in lines
-            if l.strip() and not l.strip().startswith(("#", "-", "*", "|", "`", ">"))
-        )
-        if prose_lines > len(lines) * 0.6 and code_blocks < 2:
-            scores["explanation"] += 1.5
-            indicators["explanation"].append("structure:prose_heavy")
+        self._score_structural_signals(content, scores, indicators)
 
         # 4. Filename hints (weight: 1.0)
         if file_path:
-            path_lower = file_path.lower()
-            name_hints = {
-                "tutorial": ["tutorial", "learn", "getting-started", "quickstart"],
-                "how-to": ["howto", "how-to", "guide", "cookbook", "recipe"],
-                "reference": ["reference", "api", "spec", "schema"],
-                "explanation": ["explanation", "concept", "architecture", "design", "adr"],
-            }
-            for quadrant, hints in name_hints.items():
-                if any(h in path_lower for h in hints):
-                    scores[quadrant] += 1.0
-                    indicators[quadrant].append(f"filename:{Path(file_path).name}")
+            self._score_filename_hints(file_path, scores, indicators)
 
         # Find primary and secondary
         sorted_q = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -258,6 +214,68 @@ class DiataxisClassifier:
             indicators=indicators[primary[0]][:5],
             is_mixed=is_mixed,
         )
+
+    def _score_structural_signals(
+        self,
+        content: str,
+        scores: dict[str, float],
+        indicators: dict[str, list[str]],
+    ) -> None:
+        """Apply structural heuristic scores (numbered steps, tables, code blocks, prose)."""
+        numbered_steps = len(self._NUMBERED_STEP_RE.findall(content))
+        code_blocks = len(self._CODE_BLOCK_RE.findall(content)) // 2  # pairs
+        tables = len(self._TABLE_RE.findall(content))
+        param_tables = len(self._PARAM_TABLE_RE.findall(content))
+
+        # Tutorials have many numbered steps + code blocks
+        if numbered_steps >= 3:
+            scores["tutorial"] += 2.0
+            indicators["tutorial"].append(f"structure:numbered_steps({numbered_steps})")
+        if code_blocks >= 3 and numbered_steps >= 2:
+            scores["tutorial"] += 1.5
+            indicators["tutorial"].append("structure:code_with_steps")
+
+        # How-to has code blocks but fewer steps
+        if code_blocks >= 1 and numbered_steps < 3:
+            scores["how-to"] += 1.0
+            indicators["how-to"].append("structure:code_blocks")
+
+        # Reference has parameter tables
+        if param_tables >= 2:
+            scores["reference"] += 3.0
+            indicators["reference"].append(f"structure:param_tables({param_tables})")
+        elif tables >= 2:
+            scores["reference"] += 1.5
+            indicators["reference"].append(f"structure:tables({tables})")
+
+        # Explanation has fewer code blocks, more prose
+        lines = content.split("\n")
+        prose_lines = sum(
+            1 for ln in lines
+            if ln.strip() and not ln.strip().startswith(("#", "-", "*", "|", "`", ">"))
+        )
+        if prose_lines > len(lines) * 0.6 and code_blocks < 2:
+            scores["explanation"] += 1.5
+            indicators["explanation"].append("structure:prose_heavy")
+
+    def _score_filename_hints(
+        self,
+        file_path: str,
+        scores: dict[str, float],
+        indicators: dict[str, list[str]],
+    ) -> None:
+        """Apply filename-based hint scores (weight: 1.0 per matched hint)."""
+        path_lower = file_path.lower()
+        name_hints: dict[str, list[str]] = {
+            "tutorial": ["tutorial", "learn", "getting-started", "quickstart"],
+            "how-to": ["howto", "how-to", "guide", "cookbook", "recipe"],
+            "reference": ["reference", "api", "spec", "schema"],
+            "explanation": ["explanation", "concept", "architecture", "design", "adr"],
+        }
+        for quadrant, hints in name_hints.items():
+            if any(h in path_lower for h in hints):
+                scores[quadrant] += 1.0
+                indicators[quadrant].append(f"filename:{Path(file_path).name}")
 
     def _check_frontmatter_override(self, content: str) -> str:
         """Check for diataxis_type in YAML frontmatter."""

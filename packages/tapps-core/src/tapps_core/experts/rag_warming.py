@@ -1,26 +1,16 @@
-"""Expert RAG index warming — pre-build vector indices from tech stack.
+"""Expert domain mapping — maps tech stack to relevant expert domain names.
 
-Maps tech stack (languages, frameworks, libraries, domains) to relevant
-expert domains and pre-builds VectorKnowledgeBase indices so the first
-tapps_consult_expert call for those domains is fast.
-
-Also supports warming business expert RAG indices from project-local
-knowledge directories.
+The RAG warming infrastructure (VectorKnowledgeBase, ExpertRegistry) has been
+removed. Only the tech-stack-to-domain mapping dict and helper function remain,
+as they are used by session start to populate domain hints.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-import structlog
-
-from tapps_core.experts.domain_utils import sanitize_domain_for_path
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pathlib import Path
-    from typing import Protocol
-
-    class TechStack(Protocol):
+    class TechStack:
         """Structural type for tech-stack objects passed into warming helpers.
 
         Avoids a reverse-dependency on tapps_mcp, which owns the concrete
@@ -31,8 +21,6 @@ if TYPE_CHECKING:
         libraries: list[str]
         frameworks: list[str]
         domains: list[str]
-
-logger = structlog.get_logger(__name__)
 
 # Tech stack signals (lowercase) → expert domain names.
 # When a tech_stack contains any of these signals, we warm that expert domain.
@@ -140,170 +128,3 @@ def tech_stack_to_expert_domains(tech_stack: TechStack) -> list[str]:
             result.append(d)
 
     return result
-
-
-def warm_expert_rag_indices(
-    tech_stack: TechStack,
-    *,
-    max_domains: int = 10,
-    index_base_dir: Path | None = None,
-) -> dict[str, object]:
-    """Pre-build VectorKnowledgeBase indices for expert domains relevant to tech stack.
-
-    When FAISS and sentence-transformers are installed, builds FAISS indices
-    for each domain. When absent, this is a no-op (vector RAG falls back to
-    simple search on first use).
-
-    Args:
-        tech_stack: Project tech stack.
-        max_domains: Maximum number of domains to warm.
-        index_base_dir: Base directory for per-domain indices. When provided,
-            indices are stored at index_base_dir/{domain_slug}. When None,
-            uses the default package-level location.
-
-    Returns:
-        Summary dict with warmed, attempted, domains, skipped reason.
-    """
-    from tapps_core.experts.registry import ExpertRegistry
-    from tapps_core.experts.vector_rag import VectorKnowledgeBase
-
-    domains = tech_stack_to_expert_domains(tech_stack)[:max_domains]
-
-    if not domains:
-        return {
-            "warmed": 0,
-            "attempted": 0,
-            "domains": [],
-            "skipped": "no_relevant_domains",
-        }
-
-    kb_path = ExpertRegistry.get_knowledge_base_path()
-    warmed = 0
-    failed_domains: list[str] = []
-
-    for domain in domains:
-        try:
-            expert = ExpertRegistry.get_expert_for_domain(domain)
-            if expert is None:
-                continue
-
-            dir_name = expert.knowledge_dir or sanitize_domain_for_path(domain)
-            knowledge_dir = kb_path / dir_name
-
-            if not knowledge_dir.exists():
-                logger.debug("rag_warm_skip_domain", domain=domain, reason="no_knowledge_dir")
-                continue
-
-            idx_dir: Path | None = None
-            if index_base_dir is not None:
-                domain_slug = sanitize_domain_for_path(domain)
-                idx_dir = index_base_dir / domain_slug
-
-            vkb = VectorKnowledgeBase(
-                knowledge_dir,
-                domain=domain,
-                index_dir=idx_dir,
-            )
-            # Trigger index build/load
-            vkb.search("overview patterns best practices", max_results=1)
-
-            if vkb.backend_type in ("vector", "bm25"):
-                warmed += 1
-                logger.debug(
-                    "rag_warm_domain",
-                    domain=domain,
-                    backend=vkb.backend_type,
-                )
-        except (OSError, RuntimeError, ValueError, ImportError) as e:
-            failed_domains.append(domain)
-            logger.debug("rag_warm_failed", domain=domain, error=str(e))
-
-    return {
-        "warmed": warmed,
-        "attempted": len(domains),
-        "domains": domains,
-        "failed_domains": failed_domains,
-        "skipped": None if warmed > 0 else "no_backend_available",
-    }
-
-
-def warm_business_expert_rag_indices(
-    project_root: Path,
-    *,
-    max_domains: int = 10,
-) -> dict[str, Any]:
-    """Pre-build VectorKnowledgeBase indices for registered business experts.
-
-    Iterates over business experts from :class:`ExpertRegistry` and builds
-    FAISS indices for those with ``rag_enabled=True`` and existing knowledge
-    directories containing ``.md`` files.
-
-    When FAISS is not installed, skips silently (graceful degradation).
-
-    Args:
-        project_root: Project root directory (knowledge lives under
-            ``{project_root}/.tapps-mcp/knowledge/``).
-        max_domains: Maximum number of business domains to warm.
-
-    Returns:
-        Summary dict with ``warmed``, ``skipped``, and ``errors`` lists.
-    """
-    from tapps_core.experts.business_knowledge import get_business_knowledge_path
-    from tapps_core.experts.registry import ExpertRegistry
-    from tapps_core.experts.vector_rag import VectorKnowledgeBase
-
-    business_experts = ExpertRegistry.get_business_experts()
-    if not business_experts:
-        return {"warmed": [], "skipped": [], "errors": []}
-
-    warmed: list[str] = []
-    skipped: list[str] = []
-    errors: list[str] = []
-
-    for expert in business_experts[:max_domains]:
-        domain = expert.primary_domain
-
-        if not expert.rag_enabled:
-            skipped.append(domain)
-            logger.debug("business_rag_warm_skip", domain=domain, reason="rag_disabled")
-            continue
-
-        knowledge_path = get_business_knowledge_path(project_root, expert)
-        if not knowledge_path.exists():
-            skipped.append(domain)
-            logger.debug("business_rag_warm_skip", domain=domain, reason="no_knowledge_dir")
-            continue
-
-        md_files = list(knowledge_path.glob("*.md"))
-        if not md_files:
-            skipped.append(domain)
-            logger.debug("business_rag_warm_skip", domain=domain, reason="no_md_files")
-            continue
-
-        try:
-            vkb = VectorKnowledgeBase(
-                knowledge_path,
-                domain=domain,
-            )
-            # Trigger index build/load
-            vkb.search("overview patterns best practices", max_results=1)
-
-            if vkb.backend_type in ("vector", "bm25"):
-                warmed.append(domain)
-                logger.debug(
-                    "business_rag_warm_domain",
-                    domain=domain,
-                    backend=vkb.backend_type,
-                )
-            else:
-                skipped.append(domain)
-                logger.debug(
-                    "business_rag_warm_skip",
-                    domain=domain,
-                    reason="no_backend_available",
-                )
-        except (OSError, RuntimeError, ValueError, ImportError) as e:
-            errors.append(domain)
-            logger.debug("business_rag_warm_failed", domain=domain, error=str(e))
-
-    return {"warmed": warmed, "skipped": skipped, "errors": errors}

@@ -48,7 +48,7 @@ _REEXPORT_PAIRS: list[tuple[str, str, list[str]]] = [
     (
         "tapps_core.adaptive.voting_engine",
         "tapps_mcp.adaptive.voting_engine",
-        ["AdaptiveVotingEngine", "WeightDistributor"],
+        ["AdaptiveVotingEngine"],
     ),
     (
         "tapps_core.adaptive.weight_distributor",
@@ -107,112 +107,6 @@ _REEXPORT_PAIRS: list[tuple[str, str, list[str]]] = [
             "_reset_settings_cache",
             "load_settings",
         ],
-    ),
-    # --- experts ---
-    (
-        "tapps_core.experts.adaptive_domain_detector",
-        "tapps_mcp.experts.adaptive_domain_detector",
-        ["AdaptiveDomainDetector", "DomainSuggestion"],
-    ),
-    (
-        "tapps_core.experts.confidence",
-        "tapps_mcp.experts.confidence",
-        ["compute_chunk_coverage", "compute_confidence", "compute_rag_quality"],
-    ),
-    (
-        "tapps_core.experts.domain_detector",
-        "tapps_mcp.experts.domain_detector",
-        ["DOMAIN_KEYWORDS", "DomainDetector"],
-    ),
-    (
-        "tapps_core.experts.domain_utils",
-        "tapps_mcp.experts.domain_utils",
-        ["DOMAIN_TO_DIRECTORY_MAP", "sanitize_domain_for_path"],
-    ),
-    (
-        "tapps_core.experts.engine",
-        "tapps_mcp.experts.engine",
-        ["consult_expert", "list_experts"],
-    ),
-    (
-        "tapps_core.experts.hot_rank",
-        "tapps_mcp.experts.hot_rank",
-        ["DomainHotRank", "apply_hot_rank_boost", "compute_hot_rank", "get_domain_hot_ranks"],
-    ),
-    (
-        "tapps_core.experts.knowledge_freshness",
-        "tapps_mcp.experts.knowledge_freshness",
-        ["KnowledgeFileMetadata", "KnowledgeFreshnessTracker"],
-    ),
-    (
-        "tapps_core.experts.knowledge_ingestion",
-        "tapps_mcp.experts.knowledge_ingestion",
-        ["IngestionResult", "KnowledgeEntry", "KnowledgeIngestionPipeline"],
-    ),
-    (
-        "tapps_core.experts.knowledge_validator",
-        "tapps_mcp.experts.knowledge_validator",
-        ["KnowledgeBaseValidator", "ValidationIssue", "ValidationResult"],
-    ),
-    (
-        "tapps_core.experts.models",
-        "tapps_mcp.experts.models",
-        [
-            "ConfidenceFactors",
-            "ConsultationResult",
-            "DomainMapping",
-            "ExpertConfig",
-            "ExpertInfo",
-            "HIGH_CONFIDENCE_THRESHOLD",
-            "KnowledgeChunk",
-            "LOW_CONFIDENCE_THRESHOLD",
-            "StackDetectionResult",
-        ],
-    ),
-    (
-        "tapps_core.experts.rag",
-        "tapps_mcp.experts.rag",
-        ["SimpleKnowledgeBase", "_deduplicate", "_extract_keywords"],
-    ),
-    (
-        "tapps_core.experts.rag_chunker",
-        "tapps_mcp.experts.rag_chunker",
-        ["Chunk", "Chunker"],
-    ),
-    (
-        "tapps_core.experts.rag_embedder",
-        "tapps_mcp.experts.rag_embedder",
-        ["Embedder", "SENTENCE_TRANSFORMERS_AVAILABLE", "SentenceTransformerEmbedder", "create_embedder"],
-    ),
-    (
-        "tapps_core.experts.rag_index",
-        "tapps_mcp.experts.rag_index",
-        ["FAISS_AVAILABLE", "IndexMetadata", "VectorIndex"],
-    ),
-    (
-        "tapps_core.experts.registry",
-        "tapps_mcp.experts.registry",
-        ["ExpertRegistry"],
-    ),
-    (
-        "tapps_core.experts.retrieval_eval",
-        "tapps_mcp.experts.retrieval_eval",
-        [
-            "BENCHMARK_QUERIES",
-            "BenchmarkQuery",
-            "EvalReport",
-            "QUALITY_GATE_MIN_KEYWORD_COVERAGE",
-            "QUALITY_GATE_P95_LATENCY_MS",
-            "QUALITY_GATE_PASS_RATE",
-            "QueryResult",
-            "check_quality_gates",
-            "run_retrieval_eval",
-        ],
-    ),
-    (
-        "tapps_core.experts.vector_rag",
-        "tapps_mcp.experts.vector_rag",
-        ["VectorKnowledgeBase"],
     ),
     # --- knowledge ---
     (
@@ -345,19 +239,6 @@ _REEXPORT_PAIRS: list[tuple[str, str, list[str]]] = [
         ["Alert", "AlertCondition", "AlertManager", "AlertSeverity"],
     ),
     (
-        "tapps_core.metrics.business_metrics",
-        "tapps_mcp.metrics.business_metrics",
-        [
-            "AdoptionMetrics",
-            "BusinessMetricsCollector",
-            "BusinessMetricsData",
-            "EffectivenessMetrics",
-            "OperationalMetrics",
-            "QualityMetrics",
-            "ROIMetrics",
-        ],
-    ),
-    (
         "tapps_core.metrics.collector",
         "tapps_mcp.metrics.collector",
         ["MetricsHub", "get_metrics_hub", "reset_metrics_hub"],
@@ -381,16 +262,6 @@ _REEXPORT_PAIRS: list[tuple[str, str, list[str]]] = [
         "tapps_core.metrics.execution_metrics",
         "tapps_mcp.metrics.execution_metrics",
         ["ToolBreakdown", "ToolCallMetric", "ToolCallMetricsCollector", "ToolCallSummary"],
-    ),
-    (
-        "tapps_core.metrics.expert_metrics",
-        "tapps_mcp.metrics.expert_metrics",
-        ["ConsultationRecord", "ExpertPerformanceRecord", "ExpertPerformanceTracker"],
-    ),
-    (
-        "tapps_core.metrics.expert_observability",
-        "tapps_mcp.metrics.expert_observability",
-        ["ImprovementProposal", "ObservabilitySystem", "WeakArea"],
     ),
     (
         "tapps_core.metrics.otel_export",

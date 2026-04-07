@@ -6,6 +6,7 @@ and returns a pass / fail decision.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import structlog
@@ -13,6 +14,7 @@ import structlog
 from tapps_core.config.settings import PRESETS, ScoringWeights
 from tapps_mcp.gates.models import GateFailure, GateResult, GateThresholds
 from tapps_mcp.scoring.constants import INDIVIDUAL_MAX
+from tapps_mcp.scoring.models import CategoryScore
 
 # Category weights for failure priority ordering (from ScoringWeights defaults)
 _DEFAULT_WEIGHTS = ScoringWeights()
@@ -67,6 +69,30 @@ def _fail(
     )
 
 
+def _check_min_categories(
+    cats: Mapping[str, CategoryScore],
+    thresholds: GateThresholds,
+    failures: list[GateFailure],
+) -> None:
+    """Check category-minimum thresholds (score must be >= threshold)."""
+    min_checks: list[tuple[str, str, float]] = [
+        ("security", "Security", thresholds.security_min),
+        ("maintainability", "Maintainability", thresholds.maintainability_min),
+        ("test_coverage", "Coverage", thresholds.test_coverage_min),
+        ("performance", "Performance", thresholds.performance_min),
+    ]
+    for cat_name, label, threshold_val in min_checks:
+        cat = cats.get(cat_name)
+        if cat and threshold_val > 0 and cat.score < threshold_val:
+            _fail(
+                failures,
+                cat_name,
+                cat.score,
+                threshold_val,
+                f"{label} {cat.score:.1f} < {threshold_val:.1f}",
+            )
+
+
 def evaluate_gate(
     score_result: ScoreResult,
     preset: str = "standard",
@@ -106,33 +132,10 @@ def evaluate_gate(
             f"Overall {overall:.1f} < {thresholds.overall_min:.1f}",
         )
 
-    # 2) Security
-    sec = cats.get("security")
-    if sec and thresholds.security_min > 0 and sec.score < thresholds.security_min:
-        _fail(
-            failures,
-            "security",
-            sec.score,
-            thresholds.security_min,
-            f"Security {sec.score:.1f} < {thresholds.security_min:.1f}",
-        )
+    # 2-5) Category minimum thresholds
+    _check_min_categories(cats, thresholds, failures)
 
-    # 3) Maintainability
-    maint = cats.get("maintainability")
-    if (
-        maint
-        and thresholds.maintainability_min > 0
-        and maint.score < thresholds.maintainability_min
-    ):
-        _fail(
-            failures,
-            "maintainability",
-            maint.score,
-            thresholds.maintainability_min,
-            f"Maintainability {maint.score:.1f} < {thresholds.maintainability_min:.1f}",
-        )
-
-    # 4) Complexity (lower is better - fail if score > max)
+    # 6) Complexity (inverse: lower is better — fail if score > max)
     comp = cats.get("complexity")
     if (
         comp
@@ -147,32 +150,9 @@ def evaluate_gate(
             f"Complexity {comp.score:.1f} > {thresholds.complexity_max:.1f}",
         )
 
-    # 5) Test coverage
-    cov = cats.get("test_coverage")
-    if cov and thresholds.test_coverage_min > 0 and cov.score < thresholds.test_coverage_min:
-        _fail(
-            failures,
-            "test_coverage",
-            cov.score,
-            thresholds.test_coverage_min,
-            f"Coverage {cov.score:.1f} < {thresholds.test_coverage_min:.1f}",
-        )
-
-    # 6) Performance
-    perf = cats.get("performance")
-    if perf and thresholds.performance_min > 0 and perf.score < thresholds.performance_min:
-        _fail(
-            failures,
-            "performance",
-            perf.score,
-            thresholds.performance_min,
-            f"Performance {perf.score:.1f} < {thresholds.performance_min:.1f}",
-        )
-
     # 7) Critical security floor — absolute minimum regardless of thresholds
     sec_for_floor = cats.get("security")
     if sec_for_floor and sec_for_floor.score < _SECURITY_FLOOR_INDIVIDUAL:
-        # Only add floor failure if not already failing on security
         has_security_failure = any(f.category == "security" for f in failures)
         if not has_security_failure:
             _fail(

@@ -7,6 +7,7 @@ collected metrics data.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,10 +20,8 @@ if TYPE_CHECKING:
 
 from tapps_core.common.utils import utc_now
 from tapps_core.metrics.alerts import AlertManager
-from tapps_core.metrics.business_metrics import BusinessMetricsCollector
 from tapps_core.metrics.confidence_metrics import ConfidenceMetricsTracker
 from tapps_core.metrics.execution_metrics import ToolCallMetricsCollector
-from tapps_core.metrics.expert_metrics import ExpertPerformanceTracker
 from tapps_core.metrics.outcome_tracker import OutcomeTracker
 from tapps_core.metrics.rag_metrics import RAGMetricsTracker
 from tapps_core.metrics.trends import calculate_trend
@@ -39,11 +38,12 @@ class DashboardGenerator:
         metrics_dir: Path,
         execution_collector: ToolCallMetricsCollector | None = None,
         outcome_tracker: OutcomeTracker | None = None,
-        expert_tracker: ExpertPerformanceTracker | None = None,
         confidence_tracker: ConfidenceMetricsTracker | None = None,
         rag_tracker: RAGMetricsTracker | None = None,
-        business_collector: BusinessMetricsCollector | None = None,
         memory_store: MemoryStore | None = None,
+        # Deprecated params kept for backward compat — ignored
+        expert_tracker: object | None = None,
+        business_collector: object | None = None,
     ) -> None:
         self._metrics_dir = metrics_dir
         self._dashboard_dir = metrics_dir.parent / "dashboard"
@@ -51,17 +51,8 @@ class DashboardGenerator:
 
         self._execution = execution_collector or ToolCallMetricsCollector(metrics_dir)
         self._outcomes = outcome_tracker or OutcomeTracker(metrics_dir)
-        self._experts = expert_tracker or ExpertPerformanceTracker(metrics_dir)
         self._confidence = confidence_tracker or ConfidenceMetricsTracker(metrics_dir)
         self._rag = rag_tracker or RAGMetricsTracker(metrics_dir)
-        self._business = business_collector or BusinessMetricsCollector(
-            metrics_dir,
-            execution_collector=self._execution,
-            outcome_tracker=self._outcomes,
-            expert_tracker=self._experts,
-            confidence_tracker=self._confidence,
-            rag_tracker=self._rag,
-        )
         self._memory_store = memory_store
         self._alert_manager = AlertManager()
         self._visualizer = AnalyticsVisualizer()
@@ -141,107 +132,133 @@ class DashboardGenerator:
         lines.append("# TappsMCP Dashboard")
         lines.append(f"\nGenerated: {json_data.get('timestamp', '')}\n")
 
-        # Summary
-        if "summary" in json_data:
-            summary = json_data["summary"]
-            lines.append("## Summary")
-            lines.append(f"- Total tool calls: {summary.get('total_tool_calls', 0)}")
-            lines.append(f"- Gate pass rate: {summary.get('gate_pass_rate', 0):.1%}")
-            lines.append(f"- Average score: {summary.get('avg_score', 0):.1f}")
-            lines.append(f"- Cache hit rate: {summary.get('cache_hit_rate', 0):.1%}")
-            lines.append(f"- Expert confidence avg: {summary.get('expert_confidence_avg', 0):.2f}")
-            lines.append(f"- Active alerts: {summary.get('active_alerts', 0)}")
-            lines.append("")
-
-        # Tool metrics chart
-        if "tool_metrics" in json_data:
-            tool_data = json_data["tool_metrics"]
-            if tool_data:
-                chart_data = {t["tool_name"]: float(t["call_count"]) for t in tool_data}
-                chart = self._visualizer.create_bar_chart(chart_data, title="## Tool Usage")
-                lines.append(chart)
-                lines.append("")
-
-        # Alerts
-        if "alerts" in json_data:
-            alerts = json_data["alerts"]
-            if alerts:
-                lines.append("## Active Alerts")
-                for alert in alerts:
-                    if not isinstance(alert, dict):
-                        continue
-                    severity = str(alert.get("severity", "info")).upper()
-                    lines.append(f"- [{severity}] {alert.get('message', '')}")
-                lines.append("")
-
-        # Provider stats
-        if "provider_stats" in json_data:
-            prov = json_data["provider_stats"]
-            if prov and isinstance(prov, dict):
-                lines.append("## Documentation Provider Stats")
-                for name, s in sorted(prov.items()):
-                    if isinstance(s, dict):
-                        calls = s.get("total_calls", 0)
-                        ok = s.get("total_successes", 0)
-                        healthy = s.get("is_healthy", True)
-                        lines.append(f"- **{name}**: calls={calls}, successes={ok}, healthy={healthy}")
-                lines.append("")
-
-        # Coverage metrics
-        if "coverage_metrics" in json_data:
-            cov = json_data["coverage_metrics"]
-            lines.append("## Coverage Metrics")
-            lines.append(f"- Files scored: {cov.get('files_scored', 0)}")
-            lines.append(f"- Files gated: {cov.get('files_gated', 0)}")
-            lines.append(f"- Files scanned: {cov.get('files_scanned', 0)}")
-            lines.append(f"- Gate skip rate: {cov.get('gate_skip_rate', 0):.1%}")
-            lines.append(f"- Docs lookup calls: {cov.get('docs_lookup_calls', 0)}")
-            lines.append(f"- Checklist calls: {cov.get('checklist_calls', 0)}")
-            unused = cov.get("core_tools_unused", [])
-            if unused:
-                lines.append(f"- Unused core tools: {', '.join(unused)}")
-            lines.append("")
-
-        # Memory metrics
-        if "memory_metrics" in json_data:
-            mem = json_data["memory_metrics"]
-            if mem.get("available", False):
-                lines.append("## Memory Metrics")
-                lines.append(f"- Total entries: {mem.get('total_entries', 0)}")
-                by_tier = mem.get("by_tier", {})
-                if by_tier:
-                    lines.append(
-                        f"- By tier: architectural={by_tier.get('architectural', 0)}, "
-                        f"pattern={by_tier.get('pattern', 0)}, "
-                        f"context={by_tier.get('context', 0)}"
-                    )
-                lines.append(f"- Stale count: {mem.get('stale_count', 0)}")
-                lines.append(f"- Avg confidence: {mem.get('avg_confidence', 0):.4f}")
-                lines.append(f"- Capacity: {mem.get('capacity_pct', 0):.1f}%")
-                if mem.get("consolidation_groups", 0) > 0:
-                    lines.append(
-                        f"- Consolidation: {mem.get('consolidated_count', 0)} groups, "
-                        f"{mem.get('source_entries_count', 0)} sources"
-                    )
-                fed = mem.get("federation")
-                if fed:
-                    lines.append(
-                        f"- Federation: registered={fed.get('hub_registered', False)}, "
-                        f"published={fed.get('published_count', 0)}, "
-                        f"synced={fed.get('synced_count', 0)}"
-                    )
-                lines.append("")
-
-        # Recommendations
-        if "recommendations" in json_data:
-            recs = json_data["recommendations"]
-            if recs:
-                lines.append("## Recommendations")
-                for rec in recs:
-                    lines.append(f"- {rec}")
-                lines.append("")
+        self._render_md_summary(json_data, lines)
+        self._render_md_tool_metrics(json_data, lines)
+        self._render_md_alerts(json_data, lines)
+        self._render_md_provider_stats(json_data, lines)
+        self._render_md_coverage_metrics(json_data, lines)
+        self._render_md_memory_metrics(json_data, lines)
+        self._render_md_recommendations(json_data, lines)
 
         return "\n".join(lines)
+
+    def _render_md_summary(self, json_data: dict[str, Any], lines: list[str]) -> None:
+        """Append summary section lines to *lines*."""
+        if "summary" not in json_data:
+            return
+        summary = json_data["summary"]
+        lines.append("## Summary")
+        lines.append(f"- Total tool calls: {summary.get('total_tool_calls', 0)}")
+        lines.append(f"- Gate pass rate: {summary.get('gate_pass_rate', 0):.1%}")
+        lines.append(f"- Average score: {summary.get('avg_score', 0):.1f}")
+        lines.append(f"- Cache hit rate: {summary.get('cache_hit_rate', 0):.1%}")
+        lines.append(f"- Expert confidence avg: {summary.get('expert_confidence_avg', 0):.2f}")
+        lines.append(f"- Active alerts: {summary.get('active_alerts', 0)}")
+        lines.append("")
+
+    def _render_md_tool_metrics(self, json_data: dict[str, Any], lines: list[str]) -> None:
+        """Append tool metrics bar-chart section lines to *lines*."""
+        if "tool_metrics" not in json_data:
+            return
+        tool_data = json_data["tool_metrics"]
+        if tool_data:
+            chart_data = {t["tool_name"]: float(t["call_count"]) for t in tool_data}
+            chart = self._visualizer.create_bar_chart(chart_data, title="## Tool Usage")
+            lines.append(chart)
+            lines.append("")
+
+    def _render_md_alerts(self, json_data: dict[str, Any], lines: list[str]) -> None:
+        """Append active alerts section lines to *lines*."""
+        if "alerts" not in json_data:
+            return
+        alerts = json_data["alerts"]
+        if not alerts:
+            return
+        lines.append("## Active Alerts")
+        for alert in alerts:
+            if not isinstance(alert, dict):
+                continue
+            severity = str(alert.get("severity", "info")).upper()
+            lines.append(f"- [{severity}] {alert.get('message', '')}")
+        lines.append("")
+
+    def _render_md_provider_stats(self, json_data: dict[str, Any], lines: list[str]) -> None:
+        """Append provider stats section lines to *lines*."""
+        if "provider_stats" not in json_data:
+            return
+        prov = json_data["provider_stats"]
+        if not prov or not isinstance(prov, dict):
+            return
+        lines.append("## Documentation Provider Stats")
+        for name, s in sorted(prov.items()):
+            if isinstance(s, dict):
+                calls = s.get("total_calls", 0)
+                ok = s.get("total_successes", 0)
+                healthy = s.get("is_healthy", True)
+                lines.append(f"- **{name}**: calls={calls}, successes={ok}, healthy={healthy}")
+        lines.append("")
+
+    def _render_md_coverage_metrics(self, json_data: dict[str, Any], lines: list[str]) -> None:
+        """Append coverage metrics section lines to *lines*."""
+        if "coverage_metrics" not in json_data:
+            return
+        cov = json_data["coverage_metrics"]
+        lines.append("## Coverage Metrics")
+        lines.append(f"- Files scored: {cov.get('files_scored', 0)}")
+        lines.append(f"- Files gated: {cov.get('files_gated', 0)}")
+        lines.append(f"- Files scanned: {cov.get('files_scanned', 0)}")
+        lines.append(f"- Gate skip rate: {cov.get('gate_skip_rate', 0):.1%}")
+        lines.append(f"- Docs lookup calls: {cov.get('docs_lookup_calls', 0)}")
+        lines.append(f"- Checklist calls: {cov.get('checklist_calls', 0)}")
+        unused = cov.get("core_tools_unused", [])
+        if unused:
+            lines.append(f"- Unused core tools: {', '.join(unused)}")
+        lines.append("")
+
+    def _render_md_memory_metrics(self, json_data: dict[str, Any], lines: list[str]) -> None:
+        """Append memory metrics section lines to *lines*."""
+        if "memory_metrics" not in json_data:
+            return
+        mem = json_data["memory_metrics"]
+        if not mem.get("available", False):
+            return
+        lines.append("## Memory Metrics")
+        lines.append(f"- Total entries: {mem.get('total_entries', 0)}")
+        by_tier = mem.get("by_tier", {})
+        if by_tier:
+            lines.append(
+                f"- By tier: architectural={by_tier.get('architectural', 0)}, "
+                f"pattern={by_tier.get('pattern', 0)}, "
+                f"context={by_tier.get('context', 0)}"
+            )
+        lines.append(f"- Stale count: {mem.get('stale_count', 0)}")
+        lines.append(f"- Avg confidence: {mem.get('avg_confidence', 0):.4f}")
+        lines.append(f"- Capacity: {mem.get('capacity_pct', 0):.1f}%")
+        if mem.get("consolidation_groups", 0) > 0:
+            lines.append(
+                f"- Consolidation: {mem.get('consolidated_count', 0)} groups, "
+                f"{mem.get('source_entries_count', 0)} sources"
+            )
+        fed = mem.get("federation")
+        if fed:
+            lines.append(
+                f"- Federation: registered={fed.get('hub_registered', False)}, "
+                f"published={fed.get('published_count', 0)}, "
+                f"synced={fed.get('synced_count', 0)}"
+            )
+        lines.append("")
+
+    def _render_md_recommendations(self, json_data: dict[str, Any], lines: list[str]) -> None:
+        """Append recommendations section lines to *lines*."""
+        if "recommendations" not in json_data:
+            return
+        recs = json_data["recommendations"]
+        if not recs:
+            return
+        lines.append("## Recommendations")
+        for rec in recs:
+            lines.append(f"- {rec}")
+        lines.append("")
 
     def generate_html_dashboard(
         self,
@@ -335,8 +352,7 @@ class DashboardGenerator:
         return {"metric_name": "avg_score", "direction": "stable", "data_points": 0}
 
     def _build_expert_metrics(self) -> dict[str, Any]:
-        domain_breakdown = self._experts.get_domain_breakdown()
-        return {"domains": domain_breakdown}
+        return {"domains": {}, "note": "Expert system removed (EPIC-94)"}
 
     def _build_cache_metrics(self) -> dict[str, Any]:
         rag_metrics = self._rag.get_metrics()
@@ -412,25 +428,13 @@ class DashboardGenerator:
         def _norm(fp: str | None) -> str:
             return self._normalize_file_path(fp or "", project_root)
 
-        scored_files = {
-            _norm(m.file_path)
-            for m in recent
-            if m.tool_name == "tapps_score_file" and m.file_path and _norm(m.file_path)
-        }
-        gated_files = {
-            _norm(m.file_path)
-            for m in recent
-            if m.tool_name == "tapps_quality_gate" and m.file_path and _norm(m.file_path)
-        }
-        scanned_files = {
-            _norm(m.file_path)
-            for m in recent
-            if m.tool_name == "tapps_security_scan" and m.file_path and _norm(m.file_path)
-        }
+        scored_files, gated_files, scanned_files = self._collect_file_sets(recent, _norm)
 
         # Gate skip rate: files scored but never gated
         gate_skip_count = len(scored_files - gated_files) if scored_files else 0
         gate_skip_rate = gate_skip_count / len(scored_files) if scored_files else 0.0
+
+        lookup_calls, checklist_calls = self._count_tool_calls(recent)
 
         # Tool usage counts
         all_tool_names = {m.tool_name for m in recent}
@@ -440,9 +444,6 @@ class DashboardGenerator:
             "tapps_security_scan",
             "tapps_checklist",
         }
-
-        lookup_calls = sum(1 for m in recent if m.tool_name == "tapps_lookup_docs")
-        checklist_calls = sum(1 for m in recent if m.tool_name == "tapps_checklist")
 
         return {
             "files_scored": len(scored_files),
@@ -455,6 +456,36 @@ class DashboardGenerator:
             "core_tools_used": sorted(core_tools & all_tool_names),
             "core_tools_unused": sorted(core_tools - all_tool_names),
         }
+
+    @staticmethod
+    def _collect_file_sets(
+        recent: list[Any],
+        norm: Callable[[str | None], str],
+    ) -> tuple[set[str], set[str], set[str]]:
+        """Return ``(scored_files, gated_files, scanned_files)`` from *recent* metrics."""
+        scored_files = {
+            norm(m.file_path)
+            for m in recent
+            if m.tool_name == "tapps_score_file" and m.file_path and norm(m.file_path)
+        }
+        gated_files = {
+            norm(m.file_path)
+            for m in recent
+            if m.tool_name == "tapps_quality_gate" and m.file_path and norm(m.file_path)
+        }
+        scanned_files = {
+            norm(m.file_path)
+            for m in recent
+            if m.tool_name == "tapps_security_scan" and m.file_path and norm(m.file_path)
+        }
+        return scored_files, gated_files, scanned_files
+
+    @staticmethod
+    def _count_tool_calls(recent: list[Any]) -> tuple[int, int]:
+        """Return ``(lookup_calls, checklist_calls)`` counts from *recent* metrics."""
+        lookup_calls = sum(1 for m in recent if m.tool_name == "tapps_lookup_docs")
+        checklist_calls = sum(1 for m in recent if m.tool_name == "tapps_checklist")
+        return lookup_calls, checklist_calls
 
     def _build_memory_metrics(self) -> dict[str, Any]:
         """Build memory subsystem metrics from live MemoryStore data.
@@ -649,8 +680,7 @@ class DashboardGenerator:
         return [a.to_dict() for a in alerts]
 
     def _build_business_metrics(self) -> dict[str, Any]:
-        biz = self._business.collect()
-        return biz.to_dict()
+        return {"note": "Business metrics removed (EPIC-94)"}
 
     def _build_recommendations(self) -> list[str]:
         recommendations: list[str] = []

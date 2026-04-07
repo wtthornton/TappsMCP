@@ -20,16 +20,8 @@ def _build_default_matrix() -> Any:
     ``tapps_mcp.adaptive.voting_engine.WeightDistributor`` work correctly.
     """
     from tapps_core.adaptive.models import ExpertWeightMatrix
-    from tapps_core.experts.registry import ExpertRegistry
 
-    experts = ExpertRegistry.get_all_experts()
-    if not experts:
-        return ExpertWeightMatrix()
-
-    domains = [e.primary_domain for e in experts]
-    primary_map = {e.primary_domain: e.expert_id for e in experts}
-
-    return WeightDistributor.calculate_weights(domains, primary_map)
+    return ExpertWeightMatrix()
 
 
 # Monkey-patch the core module so that AdaptiveVotingEngine.adjust_voting_weights

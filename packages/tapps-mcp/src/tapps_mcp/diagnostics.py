@@ -11,7 +11,6 @@ from tapps_core.common.models import (
     CacheDiagnostic,
     Context7Diagnostic,
     KnowledgeBaseDiagnostic,
-    KnowledgeDomainInfo,
     StartupDiagnostics,
     VectorRagDiagnostic,
 )
@@ -69,60 +68,23 @@ def check_cache(cache_dir: Path) -> CacheDiagnostic:
 
 
 def check_vector_rag() -> VectorRagDiagnostic:
-    """Check availability of optional vector RAG dependencies."""
-    from tapps_mcp.experts.rag_embedder import SENTENCE_TRANSFORMERS_AVAILABLE
-    from tapps_mcp.experts.rag_index import FAISS_AVAILABLE
-
-    try:
-        import numpy as _np
-
-        numpy_available = True
-        del _np
-    except ImportError:
-        numpy_available = False
-
-    all_present = FAISS_AVAILABLE and SENTENCE_TRANSFORMERS_AVAILABLE and numpy_available
+    """Expert system removed (EPIC-94). Returns keyword-only status."""
     return VectorRagDiagnostic(
-        faiss_available=FAISS_AVAILABLE,
-        sentence_transformers_available=SENTENCE_TRANSFORMERS_AVAILABLE,
-        numpy_available=numpy_available,
-        status="full_vector" if all_present else "keyword_only",
+        faiss_available=False,
+        sentence_transformers_available=False,
+        numpy_available=False,
+        status="removed",
     )
 
 
 def check_knowledge_base() -> KnowledgeBaseDiagnostic:
-    """Check knowledge base integrity: domain dirs, file counts, missing domains."""
-    from tapps_mcp.experts.domain_utils import sanitize_domain_for_path
-    from tapps_mcp.experts.registry import ExpertRegistry
-
-    base_path = ExpertRegistry.get_knowledge_base_path()
-    expected_domains = ExpertRegistry.TECHNICAL_DOMAINS
-
-    domains_info: list[KnowledgeDomainInfo] = []
-    total_files = 0
-    found_domains: set[str] = set()
-
-    for expert in ExpertRegistry.get_all_experts():
-        dir_name = expert.knowledge_dir or sanitize_domain_for_path(expert.primary_domain)
-        kb_path = base_path / dir_name
-        if kb_path.exists() and kb_path.is_dir():
-            file_count = len(list(kb_path.glob("*.md")))
-            total_files += file_count
-            found_domains.add(expert.primary_domain)
-            domains_info.append(
-                KnowledgeDomainInfo(domain=expert.primary_domain, file_count=file_count)
-            )
-        else:
-            domains_info.append(KnowledgeDomainInfo(domain=expert.primary_domain, file_count=0))
-
-    missing = sorted(expected_domains - found_domains)
-
+    """Expert system removed (EPIC-94). Returns empty diagnostic."""
     return KnowledgeBaseDiagnostic(
-        total_domains=len(found_domains),
-        total_files=total_files,
-        expected_domains=len(expected_domains),
-        missing_domains=missing,
-        domains=sorted(domains_info, key=lambda d: d.domain),
+        total_domains=0,
+        total_files=0,
+        expected_domains=0,
+        missing_domains=[],
+        domains=[],
     )
 
 

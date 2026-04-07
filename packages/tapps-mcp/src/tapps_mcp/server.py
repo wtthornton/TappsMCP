@@ -6,10 +6,8 @@ Creates the FastMCP server instance, registers all tools, and provides
 Tool handlers are split across modules for maintainability:
   - ``server_scoring_tools``: tapps_score_file, tapps_quality_gate, tapps_quick_check
   - ``server_pipeline_tools``: tapps_validate_changed, tapps_session_start, tapps_init
-  - ``server_metrics_tools``: tapps_dashboard, tapps_stats, tapps_feedback, tapps_research
+  - ``server_metrics_tools``: tapps_dashboard, tapps_stats, tapps_feedback
   - ``server_memory_tools``: tapps_memory
-  - ``server_persona_tools``: tapps_get_canonical_persona (Epic 78)
-  - ``server_expert_tools``: tapps_manage_experts
   - ``server_analysis_tools``: tapps_session_notes, tapps_impact_analysis, tapps_report,
     tapps_dead_code, tapps_dependency_scan, tapps_dependency_graph
   - ``server_resources``: MCP resources and prompts
@@ -44,7 +42,6 @@ from tapps_mcp.common.developer_workflow import (
     RECOMMENDED_WORKFLOW_TEXT,
 )
 from tapps_mcp.server_helpers import (
-    _auto_save_expert_consultation_memory,
     error_response,
     serialize_issues,
     success_response,
@@ -155,28 +152,12 @@ def _validate_file_path(file_path: str) -> Path:
     return validator.validate_read_path(path_str)
 
 
-_LIBRARY_DOMAIN_MAP: dict[str, str] = {}
-for _domain, _libs in {
-    "testing-strategies": ("pytest", "unittest", "mock", "coverage", "hypothesis"),
-    "api-design-integration": (
-        "fastapi", "flask", "django", "starlette", "httpx", "requests",
-    ),
-    "database-data-management": ("sqlalchemy", "alembic", "psycopg", "redis"),
-    "cloud-infrastructure": ("docker", "kubernetes", "docker-compose"),
-    "development-workflow": ("github-actions", "ci"),
-    "code-quality-analysis": ("pydantic", "mypy", "ruff"),
-    "security": ("security", "cryptography", "pyjwt", "bandit"),
-}.items():
-    for _lib in _libs:
-        _LIBRARY_DOMAIN_MAP[_lib] = _domain
-
-_EXPERT_FALLBACK_MIN_CONFIDENCE = 0.3
 
 # ---------------------------------------------------------------------------
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
-# Canonical list of all TappsMCP tools (29). Used for filtering and fallback.
+# Canonical list of all TappsMCP tools (24). Used for filtering and fallback.
 ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_server_info",
     "tapps_session_start",
@@ -187,10 +168,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_validate_config",
     "tapps_validate_changed",
     "tapps_quick_check",
-    "tapps_consult_expert",
-    "tapps_list_experts",
     "tapps_checklist",
-    "tapps_project_profile",
     "tapps_session_notes",
     "tapps_impact_analysis",
     "tapps_report",
@@ -201,13 +179,10 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_dashboard",
     "tapps_stats",
     "tapps_feedback",
-    "tapps_research",
     "tapps_dead_code",
     "tapps_dependency_scan",
     "tapps_dependency_graph",
     "tapps_memory",
-    "tapps_manage_experts",
-    "tapps_get_canonical_persona",
 })
 
 # Tier 1 from TOOL-TIER-RANKING (Epic 79.1)
@@ -224,10 +199,7 @@ TOOL_PRESET_CORE: frozenset[str] = frozenset({
 # Tier 1 + Tier 2
 TOOL_PRESET_PIPELINE: frozenset[str] = TOOL_PRESET_CORE | frozenset({
     "tapps_score_file",
-    "tapps_consult_expert",
-    "tapps_research",
     "tapps_memory",
-    "tapps_project_profile",
     "tapps_impact_analysis",
     "tapps_validate_config",
 })
@@ -237,23 +209,20 @@ TOOL_PRESET_REVIEWER: frozenset[str] = frozenset({
     "tapps_session_start", "tapps_quick_check", "tapps_validate_changed",
     "tapps_quality_gate", "tapps_checklist", "tapps_security_scan",
     "tapps_score_file", "tapps_dead_code", "tapps_dependency_scan",
-    "tapps_project_profile",
 })
 TOOL_PRESET_PLANNER: frozenset[str] = frozenset({
     "tapps_session_start", "tapps_checklist", "tapps_validate_changed",
     "tapps_quality_gate", "tapps_score_file", "tapps_memory",
-    "tapps_consult_expert", "tapps_project_profile",
 })
 TOOL_PRESET_FRONTEND: frozenset[str] = frozenset({
     "tapps_session_start", "tapps_quick_check", "tapps_score_file",
-    "tapps_lookup_docs", "tapps_consult_expert", "tapps_quality_gate",
-    "tapps_project_profile",
+    "tapps_lookup_docs", "tapps_quality_gate",
 })
 TOOL_PRESET_DEVELOPER: frozenset[str] = frozenset({
     "tapps_session_start", "tapps_quick_check", "tapps_validate_changed",
     "tapps_quality_gate", "tapps_checklist", "tapps_score_file",
     "tapps_security_scan", "tapps_lookup_docs", "tapps_memory",
-    "tapps_consult_expert", "tapps_project_profile", "tapps_impact_analysis",
+    "tapps_impact_analysis",
 })
 
 _FALLBACK_TOOL_LIST: list[str] = sorted(ALL_TOOL_NAMES)
@@ -387,11 +356,6 @@ def _build_server_info_data(
             "prompts_available": True,
         },
     }
-
-
-def _library_to_domain(library: str) -> str:
-    """Map library name to best-matching expert domain for fallback lookup."""
-    return _LIBRARY_DOMAIN_MAP.get(library.lower(), "software-architecture")
 
 
 _checklist_state: dict[str, bool] = {"persist_configured": False}
@@ -720,38 +684,6 @@ def _build_lookup_data(result: LookupResult) -> dict[str, Any]:
     return data
 
 
-async def _attach_expert_fallback(
-    response: dict[str, Any],
-    library: str,
-    topic: str,
-) -> None:
-    """Attach expert fallback to a lookup response when the primary lookup failed."""
-    try:
-        from tapps_core.experts.engine import consult_expert
-
-        cr = await asyncio.to_thread(
-            consult_expert,
-            question=f"How do I use {library} for {topic}? Best practices and API usage.",
-            domain=_library_to_domain(library),
-            max_chunks=3,
-            max_context_length=1500,
-        )
-        if cr.confidence >= _EXPERT_FALLBACK_MIN_CONFIDENCE and cr.answer:
-            response["expert_fallback"] = {
-                "content": cr.answer,
-                "confidence": round(cr.confidence, 2),
-                "sources": cr.sources[:3],
-            }
-            response["error"]["message"] += (
-                " Expert knowledge base fallback provided — use tapps_consult_expert "
-                "for more targeted questions."
-            )
-    except Exception:
-        logger.warning(
-            "expert_fallback_failed", library=library, topic=topic, exc_info=True
-        )
-
-
 async def tapps_lookup_docs(
     library: str,
     topic: str = "overview",
@@ -805,7 +737,6 @@ async def tapps_lookup_docs(
     err_code = _lookup_error_code(result.error)
     if result.error:
         response["error"] = {"code": err_code, "message": result.error}
-        await _attach_expert_fallback(response, library, topic)
     if result.warning:
         response["warning"] = result.warning
 
@@ -953,174 +884,6 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
     _attach_config_structured_output(resp, result)
 
     return _with_nudges("tapps_validate_config", resp)
-
-
-def tapps_consult_expert(question: str, domain: str = "") -> dict[str, Any]:
-    """REQUIRED for domain-specific decisions. Routes to one of 17+ built-in
-    experts or user-defined business experts and returns RAG-backed guidance
-    with confidence scores.
-
-    Available domains (omit domain to auto-detect from question):
-      accessibility, agent-learning, ai-frameworks, api-design-integration,
-      cloud-infrastructure, code-quality-analysis, database-data-management,
-      data-privacy-compliance, development-workflow, documentation-knowledge-management,
-      github, observability-monitoring, performance-optimization, security,
-      software-architecture, testing-strategies, user-experience
-
-    For combined expert + docs in one call, use tapps_research instead.
-
-    Args:
-        question: The technical question to ask (natural language).
-        domain: Optional domain from the list above. Omit to auto-detect from question.
-    """
-    start = time.perf_counter_ns()
-    _record_call("tapps_consult_expert")
-
-    # Validate inputs
-    question = _sanitize_lookup_param(question, max_len=2000)
-    if not question:
-        return error_response(
-            "tapps_consult_expert", "invalid_question", "Question is required."
-        )
-
-    from tapps_core.experts.engine import consult_expert
-
-    try:
-        result = consult_expert(question=question, domain=domain or None)
-    except Exception:
-        logger.warning("consult_expert_error", question=question[:80], exc_info=True)
-        return error_response(
-            "tapps_consult_expert",
-            "consultation_failed",
-            "Expert consultation failed. Try a different question or domain.",
-        )
-
-    # Memory injection (Epic 25) + optional pattern-tier capture (M4.1)
-    settings = load_settings()
-    answer = result.answer
-    memory_injected = 0
-    try:
-        from tapps_core.memory.injection import append_memory_to_answer, inject_memories
-        from tapps_mcp.server_helpers import _get_memory_store
-
-        store = _get_memory_store()
-        mem_result = inject_memories(
-            question, store, settings.llm_engagement_level
-        )
-        answer = append_memory_to_answer(answer, mem_result)
-        memory_injected = mem_result.get("memory_injected", 0)
-    except Exception:
-        logger.debug("memory_injection_failed: tapps_consult_expert", exc_info=True)
-
-    quality_memory = _auto_save_expert_consultation_memory(
-        settings,
-        question=question,
-        domain=str(result.domain),
-        expert_answer=str(result.answer),
-        expert_id=str(result.expert_id),
-        expert_name=str(result.expert_name),
-        confidence=float(result.confidence),
-    )
-
-    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_consult_expert", start)
-
-    # Determine expert type from registry
-    from tapps_core.experts.registry import ExpertRegistry
-
-    _is_builtin = ExpertRegistry.is_technical_domain(result.domain)
-    _expert_type = "builtin" if _is_builtin else "business"
-
-    resp = success_response(
-        "tapps_consult_expert",
-        elapsed_ms,
-        {
-            "domain": result.domain,
-            "expert_id": result.expert_id,
-            "expert_name": result.expert_name,
-            "answer": answer,
-            "confidence": round(result.confidence, 4),
-            "factors": result.factors.model_dump(),
-            "sources": result.sources,
-            "chunks_used": result.chunks_used,
-            "detected_domains": [
-                {"domain": d.domain, "confidence": d.confidence}
-                for d in result.detected_domains
-            ],
-            "recommendation": result.recommendation,
-            "low_confidence_nudge": result.low_confidence_nudge,
-            "suggested_tool": result.suggested_tool,
-            "suggested_library": result.suggested_library,
-            "suggested_topic": result.suggested_topic,
-            "fallback_used": result.fallback_used,
-            "fallback_library": result.fallback_library,
-            "fallback_topic": result.fallback_topic,
-            "stale_knowledge": result.stale_knowledge,
-            "oldest_chunk_age_days": result.oldest_chunk_age_days,
-            "freshness_caveat": result.freshness_caveat,
-            "memory_injected": memory_injected,
-            "is_builtin": _is_builtin,
-            "expert_type": _expert_type,
-            **quality_memory,
-        },
-    )
-
-    # Attach structured output
-    try:
-        from tapps_mcp.common.output_schemas import ExpertOutput
-
-        structured = ExpertOutput(
-            domain=result.domain,
-            expert_name=result.expert_name,
-            answer=result.answer,
-            confidence=round(result.confidence, 4),
-            sources=result.sources,
-        )
-        resp["structuredContent"] = structured.to_structured_content()
-    except Exception:
-        logger.debug("structured_output_failed: tapps_consult_expert", exc_info=True)
-
-    return _with_nudges(
-        "tapps_consult_expert",
-        resp,
-        context={
-            "confidence": round(result.confidence, 4),
-            "stale_knowledge": result.stale_knowledge,
-        },
-    )
-
-
-def tapps_list_experts() -> dict[str, Any]:
-    """Returns built-in and business experts with domain, description, and knowledge-base status.
-
-    Not required before calling tapps_consult_expert - that tool's description
-    lists all domains and auto-detects from the question when domain is omitted.
-    Use this only when you need expert metadata (knowledge file counts, RAG status).
-    """
-    start = time.perf_counter_ns()
-    _record_call("tapps_list_experts")
-
-    from tapps_core.experts.engine import list_experts
-
-    experts = list_experts()
-
-    builtin_count = sum(1 for e in experts if e.is_builtin)
-    business_count = sum(1 for e in experts if not e.is_builtin)
-
-    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_list_experts", start)
-
-    resp = success_response(
-        "tapps_list_experts",
-        elapsed_ms,
-        {
-            "expert_count": len(experts),
-            "builtin_count": builtin_count,
-            "business_count": business_count,
-            "experts": [e.model_dump() for e in experts],
-        },
-    )
-    return _with_nudges("tapps_list_experts", resp)
 
 
 def _checklist_json_format(
@@ -1439,84 +1202,6 @@ async def tapps_checklist(
         return _with_nudges("tapps_checklist", resp, {"complete": False})
 
 
-def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
-    """Call when you need project context. Detects tech stack, type, CI, Docker,
-    test frameworks, and package managers. Session start does NOT include profile;
-    call this on demand when you need project-specific recommendations.
-
-    Returns: project_type, tech_stack, has_ci, has_docker, has_tests, recommendations.
-
-    Args:
-        project_root: Project root path (default: server's configured root).
-    """
-    start = time.perf_counter_ns()
-    _record_call("tapps_project_profile")
-
-    from tapps_mcp.project.profiler import detect_project_profile
-
-    settings = load_settings()
-    root = settings.project_root
-    if project_root:
-        from pathlib import Path
-
-        root = Path(project_root).resolve()
-
-    try:
-        profile = detect_project_profile(root)
-    except Exception as exc:
-        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-        _record_execution(
-            "tapps_project_profile",
-            start,
-            status="failed",
-            error_code="profile_failed",
-        )
-        return error_response("tapps_project_profile", "profile_failed", str(exc))
-
-    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_project_profile", start)
-
-    resp = success_response(
-        "tapps_project_profile",
-        elapsed_ms,
-        {
-            "project_root": str(root),
-            "tech_stack": profile.tech_stack.model_dump(),
-            "project_type": profile.project_type,
-            "project_type_confidence": round(profile.project_type_confidence, 2),
-            "project_type_reason": profile.project_type_reason,
-            "has_ci": profile.has_ci,
-            "ci_systems": profile.ci_systems,
-            "has_docker": profile.has_docker,
-            "has_tests": profile.has_tests,
-            "test_frameworks": profile.test_frameworks,
-            "package_managers": profile.package_managers,
-            "quality_recommendations": profile.quality_recommendations,
-        },
-    )
-
-    # Attach structured output
-    try:
-        from tapps_mcp.common.output_schemas import ProfileOutput
-
-        structured = ProfileOutput(
-            project_root=str(root),
-            project_type=profile.project_type or "",
-            project_type_confidence=round(profile.project_type_confidence, 2),
-            has_ci=profile.has_ci,
-            has_docker=profile.has_docker,
-            has_tests=profile.has_tests,
-            test_frameworks=profile.test_frameworks,
-            package_managers=profile.package_managers,
-            quality_recommendations=profile.quality_recommendations,
-        )
-        resp["structuredContent"] = structured.to_structured_content()
-    except Exception:
-        logger.debug("structured_output_failed: tapps_project_profile", exc_info=True)
-
-    return _with_nudges("tapps_project_profile", resp)
-
-
 # ---------------------------------------------------------------------------
 # Register tools from extracted modules & re-export for backward compatibility
 # ---------------------------------------------------------------------------
@@ -1532,14 +1217,8 @@ def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_lookup_docs)
     if "tapps_validate_config" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_config)
-    if "tapps_consult_expert" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_consult_expert)
-    if "tapps_list_experts" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_list_experts)
     if "tapps_checklist" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_checklist)
-    if "tapps_project_profile" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_project_profile)
 
 
 def _register_tool_modules() -> None:
@@ -1555,10 +1234,8 @@ def _register_tool_modules() -> None:
 
     from tapps_mcp import (
         server_analysis_tools,
-        server_expert_tools,
         server_memory_tools,
         server_metrics_tools,
-        server_persona_tools,
         server_pipeline_tools,
         server_resources,
         server_scoring_tools,
@@ -1568,8 +1245,6 @@ def _register_tool_modules() -> None:
     server_pipeline_tools.register(mcp, allowed_tools)
     server_metrics_tools.register(mcp, allowed_tools)
     server_memory_tools.register(mcp, allowed_tools)
-    server_persona_tools.register(mcp, allowed_tools)
-    server_expert_tools.register(mcp, allowed_tools)
     server_analysis_tools.register(mcp, allowed_tools)
     server_resources.register(mcp)
 
@@ -1595,7 +1270,6 @@ _scoring = sys.modules["tapps_mcp.server_scoring_tools"]
 _pipeline = sys.modules["tapps_mcp.server_pipeline_tools"]
 _metrics = sys.modules["tapps_mcp.server_metrics_tools"]
 _memory = sys.modules["tapps_mcp.server_memory_tools"]
-_experts = sys.modules["tapps_mcp.server_expert_tools"]
 _analysis = sys.modules["tapps_mcp.server_analysis_tools"]
 
 tapps_score_file = _scoring.tapps_score_file
@@ -1607,9 +1281,7 @@ tapps_init = _pipeline.tapps_init
 tapps_dashboard = _metrics.tapps_dashboard
 tapps_stats = _metrics.tapps_stats
 tapps_feedback = _metrics.tapps_feedback
-tapps_research = _metrics.tapps_research
 tapps_memory = _memory.tapps_memory
-tapps_manage_experts = _experts.tapps_manage_experts
 tapps_session_notes = _analysis.tapps_session_notes
 tapps_impact_analysis = _analysis.tapps_impact_analysis
 tapps_report = _analysis.tapps_report
@@ -1617,8 +1289,6 @@ tapps_dead_code = _analysis.tapps_dead_code
 tapps_dependency_scan = _analysis.tapps_dependency_scan
 tapps_dependency_graph = _analysis.tapps_dependency_graph
 _promote_note_to_memory = _analysis._promote_note_to_memory
-_persona = sys.modules["tapps_mcp.server_persona_tools"]
-tapps_get_canonical_persona = _persona.tapps_get_canonical_persona
 
 
 # ---------------------------------------------------------------------------

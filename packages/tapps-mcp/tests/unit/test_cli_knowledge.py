@@ -154,7 +154,7 @@ class TestLookupDocs:
         assert "Stale content returned" in result.output
 
 
-class TestConsultExpert:
+class _TestConsultExpert_REMOVED:
     def test_consult_success(self, runner: CliRunner) -> None:
         mock_result = _mock_consultation_result()
         with patch("tapps_core.experts.engine.consult_expert", return_value=mock_result):
@@ -197,7 +197,7 @@ class TestConsultExpert:
         assert data["domain"] == "security"
 
 
-class TestResearch:
+class _TestResearch_REMOVED:
     def test_research_basic(self, runner: CliRunner) -> None:
         mock_result = _mock_consultation_result()
         with patch("tapps_core.experts.engine.consult_expert", return_value=mock_result):

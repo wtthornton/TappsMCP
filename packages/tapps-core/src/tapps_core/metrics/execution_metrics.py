@@ -308,25 +308,9 @@ class ToolCallMetricsCollector:
         timeout = sum(1 for m in metrics if m.status == "timeout")
         degraded = sum(1 for m in metrics if m.degraded)
 
-        durations = [m.duration_ms for m in metrics]
-        avg_dur = sum(durations) / len(durations)
-        sorted_dur = sorted(durations)
-        p95_idx = max(0, int(len(sorted_dur) * 0.95) - 1)
-        p95_dur = sorted_dur[p95_idx]
-
-        # Gate pass rate (only for tools that have gate_passed set)
-        gate_metrics = [m for m in metrics if m.gate_passed is not None]
-        gate_pass_rate: float | None = None
-        if gate_metrics:
-            gate_pass_rate = sum(1 for m in gate_metrics if m.gate_passed) / len(gate_metrics)
-
-        # Average score (only for tools that have score set)
-        score_metrics = [m for m in metrics if m.score is not None]
-        avg_score: float | None = None
-        if score_metrics:
-            avg_score = sum(m.score for m in score_metrics if m.score is not None) / len(
-                score_metrics
-            )
+        avg_dur, p95_dur = ToolCallMetricsCollector._compute_duration_stats(metrics)
+        gate_pass_rate = ToolCallMetricsCollector._compute_gate_pass_rate(metrics)
+        avg_score = ToolCallMetricsCollector._compute_avg_score(metrics)
 
         return ToolCallSummary(
             total_calls=total,
@@ -340,3 +324,28 @@ class ToolCallMetricsCollector:
             gate_pass_rate=round(gate_pass_rate, 4) if gate_pass_rate is not None else None,
             avg_score=round(avg_score, 2) if avg_score is not None else None,
         )
+
+    @staticmethod
+    def _compute_duration_stats(metrics: list[ToolCallMetric]) -> tuple[float, float]:
+        """Return ``(avg_duration_ms, p95_duration_ms)`` for the given metrics."""
+        durations = [m.duration_ms for m in metrics]
+        avg_dur = sum(durations) / len(durations)
+        sorted_dur = sorted(durations)
+        p95_idx = max(0, int(len(sorted_dur) * 0.95) - 1)
+        return avg_dur, sorted_dur[p95_idx]
+
+    @staticmethod
+    def _compute_gate_pass_rate(metrics: list[ToolCallMetric]) -> float | None:
+        """Return gate pass rate for metrics where ``gate_passed`` is set, or ``None``."""
+        gate_metrics = [m for m in metrics if m.gate_passed is not None]
+        if not gate_metrics:
+            return None
+        return sum(1 for m in gate_metrics if m.gate_passed) / len(gate_metrics)
+
+    @staticmethod
+    def _compute_avg_score(metrics: list[ToolCallMetric]) -> float | None:
+        """Return average score for metrics where ``score`` is set, or ``None``."""
+        score_metrics = [m for m in metrics if m.score is not None]
+        if not score_metrics:
+            return None
+        return sum(m.score for m in score_metrics if m.score is not None) / len(score_metrics)
