@@ -1,11 +1,16 @@
 # Epic 94: Expert System Extraction — Delegate to AgentForge
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Completed (superseded by v2.0.0)
 **Priority:** P1 - High
 **Estimated LOE:** ~1-2 weeks (1 developer)
 **Dependencies:** AgentForge EPIC-13 (Expert Migration — must land first so agents exist to delegate to)
 **Blocks:** EPIC-96 (Profiling/Session Dedup — cleaner after expert removal)
+
+> **Closed (2026-04-07):** This epic is obsolete. The expert system (23 modules,
+> 184 knowledge files, 19 shims) was fully deleted in v2.0.0 (EPIC-93 Phase 2,
+> commit d651a14). No delegation to AgentForge was needed — the code was removed
+> outright rather than migrated.
 
 <!-- docsmcp:end:metadata -->
 

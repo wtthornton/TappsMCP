@@ -4,7 +4,7 @@
 **Status:** Proposed
 **Priority:** P1 - High
 **Estimated LOE:** ~1 week (1 developer)
-**Dependencies:** EPIC-2 (hybrid matcher with embeddings — see `EPIC-2-hybrid-matcher.md`)
+**Dependencies:** EPIC-2 (hybrid matcher with embeddings — **implemented**, commit 86e75a3)
 
 <!-- docsmcp:end:metadata -->
 

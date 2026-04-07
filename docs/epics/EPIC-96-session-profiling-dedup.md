@@ -1,10 +1,16 @@
 # Epic 96: Session and Profiling Deduplication — Clean Tool Boundaries
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Completed (superseded by v2.0.0)
 **Priority:** P2 - Medium
 **Estimated LOE:** ~1 week (1 developer)
 **Dependencies:** EPIC-94 (Expert Extraction), EPIC-95 (Memory Extraction), AgentForge EPIC-15 (Tool-Agent Boundary Cleanup — coordinated changes)
+
+> **Closed (2026-04-07):** This epic is obsolete. The tools it targeted
+> (`tapps_project_profile`, `tapps_get_canonical_persona`, `tapps_research`)
+> were all deleted in v2.0.0 (EPIC-93 Phase 3, commit d651a14). Final tool
+> count reduced to 24. No AgentForge coordination was needed — the tools
+> were removed outright.
 
 <!-- docsmcp:end:metadata -->
 

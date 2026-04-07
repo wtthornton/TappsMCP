@@ -5,7 +5,7 @@
 **Priority:** P0 - Critical
 **Estimated LOE:** ~1 week (1 developer)
 **Dependencies:** None (greenfield)
-**Blocks:** EPIC-11 (memory-aware agents), EPIC-12 (catalog governance)
+**Blocks:** EPIC-12 (catalog governance)
 
 <!-- docsmcp:end:metadata -->
 
@@ -16,7 +16,7 @@
 
 We are doing this so that docs-mcp has a semantic agent matching system that can route
 prompts to the best agent using embedding similarity instead of keyword overlap alone,
-enabling accurate deduplication (EPIC-12) and memory-aware agent discovery (EPIC-11).
+enabling accurate deduplication (EPIC-12).
 
 <!-- docsmcp:end:purpose-intent -->
 
@@ -37,9 +37,8 @@ for EPIC-11's agent discovery via hive and EPIC-12's deduplication gate.
 
 The current agent matching in docs-mcp (if any exists) uses keyword overlap scoring.
 This misses semantic similarity — e.g., "deploy infrastructure" and "provision servers"
-have zero keyword overlap but high semantic similarity. Both EPIC-11 (memory-aware agents)
-and EPIC-12 (catalog governance) depend on embedding-based matching that doesn't exist yet.
-Without this foundation, neither epic can proceed.
+have zero keyword overlap but high semantic similarity. EPIC-12 (catalog governance) depends on embedding-based matching that doesn't exist yet.
+Without this foundation, that epic cannot proceed.
 
 <!-- docsmcp:end:motivation -->
 
@@ -208,7 +207,7 @@ Add `sentence-transformers` as an optional dependency (`docs-mcp[agents]`).
 | All 8 acceptance criteria met | 0/8 | 8/8 | Checklist review |
 | All 5 stories completed | 0/5 | 5/5 | Sprint board |
 | Test coverage | 0% | >= 80% | pytest --cov |
-| EPIC-11/12 unblocked | Blocked | Unblocked | Dependency check |
+| EPIC-12 unblocked | Blocked | Unblocked | Dependency check |
 
 <!-- docsmcp:end:success-metrics -->
 

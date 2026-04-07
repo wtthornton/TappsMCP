@@ -1,10 +1,16 @@
 # Epic 95: Memory System Extraction — Become tapps-brain Client
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Partially blocked
 **Priority:** P1 - High
 **Estimated LOE:** ~2 weeks (1 developer)
-**Dependencies:** tapps-brain v2.1+ (must support all 33 action equivalents), AgentForge EPIC-14 (Memory Consolidation — coordinated migration)
+**Dependencies:** tapps-brain v2.1+ (tagged, pin bumped), AgentForge EPIC-14 (Memory Consolidation — coordinated migration, **still required**)
+
+> **Updated (2026-04-07):** tapps-brain v2.1.0 has been tagged and the pin
+> bumped. The tapps-brain dependency is resolved. However, this epic still
+> depends on AgentForge EPIC-14 for coordinated migration (dual-write pattern,
+> tier mapping alignment, source-of-truth resolution). The tapps-mcp side
+> cannot proceed independently without risking data migration conflicts.
 
 <!-- docsmcp:end:metadata -->
 
