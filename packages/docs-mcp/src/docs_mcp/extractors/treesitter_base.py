@@ -115,12 +115,12 @@ class TreeSitterExtractor(abc.ABC):
     @staticmethod
     def _node_line(node: Any) -> int:
         """Return the 1-based line number of a node."""
-        return node.start_point[0] + 1
+        return int(node.start_point[0]) + 1
 
     @staticmethod
     def _node_end_line(node: Any) -> int:
         """Return the 1-based end line number of a node."""
-        return node.end_point[0] + 1
+        return int(node.end_point[0]) + 1
 
     def _children_by_type(self, node: Any, type_name: str) -> list[Any]:
         """Return direct children matching *type_name*."""

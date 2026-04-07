@@ -38,7 +38,7 @@ def _is_uv_tool_env() -> bool:
     """
     if not hasattr(_is_uv_tool_env, "_cached"):
         _is_uv_tool_env._cached = (Path(sys.prefix) / "uv-receipt.toml").exists()  # type: ignore[attr-defined]
-    return _is_uv_tool_env._cached  # type: ignore[attr-defined]
+    return bool(_is_uv_tool_env._cached)  # type: ignore[attr-defined]
 
 
 def _install_hint(tool_name: str) -> str:

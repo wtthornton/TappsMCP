@@ -134,6 +134,14 @@ class ScorerBase(abc.ABC):
             will typically be False since quick mode is intentionally limited.
         """
 
+    def score_file_quick_enriched(self, file_path: Path) -> ScoreResult:
+        """Quick mode with AST enrichment (Python only).
+
+        Default implementation delegates to ``score_file_quick``. The Python
+        scorer overrides this to add AST-based heuristics on top of ruff.
+        """
+        return self.score_file_quick(file_path)
+
     # ------------------------------------------------------------------
     # Concrete methods (shared by all scorers)
     # ------------------------------------------------------------------

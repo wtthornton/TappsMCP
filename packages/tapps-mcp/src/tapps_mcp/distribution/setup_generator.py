@@ -1496,4 +1496,4 @@ def run_upgrade(
 
     result = upgrade_pipeline(root, platform=platform, force=force, dry_run=dry_run)
     _format_upgrade_result(result, dry_run=dry_run)
-    return result.get("success", True)
+    return bool(result.get("success", True))

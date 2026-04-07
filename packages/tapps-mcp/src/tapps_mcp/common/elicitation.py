@@ -255,7 +255,7 @@ class WizardResult:
 
 
 async def run_init_wizard(
-    ctx: Context,
+    ctx: Context[Any, Any, Any],
     *,
     claude_code_detected: bool = True,
 ) -> WizardResult:

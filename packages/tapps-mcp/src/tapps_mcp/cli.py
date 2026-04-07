@@ -600,7 +600,7 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
             if len(e.value) > 40:
                 value_preview += "..."
             click.echo(
-                f"{e.key:<30} {e.tier.value:<15} {e.scope.value:<10} "
+                f"{e.key:<30} {e.tier:<15} {e.scope:<10} "
                 f"{e.confidence:<12.2f} {value_preview}"
             )
     finally:
@@ -629,7 +629,8 @@ def memory_save(key: str, value: str, tier: str, tags: str) -> None:
         if isinstance(result, dict) and "error" in result:
             click.echo(f"Error: {result['message']}", err=True)
             raise SystemExit(1)
-        click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
+        data = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+        click.echo(json.dumps(data, indent=2))
     finally:
         store.close()
 
@@ -720,7 +721,7 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
     for sm in scored:
         entry = sm.entry
         parts.append(
-            f'  <memory key="{_escape_xml_attr(entry.key)}" tier="{entry.tier.value}">'
+            f'  <memory key="{_escape_xml_attr(entry.key)}" tier="{entry.tier}">'
             f"{_escape_xml_text(entry.value)}</memory>"
         )
     xml = "<memory_context>\n" + "\n".join(parts) + "\n</memory_context>"
@@ -752,7 +753,7 @@ def memory_search(query: str, limit: int, as_json: bool) -> None:
             value_preview = e.value[:40].replace("\n", " ")
             if len(e.value) > 40:
                 value_preview += "..."
-            click.echo(f"{e.key:<30} {e.tier.value:<15} {e.confidence:<12.2f} {value_preview}")
+            click.echo(f"{e.key:<30} {e.tier:<15} {e.confidence:<12.2f} {value_preview}")
     finally:
         store.close()
 

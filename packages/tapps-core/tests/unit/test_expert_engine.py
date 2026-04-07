@@ -73,9 +73,13 @@ class TestConsultExpert:
         assert result.suggested_topic is not None
 
     def test_fallback_flags_default_shape(self) -> None:
-        result = consult_expert("How to write pytest fixtures?")
+        from unittest.mock import patch
+
+        # Disable auto-fallback so the test isn't affected by Context7 availability
+        with patch("tapps_core.experts.engine._try_fallback_docs"):
+            result = consult_expert("How to write pytest fixtures?")
         assert isinstance(result.fallback_used, bool)
-        # Known domain question should not use fallback
+        # With auto-fallback disabled, known domain question should not use fallback
         assert result.fallback_used is False, "Expected no fallback for known domain question"
 
     def test_detected_domains_populated_on_auto_detect(self) -> None:

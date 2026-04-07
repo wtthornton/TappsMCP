@@ -1501,7 +1501,7 @@ def tapps_project_profile(project_root: str = "") -> dict[str, Any]:
 
         structured = ProfileOutput(
             project_root=str(root),
-            project_type=profile.project_type,
+            project_type=profile.project_type or "",
             project_type_confidence=round(profile.project_type_confidence, 2),
             has_ci=profile.has_ci,
             has_docker=profile.has_docker,

@@ -121,9 +121,9 @@ class GitHistoryAnalyzer:
                 kwargs["until"] = until
 
             if path:
-                commits_iter = repo.iter_commits(paths=path, **kwargs)
+                commits_iter = repo.iter_commits(paths=path, **kwargs)  # type: ignore[arg-type]  # gitpython stubs are imprecise
             else:
-                commits_iter = repo.iter_commits(**kwargs)
+                commits_iter = repo.iter_commits(**kwargs)  # type: ignore[arg-type]  # gitpython stubs are imprecise
 
             results: list[CommitInfo] = []
             for commit in commits_iter:
@@ -145,7 +145,7 @@ class GitHistoryAnalyzer:
                         author=str(commit.author),
                         author_email=str(commit.author.email) if commit.author.email else "",
                         date=commit.committed_datetime.isoformat(),
-                        message=commit.message.strip(),
+                        message=str(commit.message).strip(),
                         files_changed=files_changed,
                         insertions=insertions,
                         deletions=deletions,

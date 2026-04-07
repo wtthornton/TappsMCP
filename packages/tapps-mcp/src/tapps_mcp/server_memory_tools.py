@@ -11,7 +11,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import structlog
 
@@ -469,6 +469,7 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
     if use_supersede:
         supersede_old_key = _resolve_architectural_supersede_old_key(store, p.key)
 
+    result: MemoryEntry | dict[str, Any]
     if supersede_old_key is not None:
         try:
             result = store.supersede(
@@ -884,10 +885,11 @@ def _handle_contradictions(store: MemoryStore, _p: _Params) -> dict[str, Any]:
 
     settings = load_settings()
     profile = detect_project_profile(settings.project_root)
+    profile.project_type = profile.project_type or ""
     detector = ContradictionDetector(settings.project_root)
 
     all_entries = store.list_all()
-    contradictions = detector.detect_contradictions(all_entries, profile)
+    contradictions = detector.detect_contradictions(all_entries, profile)  # type: ignore[arg-type]  # ProjectProfile.project_type is str|None vs Protocol str
 
     for c in contradictions:
         store.update_fields(c.memory_key, contradicted=True)
@@ -909,7 +911,8 @@ def _handle_reseed(store: MemoryStore, _p: _Params) -> dict[str, Any]:
 
     settings = load_settings()
     profile = detect_project_profile(settings.project_root)
-    result = reseed_from_profile(store, profile)
+    profile.project_type = profile.project_type or ""
+    result = reseed_from_profile(store, profile)  # type: ignore[arg-type]  # ProjectProfile.project_type is str|None vs Protocol str
 
     return {
         "action": "reseed",
@@ -948,16 +951,18 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
     from tapps_core.config.settings import load_settings
     from tapps_core.security.path_validator import PathValidator
 
-    fmt = (p.export_format or "json").lower()
-    if fmt not in ("json", "markdown"):
+    fmt_raw = (p.export_format or "json").lower()
+    if fmt_raw not in ("json", "markdown"):
         return {
             "error": "invalid_format",
             "message": f'format must be "json" or "markdown", got {p.export_format!r}.',
         }
+    fmt = cast(Literal["json", "markdown"], fmt_raw)
 
-    group_by_val = (p.export_group_by or "tier").lower()
-    if group_by_val not in ("tier", "tag", "none"):
-        group_by_val = "tier"
+    group_by_raw = (p.export_group_by or "tier").lower()
+    if group_by_raw not in ("tier", "tag", "none"):
+        group_by_raw = "tier"
+    group_by_val = cast(Literal["tier", "tag", "none"], group_by_raw)
 
     settings = load_settings()
     validator = PathValidator(settings.project_root)
@@ -1000,9 +1005,9 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
     snapshot = store.snapshot()
     entries = snapshot.entries
     if p.tier and p.tier != "pattern":
-        entries = [e for e in entries if e.tier.value == p.tier]
+        entries = [e for e in entries if str(e.tier) == p.tier]
     if p.scope and p.scope != "project":
-        entries = [e for e in entries if e.scope.value == p.scope]
+        entries = [e for e in entries if str(e.scope) == p.scope]
     if p.confidence >= 0:
         entries = [e for e in entries if e.confidence >= p.confidence]
 
@@ -1620,9 +1625,11 @@ def _handle_maintain(store: MemoryStore, _p: _Params) -> dict[str, Any]:
 
     # Run consolidation scan
     try:
+        from tapps_core.config.settings import load_settings as _load_settings
         from tapps_core.memory.auto_consolidation import run_periodic_consolidation_scan
 
-        consol_result = run_periodic_consolidation_scan(store)
+        _settings = _load_settings()
+        consol_result = run_periodic_consolidation_scan(store, _settings.project_root)
         consolidated = getattr(consol_result, "groups_formed", 0) if consol_result else 0
     except Exception:
         pass
@@ -2226,12 +2233,14 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
 async def _handle_validate(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Validate memory entries against authoritative documentation."""
     from tapps_core.config.settings import load_settings
+    from tapps_core.knowledge.cache import KBCache
     from tapps_core.knowledge.lookup import LookupEngine
     from tapps_core.memory.doc_validation import MemoryDocValidator
 
     settings = load_settings()
-    lookup = LookupEngine(settings=settings)
-    validator = MemoryDocValidator(lookup)
+    _cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+    lookup = LookupEngine(_cache, settings=settings)
+    validator = MemoryDocValidator(lookup)  # type: ignore[arg-type]  # LookupEngine has extra kwargs vs LookupEngineLike Protocol
 
     # Determine which entries to validate
     if params.key:
@@ -2243,7 +2252,7 @@ async def _handle_validate(store: MemoryStore, params: _Params) -> dict[str, Any
         entries = store.search(params.query)[: params.max_entries]
         report = await validator.validate_batch(entries)
     elif params.stale_only:
-        all_entries = list(store.list_all().values())
+        all_entries = store.list_all()
         report = await validator.validate_stale(
             all_entries,
             confidence_threshold=params.min_confidence,
@@ -2251,7 +2260,7 @@ async def _handle_validate(store: MemoryStore, params: _Params) -> dict[str, Any
         )
     else:
         # Validate all (up to max_entries)
-        all_entries = list(store.list_all().values())[: params.max_entries]
+        all_entries = store.list_all()[: params.max_entries]
         report = await validator.validate_batch(all_entries)
 
     # Apply results if not dry_run

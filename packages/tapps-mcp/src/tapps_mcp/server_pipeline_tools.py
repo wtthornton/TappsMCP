@@ -29,13 +29,14 @@ from tapps_mcp.server_helpers import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from mcp.server.fastmcp import FastMCP
 
     from tapps_core.config.settings import TappsMCPSettings
     from tapps_core.memory.models import MemorySnapshot
     from tapps_core.memory.store import MemoryStore
+    from tapps_mcp.common.elicitation import WizardResult
 
 _logger = structlog.get_logger(__name__)
 
@@ -219,7 +220,7 @@ async def _maybe_run_wizard(
     llm_engagement_level: str | None,
     platform: str,
     agent_teams: bool,
-) -> object | None:
+) -> WizardResult | None:
     """Run the interactive wizard if this is a true first-run.
 
     Returns a :class:`WizardResult` when the wizard ran and completed,
@@ -802,7 +803,7 @@ def _start_progress_reporting(
 
 
 async def _report_initial_progress(
-    report: Callable[..., object],
+    report: Callable[..., Awaitable[Any]],
     total_files: int,
 ) -> None:
     """Send the initial progress=0 notification."""
@@ -875,7 +876,7 @@ async def _warm_dependency_cache(
 
 
 def _maybe_auto_gc(
-    store: object,
+    store: MemoryStore,
     current_count: int,
     settings: object,
 ) -> dict[str, Any] | None:
@@ -1138,13 +1139,15 @@ async def _maybe_validate_memories(
     _session_state["doc_validation_done"] = True
 
     try:
+        from tapps_core.knowledge.cache import KBCache
         from tapps_core.knowledge.lookup import LookupEngine
         from tapps_core.memory.doc_validation import MemoryDocValidator
 
-        lookup = LookupEngine(settings=settings)
-        validator = MemoryDocValidator(lookup)
+        _cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+        lookup = LookupEngine(_cache, settings=settings)
+        validator = MemoryDocValidator(lookup)  # type: ignore[arg-type]  # LookupEngine has extra kwargs vs LookupEngineLike Protocol
 
-        all_entries = list(store.list_all().values())
+        all_entries = store.list_all()
         max_entries = getattr(doc_val, "max_entries_per_session", 5)
         threshold = getattr(doc_val, "confidence_threshold", 0.5)
         dry_run = getattr(doc_val, "dry_run", False)
@@ -1164,20 +1167,18 @@ async def _maybe_validate_memories(
 
         _logger.info(
             "session_doc_validation_completed",
-            validated=report.total_validated,
-            confirmed=report.confirmed,
-            contradicted=report.contradicted,
+            validated=report.validated,
+            flagged=report.flagged,
             no_docs=report.no_docs,
             dry_run=dry_run,
         )
 
         return {
             "ran": True,
-            "validated": report.total_validated,
-            "confirmed": report.confirmed,
-            "contradicted": report.contradicted,
+            "validated": report.validated,
+            "flagged": report.flagged,
             "no_docs": report.no_docs,
-            "adjustments": apply_result.get("adjustments", 0),
+            "adjustments": apply_result.boosted + apply_result.penalised,
             "dry_run": dry_run,
         }
     except Exception:
@@ -1361,10 +1362,12 @@ async def tapps_session_start(
         if settings.project_root.is_dir():
             from tapps_core.experts.engine import set_tech_stack_domains
             from tapps_core.experts.rag_warming import tech_stack_to_expert_domains
+            from tapps_mcp.project.profiler import detect_project_profile
 
-            domains = tech_stack_to_expert_domains(settings.project_root)
+            _profile = detect_project_profile(settings.project_root)
+            domains = tech_stack_to_expert_domains(_profile.tech_stack)
             if domains:
-                set_tech_stack_domains(domains)
+                set_tech_stack_domains(set(domains))
     except Exception:
         _logger.debug("tech_stack_domains_population_failed", exc_info=True)
     timings["tech_stack_domains_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
@@ -1972,7 +1975,7 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
         _record_execution("tapps_set_engagement_level", start, status="failed")
         return error_response(
             "tapps_set_engagement_level",
-            elapsed_ms,
+            "invalid_level",
             f"Invalid level {level!r}. Use one of: {', '.join(valid)}",
         )
 
@@ -1991,7 +1994,7 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
             _record_execution("tapps_set_engagement_level", start, status="failed")
             return error_response(
                 "tapps_set_engagement_level",
-                elapsed_ms,
+                "config_read_error",
                 f"Could not read existing .tapps-mcp.yaml: {e}",
             )
     if not isinstance(data, dict):
@@ -2015,7 +2018,7 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
             _record_execution("tapps_set_engagement_level", start, status="failed")
             return error_response(
                 "tapps_set_engagement_level",
-                elapsed_ms,
+                "config_write_error",
                 f"Could not write .tapps-mcp.yaml: {e}",
             )
 

@@ -108,7 +108,7 @@ async def tapps_get_canonical_persona(
         elapsed_ms = (time.perf_counter_ns() - start_ns) / 1e6
         return success_response(
             "tapps_get_canonical_persona",
-            elapsed_ms,
+            int(elapsed_ms),
             {
                 "content": content,
                 "source_path": str(resolved_path),

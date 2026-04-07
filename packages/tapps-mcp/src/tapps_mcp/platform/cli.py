@@ -39,7 +39,7 @@ def _get_version() -> str:
     is_eager=True,
     expose_value=False,
     callback=lambda ctx, _param, value: (
-        (click.echo(_get_version()), ctx.exit()) if value else None
+        (click.echo(_get_version()), ctx.exit()) if value else None  # type: ignore[func-returns-value]
     ),
     help="Show platform version.",
 )

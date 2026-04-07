@@ -412,7 +412,7 @@ class GoScorer(ScorerBase):
                         if func_name.startswith("Test"):
                             test_count += 1
             score = 5.0  # Neutral for test files
-            details = {"is_test_file": True, "test_function_count": test_count}
+            details: dict[str, object] = {"is_test_file": True, "test_function_count": test_count}
         else:
             # Check if corresponding test file exists
             test_file = file_path.parent / f"{file_path.stem}_test.go"

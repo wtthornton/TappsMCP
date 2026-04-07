@@ -1033,7 +1033,7 @@ def _read_engagement_level(project_root: Path) -> str | None:
         data = yaml.safe_load(raw) if raw.strip() else {}
         level = (data or {}).get("llm_engagement_level")
         if level in ("high", "medium", "low"):
-            return level
+            return str(level)
     except Exception:
         return None
     return None

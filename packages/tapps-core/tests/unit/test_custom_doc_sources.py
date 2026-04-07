@@ -89,10 +89,11 @@ class TestLocalFileDocSource:
         )
         cache = _make_cache(tmp_path)
 
-        # Mock the provider chain to return no content
+        # Mock the provider chain to return no content and disable legacy path
         engine = LookupEngine(cache, settings=settings)
         engine._registry = MagicMock()
         engine._registry.healthy_providers.return_value = []
+        engine._api_key = None  # disable legacy Context7 fallback
 
         result = await engine.lookup("mylib", "overview")
         await engine.close()
@@ -114,6 +115,7 @@ class TestLocalFileDocSource:
         engine = LookupEngine(cache, settings=settings)
         engine._registry = MagicMock()
         engine._registry.healthy_providers.return_value = []
+        engine._api_key = None  # disable legacy Context7 fallback
 
         result = await engine.lookup("mylib", "overview")
         await engine.close()
@@ -165,6 +167,7 @@ class TestUrlDocSource:
         engine = LookupEngine(cache, settings=settings)
         engine._registry = MagicMock()
         engine._registry.healthy_providers.return_value = []
+        engine._api_key = None  # disable legacy Context7 fallback
 
         with patch.object(
             real_httpx, "AsyncClient", side_effect=Exception("Connection failed")

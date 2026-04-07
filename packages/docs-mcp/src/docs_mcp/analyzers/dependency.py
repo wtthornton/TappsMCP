@@ -384,10 +384,11 @@ class ImportGraphBuilder:
                             )
                         else:
                             # Name is an attribute of the package, not a submodule
+                            # target_path is non-None here because is_package guards this block
                             edges.append(
                                 ImportEdge(
                                     source=source_rel,
-                                    target=target_path,
+                                    target=str(target_path),
                                     import_type=import_type,
                                     line=node.lineno,
                                     names=[name],
@@ -519,8 +520,8 @@ class ImportGraphBuilder:
     def _block_end_line(node: ast.AST) -> int:
         """Get the end line of an AST node, with fallback."""
         if hasattr(node, "end_lineno") and node.end_lineno is not None:
-            return node.end_lineno
-        return getattr(node, "lineno", 0)
+            return int(node.end_lineno)
+        return int(getattr(node, "lineno", 0))
 
     @staticmethod
     def _is_inside_function(

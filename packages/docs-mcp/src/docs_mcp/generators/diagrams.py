@@ -1607,10 +1607,10 @@ class DiagramGenerator:
 
         # Track which group indices are active
         group_starts: dict[int, dict[str, object]] = {
-            int(g.get("start", -1)): g for g in groups
+            int(str(g.get("start", -1))): g for g in groups
         }
         group_ends: set[int] = {
-            int(g.get("end", -1)) for g in groups
+            int(str(g.get("end", -1))) for g in groups
         }
 
         # Render messages with interleaved notes and groups
@@ -1676,10 +1676,10 @@ class DiagramGenerator:
         lines.append("")
 
         group_starts: dict[int, dict[str, object]] = {
-            int(g.get("start", -1)): g for g in groups
+            int(str(g.get("start", -1))): g for g in groups
         }
         group_ends: set[int] = {
-            int(g.get("end", -1)) for g in groups
+            int(str(g.get("end", -1))) for g in groups
         }
 
         note_map: dict[str, str] = {
