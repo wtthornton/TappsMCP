@@ -1,69 +1,25 @@
-# docs-mcp
+# Getting Started with docs-mcp
 
-## Overview
+## Prerequisites
 
-DocsMCP is part of the [TappsMCP](https://github.com/tapps-mcp/tapps-mcp) platform. It provides 31 MCP tools that help AI coding assistants generate, validate, and maintain project documentation.
-
-## Features
-
-- **Code extraction** - Parse Python modules to extract classes, functions, types, and docstrings
-- **README generation** - Generate and smart-merge README.md files with project metadata
-- **API documentation** - Generate structured API docs from source code analysis
-- **Changelog generation** - Build changelogs from git commit history using conventional commits
-- **Release notes** - Generate release notes for specific versions
-- **Architecture Decision Records** - Generate ADRs from context and rationale
-- **Onboarding and contributing guides** - Generate developer guides
-- **Diagram generation** - Generate architecture diagrams in Mermaid, PlantUML, or D2 format (dependency, module, class, ER, C4 context/container/component, sequence). D2 supports themes (default, sketch, terminal)
-- **Interactive HTML diagrams** - Generate interactive, zoomable diagram viewers with Mermaid.js
-- **llms.txt generation** - Machine-readable project summaries for LLMs
-- **Frontmatter management** - YAML frontmatter injection and update for markdown files
-- **Architecture templates** - Purpose/intent architecture templates with auto-inferred principles
-- **Documentation index** - Auto-categorized documentation index/map
-- **Diataxis analysis** - Diataxis quadrant coverage analysis and balance scoring
-- **Drift detection** - Identify when documentation falls out of sync with code
-- **Completeness analysis** - Assess documentation coverage gaps
-- **Link validation** - Check for broken documentation links
-- **Freshness checking** - Flag stale documentation
-- **Cross-reference validation** - Find orphans, broken refs, and missing backlinks
+- Python >=3.12
+- pip (or your preferred Python package manager)
 
 ## Installation
 
-See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
-
 ```bash
-uv add docs-mcp
-
-docsmcp doctor
+pip install docs-mcp
 ```
 
-## Usage
+For development:
 
 ```bash
-docsmcp serve
-
-docsmcp doctor
-
-docsmcp version
+git clone <repository-url>
+cd docs-mcp
+pip install -e '.[dev]'
 ```
 
-## License
-
-MIT
-
-<!-- docsmcp:start:table-of-contents -->
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Development](#development)
-- [License](#license)
-<!-- docsmcp:end:table-of-contents -->
-
-<!-- docsmcp:start:architecture -->
-## Architecture
-
-### Project Structure
+## Project Structure
 
 ```
 + analyzers/  # Code analysis engines for DocsMCP.
@@ -266,35 +222,35 @@ severity, location, and fix suggestions.
 
 Epic 84 -- Doc Style & Tone Validation.
 ```
-<!-- docsmcp:end:architecture -->
 
-<!-- docsmcp:start:api-reference -->
-## API Reference
+## Key Concepts
 
-See the [API documentation](docs/api.md) for detailed reference.
-<!-- docsmcp:end:api-reference -->
+- **APIFunction** - Public function in the API surface.
+- **APIClass** - Public class in the API surface.
+- **APIConstant** - Public constant in the API surface.
+- **APISurface** - Complete public API surface for a module.
+- **APISurfaceAnalyzer** - Detects public API surface of source modules.
+- **ParsedCommit** - Result of parsing/classifying a single commit message.
+- **ImportEdge** - A single import relationship between two modules.
+- **ImportGraph** - Directed graph of import relationships in a project.
+- **ImportGraphBuilder** - Builds a directed import dependency graph for a Python project.
+- **DiataxisResult** - Classification result for a single document.
 
-<!-- docsmcp:start:development -->
-## Development
+## Running the Project
+
+### `docsmcp`
 
 ```bash
-git clone <repository-url>
-cd docs-mcp
+docsmcp
+```
 
-pip install -e '.[dev]'
 
+## Running Tests
+
+```bash
 pytest
 ```
-<!-- docsmcp:end:development -->
 
-<!-- docsmcp:start:contributing -->
-## Contributing
+## Next Steps
 
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit your changes (`git commit -am 'Add my feature'`)
-4. Push to the branch (`git push origin feature/my-feature`)
-5. Open a Pull Request
-<!-- docsmcp:end:contributing -->
+- Browse the [documentation](docs/) for detailed guides

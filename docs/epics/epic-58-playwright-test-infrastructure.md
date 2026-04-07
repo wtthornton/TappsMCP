@@ -1,11 +1,22 @@
 # Epic 58: Playwright Test Infrastructure & Visual Snapshot Framework
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Blocked
 **Priority:** P0 - Critical
 **Estimated LOE:** ~1 week (1 developer)
 **Dependencies:** Epic 12 (original Playwright test rig)
 **Blocks:** Epic 59, Epic 60, Epic 61, Epic 62, Epic 63, Epic 64, Epic 65, Epic 66, Epic 67, Epic 68, Epic 69, Epic 70, Epic 71, Epic 72, Epic 73, Epic 74
+
+> **BLOCKER (2026-04-07):** This epic references "TheStudio" style guide
+> (`docs/design/07-THESTUDIO-UI-UX-STYLE-GUIDE.md`) and an Admin UI with HTMX templates
+> that do not exist in this repository. The "48 packages, 789 modules" project structure
+> does not match TappsMCP (3 packages). The only existing UI is tapps-brain's static
+> `brain-visual` dashboard at `examples/brain-visual/` in the tapps-brain repo.
+>
+> **Options:**
+> 1. Retarget this epic to test the brain-visual dashboard
+> 2. Defer until EPIC-75 (Admin UI) is built
+> 3. Move to the consuming project where the Admin UI lives
 
 <!-- docsmcp:end:metadata -->
 
