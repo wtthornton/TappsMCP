@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [master, main]
   pull_request:
     branches: [master, main]
 
@@ -14,35 +12,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: uv sync --frozen --dev
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-
-  test:
-    needs: lint
+  ci:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        package:
-          - name: tapps-core
-            path: packages/tapps-core
-          - name: tapps-mcp
-            path: packages/tapps-mcp
-          - name: docs-mcp
-            path: packages/docs-mcp
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -53,19 +25,20 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --dev
-      - name: Run tests (${{ matrix.package.name }})
-        run: uv run pytest ${{ matrix.package.path }}/tests/ -x -q
 
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: uv build
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Test tapps-core
+        run: uv run pytest packages/tapps-core/tests/ -x -q
+
+      - name: Test tapps-mcp
+        run: uv run pytest packages/tapps-mcp/tests/ -x -q
+
+      - name: Test docs-mcp
+        run: uv run pytest packages/docs-mcp/tests/ -x -q
+
+      - name: Build
+        run: uv build
