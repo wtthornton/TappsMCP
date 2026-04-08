@@ -12,8 +12,8 @@ Thank you for your interest in contributing to TappsMCP! This guide covers every
 
 ```bash
 # Clone the repository
-git clone https://github.com/tapps-mcp/tapps-mcp.git
-cd TappMCP
+git clone https://github.com/wtthornton/TappsMCP.git
+cd tapps-mcp
 
 # Install all packages (uv workspace)
 uv sync --all-packages
@@ -29,10 +29,10 @@ This is a **uv workspace monorepo** with three packages:
 | Package | Path | Purpose |
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (26 tools) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (32 tools) |
 
-Together, **tapps-mcp** + **docs-mcp** expose **62** deterministic MCP tools. `tapps-mcp doctor` reports resolved memory pipeline flags for the project under test.
+Together, **tapps-mcp** + **docs-mcp** expose **58** deterministic MCP tools. `tapps-mcp doctor` reports resolved memory pipeline flags for the project under test.
 
 ## Running Tests
 
@@ -40,9 +40,9 @@ Run tests per-package to avoid conftest collisions:
 
 ```bash
 # All tests per package
-uv run pytest packages/tapps-core/tests/ -v      # ~2,000+ tests
-uv run pytest packages/tapps-mcp/tests/ -v        # ~4,700+ tests
-uv run pytest packages/docs-mcp/tests/ -v         # ~1,500+ tests
+uv run pytest packages/tapps-core/tests/ -v      # ~960+ tests
+uv run pytest packages/tapps-mcp/tests/ -v        # ~3,790+ tests
+uv run pytest packages/docs-mcp/tests/ -v         # ~2,170+ tests
 
 # Single test file
 uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v

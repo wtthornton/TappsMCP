@@ -79,8 +79,8 @@ This creates:
 ### Setup
 
 ```bash
-git clone https://github.com/tapps-mcp/tapps-mcp.git
-cd TappMCP
+git clone https://github.com/wtthornton/TappsMCP.git
+cd tapps-mcp
 
 # Install all three packages in the workspace
 uv sync --all-packages
@@ -91,13 +91,13 @@ uv sync --all-packages
 ```
 packages/
   tapps-core/     # Shared library (config, security, logging, knowledge, memory, experts)
-  tapps-mcp/      # Code quality MCP server (30 tools)
+  tapps-mcp/      # Code quality MCP server (26 tools)
   docs-mcp/       # Documentation MCP server (32 tools)
 ```
 
 **Dependency graph:**
 ```
-tapps-core (library)  <--  tapps-mcp (30 tools)
+tapps-core (library)  <--  tapps-mcp (26 tools)
                       <--  docs-mcp  (32 tools)
 ```
 
@@ -151,7 +151,6 @@ uv run docsmcp doctor             # DocsMCP diagnostics
 ## Next Steps
 
 - Read the [Contributing Guide](../CONTRIBUTING.md) for coding standards and PR workflow
-- Browse the [API Reference](api/) for detailed tool documentation
-- See the [Architecture Diagrams](diagrams/) for visual overviews
 - Check the [README](../README.md) for the full tools reference
+- See the [Architecture Reference](ARCHITECTURE.md) for internal design details
 - Review [CLAUDE.md](../CLAUDE.md) for AI assistant instructions

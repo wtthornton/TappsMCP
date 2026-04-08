@@ -16,7 +16,7 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (30 tools), invoke the **tapps-tool-reference** skill when asked about tools.
+**For full tool reference** (26 tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
 ---
 

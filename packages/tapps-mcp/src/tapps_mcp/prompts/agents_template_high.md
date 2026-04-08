@@ -17,7 +17,7 @@ When the **TappsMCP** MCP server is configured, you **MUST** use its tools for c
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 | **tapps_memory** | **REQUIRED** - persistent cross-session knowledge (33 actions). Search at session start, save before end. See **Memory action reference** below. |
 
-**For full tool reference** (30 tools), invoke the **tapps-tool-reference** skill when asked about tools.
+**For full tool reference** (26 tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
 ---
 

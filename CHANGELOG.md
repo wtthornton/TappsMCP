@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-04-08
+
+### Fixed
+
+- **Documentation accuracy audit** — corrected tool counts across all user-facing docs: TappsMCP has **26 tools** (not 30), total platform is **58 tools** (not 62). Affected files: README.md, AGENTS.md, CLAUDE.md, CONTRIBUTING.md, ARCHITECTURE.md, ONBOARDING.md, TECH_STACK.md, docker readme, .ralph/AGENT.md, and all AGENTS.md templates (high/medium/low).
+- **Ghost tool references removed** — removed `tapps_project_profile`, `tapps_manage_experts`, and `tapps_get_canonical_persona` from README tools reference (not registered as MCP tools).
+- **Ghost server files removed from ARCHITECTURE.md** — removed references to non-existent `server_expert_tools.py` and `server_persona_tools.py`; corrected server module count from "10 files" to "8 files".
+- **Test counts corrected** — README badge and text updated to reflect actual counts: tapps-core 960+, tapps-mcp 3,790+, docs-mcp 2,170+ (6,900+ total).
+- **Git clone URL fixed** — CONTRIBUTING.md and ONBOARDING.md now use correct `github.com/wtthornton/TappsMCP.git` (was `tapps-mcp/tapps-mcp.git`) and correct `cd tapps-mcp` (was `cd TappMCP`).
+- **Duplicate feature row removed** — "Documentation lookup" appeared twice in README Knowledge & context table.
+- **Broken links fixed** — ONBOARDING.md no longer links to non-existent `api/` and `diagrams/` directories.
+
+### Changed
+
+- Version bump: tapps-core 2.2.0 → 2.3.0, tapps-mcp 2.2.0 → 2.3.0, docs-mcp 2.2.0 → 2.3.0
+
 ## [2.2.0] - 2026-04-08
 
 ### Fixed

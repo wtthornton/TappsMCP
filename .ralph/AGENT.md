@@ -45,7 +45,7 @@ uv run docsmcp serve             # DocsMCP (documentation)
 
 ## Project Structure
 - **tapps-core** (`packages/tapps-core/`): Shared infrastructure library
-- **tapps-mcp** (`packages/tapps-mcp/`): Code quality MCP server (30 tools)
+- **tapps-mcp** (`packages/tapps-mcp/`): Code quality MCP server (26 tools)
 - **docs-mcp** (`packages/docs-mcp/`): Documentation MCP server (32 tools)
 - **tapps-brain** (external git dep): Standalone memory system
 

@@ -1,4 +1,4 @@
-<!-- tapps-agents-version: 2.2.0 -->
+<!-- tapps-agents-version: 2.3.0 -->
 # TappsMCP - instructions for AI assistants
 
 When the **TappsMCP** MCP server is configured, you have access to **26 deterministic code quality tools** (including 2 deprecated stubs). Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
@@ -17,7 +17,7 @@ When the **TappsMCP** MCP server is configured, you have access to **26 determin
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (24 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+**For full tool reference** (26 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 
@@ -236,7 +236,7 @@ For direct stdio connections you can expose only a subset of tools to keep the a
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `TAPPS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools), `core` (7 Tier-1 tools), `pipeline` (Tier 1 + Tier 2), or role presets: `reviewer`, `planner`, `frontend`, `developer` (Epic 79.5). Env: `TAPPS_MCP_TOOL_PRESET=core`.
 
-Empty or missing = all 30 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see `docs/archive/planning/TOOL-SUBSETS-AND-DOCKER-FILTERING.md`.
+Empty or missing = all 26 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see `docs/archive/planning/TOOL-SUBSETS-AND-DOCKER-FILTERING.md`.
 
 ---
 ## tapps_session_start vs tapps_init

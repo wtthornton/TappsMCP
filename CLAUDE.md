@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## What is TappsMCP?
 
-TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs and AI coding assistants. It scores Python files, runs security scans, enforces quality gates, looks up library docs, and validates configs -- all via structured MCP tool calls (24 tools). Any MCP-capable client (Claude Code, Cursor, VS Code Copilot) can use it. If you are a consuming project, see [AGENTS.md](AGENTS.md) instead.
+TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs and AI coding assistants. It scores Python files, runs security scans, enforces quality gates, looks up library docs, and validates configs -- all via structured MCP tool calls (26 tools). Any MCP-capable client (Claude Code, Cursor, VS Code Copilot) can use it. If you are a consuming project, see [AGENTS.md](AGENTS.md) instead.
 
 ## Repository structure
 
@@ -14,7 +14,7 @@ This is a **uv workspace monorepo** with three packages plus an external depende
 |---|---|---|
 | **tapps-brain** | [github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain) | Standalone memory system (SQLite, BM25, decay, federation) |
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, metrics, adaptive) |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (24 tools) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (26 tools) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (32 tools) |
 
 tapps-core's `memory/` modules are re-export shims delegating to tapps-brain (except `injection.py` which is a bridge adapter). tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
@@ -30,7 +30,7 @@ uv sync --all-packages
 # Run tests per package (recommended -- avoids conftest collisions)
 uv run pytest packages/tapps-core/tests/ -v      # 960+ tests
 uv run pytest packages/tapps-mcp/tests/ -v        # 3,790+ tests
-uv run pytest packages/docs-mcp/tests/ -v         # 2,060+ tests
+uv run pytest packages/docs-mcp/tests/ -v         # 2,170+ tests
 
 # Run tests excluding slow integration tests (fast local feedback)
 uv run pytest packages/tapps-core/tests/ -m "not slow" -v
