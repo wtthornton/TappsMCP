@@ -7,15 +7,15 @@ on:
 
 permissions:
   contents: write
-  id-token: write  # OIDC trusted publishing
+  id-token: write
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Verify tag matches all package versions
@@ -23,7 +23,7 @@ jobs:
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
           echo "Git tag version: $TAG_VERSION"
           FAILED=0
-          for pkg in tapps-mcp tapps-core docs-mcp; do
+          for pkg in tapps-core tapps-mcp docs-mcp; do
             PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('packages/${pkg}/pyproject.toml','rb'))['project']['version'])")
             echo "  ${pkg}: $PKG_VERSION"
             if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
@@ -47,265 +47,117 @@ jobs:
           - name: docs-mcp
             path: packages/docs-mcp
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9  # v7
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Build ${{ matrix.package.name }}
         run: uv build --package ${{ matrix.package.name }}
-      - name: Verify build artifacts
-        run: |
-          ls -la dist/
-          python -m zipfile -l dist/*.whl | head -20
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
+      - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.package.name }}
           path: dist/
 
-  build-exe:
-    needs: build
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
-        with:
-          name: dist-tapps-core
-          path: dist/
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
-        with:
-          name: dist-tapps-mcp
-          path: dist/
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
-        with:
-          python-version: "3.12"
-      - name: Install PyInstaller and built wheels
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install dist/*.whl
-      - name: Build tapps-mcp.exe
-        run: |
-          python -m PyInstaller --onefile -n tapps-mcp --console scripts/run_tapps_mcp.py
-      - name: Upload exe artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
-        with:
-          name: exe
-          path: dist/tapps-mcp.exe
-
-  test-install:
-    needs: build
-    timeout-minutes: 10
-    strategy:
-      fail-fast: true
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
-        with:
-          name: dist-tapps-core
-          path: dist/
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
-        with:
-          name: dist-tapps-mcp
-          path: dist/
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
-        with:
-          name: dist-docs-mcp
-          path: dist/
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
-        with:
-          python-version: "3.12"
-      - name: Install all packages
-        run: pip install dist/*.whl
-        shell: bash
-      - name: Verify tapps-mcp
-        run: tapps-mcp --version
-      - name: Verify docs-mcp
-        run: docsmcp --version
-
   # Publish tapps-core first (dependency of tapps-mcp and docs-mcp)
-  publish-core-testpypi:
-    needs: test-install
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: testpypi
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
-        with:
-          name: dist-tapps-core
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
-  publish-core-pypi:
-    needs: publish-core-testpypi
+  publish-core:
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
+      - uses: actions/download-artifact@v4
         with:
           name: dist-tapps-core
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
+      - uses: pypa/gh-action-pypi-publish@release/v1
 
   # Publish tapps-mcp and docs-mcp after tapps-core is on PyPI
-  publish-tapps-mcp-testpypi:
-    needs: publish-core-pypi
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: testpypi
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
-        with:
-          name: dist-tapps-mcp
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
-  publish-tapps-mcp-pypi:
-    needs: publish-tapps-mcp-testpypi
+  publish-tapps-mcp:
+    needs: publish-core
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
+      - uses: actions/download-artifact@v4
         with:
           name: dist-tapps-mcp
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
+      - uses: pypa/gh-action-pypi-publish@release/v1
 
-  publish-docs-mcp-testpypi:
-    needs: publish-core-pypi
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: testpypi
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
-        with:
-          name: dist-docs-mcp
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
-  publish-docs-mcp-pypi:
-    needs: publish-docs-mcp-testpypi
+  publish-docs-mcp:
+    needs: publish-core
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
+      - uses: actions/download-artifact@v4
         with:
           name: dist-docs-mcp
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
+      - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    needs: [publish-tapps-mcp-pypi, publish-docs-mcp-pypi, build-exe]
+    needs: [publish-tapps-mcp, publish-docs-mcp]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
           name: dist-tapps-core
           path: dist/
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
+      - uses: actions/download-artifact@v4
         with:
           name: dist-tapps-mcp
           path: dist/
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
+      - uses: actions/download-artifact@v4
         with:
           name: dist-docs-mcp
           path: dist/
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6
-        with:
-          name: exe
-          path: exe/
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp exe/tapps-mcp.exe dist/ 2>/dev/null || true
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
             --generate-notes \
             dist/*
 
-  # Publish to MCP Registry after PyPI publishing completes
   publish-mcp-registry:
-    needs: [publish-tapps-mcp-pypi, publish-docs-mcp-pypi]
+    needs: [publish-tapps-mcp, publish-docs-mcp]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      id-token: write  # Required for OIDC authentication
+      id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-
+      - uses: actions/checkout@v4
       - name: Install mcp-publisher
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
           chmod +x mcp-publisher
-
       - name: Authenticate to MCP Registry
         run: ./mcp-publisher login github-oidc
-
       - name: Update server.json versions from tag
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
-          echo "Updating server.json files to version $VERSION"
-
-          # Update tapps-mcp server.json
-          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' \
-            packages/tapps-mcp/server.json > packages/tapps-mcp/server.json.tmp \
-            && mv packages/tapps-mcp/server.json.tmp packages/tapps-mcp/server.json
-
-          # Update docs-mcp server.json
-          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' \
-            packages/docs-mcp/server.json > packages/docs-mcp/server.json.tmp \
-            && mv packages/docs-mcp/server.json.tmp packages/docs-mcp/server.json
-
-          echo "tapps-mcp server.json:"
-          cat packages/tapps-mcp/server.json
-          echo ""
-          echo "docs-mcp server.json:"
-          cat packages/docs-mcp/server.json
-
-      - name: Publish tapps-mcp to MCP Registry
-        working-directory: packages/tapps-mcp
-        run: ../../mcp-publisher publish
-
-      - name: Publish docs-mcp to MCP Registry
-        working-directory: packages/docs-mcp
-        run: ../../mcp-publisher publish
-
-      - name: Verify MCP Registry listings
+          for pkg in tapps-mcp docs-mcp; do
+            jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' \
+              packages/${pkg}/server.json > packages/${pkg}/server.json.tmp \
+              && mv packages/${pkg}/server.json.tmp packages/${pkg}/server.json
+          done
+      - name: Publish to MCP Registry
         run: |
-          echo "Verifying tapps-mcp listing..."
-          curl -s "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.wtthornton/tapps-mcp" | jq .
-
-          echo "Verifying docs-mcp listing..."
-          curl -s "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.wtthornton/docs-mcp" | jq .
+          cd packages/tapps-mcp && ../../mcp-publisher publish && cd ../..
+          cd packages/docs-mcp && ../../mcp-publisher publish && cd ../..

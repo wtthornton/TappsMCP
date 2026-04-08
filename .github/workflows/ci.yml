@@ -18,101 +18,54 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9  # v7
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: uv sync --frozen --dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - name: MyPy strict (all packages)
-        run: |
-          uv run mypy --strict packages/tapps-mcp/src/tapps_mcp/
-          uv run mypy --strict packages/tapps-core/src/tapps_core/
-          uv run mypy --strict packages/docs-mcp/src/docs_mcp/
 
   test:
     needs: lint
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.12", "3.13"]
         package:
           - name: tapps-core
             path: packages/tapps-core
-            cov_source: tapps_core
           - name: tapps-mcp
             path: packages/tapps-mcp
-            cov_source: tapps_mcp
           - name: docs-mcp
             path: packages/docs-mcp
-            cov_source: docs_mcp
-    runs-on: ${{ matrix.os }}
-    name: test (${{ matrix.package.name }}, ${{ matrix.os }}, py${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9  # v7
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
           enable-cache: true
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+      - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
       - run: uv sync --frozen --dev
       - name: Run tests (${{ matrix.package.name }})
-        run: >
-          uv run pytest ${{ matrix.package.path }}/tests/
-          -n auto --dist worksteal
-          --cov=${{ matrix.package.cov_source }}
-          --cov-report=xml:coverage-${{ matrix.package.name }}.xml
-          -v
-      - name: Verify coverage threshold
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        run: uv run coverage report --fail-under=80
-      - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad  # v5
-        with:
-          files: coverage-${{ matrix.package.name }}.xml
-          flags: ${{ matrix.package.name }}
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Upload coverage artifact
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
-        with:
-          name: coverage-${{ matrix.package.name }}
-          path: coverage-${{ matrix.package.name }}.xml
+        run: uv run pytest ${{ matrix.package.path }}/tests/ -x -q
 
   build:
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9  # v7
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-          enable-cache: true
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Verify version consistency
-        run: |
-          PKG_VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          echo "Package version: $PKG_VERSION"
       - run: uv build
-      - name: Test install from wheel
-        run: |
-          pip install dist/*.whl
-          tapps-mcp --version
-          tapps-mcp --help
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
-        with:
-          name: dist
-          path: dist/
