@@ -4,7 +4,7 @@
 
 **A quality and documentation toolset for AI coding assistants.**
 
-Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs deterministic tools for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and domain expert consultation.
+Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs deterministic tools for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and shared memory.
 
 [![CI](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -12,7 +12,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/tests-7%2C600%2B_passing-brightgreen.svg)](#development)
 [![Tools](https://img.shields.io/badge/MCP_tools-62-blue.svg)](#tools-reference)
-[![Version](https://img.shields.io/badge/version-1.18.0-informational.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.2.0-informational.svg)](#)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
@@ -24,17 +24,17 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 ## Overview
 
-**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, experts, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **62 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
+**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **62 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
-### What's new in v1.17.0
+### What's new in v2.2.0
 
-- **Three-tier generator output** (DocsMCP) — write-first on writable filesystems (no content in response), inline for small read-only content, `FileManifest` for large. Saves client context window.
-- **Auto-computed output paths** — all DocsMCP generators compute sensible defaults when `output_path` is omitted
-- **~300 lines of boilerplate eliminated** — consolidated into `server_helpers.finalize_output()`
+- **Deprecated tool stubs** — `tapps_consult_expert` and `tapps_research` now return structured `TOOL_DEPRECATED` errors with `alternatives` and `deprecated_since` metadata instead of unhandled ImportErrors (#82, #83)
+- **`docs_check_style` path validation** — no longer silently returns score 100 when requested files don't exist; returns `NO_FILES_FOUND` error with diagnostics (#84)
+- **Enhanced `error_response()`** — both MCP servers now support structured error metadata via `extra` parameter for machine-readable error context
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
-**Memory & pipeline defaults** are POC-oriented: expert/research auto-save, recurring `tapps_quick_check` memory, architectural **supersede**, impact-analysis enrichment, and **memory_hooks** (auto-recall / auto-capture) default **on** in shipped `default.yaml`. Override under `memory:` and `memory_hooks:` in `.tapps-mcp.yaml`, or inspect effective values with `tapps-mcp doctor`. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md).
+**Memory & pipeline defaults** are POC-oriented: recurring `tapps_quick_check` memory, architectural **supersede**, impact-analysis enrichment, and **memory_hooks** (auto-recall / auto-capture) default **on** in shipped `default.yaml`. Override under `memory:` and `memory_hooks:` in `.tapps-mcp.yaml`, or inspect effective values with `tapps-mcp doctor`. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md).
 
 ---
 
@@ -43,7 +43,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 | Package | PyPI Name | Purpose | Tools |
 |---|---|---|---|
 | **tapps-brain** | `tapps-brain` | Standalone memory system (SQLite persistence, BM25 retrieval, decay, federation) | 0 (library) |
-| **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, experts, metrics, adaptive) | 0 (library) |
+| **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, metrics, adaptive) | 0 (library) |
 | **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 30 |
 | **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 32 |
 
@@ -57,7 +57,7 @@ tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp
 
 - **62 deterministic MCP tools** (30 TappsMCP + 32 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
-- **17 domain experts** with 174 curated knowledge files and RAG-backed answers
+- **Documentation lookup** via Context7 and LlmsTxt providers with local caching
 - **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) - project decisions survive across sessions (SQLite + BM25 retrieval, time-based decay, federation)
 - **Unified feature flags** - optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** - auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
@@ -130,7 +130,7 @@ The platform exposes **62 MCP tools** (30 TappsMCP + 32 DocsMCP) plus workflow p
 | Feature | Description |
 |--------|-------------|
 | **Documentation lookup** | Up-to-date library docs via Context7 (when `TAPPS_MCP_CONTEXT7_API_KEY` is set) and LlmsTxt (always, as fallback). Fuzzy matching, local cache. |
-| **Domain experts** | 17 built-in experts (security, testing, APIs, GitHub, etc.) with RAG-backed answers, confidence scores, and knowledge freshness warnings. |
+| **Documentation lookup** | Up-to-date library docs via Context7 (when API key set) and LlmsTxt (always available as fallback). Fuzzy matching, local cache. |
 | **Project context** | Detect project type, tech stack, structure for context-aware analysis. |
 | **Shared memory** | Powered by [tapps-brain](https://github.com/wtthornton/tapps-brain) — BM25 retrieval, decay, contradiction detection, federation, Hive (Agent Teams). **33 actions** on `tapps_memory` (CRUD, search, federation, profiles, security, maintenance, Hive). Shipped defaults turn on pipeline integrations and hooks; see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). |
 | **Session notes** | In-memory decisions and constraints for a single session. Promotable to shared memory for persistence. |
@@ -450,8 +450,8 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 | `tapps-mcp memory import-file` | Import memories from JSON (`--file`, `--overwrite`). |
 | `tapps-mcp memory export-file` | Export memories to JSON (`--file`). |
 | `tapps-mcp lookup-docs` | Look up library docs from CLI (`--library`, `--topic`, `--mode code\|info`, `--raw`). |
-| `tapps-mcp research` | Combined expert + docs lookup from CLI (`--question`, `--domain`, `--library`, `--json`). |
-| `tapps-mcp consult-expert` | Consult domain expert from CLI (`--question`, `--domain`, `--json`). |
+| `tapps-mcp research` | **Deprecated (EPIC-94)** — prints deprecation notice. |
+| `tapps-mcp consult-expert` | **Deprecated (EPIC-94)** — prints deprecation notice. |
 | `tapps-mcp benchmark run` | Run AGENTBench evaluation (context modes: none/tapps/human/all). |
 | `tapps-mcp benchmark analyze` | Analyze benchmark results with statistical comparison. |
 | `tapps-mcp benchmark report` | Generate markdown/CSV benchmark reports. |
@@ -607,9 +607,8 @@ Quick index:
 | **tapps_validate_changed** | Score + gate + security scan all changed files (auto-detects via git diff). |
 | **tapps_lookup_docs** | Fetch current documentation for a library (Context7 when key set, LlmsTxt fallback; cache). |
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, or infra configs. |
-| **tapps_consult_expert** | Ask a domain expert and get RAG-backed answer with confidence. |
-| **tapps_research** | Combined expert + docs lookup in one call (Context7 when key set, LlmsTxt fallback). |
-| **tapps_list_experts** | List the 17 built-in expert domains and their status. |
+| **tapps_consult_expert** | **Deprecated (EPIC-94)** — returns structured deprecation error with alternatives. |
+| **tapps_research** | **Deprecated (EPIC-94)** — returns structured deprecation error with alternatives. |
 | **tapps_checklist** | See which tools were called this session and what is still missing. |
 | **tapps_project_profile** | Detect project type, tech stack, and structure for context-aware analysis. |
 | **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. Promotable to shared memory. |
@@ -704,27 +703,19 @@ Quick index:
 
 ---
 
-### tapps_consult_expert
+### tapps_consult_expert (deprecated)
 
-**What it does:** Sends a natural-language question to a domain expert. The server has 17 built-in domains (e.g. security, testing, API design, database, observability, GitHub). You can leave **domain** empty for auto-routing from the question, or pass a domain id (e.g. `"security"`, `"testing-strategies"`). The expert uses RAG over curated knowledge files, returns an answer, a confidence score, contributing factors, and source chunks. Answers are filtered for PII/secrets before return.
+**Status:** Deprecated since EPIC-94. Returns a structured `TOOL_DEPRECATED` error with `alternatives` pointing to `tapps_lookup_docs` (for documentation) and AgentForge (for expert consultation).
 
-**Why use it:** When the AI (or user) is unsure about patterns, trade-offs, or best practices in a specific area, a single call returns focused, sourced guidance instead of generic advice. Use for security decisions, test strategy, API design, DB schema, or observability so the response is grounded in the expert knowledge base and the confidence score signals how much to rely on it.
-
----
-
-### tapps_research
-
-**What it does:** Combined expert consultation + documentation lookup in one call. Consults the domain expert first, then supplements with docs from Context7 (when key set) or LlmsTxt (fallback). Accepts optional `library` and `topic` parameters (auto-inferred when empty). The `file_context` parameter accepts a path to the file being edited, allowing the tool to infer the relevant library from imports. Returns expert answer, confidence, sources, and supplementary docs content.
-
-**Why use it:** Saves a round-trip compared to calling `tapps_consult_expert` and `tapps_lookup_docs` separately. Use when you need both expert guidance and current library documentation for a domain-specific question. Docs are always fetched to provide the most complete answer. Pass `file_context` when editing a specific file so the tool can auto-detect which library to look up from imports.
+**Migration:** Use `tapps_lookup_docs` for library documentation lookup. The RAG-based expert system has been removed.
 
 ---
 
-### tapps_list_experts
+### tapps_research (deprecated)
 
-**What it does:** Returns the list of all 17 built-in expert domains. For each expert it provides an id, display name, short description, and knowledge-base status (e.g. how many knowledge files are loaded). No parameters required.
+**Status:** Deprecated since EPIC-94. Returns a structured `TOOL_DEPRECATED` error with `alternatives` pointing to `tapps_lookup_docs` and AgentForge.
 
-**Why use it:** Lets the AI (or host) discover which domains exist before calling `tapps_consult_expert`. Use at session start or when the user asks "what can the experts help with?" so the right domain can be chosen and the right expert consulted.
+**Migration:** Use `tapps_lookup_docs` for library documentation lookup.
 
 ---
 
@@ -804,7 +795,7 @@ Quick index:
 
 **What it does:** CRUD operations for business domain experts. Actions: **list** (show all registered experts), **add** (register a new expert with domain, keywords, knowledge directory), **remove** (unregister an expert), **scaffold** (generate knowledge directory structure), **validate** (check expert config and knowledge files), **auto_generate** (suggest experts from codebase analysis). Use `dry_run=True` to preview changes before applying.
 
-**Why use it:** Extend the expert system with project-specific domain experts (e.g. a billing expert for a fintech project). Business experts work the same as built-in experts — they participate in domain detection, RAG queries, and `tapps_consult_expert` responses.
+**Why use it:** Manage project-specific domain expert configurations. Note: the RAG-based expert consultation system was removed in EPIC-94; this tool manages the configuration files only.
 
 ---
 
@@ -970,13 +961,13 @@ Best results come with these tools installed; the server degrades gracefully wit
 | vulture | Dead code detection | `pip install vulture` or `uv add vulture` |
 | pip-audit | Dependency vulnerability scanning | `pip install pip-audit` or `uv add pip-audit` |
 
-**Vector RAG (optional):** For semantic search over expert knowledge files, install the `rag` extras:
+**Vector RAG (optional):** For semantic search over memory entries, install the `rag` extras:
 
 ```bash
 pip install tapps-mcp[rag]   # or: uv add tapps-mcp[rag]
 ```
 
-This adds `faiss-cpu`, `sentence-transformers`, and `numpy`. When not installed, the expert system uses keyword-based RAG (no configuration needed).
+This adds `faiss-cpu`, `sentence-transformers`, and `numpy`. When not installed, the memory system uses keyword-based search (no configuration needed).
 
 ---
 
@@ -1051,7 +1042,7 @@ This creates:
 Key optional flags (see [init options](#tapps-mcp-init-options) for the full list):
 
 - `warm_cache_from_tech_stack=True` — pre-fetch docs for detected libraries (default: on)
-- `warm_expert_rag_from_tech_stack=True` — pre-build expert RAG indices for relevant domains (default: on)
+- `warm_expert_rag_from_tech_stack=True` — pre-build domain indices for relevant tech stack (default: on)
 - `install_missing_checkers=True` — auto-install missing ruff/mypy/bandit/radon
 - `agent_teams=True` — generate Agent Teams hooks for quality watchdog teammate (Claude Code only)
 - `minimal=True` — minimal init: MCP config + AGENTS.md only (faster, ~5-15s vs 10-35s)
@@ -1113,7 +1104,7 @@ tapps-mcp      docs-mcp
 
 **[tapps-brain](https://github.com/wtthornton/tapps-brain)** is a standalone memory system extracted from tapps-core. It provides SQLite-backed persistence, BM25 retrieval, time-based decay, contradiction detection, consolidation, federation, and garbage collection. It has its own release cycle and test suite (521+ tests).
 
-**tapps-core** provides shared infrastructure (config, security, logging, knowledge, experts, metrics, adaptive). Its `memory/` package contains thin re-export shims that delegate to tapps-brain for backward compatibility (`from tapps_core.memory.store import MemoryStore` still works). The one exception is `injection.py`, which is a bridge adapter that translates TappsMCP settings into tapps-brain's `InjectionConfig`.
+**tapps-core** provides shared infrastructure (config, security, logging, knowledge, metrics, adaptive). Its `memory/` package contains thin re-export shims that delegate to tapps-brain for backward compatibility (`from tapps_core.memory.store import MemoryStore` still works). The one exception is `injection.py`, which is a bridge adapter that translates TappsMCP settings into tapps-brain's `InjectionConfig`.
 
 **tapps-mcp** and **docs-mcp** are MCP servers that depend on tapps-core. tapps-mcp also re-exports from tapps-core for backward compat with consuming projects.
 

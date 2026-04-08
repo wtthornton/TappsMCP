@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-04-08
+
+### Fixed
+
+- **tapps-mcp: `tapps_consult_expert` deprecation stub (#82)** — The tool was removed in EPIC-94 but no MCP stub was registered, causing unhandled `ImportError` for callers. Now returns a structured `TOOL_DEPRECATED` error with alternatives and `deprecated_since` metadata.
+- **tapps-mcp: `tapps_research` opaque error (#83)** — Improved error code from generic `DEPRECATED` to `TOOL_DEPRECATED` with structured `alternatives` array and `deprecated_since` field for machine-readable deprecation context.
+- **docs-mcp: `docs_check_style` silent 0-file false positive (#84)** — When explicitly-requested files could not be resolved, the tool silently returned `aggregate_score: 100` with `total_files: 0`. Now returns `NO_FILES_FOUND` error when all files are missing, adds `warnings` for partial matches, and reports `aggregate_score: 0.0` (not 100) for zero files.
+
+### Changed
+
+- **tapps-mcp + docs-mcp: `error_response()` enhanced** — Added optional `extra` keyword parameter for structured error metadata (e.g. `alternatives`, `deprecated_since`, `requested_files`). Backward compatible — existing callers are unaffected.
+- **tapps-mcp: `ALL_TOOL_NAMES` updated** — Now includes `tapps_consult_expert` and `tapps_research` as registered deprecated stubs (26 total, including 2 deprecated).
+- **tapps-core: Pipeline stage cleanup** — Removed stale `tapps_consult_expert` and `tapps_list_experts` from `PipelineStage.RESEARCH` in `pipeline_models.py`.
+
+### Removed
+
+- **docs-mcp: Dead expert enrichment code** — Removed ~100 lines of unreachable code in `epics.py` and `stories.py` `_enrich_experts()` methods (dead since EPIC-94). Methods retained as documented no-ops for pipeline interface compatibility.
+- **tapps-mcp: Stale `tapps_consult_expert` reference** — Removed from `developer_workflow.py` `WHEN_TO_USE` list.
+
+### Added
+
+- **Tests:** 18 new tests across 4 files covering deprecation stubs, error_response extra metadata, path validation, and no-op enrichment methods.
+- Version bump: tapps-core 2.1.0 → 2.2.0, tapps-mcp 2.1.0 → 2.2.0, docs-mcp 2.1.0 → 2.2.0
+
 ## [1.18.0] - 2026-04-06
 
 ### Fixed

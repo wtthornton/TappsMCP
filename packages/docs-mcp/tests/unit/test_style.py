@@ -808,3 +808,100 @@ class TestProjectScanStyleSummary:
 
         assert result["success"] is True
         assert "style_summary" not in result["data"]
+
+
+@pytest.mark.asyncio
+class TestStyleCheckPathResolution:
+    """Issue #84: docs_check_style must not silently return 0 files."""
+
+    async def test_nonexistent_relative_path_returns_error(self, tmp_path: Path) -> None:
+        """Relative path that doesn't resolve should return NO_FILES_FOUND."""
+        from docs_mcp.server_val_tools import docs_check_style
+
+        with patch("docs_mcp.server_val_tools._get_settings") as mock_settings:
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_check_style(
+                files="nonexistent/doc.md",
+                project_root=str(tmp_path),
+            )
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "NO_FILES_FOUND"
+        assert "nonexistent/doc.md" in result["error"]["message"]
+
+    async def test_nonexistent_absolute_path_returns_error(self, tmp_path: Path) -> None:
+        """Absolute path that doesn't exist should return NO_FILES_FOUND."""
+        from docs_mcp.server_val_tools import docs_check_style
+
+        bad_path = str(tmp_path / "does_not_exist.md")
+        with patch("docs_mcp.server_val_tools._get_settings") as mock_settings:
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_check_style(
+                files=bad_path,
+                project_root=str(tmp_path),
+            )
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "NO_FILES_FOUND"
+
+    async def test_mixed_existing_and_missing_files(self, tmp_path: Path) -> None:
+        """When some files exist and others don't, check existing + warn about missing."""
+        _write(tmp_path / "real.md", "# Real doc\n\nThis is real content.")
+        from docs_mcp.server_val_tools import docs_check_style
+
+        with patch("docs_mcp.server_val_tools._get_settings") as mock_settings:
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_check_style(
+                files="real.md,ghost.md",
+                project_root=str(tmp_path),
+            )
+
+        assert result["success"] is True
+        assert result["data"]["total_files"] == 1
+        assert "warnings" in result["data"]
+        assert any("ghost.md" in w for w in result["data"]["warnings"])
+
+    async def test_all_files_missing_returns_zero_score(self, tmp_path: Path) -> None:
+        """Score should NOT be 100 when zero files were checked."""
+        from docs_mcp.server_val_tools import docs_check_style
+
+        with patch("docs_mcp.server_val_tools._get_settings") as mock_settings:
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_check_style(
+                files="a.md,b.md,c.md",
+                project_root=str(tmp_path),
+            )
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "NO_FILES_FOUND"
+
+    async def test_error_includes_requested_files(self, tmp_path: Path) -> None:
+        """NO_FILES_FOUND error should include which files were requested."""
+        from docs_mcp.server_val_tools import docs_check_style
+
+        with patch("docs_mcp.server_val_tools._get_settings") as mock_settings:
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_check_style(
+                files="missing.md",
+                project_root=str(tmp_path),
+            )
+
+        assert result["success"] is False
+        assert "missing.md" in result["error"]["requested_files"]
+        assert str(tmp_path) in result["error"]["project_root"]
+
+    async def test_existing_file_still_works(self, tmp_path: Path) -> None:
+        """Regression: existing relative paths should still be checked normally."""
+        _write(tmp_path / "doc.md", "# Doc\n\nWe utilize synergy here.")
+        from docs_mcp.server_val_tools import docs_check_style
+
+        with patch("docs_mcp.server_val_tools._get_settings") as mock_settings:
+            mock_settings.return_value = make_settings(tmp_path)
+            result = await docs_check_style(
+                files="doc.md",
+                project_root=str(tmp_path),
+            )
+
+        assert result["success"] is True
+        assert result["data"]["total_files"] == 1
+        assert result["data"]["total_issues"] >= 1

@@ -452,13 +452,30 @@ def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, Any]:
         }
 
 
-def error_response(tool_name: str, code: str, message: str) -> dict[str, Any]:
-    """Build a standard error response envelope."""
+def error_response(
+    tool_name: str,
+    code: str,
+    message: str,
+    *,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a standard error response envelope.
+
+    Args:
+        tool_name: Name of the tool that produced the error.
+        code: Machine-readable error code (e.g. ``"TOOL_DEPRECATED"``).
+        message: Human-readable error description.
+        extra: Optional structured metadata merged into the error object
+            (e.g. ``{"alternatives": [...], "deprecated_since": "EPIC-94"}``).
+    """
+    error: dict[str, Any] = {"code": code, "message": message}
+    if extra:
+        error.update(extra)
     return {
         "tool": tool_name,
         "success": False,
         "elapsed_ms": 0,
-        "error": {"code": code, "message": message},
+        "error": error,
     }
 
 

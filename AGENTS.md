@@ -1,7 +1,7 @@
-<!-- tapps-agents-version: 2.0.0 -->
+<!-- tapps-agents-version: 2.2.0 -->
 # TappsMCP - instructions for AI assistants
 
-When the **TappsMCP** MCP server is configured, you have access to **24 deterministic code quality tools**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
+When the **TappsMCP** MCP server is configured, you have access to **26 deterministic code quality tools** (including 2 deprecated stubs). Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
 
 **File paths:** Use paths relative to project root (e.g. `src/main.py`). Absolute host paths also work when `TAPPS_MCP_HOST_PROJECT_ROOT` is set.
 
@@ -87,67 +87,20 @@ When creating or updating **epic**, **story**, or **prompt** planning artifacts 
 **Recommended TappsMCP/DocsMCP calls:**
 
 - **tapps_project_profile** — project root, tech stack, constraints (for context/technical notes).
-- **tapps_consult_expert** — domain guidance (security, architecture, testing, etc.) for expert enrichment.
-- **tapps_list_experts** — optional; choose which domains to consult.
 - **docs_generate_epic** — primary epic generator (EpicConfig); use for parent epics.
 - **docs_generate_story** — primary story generator (StoryConfig); use for child stories.
 - **docs_generate_prompt** — prompt artifact generator (PromptConfig); use for LLM-facing prompt docs.
 
 Provide **purpose_and_intent** for epic and story when calling the generators so the required "Purpose & Intent" section is populated.
 
-## Domain hints for tapps_consult_expert
+## Deprecated tools
 
-Pass the `domain` parameter when the context clearly implies a domain. This improves routing accuracy and avoids auto-detection mistakes.
+The following tools were removed in EPIC-94 and now return structured `TOOL_DEPRECATED` errors:
 
-### Built-in domains (17)
+- **tapps_consult_expert** — The RAG-based expert system has been removed. Use `tapps_lookup_docs` for library documentation.
+- **tapps_research** — Combined expert + docs lookup has been removed. Use `tapps_lookup_docs` for library documentation.
 
-Use these exact slugs with `tapps_consult_expert(domain="...")`:
-
-| Domain slug | Typical use |
-|-------------|-------------|
-| `accessibility` | WCAG, ARIA, keyboard/screen-reader UX |
-| `agent-learning` | Agent memory, feedback loops, adaptive behavior |
-| `ai-frameworks` | LLM apps, agents, RAG, orchestration (not AI security—use `security`) |
-| `api-design-integration` | REST/GraphQL/gRPC, versioning, webhooks, integrations |
-| `cloud-infrastructure` | AWS/Azure/GCP, Kubernetes, Docker, IaC, serverless |
-| `code-quality-analysis` | Linting, typing, static analysis, maintainability |
-| `database-data-management` | SQL/NoSQL, schema, migrations, query design |
-| `data-privacy-compliance` | GDPR, HIPAA, consent, DPIA, EU AI Act (with dedicated KB) |
-| `development-workflow` | Generic CI/CD, build/release, trunk-based flow, non-GitHub-specific tooling |
-| `documentation-knowledge-management` | Technical writing, API docs, knowledge bases |
-| `github` | GitHub Actions (platform), rulesets, Copilot agents, Issues/PRs, GH MCP |
-| `observability-monitoring` | Logs, metrics, traces, SLOs, alerting |
-| `performance-optimization` | Profiling, latency, throughput, caching |
-| `security` | AppSec, OWASP, authz, crypto, **LLM/agent/MCP security** |
-| `software-architecture` | System design, DDD, modularization, ADRs, service boundaries |
-| `testing-strategies` | Unit/integration/E2E, fixtures, coverage, test design |
-| `user-experience` | Product UX, design systems, UI patterns, frontend UX (overlaps a11y—pick the sharper fit) |
-
-### Quick context → domain
-
-| Context | domain value |
-|---------|--------------|
-| Editing test files, conftest.py, pytest config | `testing-strategies` |
-| Security-sensitive code, auth, validation, prompt/MCP/tool abuse | `security` |
-| API routes, FastAPI/Flask endpoints | `api-design-integration` |
-| Database models, migrations, queries | `database-data-management` |
-| Dockerfile, docker-compose, k8s manifests | `cloud-infrastructure` |
-| CI/CD with Jenkins, GitLab CI, generic pipelines (not GitHub-only) | `development-workflow` |
-| GitHub rulesets, Copilot coding agent, GH Actions *as GitHub product* | `github` |
-| Code quality, linting, type hints | `code-quality-analysis` |
-| Architecture decisions, bounded contexts, ADRs | `software-architecture` |
-
-### Expert knowledge ownership (routing)
-
-- **`github`** — GitHub *platform* features: Actions YAML on GitHub, rulesets, merge queue, Copilot agent modes, GitHub MCP server, security features tied to the platform.
-- **`development-workflow`** — *Host-agnostic* delivery: branching models, generic CI concepts, reproducible builds, release strategy, non-GitHub CI systems.
-- When a question is equally about “how we deploy” and “GitHub Actions syntax,” prefer **`github`** if the repository host is GitHub; otherwise **`development-workflow`** or **`cloud-infrastructure`**.
-
-When in doubt, omit `domain` to let auto-detection from the question text choose (or call `tapps_list_experts`).
-
-### Business experts
-
-Projects can define custom business-domain experts in `.tapps-mcp/experts.yaml`. Use `tapps_manage_experts(action="list")` to see them. Pass business domain names to `tapps_consult_expert(domain="...")` like built-in domains.
+Both stubs return `alternatives` metadata pointing to `tapps_lookup_docs` and AgentForge.
 
 ---
 

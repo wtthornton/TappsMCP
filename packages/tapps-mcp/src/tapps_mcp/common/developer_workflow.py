@@ -36,7 +36,6 @@ UPDATE_STEP = (
 WHEN_TO_USE = [
     ("tapps_lookup_docs", "Before using any external library API."),
     ("tapps_impact_analysis", "Before changing or removing a file's public API."),
-    ("tapps_consult_expert", "For domain decisions (security, testing, API, DB, architecture)."),
     ("tapps_security_scan", "For auth, API routes, secrets, input validation."),
     ("tapps_validate_config", "When editing Dockerfile, docker-compose, or infra config."),
 ]

@@ -36,7 +36,7 @@ STAGE_TOOLS: dict[PipelineStage, list[str]] = {
         "tapps_session_start",
         "tapps_memory",
     ],
-    PipelineStage.RESEARCH: ["tapps_lookup_docs", "tapps_consult_expert", "tapps_list_experts"],
+    PipelineStage.RESEARCH: ["tapps_lookup_docs"],
     PipelineStage.DEVELOP: ["tapps_score_file"],
     PipelineStage.VALIDATE: [
         "tapps_score_file",

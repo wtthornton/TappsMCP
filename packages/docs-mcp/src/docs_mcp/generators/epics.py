@@ -1355,59 +1355,11 @@ class EpicGenerator:
 
     @staticmethod
     def _enrich_experts(config: EpicConfig, enrichment: dict[str, Any]) -> None:
-        """Enrich with guidance from TappsMCP domain experts.
+        """No-op — expert system removed (EPIC-94).
 
-        Runs consultations in parallel using a thread pool to avoid
-        sequential latency across all 8 domains.
+        Previously enriched epics with TappsMCP domain expert guidance.
+        Retained as a no-op to preserve the enrichment pipeline interface.
         """
-        # Expert system removed (EPIC-94) — skip enrichment
-        return
-        try:
-            from tapps_core.experts.engine import consult_expert  # type: ignore[import-not-found]
-        except Exception:
-            logger.debug("epic_expert_import_failed", exc_info=True)
-            return
-
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        context = config.title
-        if config.goal:
-            context = f"{config.title} - {config.goal}"
-
-        def _consult_one(domain: str, question_template: str) -> dict[str, str] | None:
-            try:
-                question = question_template.format(context=context)
-                result = consult_expert(
-                    question, domain=domain, max_chunks=3, max_context_length=1500,
-                )
-                if result.confidence >= 0.3 and result.answer:
-                    from docs_mcp.generators.expert_utils import extract_expert_advice
-
-                    advice = extract_expert_advice(result.answer)
-                    if advice:
-                        return {
-                            "domain": result.domain,
-                            "expert": result.expert_name,
-                            "advice": advice,
-                            "confidence": f"{result.confidence:.0%}",
-                        }
-            except Exception:
-                logger.debug("epic_expert_consult_failed", domain=domain, exc_info=True)
-            return None
-
-        guidance: list[dict[str, str]] = []
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = {
-                pool.submit(_consult_one, domain, tmpl): domain
-                for domain, tmpl in EpicGenerator._EXPERT_DOMAINS
-            }
-            for future in as_completed(futures):
-                result = future.result()
-                if result is not None:
-                    guidance.append(result)
-
-        if guidance:
-            enrichment["expert_guidance"] = guidance
 
     # -- expert filtering (Epic 18.3) ---------------------------------------
 

@@ -157,7 +157,8 @@ def _validate_file_path(file_path: str) -> Path:
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
-# Canonical list of all TappsMCP tools (24). Used for filtering and fallback.
+# Canonical list of all TappsMCP tools (26, including 2 deprecated stubs).
+# Used for filtering and fallback.
 ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_server_info",
     "tapps_session_start",
@@ -183,6 +184,8 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_dependency_scan",
     "tapps_dependency_graph",
     "tapps_memory",
+    "tapps_consult_expert",
+    "tapps_research",
 })
 
 # Tier 1 from TOOL-TIER-RANKING (Epic 79.1)

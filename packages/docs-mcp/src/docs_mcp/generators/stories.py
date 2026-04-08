@@ -916,62 +916,11 @@ class StoryGenerator:
 
     @staticmethod
     def _enrich_experts(config: StoryConfig, enrichment: dict[str, Any]) -> None:
-        """Enrich with guidance from TappsMCP domain experts.
+        """No-op — expert system removed (EPIC-94).
 
-        Runs consultations in parallel using a thread pool to avoid
-        sequential latency across all 4 domains.
+        Previously enriched stories with TappsMCP domain expert guidance.
+        Retained as a no-op to preserve the enrichment pipeline interface.
         """
-        # Expert system removed (EPIC-94) — skip enrichment
-        return
-        try:
-            from tapps_core.experts.engine import consult_expert  # type: ignore[import-not-found]
-        except Exception:
-            logger.debug("story_expert_import_failed", exc_info=True)
-            return
-
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        context = config.title
-        if config.description:
-            context = f"{config.title} - {config.description}"
-
-        def _consult_one(domain: str, question_template: str) -> dict[str, str] | None:
-            try:
-                question = question_template.format(context=context)
-                result = consult_expert(
-                    question, domain=domain, max_chunks=3, max_context_length=1500,
-                )
-                threshold = StoryGenerator._EXPERT_CONFIDENCE_THRESHOLD
-                if result.confidence >= threshold and result.answer:
-                    from docs_mcp.generators.expert_utils import extract_expert_advice
-
-                    advice = extract_expert_advice(result.answer)
-                    if advice:
-                        return {
-                            "domain": result.domain,
-                            "expert": result.expert_name,
-                            "advice": advice,
-                            "confidence": f"{result.confidence:.0%}",
-                        }
-            except Exception:
-                logger.debug("story_expert_consult_failed", domain=domain, exc_info=True)
-            return None
-
-        guidance: list[dict[str, str]] = []
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = {
-                pool.submit(_consult_one, domain, tmpl): domain
-                for domain, tmpl in StoryGenerator._EXPERT_DOMAINS
-            }
-            for future in as_completed(futures):
-                result = future.result()
-                if result is not None:
-                    guidance.append(result)
-
-        if guidance:
-            from docs_mcp.generators.expert_utils import filter_expert_guidance
-
-            enrichment["expert_guidance"] = filter_expert_guidance(guidance)
 
     # -- helpers -----------------------------------------------------------
 

@@ -764,6 +764,18 @@ class TestEpicGeneratorAutoPopulate:
 # ---------------------------------------------------------------------------
 
 
+class TestEpicExpertEnrichmentNoOp:
+    """Issue #82: _enrich_experts is a no-op after EPIC-94 removal."""
+
+    def test_enrich_experts_is_noop(self) -> None:
+        from docs_mcp.generators.epics import EpicConfig, EpicGenerator
+
+        config = EpicConfig(number=1, title="Test")
+        enrichment: dict[str, Any] = {}
+        EpicGenerator._enrich_experts(config, enrichment)
+        assert "expert_guidance" not in enrichment
+
+
 class _TestEpicGeneratorExpertEnrichment_REMOVED:
     """Tests for expert system enrichment in auto-populate."""
 

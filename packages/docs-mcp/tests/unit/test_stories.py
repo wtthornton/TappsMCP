@@ -526,6 +526,18 @@ class TestStoryGeneratorAutoPopulate:
 # ---------------------------------------------------------------------------
 
 
+class TestStoryExpertEnrichmentNoOp:
+    """Issue #82: _enrich_experts is a no-op after EPIC-94 removal."""
+
+    def test_enrich_experts_is_noop(self) -> None:
+        from docs_mcp.generators.stories import StoryConfig, StoryGenerator
+
+        config = StoryConfig(epic_number=1, story_number=1, title="Test")
+        enrichment: dict[str, Any] = {}
+        StoryGenerator._enrich_experts(config, enrichment)
+        assert "expert_guidance" not in enrichment
+
+
 class _TestStoryGeneratorExpertEnrichment_REMOVED:
     """Expert system removed (EPIC-94)."""
 

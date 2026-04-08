@@ -594,32 +594,41 @@ def _run_style_check_files(
     checker: Any,
     file_list: list[str],
     root: Path,
-) -> Any:
-    """Run style check on a specific list of files and return a StyleReport."""
+) -> tuple[Any, list[str]]:
+    """Run style check on a specific list of files and return a StyleReport.
+
+    Returns:
+        A tuple of ``(StyleReport, missing_files)`` where *missing_files*
+        contains paths that were requested but could not be resolved.
+    """
     from docs_mcp.validators.style import FileStyleResult, StyleReport
 
     results: list[FileStyleResult] = []
+    missing: list[str] = []
     for file_str in file_list:
         fp = Path(file_str)
         if not fp.is_absolute():
             fp = root / fp
         if fp.exists():
             results.append(checker.check_file(fp, relative_to=root))
+        else:
+            missing.append(file_str)
 
     total_issues = sum(len(r.issues) for r in results)
-    agg_score = sum(r.score for r in results) / len(results) if results else 100.0
+    agg_score = sum(r.score for r in results) / len(results) if results else 0.0
     issue_counts: dict[str, int] = {}
     for r in results:
         for issue in r.issues:
             issue_counts[issue.rule] = issue_counts.get(issue.rule, 0) + 1
 
-    return StyleReport(
+    report = StyleReport(
         total_files=len(results),
         total_issues=total_issues,
         files=results,
         aggregate_score=round(agg_score, 1),
         issue_counts=issue_counts,
     )
+    return report, missing
 
 
 async def docs_check_style(
@@ -672,14 +681,26 @@ async def docs_check_style(
 
     if files.strip():
         file_list = [f.strip() for f in files.split(",") if f.strip()]
-        report = _run_style_check_files(checker, file_list, root)
+        report, missing = _run_style_check_files(checker, file_list, root)
+
+        if missing and report.total_files == 0:
+            return error_response(
+                "docs_check_style",
+                "NO_FILES_FOUND",
+                f"No files could be resolved: {', '.join(missing)}",
+                extra={"requested_files": missing, "project_root": str(root)},
+            )
     else:
         report = checker.check_project(root)
+        missing = []
 
     if output_format.strip().lower() == "vale":
         data = _style_report_vale(report)
     else:
         data = _style_report_structured(report)
+
+    if missing:
+        data["warnings"] = [f"File not found: {f}" for f in missing]
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     return success_response(

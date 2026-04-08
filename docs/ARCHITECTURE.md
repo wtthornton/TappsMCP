@@ -26,10 +26,10 @@ tapps-core's `memory/` package contains thin re-export shims delegating to tapps
 
 The MCP server is split across ten files (server.py + 9 server_*.py) plus a shared helpers module. All share the same `mcp` FastMCP instance created in `server.py`:
 
-- **`server.py`** -- Creates the `FastMCP("TappsMCP")` instance and 8 tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_consult_expert`, `tapps_list_experts`, `tapps_checklist`, `tapps_project_profile`). Imports the other nine modules which register their tools/resources on the shared `mcp` object.
+- **`server.py`** -- Creates the `FastMCP("TappsMCP")` instance and 6 core tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_checklist`, `tapps_project_profile`). Imports the other nine modules which register their tools/resources on the shared `mcp` object.
 - **`server_scoring_tools.py`** -- `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** -- `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`
-- **`server_metrics_tools.py`** -- `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research`
+- **`server_metrics_tools.py`** -- `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research` (deprecated stub), `tapps_consult_expert` (deprecated stub)
 - **`server_memory_tools.py`** -- `tapps_memory` (33 actions)
 - **`server_analysis_tools.py`** -- `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`
 - **`server_expert_tools.py`** -- `tapps_manage_experts` (6 actions)
@@ -157,9 +157,9 @@ Multi-language architecture with `ScorerBase` abstract class. Language scorers: 
 
 All file I/O through `security/path_validator.py` (sandboxed to `TAPPS_MCP_PROJECT_ROOT`). Secret scanning, IO guardrails, governance checks, content safety (prompt injection filtering). Subprocess calls protected by `_ALLOWED_CHECKER_PACKAGES` allowlist.
 
-## Expert system
+## Expert system (deprecated — EPIC-94)
 
-17 domain experts with 174 curated knowledge files. Keyword-based RAG (or optional vector RAG with faiss). Adaptive domain learning stores weights in `.tapps-mcp/adaptive/domain_weights.yaml`. Auto expert generation via `experts/auto_generator.py`. The UX Design Expert covers modern frontend architecture (React, CSS, design systems, accessibility, AI UX patterns, dual-surface admin vs SPA operational UIs, semantic dashboard status patterns, prompt-first AI governance, performance, responsive/mobile).
+The RAG-based expert consultation system was removed in EPIC-94. `tapps_consult_expert` and `tapps_research` are registered as deprecation stubs returning structured `TOOL_DEPRECATED` errors with migration guidance. The `experts/` module in tapps-core retains only the tech-stack-to-domain mapping (`rag_warming.py`) used by session start for domain hints. Knowledge files remain in the repository for reference but are no longer queried at runtime.
 
 ## Memory subsystem
 

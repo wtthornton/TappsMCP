@@ -41,7 +41,7 @@ def test_update_step_mentions_upgrade() -> None:
 
 
 def test_when_to_use_has_entries() -> None:
-    assert len(WHEN_TO_USE) >= 5
+    assert len(WHEN_TO_USE) >= 4
     for tool, when in WHEN_TO_USE:
         assert tool.startswith("tapps_")
         assert when

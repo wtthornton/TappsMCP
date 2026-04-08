@@ -80,3 +80,23 @@ class TestSettingsSingleton:
         s2 = _get_settings()
         # After reset, a new instance is created (may or may not be same object)
         assert isinstance(s1, type(s2))
+
+
+class TestErrorResponseExtra:
+    """Issue #84: error_response supports extra metadata."""
+
+    def test_extra_merged_into_error(self) -> None:
+        from docs_mcp.server_helpers import error_response
+
+        result = error_response(
+            "test_tool", "NO_FILES_FOUND", "No files matched",
+            extra={"requested_files": ["a.md"], "project_root": "/tmp"},
+        )
+        assert result["error"]["requested_files"] == ["a.md"]
+        assert result["error"]["project_root"] == "/tmp"
+
+    def test_extra_none_preserves_original(self) -> None:
+        from docs_mcp.server_helpers import error_response
+
+        result = error_response("test_tool", "CODE", "msg")
+        assert set(result["error"].keys()) == {"code", "message"}
