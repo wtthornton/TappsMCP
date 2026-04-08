@@ -17,13 +17,14 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from tapps_mcp.scoring.models import LintIssue, SecurityIssue, TypeIssue
+    from tapps_mcp.tools.perflint import PerflintFinding
     from tapps_mcp.tools.vulture import DeadCodeFinding
 
 import structlog
 
 from tapps_mcp.tools.bandit import run_bandit_check_async
 from tapps_mcp.tools.mypy import run_mypy_check_async
-from tapps_mcp.tools.radon import run_radon_cc_async, run_radon_mi_async
+from tapps_mcp.tools.radon import run_radon_cc_async, run_radon_hal_async, run_radon_mi_async
 from tapps_mcp.tools.ruff import run_ruff_check_async
 from tapps_mcp.tools.vulture import run_vulture_async
 
@@ -41,6 +42,8 @@ class ParallelResults:
     security_issues: list[SecurityIssue] = field(default_factory=list)
     radon_cc: list[dict[str, Any]] = field(default_factory=list)
     radon_mi: float = 50.0
+    radon_hal: list[dict[str, Any]] = field(default_factory=list)
+    perflint: list[PerflintFinding] = field(default_factory=list)
     dead_code: list[DeadCodeFinding] = field(default_factory=list)
     missing_tools: list[str] = field(default_factory=list)
     degraded: bool = False
@@ -65,6 +68,10 @@ def _assign_result(name: str, results: ParallelResults, value: object) -> None:
         results.radon_cc = value  # type: ignore[assignment]
     elif name == "radon_mi":
         results.radon_mi = value  # type: ignore[assignment]
+    elif name == "radon_hal":
+        results.radon_hal = value  # type: ignore[assignment]
+    elif name == "perflint":
+        results.perflint = value  # type: ignore[assignment]
     elif name == "vulture":
         results.dead_code = value  # type: ignore[assignment]
 
@@ -79,10 +86,11 @@ async def run_all_tools(
     run_bandit: bool = True,
     run_radon: bool = True,
     run_vulture: bool = True,
+    run_perflint: bool = True,
     vulture_whitelist_patterns: list[str] | None = None,
     mode: str = "subprocess",
 ) -> ParallelResults:
-    """Run ruff, mypy, bandit, radon, and vulture concurrently.
+    """Run ruff, mypy, bandit, radon, vulture, and perflint concurrently.
 
     Args:
         file_path: Path to the Python file to analyse.
@@ -93,6 +101,7 @@ async def run_all_tools(
         run_bandit: Whether to run bandit.
         run_radon: Whether to run radon.
         run_vulture: Whether to run vulture (dead code detection).
+        run_perflint: Whether to run perflint (performance linting).
         mode: Execution mode - ``"subprocess"`` (async subprocess),
             ``"direct"`` (library / sync subprocess in thread pool),
             or ``"auto"`` (subprocess with direct fallback).
@@ -114,6 +123,7 @@ async def run_all_tools(
             run_bandit=run_bandit,
             run_radon=run_radon,
             run_vulture=run_vulture,
+            run_perflint=run_perflint,
             vulture_whitelist_patterns=vulture_whitelist_patterns,
         )
 
@@ -127,6 +137,7 @@ async def run_all_tools(
         run_bandit=run_bandit,
         run_radon=run_radon,
         run_vulture=run_vulture,
+        run_perflint=run_perflint,
         vulture_whitelist_patterns=vulture_whitelist_patterns,
     )
 
@@ -146,6 +157,7 @@ async def _run_subprocess(
     run_bandit: bool = True,
     run_radon: bool = True,
     run_vulture: bool = True,
+    run_perflint: bool = True,
     vulture_whitelist_patterns: list[str] | None = None,
 ) -> ParallelResults:
     """Run tools via async subprocess (original behaviour)."""
@@ -171,6 +183,7 @@ async def _run_subprocess(
     if run_radon and shutil.which("radon"):
         tasks["radon_cc"] = asyncio.create_task(run_radon_cc_async(file_path, **kw))
         tasks["radon_mi"] = asyncio.create_task(run_radon_mi_async(file_path, **kw))
+        tasks["radon_hal"] = asyncio.create_task(run_radon_hal_async(file_path, **kw))
     elif run_radon:
         _mark_missing("radon", results)
 
@@ -185,6 +198,16 @@ async def _run_subprocess(
             )
         )
         # No _mark_missing for vulture — it degrades silently (returns empty list)
+
+    # Perflint: performance anti-pattern detection (optional)
+    if run_perflint and shutil.which("pylint"):
+        from tapps_mcp.tools.perflint import run_perflint_check_async
+
+        tasks["perflint"] = asyncio.create_task(
+            run_perflint_check_async(file_path, **kw)
+        )
+    elif run_perflint:
+        _mark_missing("perflint", results)
 
     # Gather all tasks with an overall safety timeout
     if tasks:
@@ -232,6 +255,7 @@ async def _run_direct(
     run_bandit: bool = True,
     run_radon: bool = True,
     run_vulture: bool = True,
+    run_perflint: bool = True,
     vulture_whitelist_patterns: list[str] | None = None,
 ) -> ParallelResults:
     """Run tools via direct library calls and sync subprocess in thread pool.
@@ -245,7 +269,7 @@ async def _run_direct(
     """
     from tapps_mcp.tools.bandit import run_bandit_check
     from tapps_mcp.tools.mypy import run_mypy_check
-    from tapps_mcp.tools.radon_direct import cc_direct, is_available, mi_direct
+    from tapps_mcp.tools.radon_direct import cc_direct, hal_direct, is_available, mi_direct
     from tapps_mcp.tools.ruff_direct import run_ruff_check_direct
 
     results = ParallelResults()
@@ -283,10 +307,14 @@ async def _run_direct(
             tasks["radon_mi"] = asyncio.create_task(
                 asyncio.to_thread(mi_direct, file_path),
             )
+            tasks["radon_hal"] = asyncio.create_task(
+                asyncio.to_thread(hal_direct, file_path),
+            )
         elif shutil.which("radon"):
             # Fall back to async subprocess if library not importable
             tasks["radon_cc"] = asyncio.create_task(run_radon_cc_async(file_path, **kw))
             tasks["radon_mi"] = asyncio.create_task(run_radon_mi_async(file_path, **kw))
+            tasks["radon_hal"] = asyncio.create_task(run_radon_hal_async(file_path, **kw))
             results.tool_errors["radon"] = "library_unavailable, using subprocess fallback"
         else:
             _mark_missing("radon", results)
@@ -301,6 +329,16 @@ async def _run_direct(
                 whitelist_patterns=vulture_whitelist_patterns,
             )
         )
+
+    # Perflint: performance anti-pattern detection (subprocess-based)
+    if run_perflint and shutil.which("pylint"):
+        from tapps_mcp.tools.perflint import run_perflint_check
+
+        tasks["perflint"] = asyncio.create_task(
+            asyncio.to_thread(run_perflint_check, file_path, cwd=cwd, timeout=timeout),
+        )
+    elif run_perflint:
+        _mark_missing("perflint", results)
 
     # Gather with safety timeout
     if tasks:

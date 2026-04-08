@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tapps-mcp"
-version = "2.3.0"
+version = "2.4.0"
 description = "MCP server providing deterministic code quality tools for AI coding assistants"
 readme = "README.md"
 license = "MIT"
@@ -47,6 +47,10 @@ dev = [
     "pre-commit>=4.5.1,<5",
     "types-PyYAML>=6.0.12",
     "playwright>=1.58.0,<2",
+]
+perf = [
+    "pylint>=3.0.0,<4",
+    "perflint>=0.8.0,<1",
 ]
 rag = [
     "faiss-cpu>=1.13.2,<2",

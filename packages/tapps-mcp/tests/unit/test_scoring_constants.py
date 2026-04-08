@@ -48,12 +48,28 @@ class TestConstants:
 
     def test_performance_penalty_map_keys(self):
         expected_keys = {
+            # AST heuristics
             "large_function",
             "very_large_function",
             "deep_nesting",
             "very_deep_nesting",
             "nested_loops",
             "expensive_comprehension",
+            # Halstead metrics
+            "halstead_high_volume",
+            "halstead_very_high_volume",
+            "halstead_high_difficulty",
+            "halstead_high_effort",
+            "halstead_high_bugs",
+            # Perflint anti-patterns
+            "perflint_loop_invariant",
+            "perflint_dotted_import_in_loop",
+            "perflint_unnecessary_list_cast",
+            "perflint_incorrect_dict_iterator",
+            "perflint_loop_global_usage",
+            "perflint_memoryview_over_bytes",
+            "perflint_use_tuple_over_list",
+            "perflint_use_comprehension",
         }
         assert set(PERFORMANCE_PENALTY_MAP.keys()) == expected_keys
 

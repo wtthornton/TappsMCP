@@ -116,7 +116,6 @@ using its own native capabilities (Write/Edit tools).
 
 - `tapps_init` / `tapps_upgrade` (pass `output_mode: "content_return"` to force)
 - `tapps_set_engagement_level`
-- `tapps_manage_experts` (add/scaffold)
 - `tapps_memory` (export)
 - `docs_config` (set action)
 - All `docs_generate_*` generators

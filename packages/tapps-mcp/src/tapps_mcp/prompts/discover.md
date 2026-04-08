@@ -6,9 +6,7 @@ Understand the TappsMCP server capabilities and the project's tech stack before 
 
 ## Allowed Tools
 
-- `tapps_session_start` - Initialize the session (server info, checkers, configuration, memory status).
-- `tapps_server_info` - Discover server version, available tools, installed checkers, and configuration.
-- `tapps_project_profile` - Detect project type, tech stack, CI, Docker, test frameworks, and get quality recommendations.
+- `tapps_session_start` - Initialize the session (server info, checkers, configuration, project context, memory status).
 
 ## Constraints
 
@@ -18,15 +16,13 @@ Understand the TappsMCP server capabilities and the project's tech stack before 
 
 ## Steps
 
-1. Call `tapps_session_start()` to initialize the session and get server info.
-2. Call `tapps_project_profile()` to detect the tech stack and get tailored recommendations.
-3. Note which checkers are installed (ruff, mypy, bandit, radon) - this affects scoring accuracy.
-4. Review quality recommendations from the project profile.
+1. Call `tapps_session_start()` to initialize the session and get server info and project context.
+2. Note which checkers are installed (ruff, mypy, bandit, radon, pylint+perflint) - this affects scoring accuracy.
+3. Review quality recommendations from the session start response.
 
 ## Exit Criteria
 
-- [ ] Server info retrieved - you know the available tools and installed checkers.
-- [ ] Project profile retrieved - you know the tech stack, project type, and recommendations.
+- [ ] Session started - you know the available tools, installed checkers, tech stack, and recommendations.
 - [ ] Findings recorded in TAPPS_HANDOFF.md.
 
 ## Handoff
@@ -38,4 +34,4 @@ Record in `docs/TAPPS_HANDOFF.md`:
 
 ## Next Stage
 
-**Research** - Look up library documentation and consult domain experts for the task at hand.
+**Research** - Look up library documentation for the task at hand.

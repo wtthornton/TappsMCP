@@ -26,6 +26,7 @@ _TOOL_SPECS: list[dict[str, str]] = [
     {"name": "bandit", "version_flag": "--version"},
     {"name": "radon", "version_flag": "--version"},
     {"name": "vulture", "version_flag": "--version"},
+    {"name": "pylint", "version_flag": "--version"},
     {"name": "pip-audit", "version_flag": "--version"},
 ]
 
@@ -48,9 +49,11 @@ def _install_hint(tool_name: str) -> str:
     ``uv tool install tapps-mcp --with <tool>``.  Otherwise falls back to
     ``pip install <tool>``.
     """
+    # pylint needs perflint plugin for performance linting
+    pkg = "pylint perflint" if tool_name == "pylint" else tool_name
     if _is_uv_tool_env():
-        return f"uv tool install tapps-mcp --with {tool_name}"
-    return f"pip install {tool_name}"
+        return f"uv tool install tapps-mcp --with {pkg}"
+    return f"pip install {pkg}"
 
 # Per-tool timeout overrides for version checks (seconds).
 # mypy can be slow on first run in cold environments.

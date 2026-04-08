@@ -19,7 +19,7 @@ from tapps_mcp import __version__
 EXPECTED_SECTIONS: list[str] = [
     "Essential tools (always-on workflow)",
     "tapps_session_start vs tapps_init",
-    "Domain hints for tapps_consult_expert",
+    "Domain hints for tapps_lookup_docs",
     "Recommended workflow",
     "Checklist task types",
     "Memory systems",

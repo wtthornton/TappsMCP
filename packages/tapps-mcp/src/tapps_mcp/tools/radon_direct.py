@@ -1,7 +1,8 @@
 """Direct radon library analysis - no subprocess required.
 
-Uses ``radon.complexity.cc_visit`` and ``radon.metrics.mi_visit`` for
-in-process cyclomatic complexity and maintainability index analysis.
+Uses ``radon.complexity.cc_visit``, ``radon.metrics.mi_visit``, and
+``radon.metrics.h_visit`` for in-process cyclomatic complexity,
+maintainability index, and Halstead metrics analysis.
 This module is the primary path for ``mode="direct"`` scoring.
 """
 
@@ -94,3 +95,43 @@ def mi_direct(file_path: str) -> float:
     except Exception as exc:
         logger.warning("radon_mi_direct_failed", file=file_path, error=str(exc))
         return 50.0
+
+
+def hal_direct(file_path: str) -> list[dict[str, object]]:
+    """Compute Halstead metrics using radon as a library.
+
+    Returns per-function Halstead report dicts matching the structure
+    produced by :func:`tapps_mcp.tools.radon.parse_radon_hal_json`.
+    """
+    if not is_available():
+        logger.debug("radon_library_unavailable", purpose="hal")
+        return []
+    try:
+        from radon.metrics import h_visit
+
+        code = _read_source(file_path)
+        if code is None:
+            return []
+        hal_result = h_visit(code)
+        # h_visit returns Halstead(total_report, [("func_name", report), ...])
+        per_func = hal_result[1] if len(hal_result) > 1 else []
+        entries: list[dict[str, object]] = []
+        for func in per_func:
+            if isinstance(func, (list, tuple)) and len(func) >= 2:
+                name, report = str(func[0]), func[1]
+                entries.append(
+                    {
+                        "name": name,
+                        "volume": float(getattr(report, "volume", 0)),
+                        "difficulty": float(getattr(report, "difficulty", 0)),
+                        "effort": float(getattr(report, "effort", 0)),
+                        "bugs": float(getattr(report, "bugs", 0)),
+                        "vocabulary": int(getattr(report, "vocabulary", 0)),
+                        "length": int(getattr(report, "length", 0)),
+                    }
+                )
+        logger.info("radon_hal_direct_success", file=file_path, functions=len(entries))
+        return entries
+    except Exception as exc:
+        logger.warning("radon_hal_direct_failed", file=file_path, error=str(exc))
+        return []

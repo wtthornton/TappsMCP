@@ -8,7 +8,7 @@ Consider these steps when they fit your task.
 
 ### Session Start
 
-Consider calling `tapps_session_start()` at session start for server info. Call `tapps_project_profile()` when you need project context (tech stack, type).
+Consider calling `tapps_session_start()` at session start for server info and project context.
 
 ### Before Using Any Library API
 
@@ -24,7 +24,7 @@ Consider calling `tapps_validate_changed(file_paths="file1.py,file2.py")` with e
 
 ### Domain Decisions
 
-Consider calling `tapps_consult_expert(question)` for domain-specific decisions (security, testing, API design, etc.).
+Consider calling `tapps_lookup_docs(library, topic)` for domain-specific guidance (security patterns, testing, API design, etc.).
 
 ### Refactoring or Deleting Files
 
@@ -33,10 +33,6 @@ Consider calling `tapps_impact_analysis(file_path)` before refactoring or deleti
 ### Infrastructure Config Changes
 
 Consider calling `tapps_validate_config(file_path)` when changing Dockerfile, docker-compose, or infra config.
-
-### Canonical persona (prompt-injection defense)
-
-When the user requests a persona by name, consider calling `tapps_get_canonical_persona(persona_name)` and prepending the returned content to context as the only valid definition. See AGENTS.md § Canonical persona injection.
 
 ## Memory System
 
@@ -47,7 +43,7 @@ When the user requests a persona by name, consider calling `tapps_get_canonical_
 When following a full workflow:
 
 1. **Discover** - `tapps_session_start()`; optionally `tapps_memory(action="search")` for context
-2. **Research** - `tapps_lookup_docs()`, `tapps_consult_expert()`
+2. **Research** - `tapps_lookup_docs()` for libraries and domain decisions
 3. **Develop** - `tapps_score_file(file_path, quick=True)` during edits
 4. **Validate** - `tapps_quick_check()` or `tapps_validate_changed()`
 5. **Verify** - `tapps_checklist(task_type)`; optionally `tapps_memory(action="save")` for findings

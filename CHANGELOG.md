@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-04-08
+
+### Added
+
+- **Halstead metrics integration** — radon's Halstead analysis (volume, difficulty, effort, predicted bugs) now feeds the performance scoring category, providing per-function complexity signals beyond cyclomatic complexity. Uses existing radon dependency with dual-mode execution (subprocess + direct library fallback).
+- **Perflint anti-pattern detection** — new optional pylint plugin integration catches 11 concrete performance anti-patterns: loop-invariant statements, unnecessary list casts, incorrect dictionary iterators, dotted imports in loops, global variable usage in loops, and more. Findings are capped at 3.0 penalty to prevent overwhelming the score.
+- **`perf` optional dependency group** — `pip install tapps-mcp[perf]` adds pylint + perflint for full performance scoring.
+- **`perflint` feature flag** — `tapps_core.config.feature_flags.perflint` detects perflint availability.
+- **Pylint tool detection** — `tapps_doctor` and `tapps_session_start` now probe for pylint and report its availability alongside other checkers.
+- **13 new performance penalty entries** — `PERFORMANCE_PENALTY_MAP` extended with Halstead thresholds (`halstead_high_volume`, `halstead_very_high_volume`, `halstead_high_difficulty`, `halstead_high_effort`, `halstead_high_bugs`) and perflint labels (`perflint_loop_invariant`, `perflint_dotted_import_in_loop`, `perflint_unnecessary_list_cast`, `perflint_incorrect_dict_iterator`, `perflint_loop_global_usage`, `perflint_memoryview_over_bytes`, `perflint_use_tuple_over_list`, `perflint_use_comprehension`).
+- **13 new actionable suggestions** — context-specific improvement guidance for each new issue type.
+
+### Changed
+
+- **Performance scoring uses three signals** — `_score_performance_category` now combines AST heuristics + Halstead metrics + perflint findings (all additive, clamped to 0-10). Details include source breakdown: `ast_issues`, `halstead_issues`, `perflint_issues`.
+- **`ParallelResults` extended** — new `radon_hal` and `perflint` fields for Halstead and perflint data.
+- **`run_all_tools()` extended** — new `run_perflint` parameter; Halstead task added alongside existing radon CC/MI tasks.
+- Version bump: tapps-core 2.3.0 → 2.4.0, tapps-mcp 2.3.0 → 2.4.0, docs-mcp 2.3.0 → 2.4.0
+
 ## [2.3.0] - 2026-04-08
 
 ### Fixed

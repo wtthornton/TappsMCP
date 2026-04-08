@@ -137,6 +137,11 @@ async def tapps_score_file(
     performance, structure, devex). Skipping means quality issues go
     undetected and the quality gate will likely fail.
 
+    Performance scoring uses three data sources: AST heuristics (always),
+    radon Halstead metrics (when radon available), and perflint anti-patterns
+    (when pylint+perflint installed). Install ``tapps-mcp[perf]`` for full
+    performance analysis.
+
     Supports Python (.py), TypeScript/JavaScript (.ts, .tsx, .js, .jsx),
     Go (.go), and Rust (.rs) files.
 

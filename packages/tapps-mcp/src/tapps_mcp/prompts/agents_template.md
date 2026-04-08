@@ -16,7 +16,6 @@ TappsMCP is an MCP server that provides a comprehensive quality toolset for your
 - **Circular dependency detection** (import graph analysis, cycle detection, coupling metrics)
 - **Documentation lookup** (up-to-date library docs via Context7 + LlmsTxt fallback and cache)
 - **Config validation** (Dockerfile, docker-compose, WebSocket/MQTT/InfluxDB best practices)
-- **Domain experts** (17 built-in experts with RAG-backed answers, optional vector search)
 - **Project context** (project type detection, tech stack, impact analysis)
 - **Shared memory** (persistent cross-session knowledge with decay, contradiction detection, and ranked retrieval)
 - **Session management** (persist decisions, constraints, and notes within a session; promote to memory for cross-session persistence)
@@ -36,19 +35,15 @@ You only see these tools when the host has started the TappsMCP server and attac
 
 | Tool | When to use it |
 |------|----------------|
-| **tapps_session_start** | **FIRST call in every session** - returns server info (version, checkers, configuration) only. Call **tapps_project_profile** when you need project context. |
+| **tapps_session_start** | **FIRST call in every session** - returns server info (version, checkers, configuration) and project context. |
 | **tapps_server_info** | Lightweight discovery: version, tools, checkers. Prefer **tapps_session_start** as FIRST call (adds memory status, auto-GC, session capture). Use tapps_server_info only when you need discovery without session init. |
 | **tapps_score_file** | When **editing or reviewing** a Python file. Use `quick=True` during edit-lint-fix loops; use full (default) **before declaring work complete**. |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
 | **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
 | **tapps_quality_gate** | **Before declaring work complete** - ensures the file passes the configured quality preset. Do not consider work done until this passes (or the user accepts the risk). |
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - auto-detects changed files via git diff and runs score + gate on each. **Default is quick mode** (ruff-only, under ~10s). Includes impact analysis by default. Pass `quick=false` for full validation. |
-| **tapps_lookup_docs** | **Before writing code** that uses an external library - use the returned docs to avoid hallucinated APIs. |
+| **tapps_lookup_docs** | **Before writing code** that uses an external library - use the returned docs to avoid hallucinated APIs. Also use for domain-specific guidance (e.g. security patterns, testing strategies). |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
-| **tapps_consult_expert** | When making **domain-specific decisions** (security, testing, APIs, database, etc.) and you want authoritative, RAG-backed guidance. Pass `domain` when context makes it obvious (e.g. editing a test file -> `domain="testing-strategies"`). |
-| **tapps_research** | When you need **combined expert + docs** in one call - consults the domain expert, then auto-supplements with Context7 documentation when RAG is empty or confidence is low. Saves a round-trip vs calling `tapps_consult_expert` + `tapps_lookup_docs` separately. |
-| **tapps_list_experts** | When you need to see **which expert domains exist** before calling `tapps_consult_expert`. |
-| **tapps_project_profile** | Call **on demand** when you need project context. Returns project type, tech stack, CI/Docker/tests, recommendations. Session start does NOT include profile—call this when you need those details. |
 | **tapps_memory** | **At session start** - search or list past decisions with `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")`. **Before session end** - save learnings with `tapps_memory(action="save", key="...", value="...", tier="...", tags=[...])`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |
 | **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. Use `action="promote"` to promote a session note to persistent cross-session memory. |
 | **tapps_impact_analysis** | Before **modifying a file's public API** - shows what depends on it and what could break. |
@@ -75,9 +70,9 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **Duration** | Fast (~1s, server info only) | Full run: 10-35+ seconds |
 | **Purpose** | Load server info (version, checkers, config) into context | Create files (AGENTS.md, TECH_STACK.md, platform rules), optionally warm cache/RAG |
 | **Side effects** | None (read-only) | Writes files, warms caches |
-| **Typical flow** | Call at session start, then work; call **tapps_project_profile** when you need project context | Call once to bootstrap, or `dry_run: true` to preview |
+| **Typical flow** | Call at session start, then work | Call once to bootstrap, or `dry_run: true` to preview |
 
-**Session start** -> `tapps_session_start`. Use this as the first call in every session. Call **tapps_project_profile** when you need project type, tech stack, or recommendations.
+**Session start** -> `tapps_session_start`. Use this as the first call in every session. Returns server info and project context.
 
 **Pipeline/bootstrap** -> `tapps_init`. Use when you need to set up TappsMCP in a project (AGENTS.md, TECH_STACK.md, platform rules) or upgrade existing files.
 
@@ -93,35 +88,30 @@ Use this when writing project-specific tool priority docs or integrating TappsMC
 
 | Contract | Detail |
 |----------|--------|
-| **tapps_session_start** | Returns server info (version, checkers, config) only. Does **not** include project profile. Response includes `project_profile: null` and `recommended_next`; call **tapps_project_profile** when you need tech stack, type, or recommendations. |
+| **tapps_session_start** | Returns server info (version, checkers, config) and project context. |
 | **tapps_validate_changed** | Default `quick=true`: runs **score + quality gate** on each changed file; **security scan is not run**. To include security: pass `quick=false` or `security_depth='full'`. |
 | **tapps_quick_check** | Single tool; **no `quick` parameter**. Always runs quick score + gate + basic security in one call. For per-file "quick" scoring with a `quick` flag, use **tapps_score_file(file_path, quick=True)** instead. |
-| **tapps_research** | Single call for expert + docs. Use instead of **tapps_consult_expert** + **tapps_lookup_docs** when you need both domain guidance and library documentation. |
+| **tapps_lookup_docs** | Primary tool for both library documentation and domain-specific guidance. Returns structured docs for libraries and supports topic queries for patterns, best practices, and design guidance. |
 
 ---
 
-## Domain hints for tapps_consult_expert
+## Using tapps_lookup_docs for domain guidance
 
-Pass the `domain` parameter when the context clearly implies a domain. This improves routing accuracy and avoids auto-detection mistakes.
+`tapps_lookup_docs` is the primary tool for both library documentation and domain-specific guidance. Pass a `library` name for API docs, or use `topic` to query for patterns and best practices.
 
-| Context | domain value |
+| Context | Example call |
 |---------|--------------|
-| Editing test files, conftest.py, pytest config | `testing-strategies` |
-| Security-sensitive code, auth, validation | `security` |
-| API routes, FastAPI/Flask endpoints | `api-design-integration` |
-| Database models, migrations, queries | `database-data-management` |
-| Dockerfile, docker-compose, k8s manifests | `cloud-infrastructure` |
-| CI/CD, workflows, build config | `development-workflow` |
-| Code quality, linting, type hints | `code-quality-analysis` |
-| Architecture decisions, patterns | `software-architecture` |
-
-When in doubt, omit `domain` to let auto-detection from the question text choose.
+| Using an external library | `tapps_lookup_docs(library="fastapi", topic="dependency injection")` |
+| Testing patterns | `tapps_lookup_docs(library="pytest", topic="fixtures and parametrize")` |
+| Security patterns | `tapps_lookup_docs(library="python-security", topic="input validation")` |
+| API design | `tapps_lookup_docs(library="fastapi", topic="routing best practices")` |
+| Database patterns | `tapps_lookup_docs(library="sqlalchemy", topic="session management")` |
 
 ---
 
 ## Recommended workflow
 
-1. **Session start:** Call `tapps_session_start` (server info only). Call `tapps_project_profile` when you need project context (tech stack, type, recommendations). Optionally call `tapps_list_experts` if you may need experts.
+1. **Session start:** Call `tapps_session_start` (returns server info and project context).
 2. **Check project memory:** Call `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")` to recall past decisions and project context from previous sessions.
 3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
 4. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
@@ -131,7 +121,7 @@ When in doubt, omit `domain` to let auto-detection from the question text choose
    - Call `tapps_validate_changed()` to score + gate on all changed files (default quick mode). Pass `security_depth='full'` or `quick=false` to include security scan.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-8. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For expert + docs in one call**, use `tapps_research(question, ...)` instead of calling `tapps_consult_expert` and `tapps_lookup_docs` separately. For library-specific domain questions, `tapps_research` returns both expert guidance and documentation.
+8. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
 
@@ -267,7 +257,7 @@ in the response with the file contents and instructions for you to apply.
 4. Follow `verification_steps` after all files are written
 5. **Never modify the content** — write it exactly as provided
 
-**Tools that support content-return:** `tapps_init`, `tapps_upgrade`, `tapps_set_engagement_level`, `tapps_manage_experts`, `tapps_memory` (export), `docs_config`, and all `docs_generate_*` generators.
+**Tools that support content-return:** `tapps_init`, `tapps_upgrade`, `tapps_set_engagement_level`, `tapps_memory` (export), `docs_config`, and all `docs_generate_*` generators.
 
 **Force content-return:** Pass `output_mode: "content_return"` to `tapps_init` or `tapps_upgrade`.
 

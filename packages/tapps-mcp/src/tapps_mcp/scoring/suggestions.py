@@ -7,6 +7,10 @@ from __future__ import annotations
 
 from tapps_mcp.scoring.constants import (
     DEEP_NESTING_THRESHOLD,
+    HALSTEAD_HIGH_BUGS,
+    HALSTEAD_HIGH_DIFFICULTY,
+    HALSTEAD_HIGH_VOLUME,
+    HALSTEAD_VERY_HIGH_VOLUME,
     LARGE_FUNCTION_LINES,
     VERY_DEEP_NESTING_THRESHOLD,
     VERY_LARGE_FUNCTION_LINES,
@@ -123,6 +127,51 @@ _PERFORMANCE_SUGGESTIONS: dict[str, str] = {
     ),
     "expensive_comprehension": (
         "List comprehension with many function calls. Consider a plain loop for clarity."
+    ),
+    # Halstead metrics
+    "halstead_high_volume": (
+        f"Function has high Halstead volume (>{HALSTEAD_HIGH_VOLUME:.0f}). "
+        "Break into smaller functions."
+    ),
+    "halstead_very_high_volume": (
+        f"Function has very high Halstead volume (>{HALSTEAD_VERY_HIGH_VOLUME:.0f}). "
+        "Significant decomposition needed."
+    ),
+    "halstead_high_difficulty": (
+        f"High Halstead difficulty (>{HALSTEAD_HIGH_DIFFICULTY:.0f}). "
+        "Simplify operand usage and reduce distinct operators."
+    ),
+    "halstead_high_effort": (
+        "High Halstead effort metric. Function requires significant cognitive load."
+    ),
+    "halstead_high_bugs": (
+        f"Halstead predicted bug count >{HALSTEAD_HIGH_BUGS:.1f}. "
+        "This function is complex enough to likely harbor bugs."
+    ),
+    # Perflint anti-patterns
+    "perflint_loop_invariant": (
+        "Loop-invariant statement detected. Move it outside the loop."
+    ),
+    "perflint_dotted_import_in_loop": (
+        "Dotted import inside loop. Cache the import outside the loop."
+    ),
+    "perflint_unnecessary_list_cast": (
+        "Unnecessary list() cast. The iterable can be used directly."
+    ),
+    "perflint_incorrect_dict_iterator": (
+        "Incorrect dictionary iterator. Use .items() or .values() as appropriate."
+    ),
+    "perflint_loop_global_usage": (
+        "Global variable used in loop. Cache in a local variable."
+    ),
+    "perflint_memoryview_over_bytes": (
+        "Consider memoryview over bytes for better loop performance."
+    ),
+    "perflint_use_tuple_over_list": (
+        "Use tuple instead of list for immutable sequences."
+    ),
+    "perflint_use_comprehension": (
+        "Use list/dict comprehension instead of manual loop."
     ),
 }
 

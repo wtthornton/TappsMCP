@@ -31,7 +31,7 @@ from tapps_mcp.prompts.prompt_loader import (
 # Allowlist of packages that _run_server_verification may pip-install.
 # install_hints come from hardcoded CHECKER_SPECS in tool_detection.py;
 # this allowlist is defence-in-depth against unexpected hint values.
-_ALLOWED_CHECKER_PACKAGES = {"ruff", "mypy", "bandit", "radon", "vulture", "pip-audit"}
+_ALLOWED_CHECKER_PACKAGES = {"ruff", "mypy", "bandit", "radon", "vulture", "pip-audit", "pylint", "perflint"}
 
 
 class _SafeWriter(Protocol):

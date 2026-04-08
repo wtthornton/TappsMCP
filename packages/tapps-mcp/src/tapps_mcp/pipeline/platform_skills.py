@@ -126,24 +126,21 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 name: tapps-research
 user-invocable: true
 description: >-
-  Research a technical question using domain experts and library docs.
-  Combines expert consultation with docs lookup for comprehensive answers.
-allowed-tools: >-
-  mcp__tapps-mcp__tapps_research
-  mcp__tapps-mcp__tapps_consult_expert
-  mcp__tapps-mcp__tapps_lookup_docs
-argument-hint: "[question]"
+  Look up library documentation and research best practices
+  for the technologies used in this project.
+allowed-tools: mcp__tapps-mcp__tapps_lookup_docs
+argument-hint: "[library] [topic]"
 context: fork
 model: claude-sonnet-4-6
 ---
 
-Research a technical question using TappsMCP:
+Look up library documentation using TappsMCP:
 
-1. Call `mcp__tapps-mcp__tapps_research` with the question for expert + docs
-2. If confidence < 0.7, call `mcp__tapps-mcp__tapps_lookup_docs` for the library
-3. If multi-domain, call `mcp__tapps-mcp__tapps_consult_expert` per domain
-4. Synthesize findings into a clear, actionable answer
-5. Include confidence scores and suggest follow-up research if needed
+1. Call `mcp__tapps-mcp__tapps_lookup_docs` with the library name and topic
+2. If coverage is incomplete, call `mcp__tapps-mcp__tapps_lookup_docs` with a more specific topic
+3. Synthesize findings into a clear, actionable answer with code examples
+4. Include API signatures and usage patterns from the documentation
+5. Suggest follow-up lookups if additional coverage is needed
 """,
     "tapps-security": """\
 ---
@@ -151,12 +148,11 @@ name: tapps-security
 user-invocable: true
 model: claude-sonnet-4-6
 description: >-
-  Run a comprehensive security audit including vulnerability scanning,
-  dependency CVE checks, and expert security consultation.
+  Run a comprehensive security audit including vulnerability scanning
+  and dependency CVE checks.
 allowed-tools: >-
   mcp__tapps-mcp__tapps_security_scan
   mcp__tapps-mcp__tapps_dependency_scan
-  mcp__tapps-mcp__tapps_consult_expert
 argument-hint: "[file-path]"
 ---
 
@@ -164,9 +160,8 @@ Run a comprehensive security audit using TappsMCP:
 
 1. Call `mcp__tapps-mcp__tapps_security_scan` on the target file to detect vulnerabilities
 2. Call `mcp__tapps-mcp__tapps_dependency_scan` to check for known CVEs in dependencies
-3. Call `mcp__tapps-mcp__tapps_consult_expert` with domain "security" for additional guidance
-4. Group all findings by severity (critical, high, medium, low)
-5. Suggest a prioritized fix order starting with the highest-severity issues
+3. Group all findings by severity (critical, high, medium, low)
+4. Suggest a prioritized fix order starting with the highest-severity issues
 """,
     "tapps-memory": """\
 ---
@@ -235,14 +230,10 @@ provide the full tool reference from this skill.
 | Tool | When to use it |
 |------|----------------|
 | **tapps_lookup_docs** | Before writing code using an external library |
-| **tapps_consult_expert** | Domain-specific decisions (security, testing, APIs, etc.) |
-| **tapps_research** | Combined expert + docs in one call |
-| **tapps_list_experts** | See which expert domains exist |
 
 ## Project & memory
 | Tool | When to use it |
 |------|----------------|
-| **tapps_project_profile** | When you need project context (tech stack, type) |
 | **tapps_memory** | Session start: search past decisions. Session end: save learnings |
 | **tapps_session_notes** | Key decisions during session - promote to memory for persistence |
 
@@ -465,41 +456,37 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 ---
 name: tapps-research
 description: >-
-  Research a technical question using domain experts and library documentation.
-  Combines expert consultation with docs lookup for comprehensive answers.
+  Look up library documentation and research best practices
+  for the technologies used in this project.
 mcp_tools:
-  - tapps_research
-  - tapps_consult_expert
   - tapps_lookup_docs
 ---
 
-Research a technical question using TappsMCP:
+Look up library documentation using TappsMCP:
 
-1. Call `tapps_research` with the question to get expert + docs in one call
-2. If confidence is below 0.7, call `tapps_lookup_docs` directly for the relevant library
-3. If the question spans multiple domains, call `tapps_consult_expert` per domain
-4. Synthesize findings into a clear, actionable answer
-5. Include confidence scores and suggest follow-up research if needed
+1. Call `tapps_lookup_docs` with the library name and topic
+2. If coverage is incomplete, call `tapps_lookup_docs` with a more specific topic
+3. Synthesize findings into a clear, actionable answer with code examples
+4. Include API signatures and usage patterns from the documentation
+5. Suggest follow-up lookups if additional coverage is needed
 """,
     "tapps-security": """\
 ---
 name: tapps-security
 description: >-
-  Run a comprehensive security audit on a Python file including vulnerability scanning,
-  dependency CVE checks, and expert security consultation.
+  Run a comprehensive security audit on a Python file including vulnerability scanning
+  and dependency CVE checks.
 mcp_tools:
   - tapps_security_scan
   - tapps_dependency_scan
-  - tapps_consult_expert
 ---
 
 Run a comprehensive security audit using TappsMCP:
 
 1. Call `tapps_security_scan` on the target file to detect vulnerabilities
 2. Call `tapps_dependency_scan` to check for known CVEs in dependencies
-3. Call `tapps_consult_expert` with domain "security" for additional guidance
-4. Group all findings by severity (critical, high, medium, low)
-5. Suggest a prioritized fix order starting with the highest-severity issues
+3. Group all findings by severity (critical, high, medium, low)
+4. Suggest a prioritized fix order starting with the highest-severity issues
 """,
     "tapps-memory": """\
 ---

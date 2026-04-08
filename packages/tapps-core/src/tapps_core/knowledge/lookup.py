@@ -433,7 +433,7 @@ class LookupEngine:
         if _is_toc_only(safe_content):
             toc_msg = (
                 "Generic table-of-contents only; consider "
-                "tapps_consult_expert for operational questions."
+                "tapps_lookup_docs with a more specific topic for operational questions."
             )
             toc_warning = f"{toc_warning} {toc_msg}" if toc_warning else toc_msg
             logger.info("toc_only_content", library=lib_clean, topic=topic)

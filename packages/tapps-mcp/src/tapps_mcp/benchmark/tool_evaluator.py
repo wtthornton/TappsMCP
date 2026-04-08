@@ -177,16 +177,13 @@ _ALL_TOOL_NAMES = [
     "tapps_quick_check",
     "tapps_security_scan",
     "tapps_validate_changed",
-    "tapps_consult_expert",
     "tapps_lookup_docs",
     "tapps_checklist",
-    "tapps_project_profile",
     "tapps_impact_analysis",
     "tapps_dead_code",
     "tapps_dependency_scan",
     "tapps_dependency_graph",
     "tapps_memory",
-    "tapps_research",
 ]
 
 

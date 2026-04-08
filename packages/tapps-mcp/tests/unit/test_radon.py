@@ -8,13 +8,17 @@ import pytest
 from tapps_mcp.tools.radon import (
     _is_radon_importable,
     _radon_cc_direct,
+    _radon_hal_direct,
     _radon_mi_direct,
     calculate_complexity_score,
     calculate_maintainability_score,
     parse_radon_cc_json,
+    parse_radon_hal_json,
     parse_radon_mi_json,
     run_radon_cc,
     run_radon_cc_async,
+    run_radon_hal,
+    run_radon_hal_async,
     run_radon_mi,
     run_radon_mi_async,
 )
@@ -287,3 +291,117 @@ class TestRadonDirectFallback:
         # Second call should use cached value
         result2 = _is_radon_importable()
         assert result == result2
+
+
+# ---------------------------------------------------------------------------
+# Halstead metrics tests
+# ---------------------------------------------------------------------------
+
+SAMPLE_HAL_JSON = json.dumps(
+    {
+        "test.py": {
+            "total": [11, 15, 51.89, 2.86, 148.26, 8.24, 0.017],
+            "functions": [
+                ["fibonacci", {"volume": 23.26, "difficulty": 1.5, "effort": 34.90, "bugs": 0.008, "vocabulary": 6, "length": 9}],
+                ["complex_func", {"volume": 2500.0, "difficulty": 35.0, "effort": 120000.0, "bugs": 1.5, "vocabulary": 20, "length": 150}],
+            ],
+        }
+    }
+)
+
+
+class TestParseRadonHalJson:
+    def test_valid_output(self):
+        entries = parse_radon_hal_json(SAMPLE_HAL_JSON)
+        assert len(entries) == 2
+        assert entries[0]["name"] == "fibonacci"
+        assert abs(float(entries[0]["volume"]) - 23.26) < 0.01
+
+    def test_complex_function_values(self):
+        entries = parse_radon_hal_json(SAMPLE_HAL_JSON)
+        assert abs(float(entries[1]["volume"]) - 2500.0) < 0.01
+        assert abs(float(entries[1]["difficulty"]) - 35.0) < 0.01
+        assert abs(float(entries[1]["effort"]) - 120000.0) < 0.01
+        assert abs(float(entries[1]["bugs"]) - 1.5) < 0.01
+
+    def test_empty_string(self):
+        assert parse_radon_hal_json("") == []
+
+    def test_whitespace(self):
+        assert parse_radon_hal_json("   ") == []
+
+    def test_invalid_json(self):
+        assert parse_radon_hal_json("not json") == []
+
+    def test_empty_dict(self):
+        assert parse_radon_hal_json("{}") == []
+
+    def test_no_functions_key(self):
+        raw = json.dumps({"test.py": {"total": [1, 2, 3]}})
+        entries = parse_radon_hal_json(raw)
+        assert entries == []
+
+    def test_non_dict_content_skipped(self):
+        raw = json.dumps({"test.py": "not a dict"})
+        entries = parse_radon_hal_json(raw)
+        assert entries == []
+
+
+class TestRunRadonHal:
+    @patch("tapps_mcp.tools.radon.run_command")
+    def test_success(self, mock_cmd):
+        mock_cmd.return_value = CommandResult(returncode=0, stdout=SAMPLE_HAL_JSON, stderr="")
+        entries = run_radon_hal("test.py")
+        assert len(entries) == 2
+
+    @patch("tapps_mcp.tools.radon.run_command")
+    def test_timeout(self, mock_cmd):
+        mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
+        entries = run_radon_hal("test.py")
+        assert entries == []
+
+    @patch("tapps_mcp.tools.radon.run_command")
+    def test_empty_output(self, mock_cmd):
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
+        entries = run_radon_hal("test.py")
+        assert entries == []
+
+
+class TestRadonHalAsyncFallback:
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
+    @patch("tapps_mcp.tools.radon._radon_hal_direct")
+    async def test_falls_back_on_empty_output(self, mock_direct, mock_cmd):
+        mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
+        mock_direct.return_value = [{"name": "f", "volume": 10.0}]
+        result = await run_radon_hal_async("test.py")
+        mock_direct.assert_called_once_with("test.py")
+        assert len(result) == 1
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
+    @patch("tapps_mcp.tools.radon._radon_hal_direct")
+    async def test_falls_back_on_timeout(self, mock_direct, mock_cmd):
+        mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
+        mock_direct.return_value = []
+        result = await run_radon_hal_async("test.py")
+        mock_direct.assert_called_once()
+        assert result == []
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.tools.radon.run_command_async", new_callable=AsyncMock)
+    async def test_uses_subprocess_when_available(self, mock_cmd):
+        mock_cmd.return_value = CommandResult(returncode=0, stdout=SAMPLE_HAL_JSON, stderr="")
+        result = await run_radon_hal_async("test.py")
+        assert len(result) == 2
+
+
+class TestRadonHalDirectFallback:
+    @patch("tapps_mcp.tools.radon._is_radon_importable", return_value=False)
+    def test_returns_empty_when_unavailable(self, _mock):
+        assert _radon_hal_direct("test.py") == []
+
+    @patch("tapps_mcp.tools.radon._is_radon_importable", return_value=True)
+    @patch("tapps_mcp.tools.radon._read_source", return_value=None)
+    def test_returns_empty_on_read_failure(self, _mock_read, _mock_avail):
+        assert _radon_hal_direct("missing.py") == []

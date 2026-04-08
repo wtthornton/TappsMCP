@@ -508,7 +508,7 @@ def _build_builtin_tasks() -> list[ToolTask]:
                     "        return b''  # S3 download\n"
                 ),
             },
-            expected_tools=["tapps_consult_expert", "tapps_score_file"],
+            expected_tools=["tapps_lookup_docs", "tapps_score_file"],
             verification=ToolTaskVerification(
                 check_type="file_content",
                 expected_file="storage.py",
@@ -535,7 +535,7 @@ def _build_builtin_tasks() -> list[ToolTask]:
                     "    return {'db_url': db_url}\n"
                 ),
             },
-            expected_tools=["tapps_score_file", "tapps_consult_expert"],
+            expected_tools=["tapps_score_file", "tapps_lookup_docs"],
             verification=ToolTaskVerification(
                 check_type="file_content",
                 expected_file="service.py",

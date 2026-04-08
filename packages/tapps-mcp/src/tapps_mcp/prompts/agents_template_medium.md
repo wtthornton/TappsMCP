@@ -28,9 +28,9 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 | **Duration** | Fast (~1s, server info only) | Full run: 10-35+ seconds |
 | **Purpose** | Load server info (version, checkers, config) into context | Create files (AGENTS.md, TECH_STACK.md, platform rules), optionally warm cache/RAG |
 | **Side effects** | None (read-only) | Writes files, warms caches |
-| **Typical flow** | Call at session start, then work; call **tapps_project_profile** when you need project context | Call once to bootstrap, or `dry_run: true` to preview |
+| **Typical flow** | Call at session start, then work | Call once to bootstrap, or `dry_run: true` to preview |
 
-**Session start** -> `tapps_session_start`. Use this as the first call in every session. Call **tapps_project_profile** when you need project type, tech stack, or recommendations.
+**Session start** -> `tapps_session_start`. Use this as the first call in every session. Returns server info and project context.
 
 **Pipeline/bootstrap** -> `tapps_init`. Use when you need to set up TappsMCP in a project (AGENTS.md, TECH_STACK.md, platform rules) or upgrade existing files.
 
@@ -38,36 +38,27 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 
 **Lighter tapps_init options** (for timeout-prone MCP clients): Use `dry_run: true` to preview (~2-5s); use `verify_only: true` for a quick server/checker check (~1-3s); or set `warm_cache_from_tech_stack: false` and `warm_expert_rag_from_tech_stack: false` for a faster init without cache warming.
 
-**Tool contract:** Session start returns server info only (no project profile—call tapps_project_profile when needed). tapps_validate_changed default = score + gate only; use `security_depth='full'` or `quick=false` for security. tapps_quick_check has no `quick` parameter (use tapps_score_file(quick=True) for that).
+**Tool contract:** Session start returns server info and project context. tapps_validate_changed default = score + gate only; use `security_depth='full'` or `quick=false` for security. tapps_quick_check has no `quick` parameter (use tapps_score_file(quick=True) for that).
 
 ---
 
-## Domain hints for tapps_consult_expert
+## Using tapps_lookup_docs for domain guidance
 
-Pass the `domain` parameter when the context clearly implies a domain. This improves routing accuracy and avoids auto-detection mistakes.
+`tapps_lookup_docs` is the primary tool for both library documentation and domain-specific guidance. Pass a `library` name for API docs, or use `topic` to query for patterns and best practices.
 
-| Context | domain value |
+| Context | Example call |
 |---------|--------------|
-| Editing test files, conftest.py, pytest config | `testing-strategies` |
-| Security-sensitive code, auth, validation | `security` |
-| API routes, FastAPI/Flask endpoints | `api-design-integration` |
-| Database models, migrations, queries | `database-data-management` |
-| Dockerfile, docker-compose, k8s manifests | `cloud-infrastructure` |
-| CI/CD, workflows, build config | `development-workflow` |
-| Code quality, linting, type hints | `code-quality-analysis` |
-| Architecture decisions, patterns | `software-architecture` |
-
-When in doubt, omit `domain` to let auto-detection from the question text choose.
-
-### Business experts
-
-Projects can define custom business-domain experts in `.tapps-mcp/experts.yaml`. Use `tapps_manage_experts(action="list")` to see them. Pass business domain names to `tapps_consult_expert(domain="...")` like built-in domains.
+| Using an external library | `tapps_lookup_docs(library="fastapi", topic="dependency injection")` |
+| Testing patterns | `tapps_lookup_docs(library="pytest", topic="fixtures and parametrize")` |
+| Security patterns | `tapps_lookup_docs(library="python-security", topic="input validation")` |
+| API design | `tapps_lookup_docs(library="fastapi", topic="routing best practices")` |
+| Database patterns | `tapps_lookup_docs(library="sqlalchemy", topic="session management")` |
 
 ---
 
 ## Recommended workflow
 
-1. **Session start:** Call `tapps_session_start` (server info only). Call `tapps_project_profile` when you need project context (tech stack, type, recommendations). Optionally call `tapps_list_experts` if you may need experts.
+1. **Session start:** Call `tapps_session_start` (returns server info and project context).
 2. **Check project memory:** Consider calling `tapps_memory(action="search", query="...")` to recall past decisions and project context.
 3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
 3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
@@ -77,7 +68,7 @@ Projects can define custom business-domain experts in `.tapps-mcp/experts.yaml`.
    - Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to score + gate changed files. Never call without `file_paths` in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **When in doubt:** Use `tapps_consult_expert` for domain-specific questions; use `tapps_validate_config` for Docker/infra files. **For expert + docs in one call**, use `tapps_research(question, ...)` instead of consult_expert + lookup_docs.
+7. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
 
@@ -241,7 +232,7 @@ in the response with the file contents and instructions for you to apply.
 4. Follow `verification_steps` after all files are written
 5. **Never modify the content** — write it exactly as provided
 
-**Tools that support content-return:** `tapps_init`, `tapps_upgrade`, `tapps_set_engagement_level`, `tapps_manage_experts`, `tapps_memory` (export), `docs_config`, and all `docs_generate_*` generators.
+**Tools that support content-return:** `tapps_init`, `tapps_upgrade`, `tapps_set_engagement_level`, `tapps_memory` (export), `docs_config`, and all `docs_generate_*` generators.
 
 **Force content-return:** Pass `output_mode: "content_return"` to `tapps_init` or `tapps_upgrade`.
 
@@ -319,7 +310,7 @@ The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard 
 
 ## Troubleshooting: Doctor timeout
 
-`tapps-mcp doctor` runs version checks on all quality tools (ruff, mypy, bandit, radon, vulture, pip-audit) and may take **30-60+ seconds**, especially on first run or in cold environments where mypy is slow to start.
+`tapps-mcp doctor` runs version checks on all quality tools (ruff, mypy, bandit, radon, vulture, pylint, pip-audit) and may take **30-60+ seconds**, especially on first run or in cold environments where mypy is slow to start.
 
 **If doctor times out or takes too long:**
 - Use `tapps-mcp doctor --quick` to skip tool version checks (completes in a few seconds)

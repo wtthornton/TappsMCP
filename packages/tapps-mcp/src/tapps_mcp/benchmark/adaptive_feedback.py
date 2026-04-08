@@ -66,16 +66,13 @@ _TOOL_CATEGORY_MAP: dict[str, list[str]] = {
     "tapps_quick_check": ["complexity", "maintainability", "structure"],
     "tapps_security_scan": ["security"],
     "tapps_validate_changed": ["complexity", "maintainability", "security"],
-    "tapps_consult_expert": ["maintainability", "structure"],
-    "tapps_lookup_docs": ["maintainability"],
+    "tapps_lookup_docs": ["maintainability", "structure"],
     "tapps_checklist": ["structure", "devex"],
-    "tapps_project_profile": ["structure"],
     "tapps_impact_analysis": ["maintainability", "structure"],
     "tapps_dead_code": ["maintainability", "structure"],
     "tapps_dependency_scan": ["security"],
     "tapps_dependency_graph": ["structure", "maintainability"],
     "tapps_memory": ["maintainability", "devex"],
-    "tapps_research": ["maintainability"],
     "tapps_session_start": ["devex"],
 }
 

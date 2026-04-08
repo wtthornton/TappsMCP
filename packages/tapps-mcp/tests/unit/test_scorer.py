@@ -9,7 +9,9 @@ from tapps_mcp.scoring.models import LintIssue
 from tapps_mcp.scoring.scorer import (
     CodeScorer,
     _find_project_root,
+    _halstead_issues,
     _max_nesting_depth,
+    _perflint_issues,
     _suggest_complexity,
     _suggest_devex,
     _suggest_maintainability,
@@ -727,3 +729,206 @@ def check(a, b):
     def test_syntax_error_returns_none(self):
         """Syntax errors should return None."""
         assert ast_quick_complexity("def broken(") is None
+
+
+# ---------------------------------------------------------------------------
+# Halstead + perflint performance integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestHalsteadIssues:
+    """Tests for _halstead_issues helper."""
+
+    def test_empty_entries(self):
+        assert _halstead_issues([]) == []
+
+    def test_no_issues_for_low_metrics(self):
+        entries = [{"volume": 100.0, "difficulty": 5.0, "effort": 500.0, "bugs": 0.01}]
+        assert _halstead_issues(entries) == []
+
+    def test_high_volume(self):
+        entries = [{"volume": 2000.0, "difficulty": 5.0, "effort": 100.0, "bugs": 0.01}]
+        issues = _halstead_issues(entries)
+        assert "halstead_high_volume" in issues
+        assert "halstead_very_high_volume" not in issues
+
+    def test_very_high_volume(self):
+        entries = [{"volume": 4000.0, "difficulty": 5.0, "effort": 100.0, "bugs": 0.01}]
+        issues = _halstead_issues(entries)
+        assert "halstead_very_high_volume" in issues
+        # very_high_volume supersedes high_volume
+        assert "halstead_high_volume" not in issues
+
+    def test_high_difficulty(self):
+        entries = [{"volume": 100.0, "difficulty": 40.0, "effort": 100.0, "bugs": 0.01}]
+        issues = _halstead_issues(entries)
+        assert "halstead_high_difficulty" in issues
+
+    def test_high_effort(self):
+        entries = [{"volume": 100.0, "difficulty": 5.0, "effort": 200000.0, "bugs": 0.01}]
+        issues = _halstead_issues(entries)
+        assert "halstead_high_effort" in issues
+
+    def test_high_bugs(self):
+        entries = [{"volume": 100.0, "difficulty": 5.0, "effort": 100.0, "bugs": 2.0}]
+        issues = _halstead_issues(entries)
+        assert "halstead_high_bugs" in issues
+
+    def test_multiple_issues_across_functions(self):
+        entries = [
+            {"volume": 4000.0, "difficulty": 5.0, "effort": 100.0, "bugs": 0.01},
+            {"volume": 100.0, "difficulty": 40.0, "effort": 100.0, "bugs": 2.0},
+        ]
+        issues = _halstead_issues(entries)
+        assert "halstead_very_high_volume" in issues
+        assert "halstead_high_difficulty" in issues
+        assert "halstead_high_bugs" in issues
+
+
+class TestPerflintIssues:
+    """Tests for _perflint_issues helper."""
+
+    def test_empty_findings(self):
+        assert _perflint_issues([]) == []
+
+    def test_extracts_labels(self):
+        from tapps_mcp.tools.perflint import PerflintFinding
+
+        findings = [
+            PerflintFinding(code="W8202", symbol="loop-global-usage"),
+            PerflintFinding(code="W8401", symbol="use-list-comprehension"),
+        ]
+        issues = _perflint_issues(findings)
+        assert "perflint_loop_global_usage" in issues
+        assert "perflint_use_comprehension" in issues
+
+    def test_deduplicates(self):
+        from tapps_mcp.tools.perflint import PerflintFinding
+
+        findings = [
+            PerflintFinding(code="W8401", symbol="use-list-comprehension"),
+            PerflintFinding(code="W8403", symbol="use-dict-comprehension"),
+        ]
+        issues = _perflint_issues(findings)
+        # Both map to perflint_use_comprehension
+        assert issues == ["perflint_use_comprehension"]
+
+
+class TestSuggestPerformanceWithHalsteadAndPerflint:
+    """Tests for suggestions including Halstead and perflint issues."""
+
+    def test_halstead_high_volume_suggestion(self):
+        tips = _suggest_performance(7.0, {"issues_found": ["halstead_high_volume"]})
+        assert len(tips) == 1
+        assert "volume" in tips[0].lower()
+
+    def test_halstead_high_bugs_suggestion(self):
+        tips = _suggest_performance(7.0, {"issues_found": ["halstead_high_bugs"]})
+        assert len(tips) == 1
+        assert "bug" in tips[0].lower()
+
+    def test_perflint_loop_invariant_suggestion(self):
+        tips = _suggest_performance(7.0, {"issues_found": ["perflint_loop_invariant"]})
+        assert len(tips) == 1
+        assert "loop" in tips[0].lower()
+
+    def test_perflint_comprehension_suggestion(self):
+        tips = _suggest_performance(7.0, {"issues_found": ["perflint_use_comprehension"]})
+        assert len(tips) == 1
+        assert "comprehension" in tips[0].lower()
+
+    def test_mixed_ast_halstead_perflint(self):
+        tips = _suggest_performance(
+            5.0,
+            {
+                "issues_found": [
+                    "nested_loops",
+                    "halstead_high_difficulty",
+                    "perflint_loop_global_usage",
+                ]
+            },
+        )
+        assert len(tips) == 3
+
+
+class TestPerformanceCategoryScoring:
+    """Integration: _score_performance_category with all three signals."""
+
+    def test_ast_only_no_regression(self):
+        scorer = CodeScorer()
+        parallel = ParallelResults()
+        code = "def f():\n    return 1"
+        cat = scorer._score_performance_category(code, parallel)
+        assert cat.name == "performance"
+        assert cat.score == 10.0
+        assert cat.details["halstead_issues"] == []
+        assert cat.details["perflint_issues"] == []
+
+    def test_with_halstead_penalties(self):
+        scorer = CodeScorer()
+        parallel = ParallelResults(
+            radon_hal=[
+                {"name": "big_func", "volume": 4000.0, "difficulty": 40.0, "effort": 200000.0, "bugs": 2.0},
+            ]
+        )
+        code = "def f():\n    return 1"
+        cat = scorer._score_performance_category(code, parallel)
+        assert cat.score < 10.0
+        assert "halstead_very_high_volume" in cat.details["halstead_issues"]
+        assert "halstead_high_difficulty" in cat.details["halstead_issues"]
+
+    def test_with_perflint_penalties(self):
+        from tapps_mcp.tools.perflint import PerflintFinding
+
+        scorer = CodeScorer()
+        parallel = ParallelResults(
+            perflint=[
+                PerflintFinding(code="W8202", symbol="loop-global-usage"),
+                PerflintFinding(code="W8201", symbol="loop-invariant-statement"),
+            ]
+        )
+        code = "def f():\n    return 1"
+        cat = scorer._score_performance_category(code, parallel)
+        assert cat.score < 10.0
+        assert "perflint_loop_global_usage" in cat.details["perflint_issues"]
+        assert "perflint_loop_invariant" in cat.details["perflint_issues"]
+
+    def test_combined_all_sources(self):
+        from tapps_mcp.tools.perflint import PerflintFinding
+
+        scorer = CodeScorer()
+        parallel = ParallelResults(
+            radon_hal=[{"name": "f", "volume": 4000.0, "difficulty": 5.0, "effort": 100.0, "bugs": 0.01}],
+            perflint=[PerflintFinding(code="W8101", symbol="unnecessary-list-cast")],
+        )
+        # Code with nested loops → AST penalty
+        code = "for i in range(10):\n    for j in range(10):\n        pass"
+        cat = scorer._score_performance_category(code, parallel)
+        assert cat.score < 10.0
+        # All three sources contribute
+        assert len(cat.details["ast_issues"]) > 0
+        assert len(cat.details["halstead_issues"]) > 0
+        assert len(cat.details["perflint_issues"]) > 0
+
+    def test_perflint_penalty_capped(self):
+        from tapps_mcp.tools.perflint import PerflintFinding
+
+        scorer = CodeScorer()
+        # Many perflint findings — penalty should be capped at PERFLINT_PENALTY_CAP
+        parallel = ParallelResults(
+            perflint=[
+                PerflintFinding(code="W8201", symbol="loop-invariant-statement"),
+                PerflintFinding(code="W8202", symbol="loop-global-usage"),
+                PerflintFinding(code="W8205", symbol="dotted-import-in-loop"),
+                PerflintFinding(code="W8101", symbol="unnecessary-list-cast"),
+                PerflintFinding(code="W8102", symbol="incorrect-dictionary-iterator"),
+                PerflintFinding(code="W8301", symbol="use-tuple-over-list"),
+                PerflintFinding(code="W8401", symbol="use-list-comprehension"),
+            ]
+        )
+        code = "def f():\n    return 1"
+        cat = scorer._score_performance_category(code, parallel)
+        # Score should not go below what perflint cap allows
+        # Without cap: 0.8+0.5+0.5+0.3+0.5+0.2+0.3 = 3.1 penalty
+        # With cap: 3.0 penalty → score = 10.0 - 3.0 = 7.0
+        assert cat.score >= 7.0

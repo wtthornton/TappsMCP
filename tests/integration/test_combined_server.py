@@ -32,9 +32,7 @@ EXPECTED_TAPPS_TOOLS: set[str] = {
     "tapps_lookup_docs",
     "tapps_validate_config",
     "tapps_consult_expert",
-    "tapps_list_experts",
     "tapps_checklist",
-    "tapps_project_profile",
     "tapps_validate_changed",
     "tapps_init",
     "tapps_set_engagement_level",
@@ -51,7 +49,6 @@ EXPECTED_TAPPS_TOOLS: set[str] = {
     "tapps_dead_code",
     "tapps_dependency_scan",
     "tapps_dependency_graph",
-    "tapps_manage_experts",
 }
 
 EXPECTED_DOCS_TOOLS: set[str] = {
@@ -134,13 +131,13 @@ class TestAllTappsToolsRegistered:
     """Verify every expected TappsMCP tool is present in the combined server."""
 
     def test_all_expected_tapps_tools_present(self, combined) -> None:
-        """Combined server contains all 29 expected TappsMCP tools."""
+        """Combined server contains all expected TappsMCP tools."""
         combined_names = set(combined._tool_manager._tools.keys())
         missing = EXPECTED_TAPPS_TOOLS - combined_names
         assert missing == set(), f"Missing TappsMCP tools: {missing}"
 
     def test_tapps_tool_count(self, tapps_tool_names: set[str]) -> None:
-        """TappsMCP registers at least 29 tools."""
+        """TappsMCP registers at least 26 tools."""
         assert len(tapps_tool_names) >= len(EXPECTED_TAPPS_TOOLS), (
             f"Expected >= {len(EXPECTED_TAPPS_TOOLS)} tapps tools, "
             f"got {len(tapps_tool_names)}"

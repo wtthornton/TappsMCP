@@ -241,6 +241,126 @@ def _radon_mi_direct(file_path: str) -> float:
         return 50.0
 
 
+
+# ---------------------------------------------------------------------------
+# Halstead metrics
+# ---------------------------------------------------------------------------
+
+
+def parse_radon_hal_json(raw: str) -> list[dict[str, object]]:
+    """Parse ``radon hal -j`` JSON output.
+
+    Returns a flat list of per-function Halstead report dicts with keys:
+    ``name``, ``volume``, ``difficulty``, ``effort``, ``bugs``,
+    ``vocabulary``, ``length``.
+    """
+    if not raw.strip():
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    entries: list[dict[str, object]] = []
+    for _path, content in data.items():
+        if not isinstance(content, dict):
+            continue
+        # radon hal -j produces {"path": {"total": [...], "functions": [...]}}
+        functions = content.get("functions", [])
+        if isinstance(functions, list):
+            for func in functions:
+                if isinstance(func, (list, tuple)) and len(func) >= 2:
+                    name, report = func[0], func[1]
+                    entries.append(_hal_report_to_dict(str(name), report))
+                elif isinstance(func, dict):
+                    entries.append(_hal_report_to_dict(str(func.get("name", "")), func))
+    return entries
+
+
+def _hal_report_to_dict(name: str, report: object) -> dict[str, object]:
+    """Convert a Halstead report (namedtuple or dict) to a flat dict."""
+    if isinstance(report, dict):
+        return {
+            "name": name,
+            "volume": float(report.get("volume", 0)),
+            "difficulty": float(report.get("difficulty", 0)),
+            "effort": float(report.get("effort", 0)),
+            "bugs": float(report.get("bugs", 0)),
+            "vocabulary": int(report.get("vocabulary", 0)),
+            "length": int(report.get("length", 0)),
+        }
+    # namedtuple from radon.metrics.h_visit
+    return {
+        "name": name,
+        "volume": float(getattr(report, "volume", 0)),
+        "difficulty": float(getattr(report, "difficulty", 0)),
+        "effort": float(getattr(report, "effort", 0)),
+        "bugs": float(getattr(report, "bugs", 0)),
+        "vocabulary": int(getattr(report, "vocabulary", 0)),
+        "length": int(getattr(report, "length", 0)),
+    }
+
+
+def run_radon_hal(
+    file_path: str, *, cwd: str | None = None, timeout: int = 30
+) -> list[dict[str, object]]:
+    """Run ``radon hal -j`` on a single file synchronously."""
+    result = run_command(["radon", "hal", "-j", file_path], cwd=cwd, timeout=timeout)
+    if result.timed_out or not result.stdout.strip():
+        return []
+    return parse_radon_hal_json(result.stdout)
+
+
+async def run_radon_hal_async(
+    file_path: str, *, cwd: str | None = None, timeout: int = 30
+) -> list[dict[str, object]]:
+    """Run ``radon hal -j`` on a single file asynchronously.
+
+    Falls back to direct library import when the subprocess returns
+    empty output (common in MCP async contexts).
+    """
+    result = await run_command_async(["radon", "hal", "-j", file_path], cwd=cwd, timeout=timeout)
+    if result.timed_out:
+        logger.warning("radon_hal_timeout", file=file_path, timeout=timeout)
+        return _radon_hal_direct(file_path)
+    if not result.stdout.strip():
+        logger.info(
+            "radon_hal_empty_subprocess",
+            file=file_path,
+            returncode=result.returncode,
+            stderr=result.stderr[:200] if result.stderr else "",
+        )
+        return _radon_hal_direct(file_path)
+    return parse_radon_hal_json(result.stdout)
+
+
+def _radon_hal_direct(file_path: str) -> list[dict[str, object]]:
+    """Compute Halstead metrics using radon as a library.
+
+    Returns per-function Halstead report dicts.
+    """
+    if not _is_radon_importable():
+        logger.debug("radon_library_unavailable", purpose="hal")
+        return []
+    try:
+        from radon.metrics import h_visit
+
+        code = _read_source(file_path)
+        if code is None:
+            return []
+        hal_result = h_visit(code)
+        # h_visit returns Halstead(total_report, [("func_name", report), ...])
+        per_func = hal_result[1] if len(hal_result) > 1 else []
+        entries: list[dict[str, object]] = []
+        for func in per_func:
+            if isinstance(func, (list, tuple)) and len(func) >= 2:
+                entries.append(_hal_report_to_dict(str(func[0]), func[1]))
+        logger.info("radon_hal_direct_success", file=file_path, functions=len(entries))
+        return entries
+    except Exception as exc:
+        logger.warning("radon_hal_direct_failed", file=file_path, error=str(exc))
+        return []
+
+
 def _read_source(file_path: str) -> str | None:
     """Read a source file for direct radon analysis."""
     try:

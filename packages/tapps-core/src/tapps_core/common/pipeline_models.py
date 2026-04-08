@@ -32,7 +32,6 @@ STAGE_ORDER: list[PipelineStage] = [
 STAGE_TOOLS: dict[PipelineStage, list[str]] = {
     PipelineStage.DISCOVER: [
         "tapps_server_info",
-        "tapps_project_profile",
         "tapps_session_start",
         "tapps_memory",
     ],

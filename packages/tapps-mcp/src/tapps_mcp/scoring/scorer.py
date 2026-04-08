@@ -25,8 +25,14 @@ if TYPE_CHECKING:
     from tapps_mcp.tools.vulture import DeadCodeFinding
 from tapps_mcp.scoring.constants import (
     DEEP_NESTING_THRESHOLD,
+    HALSTEAD_HIGH_BUGS,
+    HALSTEAD_HIGH_DIFFICULTY,
+    HALSTEAD_HIGH_EFFORT,
+    HALSTEAD_HIGH_VOLUME,
+    HALSTEAD_VERY_HIGH_VOLUME,
     INSECURE_PATTERN_PENALTY,
     LARGE_FUNCTION_LINES,
+    PERFLINT_PENALTY_CAP,
     PERFORMANCE_PENALTY_MAP,
     VERY_DEEP_NESTING_THRESHOLD,
     VERY_LARGE_FUNCTION_LINES,
@@ -285,7 +291,7 @@ class CodeScorer(ScorerBase):
         maint_cat, dc_struct_penalty = self._score_maintainability_category(code, parallel)
         cats["maintainability"] = maint_cat
         cats["test_coverage"] = self._score_test_coverage_category(file_path)
-        cats["performance"] = self._score_performance_category(code)
+        cats["performance"] = self._score_performance_category(code, parallel)
         cats["structure"] = self._score_structure_category(file_path, dc_struct_penalty)
         cats["devex"] = self._score_devex_category(file_path)
         self._add_informational_categories(cats, parallel)
@@ -441,17 +447,41 @@ class CodeScorer(ScorerBase):
             suggestions=_suggest_test_coverage(coverage, details),
         )
 
-    def _score_performance_category(self, code: str) -> CategoryScore:
-        """Performance category: AST-based analysis."""
+    def _score_performance_category(
+        self, code: str, parallel: ParallelResults,
+    ) -> CategoryScore:
+        """Performance category: AST heuristics + Halstead metrics + perflint."""
         w = self._weights
-        perf, perf_issues = self._ast_performance_detailed(code)
-        details: dict[str, object] = {"issues_found": sorted(perf_issues)}
+
+        # 1) AST heuristics (always available)
+        ast_score, ast_issues = self._ast_performance_detailed(code)
+        ast_penalty = 10.0 - ast_score
+
+        # 2) Halstead metrics (when radon available)
+        hal_issues = _halstead_issues(parallel.radon_hal)
+        hal_penalty = sum(PERFORMANCE_PENALTY_MAP.get(i, 0.5) for i in hal_issues)
+
+        # 3) Perflint findings (when pylint+perflint available)
+        perf_issues = _perflint_issues(parallel.perflint)
+        perf_penalty = min(
+            sum(PERFORMANCE_PENALTY_MAP.get(i, 0.3) for i in perf_issues),
+            PERFLINT_PENALTY_CAP,
+        )
+
+        combined_score = clamp_individual(10.0 - ast_penalty - hal_penalty - perf_penalty)
+        all_issues = sorted(set(ast_issues) | set(hal_issues) | set(perf_issues))
+        details: dict[str, object] = {
+            "issues_found": all_issues,
+            "ast_issues": sorted(ast_issues),
+            "halstead_issues": sorted(hal_issues),
+            "perflint_issues": sorted(perf_issues),
+        }
         return CategoryScore(
             name="performance",
-            score=perf,
+            score=combined_score,
             weight=w.performance,
             details=details,
-            suggestions=_suggest_performance(perf, details),
+            suggestions=_suggest_performance(combined_score, details),
         )
 
     def _score_structure_category(
@@ -694,6 +724,42 @@ from tapps_mcp.scoring.suggestions import (
 )
 
 _SCORE_LOW = 5
+
+
+def _halstead_issues(hal_entries: list[dict[str, object]]) -> list[str]:
+    """Derive performance issue labels from Halstead metrics."""
+    if not hal_entries:
+        return []
+    seen: set[str] = set()
+    for entry in hal_entries:
+        volume = float(entry.get("volume", 0))
+        difficulty = float(entry.get("difficulty", 0))
+        effort = float(entry.get("effort", 0))
+        bugs = float(entry.get("bugs", 0))
+
+        if volume > HALSTEAD_VERY_HIGH_VOLUME:
+            seen.add("halstead_very_high_volume")
+        elif volume > HALSTEAD_HIGH_VOLUME:
+            seen.add("halstead_high_volume")
+        if difficulty > HALSTEAD_HIGH_DIFFICULTY:
+            seen.add("halstead_high_difficulty")
+        if effort > HALSTEAD_HIGH_EFFORT:
+            seen.add("halstead_high_effort")
+        if bugs > HALSTEAD_HIGH_BUGS:
+            seen.add("halstead_high_bugs")
+    return sorted(seen)
+
+
+def _perflint_issues(findings: list[object]) -> list[str]:
+    """Derive performance issue labels from perflint findings."""
+    if not findings:
+        return []
+    seen: set[str] = set()
+    for finding in findings:
+        label = getattr(finding, "label", "")
+        if label:
+            seen.add(label)
+    return sorted(seen)
 
 
 def _check_function_size(node: ast.FunctionDef | ast.AsyncFunctionDef, seen: set[str]) -> None:

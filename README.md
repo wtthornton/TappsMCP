@@ -12,7 +12,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/tests-6%2C900%2B_passing-brightgreen.svg)](#development)
 [![Tools](https://img.shields.io/badge/MCP_tools-58-blue.svg)](#tools-reference)
-[![Version](https://img.shields.io/badge/version-2.3.0-informational.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.4.0-informational.svg)](#)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
@@ -26,10 +26,11 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 **Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **58 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
-### What's new in v2.3.0
+### What's new in v2.4.0
 
-- **Documentation accuracy audit** — corrected tool counts across all docs (26 TappsMCP + 32 DocsMCP = 58 total), removed 3 ghost tool references (`tapps_project_profile`, `tapps_manage_experts`, `tapps_get_canonical_persona`), fixed test counts, corrected git clone URLs, removed duplicate feature table row, fixed broken links, and removed references to non-existent server module files
-- **AGENTS template fixes** — all engagement-level AGENTS.md templates now report accurate 26-tool count
+- **Enhanced performance scoring** — the performance category now uses three data sources instead of one: radon Halstead metrics (code volume, difficulty, effort, predicted bugs), perflint anti-pattern detection (11 pylint checks for loop invariants, unnecessary casts, inefficient iteration), and the existing AST heuristics. All three signals layer additively with configurable penalty weights and a perflint penalty cap.
+- **New optional dependency group** — `pip install tapps-mcp[perf]` installs pylint + perflint for full performance scoring. Without them, performance scoring gracefully degrades to AST-only analysis.
+- **Pylint tool detection** — `tapps_doctor` and `tapps_session_start` now report pylint availability alongside other checkers.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
@@ -107,7 +108,7 @@ The platform exposes **58 MCP tools** (26 TappsMCP + 32 DocsMCP) plus workflow p
 
 | Feature | Description |
 |--------|-------------|
-| **Code scoring** | 0–100 score across 7 categories: complexity, security, maintainability, test coverage, performance, structure, developer experience. Python uses ruff, mypy, bandit, radon. TypeScript/JavaScript, Go, Rust use tree-sitter AST analysis (optional dependency, falls back to regex). See [Supported Languages](#supported-languages). |
+| **Code scoring** | 0–100 score across 7 categories: complexity, security, maintainability, test coverage, performance, structure, developer experience. Python uses ruff, mypy, bandit, radon, pylint+perflint (optional). TypeScript/JavaScript, Go, Rust use tree-sitter AST analysis (optional dependency, falls back to regex). See [Supported Languages](#supported-languages). |
 | **Quality gates** | Pass/fail against configurable presets: **standard**, **strict**, **framework**. |
 | **Structured outputs** | Machine-parseable JSON (`structuredContent`) for 6 tools: `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`, `tapps_security_scan`, `tapps_validate_changed`, `tapps_validate_config`. |
 | **Dead code detection** | Vulture-based unused functions, classes, imports, variables with confidence scoring; integrated into maintainability/structure. |
@@ -161,7 +162,7 @@ TappsMCP scoring tools detect language from file extension and route to the appr
 
 | Language | Extensions | Status | Tooling |
 |----------|------------|--------|---------|
-| **Python** | `.py`, `.pyi` | ✅ Full | ruff, mypy, bandit, radon, vulture |
+| **Python** | `.py`, `.pyi` | ✅ Full | ruff, mypy, bandit, radon, vulture, pylint+perflint (optional) |
 | **TypeScript** | `.ts`, `.tsx` | ✅ Full | tree-sitter (optional), regex fallback |
 | **JavaScript** | `.js`, `.jsx`, `.mjs`, `.cjs` | ✅ Full | Routes to TypeScript scorer |
 | **Go** | `.go` | ✅ Full | tree-sitter (optional), regex fallback |

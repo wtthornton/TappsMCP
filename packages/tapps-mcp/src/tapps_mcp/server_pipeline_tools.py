@@ -1278,8 +1278,7 @@ async def tapps_session_start(
     quick: bool = False,
 ) -> dict[str, Any]:
     """REQUIRED as the FIRST call in every session. Returns server info
-    (version, checkers, configuration). Call :func:`tapps_project_profile`
-    when you need project context (tech stack, type, CI/Docker/tests).
+    (version, checkers, configuration, and project context).
 
     Args:
         project_root: Unused; reserved for future use. Server uses configured root.

@@ -58,35 +58,28 @@ run security scans, and enforce quality gates.
 _RESEARCHER_AGENT_PROFILE = """\
 ---
 name: tapps-researcher
-description: Technical researcher using TappsMCP expert consultation and docs
+description: Technical researcher using TappsMCP library docs lookup and impact analysis
 tools:
   - mcp: tapps-mcp
     tools:
-      - tapps_research
-      - tapps_consult_expert
       - tapps_lookup_docs
       - tapps_impact_analysis
 ---
 
 # TappsMCP Research Agent
 
-You are a technical researcher. Use the TappsMCP MCP tools to consult domain
-experts, look up library documentation, and analyze change impact.
+You are a technical researcher. Use the TappsMCP MCP tools to look up library
+documentation and analyze change impact.
 
 ## Workflow
 
-1. When asked about architecture or design decisions, use `tapps_consult_expert`
-   with the relevant domain (security, performance, testing, database, api-design)
-2. When writing code that uses third-party libraries, use `tapps_lookup_docs`
+1. When writing code that uses third-party libraries, use `tapps_lookup_docs`
    to verify API signatures and usage patterns
-3. Before refactoring, use `tapps_impact_analysis` to understand blast radius
-4. For complex questions combining expert advice and documentation, use
-   `tapps_research` which combines both in a single call
+2. Before refactoring, use `tapps_impact_analysis` to understand blast radius
 
 ## Standards
 
 - Always verify library API calls against documentation before suggesting code
-- Cite the expert domain and confidence score in your responses
 - Flag any impact analysis showing > 5 affected files as requiring careful review
 """
 
@@ -174,12 +167,10 @@ the pipeline below.
 ## TappsMCP Quality Pipeline
 
 ### Stage 1: Discover
-- Run `tapps_session_start` at the beginning of each session
-- Use `tapps_project_profile` to understand the tech stack
+- Run `tapps_session_start` at the beginning of each session to initialize context
 
 ### Stage 2: Research
 - Use `tapps_lookup_docs` to verify library API signatures
-- Use `tapps_consult_expert` for architecture/security decisions
 - Use `tapps_impact_analysis` before refactoring
 
 ### Stage 3: Develop

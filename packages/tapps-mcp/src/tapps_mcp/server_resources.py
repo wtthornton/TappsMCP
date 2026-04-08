@@ -46,14 +46,13 @@ def _get_scoring_weights() -> str:
 _WORKFLOWS: dict[str, str] = {
     "general": (
         "TappsMCP Workflow - General\n\n"
-        "1. tapps_session_start\n2. tapps_project_profile (when project context needed)\n"
-        "3. tapps_score_file(quick=True)\n4. tapps_score_file\n"
-        "5. tapps_quality_gate\n6. tapps_checklist(task_type='review')"
+        "1. tapps_session_start\n"
+        "2. tapps_score_file(quick=True)\n3. tapps_score_file\n"
+        "4. tapps_quality_gate\n5. tapps_checklist(task_type='review')"
     ),
     "feature": (
         "TappsMCP Workflow - New Feature\n\n"
-        "1. tapps_session_start\n2. tapps_project_profile (when project context needed)\n"
-        "3. tapps_lookup_docs\n"
+        "1. tapps_session_start\n2. tapps_lookup_docs\n"
         "4. tapps_score_file(quick=True)\n5. tapps_score_file\n"
         "6. tapps_security_scan\n7. tapps_quality_gate\n"
         "8. tapps_checklist(task_type='feature')"

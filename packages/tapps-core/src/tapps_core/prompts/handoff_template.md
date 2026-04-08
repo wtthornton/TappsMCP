@@ -27,7 +27,7 @@
 ## Stage: Research
 
 **Completed:** <!-- ISO timestamp -->
-**Tools called:** <!-- tapps_lookup_docs, tapps_consult_expert -->
+**Tools called:** <!-- tapps_lookup_docs -->
 
 **Findings:**
 - <!-- Library APIs and patterns -->

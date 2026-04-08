@@ -74,6 +74,13 @@ class FeatureFlags:
         return self._cache["radon"]
 
     @property
+    def perflint(self) -> bool:
+        """True when ``perflint`` is importable (pylint performance plugin)."""
+        if "perflint" not in self._cache:
+            self._cache["perflint"] = self._probe("perflint")
+        return self._cache["perflint"]
+
+    @property
     def memory_semantic_search(self) -> bool:
         """True when optional deps for memory semantic search (sentence-transformers) are available.
 
@@ -98,6 +105,7 @@ class FeatureFlags:
             self.numpy,
             self.sentence_transformers,
             self.radon,
+            self.perflint,
             self.memory_semantic_search,
         )
         return dict(self._cache)

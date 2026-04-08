@@ -132,7 +132,7 @@ module = "tapps_mcp.server"
 disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
-module = ["sentence_transformers", "sentence_transformers.*", "faiss", "numpy", "numpy.*", "radon", "radon.*", "tapps_brain", "tapps_brain.*", "tree_sitter", "tree_sitter_go", "tree_sitter_rust", "tree_sitter_java", "tree_sitter_typescript", "datasets", "pyarrow", "pyarrow.*", "pandas", "pandas.*"]
+module = ["sentence_transformers", "sentence_transformers.*", "faiss", "numpy", "numpy.*", "radon", "radon.*", "pylint", "pylint.*", "perflint", "perflint.*", "tapps_brain", "tapps_brain.*", "tree_sitter", "tree_sitter_go", "tree_sitter_rust", "tree_sitter_java", "tree_sitter_typescript", "datasets", "pyarrow", "pyarrow.*", "pandas", "pandas.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
