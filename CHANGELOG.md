@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-04-14
+
+### Added
+
+- **SHA-256 content-hash cache** (STORY-101.1, EPIC-101) — new `tapps_mcp.tools.content_hash_cache` module providing a per-process LRU-ish cache keyed on `(kind, sha256(file_bytes))`. Path-independent: renaming or copying a file hits the cache. Bounded (2000 entries, FIFO eviction), with 1h default TTL, and hit/miss/set/eviction telemetry. First real consumer: `tapps_quick_check` single-file mode now serves cached results with `cache_hit: true` when the file's bytes haven't changed, and populates the cache on miss. `fix=True` bypasses the cache since it mutates the file.
+
+### Changed
+
+- Version bump: tapps-core 2.7.0 → 2.7.1, tapps-mcp 2.7.0 → 2.7.1, docs-mcp 2.7.0 → 2.7.1
+
 ## [2.7.0] - 2026-04-14
 
 ### Added

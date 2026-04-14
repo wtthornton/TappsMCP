@@ -749,6 +749,23 @@ async def tapps_quick_check(
         _record_call("tapps_quick_check", success=False)
         return error_response("tapps_quick_check", "path_denied", str(exc))
 
+    # STORY-101.1 — SHA-256 content-hash cache. Safe to consult for
+    # read-only runs; skipped when ``fix=True`` since fix mutates the file.
+    from tapps_mcp.tools import content_hash_cache as _chc
+
+    cache_key: str | None = None
+    if not fix:
+        try:
+            cache_key = _chc.content_hash(resolved)
+            cached = _chc.get(_chc.KIND_QUICK_CHECK, cache_key)
+            if cached is not None:
+                elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+                hit = dict(cached)
+                hit["cache_hit"] = True
+                return success_response("tapps_quick_check", elapsed_ms, hit)
+        except (OSError, FileNotFoundError):
+            cache_key = None
+
     from tapps_mcp.gates.evaluator import evaluate_gate
     from tapps_mcp.security.security_scanner import run_security_scan
 
@@ -854,6 +871,10 @@ async def tapps_quick_check(
         fixes_applied if fix else None,
         recurring_events=data.get("recurring_quality_memory_events", []),
     )
+
+    # STORY-101.1 — populate cache for subsequent identical-content calls.
+    if cache_key is not None:
+        _chc.set(_chc.KIND_QUICK_CHECK, cache_key, dict(data))
 
     return _with_nudges(
         "tapps_quick_check",
