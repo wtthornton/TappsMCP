@@ -571,6 +571,11 @@ def _attach_quick_check_structured_output(
 
 _BATCH_CONCURRENCY = 10
 
+# STORY-101.6: Performance budget for tapps_quick_check on a single file.
+# Cache hits must return well under this threshold. Regression tests assert
+# the cache path does not re-invoke the scorer when content is unchanged.
+QUICK_CHECK_BUDGET_MS = 2000
+
 
 async def _quick_check_single(
     resolved: Path,

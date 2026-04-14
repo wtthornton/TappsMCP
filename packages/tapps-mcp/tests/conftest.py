@@ -70,3 +70,11 @@ def _reset_caches() -> Generator[None, None, None]:
     _reset_session_gc_flag()
     clear_dependency_cache()
     _reset_recurring_quick_check_state()
+
+    # content_hash_cache is a module-level OrderedDict; must be cleared so
+    # a cached result for "x = 1\n" (or any other small file) from one test
+    # cannot produce a spurious cache hit in a later test that uses the same
+    # file content with a different preset or expectation.
+    from tapps_mcp.tools.content_hash_cache import clear as _clear_content_cache
+
+    _clear_content_cache()

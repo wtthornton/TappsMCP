@@ -34,8 +34,17 @@ def _get_call_tracker() -> type[Any] | None:
         return None
 
 
-# Max nudges per response to avoid noise
-_MAX_NUDGES = 3
+# STORY-101.5: Return only the single highest-impact nudge per response.
+# Impact constants control priority when multiple rules fire simultaneously.
+_MAX_NUDGES = 1
+
+_IMPACT_CRITICAL = 90   # missing session/config — results may be wrong
+_IMPACT_BLOCKING = 80   # failure or incomplete — must fix before proceeding
+_IMPACT_HIGH = 70       # important next action (quality gate, etc.)
+_IMPACT_MEDIUM = 60     # recommended follow-up
+_IMPACT_LOW = 50        # suggested next step
+_IMPACT_INFO = 40       # informational (e.g. skipped-step telemetry)
+_IMPACT_REMINDER = 30   # low-priority global reminders
 
 # Discover-stage tools that should NOT trigger "you haven't called lookup_docs"
 _DISCOVER_TOOLS = frozenset(STAGE_TOOLS[PipelineStage.DISCOVER])
@@ -47,70 +56,72 @@ _SESSION_INIT_TOOLS = frozenset({"tapps_server_info", "tapps_session_start"})
 # ---------------------------------------------------------------------------
 # Per-tool nudge rules
 # ---------------------------------------------------------------------------
-# Each entry: (condition(called, ctx) -> bool, nudge_text)
-NudgeRule = tuple[Any, str]  # (callable, str) - use Any to avoid verbose typing
+# Each entry: (condition(called, ctx) -> bool, nudge_text, impact_score)
+NudgeRule = tuple[Any, str, int]  # (callable, str, int) - use Any to avoid verbose typing
 
 _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     "tapps_server_info": [
         (
-            lambda called, _ctx: (
-                "tapps_project_profile" not in called and "tapps_session_start" not in called
-            ),
-            "NEXT: Call tapps_project_profile() to detect the project tech stack.",
+            lambda called, _ctx: "tapps_session_start" not in called,
+            "NEXT: Call tapps_session_start() to initialize project context.",
+            _IMPACT_HIGH,
         ),
     ],
     "tapps_session_start": [
         (
             lambda called, _ctx: "tapps_lookup_docs" not in called,
             "NEXT: Call tapps_lookup_docs() for any external libraries you will use.",
+            _IMPACT_LOW,
         ),
     ],
     "tapps_score_file": [
         (
-            lambda called, _ctx: "tapps_quality_gate" not in called,
-            "NEXT: Call tapps_quality_gate() to verify this file passes the quality bar.",
-        ),
-        (
             lambda _called, ctx: (ctx or {}).get("security_issue_count", 0) > 0,
             "WARNING: Security issues detected. Call tapps_security_scan() for full analysis.",
+            _IMPACT_BLOCKING,
+        ),
+        (
+            lambda called, _ctx: "tapps_quality_gate" not in called,
+            "NEXT: Call tapps_quality_gate() to verify this file passes the quality bar.",
+            _IMPACT_HIGH,
         ),
     ],
     "tapps_quick_check": [
         (
             lambda _called, ctx: (ctx or {}).get("gate_passed") is False,
             "Gate FAILED. Fix the issues, then re-run tapps_quick_check().",
+            _IMPACT_BLOCKING,
         ),
         (
             lambda _called, ctx: (ctx or {}).get("security_passed") is False,
             "Security issues detected. Call tapps_security_scan() for full analysis.",
+            _IMPACT_BLOCKING,
         ),
         (
             lambda called, _ctx: "tapps_checklist" not in called,
             "NEXT: Call tapps_checklist() as the final step before declaring done.",
+            _IMPACT_MEDIUM,
         ),
     ],
     "tapps_quality_gate": [
         (
             lambda _called, ctx: (ctx or {}).get("gate_passed") is False,
             "Gate FAILED. Fix the issues, then re-run tapps_score_file() and tapps_quality_gate().",
+            _IMPACT_BLOCKING,
         ),
         (
             lambda called, ctx: (
                 (ctx or {}).get("gate_passed") is True and "tapps_checklist" not in called
             ),
             "NEXT: Call tapps_checklist() to verify no required steps were skipped.",
+            _IMPACT_MEDIUM,
         ),
     ],
     "tapps_security_scan": [
         (
             lambda called, _ctx: "tapps_quality_gate" not in called,
             "NEXT: Call tapps_quality_gate() to verify the file passes the quality bar.",
-        ),
-    ],
-    "tapps_project_profile": [
-        (
-            lambda called, _ctx: "tapps_lookup_docs" not in called,
-            "NEXT: Call tapps_lookup_docs() for any external libraries you will use.",
+            _IMPACT_HIGH,
         ),
     ],
     "tapps_lookup_docs": [
@@ -119,18 +130,33 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
                 "tapps_score_file" not in called and "tapps_quick_check" not in called
             ),
             "NEXT: Write your code, then call tapps_score_file() or tapps_quick_check().",
+            _IMPACT_LOW,
         ),
     ],
     "tapps_validate_changed": [
         (
             lambda called, _ctx: "tapps_checklist" not in called,
             "NEXT: Call tapps_checklist() as the final verification step.",
+            _IMPACT_MEDIUM,
         ),
     ],
     "tapps_checklist": [
         (
             lambda _called, ctx: (ctx or {}).get("complete") is False,
             "Checklist incomplete. Address the missing required tools listed above.",
+            _IMPACT_BLOCKING,
+        ),
+        # STORY-101.7: Detect when validate_changed was skipped entirely.
+        (
+            lambda called, ctx: (
+                (ctx or {}).get("complete") is True
+                and "tapps_validate_changed" not in called
+                and "tapps_pipeline" not in called
+                and any(t in called for t in ("tapps_score_file", "tapps_quick_check"))
+            ),
+            "WARNING: tapps_validate_changed was never called. "
+            "Run tapps_validate_changed(file_paths=...) to batch-confirm all changes pass the quality gate.",
+            _IMPACT_INFO,
         ),
     ],
 }
@@ -162,7 +188,11 @@ def compute_next_steps(
     tool_name: str,
     context: dict[str, Any] | None = None,
 ) -> list[str]:
-    """Return up to 3 imperative next-step strings for the given tool.
+    """Return the single highest-impact next-step string for the given tool.
+
+    STORY-101.5: Collects all matching nudges, ranks by impact score, and
+    returns only the top-1 so agents always get one clear action — not a
+    noisy list to triage.
 
     Args:
         tool_name: The tool that was just called.
@@ -170,40 +200,38 @@ def compute_next_steps(
             ``{"security_issue_count": 2, "gate_passed": False}``).
 
     Returns:
-        List of 1-3 short imperative strings.
+        List with at most 1 short imperative string.
     """
     tracker = _get_call_tracker()
     if tracker is None:
         return []
     called = tracker.get_called_tools()
-    steps: list[str] = []
 
-    # Apply tool-specific rules
-    rules = _TOOL_NUDGES.get(tool_name, [])
-    for condition, text in rules:
-        if len(steps) >= _MAX_NUDGES:
-            break
+    # Collect all matching nudges as (impact, text) pairs.
+    candidates: list[tuple[int, str]] = []
+
+    for condition, text, impact in _TOOL_NUDGES.get(tool_name, []):
         if condition(called, context):
-            steps.append(text)
+            candidates.append((impact, text))
 
-    # Global nudge: session-init guard for scoring/validation tools
+    # Global nudge: session-init guard for scoring/validation tools.
     if (
-        len(steps) < _MAX_NUDGES
-        and tool_name in _SESSION_DEPENDENT_TOOLS
+        tool_name in _SESSION_DEPENDENT_TOOLS
         and not _SESSION_INIT_TOOLS.intersection(called)
     ):
-        steps.insert(0, _SESSION_INIT_NUDGE)
+        candidates.append((_IMPACT_CRITICAL, _SESSION_INIT_NUDGE))
 
-    # Global nudge: lookup_docs reminder (only for non-discover tools)
+    # Global nudge: lookup_docs reminder (only for non-discover tools).
     if (
-        len(steps) < _MAX_NUDGES
-        and tool_name not in _DISCOVER_TOOLS
+        tool_name not in _DISCOVER_TOOLS
         and tool_name != "tapps_lookup_docs"
         and "tapps_lookup_docs" not in called
     ):
-        steps.append(_GLOBAL_LOOKUP_NUDGE)
+        candidates.append((_IMPACT_REMINDER, _GLOBAL_LOOKUP_NUDGE))
 
-    return steps[:_MAX_NUDGES]
+    # Return top-1 by impact descending.
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return [text for _, text in candidates[:_MAX_NUDGES]]
 
 
 # ---------------------------------------------------------------------------

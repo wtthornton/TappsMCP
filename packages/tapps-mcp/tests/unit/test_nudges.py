@@ -29,24 +29,19 @@ def _reset_tracker() -> None:  # type: ignore[misc]
 class TestComputeNextSteps:
     """Tests for compute_next_steps()."""
 
-    def test_server_info_nudges_project_profile(self) -> None:
+    def test_server_info_nudges_session_start(self) -> None:
         CallTracker.record("tapps_server_info")
         steps = compute_next_steps("tapps_server_info")
-        assert any("tapps_project_profile" in s for s in steps)
-
-    def test_server_info_no_nudge_when_profile_called(self) -> None:
-        CallTracker.record("tapps_server_info")
-        CallTracker.record("tapps_project_profile")
-        steps = compute_next_steps("tapps_server_info")
-        assert not any("tapps_project_profile" in s for s in steps)
+        assert any("tapps_session_start" in s for s in steps)
 
     def test_server_info_no_nudge_when_session_start_called(self) -> None:
         CallTracker.record("tapps_server_info")
         CallTracker.record("tapps_session_start")
         steps = compute_next_steps("tapps_server_info")
-        assert not any("tapps_project_profile" in s for s in steps)
+        assert not any("tapps_session_start" in s for s in steps)
 
     def test_score_file_nudges_quality_gate(self) -> None:
+        CallTracker.record("tapps_session_start")
         CallTracker.record("tapps_score_file")
         steps = compute_next_steps("tapps_score_file")
         assert any("tapps_quality_gate" in s for s in steps)
@@ -58,6 +53,9 @@ class TestComputeNextSteps:
         assert not any("tapps_quality_gate" in s for s in steps)
 
     def test_score_file_security_nudge_when_issues(self) -> None:
+        # Security nudge (_IMPACT_BLOCKING=80) beats gate nudge (_IMPACT_HIGH=70);
+        # session_start suppresses the SESSION_INIT nudge (_IMPACT_CRITICAL=90).
+        CallTracker.record("tapps_session_start")
         CallTracker.record("tapps_score_file")
         steps = compute_next_steps(
             "tapps_score_file",
@@ -74,6 +72,7 @@ class TestComputeNextSteps:
         assert not any("WARNING" in s for s in steps)
 
     def test_quality_gate_failed_nudge(self) -> None:
+        CallTracker.record("tapps_session_start")
         CallTracker.record("tapps_quality_gate")
         steps = compute_next_steps(
             "tapps_quality_gate",
@@ -82,6 +81,7 @@ class TestComputeNextSteps:
         assert any("FAILED" in s for s in steps)
 
     def test_quality_gate_passed_nudges_checklist(self) -> None:
+        CallTracker.record("tapps_session_start")
         CallTracker.record("tapps_quality_gate")
         steps = compute_next_steps(
             "tapps_quality_gate",
@@ -90,6 +90,7 @@ class TestComputeNextSteps:
         assert any("tapps_checklist" in s for s in steps)
 
     def test_quality_gate_passed_no_checklist_nudge_when_called(self) -> None:
+        CallTracker.record("tapps_session_start")
         CallTracker.record("tapps_quality_gate")
         CallTracker.record("tapps_checklist")
         steps = compute_next_steps(
@@ -99,12 +100,16 @@ class TestComputeNextSteps:
         assert not any("tapps_checklist" in s for s in steps)
 
     def test_max_nudges_enforced(self) -> None:
-        # With nothing called, score_file should generate gate nudge + lookup reminder
+        # STORY-101.5: top-1 selection — exactly one nudge per response.
         CallTracker.record("tapps_score_file")
         steps = compute_next_steps("tapps_score_file")
         assert len(steps) <= _MAX_NUDGES
+        assert _MAX_NUDGES == 1
 
     def test_global_lookup_nudge_for_non_discover_tool(self) -> None:
+        # session_start suppresses SESSION_INIT; quality_gate suppresses gate nudge;
+        # leaving the global lookup_docs reminder as the top-1.
+        CallTracker.record("tapps_session_start")
         CallTracker.record("tapps_score_file")
         CallTracker.record("tapps_quality_gate")
         steps = compute_next_steps("tapps_score_file")
@@ -188,6 +193,41 @@ class TestComputeNextSteps:
         CallTracker.record("tapps_checklist")
         steps = compute_next_steps("tapps_checklist", {"complete": True})
         assert not any("SETUP" in s for s in steps)
+
+    # STORY-101.7: skipped validate_changed telemetry
+
+    def test_checklist_warns_when_validate_changed_skipped(self) -> None:
+        """Checklist complete but validate_changed never called → surface warning."""
+        CallTracker.record("tapps_session_start")
+        CallTracker.record("tapps_score_file")
+        CallTracker.record("tapps_checklist")
+        steps = compute_next_steps("tapps_checklist", {"complete": True})
+        assert any("tapps_validate_changed" in s for s in steps)
+
+    def test_checklist_no_warn_when_validate_changed_called(self) -> None:
+        """No skipped-validate warning when validate_changed was already called."""
+        CallTracker.record("tapps_session_start")
+        CallTracker.record("tapps_score_file")
+        CallTracker.record("tapps_validate_changed")
+        CallTracker.record("tapps_checklist")
+        steps = compute_next_steps("tapps_checklist", {"complete": True})
+        assert not any("tapps_validate_changed" in s and "WARNING" in s for s in steps)
+
+    def test_checklist_no_warn_when_pipeline_called(self) -> None:
+        """No skipped-validate warning when tapps_pipeline was called (it includes validate)."""
+        CallTracker.record("tapps_session_start")
+        CallTracker.record("tapps_score_file")
+        CallTracker.record("tapps_pipeline")
+        CallTracker.record("tapps_checklist")
+        steps = compute_next_steps("tapps_checklist", {"complete": True})
+        assert not any("tapps_validate_changed" in s and "WARNING" in s for s in steps)
+
+    def test_checklist_no_warn_when_no_files_scored(self) -> None:
+        """No skipped-validate warning when no Python files were scored this session."""
+        CallTracker.record("tapps_session_start")
+        CallTracker.record("tapps_checklist")
+        steps = compute_next_steps("tapps_checklist", {"complete": True})
+        assert not any("tapps_validate_changed" in s and "WARNING" in s for s in steps)
 
     # Note: tapps_consult_expert and tapps_research were removed in EPIC-94.
     # Tests for those nudge rules have been removed.
@@ -384,6 +424,7 @@ class TestWithNudges:
     def test_passes_context_through(self) -> None:
         from tapps_mcp.server import _with_nudges
 
+        CallTracker.record("tapps_session_start")
         CallTracker.record("tapps_quality_gate")
         response: dict[str, Any] = {
             "success": True,

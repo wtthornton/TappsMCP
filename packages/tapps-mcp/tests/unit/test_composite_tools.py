@@ -1015,6 +1015,9 @@ class TestTappsQuickCheck:
             missing_tools=["bandit", "radon", "mypy"],
         )
 
+        from tapps_mcp.tools.checklist import CallTracker
+
+        CallTracker.record("tapps_session_start")
         with patch(
             "tapps_mcp.server_scoring_tools._get_scorer_for_file"
         ) as mock_scorer_fn:
@@ -1027,7 +1030,8 @@ class TestTappsQuickCheck:
         data = result["data"]
         # Gate should fail with a 20.0 score on strict preset
         assert data["gate_passed"] is False
-        # Nudge should mention gate failure
+        # Nudge should mention gate failure (session_start seeded so SESSION_INIT
+        # does not crowd it out in top-1 selection — STORY-101.5).
         next_steps = data.get("next_steps", [])
         assert any("Gate FAILED" in s for s in next_steps)
 
@@ -1059,6 +1063,9 @@ class TestTappsQuickCheck:
             bandit_available=True,
         )
 
+        from tapps_mcp.tools.checklist import CallTracker
+
+        CallTracker.record("tapps_session_start")
         with patch(
             "tapps_mcp.security.security_scanner.run_security_scan",
             return_value=failed_sec,
@@ -1068,6 +1075,8 @@ class TestTappsQuickCheck:
         data = result["data"]
         assert data["security_passed"] is False
         next_steps = data.get("next_steps", [])
+        # session_start seeded so SESSION_INIT does not crowd out the security
+        # nudge in top-1 selection (STORY-101.5).
         assert any("Security issues" in s or "security" in s.lower() for s in next_steps)
 
     @pytest.mark.asyncio
