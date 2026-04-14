@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Role palette applied to `dependency` and `module_map` Mermaid renderers** (STORY-100.2 first slice) — nodes now carry `:::presentation|:::business|:::data|:::infra` class tags and the four `classDef` lines are emitted, so every `docs_generate_diagram` output reads with the same semantic coloring as `pattern_card`. Remaining renderers (class_hierarchy, er_diagram, c4_*) follow in a subsequent slice.
+
 ## [2.6.0] - 2026-04-14
 
 ### Added

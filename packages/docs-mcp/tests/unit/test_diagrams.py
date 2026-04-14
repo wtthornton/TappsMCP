@@ -1283,3 +1283,44 @@ class TestPatternCard:
         r = generator.generate(tmp_path, diagram_type="pattern_card")
         assert isinstance(r, DiagramResult)
         assert r.diagram_type == "pattern_card"
+
+
+# ---------------------------------------------------------------------------
+# STORY-100.2 — shared role palette across renderers
+# ---------------------------------------------------------------------------
+
+
+class TestRolePaletteAcrossRenderers:
+    """Dependency and module_map renderers emit role classDefs and tag nodes."""
+
+    def test_dependency_mermaid_emits_role_classdefs(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        r = generator.generate(python_project, diagram_type="dependency")
+        for role in ("presentation", "business", "data", "infra"):
+            assert f"classDef {role}" in r.content
+
+    def test_dependency_mermaid_tags_nodes_with_role(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        r = generator.generate(python_project, diagram_type="dependency")
+        # `services` is business; `models` is data.
+        assert ":::business" in r.content or ":::data" in r.content
+
+    def test_module_map_mermaid_emits_role_classdefs(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        r = generator.generate(python_project, diagram_type="module_map")
+        for role in ("presentation", "business", "data", "infra"):
+            assert f"classDef {role}" in r.content
+
+    def test_module_map_mermaid_tags_leaf_nodes(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        r = generator.generate(python_project, diagram_type="module_map")
+        assert ":::" in r.content  # at least one node is role-tagged
+
+    def test_role_for_top_component(self, generator: DiagramGenerator) -> None:
+        assert generator._role_for_top_component("api/v1/users.py") == "presentation"
+        assert generator._role_for_top_component("services.billing") == "business"
+        assert generator._role_for_top_component("models/user.py") == "data"

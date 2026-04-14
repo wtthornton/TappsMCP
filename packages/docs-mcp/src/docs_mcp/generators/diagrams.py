@@ -358,7 +358,11 @@ class DiagramGenerator:
                 for mod in sorted(pkg_modules):
                     mod_id = self._sanitize_id(mod)
                     label = mod.split("/")[-1]
-                    lines.append(f'        {mod_id}["{label}"]')
+                    leaf = label.rsplit(".", 1)[0] or pkg
+                    role = self._classify_role(leaf)
+                    if role == "infra":
+                        role = self._role_for_top_component(pkg)
+                    lines.append(f'        {mod_id}["{label}"]:::{role}')
                     emitted_ids.add(mod_id)
                     node_count += 1
                 lines.append("    end")
@@ -366,7 +370,11 @@ class DiagramGenerator:
                 for mod in sorted(pkg_modules):
                     mod_id = self._sanitize_id(mod)
                     label = mod.split("/")[-1]
-                    lines.append(f'    {mod_id}["{label}"]')
+                    leaf = label.rsplit(".", 1)[0] or mod
+                    role = self._classify_role(leaf)
+                    if role == "infra":
+                        role = self._role_for_top_component(mod)
+                    lines.append(f'    {mod_id}["{label}"]:::{role}')
                     emitted_ids.add(mod_id)
                     node_count += 1
 
@@ -410,6 +418,7 @@ class DiagramGenerator:
                 f" of {len(graph.modules)} modules"
             )
 
+        lines.extend(self._role_classdef_mermaid_lines())
         content = "\n".join(lines) + "\n"
         return content, node_count, edge_count
 
@@ -789,10 +798,11 @@ class DiagramGenerator:
         project_id = self._sanitize_id(module_map.project_name)
         lines.append(f'    subgraph {project_id}["{module_map.project_name}"]')
         node_count = self._emit_module_nodes_mermaid(
-            module_map.module_tree, lines, indent=8
+            module_map.module_tree, lines, indent=8, top_role=None
         )
         lines.append("    end")
 
+        lines.extend(self._role_classdef_mermaid_lines())
         content = "\n".join(lines) + "\n"
         # Module maps have no edges -- they show structure only.
         return content, node_count, 0
@@ -802,6 +812,7 @@ class DiagramGenerator:
         nodes: list[ModuleNode],
         lines: list[str],
         indent: int,
+        top_role: str | None = None,
     ) -> int:
         """Recursively emit Mermaid nodes for a module tree.
 
@@ -814,11 +825,12 @@ class DiagramGenerator:
 
         for node in nodes:
             node_id = self._sanitize_id(node.path or node.name)
+            node_role = top_role or self._classify_role(node.name)
             if node.is_package:
                 label = f"{node.name}/"
                 lines.append(f'{pad}subgraph {node_id}["{label}"]')
                 count += self._emit_module_nodes_mermaid(
-                    node.submodules, lines, indent + 4
+                    node.submodules, lines, indent + 4, top_role=node_role
                 )
                 lines.append(f"{pad}end")
             else:
@@ -831,7 +843,7 @@ class DiagramGenerator:
                 if stats:
                     label_parts.append(f" ({', '.join(stats)})")
                 label = "".join(label_parts)
-                lines.append(f'{pad}{node_id}["{label}"]')
+                lines.append(f'{pad}{node_id}["{label}"]:::{node_role}')
                 count += 1
 
         return count
@@ -2269,6 +2281,22 @@ class DiagramGenerator:
 
         names = names[:_MAX_PATTERN_NODES]
         return [(n, self._classify_role(n)) for n in names]
+
+    @staticmethod
+    def _role_classdef_mermaid_lines() -> list[str]:
+        """Return the fixed four-role classDef lines for Mermaid renderers."""
+        out: list[str] = []
+        for role, color in _ROLE_COLORS.items():
+            text = "#000" if role == "presentation" else "#fff"
+            out.append(
+                f"    classDef {role} fill:{color},stroke:#333,color:{text}"
+            )
+        return out
+
+    def _role_for_top_component(self, path_or_name: str) -> str:
+        """Classify the top-level component of a path/name into a role."""
+        first = path_or_name.split("/", 1)[0].split(".", 1)[0]
+        return self._classify_role(first)
 
     @staticmethod
     def _classify_role(name: str) -> str:
