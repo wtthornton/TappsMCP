@@ -649,9 +649,10 @@ class DiagramGenerator:
         lines: list[str] = ["classDiagram"]
         edge_count = 0
 
-        for _module, cls in classes:
+        for module_name, cls in classes:
             cls_id = self._sanitize_id(cls.name)
-            lines.append(f"    class {cls_id} {{")
+            role = self._classify_role(module_name)
+            lines.append(f"    class {cls_id}:::{role} {{")
 
             # Class variables as attributes.
             for var in cls.class_variables:
@@ -681,6 +682,7 @@ class DiagramGenerator:
                     lines.append(f"    {base_id} <|-- {cls_id}")
                     edge_count += 1
 
+        lines.extend(self._role_classdef_mermaid_lines())
         content = "\n".join(lines) + "\n"
         return content, len(classes), edge_count
 

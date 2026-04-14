@@ -1324,3 +1324,16 @@ class TestRolePaletteAcrossRenderers:
         assert generator._role_for_top_component("api/v1/users.py") == "presentation"
         assert generator._role_for_top_component("services.billing") == "business"
         assert generator._role_for_top_component("models/user.py") == "data"
+
+    def test_class_hierarchy_mermaid_emits_role_classdefs(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        r = generator.generate(python_project, diagram_type="class_hierarchy")
+        for role in ("presentation", "business", "data", "infra"):
+            assert f"classDef {role}" in r.content
+
+    def test_class_hierarchy_mermaid_tags_classes(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        r = generator.generate(python_project, diagram_type="class_hierarchy")
+        assert ":::data" in r.content

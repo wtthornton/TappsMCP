@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-04-14
+
 ### Added
 
-- **Role palette applied to `dependency` and `module_map` Mermaid renderers** (STORY-100.2 first slice) — nodes now carry `:::presentation|:::business|:::data|:::infra` class tags and the four `classDef` lines are emitted, so every `docs_generate_diagram` output reads with the same semantic coloring as `pattern_card`. Remaining renderers (class_hierarchy, er_diagram, c4_*) follow in a subsequent slice.
+- **Role palette applied across Mermaid renderers** (STORY-100.2) — `dependency`, `module_map`, and `class_hierarchy` Mermaid output now tag each node with `:::presentation|:::business|:::data|:::infra` and emit the shared `classDef` block, so every `docs_generate_diagram` visual reads with the same semantic coloring as `pattern_card`. ER and C4 renderers use their own DSLs (`erDiagram`, `C4Context`) that do not accept Mermaid `classDef`; those receive dedicated treatment in a future slice.
+
+### Changed
+
+- Version bump: tapps-core 2.6.0 → 2.6.1, tapps-mcp 2.6.0 → 2.6.1, docs-mcp 2.6.0 → 2.6.1
 
 ## [2.6.0] - 2026-04-14
 
