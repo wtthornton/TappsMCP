@@ -176,6 +176,12 @@ class ArchitectureGenerator:
                 if not proj_subtitle:
                     proj_subtitle = "Architecture extracted from documentation"
 
+        # 5c. Classify architectural archetype — reuses already-built module_map
+        # and dep_graph so no extra analysis cost (STORY-100.11).
+        archetype_html = self._build_archetype_hero_html(
+            project_root, module_map, dep_graph
+        )
+
         # 6. Render HTML (pass pre-collected packages to avoid re-collection)
         content = self._render_html(
             project_root=project_root,
@@ -186,6 +192,7 @@ class ArchitectureGenerator:
             dep_graph=dep_graph,
             api_info=api_info,
             packages=packages,
+            archetype_html=archetype_html,
         )
 
         edge_count = dep_graph.total_internal_imports if dep_graph else 0
@@ -476,6 +483,7 @@ class ArchitectureGenerator:
         dep_graph: ImportGraph | None,
         api_info: list[dict[str, Any]],
         packages: list[dict[str, Any]] | None = None,
+        archetype_html: str = "",
     ) -> str:
         """Render the complete HTML architecture document."""
         safe_name = html.escape(proj_name)
@@ -493,8 +501,8 @@ class ArchitectureGenerator:
             '<a href="#main-content" class="skip-link">Skip to main content</a>'
         )
 
-        # Hero / title
-        sections.append(self._render_hero(safe_name, safe_subtitle))
+        # Hero / title (with optional archetype badge + animated panel)
+        sections.append(self._render_hero(safe_name, safe_subtitle, archetype_html))
 
         # Document purpose block (for developers)
         sections.append(self._render_document_purpose())
@@ -606,16 +614,77 @@ class ArchitectureGenerator:
         lines.append("</section>")
         return "\n".join(lines)
 
-    def _render_hero(self, name: str, subtitle: str) -> str:
+    def _render_hero(
+        self, name: str, subtitle: str, archetype_html: str = ""
+    ) -> str:
         desc = f'<p class="hero-subtitle">{subtitle}</p>' if subtitle else ""
+        arch_block = (
+            f'<div class="hero-arch">{archetype_html}</div>'
+            if archetype_html
+            else '<p class="hero-meta">Architecture Report</p>'
+        )
         return f"""
 <section class="hero">
   <div class="hero-content">
     <h1 class="hero-title">{name}</h1>
     {desc}
-    <p class="hero-meta">Architecture Report</p>
+    {arch_block}
   </div>
 </section>"""
+
+    def _build_archetype_hero_html(
+        self,
+        project_root: Path,
+        module_map: ModuleMap | None,
+        dep_graph: ImportGraph | None,
+    ) -> str:
+        """Classify the project archetype and build hero badge + animated SVG panel.
+
+        Returns an empty string on any failure so the caller degrades gracefully
+        (falls back to the plain "Architecture Report" label).  Confidence
+        below 0.5 also returns empty string — low-signal classifications should
+        not be surfaced prominently.
+        """
+        try:
+            from docs_mcp.analyzers.pattern import PatternClassifier
+            from docs_mcp.generators.pattern_poster import (
+                ArchPatternPosterGenerator,
+                _ARCHETYPE_LABELS,
+                _BADGE_BG,
+                _BADGE_FG,
+            )
+
+            result = PatternClassifier().classify(
+                project_root,
+                module_map=module_map,
+                import_graph=dep_graph,
+            )
+
+            if result.confidence < 0.5:
+                logger.debug(
+                    "arch_hero_low_confidence",
+                    archetype=result.archetype,
+                    confidence=result.confidence,
+                )
+                return ""
+
+            arch = str(result.archetype)
+            label = _ARCHETYPE_LABELS.get(arch, arch.upper())
+            pct = f"{result.confidence * 100:.0f}%"
+            bg = _BADGE_BG.get(arch, "#374151")
+            fg = _BADGE_FG.get(arch, "#fff")
+            badge = (
+                f'<span class="arch-badge-hero" style="background:{bg};color:{fg}">'
+                f"{label} · {pct}</span>"
+            )
+
+            poster = ArchPatternPosterGenerator()
+            svg = poster._panel_svg(arch, [], w=360, h=257)  # noqa: SLF001
+            return f"{badge}{svg}"
+
+        except Exception:
+            logger.debug("arch_hero_build_failed", path=str(project_root))
+            return ""
 
     def _render_executive_summary(
         self,
@@ -1935,6 +2004,17 @@ body {
   font-size: 1rem; color: var(--text-secondary);
   margin-bottom: 16px; line-height: 1.6;
 }
+.hero-arch {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  margin-top: 8px;
+}
+.arch-badge-hero {
+  display: inline-block;
+  padding: 5px 18px; border-radius: 8px;
+  font-weight: 800; font-size: 0.8rem; letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hero-arch svg { border-radius: 10px; }
 .hero-meta {
   font-size: 0.75rem; color: var(--accent-primary);
   text-transform: uppercase; letter-spacing: 0.08em;

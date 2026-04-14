@@ -53,7 +53,7 @@ class TestDiagramTypes:
         assert "sequence" in DiagramGenerator.VALID_TYPES
 
     def test_total_type_count(self) -> None:
-        assert len(DiagramGenerator.VALID_TYPES) == 8
+        assert len(DiagramGenerator.VALID_TYPES) == 10  # +pattern_card, +pattern_comparison
 
 
 # ---------------------------------------------------------------------------

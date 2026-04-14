@@ -126,9 +126,14 @@ class DiagramGenerator:
             "c4_component",
             "sequence",
             "pattern_card",
+            "pattern_comparison",  # STORY-100.10: 2×3 animated grid of all six archetypes
         }
     )
     VALID_FORMATS: ClassVar[frozenset[str]] = frozenset({"mermaid", "plantuml", "d2"})
+    # diagram types that also accept ``output_format="html"``
+    _HTML_CAPABLE_TYPES: ClassVar[frozenset[str]] = frozenset(
+        {"pattern_card", "pattern_comparison"}
+    )
     VALID_THEMES: ClassVar[frozenset[str]] = frozenset({"default", "sketch", "terminal"})
 
     # ------------------------------------------------------------------
@@ -178,7 +183,8 @@ class DiagramGenerator:
                 diagram_type=diagram_type, format=output_format, content=""
             )
 
-        if output_format not in self.VALID_FORMATS:
+        html_ok = diagram_type in self._HTML_CAPABLE_TYPES and output_format == "html"
+        if output_format not in self.VALID_FORMATS and not html_ok:
             logger.warning("invalid_format", format=output_format)
             return DiagramResult(
                 diagram_type=diagram_type, format=output_format, content=""
@@ -213,6 +219,9 @@ class DiagramGenerator:
                 project_root, output_format, depth, flow_spec
             ),
             "pattern_card": lambda: self._generate_pattern_card(
+                project_root, output_format
+            ),
+            "pattern_comparison": lambda: self._generate_pattern_comparison(
                 project_root, output_format
             ),
         }
@@ -2245,11 +2254,12 @@ class DiagramGenerator:
     ) -> DiagramResult:
         """Generate a single-page archetype poster for the project.
 
-        Classifies the project using :class:`PatternClassifier` and renders a
-        compact Mermaid flowchart showing the archetype, top packages colored
-        by semantic role, and a legend. Regardless of ``output_format``, the
-        rendered content is Mermaid — pattern_card is intentionally
-        README-embeddable.
+        When ``output_format="html"`` (STORY-100.8/100.9): produces a
+        self-contained HTML page with an animated SVG topology diagram using
+        the canonical shape for the detected archetype.
+
+        When ``output_format="mermaid"`` (static fallback): produces a compact
+        Mermaid flowchart suitable for embedding in a README.
         """
         try:
             from docs_mcp.analyzers.dependency import ImportGraphBuilder
@@ -2271,6 +2281,18 @@ class DiagramGenerator:
             )
 
         packages = self._select_pattern_packages(module_map, graph)
+
+        if output_format == "html":
+            from docs_mcp.generators.pattern_poster import ArchPatternPosterGenerator
+            content = ArchPatternPosterGenerator().generate_single(packages, result)
+            return DiagramResult(
+                diagram_type="pattern_card",
+                format="html",
+                content=content,
+                node_count=len(packages),
+                degraded=not packages,
+            )
+
         content = self._render_pattern_card_mermaid(result, packages)
         return DiagramResult(
             diagram_type="pattern_card",
@@ -2279,6 +2301,60 @@ class DiagramGenerator:
             node_count=len(packages),
             edge_count=content.count("-->"),
             degraded=not packages,
+        )
+
+    def _generate_pattern_comparison(
+        self,
+        project_root: Path,
+        output_format: str,
+    ) -> DiagramResult:
+        """Generate a 2×3 animated grid of all six archetypes (STORY-100.10).
+
+        All six canonical topology diagrams appear side-by-side so the reader
+        can compare patterns at a glance.  The detected archetype for this
+        project is highlighted with a coloured border.
+
+        Only ``output_format="html"`` is meaningful; other formats return an
+        empty result with ``degraded=True``.
+        """
+        if output_format != "html":
+            logger.warning(
+                "pattern_comparison_html_only",
+                format=output_format,
+                hint="Use output_format='html' for the pattern comparison poster.",
+            )
+            return DiagramResult(
+                diagram_type="pattern_comparison",
+                format=output_format,
+                content="",
+                degraded=True,
+            )
+
+        detected = ""
+        try:
+            from docs_mcp.analyzers.dependency import ImportGraphBuilder
+            from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
+            from docs_mcp.analyzers.pattern import PatternClassifier
+
+            module_map = ModuleMapAnalyzer().analyze(project_root, depth=3)
+            graph = ImportGraphBuilder().build(project_root)
+            result = PatternClassifier().classify(
+                project_root, module_map=module_map, import_graph=graph
+            )
+            detected = str(result.archetype)
+        except Exception:
+            logger.warning("pattern_comparison_classify_failed", path=str(project_root))
+
+        from docs_mcp.generators.pattern_poster import ArchPatternPosterGenerator
+        content = ArchPatternPosterGenerator().generate_comparison(
+            detected_archetype=detected
+        )
+        return DiagramResult(
+            diagram_type="pattern_comparison",
+            format="html",
+            content=content,
+            node_count=6,
+            degraded=False,
         )
 
     def _select_pattern_packages(
