@@ -82,7 +82,7 @@ class ReadmeGenerator:
         }
 
         # Sections common to all styles
-        context["installation"] = self._generate_installation(metadata)
+        context["installation"] = self._generate_installation(metadata, project_root)
         context["license"] = self._generate_license_section(metadata)
 
         # Standard and comprehensive add more sections
@@ -90,7 +90,7 @@ class ReadmeGenerator:
             context["badges"] = self._generate_badges(metadata)
             context["features"] = self._generate_features(project_root)
             context["usage"] = self._generate_usage(metadata)
-            context["development"] = self._generate_development(metadata)
+            context["development"] = self._generate_development(metadata, project_root)
 
         # Comprehensive adds even more
         if self._style == "comprehensive":
@@ -180,16 +180,26 @@ class ReadmeGenerator:
         # 4. Generic fallback
         return f"A {project_name} project."
 
-    def _generate_installation(self, metadata: ProjectMetadata) -> str:
+    def _generate_installation(
+        self,
+        metadata: ProjectMetadata,
+        project_root: Path | None = None,
+    ) -> str:
         """Generate installation instructions based on detected package manager."""
         lines: list[str] = []
 
         source = metadata.source_file.lower()
         name = metadata.name
+        has_uv = (
+            project_root is not None and (project_root / "uv.lock").exists()
+        ) or any("uv" in d for d in metadata.dev_dependencies)
 
         if source == "pyproject.toml" or not source:
             lines.append("```bash")
-            lines.append(f"pip install {name}")
+            if has_uv:
+                lines.append(f"uv sync  # or: pip install {name}")
+            else:
+                lines.append(f"pip install {name}")
             lines.append("```")
         elif source == "package.json":
             lines.append("```bash")
@@ -390,27 +400,59 @@ class ReadmeGenerator:
 
         return "\n".join(lines)
 
-    def _generate_development(self, metadata: ProjectMetadata) -> str:
+    def _generate_development(
+        self,
+        metadata: ProjectMetadata,
+        project_root: Path | None = None,
+    ) -> str:
         """Generate development setup instructions."""
         lines: list[str] = []
         source = metadata.source_file.lower()
 
+        # Detect git remote URL
+        clone_url = "<repository-url>"
+        if project_root is not None:
+            import subprocess
+
+            try:
+                result = subprocess.run(  # noqa: S603
+                    ["git", "remote", "get-url", "origin"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    cwd=project_root,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    clone_url = result.stdout.strip()
+            except Exception:
+                pass
+
+        has_uv = (
+            project_root is not None and (project_root / "uv.lock").exists()
+        ) or any("uv" in d for d in metadata.dev_dependencies)
+
         if source == "pyproject.toml" or not source:
             lines.append("```bash")
             lines.append("# Clone the repository")
-            lines.append("git clone <repository-url>")
+            lines.append(f"git clone {clone_url}")
             lines.append(f"cd {metadata.name or 'project'}")
             lines.append("")
             lines.append("# Install dependencies")
-            lines.append("pip install -e '.[dev]'")
+            if has_uv:
+                lines.append("uv sync --all-packages")
+            else:
+                lines.append("pip install -e '.[dev]'")
             lines.append("")
             lines.append("# Run tests")
-            lines.append("pytest")
+            if has_uv:
+                lines.append("uv run pytest")
+            else:
+                lines.append("pytest")
             lines.append("```")
         elif source == "package.json":
             lines.append("```bash")
             lines.append("# Clone the repository")
-            lines.append("git clone <repository-url>")
+            lines.append(f"git clone {clone_url}")
             lines.append(f"cd {metadata.name or 'project'}")
             lines.append("")
             lines.append("# Install dependencies")
@@ -422,7 +464,7 @@ class ReadmeGenerator:
         elif source == "cargo.toml":
             lines.append("```bash")
             lines.append("# Clone the repository")
-            lines.append("git clone <repository-url>")
+            lines.append(f"git clone {clone_url}")
             lines.append(f"cd {metadata.name or 'project'}")
             lines.append("")
             lines.append("# Build")
@@ -466,6 +508,11 @@ class ReadmeGenerator:
         """Generate an architecture overview based on project structure."""
         lines: list[str] = []
 
+        pattern_block = self._generate_pattern_card(project_root)
+        if pattern_block:
+            lines.append(pattern_block)
+            lines.append("")
+
         try:
             from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
 
@@ -490,6 +537,30 @@ class ReadmeGenerator:
             logger.debug("architecture_analysis_failed")
 
         return "\n".join(lines)
+
+    def _generate_pattern_card(self, project_root: Path) -> str:
+        """Render the architectural pattern_card as a Mermaid block.
+
+        Returns an empty string if classification or rendering fails, so
+        README generation degrades silently rather than breaking.
+        """
+        try:
+            from docs_mcp.generators.diagrams import DiagramGenerator
+
+            result = DiagramGenerator().generate(
+                project_root, diagram_type="pattern_card"
+            )
+            if not result.content or result.degraded:
+                return ""
+            return (
+                "### Architectural Pattern\n\n"
+                "```mermaid\n"
+                f"{result.content.rstrip()}\n"
+                "```"
+            )
+        except Exception:
+            logger.debug("readme_pattern_card_failed")
+            return ""
 
     def _generate_api_reference(self, project_root: Path) -> str:
         """Generate a placeholder API reference section."""

@@ -95,6 +95,31 @@ class TestStyleSelection:
         gen = ReadmeGenerator(style="invalid")
         assert gen.style == "standard"
 
+    def test_comprehensive_includes_pattern_card(self, tmp_path: Path) -> None:
+        """Comprehensive README embeds the pattern_card poster."""
+        root = tmp_path / "layered_proj"
+        root.mkdir()
+        (root / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\nversion = "0.1.0"\n',
+            encoding="utf-8",
+        )
+        for layer in ("api", "services", "models", "repositories"):
+            pkg = root / layer
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text('"""pkg."""\n')
+            (pkg / "core.py").write_text('"""mod."""\n')
+        gen = ReadmeGenerator(style="comprehensive")
+        result = gen.generate(root)
+        assert "Architectural Pattern" in result
+        assert "```mermaid" in result
+        assert "classDef" in result
+
+    def test_minimal_style_omits_pattern_card(self, python_project: Path) -> None:
+        """Minimal READMEs do not include the architecture/pattern block."""
+        gen = ReadmeGenerator(style="minimal")
+        result = gen.generate(python_project)
+        assert "Architectural Pattern" not in result
+
 
 # ---------------------------------------------------------------------------
 # Installation section

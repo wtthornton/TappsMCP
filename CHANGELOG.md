@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2] - 2026-04-14
+
+### Added
+
+- **`pattern_card` auto-embedded in comprehensive READMEs** (STORY-100.5) — `docs_generate_readme(style="comprehensive")` now prepends the archetype poster to the Architecture section. Renders as a fenced Mermaid block with the classified archetype, confidence, top packages colored by semantic role, and legend. Degrades silently for projects the classifier can't label (empty tree / no packages).
+
+### Changed
+
+- Version bump: tapps-core 2.6.1 → 2.6.2, tapps-mcp 2.6.1 → 2.6.2, docs-mcp 2.6.1 → 2.6.2
+
 ## [2.6.1] - 2026-04-14
 
 ### Added
