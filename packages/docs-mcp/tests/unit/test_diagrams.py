@@ -1140,3 +1140,146 @@ class TestSharedConstants:
         from docs_mcp.constants import SKIP_DIRS
 
         assert ".tox" in SKIP_DIRS
+
+
+# ---------------------------------------------------------------------------
+# Pattern card (archetype poster) — STORY-100.3
+# ---------------------------------------------------------------------------
+
+
+def _mkpkg(root: Path, name: str, *, submodules: list[str] | None = None) -> None:
+    """Helper: create a Python package with optional submodules."""
+    pkg = root / name
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "__init__.py").write_text('"""pkg."""\n')
+    for sub in submodules or []:
+        (pkg / f"{sub}.py").write_text(f'"""{sub}."""\n')
+
+
+@pytest.fixture
+def layered_project(tmp_path: Path) -> Path:
+    root = tmp_path / "layered_app"
+    root.mkdir()
+    for layer in ("api", "services", "models", "repositories", "config"):
+        _mkpkg(root, layer, submodules=["core"])
+    return root
+
+
+@pytest.fixture
+def hexagonal_project(tmp_path: Path) -> Path:
+    root = tmp_path / "hex_app"
+    root.mkdir()
+    for name in ("ports", "adapters", "core", "config"):
+        _mkpkg(root, name, submodules=["main"])
+    return root
+
+
+@pytest.fixture
+def microservice_project(tmp_path: Path) -> Path:
+    root = tmp_path / "ms"
+    root.mkdir()
+    (root / "pyproject.toml").write_text("[project]\nname='root'\n")
+    for svc in ("svc_a", "svc_b", "svc_c"):
+        (root / svc).mkdir()
+        (root / svc / "pyproject.toml").write_text(f"[project]\nname='{svc}'\n")
+        _mkpkg(root / svc, "app")
+    return root
+
+
+@pytest.fixture
+def monolith_project(tmp_path: Path) -> Path:
+    root = tmp_path / "mono"
+    root.mkdir()
+    _mkpkg(root, "app", submodules=["main"])
+    return root
+
+
+class TestPatternCard:
+    """pattern_card diagram renders an archetype poster with role palette."""
+
+    def test_layered_renders(
+        self, generator: DiagramGenerator, layered_project: Path
+    ) -> None:
+        r = generator.generate(layered_project, diagram_type="pattern_card")
+        assert r.diagram_type == "pattern_card"
+        assert r.content.startswith("flowchart")
+        assert "LAYERED" in r.content
+
+    def test_hexagonal_renders(
+        self, generator: DiagramGenerator, hexagonal_project: Path
+    ) -> None:
+        r = generator.generate(hexagonal_project, diagram_type="pattern_card")
+        assert "HEXAGONAL" in r.content
+
+    def test_microservice_renders(
+        self, generator: DiagramGenerator, microservice_project: Path
+    ) -> None:
+        r = generator.generate(microservice_project, diagram_type="pattern_card")
+        assert "MICROSERVICE" in r.content
+
+    def test_monolith_or_unknown_renders(
+        self, generator: DiagramGenerator, monolith_project: Path
+    ) -> None:
+        r = generator.generate(monolith_project, diagram_type="pattern_card")
+        assert r.content.startswith("flowchart")
+        # Small project classifies as monolith or unknown — both valid.
+        assert ("MONOLITH" in r.content) or ("UNKNOWN" in r.content)
+
+    def test_evidence_in_output(
+        self, generator: DiagramGenerator, layered_project: Path
+    ) -> None:
+        """Evidence from classifier appears in rendered content."""
+        r = generator.generate(layered_project, diagram_type="pattern_card")
+        assert "canonical layer packages matched" in r.content
+
+    def test_node_cap_respected(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """A project with many packages is capped at _MAX_PATTERN_NODES."""
+        from docs_mcp.generators.diagrams import _MAX_PATTERN_NODES
+
+        root = tmp_path / "big"
+        root.mkdir()
+        for idx in range(_MAX_PATTERN_NODES + 6):
+            _mkpkg(root, f"pkg_{idx}")
+        r = generator.generate(root, diagram_type="pattern_card")
+        assert r.node_count <= _MAX_PATTERN_NODES
+
+    def test_legend_present(
+        self, generator: DiagramGenerator, layered_project: Path
+    ) -> None:
+        r = generator.generate(layered_project, diagram_type="pattern_card")
+        assert 'subgraph legend["Legend"]' in r.content
+        for role in ("Presentation", "Business", "Data", "Infra"):
+            assert role in r.content
+
+    def test_role_colors_applied(
+        self, generator: DiagramGenerator, layered_project: Path
+    ) -> None:
+        """classDef lines for all four roles are emitted."""
+        r = generator.generate(layered_project, diagram_type="pattern_card")
+        from docs_mcp.generators.diagrams import _ROLE_COLORS
+
+        for role, color in _ROLE_COLORS.items():
+            assert f"classDef {role} fill:{color}" in r.content
+
+    def test_classify_role_known_names(
+        self, generator: DiagramGenerator
+    ) -> None:
+        assert generator._classify_role("api") == "presentation"
+        assert generator._classify_role("services") == "business"
+        assert generator._classify_role("models") == "data"
+        assert generator._classify_role("config") == "infra"
+
+    def test_classify_role_unknown_defaults_to_infra(
+        self, generator: DiagramGenerator
+    ) -> None:
+        assert generator._classify_role("zzz_xyz_nothing") == "infra"
+
+    def test_empty_project_degrades_gracefully(
+        self, generator: DiagramGenerator, tmp_path: Path
+    ) -> None:
+        """Empty directory still returns a DiagramResult, not a crash."""
+        r = generator.generate(tmp_path, diagram_type="pattern_card")
+        assert isinstance(r, DiagramResult)
+        assert r.diagram_type == "pattern_card"

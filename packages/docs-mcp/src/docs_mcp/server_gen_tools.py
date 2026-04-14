@@ -843,6 +843,8 @@ async def docs_generate_diagram(
     - "c4_container": C4 Container diagram showing high-level building blocks
     - "c4_component": C4 Component diagram showing internal components
     - "sequence": Sequence diagram showing request flows and call chains
+    - "pattern_card": Single-page archetype poster (layered/hexagonal/etc.)
+      with packages colored by semantic role — README-embeddable.
 
     Args:
         diagram_type: Type of diagram to generate.

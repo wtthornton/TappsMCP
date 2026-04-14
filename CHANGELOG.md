@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-04-14
+
+### Added
+
+- **`pattern_card` diagram type** (docs-mcp) — new value for `docs_generate_diagram(diagram_type="pattern_card")` renders a single-page archetype poster: header with the classified archetype and confidence, top packages colored by semantic role (presentation / business / data / infra), and a legend. README-embeddable (≤ 8 nodes, fits one screen). Calls `PatternClassifier().classify()` under the hood and surfaces evidence in the header. Deterministic, no LLM, no network (STORY-100.3, EPIC-100).
+- **Shared role palette** — `_ROLE_COLORS` and `_ROLE_KEYWORDS` constants in `docs_mcp.generators.diagrams` establish the fixed four-role semantic palette that STORY-100.2 will apply across the other 7 diagram types.
+
+### Changed
+
+- Version bump: tapps-core 2.5.0 → 2.6.0, tapps-mcp 2.5.0 → 2.6.0, docs-mcp 2.5.0 → 2.6.0
+
 ## [2.5.0] - 2026-04-14
 
 ### Added

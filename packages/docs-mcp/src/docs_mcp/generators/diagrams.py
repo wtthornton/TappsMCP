@@ -19,6 +19,7 @@ from docs_mcp.constants import SKIP_DIRS
 if TYPE_CHECKING:
     from docs_mcp.analyzers.dependency import ImportGraph
     from docs_mcp.analyzers.models import ModuleMap, ModuleNode
+    from docs_mcp.analyzers.pattern import ArchetypeResult
     from docs_mcp.extractors.models import ClassInfo
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -37,6 +38,49 @@ _MAX_CLASS_NODES = 30
 _MAX_SCAN_FILES = 30
 # Minimum classes/modules before a quality warning is emitted.
 _MIN_RESULTS_THRESHOLD = 3
+# Maximum packages shown on a pattern_card poster (README-embeddable size).
+_MAX_PATTERN_NODES = 8
+
+# Fixed semantic-role palette. Shared across renderers (STORY-100.2 will
+# re-use these colors for the other 7 diagram types so every docs-mcp visual
+# speaks the same visual language).
+_ROLE_COLORS: dict[str, str] = {
+    "presentation": "#F5A9D0",
+    "business": "#14B8A6",
+    "data": "#9333EA",
+    "infra": "#6B7280",
+}
+
+# Package-name keywords that map to each semantic role.
+_ROLE_KEYWORDS: dict[str, frozenset[str]] = {
+    "presentation": frozenset(
+        {
+            "api", "web", "ui", "views", "controllers", "routes",
+            "presentation", "cli", "server", "handlers", "endpoints",
+        }
+    ),
+    "business": frozenset(
+        {
+            "services", "service", "business", "domain", "usecases",
+            "use_cases", "application", "core", "generators", "analyzers",
+            "validators", "extractors", "pipeline", "tools", "workflow",
+        }
+    ),
+    "data": frozenset(
+        {
+            "repositories", "repository", "dao", "data_access", "models",
+            "entities", "persistence", "db", "database", "memory",
+            "storage", "cache", "store",
+        }
+    ),
+    "infra": frozenset(
+        {
+            "config", "settings", "security", "logging", "metrics",
+            "telemetry", "infrastructure", "distribution", "integrations",
+            "utils", "common", "constants", "monitoring", "observability",
+        }
+    ),
+}
 
 # Mapping from Python type annotation substrings to ER-diagram type names.
 _PYTHON_TYPE_TO_ER: dict[str, str] = {
@@ -81,6 +125,7 @@ class DiagramGenerator:
             "c4_container",
             "c4_component",
             "sequence",
+            "pattern_card",
         }
     )
     VALID_FORMATS: ClassVar[frozenset[str]] = frozenset({"mermaid", "plantuml", "d2"})
@@ -166,6 +211,9 @@ class DiagramGenerator:
             ),
             "sequence": lambda: self._generate_sequence(
                 project_root, output_format, depth, flow_spec
+            ),
+            "pattern_card": lambda: self._generate_pattern_card(
+                project_root, output_format
             ),
         }
 
@@ -2146,4 +2194,137 @@ class DiagramGenerator:
                 )
 
         lines.append("")
+        return "\n".join(lines) + "\n"
+
+    # ------------------------------------------------------------------
+    # Pattern card (archetype poster) — STORY-100.3
+    # ------------------------------------------------------------------
+
+    def _generate_pattern_card(
+        self,
+        project_root: Path,
+        output_format: str,
+    ) -> DiagramResult:
+        """Generate a single-page archetype poster for the project.
+
+        Classifies the project using :class:`PatternClassifier` and renders a
+        compact Mermaid flowchart showing the archetype, top packages colored
+        by semantic role, and a legend. Regardless of ``output_format``, the
+        rendered content is Mermaid — pattern_card is intentionally
+        README-embeddable.
+        """
+        try:
+            from docs_mcp.analyzers.dependency import ImportGraphBuilder
+            from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
+            from docs_mcp.analyzers.pattern import PatternClassifier
+
+            module_map = ModuleMapAnalyzer().analyze(project_root, depth=3)
+            graph = ImportGraphBuilder().build(project_root)
+            result = PatternClassifier().classify(
+                project_root, module_map=module_map, import_graph=graph
+            )
+        except Exception:
+            logger.warning("pattern_card_build_failed", path=str(project_root))
+            return DiagramResult(
+                diagram_type="pattern_card",
+                format=output_format,
+                content="",
+                degraded=True,
+            )
+
+        packages = self._select_pattern_packages(module_map, graph)
+        content = self._render_pattern_card_mermaid(result, packages)
+        return DiagramResult(
+            diagram_type="pattern_card",
+            format=output_format,
+            content=content,
+            node_count=len(packages),
+            edge_count=content.count("-->"),
+            degraded=not packages,
+        )
+
+    def _select_pattern_packages(
+        self,
+        module_map: ModuleMap,
+        graph: ImportGraph,
+    ) -> list[tuple[str, str]]:
+        """Pick up to ``_MAX_PATTERN_NODES`` packages, each tagged by role."""
+        names: list[str] = []
+        seen: set[str] = set()
+        for node in module_map.module_tree:
+            if node.name and node.name not in seen:
+                names.append(node.name)
+                seen.add(node.name)
+            for child in node.submodules:
+                if child.name and child.name not in seen:
+                    names.append(child.name)
+                    seen.add(child.name)
+
+        if graph.most_imported:
+            rank: dict[str, int] = {}
+            for idx, module in enumerate(graph.most_imported):
+                first = module.split("/")[0]
+                rank.setdefault(first, len(graph.most_imported) - idx)
+            names.sort(key=lambda n: -rank.get(n, 0))
+
+        names = names[:_MAX_PATTERN_NODES]
+        return [(n, self._classify_role(n)) for n in names]
+
+    @staticmethod
+    def _classify_role(name: str) -> str:
+        """Classify a package name into one of four semantic roles."""
+        normalized = name.lower()
+        for role, kws in _ROLE_KEYWORDS.items():
+            if normalized in kws:
+                return role
+        for role, kws in _ROLE_KEYWORDS.items():
+            if any(kw in normalized for kw in kws):
+                return role
+        return "infra"
+
+    def _render_pattern_card_mermaid(
+        self,
+        result: ArchetypeResult,
+        packages: list[tuple[str, str]],
+    ) -> str:
+        """Render the pattern-card poster as Mermaid."""
+        archetype = result.archetype.upper().replace("_", " ")
+        confidence = f"{result.confidence:.2f}"
+        evidence_note = ""
+        if result.evidence:
+            evidence_note = result.evidence[0].replace('"', "'")[:120]
+
+        lines: list[str] = ["flowchart TD"]
+        header_label = f"{archetype} (confidence {confidence})"
+        if evidence_note:
+            header_label += f"<br/>{evidence_note}"
+        lines.append(f'    header["{header_label}"]')
+
+        # Render packages grouped by role, iteration order fixed.
+        role_nodes: dict[str, list[str]] = {r: [] for r in _ROLE_COLORS}
+        for idx, (name, role) in enumerate(packages):
+            node_id = f"p{idx}_{self._sanitize_id(name)}"
+            role_nodes[role].append(node_id)
+            lines.append(f'    {node_id}["{name}"]:::{role}')
+
+        prev_anchor = "header"
+        for role in ("presentation", "business", "data", "infra"):
+            if role_nodes[role]:
+                lines.append(f"    {prev_anchor} --> {role_nodes[role][0]}")
+                prev_anchor = role_nodes[role][0]
+
+        # Legend block (always present, regardless of which roles fired).
+        lines.append("    subgraph legend[\"Legend\"]")
+        for role in _ROLE_COLORS:
+            lines.append(
+                f'        L_{role}["{role.capitalize()}"]:::{role}'
+            )
+        lines.append("    end")
+
+        for role, color in _ROLE_COLORS.items():
+            text = "#000" if role == "presentation" else "#fff"
+            lines.append(
+                f"    classDef {role} fill:{color},stroke:#333,color:{text}"
+            )
+
         return "\n".join(lines) + "\n"
