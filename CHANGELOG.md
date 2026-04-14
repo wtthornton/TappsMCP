@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.2] - 2026-04-14
+
+### Changed
+
+- **Safer `tapps_validate_changed` auto-detect** (STORY-101.3, EPIC-101) — when `file_paths=""` the tool now enforces a 30s wall-clock budget (configurable via `_AUTO_DETECT_BUDGET_S`). On expiry it returns a partial-result envelope with `timed_out: true`, a `files_remaining` count, a `files_remaining_paths` list, and a copy-paste `next_steps` hint directing the agent to re-invoke with explicit paths. Content-hash cache (STORY-101.1, `KIND_QUICK_CHECK`) is consulted per file first — cache hits are reported with `cache_hit: true` and never consume the budget. Explicit `file_paths` mode is unchanged and ignores the cap.
+- Version bump: tapps-core 2.7.1 → 2.7.2, tapps-mcp 2.7.1 → 2.7.2, docs-mcp 2.7.1 → 2.7.2
+
 ## [2.7.1] - 2026-04-14
 
 ### Added

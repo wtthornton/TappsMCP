@@ -67,6 +67,12 @@ def _current_docs_provider() -> dict[str, Any]:
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
 _VALIDATE_CONCURRENCY = 10
 
+# STORY-101.3 — wall-clock cap on auto-detect tapps_validate_changed runs.
+# Large repos can yield hundreds of changed files; without a cap, agents
+# can block for minutes. Explicit file_paths mode ignores this budget.
+# Kept module-level so STORY-101.6 (perf budget regression test) can tune it.
+_AUTO_DETECT_BUDGET_S: float = 30.0
+
 # Track whether auto-GC and consolidation have already run this session.
 # Uses a mutable container to avoid PLW0603 ``global`` statements.
 _session_state: dict[str, bool] = {
@@ -647,6 +653,12 @@ async def tapps_validate_changed(
         ctx, total_files, start, stop_progress, tracker
     )
 
+    auto_detect = not file_paths.strip()
+    cached_results, uncached_paths = _partition_by_cache(paths)
+
+    timed_out = False
+    files_remaining: list[Path] = []
+
     try:
         await ensure_session_initialized()
         _maybe_warm_dependency_cache(settings, quick)
@@ -654,15 +666,43 @@ async def tapps_validate_changed(
         sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
         do_security_full = _resolve_security_depth(security_depth, include_security, quick)
 
-        raw_results = await asyncio.gather(
-            *[
+        tasks = [
+            asyncio.create_task(
                 _validate_single_file(
                     p, preset, quick, do_security_full, sem, tracker, ctx
                 )
-                for p in paths
-            ],
-            return_exceptions=True,
-        )
+            )
+            for p in uncached_paths
+        ]
+
+        if auto_detect and tasks:
+            elapsed_s = (time.perf_counter_ns() - start) / 1e9
+            remaining_budget = max(0.0, _AUTO_DETECT_BUDGET_S - elapsed_s)
+            done, pending = await asyncio.wait(tasks, timeout=remaining_budget)
+            raw_results: list[dict[str, Any] | BaseException] = []
+            completed_paths: list[Path] = []
+            for p, t in zip(uncached_paths, tasks, strict=True):
+                if t in done:
+                    try:
+                        raw_results.append(t.result())
+                    except Exception as exc:
+                        raw_results.append(exc)
+                    completed_paths.append(p)
+                else:
+                    files_remaining.append(p)
+                    t.cancel()
+            if pending:
+                timed_out = True
+                with contextlib.suppress(Exception):
+                    await asyncio.gather(*pending, return_exceptions=True)
+            task_results = _collect_results(raw_results, completed_paths)
+        elif tasks:
+            raw_results = list(
+                await asyncio.gather(*tasks, return_exceptions=True)
+            )
+            task_results = _collect_results(raw_results, uncached_paths)
+        else:
+            task_results = []
     except Exception as exc:
         _record_call("tapps_validate_changed", success=False)
         tracker.finalize_error(str(exc))
@@ -674,7 +714,7 @@ async def tapps_validate_changed(
             with contextlib.suppress(asyncio.CancelledError):
                 await progress_task
 
-    results = _collect_results(raw_results, paths)
+    results = [*task_results, *cached_results]
     all_passed = all(r.get("gate_passed", False) for r in results)
     total_sec = sum(r.get("security_issues", 0) for r in results)
 
@@ -706,10 +746,26 @@ async def tapps_validate_changed(
         resp_data["impact_summary"] = impact_data
     if correlation_id.strip():
         resp_data["correlation_id"] = correlation_id.strip()
+    if timed_out:
+        resp_data["timed_out"] = True
+        resp_data["files_remaining"] = len(files_remaining)
+        resp_data["files_remaining_paths"] = [str(p) for p in files_remaining]
+        resp_data["auto_detect_budget_s"] = _AUTO_DETECT_BUDGET_S
 
     resp = success_response("tapps_validate_changed", elapsed_ms, resp_data)
     _build_structured_validation_output(results, all_passed, security_depth, impact_data, resp)
-    return _with_nudges("tapps_validate_changed", resp)
+    resp = _with_nudges("tapps_validate_changed", resp)
+    if timed_out:
+        data = resp.get("data", {})
+        sample = ",".join(str(p) for p in files_remaining[:10])
+        hint = (
+            f"Auto-detect exceeded {_AUTO_DETECT_BUDGET_S:.0f}s budget with "
+            f"{len(files_remaining)} files unvalidated. Finish with explicit "
+            f'paths: tapps_validate_changed(file_paths="{sample}")'
+        )
+        existing = list(data.get("next_steps") or [])
+        data["next_steps"] = [hint, *existing][:5]
+    return resp
 
 
 def _handle_no_changed_files(
@@ -828,6 +884,47 @@ def _maybe_warm_dependency_cache(
         task = asyncio.create_task(_warm_dependency_cache(settings))
         _background_tasks.add(task)
         task.add_done_callback(_background_tasks.discard)
+
+
+def _cache_hit_as_file_result(path: Path) -> dict[str, Any] | None:
+    """Return a validate_changed-shaped file_result from content-hash cache.
+
+    STORY-101.3 — reuses the ``KIND_QUICK_CHECK`` entry populated by
+    :func:`tapps_quick_check` so identical-content re-validations don't
+    consume the auto-detect wall-clock budget.
+    """
+    from tapps_mcp.tools import content_hash_cache as _chc
+
+    try:
+        sha = _chc.content_hash(path)
+    except (OSError, FileNotFoundError):
+        return None
+    cached = _chc.get(_chc.KIND_QUICK_CHECK, sha)
+    if cached is None:
+        return None
+    return {
+        "file_path": str(path),
+        "overall_score": cached.get("overall_score", 0.0),
+        "gate_passed": cached.get("gate_passed", False),
+        "security_passed": cached.get("security_passed", True),
+        "security_issues": cached.get("security_issue_count", 0),
+        "cache_hit": True,
+    }
+
+
+def _partition_by_cache(
+    paths: list[Path],
+) -> tuple[list[dict[str, Any]], list[Path]]:
+    """Split ``paths`` into (cached_results, uncached_paths)."""
+    cached_results: list[dict[str, Any]] = []
+    uncached_paths: list[Path] = []
+    for p in paths:
+        hit = _cache_hit_as_file_result(p)
+        if hit is not None:
+            cached_results.append(hit)
+        else:
+            uncached_paths.append(p)
+    return cached_results, uncached_paths
 
 
 def _collect_results(
