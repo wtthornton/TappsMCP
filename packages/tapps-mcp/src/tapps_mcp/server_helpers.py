@@ -452,6 +452,75 @@ def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, Any]:
         }
 
 
+# STORY-101.4 — actionable error envelope.
+#
+# Map of error code -> default (category, retryable, remediation). Keeps
+# error envelopes self-describing so agents can branch on category /
+# retryable without parsing free-form messages. Callers may override any
+# field via ``extra``.
+#
+# Categories:
+#   - user_input:    bad path / missing param / invalid argument
+#   - environment:   missing checker, unreachable service, OS limit
+#   - timeout:       wall-clock or per-tool budget exceeded
+#   - deprecated:    tool/flag removed; alternative is offered
+#   - unsupported:   request is well-formed but out of scope (e.g. language)
+#   - internal:      unexpected exception inside a tool (default fallback)
+_ERROR_METADATA: dict[str, dict[str, Any]] = {
+    "path_denied": {
+        "category": "user_input",
+        "retryable": False,
+        "remediation": "Pass an absolute path inside the project root.",
+    },
+    "file_error": {
+        "category": "user_input",
+        "retryable": False,
+        "remediation": "Verify the file exists and is readable.",
+    },
+    "missing_params": {
+        "category": "user_input",
+        "retryable": False,
+        "remediation": "Re-call with the required parameter populated.",
+    },
+    "invalid_library": {
+        "category": "user_input",
+        "retryable": False,
+        "remediation": "Pass a non-empty library name (e.g. 'fastapi').",
+    },
+    "unsupported_language": {
+        "category": "unsupported",
+        "retryable": False,
+        "remediation": (
+            "Use a supported extension: .py/.pyi, .ts/.tsx/.js/.jsx/.mjs/.cjs, .go, .rs."
+        ),
+    },
+    "scoring_failed": {
+        "category": "internal",
+        "retryable": True,
+        "remediation": (
+            "Retry once; if it persists, re-run with quick=False to surface the "
+            "underlying scorer error."
+        ),
+    },
+    "TOOL_DEPRECATED": {
+        "category": "deprecated",
+        "retryable": False,
+        "remediation": "Switch to the listed alternative tool.",
+    },
+    "timeout": {
+        "category": "timeout",
+        "retryable": True,
+        "remediation": "Re-run with a smaller scope (explicit file_paths or fewer files).",
+    },
+}
+
+_DEFAULT_ERROR_METADATA: dict[str, Any] = {
+    "category": "internal",
+    "retryable": True,
+    "remediation": "Retry the call; if it persists, file an issue with the message above.",
+}
+
+
 def error_response(
     tool_name: str,
     code: str,
@@ -459,16 +528,29 @@ def error_response(
     *,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build a standard error response envelope.
+    """Build a standard, actionable error response envelope (STORY-101.4).
+
+    Every envelope carries ``category``, ``retryable``, and ``remediation``
+    fields derived from the registry above so agents can react without
+    parsing the human-readable ``message``. Callers can override any field
+    by passing it in ``extra``.
 
     Args:
         tool_name: Name of the tool that produced the error.
-        code: Machine-readable error code (e.g. ``"TOOL_DEPRECATED"``).
+        code: Machine-readable error code (e.g. ``"path_denied"``).
         message: Human-readable error description.
         extra: Optional structured metadata merged into the error object
             (e.g. ``{"alternatives": [...], "deprecated_since": "EPIC-94"}``).
+            Wins over registry defaults when keys overlap.
     """
-    error: dict[str, Any] = {"code": code, "message": message}
+    defaults = _ERROR_METADATA.get(code, _DEFAULT_ERROR_METADATA)
+    error: dict[str, Any] = {
+        "code": code,
+        "message": message,
+        "category": defaults["category"],
+        "retryable": defaults["retryable"],
+        "remediation": defaults["remediation"],
+    }
     if extra:
         error.update(extra)
     return {

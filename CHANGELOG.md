@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.3] - 2026-04-14
+
+### Changed
+
+- **Actionable error envelope** (STORY-101.4, EPIC-101) — `error_response` now auto-injects `category`, `retryable`, and `remediation` fields derived from a code registry in `server_helpers.py`. Categories: `user_input`, `environment`, `timeout`, `deprecated`, `unsupported`, `internal` (fallback). Known codes covered today: `path_denied`, `file_error`, `missing_params`, `invalid_library`, `unsupported_language`, `scoring_failed`, `TOOL_DEPRECATED`, `timeout`. Caller-supplied `extra` still wins on key collision, so existing overrides (e.g. deprecation `alternatives`) keep working. Lets agents branch on `retryable` / `category` instead of parsing free-form messages.
+- Version bump: tapps-core 2.7.2 → 2.7.3, tapps-mcp 2.7.2 → 2.7.3, docs-mcp 2.7.2 → 2.7.3
+
 ## [2.7.2] - 2026-04-14
 
 ### Changed
