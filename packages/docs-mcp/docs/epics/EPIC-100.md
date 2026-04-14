@@ -1,7 +1,7 @@
 # Epic 100: Architecture Pattern Recognition & Poster Diagrams
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Complete
 **Priority:** P1 - High
 **Estimated LOE:** ~7-9 weeks (1 developer) — revised after stub audit
 
@@ -131,14 +131,16 @@ Describe what this story delivers...
 
 ### 100.6 -- Auto-select poster variant for small projects
 
-**Points:** 2
+**Points:** 2 | **Status:** ✅ Done
 
-Describe what this story delivers...
+When `diagram_type="dependency"` and `output_format` is `"mermaid"` or `"html"`, projects with
+fewer than `_POSTER_AUTO_THRESHOLD = 15` top-level packages are silently redirected to the
+`pattern_card` poster, which is more readable at that scale.
 
 **Tasks:**
-- [ ] Implement auto-select poster variant for small projects
-- [ ] Write unit tests
-- [ ] Update documentation
+- [x] Implement auto-select poster variant for small projects
+- [x] Write unit tests
+- [x] Update documentation
 
 **Definition of Done:** Auto-select poster variant for small projects is implemented, tests pass, and documentation is updated.
 
@@ -146,14 +148,17 @@ Describe what this story delivers...
 
 ### 100.7 -- ADR cross-link from detected pattern
 
-**Points:** 3
+**Points:** 3 | **Status:** ✅ Done
 
-Describe what this story delivers...
+`_find_adr_for_archetype(project_root, archetype)` searches `docs/adr/`, `docs/decisions/`,
+`adr/`, and `.docs/adr/` for a Markdown file mentioning the detected archetype keyword.
+When found, the relative path is included as `adr_link` in `DiagramResult`, as a
+`%% ADR:` comment in Mermaid output, and as a `<p class="adr-link">` note in HTML output.
 
 **Tasks:**
-- [ ] Implement adr cross-link from detected pattern
-- [ ] Write unit tests
-- [ ] Update documentation
+- [x] Implement adr cross-link from detected pattern
+- [x] Write unit tests
+- [x] Update documentation
 
 **Definition of Done:** ADR cross-link from detected pattern is implemented, tests pass, and documentation is updated.
 

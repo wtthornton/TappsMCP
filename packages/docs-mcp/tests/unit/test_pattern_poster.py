@@ -288,3 +288,211 @@ class TestDiagramGeneratorIntegration:
         gen = DiagramGenerator()
         result = gen.generate(tmp_path, diagram_type="not_a_type", output_format="mermaid")
         assert result.content == ""
+
+
+# ---------------------------------------------------------------------------
+# STORY-100.6 — Auto-select poster for small projects
+# ---------------------------------------------------------------------------
+
+
+class TestAutoPosterForSmallProjects:
+    """dependency diagram auto-selects pattern_card when project is small."""
+
+    def test_small_project_redirects_dependency_to_pattern_card(
+        self, tmp_path: Path
+    ) -> None:
+        gen = DiagramGenerator()
+        fake_mm = MagicMock()
+        # 5 nodes → below _POSTER_AUTO_THRESHOLD (15)
+        fake_mm.module_tree = [MagicMock() for _ in range(5)]
+        for i, node in enumerate(fake_mm.module_tree):
+            node.name = f"pkg{i}"
+
+        with (
+            patch(
+                "docs_mcp.analyzers.module_map.ModuleMapAnalyzer.analyze",
+                return_value=fake_mm,
+            ),
+            patch(
+                "docs_mcp.generators.diagrams.DiagramGenerator._generate_pattern_card"
+            ) as mock_pc,
+        ):
+            mock_pc.return_value = MagicMock(
+                diagram_type="pattern_card",
+                format="mermaid",
+                content="flowchart TD",
+                node_count=5,
+                edge_count=0,
+                degraded=False,
+                scanned_dirs=[],
+                skipped_count=0,
+                adr_link=None,
+            )
+            gen.generate(tmp_path, diagram_type="dependency", output_format="mermaid")
+
+        mock_pc.assert_called_once()
+
+    def test_large_project_keeps_dependency_diagram(self, tmp_path: Path) -> None:
+        gen = DiagramGenerator()
+        fake_mm = MagicMock()
+        # 20 nodes → above threshold
+        fake_mm.module_tree = [MagicMock() for _ in range(20)]
+        for i, node in enumerate(fake_mm.module_tree):
+            node.name = f"pkg{i}"
+
+        with (
+            patch(
+                "docs_mcp.analyzers.module_map.ModuleMapAnalyzer.analyze",
+                return_value=fake_mm,
+            ),
+            patch(
+                "docs_mcp.generators.diagrams.DiagramGenerator._generate_dependency"
+            ) as mock_dep,
+        ):
+            mock_dep.return_value = MagicMock(
+                diagram_type="dependency",
+                format="mermaid",
+                content="flowchart LR",
+                node_count=20,
+                edge_count=5,
+                degraded=False,
+                scanned_dirs=[],
+                skipped_count=0,
+                adr_link=None,
+            )
+            gen.generate(tmp_path, diagram_type="dependency", output_format="mermaid")
+
+        mock_dep.assert_called_once()
+
+    def test_auto_redirect_only_for_mermaid_and_html(self, tmp_path: Path) -> None:
+        """d2/plantuml formats skip auto-redirect (only mermaid/html trigger it)."""
+        gen = DiagramGenerator()
+        with (
+            patch(
+                "docs_mcp.generators.diagrams.DiagramGenerator._generate_dependency"
+            ) as mock_dep,
+        ):
+            mock_dep.return_value = MagicMock(
+                diagram_type="dependency",
+                format="d2",
+                content="",
+                node_count=0,
+                edge_count=0,
+                degraded=False,
+                scanned_dirs=[],
+                skipped_count=0,
+                adr_link=None,
+            )
+            gen.generate(tmp_path, diagram_type="dependency", output_format="d2")
+
+        # d2 format → no auto-redirect → dependency handler called
+        mock_dep.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# STORY-100.7 — ADR cross-link from detected pattern
+# ---------------------------------------------------------------------------
+
+
+class TestAdrCrossLink:
+    """_find_adr_for_archetype and wiring into DiagramResult."""
+
+    def test_returns_none_when_no_adr_dirs(self, tmp_path: Path) -> None:
+        gen = DiagramGenerator()
+        result = gen._find_adr_for_archetype(tmp_path, "layered")  # noqa: SLF001
+        assert result is None
+
+    def test_finds_adr_in_docs_adr(self, tmp_path: Path) -> None:
+        adr_dir = tmp_path / "docs" / "adr"
+        adr_dir.mkdir(parents=True)
+        adr_file = adr_dir / "0001-layered-architecture.md"
+        adr_file.write_text("# ADR-0001\n\nWe adopt the layered pattern.\n")
+
+        gen = DiagramGenerator()
+        result = gen._find_adr_for_archetype(tmp_path, "layered")  # noqa: SLF001
+        assert result == "docs/adr/0001-layered-architecture.md"
+
+    def test_finds_adr_in_docs_decisions(self, tmp_path: Path) -> None:
+        dec_dir = tmp_path / "docs" / "decisions"
+        dec_dir.mkdir(parents=True)
+        (dec_dir / "0002-event-driven.md").write_text("Use event_driven approach.\n")
+
+        gen = DiagramGenerator()
+        result = gen._find_adr_for_archetype(tmp_path, "event_driven")  # noqa: SLF001
+        assert result == "docs/decisions/0002-event-driven.md"
+
+    def test_returns_none_when_no_keyword_match(self, tmp_path: Path) -> None:
+        adr_dir = tmp_path / "docs" / "adr"
+        adr_dir.mkdir(parents=True)
+        (adr_dir / "0001-something-else.md").write_text("Nothing about architecture here.\n")
+
+        gen = DiagramGenerator()
+        result = gen._find_adr_for_archetype(tmp_path, "hexagonal")  # noqa: SLF001
+        assert result is None
+
+    def test_mermaid_output_includes_adr_comment(self) -> None:
+        gen = DiagramGenerator()
+        result = _mock_result("layered", 0.9)
+        output = gen._render_pattern_card_mermaid(  # noqa: SLF001
+            result, [], adr_link="docs/adr/0001-layered.md"
+        )
+        assert "%% ADR: docs/adr/0001-layered.md" in output
+
+    def test_mermaid_output_no_comment_when_no_adr(self) -> None:
+        gen = DiagramGenerator()
+        result = _mock_result("layered", 0.9)
+        output = gen._render_pattern_card_mermaid(result, [])  # noqa: SLF001
+        assert "%% ADR:" not in output
+
+    def test_generate_single_includes_adr_link_html(self) -> None:
+        gen = ArchPatternPosterGenerator()
+        html = gen.generate_single([], _mock_result("layered"), adr_link="docs/adr/0001.md")
+        assert "docs/adr/0001.md" in html
+        assert "adr-link" in html
+
+    def test_generate_single_no_adr_section_when_none(self) -> None:
+        gen = ArchPatternPosterGenerator()
+        html = gen.generate_single([], _mock_result("layered"), adr_link=None)
+        assert "adr-link" not in html
+
+    def test_diagram_result_carries_adr_link(self) -> None:
+        from docs_mcp.generators.diagrams import DiagramResult
+        r = DiagramResult(
+            diagram_type="pattern_card",
+            format="mermaid",
+            content="flowchart TD",
+            adr_link="docs/adr/0001-layered.md",
+        )
+        assert r.adr_link == "docs/adr/0001-layered.md"
+
+    def test_diagram_result_adr_link_defaults_none(self) -> None:
+        from docs_mcp.generators.diagrams import DiagramResult
+        r = DiagramResult(diagram_type="pattern_card", format="mermaid", content="")
+        assert r.adr_link is None
+
+    def test_generate_pattern_card_wires_adr_link(self, tmp_path: Path) -> None:
+        """Full integration: _generate_pattern_card includes adr_link in result."""
+        # Create a matching ADR
+        adr_dir = tmp_path / "docs" / "adr"
+        adr_dir.mkdir(parents=True)
+        (adr_dir / "0001-layered.md").write_text("Adopt layered architecture.\n")
+
+        gen = DiagramGenerator()
+        mock_cls_result = _mock_result("layered", 0.85)
+        mock_mm = MagicMock()
+        mock_mm.module_tree = []
+        mock_graph = MagicMock()
+        mock_graph.most_imported = []
+
+        with (
+            patch("docs_mcp.analyzers.module_map.ModuleMapAnalyzer.analyze", return_value=mock_mm),
+            patch("docs_mcp.analyzers.dependency.ImportGraphBuilder.build", return_value=mock_graph),
+            patch(
+                "docs_mcp.analyzers.pattern.PatternClassifier.classify",
+                return_value=mock_cls_result,
+            ),
+        ):
+            diagram = gen._generate_pattern_card(tmp_path, "mermaid")  # noqa: SLF001
+
+        assert diagram.adr_link == "docs/adr/0001-layered.md"
+        assert "%% ADR: docs/adr/0001-layered.md" in diagram.content

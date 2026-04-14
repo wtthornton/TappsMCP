@@ -128,6 +128,7 @@ class ArchPatternPosterGenerator:
         self,
         packages: list[tuple[str, str]],
         archetype_result: ArchetypeResult,
+        adr_link: str | None = None,
     ) -> str:
         """Return a self-contained HTML page for *archetype_result*."""
         arch = str(archetype_result.archetype)
@@ -136,6 +137,11 @@ class ArchPatternPosterGenerator:
         svg = self._panel_svg(arch, packages, w=600, h=430)
         badge_bg = _BADGE_BG.get(arch, "#374151")
         badge_fg = _BADGE_FG.get(arch, "#fff")
+        adr_html = (
+            f'  <p class="adr-link">See ADR: <a href="{adr_link}">{adr_link}</a></p>'
+            if adr_link
+            else ""
+        )
         body = f"""
 <div class="poster-single">
   <div class="poster-header">
@@ -144,6 +150,7 @@ class ArchPatternPosterGenerator:
   </div>
   {svg}
   {self._legend_html()}
+{adr_html}
 </div>"""
         return self._html_page(title=f"{label} Architecture", body=body, detected=arch)
 

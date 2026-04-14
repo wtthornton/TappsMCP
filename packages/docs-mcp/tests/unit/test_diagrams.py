@@ -151,6 +151,28 @@ def python_project(tmp_path: Path) -> Path:
     return root
 
 
+@pytest.fixture
+def large_python_project(tmp_path: Path) -> Path:
+    """Create a project with enough top-level packages to exceed the auto-poster threshold.
+
+    The auto-select redirect (STORY-100.6) only fires when a project has fewer than
+    _POSTER_AUTO_THRESHOLD (15) top-level packages.  Dependency-diagram tests must use
+    this fixture so they receive a real dependency diagram rather than a pattern_card.
+    """
+    root = tmp_path / "large_project"
+    root.mkdir()
+    # Create 16 top-level packages so the threshold is never triggered.
+    for i in range(16):
+        pkg = root / f"pkg{i}"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(f'"""Package {i}."""\n')
+        if i > 0:
+            (pkg / "utils.py").write_text(
+                f'"""Utils for pkg{i}."""\n\nfrom pkg{i - 1} import *  # noqa: F401, F403\n'
+            )
+    return root
+
+
 # ---------------------------------------------------------------------------
 # DiagramResult model
 # ---------------------------------------------------------------------------
@@ -275,36 +297,41 @@ class TestDiagramValidation:
 
 
 class TestDependencyDiagramMermaid:
-    """Dependency diagrams in Mermaid format."""
+    """Dependency diagrams in Mermaid format.
+
+    Uses the ``large_python_project`` fixture (16 packages) so the STORY-100.6
+    auto-poster redirect (_POSTER_AUTO_THRESHOLD=15) is never triggered and these
+    tests receive a genuine dependency diagram rather than a pattern_card.
+    """
 
     def test_generates_graph_td(
-        self, generator: DiagramGenerator, python_project: Path
+        self, generator: DiagramGenerator, large_python_project: Path
     ) -> None:
-        result = generator.generate(python_project, diagram_type="dependency")
+        result = generator.generate(large_python_project, diagram_type="dependency")
         assert result.content.startswith("graph TD")
 
     def test_has_subgraphs(
-        self, generator: DiagramGenerator, python_project: Path
+        self, generator: DiagramGenerator, large_python_project: Path
     ) -> None:
-        result = generator.generate(python_project, diagram_type="dependency")
+        result = generator.generate(large_python_project, diagram_type="dependency")
         assert "subgraph" in result.content
 
     def test_has_solid_edges(
-        self, generator: DiagramGenerator, python_project: Path
+        self, generator: DiagramGenerator, large_python_project: Path
     ) -> None:
-        result = generator.generate(python_project, diagram_type="dependency")
+        result = generator.generate(large_python_project, diagram_type="dependency")
         assert "-->" in result.content
 
     def test_node_count_positive(
-        self, generator: DiagramGenerator, python_project: Path
+        self, generator: DiagramGenerator, large_python_project: Path
     ) -> None:
-        result = generator.generate(python_project, diagram_type="dependency")
+        result = generator.generate(large_python_project, diagram_type="dependency")
         assert result.node_count > 0
 
     def test_result_type_and_format(
-        self, generator: DiagramGenerator, python_project: Path
+        self, generator: DiagramGenerator, large_python_project: Path
     ) -> None:
-        result = generator.generate(python_project, diagram_type="dependency")
+        result = generator.generate(large_python_project, diagram_type="dependency")
         assert result.diagram_type == "dependency"
         assert result.format == "mermaid"
 

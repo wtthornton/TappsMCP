@@ -41,6 +41,10 @@ _MIN_RESULTS_THRESHOLD = 3
 # Maximum packages shown on a pattern_card poster (README-embeddable size).
 _MAX_PATTERN_NODES = 8
 
+# STORY-100.6: projects with fewer top-level packages than this threshold
+# automatically use the pattern_card poster when diagram_type is "dependency".
+_POSTER_AUTO_THRESHOLD = 15
+
 # Fixed semantic-role palette. Shared across renderers (STORY-100.2 will
 # re-use these colors for the other 7 diagram types so every docs-mcp visual
 # speaks the same visual language).
@@ -105,6 +109,7 @@ class DiagramResult(BaseModel):
     degraded: bool = False
     scanned_dirs: list[str] = []
     skipped_count: int = 0
+    adr_link: str | None = None
 
 
 class DiagramGenerator:
@@ -177,6 +182,25 @@ class DiagramGenerator:
         Returns:
             A :class:`DiagramResult` with the rendered content.
         """
+        # STORY-100.6: auto-select pattern_card for small projects when the
+        # caller requested the default "dependency" diagram and HTML output.
+        # Counts top-level packages; falls through silently on any error.
+        if diagram_type == "dependency" and output_format in ("mermaid", "html"):
+            try:
+                from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
+
+                _mm = ModuleMapAnalyzer().analyze(project_root, depth=1)
+                _pkg_count = len({n.name for n in _mm.module_tree if n.name})
+                if _pkg_count < _POSTER_AUTO_THRESHOLD:
+                    logger.info(
+                        "auto_select_pattern_card",
+                        package_count=_pkg_count,
+                        threshold=_POSTER_AUTO_THRESHOLD,
+                    )
+                    diagram_type = "pattern_card"
+            except Exception:
+                pass  # Fall through to the normal dependency diagram.
+
         if diagram_type not in self.VALID_TYPES:
             logger.warning("invalid_diagram_type", diagram_type=diagram_type)
             return DiagramResult(
@@ -2244,6 +2268,40 @@ class DiagramGenerator:
         return "\n".join(lines) + "\n"
 
     # ------------------------------------------------------------------
+    # ADR cross-link helper — STORY-100.7
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _find_adr_for_archetype(project_root: Path, archetype: str) -> str | None:
+        """Return a relative path to an existing ADR that mentions *archetype*.
+
+        Searches ``docs/adr/``, ``docs/decisions/``, ``adr/``, and
+        ``.docs/adr/`` for Markdown files whose content contains the
+        archetype keyword (e.g. "layered", "hexagonal").  Returns the
+        relative path from *project_root* to the first match, or ``None``
+        if no match is found.
+        """
+        keyword = archetype.lower().replace("_", " ")
+        candidates = (
+            "docs/adr",
+            "docs/decisions",
+            "adr",
+            ".docs/adr",
+        )
+        for subdir in candidates:
+            adr_dir = project_root / subdir
+            if not adr_dir.is_dir():
+                continue
+            for md_file in sorted(adr_dir.glob("*.md")):
+                try:
+                    text = md_file.read_text(encoding="utf-8", errors="ignore").lower()
+                    if keyword in text or archetype.lower() in text:
+                        return str(md_file.relative_to(project_root))
+                except OSError:
+                    continue
+        return None
+
+    # ------------------------------------------------------------------
     # Pattern card (archetype poster) — STORY-100.3
     # ------------------------------------------------------------------
 
@@ -2281,19 +2339,21 @@ class DiagramGenerator:
             )
 
         packages = self._select_pattern_packages(module_map, graph)
+        adr_link = self._find_adr_for_archetype(project_root, str(result.archetype))
 
         if output_format == "html":
             from docs_mcp.generators.pattern_poster import ArchPatternPosterGenerator
-            content = ArchPatternPosterGenerator().generate_single(packages, result)
+            content = ArchPatternPosterGenerator().generate_single(packages, result, adr_link=adr_link)
             return DiagramResult(
                 diagram_type="pattern_card",
                 format="html",
                 content=content,
                 node_count=len(packages),
                 degraded=not packages,
+                adr_link=adr_link,
             )
 
-        content = self._render_pattern_card_mermaid(result, packages)
+        content = self._render_pattern_card_mermaid(result, packages, adr_link=adr_link)
         return DiagramResult(
             diagram_type="pattern_card",
             format=output_format,
@@ -2301,6 +2361,7 @@ class DiagramGenerator:
             node_count=len(packages),
             edge_count=content.count("-->"),
             degraded=not packages,
+            adr_link=adr_link,
         )
 
     def _generate_pattern_comparison(
@@ -2432,6 +2493,7 @@ class DiagramGenerator:
         self,
         result: ArchetypeResult,
         packages: list[tuple[str, str]],
+        adr_link: str | None = None,
     ) -> str:
         """Render the pattern-card poster as Mermaid."""
         archetype = result.archetype.upper().replace("_", " ")
@@ -2440,7 +2502,10 @@ class DiagramGenerator:
         if result.evidence:
             evidence_note = result.evidence[0].replace('"', "'")[:120]
 
-        lines: list[str] = ["flowchart TD"]
+        lines: list[str] = []
+        if adr_link:
+            lines.append(f"%% ADR: {adr_link}")
+        lines.append("flowchart TD")
         header_label = f"{archetype} (confidence {confidence})"
         if evidence_note:
             header_label += f"<br/>{evidence_note}"
