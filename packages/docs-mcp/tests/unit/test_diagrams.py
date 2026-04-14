@@ -1337,3 +1337,29 @@ class TestRolePaletteAcrossRenderers:
     ) -> None:
         r = generator.generate(python_project, diagram_type="class_hierarchy")
         assert ":::data" in r.content
+
+
+class TestC4RolePalette:
+    """C4 Mermaid renderers emit UpdateElementStyle per-role (STORY-100.4)."""
+
+    def test_c4_container_emits_updateelementstyle(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        r = generator.generate(python_project, diagram_type="c4_container")
+        assert "UpdateElementStyle" in r.content
+        # At least one role color from _ROLE_COLORS appears.
+        from docs_mcp.generators.diagrams import _ROLE_COLORS
+        assert any(c in r.content for c in _ROLE_COLORS.values())
+
+    def test_c4_component_emits_updateelementstyle(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        r = generator.generate(python_project, diagram_type="c4_component")
+        if r.content:  # component diagram may degrade on tiny fixtures
+            assert "UpdateElementStyle" in r.content
+
+    def test_c4_context_emits_updateelementstyle(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        r = generator.generate(python_project, diagram_type="c4_context")
+        assert "UpdateElementStyle" in r.content

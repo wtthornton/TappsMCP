@@ -1154,6 +1154,19 @@ class DiagramGenerator:
             aid = self._sanitize_id(actor_name)
             lines.append(f'    Rel({aid}, {sys_id}, "Uses")')
 
+        # Role-based styling — system is business; actors map by kind.
+        styled: list[tuple[str, str]] = [(sys_id, "business")]
+        for actor_name, _ in actors:
+            aid = self._sanitize_id(actor_name)
+            if actor_name == "Database":
+                styled.append((aid, "data"))
+            elif actor_name == "ExternalAPI":
+                styled.append((aid, "infra"))
+            else:
+                styled.append((aid, "presentation"))
+        lines.append("")
+        lines.extend(self._role_c4_updateelementstyle_lines(styled))
+
         lines.append("")
         return "\n".join(lines) + "\n", node_count, edge_count
 
@@ -1279,9 +1292,14 @@ class DiagramGenerator:
         lines.append(f'    System_Boundary({self._sanitize_id(name)}, "{name}") {{')
 
         edges = 0
+        styled: list[tuple[str, str]] = []
         for cname, tech, desc in containers:
             cid = self._sanitize_id(cname)
             lines.append(f'        Container({cid}, "{cname}", "{tech}", "{desc}")')
+            if tech == "Docker" or "Docker" in cname:
+                styled.append((cid, "infra"))
+            else:
+                styled.append((cid, self._classify_role(cname)))
 
         lines.append("    }")
         lines.append("")
@@ -1294,6 +1312,8 @@ class DiagramGenerator:
                 lines.append(f'    Rel({first_id}, {cid}, "Uses")')
                 edges += 1
 
+        lines.append("")
+        lines.extend(self._role_c4_updateelementstyle_lines(styled))
         lines.append("")
         return "\n".join(lines) + "\n", len(containers), edges
 
@@ -1398,11 +1418,15 @@ class DiagramGenerator:
         cid = self._sanitize_id(container_name)
         lines.append(f'    Container_Boundary({cid}, "{container_name}") {{')
 
+        styled: list[tuple[str, str]] = []
         for cname, desc, _ in components[:_MAX_DEPENDENCY_NODES]:
             comp_id = self._sanitize_id(cname)
             lines.append(f'        Component({comp_id}, "{cname}", "Python", "{desc}")')
+            styled.append((comp_id, self._classify_role(cname)))
 
         lines.append("    }")
+        lines.append("")
+        lines.extend(self._role_c4_updateelementstyle_lines(styled))
         lines.append("")
         return "\n".join(lines) + "\n", len(components), 0
 
@@ -2283,6 +2307,22 @@ class DiagramGenerator:
 
         names = names[:_MAX_PATTERN_NODES]
         return [(n, self._classify_role(n)) for n in names]
+
+    @staticmethod
+    def _role_c4_updateelementstyle_lines(
+        elements: list[tuple[str, str]],
+        indent: str = "    ",
+    ) -> list[str]:
+        """Emit C4-Mermaid UpdateElementStyle calls for each (id, role)."""
+        out: list[str] = []
+        for element_id, role in elements:
+            color = _ROLE_COLORS[role]
+            text = "#000" if role == "presentation" else "#fff"
+            out.append(
+                f'{indent}UpdateElementStyle({element_id}, '
+                f'$bgColor="{color}", $fontColor="{text}", $borderColor="#333")'
+            )
+        return out
 
     @staticmethod
     def _role_classdef_mermaid_lines() -> list[str]:

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.3] - 2026-04-14
+
+### Added
+
+- **C4 Mermaid role styling** (STORY-100.4) — `c4_context`, `c4_container`, and `c4_component` Mermaid renderers now emit `UpdateElementStyle(element, $bgColor=..., $fontColor=..., $borderColor=...)` per element, colored by semantic role. Containers and components are classified by package name; context actors map by kind (Person→presentation, Database→data, ExternalAPI→infra, system→business). ER diagram still deferred — Mermaid `erDiagram` has no styling directive and requires either a PlantUML-side render or a rewrite to `classDiagram`.
+
+### Changed
+
+- Version bump: tapps-core 2.6.2 → 2.6.3, tapps-mcp 2.6.2 → 2.6.3, docs-mcp 2.6.2 → 2.6.3
+
 ## [2.6.2] - 2026-04-14
 
 ### Added
