@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-04-14
+
+### Added
+
+- **`tapps_pipeline` one-call orchestrator** (STORY-101.2, EPIC-101) — new MCP tool that collapses the recommended `session_start → quick_check → validate_changed → checklist` loop into a single call. Takes comma-separated `file_paths` and `task_type`; returns a unified envelope with a `stages` array (name / success / elapsed_ms / summary per stage) and a top-level `pipeline_passed`. Short-circuits `validate_changed` on security-floor failure (no point re-running gates when security is below 50). Added to `ALL_TOOL_NAMES` and `TOOL_PRESET_CORE`.
+
+### Changed
+
+- Version bump: tapps-core 2.6.3 → 2.7.0, tapps-mcp 2.6.3 → 2.7.0, docs-mcp 2.6.3 → 2.7.0
+
 ## [2.6.3] - 2026-04-14
 
 ### Added

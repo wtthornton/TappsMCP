@@ -1355,9 +1355,17 @@ async def tapps_session_start(
     except ImportError:
         pass
 
+    # Include binary path for version-mismatch diagnosis (#89)
+    import shutil
+    import sys
+
+    server_info = dict(info["data"]["server"])
+    server_info["executable"] = sys.executable
+    server_info["binary_path"] = shutil.which("tapps-mcp") or ""
+
     data: dict[str, Any] = {
         "project_root": str(settings.project_root),
-        "server": info["data"]["server"],
+        "server": server_info,
         "configuration": info["data"]["configuration"],
         "installed_checkers": info["data"]["installed_checkers"],
         "checker_environment": info["data"].get("checker_environment", "mcp_server"),
@@ -1534,8 +1542,8 @@ async def tapps_init(
     platform: str = "",
     verify_server: bool = True,
     install_missing_checkers: bool = False,
-    warm_cache_from_tech_stack: bool = True,
-    warm_expert_rag_from_tech_stack: bool = True,
+    warm_cache_from_tech_stack: bool = False,
+    warm_expert_rag_from_tech_stack: bool = False,
     overwrite_platform_rules: bool = False,
     overwrite_agents_md: bool = False,
     overwrite_tech_stack_md: bool = False,
@@ -2054,6 +2062,169 @@ def tapps_doctor(
     return _with_nudges("tapps_doctor", resp)
 
 
+async def tapps_pipeline(
+    file_paths: str = "",
+    task_type: str = "feature",
+    preset: str = "standard",
+    skip_session_start: bool = False,
+) -> dict[str, Any]:
+    """One-call orchestrator for the full TappsMCP quality pipeline (STORY-101.2).
+
+    Collapses the recommended edit → check → validate → done loop into a
+    single tool call. Executes, in order:
+
+    1. ``tapps_session_start`` (skipped if already initialized in-session
+       or ``skip_session_start=True``)
+    2. ``tapps_quick_check`` (batch mode) on ``file_paths``
+    3. ``tapps_validate_changed`` on the same paths
+    4. ``tapps_checklist`` for ``task_type``
+
+    Short-circuits on a security floor failure from quick_check — no point
+    running validate_changed if security is already failing below 50.
+
+    Args:
+        file_paths: Comma-separated file paths to check. Required.
+        task_type: feature | bugfix | refactor | security | review | epic.
+        preset: Quality gate preset — "standard", "strict", or "framework".
+        skip_session_start: Skip session_start even if not initialized
+            (for scripted CI callers that already ran it).
+
+    Returns:
+        Unified envelope with a ``stages`` array, each entry carrying
+        ``name``, ``success``, ``elapsed_ms``, and a compact ``summary``.
+        ``pipeline_passed`` is True only when every stage succeeded and no
+        short-circuit fired.
+    """
+    from tapps_mcp.server import _record_call
+    from tapps_mcp.server_helpers import ensure_session_initialized
+    from tapps_mcp.server_scoring_tools import tapps_quick_check
+
+    start = time.perf_counter_ns()
+    _record_call("tapps_pipeline")
+
+    if not file_paths.strip():
+        return error_response(
+            "tapps_pipeline",
+            "NO_FILE_PATHS",
+            "tapps_pipeline requires file_paths — pass comma-separated paths.",
+        )
+
+    stages: list[dict[str, Any]] = []
+    pipeline_passed = True
+    short_circuit: str | None = None
+
+    # Stage 1 — session_start (cheap if already initialized).
+    if not skip_session_start:
+        stage_start = time.perf_counter_ns()
+        try:
+            await ensure_session_initialized()
+            stages.append({
+                "name": "session_start",
+                "success": True,
+                "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+                "summary": "session initialized",
+            })
+        except Exception as exc:
+            pipeline_passed = False
+            stages.append({
+                "name": "session_start",
+                "success": False,
+                "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+                "summary": f"session_start failed: {exc}",
+            })
+
+    # Stage 2 — quick_check (batch).
+    stage_start = time.perf_counter_ns()
+    qc_resp = await tapps_quick_check(
+        file_path="", preset=preset, fix=False, file_paths=file_paths,
+    )
+    qc_data = qc_resp.get("data", {}) if isinstance(qc_resp, dict) else {}
+    qc_passed = bool(qc_resp.get("success")) and not qc_data.get("security_floor_failed")
+    stages.append({
+        "name": "quick_check",
+        "success": qc_passed,
+        "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+        "summary": _summarize_quick_check(qc_data),
+    })
+    if not qc_passed:
+        pipeline_passed = False
+    if qc_data.get("security_floor_failed"):
+        short_circuit = "security_floor_failed"
+
+    # Stage 3 — validate_changed (skipped on security short-circuit).
+    if short_circuit is None:
+        stage_start = time.perf_counter_ns()
+        vc_resp = await tapps_validate_changed(file_paths=file_paths, preset=preset)
+        vc_data = vc_resp.get("data", {}) if isinstance(vc_resp, dict) else {}
+        vc_passed = bool(vc_resp.get("success")) and bool(vc_data.get("all_passed", False))
+        stages.append({
+            "name": "validate_changed",
+            "success": vc_passed,
+            "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+            "summary": (
+                f"{vc_data.get('passed_count', 0)} passed / "
+                f"{vc_data.get('failed_count', 0)} failed"
+            ),
+        })
+        if not vc_passed:
+            pipeline_passed = False
+    else:
+        stages.append({
+            "name": "validate_changed",
+            "success": False,
+            "elapsed_ms": 0,
+            "summary": f"skipped ({short_circuit})",
+        })
+        pipeline_passed = False
+
+    # Stage 4 — checklist (always runs, even on failure, for the report).
+    stage_start = time.perf_counter_ns()
+    try:
+        from tapps_mcp.server import tapps_checklist
+
+        cl_resp = await tapps_checklist(task_type=task_type, output_format="compact")
+        cl_data = cl_resp.get("data", {}) if isinstance(cl_resp, dict) else {}
+        cl_passed = bool(cl_resp.get("success")) and not cl_data.get("missing")
+        stages.append({
+            "name": "checklist",
+            "success": cl_passed,
+            "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+            "summary": cl_data.get("compact_summary") or str(cl_data.get("status", "")),
+        })
+        if not cl_passed:
+            pipeline_passed = False
+    except Exception as exc:
+        pipeline_passed = False
+        stages.append({
+            "name": "checklist",
+            "success": False,
+            "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+            "summary": f"checklist failed: {exc}",
+        })
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    data: dict[str, Any] = {
+        "pipeline_passed": pipeline_passed,
+        "short_circuit": short_circuit,
+        "stages": stages,
+        "task_type": task_type,
+        "file_paths": file_paths,
+    }
+    return success_response("tapps_pipeline", elapsed_ms, data)
+
+
+def _summarize_quick_check(qc_data: dict[str, Any]) -> str:
+    """Compact one-line summary of a quick_check response."""
+    if "batch" in qc_data:
+        batch = qc_data["batch"]
+        return (
+            f"{batch.get('passed_count', 0)} passed / "
+            f"{batch.get('failed_count', 0)} failed"
+        )
+    score = qc_data.get("score") or qc_data.get("overall_score")
+    return f"score={score}" if score is not None else "ok"
+
+
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register pipeline/validation tools on *mcp_instance* (Epic 79.1: conditional)."""
     if "tapps_validate_changed" in allowed_tools:
@@ -2068,3 +2239,5 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_upgrade)
     if "tapps_doctor" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_doctor)
+    if "tapps_pipeline" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_pipeline)

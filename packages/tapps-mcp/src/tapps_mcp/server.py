@@ -186,6 +186,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_memory",
     "tapps_consult_expert",
     "tapps_research",
+    "tapps_pipeline",
 })
 
 # Tier 1 from TOOL-TIER-RANKING (Epic 79.1)
@@ -197,6 +198,7 @@ TOOL_PRESET_CORE: frozenset[str] = frozenset({
     "tapps_checklist",
     "tapps_lookup_docs",
     "tapps_security_scan",
+    "tapps_pipeline",
 })
 
 # Tier 1 + Tier 2
