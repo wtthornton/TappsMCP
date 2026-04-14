@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-04-14
+
+### Added
+
+- **Architectural pattern classifier** (docs-mcp) — new `docs_mcp.analyzers.pattern.PatternClassifier` deterministically labels a project as `layered`, `hexagonal`, `microservice`, `event_driven`, `pipeline`, `monolith`, or `unknown`. Returns `ArchetypeResult(archetype, confidence, evidence, alternatives)` with citation evidence per verdict. No LLM, no network. Foundation for poster-style diagrams (EPIC-100, STORY-100.1).
+- **Planning: EPIC-100 Architecture Pattern Recognition & Poster Diagrams** — 7-story plan to add archetype-aware, semantic-colored, one-page "poster" diagrams. Inspired by the Amigoscode software-architectural-patterns infographic.
+- **Planning: EPIC-101 Zero-Friction Quality Pipeline** — 7-story plan to collapse the 26 tapps-mcp tools into a frictionless edit → check → validate → done loop via a shared content-hash cache, a `tapps_pipeline` orchestrator, top-1 nudges, and skipped-step telemetry.
+- **Planning: EPIC-102 Unified Brain & Cross-Project Intelligence** — 7-story plan to make tapps-brain the shared substrate both tapps-mcp and docs-mcp read and write, with auto-recall hooks and a unified insight schema.
+- **Flagship stories** — STORY-100.1 (SHIPPED), STORY-101.2 (pipeline orchestrator), STORY-102.3 (auto-recall hook) with Gherkin acceptance criteria.
+
+### Changed
+
+- Version bump: tapps-core 2.4.0 → 2.5.0, tapps-mcp 2.4.0 → 2.5.0, docs-mcp 2.4.0 → 2.5.0
+
 ## [2.4.0] - 2026-04-08
 
 ### Added
