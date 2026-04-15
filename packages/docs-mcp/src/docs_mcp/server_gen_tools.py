@@ -1004,6 +1004,15 @@ async def docs_generate_architecture(
         **out_data,
     }
 
+    # EPIC-102: write architecture facts to tapps-brain (opt-in)
+    if settings.brain_write_enabled:
+        from docs_mcp.integrations.brain_writer import ArchitectureBrainWriter
+
+        writer = ArchitectureBrainWriter(root)
+        project_name = root.name
+        bw = writer.write_from_architecture_result(result, project_name)
+        data.update(bw.to_dict())
+
     return success_response(
         "docs_generate_architecture",
         elapsed_ms,

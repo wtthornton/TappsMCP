@@ -90,6 +90,14 @@ async def docs_module_map(
         "public_api_count": result.public_api_count,
     }
 
+    # EPIC-102: write module map facts to tapps-brain (opt-in)
+    if settings.brain_write_enabled:
+        from docs_mcp.integrations.brain_writer import ArchitectureBrainWriter
+
+        writer = ArchitectureBrainWriter(root)
+        bw = writer.write_from_module_map(result)
+        data.update(bw.to_dict())
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     return success_response("docs_module_map", elapsed_ms, data)
 

@@ -209,6 +209,17 @@ class DocsMCPSettings(BaseSettings):
             return list(v)
         return []
 
+    # tapps-brain write path (EPIC-102)
+    brain_write_enabled: bool = Field(
+        default=False,
+        description=(
+            "When True, docs_generate_architecture and docs_module_map write "
+            "architecture facts into tapps-brain as InsightEntry-tagged records. "
+            "Requires tapps-brain to be installed. Opt-in: disabled by default. "
+            "Env: DOCS_MCP_BRAIN_WRITE_ENABLED."
+        ),
+    )
+
 
 # Settings cache - only the no-arg (default) case is cached.
 _cached_settings: DocsMCPSettings | None = None

@@ -523,6 +523,17 @@ class MemorySettings(BaseSettings):
         description="Entity/relationship extraction settings (Epic 65.12).",
     )
 
+    # EPIC-102: auto-recall hook for tapps_validate_changed
+    recall_on_validate: bool = Field(
+        default=False,
+        description=(
+            "When True, tapps_validate_changed searches the insights memory_group "
+            "for entries relevant to the files being validated and attaches them "
+            "under 'recalled_insights' in the response. Requires tapps-brain. "
+            "Env: TAPPS_MCP_MEMORY_RECALL_ON_VALIDATE."
+        ),
+    )
+
 
 class DocSourceConfig(BaseModel):
     """Custom documentation source for a specific library."""

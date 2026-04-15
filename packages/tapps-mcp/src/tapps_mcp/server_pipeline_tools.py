@@ -744,6 +744,13 @@ async def tapps_validate_changed(
     }
     if impact_data is not None:
         resp_data["impact_summary"] = impact_data
+
+    # EPIC-102: auto-recall of relevant insights (opt-in)
+    if settings.memory.recall_on_validate:
+        from tapps_mcp.tools.insight_recall import recall_insights_for_validate
+
+        recall_data = recall_insights_for_validate(paths, settings.project_root)
+        resp_data.update(recall_data)
     if correlation_id.strip():
         resp_data["correlation_id"] = correlation_id.strip()
     if timed_out:
