@@ -641,8 +641,12 @@ def _generate_platform_file_ops(cfg: BootstrapConfig, state: _BootstrapState) ->
         state.file_ops.append(FileOperation(
             path="CLAUDE.md",
             content=content,
-            mode="create",
-            description="Claude Code platform rules with TappsMCP pipeline reference.",
+            mode="merge",
+            description=(
+                "TappsMCP pipeline section for CLAUDE.md. "
+                "Append to existing file (do not overwrite). "
+                "If a '# TAPPS Quality Pipeline' section already exists, replace only that section."
+            ),
             priority=2,
         ))
         state.created.append("CLAUDE.md")

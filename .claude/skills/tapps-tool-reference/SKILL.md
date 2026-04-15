@@ -28,13 +28,10 @@ provide the full tool reference from this skill.
 | **tapps_score_file** | When editing/reviewing - use quick=True during edit loops |
 | **tapps_server_info** | At session start - discover version, tools, recommended workflow |
 
-## Documentation & experts
+## Documentation & research
 | Tool | When to use it |
 |------|----------------|
-| **tapps_lookup_docs** | Before writing code using an external library |
-| **tapps_consult_expert** | Domain-specific decisions (security, testing, APIs, etc.) |
-| **tapps_research** | Combined expert + docs in one call |
-| **tapps_list_experts** | See which expert domains exist |
+| **tapps_lookup_docs** | Before writing code using an external library, or for domain guidance (security, testing, APIs, etc.) |
 
 ## Project & memory
 | Tool | When to use it |

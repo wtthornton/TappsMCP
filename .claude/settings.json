@@ -16,8 +16,7 @@
       "Bash(python *)",
       "Bash(gh *)",
       "mcp__tapps-mcp__*",
-      "mcp__docs-mcp__*",
-      "mcp__tapps-mcp"
+      "mcp__docs-mcp__*"
     ],
     "deny": [
       "Bash(rm -rf *)",
