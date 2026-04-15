@@ -354,5 +354,6 @@ class TestDirectMode:
                 run_bandit=False,
                 run_radon=True,
                 run_vulture=True,
+                run_perflint=True,
                 vulture_whitelist_patterns=None,
             )

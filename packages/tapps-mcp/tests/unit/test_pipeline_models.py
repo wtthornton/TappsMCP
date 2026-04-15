@@ -45,7 +45,7 @@ class TestStageTools:
     def test_discover_tools(self):
         tools = STAGE_TOOLS[PipelineStage.DISCOVER]
         assert "tapps_server_info" in tools
-        assert "tapps_project_profile" in tools
+        assert "tapps_session_start" in tools
 
     def test_verify_tools(self):
         tools = STAGE_TOOLS[PipelineStage.VERIFY]

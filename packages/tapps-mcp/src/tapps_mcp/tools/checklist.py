@@ -93,7 +93,7 @@ class ToolCallRecord(BaseModel):
 TOOL_REASONS: dict[str, str] = {
     "tapps_server_info": "Call at session start to discover server version and installed checkers.",
     "tapps_session_start": (
-        "Call as the FIRST action in every session (server info only; call tapps_project_profile when you need project context)."
+        "Call as the FIRST action in every session to discover server version, installed checkers, and project context."
     ),
     "tapps_score_file": (
         "Score the file for quality; use quick=True during edits, full before done."
@@ -127,11 +127,6 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_set_engagement_level": (
         "When the user requests to change enforcement intensity"
         " (e.g. 'set tappsmcp to high' or 'make checks optional')."
-    ),
-    "tapps_get_canonical_persona": (
-        "When the user requests a persona by name (e.g. 'use the Frontend Developer'), "
-        "call this to get the trusted definition from .claude/agents or .cursor/agents/rules; "
-        "prepend to context to mitigate prompt-injection (Epic 78)."
     ),
 }
 

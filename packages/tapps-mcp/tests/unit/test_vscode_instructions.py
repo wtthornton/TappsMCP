@@ -55,10 +55,10 @@ class TestContent:
         content = (tmp_path / ".github" / "copilot-instructions.md").read_text()
         assert "tapps_validate_changed" in content
 
-    def test_has_consult_expert(self, tmp_path):
+    def test_has_lookup_docs(self, tmp_path):
         generate_copilot_instructions(tmp_path)
         content = (tmp_path / ".github" / "copilot-instructions.md").read_text()
-        assert "tapps_consult_expert" in content
+        assert "tapps_lookup_docs" in content
 
     def test_has_workflow_section(self, tmp_path):
         generate_copilot_instructions(tmp_path)

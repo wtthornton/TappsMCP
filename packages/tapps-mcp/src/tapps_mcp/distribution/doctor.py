@@ -75,6 +75,61 @@ def check_binary_on_path() -> CheckResult:
     )
 
 
+def check_binary_version_mismatch() -> CheckResult:
+    """Warn when the global ``tapps-mcp`` binary is a different version than this server.
+
+    A stale global binary (e.g. from ``uv tool install``) can cause opaque
+    import errors when the server code references modules that no longer exist.
+    """
+    import subprocess
+
+    from tapps_mcp import __version__
+
+    tapps_bin = shutil.which("tapps-mcp")
+    if not tapps_bin:
+        return CheckResult(
+            "Binary version",
+            True,
+            "tapps-mcp not on PATH (version check skipped)",
+        )
+
+    try:
+        result = subprocess.run(  # noqa: S603
+            [tapps_bin, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return CheckResult(
+                "Binary version",
+                True,
+                "Could not determine binary version (check skipped)",
+            )
+        # Output format varies; extract version-like string
+        bin_version = result.stdout.strip().split()[-1]
+    except Exception:
+        return CheckResult(
+            "Binary version",
+            True,
+            "Version check failed (skipped)",
+        )
+
+    if bin_version == __version__:
+        return CheckResult(
+            "Binary version",
+            True,
+            f"Binary and server versions match: {__version__}",
+        )
+    return CheckResult(
+        "Binary version",
+        False,
+        f"Version mismatch: binary={bin_version}, server={__version__}",
+        f"Reinstall: uv tool install --force --editable <tapps-mcp-path> "
+        f"or: pip install --force-reinstall tapps-mcp=={__version__}",
+    )
+
+
 def check_json_config(
     config_path: Path,
     servers_key: str,
@@ -188,6 +243,7 @@ def check_mcp_client_config(
         (project_root / ".cursor" / "mcp.json", "mcpServers", "Cursor"),
         (project_root / ".vscode" / "mcp.json", "servers", "VS Code"),
         (project_root / ".mcp.json", "mcpServers", "Claude Code (project)"),
+        (project_root / ".claude" / "settings.json", "mcpServers", "Claude Code (project settings)"),
         (base / ".claude.json", "mcpServers", "Claude Code (user)"),
         (base / ".claude" / "settings.json", "mcpServers", "Claude Code (settings)"),
     ]
@@ -758,11 +814,44 @@ def check_dual_memory_server(root: Path) -> CheckResult:
     )
 
 
+def _build_combined_install_hint(missing_tools: list[str]) -> str:
+    """Build a combined ``uv tool install --with`` command for all missing tools.
+
+    Tries to read ``uv-receipt.toml`` to determine the original install source
+    so the suggestion is accurate for editable/local installs.
+    """
+    import shutil
+
+    source = "tapps-mcp"
+
+    # Try to find the original install source from uv-receipt.toml
+    tapps_bin = shutil.which("tapps-mcp")
+    if tapps_bin:
+        receipt = Path(tapps_bin).resolve().parent.parent / "uv-receipt.toml"
+        if receipt.exists():
+            try:
+                content = receipt.read_text()
+                for line in content.splitlines():
+                    if "editable" in line.lower() or "path" in line.lower():
+                        # Extract the path value
+                        if "=" in line:
+                            val = line.split("=", 1)[1].strip().strip("'\"")
+                            if val and Path(val).exists():
+                                source = f"--editable {val}"
+                                break
+            except Exception:
+                pass
+
+    with_flags = " ".join(f"--with {t}" for t in missing_tools)
+    return f"uv tool install {source} {with_flags} --force"
+
+
 def check_quality_tools() -> list[CheckResult]:
     """Check for installed quality tools (ruff, mypy, bandit, radon)."""
     from tapps_mcp.tools.tool_detection import detect_installed_tools
 
     results: list[CheckResult] = []
+    missing_names: list[str] = []
     tools = detect_installed_tools(force_refresh=True)
     for tool in tools:
         if tool.available:
@@ -774,6 +863,7 @@ def check_quality_tools() -> list[CheckResult]:
                 )
             )
         else:
+            missing_names.append(tool.name)
             results.append(
                 CheckResult(
                     f"Tool: {tool.name}",
@@ -782,6 +872,19 @@ def check_quality_tools() -> list[CheckResult]:
                     tool.install_hint or "",
                 )
             )
+
+    # Add a combined install hint when multiple tools are missing
+    if len(missing_names) >= 2:
+        combined = _build_combined_install_hint(missing_names)
+        results.append(
+            CheckResult(
+                "Quality tools",
+                False,
+                f"{len(missing_names)} checker tools missing",
+                f"Install all at once: {combined}",
+            )
+        )
+
     return results
 
 
@@ -999,6 +1102,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     """
     checks: list[CheckResult] = []
     checks.append(check_binary_on_path())
+    checks.append(check_binary_version_mismatch())
     checks.append(check_claude_code_user(project_root=root))
     checks.append(check_claude_code_project(root))
     checks.append(check_cursor_config(root))

@@ -86,7 +86,7 @@ class OnboardingGuideGenerator:
         # Installation
         sections.append("## Installation")
         sections.append("")
-        sections.extend(self._installation(metadata, source, project_name))
+        sections.extend(self._installation(metadata, source, project_name, project_root))
         sections.append("")
 
         # Project Structure
@@ -172,6 +172,7 @@ class OnboardingGuideGenerator:
         metadata: ProjectMetadata,
         source: str,
         project_name: str,
+        project_root: Path | None = None,
     ) -> list[str]:
         """Generate installation section lines.
 
@@ -179,14 +180,40 @@ class OnboardingGuideGenerator:
             metadata: Extracted project metadata.
             source: Lowercase source file name.
             project_name: Display name for the project.
+            project_root: Project root directory (for uv.lock detection).
 
         Returns:
             List of markdown lines.
         """
+        has_uv = (
+            project_root is not None and (project_root / "uv.lock").exists()
+        ) or any("uv" in d for d in metadata.dev_dependencies)
+
+        # Detect git remote URL
+        clone_url = "<repository-url>"
+        if project_root is not None:
+            import subprocess
+
+            try:
+                result = subprocess.run(  # noqa: S603
+                    ["git", "remote", "get-url", "origin"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    cwd=project_root,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    clone_url = result.stdout.strip()
+            except Exception:
+                pass
+
         lines: list[str] = ["```bash"]
 
         if source == "pyproject.toml" or not source:
-            lines.append(f"pip install {project_name}")
+            if has_uv:
+                lines.append(f"uv sync  # or: pip install {project_name}")
+            else:
+                lines.append(f"pip install {project_name}")
         elif source == "package.json":
             lines.append(f"npm install {project_name}")
         elif source == "cargo.toml":
@@ -199,11 +226,14 @@ class OnboardingGuideGenerator:
         lines.append("For development:")
         lines.append("")
         lines.append("```bash")
-        lines.append("git clone <repository-url>")
+        lines.append(f"git clone {clone_url}")
         lines.append(f"cd {project_name}")
 
         if source == "pyproject.toml" or not source:
-            lines.append("pip install -e '.[dev]'")
+            if has_uv:
+                lines.append("uv sync --all-packages")
+            else:
+                lines.append("pip install -e '.[dev]'")
         elif source == "package.json":
             lines.append("npm install")
         elif source == "cargo.toml":
@@ -234,20 +264,23 @@ class OnboardingGuideGenerator:
             lines: list[str] = ["```"]
             for node in result.module_tree:
                 prefix = "+" if node.is_package else "-"
-                doc = (
-                    f"  # {node.module_docstring}"
+                # Truncate docstring to first line to avoid breaking tree layout
+                first_line = (
+                    node.module_docstring.split("\n")[0].strip()
                     if node.module_docstring
                     else ""
                 )
+                doc = f"  # {first_line}" if first_line else ""
                 suffix = "/" if node.is_package else ""
                 lines.append(f"{prefix} {node.name}{suffix}{doc}")
                 for sub in node.submodules:
                     sub_prefix = "  +" if sub.is_package else "  -"
-                    sub_doc = (
-                        f"  # {sub.module_docstring}"
+                    sub_first_line = (
+                        sub.module_docstring.split("\n")[0].strip()
                         if sub.module_docstring
                         else ""
                     )
+                    sub_doc = f"  # {sub_first_line}" if sub_first_line else ""
                     lines.append(f"{sub_prefix} {sub.name}{sub_doc}")
             lines.append("```")
             return lines

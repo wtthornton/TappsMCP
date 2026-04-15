@@ -81,8 +81,7 @@ class TestClaudeSkills:
         generate_skills(tmp_path, "claude")
         base = tmp_path / ".claude" / "skills"
         content = (base / "tapps-research" / "SKILL.md").read_text()
-        assert "mcp__tapps-mcp__tapps_research" in content
-        assert "mcp__tapps-mcp__tapps_consult_expert" in content
+        # tapps_research/tapps_consult_expert removed in EPIC-94; replaced by tapps_lookup_docs
         assert "mcp__tapps-mcp__tapps_lookup_docs" in content
 
     def test_security_skill_references_tools(self, tmp_path):
@@ -91,7 +90,7 @@ class TestClaudeSkills:
         content = (base / "tapps-security" / "SKILL.md").read_text()
         assert "mcp__tapps-mcp__tapps_security_scan" in content
         assert "mcp__tapps-mcp__tapps_dependency_scan" in content
-        assert "mcp__tapps-mcp__tapps_consult_expert" in content
+        # tapps_consult_expert removed in EPIC-94
 
     def test_memory_skill_references_tools(self, tmp_path):
         generate_skills(tmp_path, "claude")
@@ -157,8 +156,7 @@ class TestCursorSkills:
         generate_skills(tmp_path, "cursor")
         base = tmp_path / ".cursor" / "skills"
         content = (base / "tapps-research" / "SKILL.md").read_text()
-        assert "tapps_research" in content
-        assert "tapps_consult_expert" in content
+        # tapps_research/tapps_consult_expert removed in EPIC-94; replaced by tapps_lookup_docs
         assert "tapps_lookup_docs" in content
         assert "mcp__tapps-mcp__" not in content
 
@@ -168,7 +166,7 @@ class TestCursorSkills:
         content = (base / "tapps-security" / "SKILL.md").read_text()
         assert "tapps_security_scan" in content
         assert "tapps_dependency_scan" in content
-        assert "tapps_consult_expert" in content
+        # tapps_consult_expert removed in EPIC-94
         assert "mcp__tapps-mcp__" not in content
 
     def test_memory_skill_references_tools(self, tmp_path):

@@ -182,7 +182,6 @@ class TestTappsWorkflow:
     def test_general_workflow_steps(self):
         result = tapps_workflow("general")
         assert "tapps_session_start" in result
-        assert "tapps_project_profile" in result
         assert "tapps_quality_gate" in result
         assert "tapps_checklist" in result
 

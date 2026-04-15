@@ -90,9 +90,10 @@ class TestEngagementLevelVariants:
         content = generate_python_quality_rule("medium")
         assert "tapps_validate_changed" in content
 
-    def test_medium_references_research(self) -> None:
+    def test_medium_references_lookup_docs(self) -> None:
+        # tapps_research removed in EPIC-94; replaced by tapps_lookup_docs
         content = generate_python_quality_rule("medium")
-        assert "tapps_research" in content
+        assert "tapps_lookup_docs" in content
 
     def test_low_uses_consider_language(self) -> None:
         content = generate_python_quality_rule("low")

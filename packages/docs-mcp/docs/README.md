@@ -1,56 +1,9 @@
 # docs-mcp
 
-## Overview
+![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)  ![License](https://img.shields.io/badge/license-MIT-green)  ![Version](https://img.shields.io/badge/version-2.4.0-blue)
 
-DocsMCP is part of the [TappsMCP](https://github.com/tapps-mcp/tapps-mcp) platform. It provides 31 MCP tools that help AI coding assistants generate, validate, and maintain project documentation.
+MCP server for automated documentation generation, validation, and maintenance
 
-## Features
-
-- **Code extraction** - Parse Python modules to extract classes, functions, types, and docstrings
-- **README generation** - Generate and smart-merge README.md files with project metadata
-- **API documentation** - Generate structured API docs from source code analysis
-- **Changelog generation** - Build changelogs from git commit history using conventional commits
-- **Release notes** - Generate release notes for specific versions
-- **Architecture Decision Records** - Generate ADRs from context and rationale
-- **Onboarding and contributing guides** - Generate developer guides
-- **Diagram generation** - Generate architecture diagrams in Mermaid, PlantUML, or D2 format (dependency, module, class, ER, C4 context/container/component, sequence). D2 supports themes (default, sketch, terminal)
-- **Interactive HTML diagrams** - Generate interactive, zoomable diagram viewers with Mermaid.js
-- **llms.txt generation** - Machine-readable project summaries for LLMs
-- **Frontmatter management** - YAML frontmatter injection and update for markdown files
-- **Architecture templates** - Purpose/intent architecture templates with auto-inferred principles
-- **Documentation index** - Auto-categorized documentation index/map
-- **Diataxis analysis** - Diataxis quadrant coverage analysis and balance scoring
-- **Drift detection** - Identify when documentation falls out of sync with code
-- **Completeness analysis** - Assess documentation coverage gaps
-- **Link validation** - Check for broken documentation links
-- **Freshness checking** - Flag stale documentation
-- **Cross-reference validation** - Find orphans, broken refs, and missing backlinks
-
-## Installation
-
-See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
-
-```bash
-uv add docs-mcp
-
-docsmcp doctor
-```
-
-## Usage
-
-```bash
-docsmcp serve
-
-docsmcp doctor
-
-docsmcp version
-```
-
-## License
-
-MIT
-
-<!-- docsmcp:start:table-of-contents -->
 ## Table of Contents
 
 - [Features](#features)
@@ -58,14 +11,87 @@ MIT
 - [Usage](#usage)
 - [Development](#development)
 - [License](#license)
-<!-- docsmcp:end:table-of-contents -->
 
-<!-- docsmcp:start:architecture -->
+## Features
+
+- Python project with modern packaging (pyproject.toml)
+- Test suite included
+- Docker support
+- Documentation included
+- 73 modules with 279 public APIs
+- CLI entry points: src/docs_mcp/cli.py, docsmcp = docs_mcp.cli:cli
+- Click CLI framework
+- Pydantic data validation
+- pytest testing framework
+
+## Installation
+
+```bash
+pip install docs-mcp
+```
+
+## Usage
+
+### `docsmcp`
+
+```bash
+docsmcp
+```
+
+
 ## Architecture
 
 ### Project Structure
 
 ```
++ agents/  # Agent matching infrastructure for DocsMCP.
+
+Provides hybrid keyword + embedding matching for agent routing,
+catalog management, deduplication scoring, and lifecycle governance.
+  - catalog  # Agent catalog loader for DocsMCP.
+
+Reads AGENT.md files from a directory and parses YAML frontmatter into
+AgentConfig instances.
+  - dedup  # Embedding-based deduplication gate for agent proposals.
+
+Checks whether a proposed new agent overlaps with existing agents
+in the catalog using embedding cosine similarity. When overlap is
+detected, returns the overlapping agents instead of allowing creation.
+  - embeddings  # Embedding backend abstraction for DocsMCP agent matching.
+
+Provides a pluggable interface for computing text embeddings, with
+a local sentence-transformers implementation and a stub for testing.
+Includes disk-based caching keyed by content hash.
+  - health  # Catalog health analysis for agent governance.
+
+Computes pairwise similarity between all agents and identifies
+potential overlaps that may indicate redundant agents needing
+merge or cleanup.
+  - keyword_matcher  # Keyword-based agent matching for DocsMCP.
+
+Provides a simple TF-IDF-inspired overlap scorer as the baseline
+matching strategy and fallback when embeddings are unavailable.
+  - lifecycle  # Agent lifecycle management for catalog governance.
+
+Handles soft-delete (deprecation) and cleanup of agents that have
+been deprecated beyond the retention period.
+  - matcher  # Hybrid agent matcher combining keyword and embedding scores.
+
+Routes prompts to the best-matching agent using a weighted combination
+of keyword overlap and embedding cosine similarity.
+  - merge  # Capability merge suggestion generator for agent catalog governance.
+
+When the dedup gate detects overlap between a proposed agent and an
+existing one, this module generates structured merge suggestions:
+which keywords/capabilities to add to the existing agent to cover
+the proposed functionality.
+  - models  # Agent configuration models for DocsMCP.
+  - overlap_guard  # Proposer overlap guard for agent catalog governance.
+
+Before creating a new agent, the overlap guard identifies the top-N
+most similar existing agents. This context can be injected into a
+proposer prompt or presented to a human reviewer to reduce
+redundant agent creation.
 + analyzers/  # Code analysis engines for DocsMCP.
   - api_surface  # Public API surface detector for source modules (Python + multi-language).
   - commit_parser  # Conventional commit parser and heuristic classifier for DocsMCP.
@@ -266,28 +292,25 @@ severity, location, and fix suggestions.
 
 Epic 84 -- Doc Style & Tone Validation.
 ```
-<!-- docsmcp:end:architecture -->
 
-<!-- docsmcp:start:api-reference -->
 ## API Reference
 
 See the [API documentation](docs/api.md) for detailed reference.
-<!-- docsmcp:end:api-reference -->
 
-<!-- docsmcp:start:development -->
 ## Development
 
 ```bash
-git clone <repository-url>
+# Clone the repository
+git clone https://github.com/wtthornton/TappsMCP.git
 cd docs-mcp
 
+# Install dependencies
 pip install -e '.[dev]'
 
+# Run tests
 pytest
 ```
-<!-- docsmcp:end:development -->
 
-<!-- docsmcp:start:contributing -->
 ## Contributing
 
 Contributions are welcome! Please follow these steps:
@@ -297,4 +320,7 @@ Contributions are welcome! Please follow these steps:
 3. Commit your changes (`git commit -am 'Add my feature'`)
 4. Push to the branch (`git push origin feature/my-feature`)
 5. Open a Pull Request
-<!-- docsmcp:end:contributing -->
+
+## License
+
+This project is licensed under the MIT license.

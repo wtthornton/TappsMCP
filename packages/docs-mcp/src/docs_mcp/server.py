@@ -481,7 +481,10 @@ async def docs_project_scan(
     all_docs = _scan_doc_files(root)
     categories, total_size = _categorize_docs(all_docs)
     critical_docs = _check_critical_docs(all_docs)
-    completeness_score = _calculate_completeness(categories, critical_docs, all_docs)
+    doc_file_score = _calculate_completeness(categories, critical_docs, all_docs)
+    inline_coverage = _calculate_inline_doc_coverage(root)
+    # Composite: 70% doc files + 30% inline coverage
+    completeness_score = int(doc_file_score * 0.7 + inline_coverage * 0.3)
     recommendations = _build_project_scan_recommendations(categories, critical_docs, all_docs)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -491,6 +494,8 @@ async def docs_project_scan(
         "total_size_bytes": total_size,
         "categories": categories,
         "completeness_score": completeness_score,
+        "doc_file_completeness": doc_file_score,
+        "inline_doc_coverage": inline_coverage,
         "critical_docs": critical_docs,
         "recommendations": recommendations,
     }
@@ -673,6 +678,56 @@ def _calculate_completeness(
         score += 5
 
     return min(score, max_score)
+
+
+def _calculate_inline_doc_coverage(project_root: Path) -> int:
+    """Calculate inline documentation coverage (docstrings) as a 0-100 score.
+
+    Scans up to 50 Python files and computes the percentage of public
+    functions and classes that have docstrings.
+    """
+    try:
+        from docs_mcp.analyzers.api_surface import APISurfaceAnalyzer
+
+        analyzer = APISurfaceAnalyzer()
+        py_files = sorted(project_root.rglob("*.py"))
+
+        # Skip test files, venvs, and hidden dirs
+        filtered: list[Path] = []
+        for f in py_files:
+            parts = f.relative_to(project_root).parts
+            if any(
+                p.startswith(".") or p in ("venv", ".venv", "node_modules", "__pycache__")
+                for p in parts
+            ):
+                continue
+            filtered.append(f)
+            if len(filtered) >= 50:
+                break
+
+        total_public = 0
+        total_documented = 0
+        for py_file in filtered:
+            try:
+                surface = analyzer.analyze(py_file, project_root=project_root)
+                for func in surface.functions:
+                    total_public += 1
+                    if func.docstring_present:
+                        total_documented += 1
+                for cls in surface.classes:
+                    total_public += 1
+                    if cls.docstring_present:
+                        total_documented += 1
+            except Exception:
+                continue
+
+        if not filtered:
+            return 0  # No Python files found
+        if total_public == 0:
+            return 100  # Has Python files but no public API = nothing to document
+        return int((total_documented / total_public) * 100)
+    except Exception:
+        return 0
 
 
 # ---------------------------------------------------------------------------

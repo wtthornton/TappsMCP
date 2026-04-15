@@ -649,6 +649,16 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Upgrade skip list (Issue #86)
+    upgrade_skip_files: list[str] = Field(
+        default_factory=list,
+        description=(
+            "File paths (relative to project root) to skip during tapps_upgrade. "
+            "Use this to protect project-specific customizations from being overwritten. "
+            "Example: ['CLAUDE.md', '.claude/rules/tapps-pipeline.md']"
+        ),
+    )
+
     # Destructive command guard (opt-in PreToolUse hook)
     destructive_guard: bool = Field(
         default=False,

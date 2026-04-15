@@ -71,7 +71,7 @@ class TestDetectInstalledToolsAsync:
     ) -> None:
         """All tools missing returns unavailable entries."""
         results = await detect_installed_tools_async()
-        assert len(results) == 6
+        assert len(results) == 7
         for tool in results:
             assert tool.available is False
             assert tool.version is None
@@ -91,12 +91,12 @@ class TestDetectInstalledToolsAsync:
             command=["tool", "--version"],
         )
         results = await detect_installed_tools_async()
-        assert len(results) == 6
+        assert len(results) == 7
         for tool in results:
             assert tool.available is True
             assert tool.version == "tool 1.0.0"
-        # All 6 tools checked in parallel (6 calls total)
-        assert mock_run.call_count == 6
+        # All 7 tools checked in parallel (7 calls total)
+        assert mock_run.call_count == 7
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.tool_detection.shutil.which", return_value=None)

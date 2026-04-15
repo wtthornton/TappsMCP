@@ -117,10 +117,11 @@ class TestExpertConsultationRule:
         fm = _parse_frontmatter(content)
         assert "alwaysApply" not in fm
 
-    def test_body_references_consult_expert(self, tmp_path):
+    def test_body_references_lookup_docs(self, tmp_path):
+        # tapps_consult_expert removed in EPIC-94; expert rule now uses tapps_lookup_docs
         generate_cursor_rules(tmp_path)
         content = (tmp_path / ".cursor" / "rules" / "tapps-expert-consultation.mdc").read_text()
-        assert "tapps_consult_expert" in content
+        assert "tapps_lookup_docs" in content
 
 
 class TestSkipExisting:

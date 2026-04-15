@@ -54,7 +54,7 @@ class TestProjectScanFullFlow:
 
         data = result["data"]
         assert data["total_docs"] >= 1
-        assert data["completeness_score"] >= 15  # README = 15 pts
+        assert data["completeness_score"] >= 8  # README = 15 pts doc-file; composite lowers floor
         assert data["critical_docs"]["README.md"]["exists"] is True
 
     @pytest.mark.asyncio

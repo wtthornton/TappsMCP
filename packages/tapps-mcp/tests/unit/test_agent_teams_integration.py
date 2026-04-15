@@ -120,8 +120,10 @@ class TestClaudeMdTemplate:
     """Tests that the actual CLAUDE.md template includes Agent Teams."""
 
     def test_template_has_agent_teams_section(self):
-        from tapps_mcp.prompts.prompt_loader import load_platform_rules
+        # Agent Teams section moved from platform_claude_medium.md to
+        # AGENT_TEAMS_CLAUDE_MD_SECTION (injected into generated CLAUDE.md).
+        from tapps_mcp.pipeline.platform_bundles import get_agent_teams_claude_md_section
 
-        content = load_platform_rules("claude")
-        assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" in content
-        assert "quality watchdog" in content
+        section = get_agent_teams_claude_md_section()
+        assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" in section
+        assert "quality watchdog" in section

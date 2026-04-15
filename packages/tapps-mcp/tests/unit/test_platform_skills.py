@@ -72,7 +72,7 @@ class TestClaudeArgumentHint:
         [
             ("tapps-score", "[file-path]"),
             ("tapps-gate", "[file-path]"),
-            ("tapps-research", "[question]"),
+            ("tapps-research", "[library] [topic]"),
             ("tapps-memory", "[action] [key]"),
             ("tapps-security", "[file-path]"),
         ],

@@ -93,6 +93,13 @@ class ModuleMapAnalyzer:
         entry_points_list: list[str] = []
         counts: dict[str, int] = {"modules": 0, "packages": 0, "public_api": 0}
         self._aggregate(module_tree, entry_points=entry_points_list, counts=counts)
+
+        # Also detect entry points from pyproject.toml [project.scripts]
+        pyproject_eps = self._parse_pyproject_entry_points(project_root)
+        for ep in pyproject_eps:
+            if ep not in entry_points_list:
+                entry_points_list.append(ep)
+
         total_modules = counts["modules"]
         total_packages = counts["packages"]
         total_public_api = counts["public_api"]
@@ -352,6 +359,38 @@ class ModuleMapAnalyzer:
             if node.has_main or node.name == "__main__":
                 result.append(node.path)
             self._collect_entry_points(node.submodules, result)
+
+    @staticmethod
+    def _parse_pyproject_entry_points(project_root: Path) -> list[str]:
+        """Parse ``[project.scripts]`` and ``[project.gui-scripts]`` from pyproject.toml.
+
+        Returns entry points formatted as ``"name = module:function"``.
+        """
+        pyproject = project_root / "pyproject.toml"
+        if not pyproject.exists():
+            return []
+
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            try:
+                import tomli as tomllib  # type: ignore[no-redef]
+            except ModuleNotFoundError:
+                return []
+
+        try:
+            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+
+        results: list[str] = []
+        project = data.get("project", {})
+        for key in ("scripts", "gui-scripts"):
+            scripts = project.get(key, {})
+            if isinstance(scripts, dict):
+                for name, target in scripts.items():
+                    results.append(f"{name} = {target}")
+        return results
 
     # ------------------------------------------------------------------
     # Helpers

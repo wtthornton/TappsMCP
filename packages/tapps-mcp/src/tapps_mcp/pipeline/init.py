@@ -49,8 +49,8 @@ class BootstrapConfig:
     platform: str = ""
     verify_server: bool = True
     install_missing_checkers: bool = False
-    warm_cache_from_tech_stack: bool = True
-    warm_expert_rag_from_tech_stack: bool = True
+    warm_cache_from_tech_stack: bool = False
+    warm_expert_rag_from_tech_stack: bool = False
     overwrite_platform_rules: bool = False
     overwrite_agents_md: bool = False
     agent_teams: bool = False
@@ -706,6 +706,11 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             docsmcp_detected=state.result.get("docsmcp_detected", False),
         )
         state.result["claude_settings"] = {"action": settings_action}
+        if settings_action in ("created", "updated"):
+            state.warnings.append(
+                "MCP servers are only connected at session start. "
+                "Restart your Claude Code session for tapps-mcp tools to become available."
+            )
         if settings_action == "created":
             state.created.append(".claude/settings.json")
         if not cfg.minimal:

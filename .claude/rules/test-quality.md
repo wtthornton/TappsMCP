@@ -8,7 +8,7 @@ paths:
 
 Run `tapps_quick_check(file_path)` after editing test files.
 
-Use `tapps_consult_expert(question, domain="testing-strategies")` for test design decisions.
+Use `tapps_lookup_docs(library, topic)` for test framework APIs and best practices.
 
 ## Testing Standards
 

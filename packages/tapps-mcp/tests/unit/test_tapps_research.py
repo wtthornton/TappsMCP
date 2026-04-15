@@ -110,4 +110,9 @@ class TestErrorResponseExtra:
         from tapps_mcp.server_helpers import error_response
 
         result = error_response("test_tool", "TEST_CODE", "msg")
-        assert set(result["error"].keys()) == {"code", "message"}
+        # Actionable envelope (STORY-101.4) always includes category/retryable/remediation
+        assert "code" in result["error"]
+        assert "message" in result["error"]
+        assert "category" in result["error"]
+        assert "retryable" in result["error"]
+        assert "remediation" in result["error"]

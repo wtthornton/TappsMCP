@@ -104,6 +104,8 @@ a = Analysis(
         "tapps_mcp.tools.vulture",
         "tapps_mcp.tools.pip_audit",
         "tapps_mcp.tools.dependency_scan_cache",
+        "tapps_mcp.tools.content_hash_cache",
+        "tapps_mcp.tools.perflint",
         "tapps_mcp.knowledge",
         "tapps_mcp.knowledge.models",
         "tapps_mcp.knowledge.cache",

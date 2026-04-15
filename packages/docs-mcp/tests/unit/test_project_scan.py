@@ -77,8 +77,9 @@ class TestDocsProjectScan:
         # Minimal project (only README) should score lower
         result_full = await docs_project_scan(project_root=str(sample_project))
         assert score_minimal == result_full["data"]["completeness_score"]
-        # At least README gives 15 points
-        assert score_minimal >= 15
+        # README gives 15 doc_file points; composite = 15*0.7 + inline*0.3
+        assert score_minimal >= 10
+        assert result["data"]["doc_file_completeness"] >= 15
 
     @pytest.mark.asyncio
     async def test_project_scan_critical_docs(self, docs_project: Path) -> None:

@@ -32,7 +32,7 @@ class TestAgentProfileGeneration:
         researcher = tmp_path / ".github" / "agents" / "tapps-researcher.md"
         assert researcher.exists()
         content = researcher.read_text()
-        assert "tapps_research" in content
+        # tapps_research removed in EPIC-94; researcher agent now uses tapps_lookup_docs
         assert "tapps_lookup_docs" in content
 
     def test_quality_agent_has_yaml_frontmatter(self, tmp_path):

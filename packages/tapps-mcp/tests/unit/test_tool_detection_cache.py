@@ -89,7 +89,7 @@ class TestDiskCacheWriteAndRead:
             detect_installed_tools()
             assert cache_file.exists()
             data = json.loads(cache_file.read_text(encoding="utf-8"))
-            assert len(data["tools"]) == 6
+            assert len(data["tools"]) == 7
 
     @pytest.mark.asyncio
     async def test_async_detect_writes_disk_cache(self, tmp_path: Path) -> None:
@@ -109,7 +109,7 @@ class TestDiskCacheWriteAndRead:
             await detect_installed_tools_async()
             assert cache_file.exists()
             data = json.loads(cache_file.read_text(encoding="utf-8"))
-            assert len(data["tools"]) == 6
+            assert len(data["tools"]) == 7
 
 
 class TestDiskCacheExpiry:

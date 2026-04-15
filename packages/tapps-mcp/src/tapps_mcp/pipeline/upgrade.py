@@ -69,6 +69,7 @@ def _upgrade_platform(
     force: bool = False,
     dry_run: bool = False,
     engagement_level: str = "medium",
+    skip_files: set[str] | None = None,
 ) -> dict[str, Any]:
     """Upgrade platform-specific files for a single host.
 
@@ -95,6 +96,7 @@ def _upgrade_platform(
     )
 
     result: dict[str, Any] = {"host": host, "components": {}}
+    _skip = skip_files or set()
 
     # MCP config check (upgrade_mode preserves command paths)
     config_path = _get_config_path(host, project_root)
@@ -118,6 +120,8 @@ def _upgrade_platform(
             result["components"]["agents"] = "would-regenerate"
             result["components"]["skills"] = "would-regenerate"
             result["components"]["python_quality_rule"] = "would-regenerate"
+        elif "CLAUDE.md" in _skip:
+            result["components"]["claude_md"] = "skipped (upgrade_skip_files)"
         else:
             claude_action = _bootstrap_claude(project_root, overwrite=force)
             result["components"]["claude_md"] = claude_action
@@ -147,6 +151,11 @@ def _upgrade_platform(
                 project_root, engagement_level=engagement_level
             )
             result["components"]["python_quality_rule"] = rule_result
+
+            from tapps_mcp.pipeline.platform_bundles import generate_claude_pipeline_rule
+
+            pipeline_rule_result = generate_claude_pipeline_rule(project_root)
+            result["components"]["pipeline_rule"] = pipeline_rule_result
 
     elif host == "cursor":
         if dry_run:
@@ -544,13 +553,26 @@ def upgrade_pipeline(
             log.warning("backup_failed", error=str(exc))
             result["backup"] = f"failed: {exc}"
 
+    # Resolve engagement level and Docker config from settings
+    from tapps_core.config.settings import load_settings
+
+    settings = load_settings()
+
+    # Load skip list from settings (Issue #86)
+    skip_files: set[str] = set(settings.upgrade_skip_files)
+    if skip_files:
+        result["skipped_files"] = sorted(skip_files)
+
     # AGENTS.md (platform-independent)
-    try:
-        agents_result = _upgrade_agents_md(project_root, dry_run=dry_run)
-        result["components"]["agents_md"] = agents_result
-    except Exception as exc:
-        result["errors"].append(f"AGENTS.md: {exc}")
-        result["components"]["agents_md"] = {"action": "error", "detail": str(exc)}
+    if "AGENTS.md" in skip_files:
+        result["components"]["agents_md"] = {"action": "skipped (upgrade_skip_files)"}
+    else:
+        try:
+            agents_result = _upgrade_agents_md(project_root, dry_run=dry_run)
+            result["components"]["agents_md"] = agents_result
+        except Exception as exc:
+            result["errors"].append(f"AGENTS.md: {exc}")
+            result["components"]["agents_md"] = {"action": "error", "detail": str(exc)}
 
     # Detect platform if not specified
     detected = platform or _detect_platform(project_root)
@@ -562,10 +584,6 @@ def upgrade_pipeline(
     if detected in ("cursor", "both"):
         hosts.append("cursor")
 
-    # Resolve engagement level and Docker config from settings
-    from tapps_core.config.settings import load_settings
-
-    settings = load_settings()
     engagement_level = settings.llm_engagement_level
 
     # Per-host upgrades
@@ -578,6 +596,7 @@ def upgrade_pipeline(
                 force=force,
                 dry_run=dry_run,
                 engagement_level=engagement_level,
+                skip_files=skip_files,
             )
             platform_results.append(host_result)
         except Exception as exc:

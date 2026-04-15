@@ -6,7 +6,7 @@ paths:
 
 Run `tapps_quick_check(file_path)` after editing Python files.
 
-Use `tapps_research(question)` before using unfamiliar library APIs.
+Use `tapps_lookup_docs(library, topic)` before using unfamiliar library APIs.
 
 Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths before declaring work complete. Never call without `file_paths`. Default is quick mode; only use `quick=false` as a last resort.
 

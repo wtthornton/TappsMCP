@@ -17,7 +17,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = None
         allowed = _resolve_allowed_tools(settings)
         assert allowed == ALL_TOOL_NAMES
-        assert len(allowed) == 24
+        assert len(allowed) == 27
 
     def test_enabled_tools_subset(self) -> None:
         from tapps_mcp.server import _resolve_allowed_tools
@@ -50,7 +50,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "core"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_CORE
-        assert len(allowed) == 7
+        assert len(allowed) == 8
 
     def test_preset_pipeline(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_PIPELINE, _resolve_allowed_tools
@@ -61,7 +61,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "pipeline"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_PIPELINE
-        assert len(allowed) == 11
+        assert len(allowed) == 12
 
     def test_preset_full(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES, _resolve_allowed_tools
@@ -191,6 +191,7 @@ class TestToolPresetConstants:
             "tapps_checklist",
             "tapps_lookup_docs",
             "tapps_security_scan",
+            "tapps_pipeline",
         }
         assert TOOL_PRESET_CORE == expected
 
@@ -205,9 +206,9 @@ class TestToolPresetConstants:
             "tapps_validate_config",
         }
         assert tier2 <= TOOL_PRESET_PIPELINE
-        assert len(TOOL_PRESET_PIPELINE) == 11
+        assert len(TOOL_PRESET_PIPELINE) == 12
 
     def test_all_tool_names_count(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES
 
-        assert len(ALL_TOOL_NAMES) == 24
+        assert len(ALL_TOOL_NAMES) == 27
