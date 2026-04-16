@@ -1027,8 +1027,8 @@ def _maybe_auto_gc(
     _session_state["gc_done"] = True
 
     try:
-        from tapps_core.memory.decay import DecayConfig
-        from tapps_core.memory.gc import MemoryGarbageCollector
+        from tapps_brain.decay import DecayConfig
+        from tapps_brain.gc import MemoryGarbageCollector
 
         config = DecayConfig()
         gc = MemoryGarbageCollector(config)
@@ -1144,7 +1144,7 @@ def _maybe_consolidation_scan(
     _session_state["consolidation_done"] = True
 
     try:
-        from tapps_core.memory.auto_consolidation import run_periodic_consolidation_scan
+        from tapps_brain.auto_consolidation import run_periodic_consolidation_scan
 
         result = run_periodic_consolidation_scan(
             store,

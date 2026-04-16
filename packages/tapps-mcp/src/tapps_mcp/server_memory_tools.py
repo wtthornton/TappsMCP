@@ -18,6 +18,7 @@ import structlog
 from tapps_mcp.server_helpers import (
     _agent_teams_env_enabled,
     _ensure_hive_singletons,
+    _get_brain_bridge,
     _get_memory_store,
     collect_session_hive_status,
     ensure_session_initialized,
@@ -86,8 +87,32 @@ _VALID_ACTIONS = {
     "agent_register",
 }
 
-# Async actions require special dispatch (doc lookups are async)
-_ASYNC_ACTIONS = {"validate"}
+# Async actions require special dispatch.
+# - validate: doc lookups are async
+# - gc/consolidate/unconsolidate/contradictions/verify_integrity/maintain/health:
+#   delegate to BrainBridge async methods (TAP-412 / EPIC-95.3)
+_ASYNC_ACTIONS = {
+    "validate",
+    "gc",
+    "consolidate",
+    "contradictions",
+    "verify_integrity",
+    "maintain",
+    "health",
+}
+
+
+def _bridge_unavailable_response(action: str) -> dict[str, Any]:
+    """Standard response when BrainBridge is unconfigured (TAP-412 / EPIC-95.7 shape)."""
+    return {
+        "action": action,
+        "success": False,
+        "degraded": True,
+        "reason": "TAPPS_BRAIN_DATABASE_URL not configured",
+        "next_steps": [
+            "Set TAPPS_BRAIN_DATABASE_URL in your environment or .tapps-mcp.yaml",
+        ],
+    }
 
 _BULK_SAVE_MAX_ENTRIES = 50
 
@@ -851,54 +876,49 @@ def _handle_reinforce(store: MemoryStore, p: _Params) -> dict[str, Any]:
     return result
 
 
-def _handle_gc(store: MemoryStore, _p: _Params) -> dict[str, Any]:
-    """Handle the gc (garbage collection) action."""
-    from tapps_core.memory.decay import DecayConfig
-    from tapps_core.memory.gc import MemoryGarbageCollector
+async def _handle_gc(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Handle the gc (garbage collection) action via BrainBridge (TAP-412)."""
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("gc")
 
-    config = DecayConfig()
-    gc_runner = MemoryGarbageCollector(config)
-
-    snap = store.snapshot()
-    candidates = gc_runner.identify_candidates(snap.entries)
-
-    archived_keys: list[str] = []
-    for candidate in candidates:
-        deleted = store.delete(candidate.key)
-        if deleted:
-            archived_keys.append(candidate.key)
-
+    result = await bridge.gc(dry_run=p.dry_run)
     return {
         "action": "gc",
-        "archived_count": len(archived_keys),
-        "archived_keys": archived_keys,
-        "remaining_count": store.count(),
+        "success": True,
+        "archived_count": int(result.get("archived_count", 0)),
+        "archived_keys": list(result.get("archived_keys", [])),
+        "remaining_count": int(result.get("remaining_count", store.count())),
+        "dry_run": bool(result.get("dry_run", p.dry_run)),
+        "reason_counts": result.get("reason_counts", {}),
         "store_metadata": _store_metadata(store),
     }
 
 
-def _handle_contradictions(store: MemoryStore, _p: _Params) -> dict[str, Any]:
-    """Detect memories contradicting observable project state."""
+async def _handle_contradictions(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Detect memories contradicting project state via BrainBridge (TAP-412)."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.contradictions import ContradictionDetector
     from tapps_mcp.project.profiler import detect_project_profile
+
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("contradictions")
 
     settings = load_settings()
     profile = detect_project_profile(settings.project_root)
     profile.project_type = profile.project_type or ""
-    detector = ContradictionDetector(settings.project_root)
 
-    all_entries = store.list_all()
-    contradictions = detector.detect_contradictions(all_entries, profile)  # type: ignore[arg-type]  # ProjectProfile.project_type is str|None vs Protocol str
-
-    for c in contradictions:
-        store.update_fields(c.memory_key, contradicted=True)
+    result = await bridge.detect_conflicts(
+        profile=profile,
+        project_root=settings.project_root,
+    )
 
     return {
         "action": "contradictions",
-        "contradictions": [c.model_dump() for c in contradictions],
-        "count": len(contradictions),
-        "checked_count": len(all_entries),
+        "success": True,
+        "contradictions": result.get("contradictions", []),
+        "count": result.get("count", 0),
+        "checked_count": result.get("checked_count", 0),
         "store_metadata": _store_metadata(store),
     }
 
@@ -1062,64 +1082,103 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
     }
 
 
-def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
-    """Handle the consolidate action (Epic 58, Story 58.4).
+async def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Handle the consolidate action via BrainBridge (TAP-412).
 
     Consolidates related memory entries into a single entry with provenance.
-    Supports explicit entry_ids or query-based discovery of similar entries.
+    For auto-discovery (no entry_ids and no query), delegates to
+    ``BrainBridge.consolidate(dry_run)`` which runs the v3 native
+    periodic consolidation scan. Explicit entry_ids and query-based paths
+    use BrainBridge primitives + tapps-brain consolidation logic.
     """
-    from tapps_core.memory.consolidation import (
+    from tapps_brain.consolidation import (
         consolidate,
         detect_consolidation_reason,
     )
-    from tapps_core.memory.similarity import find_consolidation_groups
+    from tapps_brain.similarity import find_consolidation_groups
 
-    # Determine entries to consolidate
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("consolidate")
+
+    # Auto-discovery path.
+    if not p.entry_ids and not p.query:
+        # tapps-brain's run_periodic_consolidation_scan has no dry_run mode;
+        # preview the discovered groups locally before delegating.
+        if p.dry_run:
+            all_entries = store.list_all()
+            active_entries = [
+                e
+                for e in all_entries
+                if not getattr(e, "is_consolidated", False) and not e.contradicted
+            ]
+            if len(active_entries) < 2:
+                return {
+                    "action": "consolidate",
+                    "success": True,
+                    "dry_run": True,
+                    "consolidated": False,
+                    "discovery_method": "auto",
+                    "reason": "not_enough_entries",
+                    "would_consolidate": False,
+                    "store_metadata": _store_metadata(store),
+                }
+            groups = find_consolidation_groups(active_entries, min_group_size=2)
+            return {
+                "action": "consolidate",
+                "success": True,
+                "dry_run": True,
+                "consolidated": False,
+                "would_consolidate": bool(groups),
+                "groups_found": len(groups),
+                "preview_groups": [list(g) for g in groups[:3]],
+                "discovery_method": "auto",
+                "reason": "consolidated" if groups else "no_similar_entries",
+                "store_metadata": _store_metadata(store),
+            }
+
+        scan = await bridge.consolidate(dry_run=False)
+        groups_found = int(scan.get("groups_found", 0))
+        consolidated_flag = groups_found > 0
+        skipped_reason = str(scan.get("skipped_reason", "") or "")
+
+        # Map tapps-brain skipped_reason to the legacy reason vocabulary so
+        # callers (and tests) don't need to know about both names.
+        if consolidated_flag:
+            reason = "consolidated"
+        elif "not_enough" in skipped_reason:
+            reason = "not_enough_entries"
+        elif skipped_reason:
+            reason = skipped_reason
+        else:
+            reason = "no_similar_entries"
+
+        return {
+            "action": "consolidate",
+            "success": True,
+            "consolidated": consolidated_flag,
+            "groups_found": groups_found,
+            "entries_consolidated": int(scan.get("entries_consolidated", 0)),
+            "consolidated_entries": list(scan.get("consolidated_entries", [])),
+            "dry_run": False,
+            "discovery_method": "auto",
+            "reason": reason,
+            "skipped_reason": skipped_reason,
+            "store_metadata": _store_metadata(store),
+        }
+
+    # Explicit entry_ids or query: orchestrate via store primitives.
     if p.entry_ids:
-        # Explicit entry IDs provided
         entries_to_consolidate = _get_entries_by_ids(store, p.entry_ids)
         if isinstance(entries_to_consolidate, dict):
-            return entries_to_consolidate  # Error response
+            return entries_to_consolidate
         discovery_method = "explicit"
-    elif p.query:
-        # Query-based discovery
+    else:
+        # p.query path
         entries_to_consolidate = _find_entries_by_query(store, p.query, p.limit)
         if isinstance(entries_to_consolidate, dict):
-            return entries_to_consolidate  # Error response
+            return entries_to_consolidate
         discovery_method = "query"
-    else:
-        # Auto-discover consolidation groups
-        all_entries = store.list_all()
-        active_entries = [
-            e
-            for e in all_entries
-            if not getattr(e, "is_consolidated", False) and not e.contradicted
-        ]
-
-        if len(active_entries) < 2:
-            return {
-                "action": "consolidate",
-                "consolidated": False,
-                "reason": "not_enough_entries",
-                "message": "Need at least 2 active entries to consolidate.",
-                "store_metadata": _store_metadata(store),
-            }
-
-        # Find the first consolidation group
-        groups = find_consolidation_groups(active_entries, min_group_size=2)
-        if not groups:
-            return {
-                "action": "consolidate",
-                "consolidated": False,
-                "reason": "no_similar_entries",
-                "message": "No similar entries found to consolidate.",
-                "store_metadata": _store_metadata(store),
-            }
-
-        # Use the first group
-        entry_by_key = {e.key: e for e in active_entries}
-        entries_to_consolidate = [entry_by_key[k] for k in groups[0] if k in entry_by_key]
-        discovery_method = "auto"
 
     if len(entries_to_consolidate) < 2:
         return {
@@ -1206,15 +1265,17 @@ def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
 
 
 def _handle_unconsolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
-    """Handle the unconsolidate action (Epic 58, Story 58.6).
+    """Handle the unconsolidate action.
 
-    Restores source entries that were consolidated into the given entry,
-    then removes the consolidated entry itself.
+    Operates on entries via the store API (which now lives behind BrainBridge
+    after TAP-408). Uses contradiction_reason markers written by the explicit
+    consolidate path to find source entries — distinct from
+    ``store.undo_consolidation_merge()`` which only handles entries with the
+    audit row from ``run_periodic_consolidation_scan``.
     """
     if not p.key:
         return {"error": "missing_key", "message": "Key is required for unconsolidate."}
 
-    # Verify the target entry exists
     target = store.get(p.key)
     if target is None:
         return {
@@ -1225,7 +1286,6 @@ def _handle_unconsolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "store_metadata": _store_metadata(store),
         }
 
-    # Find source entries by scanning for contradiction_reason referencing this key
     marker = f"consolidated into {p.key}"
     all_entries = store.list_all()
     source_entries = [
@@ -1246,7 +1306,6 @@ def _handle_unconsolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "store_metadata": _store_metadata(store),
         }
 
-    # Restore source entries (clear contradicted flag)
     restored_keys: list[str] = []
     for entry in source_entries:
         updated = store.update_fields(
@@ -1257,7 +1316,6 @@ def _handle_unconsolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
         if updated is not None:
             restored_keys.append(entry.key)
 
-    # Delete the consolidated entry
     deleted = store.delete(p.key)
 
     return {
@@ -1312,15 +1370,8 @@ def _find_entries_by_query(
 
     settings = load_settings()
     rr = settings.memory.reranker
-    reranker = (
-        get_reranker(
-            enabled=rr.enabled,
-            provider=rr.provider,
-            api_key=rr.api_key,
-        )
-        if rr.enabled
-        else None
-    )
+    # tapps-brain v3: get_reranker no longer accepts provider/api_key (Cohere removed).
+    reranker = get_reranker(enabled=rr.enabled) if rr.enabled else None
     # M2: Load profile scoring config (includes source_trust multipliers)
     scoring_config = getattr(getattr(store, "profile", None), "scoring", None)
     retriever = MemoryRetriever(
@@ -1602,105 +1653,70 @@ def _handle_federate_status(store: MemoryStore, params: _Params) -> dict[str, An
     }
 
 
-def _handle_maintain(store: MemoryStore, _p: _Params) -> dict[str, Any]:
-    """Run memory maintenance: GC + consolidation + deduplication (Epic 65.15)."""
-    gc_archived = 0
-    consolidated = 0
-    deduplicated = 0
+async def _handle_maintain(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Run memory maintenance via BrainBridge (TAP-412).
 
-    # Run GC (same approach as _handle_gc)
-    try:
-        from tapps_core.memory.decay import DecayConfig
-        from tapps_core.memory.gc import MemoryGarbageCollector
+    Chains GC + consolidation + deduplication through
+    :meth:`BrainBridge.maintain`, which runs each phase via the bridge's
+    circuit-breaker-protected calls.
+    """
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("maintain")
 
-        config = DecayConfig()
-        gc_runner = MemoryGarbageCollector(config)
-        snap = store.snapshot()
-        candidates = gc_runner.identify_candidates(snap.entries)
-        for candidate in candidates:
-            if store.delete(candidate.key):
-                gc_archived += 1
-    except Exception:
-        pass
-
-    # Run consolidation scan
-    try:
-        from tapps_core.config.settings import load_settings as _load_settings
-        from tapps_core.memory.auto_consolidation import run_periodic_consolidation_scan
-
-        _settings = _load_settings()
-        consol_result = run_periodic_consolidation_scan(store, _settings.project_root)
-        consolidated = getattr(consol_result, "groups_formed", 0) if consol_result else 0
-    except Exception:
-        pass
-
-    # Deduplication: find exact duplicate values and merge
-    try:
-        snapshot = store.snapshot()
-        seen_values: dict[str, str] = {}  # value hash -> first key
-        for entry in snapshot.entries:
-            val_hash = entry.value.strip().lower()
-            if val_hash in seen_values and seen_values[val_hash] != entry.key:
-                store.delete(entry.key)
-                deduplicated += 1
-            else:
-                seen_values[val_hash] = entry.key
-    except Exception:
-        pass
-
+    result = await bridge.maintain()
     return {
         "action": "maintain",
-        "gc_archived": gc_archived,
-        "consolidated": consolidated,
-        "deduplicated": deduplicated,
+        "success": True,
+        "gc_archived": int(result.get("gc_archived", 0)),
+        "consolidated": int(result.get("consolidated", 0)),
+        "deduplicated": int(result.get("deduplicated", 0)),
         "store_metadata": _store_metadata(store),
     }
 
 
-def _handle_health(store: MemoryStore, _p: _Params) -> dict[str, Any]:
-    """Handle the health action -- aggregate health report with integrity status.
+async def _handle_health(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Handle the health action via BrainBridge (TAP-412).
 
-    Delegates to ``store.health()`` when available (tapps-brain >= v1.1.0).
-    Falls back to a basic snapshot-based report for older versions.
+    Delegates to ``BrainBridge.health()`` which wraps ``store.health()`` from
+    tapps-brain v3 with circuit-breaker protection.
     """
-    if hasattr(store, "health") and callable(store.health):
-        report = store.health()
+    bridge = _get_brain_bridge()
+    if bridge is None:
         return {
-            "action": "health",
-            "store_path": report.store_path,
-            "entry_count": report.entry_count,
-            "max_entries": report.max_entries,
-            "schema_version": report.schema_version,
-            "tier_distribution": report.tier_distribution,
-            "oldest_entry_age_days": round(report.oldest_entry_age_days, 1),
-            "consolidation_candidates": report.consolidation_candidates,
-            "gc_candidates": report.gc_candidates,
-            "federation_enabled": report.federation_enabled,
-            "federation_project_count": report.federation_project_count,
-            # Integrity (H4c)
-            "integrity_verified": report.integrity_verified,
-            "integrity_tampered": report.integrity_tampered,
-            "integrity_no_hash": report.integrity_no_hash,
-            "integrity_tampered_keys": report.integrity_tampered_keys[:20],
-            "integrity_status": ("clean" if report.integrity_tampered == 0 else "tampered"),
-            # Rate limiter anomaly counts (H6c)
-            "rate_limit_minute_anomalies": getattr(report, "rate_limit_minute_anomalies", 0),
-            "rate_limit_session_anomalies": getattr(report, "rate_limit_session_anomalies", 0),
-            "rate_limit_total_writes": getattr(report, "rate_limit_total_writes", 0),
-            "rate_limit_exempt_writes": getattr(report, "rate_limit_exempt_writes", 0),
-            # Relation graph (M3)
-            "relation_count": getattr(report, "relation_count", 0),
+            **_bridge_unavailable_response("health"),
+            "status": "degraded",
+            "configured": False,
         }
 
-    # Fallback for older tapps-brain without store.health()
-    snap = store.snapshot()
+    health = await bridge.health()
+
+    integrity_tampered = int(health.get("integrity_tampered", 0))
     return {
         "action": "health",
-        "entry_count": snap.total_count,
-        "tier_distribution": snap.tier_counts,
-        "integrity_status": "unavailable",
-        "degraded": True,
-        "message": "Full health report requires tapps-brain >= v1.1.0.",
+        "success": True,
+        "status": health.get("status", "ok"),
+        "postgres": health.get("postgres", "connected"),
+        "store_path": health.get("store_path"),
+        "entry_count": int(health.get("entry_count", 0)),
+        "max_entries": health.get("max_entries"),
+        "schema_version": health.get("schema_version"),
+        "tier_distribution": health.get("tier_distribution", {}),
+        "oldest_entry_age_days": round(float(health.get("oldest_entry_age_days", 0.0) or 0.0), 1),
+        "consolidation_candidates": health.get("consolidation_candidates", 0),
+        "gc_candidates": health.get("gc_candidates", 0),
+        "federation_enabled": health.get("federation_enabled", False),
+        "federation_project_count": health.get("federation_project_count", 0),
+        "integrity_verified": health.get("integrity_verified", 0),
+        "integrity_tampered": integrity_tampered,
+        "integrity_no_hash": health.get("integrity_no_hash", 0),
+        "integrity_tampered_keys": list(health.get("integrity_tampered_keys", []))[:20],
+        "integrity_status": "clean" if integrity_tampered == 0 else "tampered",
+        "rate_limit_minute_anomalies": health.get("rate_limit_minute_anomalies", 0),
+        "rate_limit_session_anomalies": health.get("rate_limit_session_anomalies", 0),
+        "rate_limit_total_writes": health.get("rate_limit_total_writes", 0),
+        "rate_limit_exempt_writes": health.get("rate_limit_exempt_writes", 0),
+        "relation_count": health.get("relation_count", 0),
     }
 
 
@@ -1739,61 +1755,29 @@ def _handle_safety_check(store: MemoryStore, p: _Params) -> dict[str, Any]:
     }
 
 
-def _handle_verify_integrity(store: MemoryStore, _p: _Params) -> dict[str, Any]:
-    """Handle the verify_integrity action -- check memory entries for tampering.
+async def _handle_verify_integrity(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Handle the verify_integrity action via BrainBridge (TAP-412).
 
-    Delegates to ``store.verify_integrity()`` for HMAC-SHA256 verification
-    when available. Falls back to a basic consistency check (entry round-trip)
-    for older tapps-brain versions.
+    Delegates to ``store.verify_integrity()`` (HMAC-SHA256) through
+    :meth:`BrainBridge.verify_integrity`. tapps-brain v3 always implements this
+    natively so no fallback path is needed.
     """
-    if hasattr(store, "verify_integrity") and callable(store.verify_integrity):
-        result = store.verify_integrity()
-        return {
-            "action": "verify_integrity",
-            "total_entries": result["total"],
-            "verified": result["verified"],
-            "tampered": result["tampered"],
-            "no_hash": result["no_hash"],
-            "tampered_keys": result["tampered_keys"][:20],
-            "missing_hash_keys": result.get("missing_hash_keys", [])[:20],
-            "tampered_details": result.get("tampered_details", [])[:10],
-            "integrity_method": "hmac_sha256",
-            "store_metadata": _store_metadata(store),
-        }
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("verify_integrity")
 
-    # Fallback for older tapps-brain without verify_integrity()
-    import hashlib
-
-    entries = store.list_all()
-    total = len(entries)
-    tampered: list[str] = []
-    verified = 0
-
-    for entry in entries:
-        fetched = store.get(entry.key)
-        if fetched is None:
-            tampered.append(entry.key)
-            continue
-
-        expected = hashlib.sha256(f"{entry.key}|{entry.value}|{entry.tier}".encode()).hexdigest()[
-            :16
-        ]
-        actual = hashlib.sha256(
-            f"{fetched.key}|{fetched.value}|{fetched.tier}".encode()
-        ).hexdigest()[:16]
-
-        if expected == actual:
-            verified += 1
-        else:
-            tampered.append(entry.key)
-
+    result = await bridge.verify_integrity()
     return {
         "action": "verify_integrity",
-        "total_entries": total,
-        "verified": verified,
-        "tampered": len(tampered),
-        "tampered_keys": tampered[:20],
-        "integrity_method": "sha256_roundtrip",
+        "success": True,
+        "total_entries": result["total"],
+        "verified": result["verified"],
+        "tampered": result["tampered"],
+        "no_hash": result["no_hash"],
+        "tampered_keys": result["tampered_keys"][:20],
+        "missing_hash_keys": result.get("missing_hash_keys", [])[:20],
+        "tampered_details": result.get("tampered_details", [])[:10],
+        "integrity_method": "hmac_sha256",
         "store_metadata": _store_metadata(store),
     }
 
@@ -2040,7 +2024,7 @@ def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
 
 def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, Any]:
     """Propagate local memories into Hive per entry agent_scope (Epic M3)."""
-    from tapps_brain.hive import PropagationEngine
+    from tapps_brain.backends import PropagationEngine
 
     from tapps_core.config.settings import load_settings
 
@@ -2114,7 +2098,7 @@ def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, Any]:
 
 def _handle_agent_register(store: MemoryStore, p: _Params) -> dict[str, Any]:
     """Register an agent in the Hive YAML registry (Epic M3)."""
-    from tapps_brain.hive import AgentRegistration
+    from tapps_brain.models import AgentRegistration
 
     from tapps_core.config.settings import load_settings
 
@@ -2193,12 +2177,9 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "delete": _handle_delete,
     "search": _handle_search,
     "reinforce": _handle_reinforce,
-    "gc": _handle_gc,
-    "contradictions": _handle_contradictions,
     "reseed": _handle_reseed,
     "import": _handle_import,
     "export": _handle_export,
-    "consolidate": _handle_consolidate,
     "unconsolidate": _handle_unconsolidate,
     "federate_register": _handle_federate_register,
     "federate_publish": _handle_federate_publish,
@@ -2207,21 +2188,20 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "federate_search": _handle_federate_search,
     "federate_status": _handle_federate_status,
     "index_session": _handle_index_session,
-    "maintain": _handle_maintain,
     # Epic M1: Security surface
     "safety_check": _handle_safety_check,
-    "verify_integrity": _handle_verify_integrity,
     # Epic M2: Profile & lifecycle management
     "profile_info": _handle_profile_info,
     "profile_list": _handle_profile_list,
     "profile_switch": _handle_profile_switch,
-    # Health / diagnostics
-    "health": _handle_health,
     # Epic M3: Hive / Agent Teams
     "hive_status": _handle_hive_status,
     "hive_search": _handle_hive_search,
     "hive_propagate": _handle_hive_propagate,
     "agent_register": _handle_agent_register,
+    # NOTE: gc, consolidate, unconsolidate, contradictions, verify_integrity,
+    # maintain, and health moved to _ASYNC_DISPATCH (TAP-412 / EPIC-95.3) —
+    # they delegate to BrainBridge async methods.
 }
 
 
@@ -2312,6 +2292,13 @@ async def _handle_validate(store: MemoryStore, params: _Params) -> dict[str, Any
 
 _ASYNC_DISPATCH: dict[str, Any] = {
     "validate": _handle_validate,
+    # TAP-412 / EPIC-95.3: maintenance + diagnostics delegate to BrainBridge.
+    "gc": _handle_gc,
+    "consolidate": _handle_consolidate,
+    "contradictions": _handle_contradictions,
+    "verify_integrity": _handle_verify_integrity,
+    "maintain": _handle_maintain,
+    "health": _handle_health,
 }
 
 
@@ -2339,15 +2326,8 @@ def _ranked_search(
 
     settings = load_settings()
     rr = settings.memory.reranker
-    reranker = (
-        get_reranker(
-            enabled=rr.enabled,
-            provider=rr.provider,
-            api_key=rr.api_key,
-        )
-        if rr.enabled
-        else None
-    )
+    # tapps-brain v3: get_reranker no longer accepts provider/api_key (Cohere removed).
+    reranker = get_reranker(enabled=rr.enabled) if rr.enabled else None
     # M2: Load profile scoring config (includes source_trust multipliers)
     scoring_config = getattr(getattr(store, "profile", None), "scoring", None)
     retriever = MemoryRetriever(

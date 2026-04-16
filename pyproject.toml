@@ -2,7 +2,7 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v2.1.0" }
+tapps-brain = { path = "/home/wtthornton/code/tapps-brain" }
 
 [tool.uv]
 dev-dependencies = [
@@ -136,6 +136,16 @@ module = ["sentence_transformers", "sentence_transformers.*", "faiss", "numpy", 
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# Backward-compat shims use try/except ImportError to handle removed tapps-brain v2 modules.
+# mypy's warn_unused_ignores interacts poorly with ignore_missing_imports in this pattern:
+# the type: ignore is needed on cold cache (no-redef detected) but "unused" on warm cache.
+module = [
+    "tapps_core.memory.federation",
+    "tapps_core.memory.persistence",
+]
+warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_untyped_decorators = false
@@ -161,6 +171,10 @@ markers = [
 addopts = "-v --tb=short -p randomly --randomly-seed=last"
 filterwarnings = [
     "ignore:tapps_core\\.memory is deprecated:DeprecationWarning",
+    "ignore:tapps_core\\.memory\\.gc is deprecated:DeprecationWarning",
+    "ignore:tapps_core\\.memory\\.consolidation is deprecated:DeprecationWarning",
+    "ignore:tapps_core\\.memory\\.auto_consolidation is deprecated:DeprecationWarning",
+    "ignore:tapps_core\\.memory\\.contradictions is deprecated:DeprecationWarning",
 ]
 
 [tool.coverage.run]
