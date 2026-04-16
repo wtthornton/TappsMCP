@@ -65,9 +65,7 @@ class BrainBridge:
         self._brain = brain
         self._failures: int = 0
         self._open_at: float | None = None
-        self._write_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
-            maxsize=_WRITE_QUEUE_CAP
-        )
+        self._write_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_WRITE_QUEUE_CAP)
         self._drain_task: asyncio.Task[None] | None = None
 
     # -------------------------------------------------------------------------
@@ -381,9 +379,7 @@ class BrainBridge:
                     skipped_private += 1
                 else:
                     propagated += 1
-                    details.append(
-                        {"key": entry.key, "namespace": saved.get("namespace", "")}
-                    )
+                    details.append({"key": entry.key, "namespace": saved.get("namespace", "")})
 
             return {
                 "enabled": True,
@@ -469,9 +465,7 @@ class BrainBridge:
             }
 
         def _fn() -> dict[str, Any]:
-            entry = self._brain.store.save(
-                key, value, tier=tier, scope=scope, tags=tags, **kwargs
-            )
+            entry = self._brain.store.save(key, value, tier=tier, scope=scope, tags=tags, **kwargs)
             return self._to_dict(entry)
 
         result: dict[str, Any] = await self._call(_fn)
@@ -681,6 +675,94 @@ class BrainBridge:
         return self._brain.store
 
     # -------------------------------------------------------------------------
+    # Startup health check (TAP-523)
+    # -------------------------------------------------------------------------
+
+    def health_check(self) -> dict[str, Any]:
+        """Synchronously probe DSN reachability and pool config validity.
+
+        Intended to run once at MCP server startup so misconfiguration is
+        surfaced at session-start time rather than inside the first memory
+        tool call. Returns a structured report; callers decide whether to
+        fail fast based on ``ok``.
+
+        Checks performed:
+
+        1. DSN reachability — calls ``store.count()`` to force a connection.
+        2. Pool config validity — inspects the
+           ``TAPPS_BRAIN_PG_POOL_MAX_WAITING`` and
+           ``TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS`` env vars (if set)
+           and rejects non-integer / negative values.
+        3. Optional native health — calls ``store.health()`` when available
+           for extra diagnostics (current count, schema version, etc.).
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+        details: dict[str, Any] = {}
+
+        # --- DSN reachability ------------------------------------------------
+        dsn_reachable = False
+        try:
+            entry_count = self._brain.store.count()
+            dsn_reachable = True
+            details["entry_count"] = int(entry_count)
+        except Exception as exc:
+            errors.append(f"dsn_unreachable: {exc}")
+
+        # --- Pool config validity -------------------------------------------
+        pool_config_valid = True
+        for env_name in (
+            "TAPPS_BRAIN_PG_POOL_MAX_WAITING",
+            "TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS",
+        ):
+            raw = os.environ.get(env_name, "")
+            if not raw:
+                continue
+            try:
+                value = int(raw)
+            except ValueError:
+                errors.append(f"invalid_pool_config: {env_name}={raw!r} is not an integer")
+                pool_config_valid = False
+                continue
+            if value < 0:
+                errors.append(f"invalid_pool_config: {env_name}={value} must be >= 0")
+                pool_config_valid = False
+                continue
+            details[env_name.lower()] = value
+            if env_name == "TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS" and 0 < value < 30:
+                warnings.append(
+                    f"{env_name}={value}s is unusually short "
+                    "(connections will churn heavily; minimum 30s recommended)"
+                )
+
+        # --- Optional native health ------------------------------------------
+        native_health_ok = False
+        health_fn = getattr(self._brain.store, "health", None)
+        if callable(health_fn):
+            try:
+                raw_health = health_fn()
+                native_health_ok = True
+                if hasattr(raw_health, "model_dump"):
+                    details["native_health"] = raw_health.model_dump()
+                elif isinstance(raw_health, dict):
+                    details["native_health"] = raw_health
+                else:
+                    details["native_health"] = {"value": str(raw_health)}
+            except Exception as exc:
+                warnings.append(f"native_health_probe_failed: {exc}")
+
+        ok = not errors and dsn_reachable and pool_config_valid
+        return {
+            "ok": ok,
+            "dsn_reachable": dsn_reachable,
+            "pool_config_valid": pool_config_valid,
+            "native_health_ok": native_health_ok,
+            "errors": errors,
+            "warnings": warnings,
+            "details": details,
+        }
+
+    # -------------------------------------------------------------------------
     # Lifecycle
     # -------------------------------------------------------------------------
 
@@ -758,9 +840,7 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
     if pg_pool_max_waiting:
         os.environ["TAPPS_BRAIN_PG_POOL_MAX_WAITING"] = str(pg_pool_max_waiting)
     if pg_pool_max_lifetime_seconds:
-        os.environ["TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS"] = str(
-            pg_pool_max_lifetime_seconds
-        )
+        os.environ["TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS"] = str(pg_pool_max_lifetime_seconds)
 
     # --- Construct & probe ---------------------------------------------------
     try:
@@ -770,9 +850,27 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
             profile=profile,
             hive_dsn=hive_dsn,
         )
-        # Probe the store to fail fast on bad DSN before returning
-        brain.store.count()
-        return BrainBridge(brain)
     except Exception as exc:
         logger.warning("brain_bridge.init_failed", error=str(exc))
         return None
+
+    bridge = BrainBridge(brain)
+    # TAP-523: validate DSN reachability + pool config before returning so
+    # misconfiguration surfaces at startup rather than inside the first
+    # user-facing tool call.
+    report = bridge.health_check()
+    if not report["ok"]:
+        logger.warning(
+            "brain_bridge.health_check_failed",
+            errors=report["errors"],
+            warnings=report["warnings"],
+        )
+        with contextlib.suppress(Exception):
+            brain.close()
+        return None
+    if report["warnings"]:
+        logger.info(
+            "brain_bridge.health_check_warnings",
+            warnings=report["warnings"],
+        )
+    return bridge
