@@ -478,7 +478,7 @@ wheels = [
 
 [[package]]
 name = "docs-mcp"
-version = "2.7.3"
+version = "2.8.0"
 source = { editable = "packages/docs-mcp" }
 dependencies = [
     { name = "click" },
@@ -2448,8 +2448,8 @@ wheels = [
 
 [[package]]
 name = "tapps-brain"
-version = "3.7.2"
-source = { directory = "/home/wtthornton/code/tapps-brain" }
+version = "3.8.0"
+source = { git = "https://github.com/wtthornton/tapps-brain.git?rev=a3654693df32d64f65cd3d97e7e28b2499a5308b#a3654693df32d64f65cd3d97e7e28b2499a5308b" }
 dependencies = [
     { name = "numpy" },
     { name = "opentelemetry-api" },
@@ -2460,49 +2460,9 @@ dependencies = [
     { name = "structlog" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "argon2-cffi", marker = "extra == 'http'", specifier = ">=23.1.0,<25" },
-    { name = "fastapi", marker = "extra == 'http'", specifier = ">=0.115,<1" },
-    { name = "flashrank", marker = "extra == 'reranker'", specifier = ">=0.2.9,<0.3" },
-    { name = "httpx", marker = "extra == 'client'", specifier = ">=0.27,<1" },
-    { name = "mcp", marker = "extra == 'http'", specifier = ">=1.25.0,<2" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.25.0,<2" },
-    { name = "numpy", specifier = ">=2.4.2,<3" },
-    { name = "opentelemetry-api", specifier = ">=1.20,<2" },
-    { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.20,<2" },
-    { name = "playwright", marker = "extra == 'visual'", specifier = ">=1.45,<2" },
-    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2,<4" },
-    { name = "pydantic", specifier = ">=2.12.5,<3" },
-    { name = "pyyaml", specifier = ">=6.0.3,<7" },
-    { name = "sentence-transformers", specifier = ">=5.2.3,<6" },
-    { name = "starlette", marker = "extra == 'http'", specifier = ">=0.40,<1" },
-    { name = "structlog", specifier = ">=25.5.0,<26" },
-    { name = "tapps-brain", extras = ["cli", "mcp", "http", "reranker", "client"], marker = "extra == 'all'" },
-    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.15.0,<1" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'http'", specifier = ">=0.32,<1" },
-]
-provides-extras = ["cli", "mcp", "http", "reranker", "otel", "visual", "client", "all"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "fastapi", specifier = ">=0.115,<1" },
-    { name = "httpx", specifier = ">=0.27,<1" },
-    { name = "mcp", specifier = ">=1.25.0,<2" },
-    { name = "mypy", specifier = ">=1.14,<2" },
-    { name = "pytest", specifier = ">=8.0,<9" },
-    { name = "pytest-asyncio", specifier = ">=0.25,<1" },
-    { name = "pytest-benchmark", specifier = ">=5.0,<6" },
-    { name = "pytest-cov", specifier = ">=6.0,<7" },
-    { name = "ruff", specifier = ">=0.9,<1" },
-    { name = "starlette", specifier = ">=0.40,<1" },
-    { name = "typer", specifier = ">=0.15.0,<1" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1" },
-]
-
 [[package]]
 name = "tapps-core"
-version = "2.7.3"
+version = "2.8.0"
 source = { editable = "packages/tapps-core" }
 dependencies = [
     { name = "httpx" },
@@ -2534,13 +2494,13 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
     { name = "sentence-transformers", marker = "extra == 'vector'", specifier = ">=5.2.3,<6" },
     { name = "structlog", specifier = ">=25.5.0,<26" },
-    { name = "tapps-brain", directory = "/home/wtthornton/code/tapps-brain" },
+    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?rev=a3654693df32d64f65cd3d97e7e28b2499a5308b" },
 ]
 provides-extras = ["vector", "reranker"]
 
 [[package]]
 name = "tapps-mcp"
-version = "2.7.3"
+version = "2.8.0"
 source = { editable = "packages/tapps-mcp" }
 dependencies = [
     { name = "anyio" },
