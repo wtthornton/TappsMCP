@@ -1,8 +1,12 @@
-"""Tests for session notes backward compatibility and promote (Epic 23.5)."""
+"""Tests for session notes backward compatibility and promote (Epic 23.5).
+
+TAP-414 / EPIC-95.5: ``_promote_note_to_memory`` is now async and delegates
+to :class:`BrainBridge.save` instead of touching MemoryStore directly.
+"""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -10,8 +14,9 @@ from tapps_mcp.project.models import SessionNote
 
 
 class TestPromoteNoteToMemory:
-    def test_promote_success(self) -> None:
-        """Promoting a session note creates a memory entry."""
+    @pytest.mark.asyncio
+    async def test_promote_success(self) -> None:
+        """Promoting a session note creates a memory entry via bridge."""
         from tapps_mcp.server import _promote_note_to_memory
 
         note = SessionNote(
@@ -21,27 +26,28 @@ class TestPromoteNoteToMemory:
             updated_at="2026-01-01T00:00:00+00:00",
         )
 
-        mock_store = MagicMock()
-        mock_entry = MagicMock()
-        mock_entry.model_dump.return_value = {"key": "my-note", "value": "important info"}
-        mock_store.save.return_value = mock_entry
+        mock_bridge = MagicMock()
+        mock_bridge.save = AsyncMock(
+            return_value={"key": "my-note", "value": "important info"}
+        )
 
-        with patch("tapps_mcp.server_helpers._get_memory_store", return_value=mock_store):
-            result = _promote_note_to_memory(note, "pattern")
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge):
+            result = await _promote_note_to_memory(note, "pattern")
 
         assert result["action"] == "promote"
         assert result["promoted"] is True
-        mock_store.save.assert_called_once_with(
+        mock_bridge.save.assert_awaited_once_with(
             key="my-note",
             value="important info",
             tier="pattern",
+            scope="session",
             source="agent",
             source_agent="session-promote",
-            scope="session",
             tags=["promoted-from-session-notes"],
         )
 
-    def test_promote_failure_returns_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_promote_failure_returns_error(self) -> None:
         """When promotion fails, result contains error info."""
         from tapps_mcp.server import _promote_note_to_memory
 
@@ -53,31 +59,43 @@ class TestPromoteNoteToMemory:
         )
 
         with patch(
-            "tapps_mcp.server_helpers._get_memory_store",
-            side_effect=RuntimeError("store unavailable"),
+            "tapps_mcp.server_helpers._get_brain_bridge",
+            side_effect=RuntimeError("bridge unavailable"),
         ):
-            result = _promote_note_to_memory(note)
+            result = await _promote_note_to_memory(note)
 
         assert result["action"] == "promote"
         assert result["promoted"] is False
-        assert "store unavailable" in result["error"]
+        assert "bridge unavailable" in result["error"]
 
-    def test_promote_default_tier_is_context(self) -> None:
+    @pytest.mark.asyncio
+    async def test_promote_default_tier_is_context(self) -> None:
         """Default tier for promoted notes is 'context'."""
         from tapps_mcp.server import _promote_note_to_memory
 
         note = SessionNote(key="my-note", value="test")
 
-        mock_store = MagicMock()
-        mock_entry = MagicMock()
-        mock_entry.model_dump.return_value = {}
-        mock_store.save.return_value = mock_entry
+        mock_bridge = MagicMock()
+        mock_bridge.save = AsyncMock(return_value={})
 
-        with patch("tapps_mcp.server_helpers._get_memory_store", return_value=mock_store):
-            _promote_note_to_memory(note)
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge):
+            await _promote_note_to_memory(note)
 
-        call_kwargs = mock_store.save.call_args[1]
+        call_kwargs = mock_bridge.save.await_args.kwargs
         assert call_kwargs["tier"] == "context"
+        assert call_kwargs["scope"] == "session"
+
+    @pytest.mark.asyncio
+    async def test_promote_degraded_when_no_bridge(self) -> None:
+        """When bridge is None, result has degraded=True (no SQLite fallback)."""
+        from tapps_mcp.server import _promote_note_to_memory
+
+        note = SessionNote(key="my-note", value="test")
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=None):
+            result = await _promote_note_to_memory(note)
+
+        assert result["promoted"] is False
+        assert result.get("degraded") is True
 
 
 class TestSessionNotesBackwardCompat:

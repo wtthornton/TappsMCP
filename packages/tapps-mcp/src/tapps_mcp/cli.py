@@ -686,45 +686,47 @@ def memory_get(key: str) -> None:
     help="Minimum confidence (0-1). Default: 0.3.",
 )
 def memory_recall(query: str, project_root: str, max_results: int, min_score: float) -> None:
-    """Search memories and output XML for auto-recall hook injection.
+    """Search memories via BrainBridge and output XML for auto-recall injection.
 
-    Used by the memory_auto_recall hook (Epic 65.4). Outputs
-    <memory_context>...</memory_context> to stdout.
-    Handles: no MemoryStore, empty results (graceful fallback).
+    Used by the memory_auto_recall hook (Epic 65.4 / TAP-414). Outputs
+    ``<memory_context>...</memory_context>`` to stdout. When no
+    ``TAPPS_BRAIN_DATABASE_URL`` is configured, exits 0 silently (degraded
+    mode — auto-recall just injects nothing).
     """
+    import asyncio
     import sys
     from pathlib import Path
 
-    from tapps_core.memory.retrieval import MemoryRetriever, ScoredMemory
-    from tapps_core.memory.store import MemoryStore
+    from tapps_core.brain_bridge import create_brain_bridge
+    from tapps_core.config.settings import load_settings
 
     root = _get_project_root() if project_root == "." else Path(project_root).resolve()
     max_results = max(1, min(max_results, 10))
     min_score = max(0.0, min(min_score, 1.0))
 
-    store: MemoryStore | None = None
-    scored: list[ScoredMemory] = []
+    async def _recall() -> list[dict[str, object]]:
+        settings = load_settings(project_root=root)
+        bridge = create_brain_bridge(settings)
+        if bridge is None:
+            return []
+        try:
+            return await bridge.search(query, limit=max_results)
+        finally:
+            bridge.close()
+
     try:
-        store = MemoryStore(root, store_dir=".tapps-mcp")
-        # M2: Load profile scoring config for source_trust multipliers
-        scoring_config = getattr(getattr(store, "profile", None), "scoring", None)
-        retriever = MemoryRetriever(scoring_config=scoring_config)
-        scored = retriever.search(
-            query,
-            store,
-            limit=max_results,
-            min_confidence=min_score,
-        )
+        hits = asyncio.run(_recall())
     except Exception:
         import structlog
 
-        structlog.get_logger(__name__).debug("memory_search_failed", exc_info=True)
+        structlog.get_logger(__name__).debug("memory_recall_failed", exc_info=True)
         sys.exit(0)
-    finally:
-        if store is not None:
-            store.close()
 
-    if not scored:
+    # Filter by min_score (entries' confidence) — bridge.search doesn't filter.
+    filtered = [
+        h for h in hits if float(h.get("confidence", h.get("score", 1.0))) >= min_score
+    ]
+    if not filtered:
         sys.exit(0)
 
     def _escape_xml_text(s: str) -> str:
@@ -734,11 +736,13 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
         return _escape_xml_text(s).replace('"', "&quot;")
 
     parts: list[str] = []
-    for sm in scored:
-        entry = sm.entry
+    for hit in filtered:
+        key = str(hit.get("key", ""))
+        tier = str(hit.get("tier", ""))
+        value = str(hit.get("value", ""))
         parts.append(
-            f'  <memory key="{_escape_xml_attr(entry.key)}" tier="{entry.tier}">'
-            f"{_escape_xml_text(entry.value)}</memory>"
+            f'  <memory key="{_escape_xml_attr(key)}" tier="{_escape_xml_text(tier)}">'
+            f"{_escape_xml_text(value)}</memory>"
         )
     xml = "<memory_context>\n" + "\n".join(parts) + "\n</memory_context>"
     click.echo(xml)

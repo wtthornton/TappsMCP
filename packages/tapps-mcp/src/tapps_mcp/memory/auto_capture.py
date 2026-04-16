@@ -1,11 +1,14 @@
 """Auto-capture runner: extract durable facts and save to memory (Epic 65.5).
 
 Invoked by Stop/SessionEnd hooks. Reads JSON from stdin, extracts context,
-calls extract_durable_facts, and saves via MemoryStore.
+calls extract_durable_facts, and saves via :class:`BrainBridge` (TAP-414 /
+EPIC-95.5). When ``TAPPS_BRAIN_DATABASE_URL`` is unset, the run silently
+skips with ``degraded=True`` instead of attempting a SQLite write.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -37,7 +40,7 @@ def _extract_context_from_payload(payload: dict[str, Any]) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
-def run_auto_capture(
+async def run_auto_capture(
     stdin_text: str,
     project_root: Path,
     *,
@@ -45,20 +48,22 @@ def run_auto_capture(
     min_context_length: int = 100,
     capture_prompt: str = "",
 ) -> dict[str, Any]:
-    """Extract durable facts from context and save to memory.
+    """Extract durable facts from context and save via BrainBridge.
 
     Args:
         stdin_text: Raw JSON from Stop hook stdin.
-        project_root: Project root for MemoryStore.
+        project_root: Project root for settings + bridge construction.
         max_facts: Maximum facts to extract (default 5).
         min_context_length: Skip if context shorter (default 100).
         capture_prompt: Optional capture prompt from config (Epic 65.3).
 
     Returns:
-        Dict with saved, skipped, errors, and extracted keys.
+        Dict with saved, skipped, errors, and extracted keys. Includes
+        ``degraded=True`` when no bridge is available.
     """
+    from tapps_core.brain_bridge import create_brain_bridge
+    from tapps_core.config.settings import load_settings
     from tapps_core.memory.extraction import extract_durable_facts
-    from tapps_core.memory.store import ConsolidationConfig, MemoryStore
 
     result: dict[str, Any] = {
         "saved": 0,
@@ -89,40 +94,45 @@ def run_auto_capture(
     if not facts:
         return result
 
-    try:
-        store = MemoryStore(
-            project_root,
-            store_dir=".tapps-mcp",
-            consolidation_config=ConsolidationConfig(enabled=False),
+    settings = load_settings(project_root=project_root)
+    bridge = create_brain_bridge(settings)
+    if bridge is None:
+        result["degraded"] = True
+        result["errors"].append(
+            "TAPPS_BRAIN_DATABASE_URL not configured; skipping auto-capture."
         )
-    except Exception as exc:
-        result["errors"].append(f"Store init failed: {exc}")
         return result
 
-    for entry in facts:
-        key = entry.get("key", "")
-        value = entry.get("value", "")
-        tier = entry.get("tier", "pattern")
-        if not key or not value:
-            result["skipped"] += 1
-            continue
-        try:
-            out = store.save(
-                key=key,
-                value=value,
-                tier=tier,
-                source="system",
-                source_agent="auto-capture",
-            )
-            if isinstance(out, dict) and "error" in out:
-                result["errors"].append(f"{key}: {out.get('message', out)}")
+    try:
+        for entry in facts:
+            key = entry.get("key", "")
+            value = entry.get("value", "")
+            tier = entry.get("tier", "pattern")
+            if not key or not value:
                 result["skipped"] += 1
-            else:
-                result["saved"] += 1
-                result["extracted_keys"].append(key)
-        except Exception as exc:
-            result["errors"].append(f"{key}: {exc}")
-            result["skipped"] += 1
+                continue
+            try:
+                out = await bridge.save(
+                    key=key,
+                    value=value,
+                    tier=tier,
+                    scope="session",
+                    source="system",
+                    source_agent="auto-capture",
+                )
+                if isinstance(out, dict) and out.get("degraded"):
+                    result["errors"].append(
+                        f"{key}: bridge degraded ({out.get('reason', 'unknown')})"
+                    )
+                    result["skipped"] += 1
+                else:
+                    result["saved"] += 1
+                    result["extracted_keys"].append(key)
+            except Exception as exc:
+                result["errors"].append(f"{key}: {exc}")
+                result["skipped"] += 1
+    finally:
+        bridge.close()
 
     return result
 
@@ -136,10 +146,12 @@ def main() -> int:
         os.environ.get("CLAUDE_PROJECT_DIR") or os.environ.get("TAPPS_MCP_PROJECT_ROOT") or "."
     )
     project_root = Path(project_root_str).resolve()
-    res = run_auto_capture(raw, project_root)
+    res = asyncio.run(run_auto_capture(raw, project_root))
     import structlog
 
     log = structlog.get_logger(__name__)
+    if res.get("degraded"):
+        log.info("auto_capture_degraded", reason="no_brain_url")
     if res.get("errors"):
         for e in res["errors"][:3]:
             log.warning("auto_capture_error", error=str(e))

@@ -140,26 +140,37 @@ def _reset_session_store() -> None:
     _session_store = None
 
 
-def _promote_note_to_memory(note: SessionNote, tier: str = "context") -> dict[str, Any]:
-    """Promote a session note to the memory store."""
-    try:
-        from tapps_mcp.server_helpers import _get_memory_store
+async def _promote_note_to_memory(note: SessionNote, tier: str = "context") -> dict[str, Any]:
+    """Promote a session note to memory via BrainBridge (TAP-414).
 
-        mem_store = _get_memory_store()
-        entry = mem_store.save(
+    Always writes with ``scope="session"`` and the requested tier (default
+    ``context``) so promoted notes match the EPIC-95.5 contract for
+    session-scoped tapps-brain entries.
+    """
+    try:
+        from tapps_mcp.server_helpers import _get_brain_bridge
+
+        bridge = _get_brain_bridge()
+        if bridge is None:
+            return {
+                "action": "promote",
+                "promoted": False,
+                "degraded": True,
+                "reason": "TAPPS_BRAIN_DATABASE_URL not configured",
+            }
+        entry = await bridge.save(
             key=note.key,
             value=note.value,
             tier=tier,
+            scope="session",
             source="agent",
             source_agent="session-promote",
-            scope="session",
             tags=["promoted-from-session-notes"],
         )
-        dumped: dict[str, Any] = entry if isinstance(entry, dict) else entry.model_dump()
         return {
             "action": "promote",
             "promoted": True,
-            "memory_entry": dumped,
+            "memory_entry": entry,
         }
     except Exception as exc:
         logger.debug("promote_to_memory_failed", key=note.key, error=str(exc))
@@ -221,7 +232,7 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
             return error_response(
                 "tapps_session_notes", "not_found", f"Note '{key}' not found"
             )
-        data = _promote_note_to_memory(found, value or "context")
+        data = await _promote_note_to_memory(found, value or "context")
     else:
         return error_response(
             "tapps_session_notes",

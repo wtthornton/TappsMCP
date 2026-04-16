@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -19,38 +20,60 @@ from tapps_mcp.pipeline.platform_hooks import generate_memory_auto_capture_hook
 
 
 class TestAutoCaptureRunner:
-    """Tests for run_auto_capture."""
+    """Tests for run_auto_capture (TAP-414: now async, delegates to BrainBridge)."""
 
-    def test_stop_hook_active_skips(self, tmp_path: Path) -> None:
+    def _patch_bridge(self) -> Any:
+        """Patch create_brain_bridge to return a fake bridge that records saves."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        bridge = MagicMock()
+        bridge.save = AsyncMock(return_value={"key": "k", "value": "v"})
+        bridge.close = MagicMock()
+        return patch(
+            "tapps_core.brain_bridge.create_brain_bridge", return_value=bridge
+        ), bridge
+
+    @pytest.mark.asyncio
+    async def test_stop_hook_active_skips(self, tmp_path: Path) -> None:
         """When stop_hook_active is true, no extraction or save."""
         stdin = json.dumps({"stop_hook_active": True})
-        result = run_auto_capture(stdin, tmp_path)
+        result = await run_auto_capture(stdin, tmp_path)
         assert result["saved"] == 0
         assert result["extracted_keys"] == []
 
-    def test_short_context_skips(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_short_context_skips(self, tmp_path: Path) -> None:
         """Context shorter than min_context_length skips."""
         stdin = json.dumps({"context": "short"})
-        result = run_auto_capture(stdin, tmp_path, min_context_length=100)
+        result = await run_auto_capture(stdin, tmp_path, min_context_length=100)
         assert result["saved"] == 0
 
-    def test_extracts_and_saves(self, tmp_path: Path) -> None:
-        """Extracts durable facts and saves to store."""
+    @pytest.mark.asyncio
+    async def test_extracts_and_saves(self, tmp_path: Path) -> None:
+        """Extracts durable facts and saves via bridge."""
         ctx = "We decided to use PostgreSQL for the database."
         stdin = json.dumps({"transcript": ctx})
-        result = run_auto_capture(stdin, tmp_path, min_context_length=10)
+        ctx_mgr, bridge = self._patch_bridge()
+        with ctx_mgr:
+            result = await run_auto_capture(stdin, tmp_path, min_context_length=10)
         assert result["saved"] >= 1
         assert result["extracted_keys"]
-        # Note: v3 (ADR-007) removed SQLite; no memory.db file is written.
+        # bridge.save was called with scope="session" per EPIC-95.5 contract.
+        assert bridge.save.await_count >= 1
+        assert bridge.save.await_args.kwargs["scope"] == "session"
 
-    def test_transcript_field_used(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_transcript_field_used(self, tmp_path: Path) -> None:
         """Transcript field is extracted from payload."""
         ctx = "A key decision was to use Redis for caching."
         stdin = json.dumps({"transcript": ctx})
-        result = run_auto_capture(stdin, tmp_path, min_context_length=10)
+        ctx_mgr, _ = self._patch_bridge()
+        with ctx_mgr:
+            result = await run_auto_capture(stdin, tmp_path, min_context_length=10)
         assert result["saved"] >= 1
 
-    def test_messages_field_used(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_messages_field_used(self, tmp_path: Path) -> None:
         """Messages field is extracted from payload."""
         ctx = "We agreed on using ruff for linting across the project."
         stdin = json.dumps({
@@ -58,14 +81,29 @@ class TestAutoCaptureRunner:
                 {"content": ctx},
             ],
         })
-        result = run_auto_capture(stdin, tmp_path, min_context_length=10)
+        ctx_mgr, _ = self._patch_bridge()
+        with ctx_mgr:
+            result = await run_auto_capture(stdin, tmp_path, min_context_length=10)
         assert result["saved"] >= 1
 
-    def test_empty_extraction_no_save(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_empty_extraction_no_save(self, tmp_path: Path) -> None:
         """No decision patterns -> no save."""
         stdin = json.dumps({"transcript": "We ran tests. All passed."})
-        result = run_auto_capture(stdin, tmp_path, min_context_length=10)
+        result = await run_auto_capture(stdin, tmp_path, min_context_length=10)
         assert result["saved"] == 0
+
+    @pytest.mark.asyncio
+    async def test_degraded_when_no_bridge(self, tmp_path: Path) -> None:
+        """When bridge is None (no DSN), result has degraded=True."""
+        ctx = "We chose pytest as the test framework."
+        stdin = json.dumps({"transcript": ctx})
+        with patch(
+            "tapps_core.brain_bridge.create_brain_bridge", return_value=None
+        ):
+            result = await run_auto_capture(stdin, tmp_path, min_context_length=10)
+        assert result["saved"] == 0
+        assert result.get("degraded") is True
 
 
 class TestAutoCaptureHookTemplate:
