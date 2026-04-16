@@ -107,18 +107,100 @@ class TestCreateBrainBridge:
 
     def test_reads_dsn_from_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
+        monkeypatch.delenv("TAPPS_BRAIN_PROJECT", raising=False)
+        monkeypatch.delenv("TAPPS_BRAIN_PG_POOL_MAX_WAITING", raising=False)
+        monkeypatch.delenv("TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS", raising=False)
         from tapps_core.brain_bridge import BrainBridge, create_brain_bridge
 
         settings = MagicMock()
         settings.memory.database_url = "postgresql://settings/db"
         settings.memory.profile = "repo-brain"
         settings.memory.hive_dsn = ""
+        settings.memory.project_id = ""
+        settings.memory.pg_pool_max_waiting = 0
+        settings.memory.pg_pool_max_lifetime_seconds = 0
 
         mock_brain = _make_brain()
         with patch("tapps_brain.AgentBrain", return_value=mock_brain):
             result = create_brain_bridge(settings=settings)
 
         assert isinstance(result, BrainBridge)
+
+    def test_exports_project_id_to_env_when_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ADR-010: ``memory.project_id`` must be exported as TAPPS_BRAIN_PROJECT
+        so AgentBrain resolves to the registered tenant, not a per-dir hash.
+        """
+        monkeypatch.delenv("TAPPS_BRAIN_PROJECT", raising=False)
+        monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "postgresql://x/db")
+        from tapps_core.brain_bridge import create_brain_bridge
+
+        settings = MagicMock()
+        settings.memory.database_url = "postgresql://x/db"
+        settings.memory.profile = "repo-brain"
+        settings.memory.hive_dsn = ""
+        settings.memory.project_id = "my-project"
+        settings.memory.pg_pool_max_waiting = 0
+        settings.memory.pg_pool_max_lifetime_seconds = 0
+
+        mock_brain = _make_brain()
+        with patch("tapps_brain.AgentBrain", return_value=mock_brain):
+            create_brain_bridge(settings=settings)
+
+        import os
+
+        assert os.environ.get("TAPPS_BRAIN_PROJECT") == "my-project"
+
+    def test_exports_pool_tuning_env_when_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """tapps-brain v3.7.0 pool-tuning knobs must be exported when non-zero."""
+        monkeypatch.delenv("TAPPS_BRAIN_PG_POOL_MAX_WAITING", raising=False)
+        monkeypatch.delenv("TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS", raising=False)
+        monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "postgresql://x/db")
+        from tapps_core.brain_bridge import create_brain_bridge
+
+        settings = MagicMock()
+        settings.memory.database_url = "postgresql://x/db"
+        settings.memory.profile = "repo-brain"
+        settings.memory.hive_dsn = ""
+        settings.memory.project_id = ""
+        settings.memory.pg_pool_max_waiting = 40
+        settings.memory.pg_pool_max_lifetime_seconds = 1800
+
+        mock_brain = _make_brain()
+        with patch("tapps_brain.AgentBrain", return_value=mock_brain):
+            create_brain_bridge(settings=settings)
+
+        import os
+
+        assert os.environ.get("TAPPS_BRAIN_PG_POOL_MAX_WAITING") == "40"
+        assert os.environ.get("TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS") == "1800"
+
+    def test_leaves_pool_env_untouched_when_zero(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Zero pool settings must not clobber operator-provided env values."""
+        monkeypatch.setenv("TAPPS_BRAIN_PG_POOL_MAX_WAITING", "99")
+        monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "postgresql://x/db")
+        from tapps_core.brain_bridge import create_brain_bridge
+
+        settings = MagicMock()
+        settings.memory.database_url = "postgresql://x/db"
+        settings.memory.profile = "repo-brain"
+        settings.memory.hive_dsn = ""
+        settings.memory.project_id = ""
+        settings.memory.pg_pool_max_waiting = 0
+        settings.memory.pg_pool_max_lifetime_seconds = 0
+
+        mock_brain = _make_brain()
+        with patch("tapps_brain.AgentBrain", return_value=mock_brain):
+            create_brain_bridge(settings=settings)
+
+        import os
+
+        assert os.environ.get("TAPPS_BRAIN_PG_POOL_MAX_WAITING") == "99"
 
 
 # ---------------------------------------------------------------------------

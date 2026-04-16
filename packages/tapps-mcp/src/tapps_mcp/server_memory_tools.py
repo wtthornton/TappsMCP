@@ -19,7 +19,6 @@ from tapps_mcp.server_helpers import (
     _agent_teams_env_enabled,
     _get_brain_bridge,
     _get_memory_store,
-    _hive_propagation_config_payload,
     ensure_session_initialized,
     error_response,
     initial_session_hive_status,
@@ -309,9 +308,10 @@ async def tapps_memory(
         profile_switch: Switch to a different memory profile. Pass the profile name as
             value (e.g., "research-knowledge"). Persists choice and resets the store. (Epic M2)
         hive_status: Show Hive / Agent Teams status (requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).
-            Mirrors session-start hive_status; includes propagation_config (documents that
-            profile-sourced tier lists are unavailable in tapps-brain v1.4.3 and how
-            hive_propagate calls PropagationEngine). Registers this process when enabled. (Epic M3)
+            Mirrors session-start hive_status. Registers this process when enabled.
+            Propagation tier rules are enforced server-side by tapps-brain's
+            PropagationEngine; clients read outcomes from hive_propagate / hive_push
+            responses rather than mirroring rules locally. (Epic M3)
         hive_search: Search the Hive store (query or value = search text). Optional tags =
             comma-separated namespace filter. limit/min_confidence apply. (Epic M3)
         hive_propagate: Push eligible local MemoryStore entries to Hive via PropagationEngine
@@ -1973,14 +1973,12 @@ async def _handle_hive_status(store: MemoryStore, _p: _Params) -> dict[str, Any]
         }
 
     bridge = _get_brain_bridge()
-    propagation = {"propagation_config": _hive_propagation_config_payload()}
     if bridge is None:
         return {
             "action": "hive_status",
             "enabled": True,
             "degraded": True,
             "message": "BrainBridge unavailable (TAPPS_BRAIN_DATABASE_URL not configured).",
-            **propagation,
             "store_metadata": _store_metadata(store),
         }
 
@@ -1997,7 +1995,6 @@ async def _handle_hive_status(store: MemoryStore, _p: _Params) -> dict[str, Any]
     return {
         "action": "hive_status",
         **status,
-        **propagation,
         "store_metadata": _store_metadata(store),
     }
 

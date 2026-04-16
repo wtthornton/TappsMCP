@@ -217,6 +217,4 @@ async def test_tapps_memory_hive_status_disabled(monkeypatch: pytest.MonkeyPatch
     assert result["success"] is True
     assert result["data"]["action"] == "hive_status"
     assert result["data"]["enabled"] is False
-    pc = result["data"].get("propagation_config")
-    assert isinstance(pc, dict)
-    assert pc.get("profile_sourced") is False
+    assert "propagation_config" not in result["data"]

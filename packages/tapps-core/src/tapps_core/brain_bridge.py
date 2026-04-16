@@ -728,6 +728,9 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
     project_root: str | None = None
     profile = "repo-brain"
     hive_dsn: str | None = None
+    project_id: str = ""
+    pg_pool_max_waiting: int = 0
+    pg_pool_max_lifetime_seconds: int = 0
 
     if settings is not None:
         project_root = str(getattr(settings, "project_root", None) or "")
@@ -736,6 +739,28 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
             profile = str(getattr(memory, "profile", None) or "repo-brain")
             raw_hive = str(getattr(memory, "hive_dsn", None) or "")
             hive_dsn = raw_hive or None
+            project_id = str(getattr(memory, "project_id", "") or "")
+            pg_pool_max_waiting = int(getattr(memory, "pg_pool_max_waiting", 0) or 0)
+            pg_pool_max_lifetime_seconds = int(
+                getattr(memory, "pg_pool_max_lifetime_seconds", 0) or 0
+            )
+
+    # ADR-010 / EPIC-069: declare the registered project slug on the wire so
+    # AgentBrain hits the project registry instead of deriving a per-directory
+    # hash. When the setting is empty we leave any pre-set env var untouched
+    # (user may export TAPPS_BRAIN_PROJECT directly).
+    if project_id:
+        os.environ["TAPPS_BRAIN_PROJECT"] = project_id
+
+    # EPIC-066 (tapps-brain v3.7.0): pool tuning pass-through. Only set env
+    # vars when the setting is non-zero so we don't override operator-provided
+    # values or clobber tapps-brain's own defaults.
+    if pg_pool_max_waiting:
+        os.environ["TAPPS_BRAIN_PG_POOL_MAX_WAITING"] = str(pg_pool_max_waiting)
+    if pg_pool_max_lifetime_seconds:
+        os.environ["TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS"] = str(
+            pg_pool_max_lifetime_seconds
+        )
 
     # --- Construct & probe ---------------------------------------------------
     try:

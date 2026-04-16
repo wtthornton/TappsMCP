@@ -7,9 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-04-16
+
+### Fixed
+
+- **Hive init error messaging** — `tapps_session_start`'s `hive_status` previously returned a generic `"Hive singleton initialization failed"` that masked three distinct causes: missing `TAPPS_BRAIN_DATABASE_URL`, unsupported DSN scheme, or a `create_hive_backend` exception that was being silently swallowed by `contextlib.suppress(Exception)`. `_ensure_hive_singletons` now surfaces an actionable reason for each case (naming the env var, the scheme, or the underlying exception), and caches backend-init failures so we don't retry a known-broken DSN on every call. ([packages/tapps-mcp/src/tapps_mcp/server_helpers.py](packages/tapps-mcp/src/tapps_mcp/server_helpers.py))
+
 ### Changed
 
-- **tapps-brain pin floor → 3.7.2** — bumped `tapps-core` dependency from `>=3.7.0,<4` to [`>=3.7.2,<4`](https://github.com/wtthornton/tapps-brain/releases/tag/v3.7.2). 3.7.1 fixed a `RuntimeError: Task group is not initialized` crash in the MCP streamable-HTTP `/mcp` transport lifespan ordering and a 404 bug in `TappsBrainClient`/`AsyncTappsBrainClient` against unimplemented `/v1/tools/*` REST routes. 3.7.2 fixed the client path (`/mcp` → `/mcp/mcp`) since FastMCP's mounted sub-app serves at the nested path. No tapps-mcp code change required — usage is in-process `AgentBrain` via `BrainBridge` ([packages/tapps-core/src/tapps_core/brain_bridge.py](packages/tapps-core/src/tapps_core/brain_bridge.py)), not the HTTP network client or `/mcp` endpoint. Floor bump is preventative: any future migration to remote brain-as-a-service inherits a working client. Fixes stale CLAUDE.md gotcha note (was still referencing `v2.0.4`).
+- **Removed stale `propagation_config` field** from `hive_status` responses — the payload asserted tapps-brain didn't expose profile-sourced tier rules (`auto_propagate_tiers` / `private_tiers`) and framed that as a client-side gap. It is not a gap: tapps-brain's `PropagationEngine` enforces tier rules server-side on every `hive_propagate` / `hive_push` call; mirroring the rules client-side would have been two-sources-of-truth drift. Clients read propagation outcomes from `hive_propagate` / `hive_push` responses instead. Removes `propagation_config` from `tapps_session_start.hive_status` and `tapps_memory(action="hive_status")`. Deletes `_hive_propagation_config_payload`.
+
+### Added
+
+- **`memory.project_id` setting** (EPIC-069 / ADR-010) — new `TAPPS_MCP_MEMORY_PROJECT_ID` setting on `MemoryConfig`. When set, `create_brain_bridge` exports it to `TAPPS_BRAIN_PROJECT` before constructing `AgentBrain`, so tapps-brain's multi-tenant project registry (v3.5.0+) resolves to the registered slug instead of falling back to `derive_project_id(project_dir)` per-directory hash. Register with `tapps-brain project register` first.
+- **Postgres pool-tuning pass-through** (tapps-brain v3.7.0 knobs) — new `memory.pg_pool_max_waiting` and `memory.pg_pool_max_lifetime_seconds` settings. When non-zero, exported as `TAPPS_BRAIN_PG_POOL_MAX_WAITING` / `TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS` so the Postgres connection-pool queue depth and connection lifetime can be tuned from `.tapps-mcp.yaml` without forking the brain config. Zero leaves operator-provided env values untouched.
+- **tapps-brain pin floor → 3.7.2** — bumped `tapps-core` dependency from `>=3.7.0,<4` to [`>=3.7.2,<4`](https://github.com/wtthornton/tapps-brain/releases/tag/v3.7.2). 3.7.1 fixed a `RuntimeError: Task group is not initialized` crash in the MCP streamable-HTTP `/mcp` transport lifespan ordering and a 404 bug in `TappsBrainClient`/`AsyncTappsBrainClient` against unimplemented `/v1/tools/*` REST routes. 3.7.2 fixed the client path (`/mcp` → `/mcp/mcp`) since FastMCP's mounted sub-app serves at the nested path. Not load-bearing for tapps-mcp today (in-process `AgentBrain` via `BrainBridge`, not the HTTP network client), but any future migration to remote brain-as-a-service now gets a working client.
+
+- Version bump: tapps-core 2.7.3 → 2.8.0, tapps-mcp 2.7.3 → 2.8.0, docs-mcp 2.7.3 → 2.8.0
 
 ## [2.7.3] - 2026-04-14
 

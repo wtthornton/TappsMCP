@@ -279,6 +279,7 @@ def build_impact_memory_context(
 _hive_store: Any | None = None
 _hive_registry: Any | None = None
 _hive_import_error: str | None = None
+_hive_init_error: str | None = None
 _hive_lock = threading.Lock()
 
 
@@ -288,8 +289,8 @@ def _agent_teams_env_enabled() -> bool:
 
 
 def _reset_hive_store_cache() -> None:
-    """Reset Hive singletons and import-error cache (for testing)."""
-    global _hive_store, _hive_registry, _hive_import_error
+    """Reset Hive singletons and cached error state (for testing)."""
+    global _hive_store, _hive_registry, _hive_import_error, _hive_init_error
     with _hive_lock:
         if _hive_store is not None:
             with contextlib.suppress(Exception):
@@ -297,6 +298,7 @@ def _reset_hive_store_cache() -> None:
         _hive_store = None
         _hive_registry = None
         _hive_import_error = None
+        _hive_init_error = None
 
 
 def _ensure_hive_singletons() -> tuple[
@@ -306,11 +308,14 @@ def _ensure_hive_singletons() -> tuple[
 ]:
     """Lazily construct Hive store and agent registry.
 
-    Returns:
-        ``(hive_store, agent_registry, error_message)``. *error_message* is set
-        when the env flag is on but ``tapps_brain.hive`` cannot be imported.
+    Returns ``(hive_store, agent_registry, error_message)``. *error_message*
+    is populated with an actionable reason when init cannot complete: missing
+    tapps-brain import, missing/invalid ``TAPPS_BRAIN_DATABASE_URL``, or a
+    ``create_hive_backend`` failure. Backend-init failures are cached so we
+    don't retry a known-broken DSN on every call; DSN-missing is *not* cached
+    (env may be set later by a fixture or sidecar).
     """
-    global _hive_store, _hive_registry, _hive_import_error
+    global _hive_store, _hive_registry, _hive_import_error, _hive_init_error
     if not _agent_teams_env_enabled():
         return None, None, None
     if _hive_import_error is not None:
@@ -328,10 +333,25 @@ def _ensure_hive_singletons() -> tuple[
             return None, None, _hive_import_error
         if _hive_store is None:
             dsn = os.environ.get("TAPPS_BRAIN_DATABASE_URL", "")
-            if dsn and dsn.startswith(("postgres://", "postgresql://")):
-                with contextlib.suppress(Exception):
-                    from tapps_brain.backends import create_hive_backend
-                    _hive_store = create_hive_backend(dsn)
+            if not dsn:
+                return None, None, (
+                    "TAPPS_BRAIN_DATABASE_URL not configured "
+                    "(Postgres DSN required for Hive; ADR-007)"
+                )
+            if not dsn.startswith(("postgres://", "postgresql://")):
+                scheme = dsn.split("://", 1)[0] if "://" in dsn else "<none>"
+                return None, None, (
+                    f"TAPPS_BRAIN_DATABASE_URL scheme '{scheme}' not supported "
+                    "(Hive requires postgres:// or postgresql://)"
+                )
+            if _hive_init_error is not None:
+                return None, None, _hive_init_error
+            try:
+                from tapps_brain.backends import create_hive_backend
+                _hive_store = create_hive_backend(dsn)
+            except Exception as exc:  # noqa: BLE001 — surface real init failure
+                _hive_init_error = f"create_hive_backend failed: {exc}"
+                return None, None, _hive_init_error
         if _hive_registry is None:
             _hive_registry = AgentRegistry()
     return _hive_store, _hive_registry, None
@@ -349,75 +369,39 @@ def _get_hive_registry() -> _HiveAgentRegistryType | None:
     return registry
 
 
-def _hive_propagation_config_payload() -> dict[str, Any]:
-    """Describe Hive propagation settings visible to MCP clients (Epic M3 polish).
-
-    tapps-brain does not expose profile YAML keys such as
-    ``hive.auto_propagate_tiers`` / ``hive.private_tiers`` through a public API
-    that TappsMCP can read, so live profile-sourced tier lists cannot appear in
-    ``hive_status`` yet.
-
-    The ``hive_propagate`` action calls :meth:`PropagationEngine.propagate` with
-    both tier lists set to ``None``; the engine then routes only by
-    ``agent_scope`` (private entries stay local; domain → agent profile namespace;
-    hive → ``universal``).
-    """
-    return {
-        "profile_sourced": False,
-        "reason": (
-            "tapps-brain does not expose Hive propagation tier rules from "
-            "memory profiles to TappsMCP; live auto_propagate_tiers/private_tiers "
-            "are not available in this response."
-        ),
-        "hive_propagate_tool": {
-            "auto_propagate_tiers": None,
-            "private_tiers": None,
-            "note": (
-                "TappsMCP passes None for both; tier-based scope upgrades are not "
-                "applied—only each entry's agent_scope is used."
-            ),
-        },
-    }
-
-
 def initial_session_hive_status() -> dict[str, Any]:
     """Baseline ``hive_status`` before :func:`collect_session_hive_status` runs.
 
-    Used by session-start when collection is skipped or raises; includes
-    ``propagation_config`` so clients always see the same keys.
+    Used by session-start when collection is skipped or raises.
     """
-    return {"enabled": False, "propagation_config": _hive_propagation_config_payload()}
+    return {"enabled": False}
 
 
 def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, Any]:
     """Build ``hive_status`` payload for :func:`tapps_session_start`.
 
     When ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` is unset, returns
-    ``{\"enabled\": False, \"propagation_config\": ...}``. When set, registers
-    this process as a Hive agent
+    ``{"enabled": False}``. When set, registers this process as a Hive agent
     (best-effort) and returns namespace / agent counts. On failure, returns
-    ``degraded: true`` with a message (non-fatal), matching other optional
-    tapps-brain integrations.
+    ``degraded: true`` with an actionable message (non-fatal), matching other
+    optional tapps-brain integrations.
+
+    Propagation tier rules (``auto_propagate_tiers`` / ``private_tiers``) are
+    intentionally not mirrored here: tapps-brain's ``PropagationEngine``
+    enforces them server-side on every ``hive_propagate`` / ``hive_push`` call.
+    Clients read the propagation outcome from the response, not the rules.
     """
     if not _agent_teams_env_enabled():
         return initial_session_hive_status()
 
-    propagation = {"propagation_config": _hive_propagation_config_payload()}
     try:
-        store, registry, import_err = _ensure_hive_singletons()
-        if import_err:
+        store, registry, init_err = _ensure_hive_singletons()
+        if init_err or store is None or registry is None:
+            reason = init_err or "Hive singletons unavailable"
             return {
                 "enabled": True,
                 "degraded": True,
-                "message": f"Hive unavailable (import): {import_err}",
-                **propagation,
-            }
-        if store is None or registry is None:
-            return {
-                "enabled": True,
-                "degraded": True,
-                "message": "Hive singleton initialization failed.",
-                **propagation,
+                "message": f"Hive unavailable: {reason}",
             }
 
         from tapps_brain.models import AgentRegistration
@@ -441,14 +425,12 @@ def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, Any]:
             "agent_id": agent_id,
             "namespaces": namespaces,
             "registered_agents_count": len(agents),
-            **propagation,
         }
     except Exception as exc:
         return {
             "enabled": True,
             "degraded": True,
             "message": f"Hive status failed: {exc}",
-            **propagation,
         }
 
 

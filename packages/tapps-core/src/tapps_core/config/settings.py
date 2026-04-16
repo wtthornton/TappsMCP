@@ -553,6 +553,40 @@ class MemorySettings(BaseSettings):
         ),
     )
 
+    # EPIC-069 / ADR-010: multi-tenant project_id on the wire.
+    project_id: str = Field(
+        default="",
+        description=(
+            "Registered tapps-brain project slug. When set, exported as "
+            "TAPPS_BRAIN_PROJECT so AgentBrain resolves to the registered "
+            "tenant instead of falling back to a per-directory hash. "
+            "Register a project with `tapps-brain project register` before use. "
+            "Env: TAPPS_MCP_MEMORY_PROJECT_ID."
+        ),
+    )
+
+    # EPIC-066 (tapps-brain v3.7.0): Postgres connection-pool tuning.
+    pg_pool_max_waiting: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Maximum queued pool waiters before new acquires are rejected. "
+            "0 leaves tapps-brain's default (20). Exported as "
+            "TAPPS_BRAIN_PG_POOL_MAX_WAITING when non-zero. "
+            "Env: TAPPS_MCP_MEMORY_PG_POOL_MAX_WAITING."
+        ),
+    )
+    pg_pool_max_lifetime_seconds: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Maximum lifetime (seconds) of a pooled connection before recycling. "
+            "0 leaves tapps-brain's default (3600). Exported as "
+            "TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS when non-zero. "
+            "Env: TAPPS_MCP_MEMORY_PG_POOL_MAX_LIFETIME_SECONDS."
+        ),
+    )
+
 
 class DocSourceConfig(BaseModel):
     """Custom documentation source for a specific library."""

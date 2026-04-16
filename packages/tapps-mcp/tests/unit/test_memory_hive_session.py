@@ -18,10 +18,7 @@ def test_collect_session_hive_status_disabled(monkeypatch: pytest.MonkeyPatch) -
     settings = load_settings()
     out = collect_session_hive_status(settings)
     assert out["enabled"] is False
-    pc = out.get("propagation_config")
-    assert isinstance(pc, dict)
-    assert pc.get("profile_sourced") is False
-    assert "hive_propagate_tool" in pc
+    assert "propagation_config" not in out
 
 
 def test_collect_session_hive_status_happy_path(
@@ -62,10 +59,7 @@ def test_collect_session_hive_status_happy_path(
     assert "agent_id" in result
     assert isinstance(result.get("namespaces"), list)
     assert result.get("registered_agents_count", 0) >= 1
-    pc = result.get("propagation_config")
-    assert isinstance(pc, dict)
-    assert pc.get("profile_sourced") is False
-    assert pc.get("hive_propagate_tool", {}).get("auto_propagate_tiers") is None
+    assert "propagation_config" not in result
 
 
 def test_collect_session_hive_status_degraded_on_import_error(
@@ -85,7 +79,81 @@ def test_collect_session_hive_status_degraded_on_import_error(
     assert result["enabled"] is True
     assert result.get("degraded") is True
     assert "simulated import failure" in (result.get("message") or "")
-    assert isinstance(result.get("propagation_config"), dict)
+    assert "propagation_config" not in result
+
+
+def test_collect_session_hive_status_reports_missing_dsn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When Agent Teams is on but TAPPS_BRAIN_DATABASE_URL is unset, the status
+    message must name the missing DSN — not the misleading
+    ``Hive singleton initialization failed`` that masked the real cause.
+    """
+    monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
+    monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
+    from tapps_mcp.server_helpers import _reset_hive_store_cache, collect_session_hive_status
+
+    _reset_hive_store_cache()
+    settings = load_settings()
+    result = collect_session_hive_status(settings)
+
+    assert result["enabled"] is True
+    assert result.get("degraded") is True
+    message = result.get("message") or ""
+    assert "TAPPS_BRAIN_DATABASE_URL" in message
+    assert "not configured" in message
+
+
+def test_collect_session_hive_status_reports_bad_dsn_scheme(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-postgres DSN schemes must be reported by name, not swallowed."""
+    monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
+    monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "sqlite:///tmp/brain.db")
+    from tapps_mcp.server_helpers import _reset_hive_store_cache, collect_session_hive_status
+
+    _reset_hive_store_cache()
+    settings = load_settings()
+    result = collect_session_hive_status(settings)
+
+    assert result["enabled"] is True
+    assert result.get("degraded") is True
+    message = result.get("message") or ""
+    assert "sqlite" in message
+    assert "postgres" in message
+
+
+def test_ensure_hive_singletons_caches_backend_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``create_hive_backend`` raising should surface the exception message and
+    cache it so we don't retry a known-broken DSN on every call.
+    """
+    monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
+    monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "postgresql://nope:5432/x")
+    from tapps_mcp import server_helpers
+    from tapps_mcp.server_helpers import _ensure_hive_singletons, _reset_hive_store_cache
+
+    _reset_hive_store_cache()
+
+    call_count = {"n": 0}
+
+    def _boom(_dsn: str) -> object:
+        call_count["n"] += 1
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(
+        "tapps_brain.backends.create_hive_backend", _boom, raising=True
+    )
+
+    _, _, err1 = _ensure_hive_singletons()
+    _, _, err2 = _ensure_hive_singletons()
+
+    assert err1 is not None
+    assert "connection refused" in err1
+    assert err1 == err2
+    assert call_count["n"] == 1, "backend failure should be cached, not retried"
+    assert server_helpers._hive_init_error is not None
 
 
 @pytest.mark.asyncio
@@ -110,4 +178,4 @@ async def test_session_start_quick_includes_hive_status(
     hs = result["data"].get("hive_status")
     assert hs is not None
     assert hs.get("enabled") is False
-    assert isinstance(hs.get("propagation_config"), dict)
+    assert "propagation_config" not in hs
