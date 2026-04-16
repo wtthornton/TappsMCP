@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import Context
-    from tapps_brain.backends import AgentRegistry as _HiveAgentRegistryType
     from tapps_brain import HiveBackend as _HiveStoreType
+    from tapps_brain.backends import AgentRegistry as _HiveAgentRegistryType
 
     from tapps_core.brain_bridge import BrainBridge as _BrainBridgeType
     from tapps_core.config.settings import TappsMCPSettings
@@ -40,6 +40,7 @@ async def emit_ctx_info(ctx: Context[Any, Any, Any] | None, message: str) -> Non
         return
     with contextlib.suppress(Exception):
         await info_fn(message)
+
 
 # ---------------------------------------------------------------------------
 # CodeScorer singleton — avoids re-instantiating on every tool call.
@@ -158,6 +159,16 @@ def _reset_brain_bridge_cache() -> None:
         _brain_bridge = None
 
 
+def _peek_brain_bridge() -> _BrainBridgeType | None:
+    """Return the cached :class:`BrainBridge` without forcing init (TAP-517).
+
+    Used by read-only consumers like ``tapps_server_info`` that need to
+    report bridge state but must not incur a Postgres connection just to
+    answer a diagnostics query.
+    """
+    return _brain_bridge
+
+
 def _get_memory_store() -> _MemoryStoreType:
     """Return the Postgres-backed :class:`MemoryStore` from the BrainBridge.
 
@@ -257,13 +268,15 @@ def build_impact_memory_context(
     for entry in filtered:
         val = str(getattr(entry, "value", "") or "")
         cap = _IMPACT_MEMORY_SUMMARY_MAX
-        items.append({
-            "key": str(getattr(entry, "key", "")),
-            "summary": val[:cap] + ("..." if len(val) > cap else ""),
-            "tier": _tier_str(getattr(entry, "tier", "")),
-            "confidence": float(getattr(entry, "confidence", 0.0)),
-            "source": "memory",
-        })
+        items.append(
+            {
+                "key": str(getattr(entry, "key", "")),
+                "summary": val[:cap] + ("..." if len(val) > cap else ""),
+                "tier": _tier_str(getattr(entry, "tier", "")),
+                "confidence": float(getattr(entry, "confidence", 0.0)),
+                "source": "memory",
+            }
+        )
 
     return {
         "memory_context": items,
@@ -334,22 +347,31 @@ def _ensure_hive_singletons() -> tuple[
         if _hive_store is None:
             dsn = os.environ.get("TAPPS_BRAIN_DATABASE_URL", "")
             if not dsn:
-                return None, None, (
-                    "TAPPS_BRAIN_DATABASE_URL not configured "
-                    "(Postgres DSN required for Hive; ADR-007)"
+                return (
+                    None,
+                    None,
+                    (
+                        "TAPPS_BRAIN_DATABASE_URL not configured "
+                        "(Postgres DSN required for Hive; ADR-007)"
+                    ),
                 )
             if not dsn.startswith(("postgres://", "postgresql://")):
                 scheme = dsn.split("://", 1)[0] if "://" in dsn else "<none>"
-                return None, None, (
-                    f"TAPPS_BRAIN_DATABASE_URL scheme '{scheme}' not supported "
-                    "(Hive requires postgres:// or postgresql://)"
+                return (
+                    None,
+                    None,
+                    (
+                        f"TAPPS_BRAIN_DATABASE_URL scheme '{scheme}' not supported "
+                        "(Hive requires postgres:// or postgresql://)"
+                    ),
                 )
             if _hive_init_error is not None:
                 return None, None, _hive_init_error
             try:
                 from tapps_brain.backends import create_hive_backend
+
                 _hive_store = create_hive_backend(dsn)
-            except Exception as exc:  # noqa: BLE001 — surface real init failure
+            except Exception as exc:
                 _hive_init_error = f"create_hive_backend failed: {exc}"
                 return None, None, _hive_init_error
         if _hive_registry is None:
@@ -654,12 +676,14 @@ async def ensure_session_initialized() -> None:
     except Exception:
         pass  # Best-effort; profiling failure should not block session init
 
-    mark_session_initialized({
-        "project_root": str(settings.project_root),
-        "quality_preset": settings.quality_preset,
-        "auto_initialized": True,
-        "project_profile": profile_data,
-    })
+    mark_session_initialized(
+        {
+            "project_root": str(settings.project_root),
+            "quality_preset": settings.quality_preset,
+            "auto_initialized": True,
+            "project_profile": profile_data,
+        }
+    )
 
 
 def ensure_session_initialized_sync() -> None:
@@ -674,9 +698,11 @@ def ensure_session_initialized_sync() -> None:
     from tapps_core.config.settings import load_settings
 
     settings = load_settings()
-    mark_session_initialized({
-        "project_root": str(settings.project_root),
-        "quality_preset": settings.quality_preset,
-        "auto_initialized": True,
-        "sync_only": True,
-    })
+    mark_session_initialized(
+        {
+            "project_root": str(settings.project_root),
+            "quality_preset": settings.quality_preset,
+            "auto_initialized": True,
+            "sync_only": True,
+        }
+    )
