@@ -17,7 +17,6 @@ from tapps_core.common.file_operations import (
     detect_write_mode,
 )
 
-
 # ---------------------------------------------------------------------------
 # WriteMode enum
 # ---------------------------------------------------------------------------
@@ -227,9 +226,7 @@ class TestFileManifest:
         assert "Agent Instructions" in text
         assert "Backup first" in text
 
-    def test_to_text_content_respects_priority_order(
-        self, sample_manifest: FileManifest
-    ) -> None:
+    def test_to_text_content_respects_priority_order(self, sample_manifest: FileManifest) -> None:
         text = sample_manifest.to_text_content()
         agents_pos = text.index("AGENTS.md")
         config_pos = text.index(".tapps-mcp.yaml")
@@ -298,20 +295,16 @@ class TestReExports:
         assert callable(detect_write_mode)
 
     def test_tapps_mcp_common_reexports(self) -> None:
-        from tapps_mcp.common import (
-            AgentInstructions,
-            FileManifest,
-            FileOperation,
-            WriteMode,
-            detect_write_mode,
-        )
-
         # Verify identity — same objects, not copies
         from tapps_core.common.file_operations import (
             FileManifest as CoreFileManifest,
         )
         from tapps_core.common.file_operations import (
             FileOperation as CoreFileOperation,
+        )
+        from tapps_mcp.common import (
+            FileManifest,
+            FileOperation,
         )
 
         assert FileOperation is CoreFileOperation

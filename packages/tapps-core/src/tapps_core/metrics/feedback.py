@@ -68,11 +68,7 @@ class FeedbackTracker:
                 continue
             if ts < cutoff:
                 break  # older records are before cutoff
-            if (
-                rec.tool_name == tool_name
-                and rec.helpful == helpful
-                and rec.context == context
-            ):
+            if rec.tool_name == tool_name and rec.helpful == helpful and rec.context == context:
                 return True
         return False
 

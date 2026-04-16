@@ -125,24 +125,19 @@ class APISurfaceAnalyzer:
         classes = self._build_classes(module_info.classes, all_exports, depth)
         constants = self._build_constants(module_info.constants, all_exports, depth)
         type_aliases = (
-            self._detect_type_aliases(module_info, all_exports, depth)
-            if include_types
-            else []
+            self._detect_type_aliases(module_info, all_exports, depth) if include_types else []
         )
         re_exports = self._detect_re_exports(module_info, file_path)
 
         # Calculate coverage
         all_public_names: list[str] = (
-            [f.name for f in functions]
-            + [c.name for c in classes]
-            + [c.name for c in constants]
+            [f.name for f in functions] + [c.name for c in classes] + [c.name for c in constants]
         )
         total_public = len(all_public_names)
 
-        documented_names = (
-            {f.name for f in functions if f.docstring_present}
-            | {c.name for c in classes if c.docstring_present}
-        )
+        documented_names = {f.name for f in functions if f.docstring_present} | {
+            c.name for c in classes if c.docstring_present
+        }
         # Constants don't have docstrings, so they don't count for coverage
         docstring_eligible = [f.name for f in functions] + [c.name for c in classes]
         eligible_count = len(docstring_eligible)
@@ -253,9 +248,7 @@ class APISurfaceAnalyzer:
                 parsed = parse_docstring(cls.docstring)
                 docstring_summary = parsed.summary
 
-            public_methods = [
-                m.name for m in cls.methods if not m.name.startswith("_")
-            ]
+            public_methods = [m.name for m in cls.methods if not m.name.startswith("_")]
 
             result.append(
                 APIClass(
@@ -310,15 +303,16 @@ class APISurfaceAnalyzer:
             # Heuristic: annotated with TypeAlias or assigned to a typing construct
             is_type_alias = const.annotation and "TypeAlias" in const.annotation
             is_typing_construct = const.value and any(
-                kw in const.value
-                for kw in ("Union[", "Optional[", "Literal[", "TypeVar(")
+                kw in const.value for kw in ("Union[", "Optional[", "Literal[", "TypeVar(")
             )
             if is_type_alias or is_typing_construct:
                 aliases.append(const.name)
         return aliases
 
     def _detect_re_exports(
-        self, module_info: ModuleInfo, file_path: Path,
+        self,
+        module_info: ModuleInfo,
+        file_path: Path,
     ) -> list[str]:
         """Detect names re-exported from __init__.py files."""
         if file_path.name != "__init__.py":

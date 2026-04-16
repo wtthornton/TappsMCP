@@ -35,7 +35,6 @@ Quick start::
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from typing import Any
 
@@ -44,13 +43,11 @@ import structlog
 from tapps_core.insights.migration import (
     InsightMigrationResult,
     bulk_migrate,
-    migrate_memory_entry_to_insight,
 )
 from tapps_core.insights.models import (
     InsightEntry,
     InsightOrigin,
     InsightType,
-    SubjectKind,
 )
 from tapps_core.insights.scope import ScopeViolation, enforce_scope
 
@@ -184,7 +181,9 @@ class InsightClient:
             logger.warning("insight_search_failed", query=query, exc_info=True)
             return []
 
-    def get_by_path(self, subject_path: str, *, limit: int = _DEFAULT_SEARCH_LIMIT) -> list[InsightEntry]:
+    def get_by_path(
+        self, subject_path: str, *, limit: int = _DEFAULT_SEARCH_LIMIT
+    ) -> list[InsightEntry]:
         """Return insights about a specific file or module path.
 
         Searches using the path as the query, restricted to the ``insights``

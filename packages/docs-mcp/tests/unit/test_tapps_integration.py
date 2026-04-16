@@ -28,7 +28,6 @@ from docs_mcp.integrations.tapps import (
     TappsQualityScore,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -249,16 +248,12 @@ class TestTappsAvailability:
 class TestLoadEnrichment:
     """load_enrichment reads and parses the export JSON."""
 
-    def test_returns_unavailable_when_dir_does_not_exist(
-        self, bare_project: Path
-    ) -> None:
+    def test_returns_unavailable_when_dir_does_not_exist(self, bare_project: Path) -> None:
         integration = TappsIntegration(bare_project)
         enrichment = integration.load_enrichment()
         assert enrichment.available is False
 
-    def test_returns_unavailable_when_export_file_missing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_returns_unavailable_when_export_file_missing(self, tmp_path: Path) -> None:
         root = tmp_path / "nofile"
         root.mkdir()
         (root / ".tapps-mcp").mkdir()
@@ -267,23 +262,17 @@ class TestLoadEnrichment:
         enrichment = integration.load_enrichment()
         assert enrichment.available is False
 
-    def test_returns_unavailable_when_json_malformed(
-        self, tmp_path: Path
-    ) -> None:
+    def test_returns_unavailable_when_json_malformed(self, tmp_path: Path) -> None:
         root = tmp_path / "malformed"
         root.mkdir()
         tapps_dir = root / ".tapps-mcp"
         tapps_dir.mkdir()
-        (tapps_dir / "docsmcp-export.json").write_text(
-            "not valid json {{{", encoding="utf-8"
-        )
+        (tapps_dir / "docsmcp-export.json").write_text("not valid json {{{", encoding="utf-8")
         integration = TappsIntegration(root)
         enrichment = integration.load_enrichment()
         assert enrichment.available is False
 
-    def test_returns_unavailable_when_version_mismatch(
-        self, tmp_path: Path
-    ) -> None:
+    def test_returns_unavailable_when_version_mismatch(self, tmp_path: Path) -> None:
         root = tmp_path / "badver"
         root.mkdir()
         _write_export(root, {"version": "99.0", "quality_scores": []})
@@ -291,9 +280,7 @@ class TestLoadEnrichment:
         enrichment = integration.load_enrichment()
         assert enrichment.available is False
 
-    def test_loads_quality_scores_from_valid_export(
-        self, tapps_project: Path
-    ) -> None:
+    def test_loads_quality_scores_from_valid_export(self, tapps_project: Path) -> None:
         integration = TappsIntegration(tapps_project)
         enrichment = integration.load_enrichment()
         assert enrichment.available is True
@@ -304,9 +291,7 @@ class TestLoadEnrichment:
         assert enrichment.quality_scores[1].file_path == "src/utils.py"
         assert enrichment.quality_scores[1].overall_score == 55.0
 
-    def test_loads_project_profile_from_valid_export(
-        self, tapps_project: Path
-    ) -> None:
+    def test_loads_project_profile_from_valid_export(self, tapps_project: Path) -> None:
         integration = TappsIntegration(tapps_project)
         enrichment = integration.load_enrichment()
         assert enrichment.available is True
@@ -316,9 +301,7 @@ class TestLoadEnrichment:
         assert "pytest" in enrichment.project_profile.test_frameworks
         assert "uv" in enrichment.project_profile.package_managers
 
-    def test_loads_dependency_data_from_valid_export(
-        self, tapps_project: Path
-    ) -> None:
+    def test_loads_dependency_data_from_valid_export(self, tapps_project: Path) -> None:
         integration = TappsIntegration(tapps_project)
         enrichment = integration.load_enrichment()
         assert enrichment.available is True
@@ -328,16 +311,12 @@ class TestLoadEnrichment:
         assert enrichment.dependency_data.cycles == []
         assert enrichment.dependency_data.coupling == []
 
-    def test_returns_overall_project_score(
-        self, tapps_project: Path
-    ) -> None:
+    def test_returns_overall_project_score(self, tapps_project: Path) -> None:
         integration = TappsIntegration(tapps_project)
         enrichment = integration.load_enrichment()
         assert enrichment.overall_project_score == 72.5
 
-    def test_partial_export_no_profile_or_deps(
-        self, tmp_path: Path
-    ) -> None:
+    def test_partial_export_no_profile_or_deps(self, tmp_path: Path) -> None:
         root = tmp_path / "partial"
         root.mkdir()
         _write_export(root, {"version": "1.0", "quality_scores": []})
@@ -358,24 +337,18 @@ class TestLoadEnrichment:
 class TestLoadProjectProfile:
     """load_project_profile returns TappsProjectProfile or None."""
 
-    def test_returns_none_when_dir_does_not_exist(
-        self, bare_project: Path
-    ) -> None:
+    def test_returns_none_when_dir_does_not_exist(self, bare_project: Path) -> None:
         integration = TappsIntegration(bare_project)
         assert integration.load_project_profile() is None
 
-    def test_returns_none_when_no_profile_in_export(
-        self, tmp_path: Path
-    ) -> None:
+    def test_returns_none_when_no_profile_in_export(self, tmp_path: Path) -> None:
         root = tmp_path / "noprofile"
         root.mkdir()
         _write_export(root, {"version": "1.0", "quality_scores": []})
         integration = TappsIntegration(root)
         assert integration.load_project_profile() is None
 
-    def test_returns_profile_with_correct_fields(
-        self, tapps_project: Path
-    ) -> None:
+    def test_returns_profile_with_correct_fields(self, tapps_project: Path) -> None:
         integration = TappsIntegration(tapps_project)
         profile = integration.load_project_profile()
         assert profile is not None
@@ -394,15 +367,11 @@ class TestLoadProjectProfile:
 class TestLoadQualityScores:
     """load_quality_scores returns list[TappsQualityScore] or empty."""
 
-    def test_returns_empty_when_dir_does_not_exist(
-        self, bare_project: Path
-    ) -> None:
+    def test_returns_empty_when_dir_does_not_exist(self, bare_project: Path) -> None:
         integration = TappsIntegration(bare_project)
         assert integration.load_quality_scores() == []
 
-    def test_loads_scores_from_valid_export(
-        self, tapps_project: Path
-    ) -> None:
+    def test_loads_scores_from_valid_export(self, tapps_project: Path) -> None:
         integration = TappsIntegration(tapps_project)
         scores = integration.load_quality_scores()
         assert len(scores) == 2

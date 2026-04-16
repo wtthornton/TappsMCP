@@ -32,9 +32,7 @@ class TestInitCtxInfo:
                 "tapps_mcp.server._with_nudges",
                 side_effect=lambda _n, r: r,
             ),
-            patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings,
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.common.elicitation.elicit_init_confirmation",
                 new_callable=AsyncMock,
@@ -93,9 +91,7 @@ class TestInitCtxInfo:
                 "tapps_mcp.server._with_nudges",
                 side_effect=lambda _n, r: r,
             ),
-            patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings,
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.pipeline.init.bootstrap_pipeline",
                 return_value=mock_init_result,
@@ -142,9 +138,7 @@ class TestInitCtxInfo:
                 "tapps_mcp.server._with_nudges",
                 side_effect=lambda _n, r: r,
             ),
-            patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings,
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.common.elicitation.elicit_init_confirmation",
                 new_callable=AsyncMock,
@@ -201,9 +195,7 @@ class TestInitCtxInfo:
                 "tapps_mcp.server._with_nudges",
                 side_effect=lambda _n, r: r,
             ),
-            patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings,
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.common.elicitation.elicit_init_confirmation",
                 new_callable=AsyncMock,

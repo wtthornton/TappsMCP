@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pytest  # noqa: F401 (monkeypatch fixture)
+import pytest
 
 from tapps_core.config.settings import (
     PRESETS,

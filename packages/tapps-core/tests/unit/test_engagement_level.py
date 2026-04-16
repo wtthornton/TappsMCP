@@ -24,9 +24,7 @@ class TestEngagementLevelSettings:
         ["high", "low"],
         ids=["high", "low"],
     )
-    def test_loads_level_from_yaml(
-        self, tmp_path: pytest.TempPathFactory, level: str
-    ) -> None:
+    def test_loads_level_from_yaml(self, tmp_path: pytest.TempPathFactory, level: str) -> None:
         from tapps_core.config.settings import load_settings
 
         config = tmp_path / ".tapps-mcp.yaml"  # type: ignore[operator]
@@ -45,9 +43,7 @@ class TestEngagementLevelSettings:
                 llm_engagement_level="extreme",  # type: ignore[arg-type]
             )
 
-    def test_existing_yaml_without_key_still_loads(
-        self, tmp_path: pytest.TempPathFactory
-    ) -> None:
+    def test_existing_yaml_without_key_still_loads(self, tmp_path: pytest.TempPathFactory) -> None:
         from tapps_core.config.settings import load_settings
 
         config = tmp_path / ".tapps-mcp.yaml"  # type: ignore[operator]
@@ -86,7 +82,9 @@ class TestChecklistSettings:
         assert settings.checklist_strict_unknown_task_types is False
         assert settings.checklist_require_success is False
 
-    def test_env_overrides(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_env_overrides(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from tapps_core.config.settings import load_settings
 
         monkeypatch.setenv("TAPPS_MCP_CHECKLIST_STRICT_UNKNOWN_TASK_TYPES", "true")

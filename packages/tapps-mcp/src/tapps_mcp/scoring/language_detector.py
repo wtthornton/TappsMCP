@@ -44,12 +44,14 @@ LANGUAGE_ALIASES: dict[str, str] = {
 }
 
 # Supported languages for scoring (languages with implemented scorers)
-SUPPORTED_LANGUAGES: frozenset[str] = frozenset({
-    "python",
-    "typescript",
-    "go",
-    "rust",
-})
+SUPPORTED_LANGUAGES: frozenset[str] = frozenset(
+    {
+        "python",
+        "typescript",
+        "go",
+        "rust",
+    }
+)
 
 
 def detect_language(file_path: Path | str) -> str | None:

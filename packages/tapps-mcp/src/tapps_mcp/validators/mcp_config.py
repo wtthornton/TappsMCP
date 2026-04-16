@@ -82,8 +82,7 @@ def validate_mcp_config(file_path: str, content: str) -> ConfigValidationResult:
 
     if "mcpServers" not in data:
         suggestions.append(
-            "Consider wrapping server entries under 'mcpServers' key "
-            "for standard MCP format."
+            "Consider wrapping server entries under 'mcpServers' key for standard MCP format."
         )
 
     if not servers:
@@ -135,9 +134,7 @@ def validate_mcp_config(file_path: str, content: str) -> ConfigValidationResult:
 
         env = config.get("env")
         if isinstance(env, dict) and not env:
-            suggestions.append(
-                f"Server '{name}' has empty 'env' object; can be removed."
-            )
+            suggestions.append(f"Server '{name}' has empty 'env' object; can be removed.")
 
     valid = not any(f.severity == "critical" for f in findings)
     return ConfigValidationResult(

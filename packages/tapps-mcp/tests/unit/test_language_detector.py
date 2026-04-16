@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from tapps_mcp.scoring.language_detector import (
     EXTENSION_TO_LANGUAGE,
     SUPPORTED_LANGUAGES,

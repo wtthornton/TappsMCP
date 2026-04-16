@@ -166,9 +166,7 @@ class TestAgenticWorkflow:
         from tapps_mcp.pipeline.github_copilot import generate_agentic_workflow
 
         generate_agentic_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "agentic-pr-review.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "agentic-pr-review.yml").read_text()
         assert "pull_request" in content
 
     def test_result_dict(self, tmp_path):

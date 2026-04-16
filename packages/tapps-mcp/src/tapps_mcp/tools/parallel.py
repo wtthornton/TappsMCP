@@ -203,9 +203,7 @@ async def _run_subprocess(
     if run_perflint and shutil.which("pylint"):
         from tapps_mcp.tools.perflint import run_perflint_check_async
 
-        tasks["perflint"] = asyncio.create_task(
-            run_perflint_check_async(file_path, **kw)
-        )
+        tasks["perflint"] = asyncio.create_task(run_perflint_check_async(file_path, **kw))
     elif run_perflint:
         _mark_missing("perflint", results)
 

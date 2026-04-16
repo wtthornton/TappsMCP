@@ -212,8 +212,7 @@ class ArchitectureBrainWriter:
         if module_map.entry_points:
             ep_key = _build_key("arch", project, "entry_points")
             ep_value = _truncate(
-                f"Entry points for {project}: "
-                + ", ".join(module_map.entry_points[:20])
+                f"Entry points for {project}: " + ", ".join(module_map.entry_points[:20])
             )
             self._save(store, br, ep_key, ep_value)
 

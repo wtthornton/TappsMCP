@@ -189,7 +189,7 @@ class InMemoryPrivateBackend:
             record.update(extra)
         with self._lock:
             try:
-                with open(self._audit_path, "a", encoding="utf-8") as fh:
+                with self._audit_path.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(record, default=str) + "\n")
             except OSError:
                 pass
@@ -358,9 +358,7 @@ def _inject_test_brain_bridge(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]
 
     # Only patch the alias used by the handler module, not the canonical name
     # in server_helpers. Patching both creates the recursion described above.
-    monkeypatch.setattr(
-        "tapps_mcp.server_memory_tools._get_brain_bridge", _bridge_from_store
-    )
+    monkeypatch.setattr("tapps_mcp.server_memory_tools._get_brain_bridge", _bridge_from_store)
     yield
 
 

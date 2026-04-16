@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from tapps_brain.models import MemoryScope
 
-from tapps_core.insights.models import InsightEntry, InsightOrigin, InsightType
+from tapps_core.insights.models import InsightEntry, InsightOrigin
 from tapps_core.insights.scope import ScopeViolation, enforce_scope, validate_origin_scope
 
 

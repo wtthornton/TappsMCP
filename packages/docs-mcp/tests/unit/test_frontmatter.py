@@ -5,11 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from docs_mcp.generators.frontmatter import FrontmatterGenerator, FrontmatterResult
+from docs_mcp.generators.frontmatter import FrontmatterGenerator
 from tests.helpers import make_settings
-
 
 # ---------------------------------------------------------------------------
 # FrontmatterGenerator unit tests

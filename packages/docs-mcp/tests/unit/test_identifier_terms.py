@@ -40,9 +40,7 @@ def test_collect_long_def_name(tmp_path: Path) -> None:
 def test_skips_test_def_and_short_names(tmp_path: Path) -> None:
     _write(
         tmp_path / "t.py",
-        "def test_foo():\n    pass\n"
-        "def run():\n    pass\n"
-        "class TestHelper:\n    pass\n",
+        "def test_foo():\n    pass\ndef run():\n    pass\nclass TestHelper:\n    pass\n",
     )
     terms = collect_identifier_terms(tmp_path, max_files=10, max_terms=50)
     assert "test_foo" not in terms

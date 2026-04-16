@@ -8,7 +8,6 @@ import pytest
 
 from tapps_core.metrics.feedback import FeedbackRecord, FeedbackTracker
 
-
 # ---------------------------------------------------------------------------
 # FeedbackRecord
 # ---------------------------------------------------------------------------

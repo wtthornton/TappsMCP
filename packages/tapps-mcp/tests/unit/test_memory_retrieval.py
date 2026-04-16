@@ -16,7 +16,6 @@ from tapps_mcp.memory.models import (
 )
 from tapps_mcp.memory.retrieval import MemoryRetriever, ScoredMemory
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -192,9 +191,7 @@ class TestMemoryRetriever:
         assert results[0].entry.key == "bad-key"
 
     def test_result_limit_respected(self) -> None:
-        entries = [
-            _make_entry(f"key-{i}", f"matching value {i}") for i in range(20)
-        ]
+        entries = [_make_entry(f"key-{i}", f"matching value {i}") for i in range(20)]
         retriever = MemoryRetriever()
         store = _make_store(entries)
 
@@ -202,9 +199,7 @@ class TestMemoryRetriever:
         assert len(results) <= 5
 
     def test_max_limit_capped(self) -> None:
-        entries = [
-            _make_entry(f"key-{i}", f"value {i}") for i in range(60)
-        ]
+        entries = [_make_entry(f"key-{i}", f"value {i}") for i in range(60)]
         retriever = MemoryRetriever()
         store = _make_store(entries)
 

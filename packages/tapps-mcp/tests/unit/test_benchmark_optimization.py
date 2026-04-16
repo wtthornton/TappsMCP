@@ -405,12 +405,8 @@ class TestRedundancyAnalyzerV2Sections:
         analyzer = RedundancyAnalyzerV2()
         report = analyzer.analyze_template_redundancy(_SAMPLE_TEMPLATE, tmp_path)
 
-        remove_count = sum(
-            1 for s in report.sections if s.recommendation == "remove"
-        )
-        reduce_count = sum(
-            1 for s in report.sections if s.recommendation == "reduce"
-        )
+        remove_count = sum(1 for s in report.sections if s.recommendation == "remove")
+        reduce_count = sum(1 for s in report.sections if s.recommendation == "reduce")
         assert report.sections_to_remove == remove_count
         assert report.sections_to_reduce == reduce_count
 
@@ -529,9 +525,7 @@ class TestAblationRunner:
     """Test section ablation testing."""
 
     @pytest.mark.asyncio()
-    async def test_ablation_returns_results_per_section(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_ablation_returns_results_per_section(self, tmp_path: Path) -> None:
         """Ablation returns one result per section."""
         from tapps_mcp.benchmark.ablation import AblationConfig, AblationRunner
 
@@ -570,10 +564,7 @@ class TestAblationRunner:
         from tapps_mcp.benchmark.ablation import AblationConfig, AblationRunner
 
         dataset_file = tmp_path / "test.json"
-        instances = [
-            {**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"cls-{i}"}
-            for i in range(5)
-        ]
+        instances = [{**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"cls-{i}"} for i in range(5)]
         dataset_file.write_text(json.dumps(instances), encoding="utf-8")
 
         config = AblationConfig(
@@ -599,10 +590,7 @@ class TestAblationRunner:
         from tapps_mcp.benchmark.ablation import AblationConfig, AblationRunner
 
         dataset_file = tmp_path / "test.json"
-        instances = [
-            {**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"base-{i}"}
-            for i in range(5)
-        ]
+        instances = [{**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"base-{i}"} for i in range(5)]
         dataset_file.write_text(json.dumps(instances), encoding="utf-8")
 
         # Pre-computed baseline
@@ -706,10 +694,7 @@ class TestEngagementCalibrator:
         from tapps_mcp.benchmark.engagement_calibrator import EngagementCalibrator
 
         dataset_file = tmp_path / "test.json"
-        instances = [
-            {**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"cal-{i}"}
-            for i in range(5)
-        ]
+        instances = [{**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"cal-{i}"} for i in range(5)]
         dataset_file.write_text(json.dumps(instances), encoding="utf-8")
 
         config = BenchmarkConfig(
@@ -732,10 +717,7 @@ class TestEngagementCalibrator:
         from tapps_mcp.benchmark.engagement_calibrator import EngagementCalibrator
 
         dataset_file = tmp_path / "test.json"
-        instances = [
-            {**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"rec-{i}"}
-            for i in range(5)
-        ]
+        instances = [{**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"rec-{i}"} for i in range(5)]
         dataset_file.write_text(json.dumps(instances), encoding="utf-8")
 
         config = BenchmarkConfig(
@@ -752,17 +734,12 @@ class TestEngagementCalibrator:
         assert len(report.recommendation_reason) > 0
 
     @pytest.mark.asyncio()
-    async def test_calibrate_warns_worse_than_none(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_calibrate_warns_worse_than_none(self, tmp_path: Path) -> None:
         """Calibration warns when a level performs worse than no-context."""
         from tapps_mcp.benchmark.engagement_calibrator import EngagementCalibrator
 
         dataset_file = tmp_path / "test.json"
-        instances = [
-            {**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"warn-{i}"}
-            for i in range(10)
-        ]
+        instances = [{**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"warn-{i}"} for i in range(10)]
         dataset_file.write_text(json.dumps(instances), encoding="utf-8")
 
         # Use rates where NONE beats everything
@@ -784,9 +761,7 @@ class TestEngagementCalibrator:
         # With TAPPS at 10% and NONE at 90%, should warn
         # Note: MockEvaluator uses the same rates for all engagement levels
         # so all three levels get the TAPPS rate.
-        assert report.warning is not None or any(
-            c.delta_vs_none < 0 for c in report.calibrations
-        )
+        assert report.warning is not None or any(c.delta_vs_none < 0 for c in report.calibrations)
 
     @pytest.mark.asyncio()
     async def test_calibrate_efficiency_metrics(self, tmp_path: Path) -> None:
@@ -794,10 +769,7 @@ class TestEngagementCalibrator:
         from tapps_mcp.benchmark.engagement_calibrator import EngagementCalibrator
 
         dataset_file = tmp_path / "test.json"
-        instances = [
-            {**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"eff-{i}"}
-            for i in range(5)
-        ]
+        instances = [{**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"eff-{i}"} for i in range(5)]
         dataset_file.write_text(json.dumps(instances), encoding="utf-8")
 
         config = BenchmarkConfig(
@@ -820,10 +792,7 @@ class TestEngagementCalibrator:
         from tapps_mcp.benchmark.engagement_calibrator import EngagementCalibrator
 
         dataset_file = tmp_path / "test.json"
-        instances = [
-            {**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"dvm-{i}"}
-            for i in range(5)
-        ]
+        instances = [{**_REQUIRED_INSTANCE_FIELDS, "instance_id": f"dvm-{i}"} for i in range(5)]
         dataset_file.write_text(json.dumps(instances), encoding="utf-8")
 
         config = BenchmarkConfig(
@@ -836,9 +805,7 @@ class TestEngagementCalibrator:
         evaluator = MockEvaluator(seed=42)
         report = await calibrator.calibrate(config, evaluator)
 
-        medium_cal = next(
-            (c for c in report.calibrations if c.level == "medium"), None
-        )
+        medium_cal = next((c for c in report.calibrations if c.level == "medium"), None)
         assert medium_cal is not None
         # Medium's delta_vs_medium should be 0
         assert medium_cal.delta_vs_medium == pytest.approx(0.0, abs=0.0001)
@@ -949,11 +916,7 @@ class TestFailureAnalyzerPatterns:
         """Each pattern has a non-empty suggested fix."""
         from tapps_mcp.benchmark.failure_analyzer import FailureAnalyzer
 
-        results = [
-            make_test_result(
-                instance_id="err-1", resolved=False, error="import error"
-            )
-        ]
+        results = [make_test_result(instance_id="err-1", resolved=False, error="import error")]
         instances = [_make_instance(instance_id="err-1")]
 
         analyzer = FailureAnalyzer()

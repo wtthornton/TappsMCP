@@ -6,7 +6,6 @@ skipped when ``tapps_brain.federation`` is not importable.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,16 +29,15 @@ from tapps_core.memory.federation import (
     FederationProject,
     FederationSubscription,
     add_subscription,
+    federated_search,
     load_federation_config,
     register_project,
     save_federation_config,
     sync_from_hub,
     sync_to_hub,
     unregister_project,
-    federated_search,
 )
 from tapps_core.memory.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -440,8 +438,12 @@ class TestSyncToHub:
     """Tests for sync_to_hub — publishing shared-scope entries."""
 
     def test_publishes_shared_scope_entries(self, hub_store: FederatedStore) -> None:
-        shared_entry = _make_entry(key="shared-pattern", value="shared val", scope=MemoryScope.shared)
-        project_entry = _make_entry(key="project-only", value="project val", scope=MemoryScope.project)
+        shared_entry = _make_entry(
+            key="shared-pattern", value="shared val", scope=MemoryScope.shared
+        )
+        project_entry = _make_entry(
+            key="project-only", value="project val", scope=MemoryScope.project
+        )
         mock_store = MockMemoryStore([shared_entry, project_entry])
 
         result = sync_to_hub(mock_store, hub_store, "proj-a", project_root="/tmp/a")
@@ -475,7 +477,9 @@ class TestSyncFromHub:
             [
                 _make_entry(key="pattern-from-b", value="B pattern", confidence=0.8, tags=["api"]),
                 _make_entry(key="low-conf-b", value="Low confidence", confidence=0.3, tags=["api"]),
-                _make_entry(key="untagged-b", value="No matching tags", confidence=0.8, tags=["other"]),
+                _make_entry(
+                    key="untagged-b", value="No matching tags", confidence=0.8, tags=["other"]
+                ),
             ],
         )
 
@@ -578,9 +582,7 @@ class TestFederatedSearch:
             [_make_entry(key="hub-pattern", value="hub value", confidence=0.8)],
         )
 
-        results = federated_search(
-            "pattern", mock_store, hub_store, project_id="proj-a"
-        )
+        results = federated_search("pattern", mock_store, hub_store, project_id="proj-a")
 
         local_results = [r for r in results if r.source == "local"]
         hub_results = [r for r in results if r.source == "federated"]
@@ -601,9 +603,7 @@ class TestFederatedSearch:
             [_make_entry(key="same-key", value="hub version", confidence=0.9)],
         )
 
-        results = federated_search(
-            "same", mock_store, hub_store, project_id="proj-a"
-        )
+        results = federated_search("same", mock_store, hub_store, project_id="proj-a")
 
         same_key_results = [r for r in results if r.key == "same-key"]
         assert len(same_key_results) == 1
@@ -616,9 +616,7 @@ class TestFederatedSearch:
         ]
         mock_store = MockMemoryStore(entries)
 
-        results = federated_search(
-            "entry", mock_store, hub_store, project_id="proj-a"
-        )
+        results = federated_search("entry", mock_store, hub_store, project_id="proj-a")
         if len(results) >= 2:
             assert results[0].relevance_score >= results[1].relevance_score
 
@@ -660,8 +658,7 @@ class TestFederatedSearch:
 
     def test_max_results_respected(self, hub_store: FederatedStore) -> None:
         entries = [
-            _make_entry(key=f"entry-{i:03d}", value=f"value {i}", confidence=0.8)
-            for i in range(10)
+            _make_entry(key=f"entry-{i:03d}", value=f"value {i}", confidence=0.8) for i in range(10)
         ]
         mock_store = MockMemoryStore(entries)
 
@@ -672,9 +669,7 @@ class TestFederatedSearch:
 
     def test_empty_search_returns_empty(self, hub_store: FederatedStore) -> None:
         mock_store = MockMemoryStore([])
-        results = federated_search(
-            "nonexistent", mock_store, hub_store, project_id="proj-a"
-        )
+        results = federated_search("nonexistent", mock_store, hub_store, project_id="proj-a")
         assert results == []
 
 
@@ -708,9 +703,7 @@ class TestFederatedSearchResult:
     """Tests for the FederatedSearchResult dataclass."""
 
     def test_defaults(self) -> None:
-        result = FederatedSearchResult(
-            key="k", value="v", source="local", project_id="p"
-        )
+        result = FederatedSearchResult(key="k", value="v", source="local", project_id="p")
         assert result.confidence == 0.0
         assert result.tier == "pattern"
         assert result.tags == []

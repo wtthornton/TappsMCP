@@ -81,9 +81,9 @@ ignore = [
     "PLW0603", # global-statement — used intentionally in several modules
     "S110",    # try-except-pass — intentional in resilient error handling
     "S101",    # assert — used in non-test validation code intentionally
-    "TCH003",  # typing-only-standard-library-import — refactoring suggestion, not a bug
-    "TCH002",  # typing-only-third-party-import — refactoring suggestion, not a bug
-    "TCH001",  # typing-only-first-party-import — refactoring suggestion, not a bug
+    "TC003",   # typing-only-standard-library-import — refactoring suggestion, not a bug
+    "TC002",   # typing-only-third-party-import — refactoring suggestion, not a bug
+    "TC001",   # typing-only-first-party-import — refactoring suggestion, not a bug
     "SIM102",  # collapsible-if — readability is subjective
     "SIM103",  # needless-bool — readability is subjective
     "SIM108",  # if-else-block-instead-of-if-exp — ternary not always clearer
@@ -107,10 +107,19 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "examples/**/*.py" = ["T201", "PTH109"]
-"packages/*/tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007", "B017", "F841", "PLW2901"]
+# N806 covers the `with patch(...) as MockClient:` idiom where the binding
+# carries an intentional class-like name to mirror what's being patched.
+"packages/*/tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007", "B017", "F841", "PLW2901", "N806"]
 "packages/tapps-mcp/src/tapps_mcp/metrics/**/*.py" = ["PLR2004"]
+# Benchmark fixtures use random for synthetic data, not crypto.
+"packages/tapps-mcp/src/tapps_mcp/benchmark/**/*.py" = ["S311"]
+# Pattern-poster generators intentionally use the `×` (MULTIPLICATION SIGN)
+# in docstrings/comments to describe grid dimensions like "2×3 grid".
+"packages/docs-mcp/src/docs_mcp/generators/pattern_poster.py" = ["RUF002", "RUF003"]
+"packages/docs-mcp/src/docs_mcp/generators/diagrams.py" = ["RUF002", "RUF003"]
+"packages/docs-mcp/tests/unit/test_pattern_poster.py" = ["RUF002"]
 "scripts/**/*.py" = ["T201", "E501", "PLR2004", "ANN", "PTH"]
-"tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007", "B017", "F841"]
+"tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007", "B017", "F841", "N806"]
 
 [tool.mypy]
 python_version = "3.12"

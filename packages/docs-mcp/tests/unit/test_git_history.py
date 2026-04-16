@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import git
@@ -14,7 +13,6 @@ from docs_mcp.analyzers.git_history import (
     TagInfo,
     _parse_semver_tag,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

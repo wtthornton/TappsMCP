@@ -82,16 +82,15 @@ class HybridMatcher:
             self._cache = EmbeddingCache(self.cache_dir)
 
         # Pre-compute tokens
-        self._agent_tokens = [
-            tokenize(agent.embedding_text()) for agent in self.agents
-        ]
+        self._agent_tokens = [tokenize(agent.embedding_text()) for agent in self.agents]
 
         # Pre-compute embeddings
         texts = [agent.embedding_text() for agent in self.agents]
         if texts:
             if self._cache is not None:
                 self._agent_embeddings = self._cache.get_or_compute(
-                    texts, self.backend,
+                    texts,
+                    self.backend,
                 )
             else:
                 self._agent_embeddings = self.backend.embed(texts)
@@ -129,7 +128,8 @@ class HybridMatcher:
         # Compute query embedding
         if self._cache is not None:
             query_embeddings = self._cache.get_or_compute(
-                [prompt], self.backend,
+                [prompt],
+                self.backend,
             )
         else:
             query_embeddings = self.backend.embed([prompt])
@@ -147,24 +147,24 @@ class HybridMatcher:
             emb_score = 0.0
             if query_embedding and i < len(self._agent_embeddings):
                 emb_score = cosine_similarity(
-                    query_embedding, self._agent_embeddings[i],
+                    query_embedding,
+                    self._agent_embeddings[i],
                 )
                 # Map from [-1, 1] to [0, 1]
                 emb_score = (emb_score + 1) / 2
 
             # Combined score
-            combined = (
-                self.keyword_weight * kw_score
-                + self.embedding_weight * emb_score
-            )
+            combined = self.keyword_weight * kw_score + self.embedding_weight * emb_score
 
             if combined >= threshold:
-                results.append(MatchResult(
-                    agent=agent,
-                    score=combined,
-                    keyword_score=kw_score,
-                    embedding_score=emb_score,
-                ))
+                results.append(
+                    MatchResult(
+                        agent=agent,
+                        score=combined,
+                        keyword_score=kw_score,
+                        embedding_score=emb_score,
+                    )
+                )
 
         results.sort(key=lambda r: r.score, reverse=True)
         return results[:max_results]

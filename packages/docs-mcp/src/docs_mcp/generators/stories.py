@@ -298,9 +298,7 @@ class StoryGenerator:
             )
 
         enrichment = (
-            self._auto_populate(project_root, config)
-            if auto_populate and project_root
-            else {}
+            self._auto_populate(project_root, config) if auto_populate and project_root else {}
         )
 
         render_config = config
@@ -360,8 +358,7 @@ class StoryGenerator:
             lines.append("")
         else:
             lines.append("")
-            lines.append("> **As a** [role], **I want** [capability], "
-                         "**so that** [benefit]")
+            lines.append("> **As a** [role], **I want** [capability], **so that** [benefit]")
             lines.append("")
 
         lines.extend(["<!-- docsmcp:end:user-story -->", ""])
@@ -439,8 +436,7 @@ class StoryGenerator:
             epic_num = config.epic_number
             label = f"Epic {epic_num}" if epic_num else "parent epic"
             lines.append(
-                f"See [{label}]({config.epic_path}) for project context "
-                "and shared definitions."
+                f"See [{label}]({config.epic_path}) for project context and shared definitions."
             )
 
         # Only include project metadata when NOT inheriting from epic.
@@ -622,8 +618,7 @@ class StoryGenerator:
 
                 given_line = given if given else "[describe the precondition]"
                 when_line = (
-                    when if when
-                    else f"[describe the action that triggers: {criterion.lower()}]"
+                    when if when else f"[describe the action that triggers: {criterion.lower()}]"
                 )
                 then_line = then if then else "[describe the expected observable outcome]"
 
@@ -650,7 +645,9 @@ class StoryGenerator:
         return lines
 
     def _render_definition_of_done(
-        self, config: StoryConfig, enrichment: dict[str, Any] | None = None,
+        self,
+        config: StoryConfig,
+        enrichment: dict[str, Any] | None = None,
     ) -> list[str]:
         """Render the Definition of Done section.
 
@@ -667,9 +664,7 @@ class StoryGenerator:
         if config.inherit_context and config.epic_path:
             epic_num = config.epic_number
             label = f"Epic {epic_num}" if epic_num else "parent epic"
-            lines.append(
-                f"Definition of Done per [{label}]({config.epic_path})."
-            )
+            lines.append(f"Definition of Done per [{label}]({config.epic_path}).")
             lines.extend(["", "<!-- docsmcp:end:definition-of-done -->", ""])
             return lines
 
@@ -686,7 +681,8 @@ class StoryGenerator:
 
         # Add expert-recommended DoD items from security/testing experts.
         expert_guidance: list[dict[str, str]] = (enrichment or {}).get(
-            "expert_guidance", [],
+            "expert_guidance",
+            [],
         )
         security_items = [g for g in expert_guidance if g["domain"] == "security"]
         testing_items = [g for g in expert_guidance if g["domain"] == "testing"]
@@ -768,10 +764,7 @@ class StoryGenerator:
             lines.append("### Expert Recommendations")
             lines.append("")
             for item in rendered_guidance:
-                lines.append(
-                    f"- **{item['expert']}** ({item['confidence']}): "
-                    f"{item['advice']}"
-                )
+                lines.append(f"- **{item['expert']}** ({item['confidence']}): {item['advice']}")
 
         lines.extend(["", "<!-- docsmcp:end:technical-notes -->", ""])
         return lines
@@ -820,9 +813,7 @@ class StoryGenerator:
 
         for letter, name, description in items:
             checked = "x" if assessment.get(name, False) else " "
-            lines.append(
-                f"- [{checked}] **{letter}**{name[1:]} -- {description}"
-            )
+            lines.append(f"- [{checked}] **{letter}**{name[1:]} -- {description}")
 
         lines.extend(["", "<!-- docsmcp:end:invest -->", ""])
         return lines
@@ -832,7 +823,9 @@ class StoryGenerator:
     _AUTO_POPULATE_TIMEOUT_S: ClassVar[float] = 15.0
 
     def _auto_populate(
-        self, project_root: Path, config: StoryConfig | None = None,
+        self,
+        project_root: Path,
+        config: StoryConfig | None = None,
     ) -> dict[str, Any]:
         """Gather enrichment data from project analyzers and domain experts.
 
@@ -924,11 +917,31 @@ class StoryGenerator:
 
     # -- helpers -----------------------------------------------------------
 
-    _STOPWORDS: ClassVar[frozenset[str]] = frozenset({
-        "the", "and", "is", "are", "should", "that", "when", "then",
-        "given", "a", "an", "of", "in", "to", "for", "with", "be",
-        "has", "have", "it", "its",
-    })
+    _STOPWORDS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "the",
+            "and",
+            "is",
+            "are",
+            "should",
+            "that",
+            "when",
+            "then",
+            "given",
+            "a",
+            "an",
+            "of",
+            "in",
+            "to",
+            "for",
+            "with",
+            "be",
+            "has",
+            "have",
+            "it",
+            "its",
+        }
+    )
 
     _MAX_TEST_NAME_LEN: ClassVar[int] = 80
 

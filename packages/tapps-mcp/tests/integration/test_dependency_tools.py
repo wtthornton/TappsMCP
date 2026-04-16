@@ -263,9 +263,7 @@ class TestDependencyGraphTool:
         """Can disable cycle detection."""
         from tapps_mcp.server import tapps_dependency_graph
 
-        result = await tapps_dependency_graph(
-            project_root=str(project), detect_cycles=False
-        )
+        result = await tapps_dependency_graph(project_root=str(project), detect_cycles=False)
         data = result["data"]
 
         assert "cycles" not in data
@@ -276,9 +274,7 @@ class TestDependencyGraphTool:
         """Can disable coupling analysis."""
         from tapps_mcp.server import tapps_dependency_graph
 
-        result = await tapps_dependency_graph(
-            project_root=str(project), include_coupling=False
-        )
+        result = await tapps_dependency_graph(project_root=str(project), include_coupling=False)
         data = result["data"]
 
         assert "coupling" not in data

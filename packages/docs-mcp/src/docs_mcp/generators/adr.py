@@ -105,11 +105,7 @@ class ADRGenerator:
             consequences=consequences,
         )
 
-        content = (
-            self._render_nygard(record)
-            if template == "nygard"
-            else self._render_madr(record)
-        )
+        content = self._render_nygard(record) if template == "nygard" else self._render_madr(record)
 
         slug = self._slugify(title)
         filename = f"{number:04d}-{slug}.md"
@@ -169,28 +165,22 @@ class ADRGenerator:
 
         if record.supersedes is not None:
             lines.append("")
-            lines.append(
-                f"Supersedes [ADR {record.supersedes}]"
-                f"({record.supersedes:04d}-*.md)"
-            )
+            lines.append(f"Supersedes [ADR {record.supersedes}]({record.supersedes:04d}-*.md)")
 
         lines.extend(
             [
                 "",
                 "## Context",
                 "",
-                record.context
-                or "Describe the context and problem statement...",
+                record.context or "Describe the context and problem statement...",
                 "",
                 "## Decision",
                 "",
-                record.decision
-                or "Describe the decision that was made...",
+                record.decision or "Describe the decision that was made...",
                 "",
                 "## Consequences",
                 "",
-                record.consequences
-                or "Describe the consequences of this decision...",
+                record.consequences or "Describe the consequences of this decision...",
                 "",
             ]
         )
@@ -225,8 +215,7 @@ class ADRGenerator:
             "",
             "## Consequences",
             "",
-            record.consequences
-            or "What becomes easier or more difficult...",
+            record.consequences or "What becomes easier or more difficult...",
             "",
         ]
 

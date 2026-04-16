@@ -13,7 +13,8 @@ from typing import Any
 
 # Boilerplate that appears at the start of consultation answers; skip when extracting advice.
 _NO_KNOWLEDGE_PATTERN: re.Pattern[str] = re.compile(
-    r"no specific knowledge found", re.IGNORECASE,
+    r"no specific knowledge found",
+    re.IGNORECASE,
 )
 _BOILERPLATE_PATTERN: re.Pattern[str] = re.compile(
     r"^Based on domain knowledge\s*\([^)]+\)\s*:?\s*$",
@@ -47,7 +48,11 @@ def extract_expert_advice(answer: str, max_length: int = 300) -> str:
             continue
         if _BOILERPLATE_PATTERN.match(cleaned):
             continue
-        if len(cleaned) < _MIN_SUBSTANTIVE_LEN and ":" in cleaned and "confidence" in cleaned.lower():
+        if (
+            len(cleaned) < _MIN_SUBSTANTIVE_LEN
+            and ":" in cleaned
+            and "confidence" in cleaned.lower()
+        ):
             continue
         if len(cleaned) > max_length:
             cleaned = cleaned[: max_length - 3].rsplit(" ", 1)[0] + "..."
@@ -82,13 +87,14 @@ def filter_expert_guidance(guidance: list[dict[str, Any]]) -> list[dict[str, Any
             continue
         if confidence < 0.5:
             domain = item.get("domain", "unknown")
-            filtered.append({
-                **item,
-                "advice": (
-                    f"Expert review recommended for {domain} "
-                    "- automated analysis inconclusive"
-                ),
-            })
+            filtered.append(
+                {
+                    **item,
+                    "advice": (
+                        f"Expert review recommended for {domain} - automated analysis inconclusive"
+                    ),
+                }
+            )
         else:
             filtered.append(item)
     return filtered

@@ -1072,10 +1072,16 @@ PS1_PREFIX = "powershell -NoProfile -ExecutionPolicy Bypass -File "
 
 # Supported Cursor hooks.json event keys (schema: cursor-hooks/schema/hooks.schema.json).
 # Only these keys are valid under "hooks"; invalid keys can cause the file to be ignored.
-SUPPORTED_CURSOR_HOOK_KEYS: frozenset[str] = frozenset({
-    "beforeShellExecution", "beforeMCPExecution", "afterFileEdit",
-    "beforeReadFile", "beforeSubmitPrompt", "stop",
-})
+SUPPORTED_CURSOR_HOOK_KEYS: frozenset[str] = frozenset(
+    {
+        "beforeShellExecution",
+        "beforeMCPExecution",
+        "afterFileEdit",
+        "beforeReadFile",
+        "beforeSubmitPrompt",
+        "stop",
+    }
+)
 
 CURSOR_HOOKS_CONFIG: dict[str, list[dict[str, str]]] = {
     "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
@@ -1135,13 +1141,14 @@ MEMORY_AUTO_CAPTURE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
 # Configurable: max_results (5), min_score (0.3), min_prompt_length (50).
 # ---------------------------------------------------------------------------
 
+
 def _memory_auto_recall_script(
     max_results: int = 5,
     min_score: float = 0.3,
     min_prompt_length: int = 50,
 ) -> str:
     """Return the bash script for memory auto-recall (Epic 65.4)."""
-    return f'''#!/usr/bin/env bash
+    return f"""#!/usr/bin/env bash
 # TappsMCP Memory Auto-Recall (Epic 65.4)
 # Injects relevant memories before agent prompt. Runs on PreCompact, SessionStart.
 # Graceful fallback: no MemoryStore, MCP unavailable, empty results — exit 0.
@@ -1177,7 +1184,7 @@ if [ -n "$OUT" ]; then
   echo "$OUT"
 fi
 exit 0
-'''
+"""
 
 
 def _memory_auto_recall_script_ps(
@@ -1186,7 +1193,7 @@ def _memory_auto_recall_script_ps(
     min_prompt_length: int = 50,
 ) -> str:
     """Return the PowerShell script for memory auto-recall (Epic 65.4)."""
-    return f'''# TappsMCP Memory Auto-Recall (Epic 65.4)
+    return f"""# TappsMCP Memory Auto-Recall (Epic 65.4)
 # Injects relevant memories before agent prompt. Runs on PreCompact, SessionStart.
 # Graceful fallback: no MemoryStore, MCP unavailable, empty results — exit 0.
 $rawInput = @($input) -join "`n"
@@ -1220,7 +1227,7 @@ try {{
     if ($out) {{ Write-Output $out }}
 }} catch {{}}
 exit 0
-'''
+"""
 
 
 MEMORY_AUTO_RECALL_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
@@ -1629,12 +1636,29 @@ PROMPT_HOOK_CONFIG: dict[str, list[dict[str, Any]]] = {
 # PostCompact is NOT supported; invalid keys cause the entire settings file
 # to be skipped by Claude Code. Used by init/upgrade to avoid writing or
 # retaining unsupported keys.
-SUPPORTED_CLAUDE_HOOK_KEYS: frozenset[str] = frozenset({
-    "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest",
-    "Notification", "UserPromptSubmit", "Stop", "SubagentStart", "SubagentStop",
-    "PreCompact", "TeammateIdle", "TaskCompleted", "Setup", "InstructionsLoaded",
-    "ConfigChange", "WorktreeCreate", "WorktreeRemove", "SessionStart", "SessionEnd",
-})
+SUPPORTED_CLAUDE_HOOK_KEYS: frozenset[str] = frozenset(
+    {
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "PermissionRequest",
+        "Notification",
+        "UserPromptSubmit",
+        "Stop",
+        "SubagentStart",
+        "SubagentStop",
+        "PreCompact",
+        "TeammateIdle",
+        "TaskCompleted",
+        "Setup",
+        "InstructionsLoaded",
+        "ConfigChange",
+        "WorktreeCreate",
+        "WorktreeRemove",
+        "SessionStart",
+        "SessionEnd",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Engagement-level hook event sets (Epic 36.6)
@@ -1643,13 +1667,24 @@ SUPPORTED_CLAUDE_HOOK_KEYS: frozenset[str] = frozenset({
 # Events to include per engagement level (for generate_claude_hooks filtering)
 ENGAGEMENT_HOOK_EVENTS: dict[str, set[str]] = {
     "high": {
-        "SessionStart", "PostToolUse", "Stop", "TaskCompleted",
-        "PreCompact", "SubagentStart", "SubagentStop", "SessionEnd",
+        "SessionStart",
+        "PostToolUse",
+        "Stop",
+        "TaskCompleted",
+        "PreCompact",
+        "SubagentStart",
+        "SubagentStop",
+        "SessionEnd",
         "PostToolUseFailure",
     },
     "medium": {
-        "SessionStart", "PostToolUse", "Stop", "TaskCompleted",
-        "PreCompact", "SubagentStart", "SubagentStop",
+        "SessionStart",
+        "PostToolUse",
+        "Stop",
+        "TaskCompleted",
+        "PreCompact",
+        "SubagentStart",
+        "SubagentStop",
     },
     "low": {
         "SessionStart",

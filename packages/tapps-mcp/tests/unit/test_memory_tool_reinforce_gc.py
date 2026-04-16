@@ -25,7 +25,7 @@ def _mock_session(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture()
-def mock_store(tmp_path: Path):  # noqa: ANN201
+def mock_store(tmp_path: Path):
     """Create a real MemoryStore backed by tmp_path and patch _get_memory_store."""
     from tapps_core.memory.store import MemoryStore
 
@@ -128,15 +128,13 @@ class TestGCAction:
             confidence=0.3,
         )
         # Write directly to persistence and in-memory cache
-        store._entries[entry.key] = entry  # noqa: SLF001
-        store._persistence.save(entry)  # noqa: SLF001
+        store._entries[entry.key] = entry
+        store._persistence.save(entry)
 
         # Also add a fresh project-scoped entry
         store.save(key="fresh-project", value="Still relevant")
 
-        with patch(
-            "tapps_mcp.server_memory_tools._get_memory_store", return_value=store
-        ):
+        with patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=store):
             result = await tapps_memory(action="gc")
 
         assert result["success"] is True

@@ -60,7 +60,8 @@ async def docs_check_drift(
 
     if not root.is_dir():
         return error_response(
-            "docs_check_drift", "INVALID_ROOT",
+            "docs_check_drift",
+            "INVALID_ROOT",
             f"Project root does not exist: {root}",
         )
 
@@ -88,19 +89,11 @@ async def docs_check_drift(
 
     if source_filter:
         normalised = {sf.replace("\\", "/").lower() for sf in source_filter}
-        items = [
-            it for it in items
-            if any(it.file_path.lower().endswith(sf) for sf in normalised)
-        ]
+        items = [it for it in items if any(it.file_path.lower().endswith(sf) for sf in normalised)]
 
     if search_names.strip():
-        names_lower = {
-            n.strip().lower() for n in search_names.split(",") if n.strip()
-        }
-        items = [
-            it for it in items
-            if any(nm in it.description.lower() for nm in names_lower)
-        ]
+        names_lower = {n.strip().lower() for n in search_names.split(",") if n.strip()}
+        items = [it for it in items if any(nm in it.description.lower() for nm in names_lower)]
 
     total_filtered = len(items)
 
@@ -163,7 +156,8 @@ async def docs_check_completeness(
 
     if not root.is_dir():
         return error_response(
-            "docs_check_completeness", "INVALID_ROOT",
+            "docs_check_completeness",
+            "INVALID_ROOT",
             f"Project root does not exist: {root}",
         )
 
@@ -200,7 +194,8 @@ async def docs_check_links(
 
     if not root.is_dir():
         return error_response(
-            "docs_check_links", "INVALID_ROOT",
+            "docs_check_links",
+            "INVALID_ROOT",
             f"Project root does not exist: {root}",
         )
 
@@ -256,7 +251,8 @@ async def docs_check_freshness(
 
     if not root.is_dir():
         return error_response(
-            "docs_check_freshness", "INVALID_ROOT",
+            "docs_check_freshness",
+            "INVALID_ROOT",
             f"Project root does not exist: {root}",
         )
 
@@ -266,7 +262,8 @@ async def docs_check_freshness(
         scan_root = root / path.strip()
         if not scan_root.is_dir():
             return error_response(
-                "docs_check_freshness", "INVALID_PATH",
+                "docs_check_freshness",
+                "INVALID_PATH",
                 f"Scoped path does not exist: {scan_root}",
             )
 
@@ -485,9 +482,7 @@ async def docs_check_cross_refs(
 
     try:
         validator = CrossRefValidator()
-        report = validator.validate(
-            root, doc_dirs=dirs_list, check_backlinks=check_backlinks
-        )
+        report = validator.validate(root, doc_dirs=dirs_list, check_backlinks=check_backlinks)
     except Exception as exc:
         return error_response(
             "docs_check_cross_refs",
@@ -670,13 +665,16 @@ async def docs_check_style(
 
     if not root.is_dir():
         return error_response(
-            "docs_check_style", "INVALID_ROOT",
+            "docs_check_style",
+            "INVALID_ROOT",
             f"Project root does not exist: {root}",
         )
 
     from docs_mcp.validators.style import StyleChecker
 
-    config = _build_style_config(rules, heading_style, max_sentence_words, custom_terms, root, settings)
+    config = _build_style_config(
+        rules, heading_style, max_sentence_words, custom_terms, root, settings
+    )
     checker = StyleChecker(config)
 
     if files.strip():
@@ -720,12 +718,14 @@ def _style_report_structured(report: StyleReport) -> dict[str, Any]:
     files_data: list[dict[str, Any]] = []
     for fr in report.files:
         if fr.issues:
-            files_data.append({
-                "file_path": fr.file_path,
-                "score": fr.score,
-                "issue_count": len(fr.issues),
-                "issues": [i.model_dump() for i in fr.issues[:20]],
-            })
+            files_data.append(
+                {
+                    "file_path": fr.file_path,
+                    "score": fr.score,
+                    "issue_count": len(fr.issues),
+                    "issues": [i.model_dump() for i in fr.issues[:20]],
+                }
+            )
 
     return {
         "total_files": report.total_files,
@@ -749,8 +749,7 @@ def _style_report_vale(report: StyleReport) -> dict[str, Any]:
                     "Line": i.line,
                     "Span": [i.column, i.column],
                     "Message": i.message,
-                    "Action": {"Name": "suggest", "Params": [i.suggestion]}
-                    if i.suggestion else {},
+                    "Action": {"Name": "suggest", "Params": [i.suggestion]} if i.suggestion else {},
                 }
                 for i in fr.issues
             ]

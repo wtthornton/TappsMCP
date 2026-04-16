@@ -41,8 +41,12 @@ Archetype = Literal[
 ]
 
 _LAYER_KEYWORDS: dict[str, frozenset[str]] = {
-    "presentation": frozenset({"api", "web", "ui", "views", "controllers", "routes", "presentation"}),
-    "business": frozenset({"services", "business", "domain", "usecases", "use_cases", "application"}),
+    "presentation": frozenset(
+        {"api", "web", "ui", "views", "controllers", "routes", "presentation"}
+    ),
+    "business": frozenset(
+        {"services", "business", "domain", "usecases", "use_cases", "application"}
+    ),
     "data_access": frozenset({"repositories", "repository", "dao", "data_access"}),
     "persistence": frozenset({"models", "entities", "persistence", "db", "database"}),
 }
@@ -117,11 +121,7 @@ class PatternClassifier:
             evidence["hexagonal"] = [f"ports/adapters packages present: {sorted(hex_hits)}"]
 
         # --- Layered: matches across 3+ canonical layer names ---
-        layer_hits = [
-            layer
-            for layer, kws in _LAYER_KEYWORDS.items()
-            if package_names & kws
-        ]
+        layer_hits = [layer for layer, kws in _LAYER_KEYWORDS.items() if package_names & kws]
         if len(layer_hits) >= 3:
             scores["layered"] = 0.5 + 0.15 * len(layer_hits)
             evidence["layered"] = [f"canonical layer packages matched: {layer_hits}"]

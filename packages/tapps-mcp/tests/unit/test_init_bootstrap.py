@@ -181,11 +181,14 @@ class TestAutoDetectClaudeSettings:
             warm_expert_rag_from_tech_stack=False,
             dry_run=dry_run,
         )
-        with patch(
-            "tapps_mcp.pipeline.init._run_server_verification",
-            return_value={"ok": True},
-        ), patch(
-            "tapps_mcp.pipeline.init._detect_profile",
+        with (
+            patch(
+                "tapps_mcp.pipeline.init._run_server_verification",
+                return_value={"ok": True},
+            ),
+            patch(
+                "tapps_mcp.pipeline.init._detect_profile",
+            ),
         ):
             return bootstrap_pipeline(tmp_path, config=cfg)
 

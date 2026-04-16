@@ -12,7 +12,7 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 ts = pytest.importorskip("tree_sitter", reason="tree-sitter not installed")
 ts_go = pytest.importorskip("tree_sitter_go", reason="tree-sitter-go not installed")
 
-from docs_mcp.extractors.treesitter_go import GoExtractor  # noqa: E402
+from docs_mcp.extractors.treesitter_go import GoExtractor
 
 
 @pytest.fixture

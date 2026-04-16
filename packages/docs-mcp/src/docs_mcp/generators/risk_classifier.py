@@ -21,38 +21,89 @@ class RiskClassifier:
 
     # Keywords that indicate high-impact risks.
     _HIGH_IMPACT_KEYWORDS: ClassVar[list[str]] = [
-        "encrypt", "auth", "credential", "secret", "token", "password",
-        "certificate", "oauth", "jwt", "session", "permission", "rbac",
-        "migration", "schema", "database", "backup", "data loss",
-        "production", "downtime", "outage",
+        "encrypt",
+        "auth",
+        "credential",
+        "secret",
+        "token",
+        "password",
+        "certificate",
+        "oauth",
+        "jwt",
+        "session",
+        "permission",
+        "rbac",
+        "migration",
+        "schema",
+        "database",
+        "backup",
+        "data loss",
+        "production",
+        "downtime",
+        "outage",
     ]
 
     # Keywords that indicate medium-impact risks.
     _MEDIUM_IMPACT_KEYWORDS: ClassVar[list[str]] = [
-        "deploy", "docker", "ci", "pipeline", "infrastructure",
-        "api", "endpoint", "integration", "cache", "queue",
-        "config", "performance", "latency", "scale",
+        "deploy",
+        "docker",
+        "ci",
+        "pipeline",
+        "infrastructure",
+        "api",
+        "endpoint",
+        "integration",
+        "cache",
+        "queue",
+        "config",
+        "performance",
+        "latency",
+        "scale",
     ]
 
     # Keywords that indicate low-impact risks.
     _LOW_IMPACT_KEYWORDS: ClassVar[list[str]] = [
-        "ui", "display", "format", "label", "color", "font",
-        "typo", "rename", "refactor", "comment", "docs",
-        "style", "lint", "cosmetic",
+        "ui",
+        "display",
+        "format",
+        "label",
+        "color",
+        "font",
+        "typo",
+        "rename",
+        "refactor",
+        "comment",
+        "docs",
+        "style",
+        "lint",
+        "cosmetic",
     ]
 
     # Keywords that indicate higher probability.
     _HIGH_PROBABILITY_KEYWORDS: ClassVar[list[str]] = [
-        "complex", "legacy", "untested", "fragile", "manual",
-        "third-party", "external", "dependency", "migration",
+        "complex",
+        "legacy",
+        "untested",
+        "fragile",
+        "manual",
+        "third-party",
+        "external",
+        "dependency",
+        "migration",
     ]
 
     # Risk score matrix: (probability_index, impact_index) -> score 1-9.
     # Index 0=Low, 1=Medium, 2=High.
     _RISK_MATRIX: ClassVar[dict[tuple[int, int], int]] = {
-        (0, 0): 1, (0, 1): 2, (0, 2): 3,
-        (1, 0): 2, (1, 1): 4, (1, 2): 6,
-        (2, 0): 3, (2, 1): 6, (2, 2): 9,
+        (0, 0): 1,
+        (0, 1): 2,
+        (0, 2): 3,
+        (1, 0): 2,
+        (1, 1): 4,
+        (1, 2): 6,
+        (2, 0): 3,
+        (2, 1): 6,
+        (2, 2): 9,
     }
 
     def classify(self, risk_text: str) -> tuple[str, str, int]:
@@ -91,10 +142,7 @@ class RiskClassifier:
             if not first_sentence.endswith("."):
                 first_sentence += "."
             return first_sentence
-        return (
-            "Warning: Mitigation required "
-            "- no automated recommendation available"
-        )
+        return "Warning: Mitigation required - no automated recommendation available"
 
     def _classify_impact(self, text: str) -> str:
         """Classify impact level from keywords in text."""

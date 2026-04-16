@@ -17,13 +17,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from docs_mcp.generators.release_notes import ReleaseNotes
 from tests.helpers import make_commit as _commit
 from tests.helpers import make_settings as _make_settings
 from tests.helpers import make_version as _version
-
 
 # ---------------------------------------------------------------------------
 # docs_generate_readme MCP tool tests
@@ -127,7 +123,9 @@ class TestDocsGenerateReadme:
             "docs_mcp.config.settings.load_docs_settings",
             return_value=_make_settings(root),
         ):
-            result = await docs_generate_readme(style="standard", merge=True, project_root=str(root))
+            result = await docs_generate_readme(
+                style="standard", merge=True, project_root=str(root)
+            )
 
         assert result["success"] is True
         data = result["data"]
@@ -157,7 +155,9 @@ class TestDocsGenerateReadme:
             "docs_mcp.config.settings.load_docs_settings",
             return_value=_make_settings(root),
         ):
-            result = await docs_generate_readme(style="minimal", merge=False, project_root=str(root))
+            result = await docs_generate_readme(
+                style="minimal", merge=False, project_root=str(root)
+            )
 
         assert result["success"] is True
         data = result["data"]
@@ -195,8 +195,7 @@ class TestDocsGenerateReadme:
         root = tmp_path / "proj"
         root.mkdir()
         (root / "pyproject.toml").write_text(
-            '[project]\nname = "disk-write"\nversion = "1.0.0"\n'
-            'description = "Test disk write"\n',
+            '[project]\nname = "disk-write"\nversion = "1.0.0"\ndescription = "Test disk write"\n',
             encoding="utf-8",
         )
 
@@ -250,9 +249,13 @@ class TestDocsGenerateChangelog:
         root.mkdir()
 
         versions = [
-            _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-                _commit("feat: initial release"),
-            ]),
+            _version(
+                "1.0.0",
+                "2026-01-15T00:00:00+00:00",
+                [
+                    _commit("feat: initial release"),
+                ],
+            ),
         ]
 
         from docs_mcp.server_gen_tools import docs_generate_changelog
@@ -322,10 +325,14 @@ class TestDocsGenerateChangelog:
         root.mkdir()
 
         versions = [
-            _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-                _commit("feat: add feature"),
-                _commit("fix: fix bug"),
-            ]),
+            _version(
+                "1.0.0",
+                "2026-01-15T00:00:00+00:00",
+                [
+                    _commit("feat: add feature"),
+                    _commit("fix: fix bug"),
+                ],
+            ),
         ]
 
         from docs_mcp.server_gen_tools import docs_generate_changelog
@@ -406,9 +413,13 @@ class TestDocsGenerateReleaseNotes:
         root.mkdir()
 
         versions = [
-            _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-                _commit("feat: initial"),
-            ]),
+            _version(
+                "1.0.0",
+                "2026-01-15T00:00:00+00:00",
+                [
+                    _commit("feat: initial"),
+                ],
+            ),
         ]
 
         from docs_mcp.server_gen_tools import docs_generate_release_notes
@@ -434,12 +445,20 @@ class TestDocsGenerateReleaseNotes:
         root.mkdir()
 
         versions = [
-            _version("2.0.0", "2026-02-15T00:00:00+00:00", [
-                _commit("feat: v2 feature"),
-            ]),
-            _version("1.0.0", "2026-01-01T00:00:00+00:00", [
-                _commit("feat: v1 feature"),
-            ]),
+            _version(
+                "2.0.0",
+                "2026-02-15T00:00:00+00:00",
+                [
+                    _commit("feat: v2 feature"),
+                ],
+            ),
+            _version(
+                "1.0.0",
+                "2026-01-01T00:00:00+00:00",
+                [
+                    _commit("feat: v1 feature"),
+                ],
+            ),
         ]
 
         from docs_mcp.server_gen_tools import docs_generate_release_notes
@@ -469,13 +488,21 @@ class TestDocsGenerateReleaseNotes:
         root.mkdir()
 
         versions = [
-            _version("2.0.0", "2026-02-15T00:00:00+00:00", [
-                _commit("feat: v2 feature"),
-            ]),
-            _version("1.0.0", "2026-01-01T00:00:00+00:00", [
-                _commit("feat: v1 feature"),
-                _commit("fix: v1 fix", author="Alice"),
-            ]),
+            _version(
+                "2.0.0",
+                "2026-02-15T00:00:00+00:00",
+                [
+                    _commit("feat: v2 feature"),
+                ],
+            ),
+            _version(
+                "1.0.0",
+                "2026-01-01T00:00:00+00:00",
+                [
+                    _commit("feat: v1 feature"),
+                    _commit("fix: v1 fix", author="Alice"),
+                ],
+            ),
         ]
 
         from docs_mcp.server_gen_tools import docs_generate_release_notes
@@ -536,10 +563,14 @@ class TestDocsGenerateReleaseNotes:
         root.mkdir()
 
         versions = [
-            _version("2.0.0", "2026-02-01T00:00:00+00:00", [
-                _commit("feat!: redesign API"),
-                _commit("feat: new dashboard"),
-            ]),
+            _version(
+                "2.0.0",
+                "2026-02-01T00:00:00+00:00",
+                [
+                    _commit("feat!: redesign API"),
+                    _commit("feat: new dashboard"),
+                ],
+            ),
         ]
 
         from docs_mcp.server_gen_tools import docs_generate_release_notes

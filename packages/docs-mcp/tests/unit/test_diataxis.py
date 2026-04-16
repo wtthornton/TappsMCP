@@ -5,9 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from docs_mcp.analyzers.diataxis import DiataxisClassifier, DiataxisResult
+from docs_mcp.analyzers.diataxis import DiataxisClassifier
 from docs_mcp.validators.diataxis import DiataxisValidator
 from tests.helpers import make_settings
 
@@ -70,7 +68,7 @@ class TestClassifierHowTo:
 
 class TestClassifierReference:
     def test_api_reference(self) -> None:
-        content = "# API Reference\n\n## Parameters\n\n| Name | Type | Default | Required |\n|------|------|---------|----------|\n| id | int | - | yes |\n| name | str | \"\" | no |\n\n## Returns\n\n| Field | Type |\n|-------|------|\n| status | int |\n"
+        content = '# API Reference\n\n## Parameters\n\n| Name | Type | Default | Required |\n|------|------|---------|----------|\n| id | int | - | yes |\n| name | str | "" | no |\n\n## Returns\n\n| Field | Type |\n|-------|------|\n| status | int |\n'
         cls = DiataxisClassifier()
         result = cls.classify(content)
         assert result.primary_quadrant == "reference"
@@ -131,7 +129,9 @@ class TestClassifierEdgeCases:
         assert result.primary_quadrant in ("tutorial", "how-to")
 
     def test_confidence_range(self) -> None:
-        content = "# API Reference\n\n## Parameters\n\n| Name | Type |\n|------|------|\n| id | int |\n"
+        content = (
+            "# API Reference\n\n## Parameters\n\n| Name | Type |\n|------|------|\n| id | int |\n"
+        )
         cls = DiataxisClassifier()
         result = cls.classify(content)
         assert 0.0 <= result.confidence <= 1.0
@@ -151,8 +151,13 @@ class TestDiataxisValidator:
         assert len(result.recommendations) > 0
 
     def test_single_quadrant(self, tmp_path: Path) -> None:
-        _write(tmp_path / "api1.md", "# API Reference\n\n| Param | Type |\n|---|---|\n| id | int |\n")
-        _write(tmp_path / "api2.md", "# API Endpoints\n\n| Method | Path |\n|---|---|\n| GET | /users |\n")
+        _write(
+            tmp_path / "api1.md", "# API Reference\n\n| Param | Type |\n|---|---|\n| id | int |\n"
+        )
+        _write(
+            tmp_path / "api2.md",
+            "# API Endpoints\n\n| Method | Path |\n|---|---|\n| GET | /users |\n",
+        )
 
         validator = DiataxisValidator()
         result = validator.validate(tmp_path)
@@ -162,10 +167,22 @@ class TestDiataxisValidator:
         assert result.balance_score < 50  # Single quadrant = poor balance
 
     def test_balanced_project(self, tmp_path: Path) -> None:
-        _write(tmp_path / "tutorial.md", "# Getting Started Tutorial\n\nIn this tutorial, you will learn step by step.\n\n1. First\n2. Second\n3. Third\n")
-        _write(tmp_path / "howto.md", "# How to Configure\n\nInstall and set up the system.\n\n```\npip install pkg\n```\n")
-        _write(tmp_path / "reference.md", "# API Reference\n\n| Param | Type | Default |\n|---|---|---|\n| id | int | 0 |\n| name | str | \"\" |\n")
-        _write(tmp_path / "architecture.md", "# Architecture Overview\n\nBackground on why we designed the system this way. The motivation was scalability.\n")
+        _write(
+            tmp_path / "tutorial.md",
+            "# Getting Started Tutorial\n\nIn this tutorial, you will learn step by step.\n\n1. First\n2. Second\n3. Third\n",
+        )
+        _write(
+            tmp_path / "howto.md",
+            "# How to Configure\n\nInstall and set up the system.\n\n```\npip install pkg\n```\n",
+        )
+        _write(
+            tmp_path / "reference.md",
+            '# API Reference\n\n| Param | Type | Default |\n|---|---|---|\n| id | int | 0 |\n| name | str | "" |\n',
+        )
+        _write(
+            tmp_path / "architecture.md",
+            "# Architecture Overview\n\nBackground on why we designed the system this way. The motivation was scalability.\n",
+        )
 
         validator = DiataxisValidator()
         result = validator.validate(tmp_path)

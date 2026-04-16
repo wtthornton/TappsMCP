@@ -44,12 +44,18 @@ def mock_store(tmp_path: Path):
 async def _consolidate_two(key1: str = "src1", key2: str = "src2") -> dict:
     """Save two entries and consolidate them. Return consolidation result."""
     await tapps_memory(
-        action="save", key=key1, value=f"Value for {key1}",
-        tier="pattern", tags="test",
+        action="save",
+        key=key1,
+        value=f"Value for {key1}",
+        tier="pattern",
+        tags="test",
     )
     await tapps_memory(
-        action="save", key=key2, value=f"Value for {key2}",
-        tier="pattern", tags="test",
+        action="save",
+        key=key2,
+        value=f"Value for {key2}",
+        tier="pattern",
+        tags="test",
     )
     return await tapps_memory(
         action="consolidate",

@@ -48,19 +48,19 @@ except ImportError:
 
     _DEFAULT_HUB_DIR: Path = Path.home() / ".tapps-brain" / "hub"  # type: ignore[no-redef]
 
-    class FederatedSearchResult:  # type: ignore  # noqa: F811
+    class FederatedSearchResult:  # type: ignore
         """Stub — not available in tapps-brain >= 3.0."""
 
         def __init__(self, *a: object, **kw: object) -> None:
             raise ImportError(_ERR)
 
-    class FederatedStore:  # type: ignore  # noqa: F811
+    class FederatedStore:  # type: ignore
         """Stub — not available in tapps-brain >= 3.0."""
 
         def __init__(self, *a: object, **kw: object) -> None:
             raise ImportError(_ERR)
 
-    class FederationConfig:  # type: ignore  # noqa: F811
+    class FederationConfig:  # type: ignore
         """Stub — not available in tapps-brain >= 3.0."""
 
         projects: list[object] = []
@@ -69,38 +69,38 @@ except ImportError:
         def __init__(self, *a: object, **kw: object) -> None:
             raise ImportError(_ERR)
 
-    class FederationProject:  # type: ignore  # noqa: F811
+    class FederationProject:  # type: ignore
         """Stub — not available in tapps-brain >= 3.0."""
 
         def __init__(self, *a: object, **kw: object) -> None:
             raise ImportError(_ERR)
 
-    class FederationSubscription:  # type: ignore  # noqa: F811
+    class FederationSubscription:  # type: ignore
         """Stub — not available in tapps-brain >= 3.0."""
 
         def __init__(self, *a: object, **kw: object) -> None:
             raise ImportError(_ERR)
 
-    def add_subscription(*a: object, **kw: object) -> object:  # type: ignore  # noqa: F811
+    def add_subscription(*a: object, **kw: object) -> object:  # type: ignore
         raise ImportError(_ERR)
 
-    def federated_search(*a: object, **kw: object) -> object:  # type: ignore  # noqa: F811
+    def federated_search(*a: object, **kw: object) -> object:  # type: ignore
         raise ImportError(_ERR)
 
-    def load_federation_config(*a: object, **kw: object) -> object:  # type: ignore  # noqa: F811
+    def load_federation_config(*a: object, **kw: object) -> object:  # type: ignore
         raise ImportError(_ERR)
 
-    def register_project(*a: object, **kw: object) -> object:  # type: ignore  # noqa: F811
+    def register_project(*a: object, **kw: object) -> object:  # type: ignore
         raise ImportError(_ERR)
 
-    def save_federation_config(*a: object, **kw: object) -> object:  # type: ignore  # noqa: F811
+    def save_federation_config(*a: object, **kw: object) -> object:  # type: ignore
         raise ImportError(_ERR)
 
-    def sync_from_hub(*a: object, **kw: object) -> object:  # type: ignore  # noqa: F811
+    def sync_from_hub(*a: object, **kw: object) -> object:  # type: ignore
         raise ImportError(_ERR)
 
-    def sync_to_hub(*a: object, **kw: object) -> object:  # type: ignore  # noqa: F811
+    def sync_to_hub(*a: object, **kw: object) -> object:  # type: ignore
         raise ImportError(_ERR)
 
-    def unregister_project(*a: object, **kw: object) -> object:  # type: ignore  # noqa: F811
+    def unregister_project(*a: object, **kw: object) -> object:  # type: ignore
         raise ImportError(_ERR)

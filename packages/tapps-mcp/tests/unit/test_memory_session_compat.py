@@ -27,9 +27,7 @@ class TestPromoteNoteToMemory:
         )
 
         mock_bridge = MagicMock()
-        mock_bridge.save = AsyncMock(
-            return_value={"key": "my-note", "value": "important info"}
-        )
+        mock_bridge.save = AsyncMock(return_value={"key": "my-note", "value": "important info"})
 
         with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge):
             result = await _promote_note_to_memory(note, "pattern")
@@ -105,9 +103,10 @@ class TestSessionNotesBackwardCompat:
         We just verify the session_notes handler accepts those actions
         without error (testing via the store).
         """
-        from tapps_mcp.project.session_notes import SessionNoteStore
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
+
+        from tapps_mcp.project.session_notes import SessionNoteStore
 
         with tempfile.TemporaryDirectory() as tmpdir:
             store = SessionNoteStore(Path(tmpdir))

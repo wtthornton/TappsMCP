@@ -1,4 +1,5 @@
 """Backward-compatible re-export."""
+
 from __future__ import annotations
 
 from tapps_core.memory.models import MAX_KEY_LENGTH as MAX_KEY_LENGTH

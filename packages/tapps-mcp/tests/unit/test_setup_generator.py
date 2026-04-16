@@ -333,7 +333,9 @@ class TestGenerateConfig:
         with (
             patch.object(sys.stdin, "isatty", return_value=True),
             patch("tapps_mcp.distribution.setup_generator.click.confirm", return_value=True),
-            patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"),
+            patch(
+                "tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"
+            ),
         ):
             _generate_config("cursor", project)
         data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
@@ -1066,7 +1068,9 @@ class TestEpic80ConsumerInit:
             },
         }
         (cursor_dir / "mcp.json").write_text(json.dumps(existing), encoding="utf-8")
-        with patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"):
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"
+        ):
             _generate_config("cursor", project, force=True)
         data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
         env = data["mcpServers"]["tapps-mcp"]["env"]
@@ -1093,7 +1097,9 @@ class TestEpic80ConsumerInit:
         with (
             patch.object(sys.stdin, "isatty", return_value=False),
             patch.dict(os.environ, {"TAPPS_MCP_INIT_ASSUME_YES": "1"}),
-            patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/x/tapps-mcp"),
+            patch(
+                "tapps_mcp.distribution.setup_generator.shutil.which", return_value="/x/tapps-mcp"
+            ),
         ):
             ok = _generate_config("cursor", project, force=False)
         assert ok is True
@@ -1109,7 +1115,9 @@ class TestEpic80ConsumerInit:
     def test_run_init_package_dir_with_allow_flag(self, tmp_path):
         pkg = tmp_path / "packages" / "tapps-mcp"
         pkg.mkdir(parents=True)
-        with patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"):
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"
+        ):
             ok = run_init(
                 mcp_host="cursor",
                 project_root=str(pkg),
@@ -1184,25 +1192,25 @@ class TestEnvMigrationAcrossScopes:
         home.mkdir()
         user_cfg = home / ".claude.json"
         user_cfg.write_text(
-            json.dumps({
-                "mcpServers": {
-                    "tapps-mcp": {
-                        "command": "tapps-mcp",
-                        "args": ["serve"],
-                        "env": {
-                            "CONTEXT7_API_KEY": "ctx7sk-test",
-                            "TAPPS_MCP_PROJECT_ROOT": "/old/path",
-                        },
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "tapps-mcp": {
+                            "command": "tapps-mcp",
+                            "args": ["serve"],
+                            "env": {
+                                "CONTEXT7_API_KEY": "ctx7sk-test",
+                                "TAPPS_MCP_PROJECT_ROOT": "/old/path",
+                            },
+                        }
                     }
                 }
-            }),
+            ),
             encoding="utf-8",
         )
         project = tmp_path / "proj"
         project.mkdir()
-        with patch(
-            "tapps_mcp.distribution.setup_generator.Path.home", return_value=home
-        ):
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=home):
             env = _load_existing_env_from_other_scope("claude-code", project, "project")
         assert env == {"CONTEXT7_API_KEY": "ctx7sk-test"}
 
@@ -1210,41 +1218,35 @@ class TestEnvMigrationAcrossScopes:
         """Missing other-scope file → empty dict."""
         home = tmp_path / "home"
         home.mkdir()
-        with patch(
-            "tapps_mcp.distribution.setup_generator.Path.home", return_value=home
-        ):
-            env = _load_existing_env_from_other_scope(
-                "claude-code", tmp_path / "proj", "project"
-            )
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=home):
+            env = _load_existing_env_from_other_scope("claude-code", tmp_path / "proj", "project")
         assert env == {}
 
     def test_load_existing_env_skips_non_claude_hosts(self, tmp_path):
         """Non-claude hosts have no alternate scope."""
-        assert (
-            _load_existing_env_from_other_scope("cursor", tmp_path, "project") == {}
-        )
+        assert _load_existing_env_from_other_scope("cursor", tmp_path, "project") == {}
 
     def test_generate_config_migrates_env_from_user_scope(self, tmp_path):
         """Creating new project .mcp.json merges env from ~/.claude.json."""
         home = tmp_path / "home"
         home.mkdir()
         (home / ".claude.json").write_text(
-            json.dumps({
-                "mcpServers": {
-                    "tapps-mcp": {
-                        "command": "tapps-mcp",
-                        "args": ["serve"],
-                        "env": {"CONTEXT7_API_KEY": "ctx7sk-migrated"},
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "tapps-mcp": {
+                            "command": "tapps-mcp",
+                            "args": ["serve"],
+                            "env": {"CONTEXT7_API_KEY": "ctx7sk-migrated"},
+                        }
                     }
                 }
-            }),
+            ),
             encoding="utf-8",
         )
         project = tmp_path / "proj"
         project.mkdir()
-        with patch(
-            "tapps_mcp.distribution.setup_generator.Path.home", return_value=home
-        ):
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=home):
             ok = _generate_config("claude-code", project, scope="project", force=True)
         assert ok
         data = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
@@ -1353,9 +1355,7 @@ class TestUvContextDetection:
 
     def test_detects_dependency_groups(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "demo"\n'
-            "[dependency-groups]\n"
-            'tapps-mcp = ["tapps-mcp>=1.0"]\n',
+            '[project]\nname = "demo"\n[dependency-groups]\ntapps-mcp = ["tapps-mcp>=1.0"]\n',
             encoding="utf-8",
         )
         info = _detect_uv_context(tmp_path)
@@ -1364,9 +1364,7 @@ class TestUvContextDetection:
 
     def test_no_extra_when_tapps_mcp_absent(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "demo"\n'
-            "[project.optional-dependencies]\n"
-            'dev = ["pytest"]\n',
+            '[project]\nname = "demo"\n[project.optional-dependencies]\ndev = ["pytest"]\n',
             encoding="utf-8",
         )
         info = _detect_uv_context(tmp_path)
@@ -1375,9 +1373,7 @@ class TestUvContextDetection:
 
     def test_should_use_uv_launch_off_disables(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "demo"\n'
-            "[project.optional-dependencies]\n"
-            'mcp = ["tapps-mcp"]\n',
+            '[project]\nname = "demo"\n[project.optional-dependencies]\nmcp = ["tapps-mcp"]\n',
             encoding="utf-8",
         )
         use_uv, _, _ = _should_use_uv_launch(tmp_path, uv_mode="off")

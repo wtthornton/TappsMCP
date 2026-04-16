@@ -46,7 +46,8 @@ async def docs_module_map(
 
     if not root.is_dir():
         return error_response(
-            "docs_module_map", "INVALID_ROOT",
+            "docs_module_map",
+            "INVALID_ROOT",
             f"Project root does not exist: {root}",
         )
 
@@ -55,7 +56,9 @@ async def docs_module_map(
     analyzer = ModuleMapAnalyzer()
     src_list = [s.strip() for s in source_dirs.split(",") if s.strip()] or None
     result = analyzer.analyze(
-        root, depth=depth, include_private=include_private,
+        root,
+        depth=depth,
+        include_private=include_private,
         source_dirs=src_list,
     )
 
@@ -133,13 +136,15 @@ async def docs_api_surface(
 
     if not file_path.exists():
         return error_response(
-            "docs_api_surface", "FILE_NOT_FOUND",
+            "docs_api_surface",
+            "FILE_NOT_FOUND",
             f"File does not exist: {file_path}",
         )
 
     if depth not in ("public", "protected", "all"):
         return error_response(
-            "docs_api_surface", "INVALID_DEPTH",
+            "docs_api_surface",
+            "INVALID_DEPTH",
             f"Invalid depth '{depth}'. Must be 'public', 'protected', or 'all'.",
         )
 
@@ -147,7 +152,10 @@ async def docs_api_surface(
 
     analyzer = APISurfaceAnalyzer()
     surface = analyzer.analyze(
-        file_path, project_root=root, depth=depth, include_types=include_types,
+        file_path,
+        project_root=root,
+        depth=depth,
+        include_types=include_types,
     )
 
     data: dict[str, Any] = {

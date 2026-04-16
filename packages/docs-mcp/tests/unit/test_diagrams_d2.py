@@ -18,7 +18,6 @@ import pytest
 from docs_mcp.generators.diagrams import DiagramGenerator, DiagramResult
 from tests.helpers import make_settings as _make_settings
 
-
 # ---------------------------------------------------------------------------
 # Sample source snippets
 # ---------------------------------------------------------------------------
@@ -93,8 +92,8 @@ def python_project(tmp_path: Path) -> Path:
     (pkg / "__init__.py").write_text('"""My app."""\n')
     (pkg / "models.py").write_text(
         '"""Models."""\n\nfrom pydantic import BaseModel\n\n'
-        'class User(BaseModel):\n    name: str\n    email: str\n\n'
-        'class Post(BaseModel):\n    title: str\n    author: User\n'
+        "class User(BaseModel):\n    name: str\n    email: str\n\n"
+        "class Post(BaseModel):\n    title: str\n    author: User\n"
     )
     (pkg / "service.py").write_text(
         '"""Service."""\n\nfrom myapp.models import User\n\n'
@@ -139,13 +138,9 @@ class TestD2FormatValidation:
         """d2 is listed in DiagramGenerator.VALID_FORMATS."""
         assert "d2" in DiagramGenerator.VALID_FORMATS
 
-    def test_d2_accepted_by_generate(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_d2_accepted_by_generate(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """D2 format does not return empty due to validation."""
-        result = generator.generate(
-            tmp_path, diagram_type="dependency", output_format="d2"
-        )
+        result = generator.generate(tmp_path, diagram_type="dependency", output_format="d2")
         assert isinstance(result, DiagramResult)
         assert result.format == "d2"
 
@@ -164,25 +159,19 @@ class TestD2ThemeSystem:
         assert "sketch" in DiagramGenerator.VALID_THEMES
         assert "terminal" in DiagramGenerator.VALID_THEMES
 
-    def test_default_theme_no_directives(
-        self, generator: DiagramGenerator
-    ) -> None:
+    def test_default_theme_no_directives(self, generator: DiagramGenerator) -> None:
         """Default theme produces no extra D2 directives."""
         generator._d2_theme = "default"
         block = generator._d2_theme_block()
         assert block == []
 
-    def test_sketch_theme_directives(
-        self, generator: DiagramGenerator
-    ) -> None:
+    def test_sketch_theme_directives(self, generator: DiagramGenerator) -> None:
         """Sketch theme emits sketch: true."""
         generator._d2_theme = "sketch"
         block = generator._d2_theme_block()
         assert any("sketch: true" in line for line in block)
 
-    def test_terminal_theme_directives(
-        self, generator: DiagramGenerator
-    ) -> None:
+    def test_terminal_theme_directives(self, generator: DiagramGenerator) -> None:
         """Terminal theme emits theme-id: 200."""
         generator._d2_theme = "terminal"
         block = generator._d2_theme_block()
@@ -222,13 +211,9 @@ class TestD2ThemeSystem:
 class TestDependencyD2:
     """Dependency diagram in D2 format."""
 
-    def test_dependency_d2_basic(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_dependency_d2_basic(self, generator: DiagramGenerator, python_project: Path) -> None:
         """D2 dependency diagram produces valid output."""
-        result = generator.generate(
-            python_project, diagram_type="dependency", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="dependency", output_format="d2")
         assert result.format == "d2"
         assert result.diagram_type == "dependency"
         assert "direction:" in result.content
@@ -237,9 +222,7 @@ class TestDependencyD2:
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
         """D2 dependency diagram includes module nodes."""
-        result = generator.generate(
-            python_project, diagram_type="dependency", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="dependency", output_format="d2")
         assert result.node_count > 0
 
     def test_dependency_d2_direction_lr(
@@ -275,9 +258,7 @@ class TestDependencyD2:
 class TestClassHierarchyD2:
     """Class hierarchy diagram in D2 format."""
 
-    def test_class_d2_basic(
-        self, generator: DiagramGenerator, class_project: Path
-    ) -> None:
+    def test_class_d2_basic(self, generator: DiagramGenerator, class_project: Path) -> None:
         """D2 class diagram produces valid output with class shapes."""
         result = generator.generate(
             class_project, diagram_type="class_hierarchy", output_format="d2"
@@ -286,9 +267,7 @@ class TestClassHierarchyD2:
         assert result.content != ""
         assert "shape: class" in result.content
 
-    def test_class_d2_has_nodes(
-        self, generator: DiagramGenerator, class_project: Path
-    ) -> None:
+    def test_class_d2_has_nodes(self, generator: DiagramGenerator, class_project: Path) -> None:
         """D2 class diagram includes correct node count."""
         result = generator.generate(
             class_project, diagram_type="class_hierarchy", output_format="d2"
@@ -332,13 +311,9 @@ class TestClassHierarchyD2:
 class TestModuleMapD2:
     """Module map diagram in D2 format."""
 
-    def test_module_map_d2_basic(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_module_map_d2_basic(self, generator: DiagramGenerator, python_project: Path) -> None:
         """D2 module map produces valid output with nested containers."""
-        result = generator.generate(
-            python_project, diagram_type="module_map", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="module_map", output_format="d2")
         assert result.format == "d2"
         assert result.content != ""
         assert "direction:" in result.content
@@ -347,18 +322,14 @@ class TestModuleMapD2:
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
         """D2 module map includes package modules."""
-        result = generator.generate(
-            python_project, diagram_type="module_map", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="module_map", output_format="d2")
         assert result.node_count > 0
 
     def test_module_map_d2_uses_containers(
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
         """D2 module map uses nested containers via {}."""
-        result = generator.generate(
-            python_project, diagram_type="module_map", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="module_map", output_format="d2")
         assert "{" in result.content
 
 
@@ -370,24 +341,16 @@ class TestModuleMapD2:
 class TestERDiagramD2:
     """ER diagram in D2 format."""
 
-    def test_er_d2_basic(
-        self, generator: DiagramGenerator, model_project: Path
-    ) -> None:
+    def test_er_d2_basic(self, generator: DiagramGenerator, model_project: Path) -> None:
         """D2 ER diagram produces valid output with sql_table shapes."""
-        result = generator.generate(
-            model_project, diagram_type="er_diagram", output_format="d2"
-        )
+        result = generator.generate(model_project, diagram_type="er_diagram", output_format="d2")
         assert result.format == "d2"
         assert result.content != ""
         assert "shape: sql_table" in result.content
 
-    def test_er_d2_has_models(
-        self, generator: DiagramGenerator, model_project: Path
-    ) -> None:
+    def test_er_d2_has_models(self, generator: DiagramGenerator, model_project: Path) -> None:
         """D2 ER diagram includes model entities."""
-        result = generator.generate(
-            model_project, diagram_type="er_diagram", output_format="d2"
-        )
+        result = generator.generate(model_project, diagram_type="er_diagram", output_format="d2")
         assert result.node_count == 2  # User, Order
         assert "User" in result.content
         assert "Order" in result.content
@@ -396,19 +359,13 @@ class TestERDiagramD2:
         self, generator: DiagramGenerator, model_project: Path
     ) -> None:
         """D2 ER diagram renders relationships."""
-        result = generator.generate(
-            model_project, diagram_type="er_diagram", output_format="d2"
-        )
+        result = generator.generate(model_project, diagram_type="er_diagram", output_format="d2")
         assert result.edge_count > 0
         assert "has" in result.content
 
-    def test_er_d2_field_types(
-        self, generator: DiagramGenerator, model_project: Path
-    ) -> None:
+    def test_er_d2_field_types(self, generator: DiagramGenerator, model_project: Path) -> None:
         """D2 ER diagram maps Python types to ER types."""
-        result = generator.generate(
-            model_project, diagram_type="er_diagram", output_format="d2"
-        )
+        result = generator.generate(model_project, diagram_type="er_diagram", output_format="d2")
         assert "string" in result.content  # str -> string
         assert "float" in result.content
 
@@ -421,13 +378,9 @@ class TestERDiagramD2:
 class TestC4ContextD2:
     """C4 System Context diagram in D2 format."""
 
-    def test_c4_context_d2_basic(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_c4_context_d2_basic(self, generator: DiagramGenerator, python_project: Path) -> None:
         """D2 C4 context diagram produces valid output."""
-        result = generator.generate(
-            python_project, diagram_type="c4_context", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="c4_context", output_format="d2")
         assert result.format == "d2"
         assert result.content != ""
         assert result.node_count >= 2
@@ -436,18 +389,14 @@ class TestC4ContextD2:
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
         """D2 C4 context diagram has actor shapes."""
-        result = generator.generate(
-            python_project, diagram_type="c4_context", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="c4_context", output_format="d2")
         assert "shape:" in result.content
 
     def test_c4_context_d2_has_relationships(
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
         """D2 C4 context diagram includes relationship edges."""
-        result = generator.generate(
-            python_project, diagram_type="c4_context", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="c4_context", output_format="d2")
         assert result.edge_count > 0
         assert "Uses" in result.content
 
@@ -460,13 +409,9 @@ class TestC4ContextD2:
 class TestC4ContainerD2:
     """C4 Container diagram in D2 format."""
 
-    def test_c4_container_d2_basic(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_c4_container_d2_basic(self, generator: DiagramGenerator, python_project: Path) -> None:
         """D2 C4 container diagram produces valid output."""
-        result = generator.generate(
-            python_project, diagram_type="c4_container", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="c4_container", output_format="d2")
         assert result.format == "d2"
         assert result.content != ""
         assert result.node_count > 0
@@ -475,9 +420,7 @@ class TestC4ContainerD2:
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
         """D2 C4 container diagram uses D2 nested containers."""
-        result = generator.generate(
-            python_project, diagram_type="c4_container", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="c4_container", output_format="d2")
         assert "{" in result.content
 
 
@@ -489,13 +432,9 @@ class TestC4ContainerD2:
 class TestC4ComponentD2:
     """C4 Component diagram in D2 format."""
 
-    def test_c4_component_d2_basic(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_c4_component_d2_basic(self, generator: DiagramGenerator, python_project: Path) -> None:
         """D2 C4 component diagram produces valid output."""
-        result = generator.generate(
-            python_project, diagram_type="c4_component", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="c4_component", output_format="d2")
         assert result.format == "d2"
         assert isinstance(result, DiagramResult)
 
@@ -520,24 +459,22 @@ class TestC4ComponentD2:
 class TestSequenceD2:
     """Sequence diagram in D2 format."""
 
-    def test_sequence_d2_from_spec(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_sequence_d2_from_spec(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """D2 sequence diagram renders from flow_spec JSON."""
         import json
 
-        spec = json.dumps({
-            "title": "Login Flow",
-            "participants": ["Client", "Server", "Database"],
-            "messages": [
-                {"from": "Client", "to": "Server", "label": "POST /login"},
-                {"from": "Server", "to": "Database", "label": "SELECT user"},
-                {"from": "Database", "to": "Server", "label": "result",
-                 "type": "reply"},
-                {"from": "Server", "to": "Client", "label": "200 OK",
-                 "type": "reply"},
-            ],
-        })
+        spec = json.dumps(
+            {
+                "title": "Login Flow",
+                "participants": ["Client", "Server", "Database"],
+                "messages": [
+                    {"from": "Client", "to": "Server", "label": "POST /login"},
+                    {"from": "Server", "to": "Database", "label": "SELECT user"},
+                    {"from": "Database", "to": "Server", "label": "result", "type": "reply"},
+                    {"from": "Server", "to": "Client", "label": "200 OK", "type": "reply"},
+                ],
+            }
+        )
         result = generator.generate(
             tmp_path,
             diagram_type="sequence",
@@ -550,18 +487,18 @@ class TestSequenceD2:
         assert result.node_count == 3
         assert result.edge_count == 4
 
-    def test_sequence_d2_sync_messages(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_sequence_d2_sync_messages(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """D2 sequence diagram renders sync messages as solid arrows."""
         import json
 
-        spec = json.dumps({
-            "participants": ["A", "B"],
-            "messages": [
-                {"from": "A", "to": "B", "label": "call"},
-            ],
-        })
+        spec = json.dumps(
+            {
+                "participants": ["A", "B"],
+                "messages": [
+                    {"from": "A", "to": "B", "label": "call"},
+                ],
+            }
+        )
         result = generator.generate(
             tmp_path,
             diagram_type="sequence",
@@ -571,18 +508,18 @@ class TestSequenceD2:
         assert "A -> B: call" in result.content
         assert "stroke-dash" not in result.content.split("A -> B: call")[1].split("\n")[0]
 
-    def test_sequence_d2_reply_messages(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_sequence_d2_reply_messages(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """D2 sequence diagram renders reply messages with dashed stroke."""
         import json
 
-        spec = json.dumps({
-            "participants": ["A", "B"],
-            "messages": [
-                {"from": "A", "to": "B", "label": "response", "type": "reply"},
-            ],
-        })
+        spec = json.dumps(
+            {
+                "participants": ["A", "B"],
+                "messages": [
+                    {"from": "A", "to": "B", "label": "response", "type": "reply"},
+                ],
+            }
+        )
         result = generator.generate(
             tmp_path,
             diagram_type="sequence",
@@ -591,18 +528,18 @@ class TestSequenceD2:
         )
         assert "stroke-dash: 3" in result.content
 
-    def test_sequence_d2_async_messages(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_sequence_d2_async_messages(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """D2 sequence diagram renders async messages with longer dashes."""
         import json
 
-        spec = json.dumps({
-            "participants": ["A", "B"],
-            "messages": [
-                {"from": "A", "to": "B", "label": "fire", "type": "async"},
-            ],
-        })
+        spec = json.dumps(
+            {
+                "participants": ["A", "B"],
+                "messages": [
+                    {"from": "A", "to": "B", "label": "fire", "type": "async"},
+                ],
+            }
+        )
         result = generator.generate(
             tmp_path,
             diagram_type="sequence",
@@ -611,21 +548,21 @@ class TestSequenceD2:
         )
         assert "stroke-dash: 5" in result.content
 
-    def test_sequence_d2_with_notes(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_sequence_d2_with_notes(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """D2 sequence diagram renders notes."""
         import json
 
-        spec = json.dumps({
-            "participants": ["Client", "Server"],
-            "messages": [
-                {"from": "Client", "to": "Server", "label": "request"},
-            ],
-            "notes": [
-                {"over": "Server", "text": "Validates token"},
-            ],
-        })
+        spec = json.dumps(
+            {
+                "participants": ["Client", "Server"],
+                "messages": [
+                    {"from": "Client", "to": "Server", "label": "request"},
+                ],
+                "notes": [
+                    {"over": "Server", "text": "Validates token"},
+                ],
+            }
+        )
         result = generator.generate(
             tmp_path,
             diagram_type="sequence",
@@ -638,9 +575,7 @@ class TestSequenceD2:
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
         """D2 sequence diagram auto-detects from import graph."""
-        result = generator.generate(
-            python_project, diagram_type="sequence", output_format="d2"
-        )
+        result = generator.generate(python_project, diagram_type="sequence", output_format="d2")
         assert result.format == "d2"
         if result.content:
             assert "shape: sequence_diagram" in result.content
@@ -665,9 +600,7 @@ class TestD2ThemesAcrossTypes:
         )
         assert "sketch: true" in result.content
 
-    def test_terminal_theme_in_er(
-        self, generator: DiagramGenerator, model_project: Path
-    ) -> None:
+    def test_terminal_theme_in_er(self, generator: DiagramGenerator, model_project: Path) -> None:
         result = generator.generate(
             model_project,
             diagram_type="er_diagram",
@@ -687,15 +620,15 @@ class TestD2ThemesAcrossTypes:
         )
         assert "sketch: true" in result.content
 
-    def test_terminal_theme_in_sequence(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_terminal_theme_in_sequence(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         import json
 
-        spec = json.dumps({
-            "participants": ["A", "B"],
-            "messages": [{"from": "A", "to": "B", "label": "call"}],
-        })
+        spec = json.dumps(
+            {
+                "participants": ["A", "B"],
+                "messages": [{"from": "A", "to": "B", "label": "call"}],
+            }
+        )
         result = generator.generate(
             tmp_path,
             diagram_type="sequence",
@@ -718,10 +651,13 @@ class TestDocsGenerateDiagramD2:
         """MCP tool generates D2 output when format=d2."""
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
-        with patch(
-            "docs_mcp.server_gen_tools._get_settings",
-            return_value=_make_settings(python_project),
-        ), patch("docs_mcp.server_gen_tools._record_call"):
+        with (
+            patch(
+                "docs_mcp.server_gen_tools._get_settings",
+                return_value=_make_settings(python_project),
+            ),
+            patch("docs_mcp.server_gen_tools._record_call"),
+        ):
             result = await docs_generate_diagram(
                 diagram_type="class_hierarchy",
                 format="d2",
@@ -737,10 +673,13 @@ class TestDocsGenerateDiagramD2:
         """MCP tool passes theme to DiagramGenerator."""
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
-        with patch(
-            "docs_mcp.server_gen_tools._get_settings",
-            return_value=_make_settings(python_project),
-        ), patch("docs_mcp.server_gen_tools._record_call"):
+        with (
+            patch(
+                "docs_mcp.server_gen_tools._get_settings",
+                return_value=_make_settings(python_project),
+            ),
+            patch("docs_mcp.server_gen_tools._record_call"),
+        ):
             result = await docs_generate_diagram(
                 diagram_type="class_hierarchy",
                 format="d2",
@@ -756,10 +695,13 @@ class TestDocsGenerateDiagramD2:
         """MCP tool generates D2 ER diagrams."""
         from docs_mcp.server_gen_tools import docs_generate_diagram
 
-        with patch(
-            "docs_mcp.server_gen_tools._get_settings",
-            return_value=_make_settings(model_project),
-        ), patch("docs_mcp.server_gen_tools._record_call"):
+        with (
+            patch(
+                "docs_mcp.server_gen_tools._get_settings",
+                return_value=_make_settings(model_project),
+            ),
+            patch("docs_mcp.server_gen_tools._record_call"),
+        ):
             result = await docs_generate_diagram(
                 diagram_type="er_diagram",
                 format="d2",

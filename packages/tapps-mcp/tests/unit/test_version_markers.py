@@ -6,7 +6,6 @@ Epic 67, Story 67.3: Version Markers for Generated Markdown Artifacts.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 
 class TestCheckVersionMarker:

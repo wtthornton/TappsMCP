@@ -141,6 +141,7 @@ class TestRunSecurityScan:
 # TAP-477: domain_patterns module
 # ---------------------------------------------------------------------------
 
+
 class TestDomainPatterns:
     """Tests for domain-specific security anti-patterns."""
 

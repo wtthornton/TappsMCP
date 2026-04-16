@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from tapps_mcp.pipeline.platform_docs_automation import (
     CLAUDE_DOC_AGENTS,
     CURSOR_DOC_AGENTS,
@@ -14,7 +12,6 @@ from tapps_mcp.pipeline.platform_docs_automation import (
     generate_docs_automation,
     generate_docs_skills,
 )
-
 
 # ---------------------------------------------------------------------------
 # Template tests

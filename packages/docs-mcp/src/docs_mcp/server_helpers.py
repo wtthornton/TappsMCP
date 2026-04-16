@@ -173,8 +173,7 @@ def build_generator_manifest(
                 "provided — do not modify content, add comments, or reformat."
             ),
             tool_preference=(
-                "Use the Write tool to create the file.  "
-                "Create parent directories as needed."
+                "Use the Write tool to create the file.  Create parent directories as needed."
             ),
             verification_steps=[
                 f"Verify the file was written to {output_path}.",
@@ -254,13 +253,9 @@ async def finalize_output(
             write_path = validator.validate_write_path(output_path)
             write_path.parent.mkdir(parents=True, exist_ok=True)
             await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            fragment["written_to"] = str(write_path.relative_to(root)).replace(
-                "\\", "/"
-            )
+            fragment["written_to"] = str(write_path.relative_to(root)).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
-            return error_response(
-                tool_name, "WRITE_ERROR", f"Failed to write: {exc}"
-            )
+            return error_response(tool_name, "WRITE_ERROR", f"Failed to write: {exc}")
     elif len(content) < _INLINE_THRESHOLD:
         # Tier 2: small content, inline it
         fragment["content"] = content

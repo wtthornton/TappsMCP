@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from tapps_mcp.common.developer_workflow import (
     DAILY_STEPS,
     RECOMMENDED_WORKFLOW_TEXT,

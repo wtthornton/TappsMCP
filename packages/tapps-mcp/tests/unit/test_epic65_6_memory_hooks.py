@@ -6,10 +6,9 @@ and auto-recall/auto-capture hook generation when enabled.
 
 from __future__ import annotations
 
-import yaml
 from pathlib import Path
 
-import pytest
+import yaml
 
 from tapps_mcp.pipeline.init import (
     BootstrapConfig,
@@ -47,9 +46,7 @@ class TestMemoryHooksDefaultsForEngagement:
 class TestEnsureMemoryHooksConfig:
     """Ensure memory_hooks section in .tapps-mcp.yaml."""
 
-    def test_creates_yaml_with_memory_hooks_when_missing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_creates_yaml_with_memory_hooks_when_missing(self, tmp_path: Path) -> None:
         action = _ensure_memory_hooks_config(tmp_path, "high", dry_run=False)
         yaml_path = tmp_path / ".tapps-mcp.yaml"
         assert yaml_path.exists()
@@ -78,9 +75,7 @@ class TestEnsureMemoryHooksConfig:
 class TestBootstrapMemoryHooksIntegration:
     """bootstrap_pipeline wires memory_hooks config and hooks."""
 
-    def test_init_adds_memory_hooks_config_when_platform_claude(
-        self, tmp_path: Path
-    ) -> None:
+    def test_init_adds_memory_hooks_config_when_platform_claude(self, tmp_path: Path) -> None:
         cfg = BootstrapConfig(
             platform="claude",
             verify_server=False,
@@ -95,9 +90,7 @@ class TestBootstrapMemoryHooksIntegration:
         data = yaml.safe_load(yaml_path.read_text())
         assert "memory_hooks" in data
 
-    def test_init_adds_auto_recall_hook_when_high_engagement(
-        self, tmp_path: Path
-    ) -> None:
+    def test_init_adds_auto_recall_hook_when_high_engagement(self, tmp_path: Path) -> None:
         # High engagement enables both auto_recall and auto_capture by default
         cfg = BootstrapConfig(
             platform="claude",

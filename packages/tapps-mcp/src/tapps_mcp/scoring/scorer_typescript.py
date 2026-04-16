@@ -183,9 +183,7 @@ class TypeScriptScorer(ScorerBase):
 
         # Read file content
         try:
-            code = await asyncio.to_thread(
-                resolved.read_text, encoding="utf-8", errors="replace"
-            )
+            code = await asyncio.to_thread(resolved.read_text, encoding="utf-8", errors="replace")
         except (OSError, PermissionError) as exc:
             logger.error("file_read_failed", path=str_path, error=str(exc))
             return self._error_result(str_path)
@@ -218,9 +216,7 @@ class TypeScriptScorer(ScorerBase):
     # Tree-sitter based scoring
     # ------------------------------------------------------------------
 
-    def _score_with_treesitter(
-        self, code: str, file_path: Path
-    ) -> dict[str, CategoryScore]:
+    def _score_with_treesitter(self, code: str, file_path: Path) -> dict[str, CategoryScore]:
         """Score using tree-sitter AST analysis."""
         source_bytes = code.encode("utf-8")
         lang = _TSX_LANGUAGE if self._is_tsx else _TS_LANGUAGE
@@ -256,9 +252,7 @@ class TypeScriptScorer(ScorerBase):
 
         return cats
 
-    def _score_complexity_ts(
-        self, root: Any, source: bytes, weight: float
-    ) -> CategoryScore:
+    def _score_complexity_ts(self, root: Any, source: bytes, weight: float) -> CategoryScore:
         """Calculate complexity score via AST branch counting."""
         # Count branching nodes for cyclomatic complexity
         branch_types = {
@@ -283,7 +277,7 @@ class TypeScriptScorer(ScorerBase):
                 if node.type == "binary_expression":
                     op_node = node.child_by_field_name("operator")
                     if op_node:
-                        op = source[op_node.start_byte:op_node.end_byte].decode()
+                        op = source[op_node.start_byte : op_node.end_byte].decode()
                         if op in ("&&", "||", "??"):
                             count = 1
                 else:
@@ -343,7 +337,7 @@ class TypeScriptScorer(ScorerBase):
             if node.type == "call_expression":
                 func_node = node.child_by_field_name("function")
                 if func_node:
-                    func_text = source[func_node.start_byte:func_node.end_byte].decode()
+                    func_text = source[func_node.start_byte : func_node.end_byte].decode()
                     if func_text == "eval" and "eval() usage" not in issues_found:
                         issues_found.append("eval() usage")
 
@@ -412,26 +406,26 @@ class TypeScriptScorer(ScorerBase):
             suggestions=self._suggest_maintainability(line_count, has_jsdoc, doc_ratio),
         )
 
-    def _score_test_coverage_ts(
-        self, file_path: Path, root: Any, weight: float
-    ) -> CategoryScore:
+    def _score_test_coverage_ts(self, file_path: Path, root: Any, weight: float) -> CategoryScore:
         """Calculate test coverage heuristic score."""
         name = file_path.name.lower()
         stem = file_path.stem.lower()
 
         # Check if this is a test file
-        is_test_file = any([
-            name.endswith(".test.ts"),
-            name.endswith(".test.tsx"),
-            name.endswith(".test.js"),
-            name.endswith(".test.jsx"),
-            name.endswith(".spec.ts"),
-            name.endswith(".spec.tsx"),
-            name.endswith(".spec.js"),
-            name.endswith(".spec.jsx"),
-            stem.startswith("test_"),
-            stem.endswith("_test"),
-        ])
+        is_test_file = any(
+            [
+                name.endswith(".test.ts"),
+                name.endswith(".test.tsx"),
+                name.endswith(".test.js"),
+                name.endswith(".test.jsx"),
+                name.endswith(".spec.ts"),
+                name.endswith(".spec.tsx"),
+                name.endswith(".spec.js"),
+                name.endswith(".spec.jsx"),
+                stem.startswith("test_"),
+                stem.endswith("_test"),
+            ]
+        )
 
         if is_test_file:
             score = 5.0  # Neutral for test files
@@ -537,9 +531,7 @@ class TypeScriptScorer(ScorerBase):
             },
         )
 
-    def _score_devex_ts(
-        self, code: str, root: Any, source: bytes, weight: float
-    ) -> CategoryScore:
+    def _score_devex_ts(self, code: str, root: Any, source: bytes, weight: float) -> CategoryScore:
         """Calculate developer experience score."""
         issues: list[str] = []
 
@@ -592,9 +584,7 @@ class TypeScriptScorer(ScorerBase):
     # Regex-based fallback scoring
     # ------------------------------------------------------------------
 
-    def _score_with_regex(
-        self, code: str, file_path: Path
-    ) -> dict[str, CategoryScore]:
+    def _score_with_regex(self, code: str, file_path: Path) -> dict[str, CategoryScore]:
         """Score using regex-based analysis (fallback when tree-sitter unavailable)."""
         w = self._weights
         cats: dict[str, CategoryScore] = {}
@@ -603,13 +593,15 @@ class TypeScriptScorer(ScorerBase):
         line_count = len(lines)
 
         # 1) Complexity (regex approximation)
-        branch_count = sum([
-            len(re.findall(r"\bif\s*\(", code)),
-            len(re.findall(r"\bfor\s*\(", code)),
-            len(re.findall(r"\bwhile\s*\(", code)),
-            len(re.findall(r"\bswitch\s*\(", code)),
-            len(re.findall(r"\?\s*[^:]+\s*:", code)),  # ternary
-        ])
+        branch_count = sum(
+            [
+                len(re.findall(r"\bif\s*\(", code)),
+                len(re.findall(r"\bfor\s*\(", code)),
+                len(re.findall(r"\bwhile\s*\(", code)),
+                len(re.findall(r"\bswitch\s*\(", code)),
+                len(re.findall(r"\?\s*[^:]+\s*:", code)),  # ternary
+            ]
+        )
         complexity_score = clamp_individual(branch_count / 5.0)
         cats["complexity"] = CategoryScore(
             name="complexity",
@@ -649,11 +641,13 @@ class TypeScriptScorer(ScorerBase):
 
         # 4) Test coverage
         name = file_path.name.lower()
-        is_test = any([
-            ".test." in name,
-            ".spec." in name,
-            name.startswith("test_"),
-        ])
+        is_test = any(
+            [
+                ".test." in name,
+                ".spec." in name,
+                name.startswith("test_"),
+            ]
+        )
         cats["test_coverage"] = CategoryScore(
             name="test_coverage",
             score=5.0 if is_test else 0.0,

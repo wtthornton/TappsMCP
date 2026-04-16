@@ -471,9 +471,7 @@ class TestReplaceTappsSection:
     def test_tapps_in_middle_between_user_sections(self):
         """TAPPS section sits between two user-defined H1 sections."""
         existing = (
-            "# Intro\n\nHello.\n\n"
-            "# TAPPS Quality Pipeline\n\nOld TAPPS.\n\n"
-            "# Appendix\n\nEnd."
+            "# Intro\n\nHello.\n\n# TAPPS Quality Pipeline\n\nOld TAPPS.\n\n# Appendix\n\nEnd."
         )
         new_tapps = "# TAPPS Quality Pipeline\n\nUpdated TAPPS."
 
@@ -585,11 +583,7 @@ class TestSplitByH1Headings:
 
     def test_reassembly_preserves_original(self):
         """Concatenating heading + body for all sections reproduces input."""
-        content = (
-            "Preamble.\n\n"
-            "# First\n\nA.\n\n"
-            "# Second\n\n## Sub\n\nB.\n"
-        )
+        content = "Preamble.\n\n# First\n\nA.\n\n# Second\n\n## Sub\n\nB.\n"
         sections = _split_by_h1_headings(content)
         reassembled = "".join(h + b for h, b in sections)
         assert reassembled == content

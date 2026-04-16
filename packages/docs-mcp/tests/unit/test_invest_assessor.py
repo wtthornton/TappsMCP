@@ -9,7 +9,6 @@ from __future__ import annotations
 from docs_mcp.generators.invest_assessor import assess_invest
 from docs_mcp.generators.stories import StoryConfig
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

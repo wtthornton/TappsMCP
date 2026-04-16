@@ -98,7 +98,9 @@ def analyze_catalog_health(
 
     overlap_pairs: list[OverlapPair] = []
     for (name_a, name_b), sim in sorted(
-        pairs.items(), key=lambda x: x[1], reverse=True,
+        pairs.items(),
+        key=lambda x: x[1],
+        reverse=True,
     ):
         if sim >= threshold:
             if sim >= 0.85:
@@ -112,12 +114,14 @@ def analyze_catalog_health(
                     f"agents are needed or if capabilities can be consolidated."
                 )
 
-            overlap_pairs.append(OverlapPair(
-                agent_a=name_a,
-                agent_b=name_b,
-                similarity=sim,
-                recommendation=recommendation,
-            ))
+            overlap_pairs.append(
+                OverlapPair(
+                    agent_a=name_a,
+                    agent_b=name_b,
+                    similarity=sim,
+                    recommendation=recommendation,
+                )
+            )
 
     report = CatalogHealthReport(
         total_agents=len(matcher.agents),

@@ -110,53 +110,226 @@ class RuleBase(ABC):
 # ---------------------------------------------------------------------------
 
 # Common past participles for passive voice detection.
-_PAST_PARTICIPLES: frozenset[str] = frozenset({
-    "accepted", "accomplished", "achieved", "acquired", "added", "adjusted",
-    "allowed", "applied", "approved", "assigned", "authorized", "avoided",
-    "based", "been", "broken", "built", "called", "caused", "changed",
-    "chosen", "closed", "collected", "combined", "completed", "composed",
-    "configured", "connected", "considered", "consumed", "contained",
-    "converted", "copied", "corrected", "covered", "created", "customized",
-    "defined", "deleted", "delivered", "deployed", "described", "designed",
-    "detected", "determined", "developed", "disabled", "displayed",
-    "distributed", "documented", "done", "downloaded", "driven",
-    "enabled", "enforced", "established", "evaluated", "examined",
-    "exceeded", "excluded", "executed", "expected", "exported", "expressed",
-    "extended", "extracted",
-    "failed", "fixed", "followed", "formatted", "found", "frozen",
-    "generated", "given", "granted",
-    "handled", "held", "hidden",
-    "identified", "ignored", "implemented", "imported", "improved",
-    "included", "increased", "indicated", "initialized", "injected",
-    "installed", "integrated", "intended", "introduced", "invalidated",
-    "invoked",
-    "kept", "known",
-    "launched", "left", "limited", "linked", "listed", "loaded", "located",
-    "logged", "lost",
-    "made", "maintained", "managed", "mapped", "marked", "measured",
-    "merged", "migrated", "modified", "monitored", "moved",
-    "named", "needed", "noted",
-    "observed", "obtained", "offered", "omitted", "opened", "optimized",
-    "organized", "overridden", "owned",
-    "parsed", "passed", "performed", "permitted", "placed", "planned",
-    "populated", "preferred", "prepared", "presented", "prevented",
-    "processed", "produced", "prohibited", "protected", "provided",
-    "published",
-    "raised", "reached", "read", "received", "recognized", "recommended",
-    "recorded", "reduced", "referenced", "registered", "rejected",
-    "released", "removed", "renamed", "replaced", "reported", "represented",
-    "requested", "required", "reserved", "reset", "resolved", "restricted",
-    "retained", "retrieved", "returned", "reviewed", "revoked", "run",
-    "saved", "scanned", "scheduled", "secured", "seen", "selected", "sent",
-    "separated", "served", "set", "shared", "shown", "signed", "skipped",
-    "sorted", "specified", "split", "started", "stopped", "stored",
-    "submitted", "supported", "suppressed",
-    "taken", "tested", "thrown", "tracked", "transferred", "transformed",
-    "triggered", "truncated", "turned", "typed",
-    "updated", "uploaded", "used", "utilized",
-    "validated", "verified", "viewed", "violated",
-    "warned", "written",
-})
+_PAST_PARTICIPLES: frozenset[str] = frozenset(
+    {
+        "accepted",
+        "accomplished",
+        "achieved",
+        "acquired",
+        "added",
+        "adjusted",
+        "allowed",
+        "applied",
+        "approved",
+        "assigned",
+        "authorized",
+        "avoided",
+        "based",
+        "been",
+        "broken",
+        "built",
+        "called",
+        "caused",
+        "changed",
+        "chosen",
+        "closed",
+        "collected",
+        "combined",
+        "completed",
+        "composed",
+        "configured",
+        "connected",
+        "considered",
+        "consumed",
+        "contained",
+        "converted",
+        "copied",
+        "corrected",
+        "covered",
+        "created",
+        "customized",
+        "defined",
+        "deleted",
+        "delivered",
+        "deployed",
+        "described",
+        "designed",
+        "detected",
+        "determined",
+        "developed",
+        "disabled",
+        "displayed",
+        "distributed",
+        "documented",
+        "done",
+        "downloaded",
+        "driven",
+        "enabled",
+        "enforced",
+        "established",
+        "evaluated",
+        "examined",
+        "exceeded",
+        "excluded",
+        "executed",
+        "expected",
+        "exported",
+        "expressed",
+        "extended",
+        "extracted",
+        "failed",
+        "fixed",
+        "followed",
+        "formatted",
+        "found",
+        "frozen",
+        "generated",
+        "given",
+        "granted",
+        "handled",
+        "held",
+        "hidden",
+        "identified",
+        "ignored",
+        "implemented",
+        "imported",
+        "improved",
+        "included",
+        "increased",
+        "indicated",
+        "initialized",
+        "injected",
+        "installed",
+        "integrated",
+        "intended",
+        "introduced",
+        "invalidated",
+        "invoked",
+        "kept",
+        "known",
+        "launched",
+        "left",
+        "limited",
+        "linked",
+        "listed",
+        "loaded",
+        "located",
+        "logged",
+        "lost",
+        "made",
+        "maintained",
+        "managed",
+        "mapped",
+        "marked",
+        "measured",
+        "merged",
+        "migrated",
+        "modified",
+        "monitored",
+        "moved",
+        "named",
+        "needed",
+        "noted",
+        "observed",
+        "obtained",
+        "offered",
+        "omitted",
+        "opened",
+        "optimized",
+        "organized",
+        "overridden",
+        "owned",
+        "parsed",
+        "passed",
+        "performed",
+        "permitted",
+        "placed",
+        "planned",
+        "populated",
+        "preferred",
+        "prepared",
+        "presented",
+        "prevented",
+        "processed",
+        "produced",
+        "prohibited",
+        "protected",
+        "provided",
+        "published",
+        "raised",
+        "reached",
+        "read",
+        "received",
+        "recognized",
+        "recommended",
+        "recorded",
+        "reduced",
+        "referenced",
+        "registered",
+        "rejected",
+        "released",
+        "removed",
+        "renamed",
+        "replaced",
+        "reported",
+        "represented",
+        "requested",
+        "required",
+        "reserved",
+        "reset",
+        "resolved",
+        "restricted",
+        "retained",
+        "retrieved",
+        "returned",
+        "reviewed",
+        "revoked",
+        "run",
+        "saved",
+        "scanned",
+        "scheduled",
+        "secured",
+        "seen",
+        "selected",
+        "sent",
+        "separated",
+        "served",
+        "set",
+        "shared",
+        "shown",
+        "signed",
+        "skipped",
+        "sorted",
+        "specified",
+        "split",
+        "started",
+        "stopped",
+        "stored",
+        "submitted",
+        "supported",
+        "suppressed",
+        "taken",
+        "tested",
+        "thrown",
+        "tracked",
+        "transferred",
+        "transformed",
+        "triggered",
+        "truncated",
+        "turned",
+        "typed",
+        "updated",
+        "uploaded",
+        "used",
+        "utilized",
+        "validated",
+        "verified",
+        "viewed",
+        "violated",
+        "warned",
+        "written",
+    }
+)
 
 _BE_VERBS = r"\b(?:is|are|was|were|be|been|being)\b"
 _PASSIVE_RE = re.compile(
@@ -180,15 +353,17 @@ class PassiveVoiceRule(RuleBase):
             for match in _PASSIVE_RE.finditer(line):
                 participle = match.group(2).lower()
                 if participle in _PAST_PARTICIPLES:
-                    issues.append(StyleIssue(
-                        rule=self.name,
-                        severity=self.default_severity,
-                        line=line_num,
-                        column=match.start() + 1,
-                        message=f"Passive voice: '{match.group(0).strip()}'.",
-                        suggestion="Consider rewriting in active voice.",
-                        context=line.strip()[:120],
-                    ))
+                    issues.append(
+                        StyleIssue(
+                            rule=self.name,
+                            severity=self.default_severity,
+                            line=line_num,
+                            column=match.start() + 1,
+                            message=f"Passive voice: '{match.group(0).strip()}'.",
+                            suggestion="Consider rewriting in active voice.",
+                            context=line.strip()[:120],
+                        )
+                    )
         return issues
 
 
@@ -197,14 +372,30 @@ class PassiveVoiceRule(RuleBase):
 # ---------------------------------------------------------------------------
 
 _DEFAULT_JARGON: list[str] = [
-    "utilize", "utilise", "leverage", "synergy", "synergize",
-    "paradigm", "holistic", "proactive", "proactively",
-    "actionable", "scalable", "robust",
-    "bleeding edge", "cutting edge", "best of breed",
-    "circle back", "deep dive", "move the needle",
-    "low-hanging fruit", "boil the ocean",
-    "at the end of the day", "going forward",
-    "touch base", "drill down",
+    "utilize",
+    "utilise",
+    "leverage",
+    "synergy",
+    "synergize",
+    "paradigm",
+    "holistic",
+    "proactive",
+    "proactively",
+    "actionable",
+    "scalable",
+    "robust",
+    "bleeding edge",
+    "cutting edge",
+    "best of breed",
+    "circle back",
+    "deep dive",
+    "move the needle",
+    "low-hanging fruit",
+    "boil the ocean",
+    "at the end of the day",
+    "going forward",
+    "touch base",
+    "drill down",
 ]
 
 
@@ -231,15 +422,17 @@ class JargonRule(RuleBase):
                 continue
             for term, pat in patterns:
                 for match in pat.finditer(line):
-                    issues.append(StyleIssue(
-                        rule=self.name,
-                        severity=self.default_severity,
-                        line=line_num,
-                        column=match.start() + 1,
-                        message=f"Jargon: '{match.group(0)}'.",
-                        suggestion=f"Replace '{term}' with a simpler alternative.",
-                        context=line.strip()[:120],
-                    ))
+                    issues.append(
+                        StyleIssue(
+                            rule=self.name,
+                            severity=self.default_severity,
+                            line=line_num,
+                            column=match.start() + 1,
+                            message=f"Jargon: '{match.group(0)}'.",
+                            suggestion=f"Replace '{term}' with a simpler alternative.",
+                            context=line.strip()[:120],
+                        )
+                    )
         return issues
 
 
@@ -271,18 +464,17 @@ class SentenceLengthRule(RuleBase):
             for sentence in sentences:
                 words = sentence.split()
                 if len(words) > max_words:
-                    issues.append(StyleIssue(
-                        rule=self.name,
-                        severity=self.default_severity,
-                        line=line_num,
-                        column=1,
-                        message=(
-                            f"Sentence has {len(words)} words "
-                            f"(max {max_words})."
-                        ),
-                        suggestion="Break into shorter sentences for clarity.",
-                        context=sentence.strip()[:120],
-                    ))
+                    issues.append(
+                        StyleIssue(
+                            rule=self.name,
+                            severity=self.default_severity,
+                            line=line_num,
+                            column=1,
+                            message=(f"Sentence has {len(words)} words (max {max_words})."),
+                            suggestion="Break into shorter sentences for clarity.",
+                            context=sentence.strip()[:120],
+                        )
+                    )
         return issues
 
 
@@ -293,11 +485,32 @@ class SentenceLengthRule(RuleBase):
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
 
 # Words that stay lowercase in title case (common articles/prepositions).
-_TITLE_CASE_EXCEPTIONS: frozenset[str] = frozenset({
-    "a", "an", "the", "and", "but", "or", "nor", "for", "yet", "so",
-    "at", "by", "in", "of", "on", "to", "up", "as", "is", "it",
-    "vs", "via",
-})
+_TITLE_CASE_EXCEPTIONS: frozenset[str] = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "and",
+        "but",
+        "or",
+        "nor",
+        "for",
+        "yet",
+        "so",
+        "at",
+        "by",
+        "in",
+        "of",
+        "on",
+        "to",
+        "up",
+        "as",
+        "is",
+        "it",
+        "vs",
+        "via",
+    }
+)
 
 
 class HeadingConsistencyRule(RuleBase):
@@ -330,34 +543,32 @@ class HeadingConsistencyRule(RuleBase):
 
             if style == "sentence":
                 if not _is_sentence_case(cleaned, config.custom_terms):
-                    issues.append(StyleIssue(
+                    issues.append(
+                        StyleIssue(
+                            rule=self.name,
+                            severity=self.default_severity,
+                            line=line_num,
+                            column=len(m.group(1)) + 2,
+                            message=(f"Heading '{heading_text}' is not sentence case."),
+                            suggestion=(
+                                "Use sentence case: capitalize only the first word "
+                                "and proper nouns."
+                            ),
+                            context=line.strip(),
+                        )
+                    )
+            elif style == "title" and not _is_title_case(cleaned, config.custom_terms):
+                issues.append(
+                    StyleIssue(
                         rule=self.name,
                         severity=self.default_severity,
                         line=line_num,
                         column=len(m.group(1)) + 2,
-                        message=(
-                            f"Heading '{heading_text}' is not sentence case."
-                        ),
-                        suggestion=(
-                            "Use sentence case: capitalize only the first word "
-                            "and proper nouns."
-                        ),
+                        message=(f"Heading '{heading_text}' is not title case."),
+                        suggestion=("Use title case: capitalize major words."),
                         context=line.strip(),
-                    ))
-            elif style == "title" and not _is_title_case(cleaned, config.custom_terms):
-                issues.append(StyleIssue(
-                    rule=self.name,
-                    severity=self.default_severity,
-                    line=line_num,
-                    column=len(m.group(1)) + 2,
-                    message=(
-                        f"Heading '{heading_text}' is not title case."
-                    ),
-                    suggestion=(
-                        "Use title case: capitalize major words."
-                    ),
-                    context=line.strip(),
-                ))
+                    )
+                )
         return issues
 
 
@@ -366,21 +577,93 @@ class HeadingConsistencyRule(RuleBase):
 # ---------------------------------------------------------------------------
 
 # Imperative markers: common imperative verbs at the start of sentences/items.
-_IMPERATIVE_STARTERS: frozenset[str] = frozenset({
-    "add", "apply", "build", "call", "check", "choose", "clone",
-    "configure", "copy", "create", "define", "delete", "deploy",
-    "disable", "do", "download", "edit", "enable", "ensure",
-    "enter", "execute", "export", "extend", "find", "follow",
-    "generate", "get", "go", "import", "include", "initialize",
-    "insert", "install", "keep", "launch", "list", "load", "look",
-    "make", "merge", "modify", "move", "navigate", "note", "open",
-    "pass", "perform", "place", "press", "provide", "pull", "push",
-    "put", "read", "remove", "rename", "replace", "restart", "return",
-    "review", "run", "save", "search", "see", "select", "send", "set",
-    "specify", "start", "stop", "submit", "test", "try", "type",
-    "update", "upgrade", "upload", "use", "verify", "view", "visit",
-    "wait", "write",
-})
+_IMPERATIVE_STARTERS: frozenset[str] = frozenset(
+    {
+        "add",
+        "apply",
+        "build",
+        "call",
+        "check",
+        "choose",
+        "clone",
+        "configure",
+        "copy",
+        "create",
+        "define",
+        "delete",
+        "deploy",
+        "disable",
+        "do",
+        "download",
+        "edit",
+        "enable",
+        "ensure",
+        "enter",
+        "execute",
+        "export",
+        "extend",
+        "find",
+        "follow",
+        "generate",
+        "get",
+        "go",
+        "import",
+        "include",
+        "initialize",
+        "insert",
+        "install",
+        "keep",
+        "launch",
+        "list",
+        "load",
+        "look",
+        "make",
+        "merge",
+        "modify",
+        "move",
+        "navigate",
+        "note",
+        "open",
+        "pass",
+        "perform",
+        "place",
+        "press",
+        "provide",
+        "pull",
+        "push",
+        "put",
+        "read",
+        "remove",
+        "rename",
+        "replace",
+        "restart",
+        "return",
+        "review",
+        "run",
+        "save",
+        "search",
+        "see",
+        "select",
+        "send",
+        "set",
+        "specify",
+        "start",
+        "stop",
+        "submit",
+        "test",
+        "try",
+        "type",
+        "update",
+        "upgrade",
+        "upload",
+        "use",
+        "verify",
+        "view",
+        "visit",
+        "wait",
+        "write",
+    }
+)
 
 # Declarative/descriptive markers.
 _DECLARATIVE_RE = re.compile(
@@ -437,20 +720,20 @@ class TenseConsistencyRule(RuleBase):
 
             # Only flag up to 5 lines
             for line_num in minority_lines[:5]:
-                issues.append(StyleIssue(
-                    rule=self.name,
-                    severity=self.default_severity,
-                    line=line_num,
-                    column=1,
-                    message=(
-                        f"Tense inconsistency: document is primarily "
-                        f"{dominant} but this line uses "
-                        f"{'imperative' if minority_is_imperative else 'declarative'}."
-                    ),
-                    suggestion=(
-                        f"Use {dominant} tense consistently throughout."
-                    ),
-                ))
+                issues.append(
+                    StyleIssue(
+                        rule=self.name,
+                        severity=self.default_severity,
+                        line=line_num,
+                        column=1,
+                        message=(
+                            f"Tense inconsistency: document is primarily "
+                            f"{dominant} but this line uses "
+                            f"{'imperative' if minority_is_imperative else 'declarative'}."
+                        ),
+                        suggestion=(f"Use {dominant} tense consistently throughout."),
+                    )
+                )
         return issues
 
 
@@ -565,9 +848,7 @@ class StyleChecker:
             results.append(result)
 
         total_issues = sum(len(r.issues) for r in results)
-        aggregate_score = (
-            sum(r.score for r in results) / len(results) if results else 100.0
-        )
+        aggregate_score = sum(r.score for r in results) / len(results) if results else 100.0
 
         # Count issues by rule
         issue_counts: dict[str, int] = {}

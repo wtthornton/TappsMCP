@@ -72,19 +72,21 @@ async def docs_git_summary(
         parsed = classify_commit(commit.message)
         type_counter[parsed.type] += 1
         author_counter[commit.author] += 1
-        parsed_commits.append({
-            "hash": commit.short_hash,
-            "author": commit.author,
-            "date": commit.date,
-            "message": commit.message,
-            "type": parsed.type,
-            "scope": parsed.scope,
-            "breaking": parsed.breaking,
-            "is_conventional": parsed.is_conventional,
-            "files_changed": commit.files_changed,
-            "insertions": commit.insertions,
-            "deletions": commit.deletions,
-        })
+        parsed_commits.append(
+            {
+                "hash": commit.short_hash,
+                "author": commit.author,
+                "date": commit.date,
+                "message": commit.message,
+                "type": parsed.type,
+                "scope": parsed.scope,
+                "breaking": parsed.breaking,
+                "is_conventional": parsed.is_conventional,
+                "files_changed": commit.files_changed,
+                "insertions": commit.insertions,
+                "deletions": commit.deletions,
+            }
+        )
 
     # Version boundaries
     versions_data: list[dict[str, Any]] = []
@@ -92,17 +94,18 @@ async def docs_git_summary(
         detector = VersionDetector()
         boundaries = detector.detect_versions(root, include_commits=False)
         for boundary in boundaries:
-            versions_data.append({
-                "version": boundary.version,
-                "tag": boundary.tag,
-                "date": boundary.date,
-                "commit_count": boundary.commit_count,
-            })
+            versions_data.append(
+                {
+                    "version": boundary.version,
+                    "tag": boundary.tag,
+                    "date": boundary.date,
+                    "commit_count": boundary.commit_count,
+                }
+            )
 
     # Active contributors (sorted by commit count descending)
     contributors: list[dict[str, Any]] = [
-        {"name": name, "commits": count}
-        for name, count in author_counter.most_common()
+        {"name": name, "commits": count} for name, count in author_counter.most_common()
     ]
 
     # Type distribution (sorted by count descending)

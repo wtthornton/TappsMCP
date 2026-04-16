@@ -29,12 +29,26 @@ _FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 _DOC_EXTENSIONS: frozenset[str] = frozenset({".md", ".rst", ".txt"})
 
 # Directories to skip.
-_SKIP_DIRS: frozenset[str] = frozenset({
-    ".git", ".hg", ".svn", "__pycache__", "node_modules",
-    ".venv", "venv", ".env", ".tox", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", "dist", "build",
-    ".eggs", ".tapps-mcp",
-})
+_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".env",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".eggs",
+        ".tapps-mcp",
+    }
+)
 
 
 class BrokenLink(BaseModel):
@@ -189,13 +203,15 @@ def _check_backtick_refs(
         if line_num in fenced_lines:
             # Record matches inside fenced blocks as skipped
             for match in _BACKTICK_REF_RE.finditer(line):
-                refs.append(BacktickReference(
-                    source_file=rel_source,
-                    line=line_num,
-                    reference=match.group(1),
-                    exists=False,
-                    reason="skipped_code_block",
-                ))
+                refs.append(
+                    BacktickReference(
+                        source_file=rel_source,
+                        line=line_num,
+                        reference=match.group(1),
+                        exists=False,
+                        reason="skipped_code_block",
+                    )
+                )
             continue
 
         for match in _BACKTICK_REF_RE.finditer(line):
@@ -206,21 +222,25 @@ def _check_backtick_refs(
             target_from_file = file_dir / ref_path
 
             if target_from_root.exists() or target_from_file.exists():
-                refs.append(BacktickReference(
-                    source_file=rel_source,
-                    line=line_num,
-                    reference=ref_path,
-                    exists=True,
-                    reason="found",
-                ))
+                refs.append(
+                    BacktickReference(
+                        source_file=rel_source,
+                        line=line_num,
+                        reference=ref_path,
+                        exists=True,
+                        reason="found",
+                    )
+                )
             else:
-                refs.append(BacktickReference(
-                    source_file=rel_source,
-                    line=line_num,
-                    reference=ref_path,
-                    exists=False,
-                    reason="not_found",
-                ))
+                refs.append(
+                    BacktickReference(
+                        source_file=rel_source,
+                        line=line_num,
+                        reference=ref_path,
+                        exists=False,
+                        reason="not_found",
+                    )
+                )
 
     return refs
 
@@ -264,13 +284,15 @@ def _check_file_links(
                 if anchor in local_anchors:
                     valid += 1
                 else:
-                    broken.append(BrokenLink(
-                        source_file=rel_source,
-                        line=line_num,
-                        link_text=link_text,
-                        link_target=link_target,
-                        reason="anchor_not_found",
-                    ))
+                    broken.append(
+                        BrokenLink(
+                            source_file=rel_source,
+                            line=line_num,
+                            link_text=link_text,
+                            link_target=link_target,
+                            reason="anchor_not_found",
+                        )
+                    )
                 continue
 
             # Split file path and optional anchor
@@ -290,40 +312,47 @@ def _check_file_links(
             try:
                 target_path = (file_dir / file_part).resolve()
             except (OSError, ValueError):
-                broken.append(BrokenLink(
-                    source_file=rel_source,
-                    line=line_num,
-                    link_text=link_text,
-                    link_target=link_target,
-                    reason="invalid_path",
-                ))
+                broken.append(
+                    BrokenLink(
+                        source_file=rel_source,
+                        line=line_num,
+                        link_text=link_text,
+                        link_target=link_target,
+                        reason="invalid_path",
+                    )
+                )
                 continue
 
             if not target_path.exists():
-                broken.append(BrokenLink(
-                    source_file=rel_source,
-                    line=line_num,
-                    link_text=link_text,
-                    link_target=link_target,
-                    reason="file_not_found",
-                ))
+                broken.append(
+                    BrokenLink(
+                        source_file=rel_source,
+                        line=line_num,
+                        link_text=link_text,
+                        link_target=link_target,
+                        reason="file_not_found",
+                    )
+                )
                 continue
 
             # File exists; if there's an anchor, do best-effort check
             if anchor_part and target_path.suffix.lower() in _DOC_EXTENSIONS:
                 try:
                     target_content = target_path.read_text(
-                        encoding="utf-8", errors="replace",
+                        encoding="utf-8",
+                        errors="replace",
                     )
                     target_anchors = _extract_headings(target_content)
                     if anchor_part not in target_anchors:
-                        broken.append(BrokenLink(
-                            source_file=rel_source,
-                            line=line_num,
-                            link_text=link_text,
-                            link_target=link_target,
-                            reason="anchor_not_found",
-                        ))
+                        broken.append(
+                            BrokenLink(
+                                source_file=rel_source,
+                                line=line_num,
+                                link_text=link_text,
+                                link_target=link_target,
+                                reason="anchor_not_found",
+                            )
+                        )
                         continue
                 except OSError:
                     pass  # Can't read target file; treat as valid
@@ -379,7 +408,10 @@ class LinkChecker:
             # Check backtick file references
             fenced_lines = _find_fenced_blocks(content)
             bt_refs = _check_backtick_refs(
-                doc_file, project_root, content, fenced_lines,
+                doc_file,
+                project_root,
+                content,
+                fenced_lines,
             )
             all_backtick_refs.extend(bt_refs)
             for ref in bt_refs:
@@ -395,9 +427,7 @@ class LinkChecker:
             rel_name = str(
                 doc_file.relative_to(project_root),
             ).replace("\\", "/")
-            non_skipped_bt = sum(
-                1 for r in bt_refs if r.reason != "skipped_code_block"
-            )
+            non_skipped_bt = sum(1 for r in bt_refs if r.reason != "skipped_code_block")
             if total == 0 and non_skipped_bt == 0:
                 warnings.append(
                     f"No links or file references found in {rel_name}"

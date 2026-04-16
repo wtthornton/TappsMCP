@@ -27,9 +27,7 @@ class TestDocsSessionStart:
         assert "README.md" in existing_paths
 
     @pytest.mark.asyncio
-    async def test_session_start_recommends_missing_docs(
-        self, sample_project: Path
-    ) -> None:
+    async def test_session_start_recommends_missing_docs(self, sample_project: Path) -> None:
         from docs_mcp.server import docs_session_start
 
         result = await docs_session_start(project_root=str(sample_project))
@@ -60,9 +58,7 @@ class TestDocsSessionStart:
         assert _tool_calls.get("docs_session_start", 0) >= 1
 
     @pytest.mark.asyncio
-    async def test_session_start_detects_project_name(
-        self, sample_project: Path
-    ) -> None:
+    async def test_session_start_detects_project_name(self, sample_project: Path) -> None:
         from docs_mcp.server import docs_session_start
 
         result = await docs_session_start(project_root=str(sample_project))
@@ -95,9 +91,7 @@ class TestDocsSessionStart:
         assert result["elapsed_ms"] >= 0
 
     @pytest.mark.asyncio
-    async def test_session_start_well_documented_project(
-        self, docs_project: Path
-    ) -> None:
+    async def test_session_start_well_documented_project(self, docs_project: Path) -> None:
         from docs_mcp.server import docs_session_start
 
         result = await docs_session_start(project_root=str(docs_project))

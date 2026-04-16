@@ -94,7 +94,7 @@ def check_binary_version_mismatch() -> CheckResult:
         )
 
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [tapps_bin, "--version"],
             capture_output=True,
             text=True,
@@ -243,7 +243,11 @@ def check_mcp_client_config(
         (project_root / ".cursor" / "mcp.json", "mcpServers", "Cursor"),
         (project_root / ".vscode" / "mcp.json", "servers", "VS Code"),
         (project_root / ".mcp.json", "mcpServers", "Claude Code (project)"),
-        (project_root / ".claude" / "settings.json", "mcpServers", "Claude Code (project settings)"),
+        (
+            project_root / ".claude" / "settings.json",
+            "mcpServers",
+            "Claude Code (project settings)",
+        ),
         (base / ".claude.json", "mcpServers", "Claude Code (user)"),
         (base / ".claude" / "settings.json", "mcpServers", "Claude Code (settings)"),
     ]
@@ -359,9 +363,7 @@ def check_claude_md(project_root: Path) -> CheckResult:
     a missing CLAUDE.md reference is reported as a soft pass rather than a
     failure, since the project may target Cursor rather than Claude Code.
     """
-    cursor_rules_present = (
-        project_root / ".cursor" / "rules" / "tapps-pipeline.md"
-    ).exists()
+    cursor_rules_present = (project_root / ".cursor" / "rules" / "tapps-pipeline.md").exists()
     claude_md = project_root / "CLAUDE.md"
     if not claude_md.exists():
         if cursor_rules_present:
@@ -497,7 +499,8 @@ def check_claude_settings(project_root: Path) -> CheckResult:
 
 
 def _check_cursor_hooks_config(
-    project_root: Path, found: list[str],
+    project_root: Path,
+    found: list[str],
 ) -> CheckResult | None:
     """Validate .cursor/hooks.json existence, format, and platform. Returns failure or None."""
     cursor_hooks_json = project_root / ".cursor" / "hooks.json"
@@ -941,21 +944,25 @@ def _build_requirements_summary(
         name = _REQ_NAMES[req_num]
 
         if req_num == 1:
-            summary.append({
-                "requirement": req_num,
-                "name": name,
-                "status": "verify_in_session",
-                "checks": [],
-            })
+            summary.append(
+                {
+                    "requirement": req_num,
+                    "name": name,
+                    "status": "verify_in_session",
+                    "checks": [],
+                }
+            )
             continue
 
         if req_num == _NUM_REQUIREMENTS:
-            summary.append({
-                "requirement": req_num,
-                "name": name,
-                "status": "see_docs",
-                "checks": [],
-            })
+            summary.append(
+                {
+                    "requirement": req_num,
+                    "name": name,
+                    "status": "see_docs",
+                    "checks": [],
+                }
+            )
             continue
 
         mapped_checks = _REQ_CHECK_MAP.get(req_num, [])
@@ -974,12 +981,14 @@ def _build_requirements_summary(
         else:
             status = "fail"
 
-        summary.append({
-            "requirement": req_num,
-            "name": name,
-            "status": status,
-            "checks": [c for c in mapped_checks if c in check_by_name],
-        })
+        summary.append(
+            {
+                "requirement": req_num,
+                "name": name,
+                "status": status,
+                "checks": [c for c in mapped_checks if c in check_by_name],
+            }
+        )
 
     return summary
 
@@ -1042,8 +1051,7 @@ def check_uv_path_mismatch(project_root: Path) -> CheckResult:
         False,
         f"MCP config(s) use bare 'tapps-mcp' command but project has "
         f"tapps-mcp in uv extra '{extra}': {', '.join(warnings)}",
-        f"Re-run: tapps-mcp init --force (auto-detects uv) "
-        f"or use --uv --uv-extra {extra}",
+        f"Re-run: tapps-mcp init --force (auto-detects uv) or use --uv --uv-extra {extra}",
     )
 
 
@@ -1075,9 +1083,7 @@ def check_plaintext_secrets(project_root: Path) -> CheckResult:
                 if isinstance(entry, dict):
                     secrets = _collect_plaintext_secrets(entry)
                     if secrets:
-                        findings.append(
-                            f"{path.name} ({server_name}): {', '.join(secrets)}"
-                        )
+                        findings.append(f"{path.name} ({server_name}): {', '.join(secrets)}")
     if not findings:
         return CheckResult(
             "MCP secrets",
@@ -1122,12 +1128,14 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_plaintext_secrets(root))
     checks.append(check_uv_path_mismatch(root))
     if quick:
-        checks.append(CheckResult(
-            "Quality tools",
-            True,
-            "Skipped (quick mode)",
-            "Run without --quick for full tool version checks",
-        ))
+        checks.append(
+            CheckResult(
+                "Quality tools",
+                True,
+                "Skipped (quick mode)",
+                "Run without --quick for full tool version checks",
+            )
+        )
     else:
         checks.extend(check_quality_tools())
     return checks
@@ -1151,9 +1159,7 @@ def _read_engagement_level(project_root: Path) -> str | None:
     return None
 
 
-def run_doctor_structured(
-    *, project_root: str = ".", quick: bool = False
-) -> dict[str, Any]:
+def run_doctor_structured(*, project_root: str = ".", quick: bool = False) -> dict[str, Any]:
     """Run all diagnostic checks and return structured results.
 
     Returns a dict with ``checks``, ``pass_count``, ``fail_count``,

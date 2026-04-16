@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,7 +9,6 @@ import pytest
 
 from tapps_core.metrics.judge import (
     JudgeDefinition,
-    JudgeResult,
     run_judge,
     run_judges,
 )
@@ -142,9 +140,11 @@ class TestRunJudges:
     async def test_mixed_judges(self, tmp_path: Path) -> None:
         f = tmp_path / "file.py"
         f.write_text("import os\n")
-        result = await run_judges([
-            {"type": "exists", "target": str(f)},
-            {"type": "grep", "target": str(f), "expect": "import os"},
-        ])
+        result = await run_judges(
+            [
+                {"type": "exists", "target": str(f)},
+                {"type": "grep", "target": str(f), "expect": "import os"},
+            ]
+        )
         assert result["judges_passed"] is True
         assert len(result["judge_results"]) == 2

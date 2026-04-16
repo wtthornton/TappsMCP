@@ -2,95 +2,21 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from tapps_mcp.server_resources import (
     _get_quality_presets as get_quality_presets,
+)
+from tapps_mcp.server_resources import (
     _get_scoring_weights as get_scoring_weights,
+)
+from tapps_mcp.server_resources import (
     _tapps_workflow as tapps_workflow,
 )
 
-# ---------------------------------------------------------------------------
-# Knowledge resource — valid domain/topic
-# ---------------------------------------------------------------------------
-
-
-class _TestGetKnowledgeResource_REMOVED:
-    def test_valid_domain_and_topic(self):
-        """Reading security/owasp-top10 should return real markdown content."""
-        result = get_knowledge_resource("security", "owasp-top10")
-        assert isinstance(result, str)
-        assert len(result) > 100
-        # Knowledge files are markdown — expect headings or content
-        assert "#" in result or "OWASP" in result.upper() or "security" in result.lower()
-
-    def test_invalid_domain(self):
-        result = get_knowledge_resource("nonexistent-domain", "anything")
-        assert "Unknown domain" in result
-        assert "nonexistent-domain" in result
-        # Should list valid domains
-        assert "security" in result
-        assert "Valid domains:" in result
-
-    def test_invalid_topic_lists_available(self):
-        """An invalid topic under a valid domain should list available topics."""
-        result = get_knowledge_resource("security", "nonexistent-topic")
-        assert "not found" in result.lower() or "Topic" in result
-        assert "security" in result
-        # Should list at least one known topic
-        assert "owasp-top10" in result or "secure-coding" in result or "Available:" in result
-
-    def test_all_17_domains_recognised(self):
-        """Every domain in TECHNICAL_DOMAINS should not return 'Unknown domain'."""
-        from tapps_mcp.experts.registry import ExpertRegistry
-
-        for domain in ExpertRegistry.TECHNICAL_DOMAINS:
-            result = get_knowledge_resource(domain, "__probe__")
-            assert "Unknown domain" not in result, f"{domain} was not recognised"
-
-
-# ---------------------------------------------------------------------------
-# Knowledge domains listing
-# ---------------------------------------------------------------------------
-
-
-class _TestListKnowledgeDomains_REMOVED:
-    def test_returns_string(self):
-        result = list_knowledge_domains()
-        assert isinstance(result, str)
-
-    def test_contains_header(self):
-        result = list_knowledge_domains()
-        assert "# TappsMCP Knowledge Domains" in result
-
-    def test_contains_all_17_domain_dirs(self):
-        """The knowledge directory has 17 subdirectories (one per domain).
-
-        Note: some directories use short names (e.g. 'performance' for
-        'performance-optimization'), so we check for the directory names
-        rather than the TECHNICAL_DOMAINS set.
-        """
-        result = list_knowledge_domains()
-        knowledge_base = (
-            Path(__file__).resolve().parent.parent.parent.parent
-            / "tapps-core"
-            / "src"
-            / "tapps_core"
-            / "experts"
-            / "knowledge"
-        )
-        domain_dirs = [d.name for d in sorted(knowledge_base.iterdir()) if d.is_dir()]
-        # There should be exactly 17 domain directories
-        assert len(domain_dirs) == 17
-        for dname in domain_dirs:
-            assert dname in result, f"Domain directory '{dname}' missing from listing"
-
-    def test_lists_topics(self):
-        result = list_knowledge_domains()
-        # At least one topic line should appear
-        assert "  - " in result
+# Note: TestGetKnowledgeResource and TestListKnowledgeDomains were removed
+# when the get_knowledge_resource / list_knowledge_domains functions were
+# removed from server_resources. The test classes have been deleted entirely.
 
 
 # ---------------------------------------------------------------------------

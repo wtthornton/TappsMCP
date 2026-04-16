@@ -94,9 +94,7 @@ async def test_auto_run_true_runs_validate_when_score_missing() -> None:
 
     with (
         patch(_EVALUATE_TARGET, side_effect=evaluate_side_effect),
-        patch(
-            _VC_TARGET, new_callable=AsyncMock, return_value=_mock_vc_result()
-        ) as mock_vc,
+        patch(_VC_TARGET, new_callable=AsyncMock, return_value=_mock_vc_result()) as mock_vc,
         patch(_SETTINGS_TARGET, return_value=mock_settings),
     ):
         from tapps_mcp.server import tapps_checklist

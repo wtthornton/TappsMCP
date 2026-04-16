@@ -92,8 +92,17 @@ class ReleaseNotesGenerator:
                     fixes.append(f"**{parsed.scope}:** {description}")
                 else:
                     fixes.append(description)
-            elif parsed.type in ("docs", "refactor", "perf", "test", "chore",
-                                  "style", "ci", "build", "revert"):
+            elif parsed.type in (
+                "docs",
+                "refactor",
+                "perf",
+                "test",
+                "chore",
+                "style",
+                "ci",
+                "build",
+                "revert",
+            ):
                 if parsed.scope:
                     other_changes.append(f"**{parsed.scope}:** {description}")
                 else:

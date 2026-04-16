@@ -331,9 +331,8 @@ class TestResourceRegistration:
 
     def test_mcp_has_status_resource(self) -> None:
         """Verify the docs://status resource is registered."""
-        from docs_mcp.server import mcp
-
         import docs_mcp.server_resources  # noqa: F401
+        from docs_mcp.server import mcp
 
         assert mcp is not None
 

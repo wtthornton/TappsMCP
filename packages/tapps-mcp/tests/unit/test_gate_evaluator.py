@@ -108,9 +108,9 @@ class TestFailureWeighting:
 
         assert result.passed is False
         assert len(result.failures) >= 2
-        assert any(
-            "highest-weight categories first" in w for w in result.warnings
-        ), f"Priority suggestion missing from warnings: {result.warnings}"
+        assert any("highest-weight categories first" in w for w in result.warnings), (
+            f"Priority suggestion missing from warnings: {result.warnings}"
+        )
 
     def test_overall_pass_but_security_floor_fail(self) -> None:
         """Overall=85 but security=4.0 fails due to security floor."""

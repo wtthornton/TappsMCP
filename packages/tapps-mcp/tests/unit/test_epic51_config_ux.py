@@ -24,9 +24,7 @@ class TestTechStackPreservation:
 
     def test_tech_stack_preserved_by_default(self, tmp_path):
         """Existing TECH_STACK.md with custom content is preserved by default."""
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname = 'foo'\ndependencies = []\n"
-        )
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'foo'\ndependencies = []\n")
         custom_content = "# My Custom Tech Stack\n\nHand-curated content.\n"
         (tmp_path / "TECH_STACK.md").write_text(custom_content)
 
@@ -38,14 +36,10 @@ class TestTechStackPreservation:
 
     def test_tech_stack_overwrite_when_explicit(self, tmp_path):
         """overwrite_tech_stack_md=True overwrites existing file."""
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname = 'foo'\ndependencies = []\n"
-        )
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'foo'\ndependencies = []\n")
         (tmp_path / "TECH_STACK.md").write_text("# Old content\n")
 
-        result = bootstrap_pipeline(
-            tmp_path, **self._common, overwrite_tech_stack_md=True
-        )
+        result = bootstrap_pipeline(tmp_path, **self._common, overwrite_tech_stack_md=True)
 
         assert result["tech_stack_md"]["action"] in ("created", "updated")
         content = (tmp_path / "TECH_STACK.md").read_text()
@@ -54,9 +48,7 @@ class TestTechStackPreservation:
 
     def test_tech_stack_created_when_missing(self, tmp_path):
         """When no TECH_STACK.md exists, it is created normally."""
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname = 'foo'\ndependencies = []\n"
-        )
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'foo'\ndependencies = []\n")
 
         result = bootstrap_pipeline(tmp_path, **self._common)
 
@@ -67,9 +59,7 @@ class TestTechStackPreservation:
 
     def test_tech_stack_skipped_when_disabled(self, tmp_path):
         """create_tech_stack_md=False skips entirely."""
-        result = bootstrap_pipeline(
-            tmp_path, **self._common, create_tech_stack_md=False
-        )
+        result = bootstrap_pipeline(tmp_path, **self._common, create_tech_stack_md=False)
         assert result["tech_stack_md"]["action"] == "skipped"
 
     def test_bootstrap_config_has_overwrite_field(self):
@@ -82,9 +72,7 @@ class TestTechStackPreservation:
 
     def test_bootstrap_config_passed_through(self, tmp_path):
         """Config object with overwrite_tech_stack_md=True works."""
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname = 'foo'\ndependencies = []\n"
-        )
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'foo'\ndependencies = []\n")
         (tmp_path / "TECH_STACK.md").write_text("# Custom\n")
 
         cfg = BootstrapConfig(
@@ -107,9 +95,7 @@ class TestShowConfigCli:
     def test_show_config_outputs_yaml(self, tmp_path):
         """show-config prints YAML to stdout."""
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["show-config", "--project-root", str(tmp_path)]
-        )
+        result = runner.invoke(main, ["show-config", "--project-root", str(tmp_path)])
         assert result.exit_code == 0
         assert "project_root:" in result.output
         assert "quality_preset:" in result.output
@@ -118,21 +104,15 @@ class TestShowConfigCli:
     def test_show_config_redacts_api_key(self, tmp_path):
         """API keys should be redacted in output."""
         runner = CliRunner()
-        with patch.dict(
-            "os.environ", {"TAPPS_MCP_CONTEXT7_API_KEY": "secret-key-123"}
-        ):
-            result = runner.invoke(
-                main, ["show-config", "--project-root", str(tmp_path)]
-            )
+        with patch.dict("os.environ", {"TAPPS_MCP_CONTEXT7_API_KEY": "secret-key-123"}):
+            result = runner.invoke(main, ["show-config", "--project-root", str(tmp_path)])
         assert result.exit_code == 0
         assert "secret-key-123" not in result.output
 
     def test_show_config_includes_nested_settings(self, tmp_path):
         """Nested models like memory and adaptive should appear."""
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["show-config", "--project-root", str(tmp_path)]
-        )
+        result = runner.invoke(main, ["show-config", "--project-root", str(tmp_path)])
         assert result.exit_code == 0
         assert "memory:" in result.output
         assert "adaptive:" in result.output
@@ -166,9 +146,7 @@ class TestInitWarnings:
         (tmp_path / "pyproject.toml").write_text(
             "[project]\nname = 'foo'\ndependencies = ['requests']\n"
         )
-        result = bootstrap_pipeline(
-            tmp_path, **self._common, warm_cache_from_tech_stack=True
-        )
+        result = bootstrap_pipeline(tmp_path, **self._common, warm_cache_from_tech_stack=True)
 
         assert "warnings" in result
         assert isinstance(result["warnings"], list)
@@ -211,9 +189,7 @@ class TestInitWarnings:
         (tmp_path / "pyproject.toml").write_text(
             "[project]\nname = 'foo'\ndependencies = ['requests']\n"
         )
-        result = bootstrap_pipeline(
-            tmp_path, **self._common, warm_cache_from_tech_stack=True
-        )
+        result = bootstrap_pipeline(tmp_path, **self._common, warm_cache_from_tech_stack=True)
         cw = result.get("cache_warming", {})
         if cw.get("skipped") == "no_api_key":
             warning_text = cw.get("warning", "")

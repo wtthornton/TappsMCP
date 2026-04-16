@@ -7,14 +7,11 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.helpers import make_settings
-
 from docs_mcp.validators.style import (
     FileStyleResult,
     HeadingConsistencyRule,
     JargonRule,
     PassiveVoiceRule,
-    RuleBase,
     SentenceLengthRule,
     StyleChecker,
     StyleConfig,
@@ -26,6 +23,7 @@ from docs_mcp.validators.style import (
     _is_sentence_case,
     _is_title_case,
 )
+from tests.helpers import make_settings
 
 
 def _write(path: Path, content: str) -> None:
@@ -153,10 +151,7 @@ class TestCalculateFileScore:
         assert _calculate_file_score(issues) == 98.0
 
     def test_score_floors_at_zero(self) -> None:
-        issues = [
-            StyleIssue(rule="test", severity="error", line=i, message="x")
-            for i in range(15)
-        ]
+        issues = [StyleIssue(rule="test", severity="error", line=i, message="x") for i in range(15)]
         assert _calculate_file_score(issues) == 0.0
 
 
@@ -511,11 +506,7 @@ class TestStyleChecker:
         assert report.total_files >= 1
 
     def test_issues_sorted_by_line(self) -> None:
-        content = (
-            "We leverage this.\n"
-            "Normal line.\n"
-            "We utilize that.\n"
-        )
+        content = "We leverage this.\nNormal line.\nWe utilize that.\n"
         config = StyleConfig(enabled_rules=["jargon"])
         checker = StyleChecker(config)
         result = checker.check_content(content)

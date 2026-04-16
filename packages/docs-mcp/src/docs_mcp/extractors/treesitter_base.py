@@ -110,7 +110,7 @@ class TreeSitterExtractor(abc.ABC):
     @staticmethod
     def _node_text(node: Any, source: bytes) -> str:
         """Extract the UTF-8 text of a tree-sitter node."""
-        return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
+        return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
 
     @staticmethod
     def _node_line(node: Any) -> int:
@@ -143,9 +143,7 @@ class TreeSitterExtractor(abc.ABC):
     ) -> FunctionInfo:
         """Build a ``FunctionInfo`` with a computed signature."""
         params = parameters or []
-        params_str = ", ".join(
-            self._format_param(p) for p in params
-        )
+        params_str = ", ".join(self._format_param(p) for p in params)
         sig = f"({params_str})"
         if return_annotation:
             sig += f" -> {return_annotation}"
@@ -203,13 +201,13 @@ class TreeSitterExtractor(abc.ABC):
 
         Works for ``//``, ``///``, and ``#`` style line comments.
         """
-        lines = source[:node.start_byte].decode("utf-8", errors="replace").split("\n")
+        lines = source[: node.start_byte].decode("utf-8", errors="replace").split("\n")
         doc_lines: list[str] = []
         idx = len(lines) - 2  # line before the node
         while idx >= 0:
             stripped = lines[idx].strip()
             if stripped.startswith(prefix):
-                text = stripped[len(prefix):].strip()
+                text = stripped[len(prefix) :].strip()
                 doc_lines.append(text)
                 idx -= 1
             elif stripped == "":
@@ -236,8 +234,7 @@ class TreeSitterExtractor(abc.ABC):
             if text.startswith("/**") and text.endswith("*/"):
                 body = text[3:-2]
                 cleaned = "\n".join(
-                    line.strip().lstrip("*").strip()
-                    for line in body.split("\n")
+                    line.strip().lstrip("*").strip() for line in body.split("\n")
                 ).strip()
                 return cleaned or None
         return None

@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 
 from tapps_core.memory.reranker import (
-    NoopReranker,
     RERANKER_TOP_CANDIDATES,
+    NoopReranker,
     get_reranker,
 )
 
@@ -75,6 +75,7 @@ class TestGetReranker:
         """When flashrank is not installed, get_reranker falls back to NoopReranker."""
         try:
             import flashrank  # type: ignore[import-untyped]  # noqa: F401
+
             pytest.skip("flashrank is installed — fallback path not exercised")
         except ImportError:
             pass
@@ -88,6 +89,7 @@ class TestGetReranker:
         except ImportError:
             pytest.skip("flashrank not installed")
         from tapps_core.memory.reranker import FlashRankReranker
+
         r = get_reranker(enabled=True)
         assert isinstance(r, FlashRankReranker)
 

@@ -6,10 +6,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-import pytest
-
-from docs_mcp.generators.purpose import PurposeGenerator
 from docs_mcp.generators.doc_index import DocIndexGenerator
+from docs_mcp.generators.purpose import PurposeGenerator
 from docs_mcp.validators.cross_ref import CrossRefValidator
 from tests.helpers import make_settings
 
@@ -24,9 +22,9 @@ def _make_pyproject(root: Path, **kwargs: Any) -> None:
     deps_str = ", ".join(f'"{d}"' for d in deps)
     content = f"""
 [project]
-name = "{kwargs.get('name', 'my-project')}"
+name = "{kwargs.get("name", "my-project")}"
 version = "1.0.0"
-description = "{kwargs.get('description', 'A test project')}"
+description = "{kwargs.get("description", "A test project")}"
 dependencies = [{deps_str}]
 """
     if "python_version" in kwargs:

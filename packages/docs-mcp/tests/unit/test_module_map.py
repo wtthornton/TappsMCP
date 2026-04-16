@@ -7,7 +7,6 @@ from pathlib import Path
 from docs_mcp.analyzers.models import ModuleMap, ModuleNode
 from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
 
-
 # ===================================================================
 # Helpers
 # ===================================================================

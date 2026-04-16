@@ -63,26 +63,30 @@ def render_workflow_md() -> str:
     ]
     for step in SETUP_STEPS:
         lines.append(f"- {step}")
-    lines.extend([
-        "",
-        "## Update (after upgrading TappsMCP)",
-        "",
-        f"- {UPDATE_STEP}",
-        "",
-        "## Daily workflow",
-        "",
-        "Every session:",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Update (after upgrading TappsMCP)",
+            "",
+            f"- {UPDATE_STEP}",
+            "",
+            "## Daily workflow",
+            "",
+            "Every session:",
+            "",
+        ]
+    )
     for step in DAILY_STEPS:
         lines.append(f"- {step}")
-    lines.extend([
-        "",
-        "Use `task_type` in tapps_checklist: feature, bugfix, refactor, security, review, or epic.",
-        "",
-        "## When to use other tools",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "Use `task_type` in tapps_checklist: feature, bugfix, refactor, security, review, or epic.",
+            "",
+            "## When to use other tools",
+            "",
+        ]
+    )
     for tool, when in WHEN_TO_USE:
         lines.append(f"- **{tool}** — {when}")
     lines.append("")

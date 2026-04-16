@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 
 class TestResolveAllowedTools:
     """Test _resolve_allowed_tools with various settings."""
@@ -23,11 +21,13 @@ class TestResolveAllowedTools:
             [],
             None,
         )
-        assert allowed == frozenset({
-            "docs_session_start",
-            "docs_project_scan",
-            "docs_check_links",
-        })
+        assert allowed == frozenset(
+            {
+                "docs_session_start",
+                "docs_project_scan",
+                "docs_check_links",
+            }
+        )
 
     def test_disabled_tools_excludes_from_full(self) -> None:
         from docs_mcp.server import ALL_DOCS_TOOL_NAMES, _resolve_allowed_tools
@@ -37,10 +37,12 @@ class TestResolveAllowedTools:
             ["docs_generate_diagram", "docs_validate_epic"],
             None,
         )
-        assert allowed == ALL_DOCS_TOOL_NAMES - frozenset({
-            "docs_generate_diagram",
-            "docs_validate_epic",
-        })
+        assert allowed == ALL_DOCS_TOOL_NAMES - frozenset(
+            {
+                "docs_generate_diagram",
+                "docs_validate_epic",
+            }
+        )
         assert "docs_generate_diagram" not in allowed
         assert "docs_validate_epic" not in allowed
 
@@ -128,7 +130,7 @@ class TestToolPresetConstants:
             "docs_check_completeness",
             "docs_check_links",
         }
-        assert DOCS_TOOL_PRESET_CORE == expected
+        assert expected == DOCS_TOOL_PRESET_CORE
 
     def test_all_tool_names_count(self) -> None:
         from docs_mcp.server import ALL_DOCS_TOOL_NAMES

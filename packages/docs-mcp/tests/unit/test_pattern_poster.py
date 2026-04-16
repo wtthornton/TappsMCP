@@ -13,11 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from docs_mcp.generators.diagrams import DiagramGenerator
 from docs_mcp.generators.pattern_poster import ArchPatternPosterGenerator
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -98,7 +95,14 @@ class TestGenerateComparison:
     def test_contains_all_six_archetypes(self) -> None:
         gen = ArchPatternPosterGenerator()
         html = gen.generate_comparison()
-        for arch in ["EVENT DRIVEN", "LAYERED", "MONOLITH", "MICROSERVICE", "PIPELINE", "HEXAGONAL"]:
+        for arch in [
+            "EVENT DRIVEN",
+            "LAYERED",
+            "MONOLITH",
+            "MICROSERVICE",
+            "PIPELINE",
+            "HEXAGONAL",
+        ]:
             assert arch in html
 
     def test_title_banner_present(self) -> None:
@@ -140,7 +144,7 @@ class TestPanelSvgTopologies:
     """Each archetype must produce SVG with its canonical marker elements."""
 
     def _svg(self, arch: str) -> str:
-        return ArchPatternPosterGenerator()._panel_svg(arch, [], w=280, h=200)  # noqa: SLF001
+        return ArchPatternPosterGenerator()._panel_svg(arch, [], w=280, h=200)
 
     def test_layered_has_four_role_bands(self) -> None:
         svg = self._svg("layered")
@@ -198,7 +202,7 @@ class TestPanelSvgTopologies:
     def test_all_archetypes_have_background_rect(self) -> None:
         for arch in ArchPatternPosterGenerator.ALL_ARCHETYPES:
             svg = self._svg(arch)
-            assert '#0a0a0f' in svg, f"{arch} missing dark background"
+            assert "#0a0a0f" in svg, f"{arch} missing dark background"
 
     def test_all_archetypes_have_animated_element(self) -> None:
         """Each archetype SVG must embed at least one animated CSS class."""
@@ -211,15 +215,12 @@ class TestPanelSvgTopologies:
             "pipeline": "dot-pipe",
         }
         for arch, css_class in animated_classes.items():
-            svg = ArchPatternPosterGenerator()._panel_svg(arch, [], w=280, h=200)  # noqa: SLF001
+            svg = ArchPatternPosterGenerator()._panel_svg(arch, [], w=280, h=200)
             assert css_class in svg, f"{arch}: expected CSS class '{css_class}' not found in SVG"
 
     def test_archetypes_produce_distinct_svgs(self) -> None:
         """No two archetypes should produce identical SVG content."""
-        svgs = {
-            arch: self._svg(arch)
-            for arch in ArchPatternPosterGenerator.ALL_ARCHETYPES
-        }
+        svgs = {arch: self._svg(arch) for arch in ArchPatternPosterGenerator.ALL_ARCHETYPES}
         unique = set(svgs.values())
         assert len(unique) == len(ArchPatternPosterGenerator.ALL_ARCHETYPES), (
             "Two or more archetypes produced identical SVG output"
@@ -243,8 +244,14 @@ class TestDiagramGeneratorIntegration:
             patch("docs_mcp.generators.diagrams.DiagramGenerator._generate_pattern_card") as mock,
         ):
             mock.return_value = MagicMock(
-                diagram_type="pattern_card", format="html", content="<html/>",
-                node_count=0, edge_count=0, degraded=False, scanned_dirs=[], skipped_count=0,
+                diagram_type="pattern_card",
+                format="html",
+                content="<html/>",
+                node_count=0,
+                edge_count=0,
+                degraded=False,
+                scanned_dirs=[],
+                skipped_count=0,
             )
             result = gen.generate(tmp_path, diagram_type="pattern_card", output_format="html")
         mock.assert_called_once_with(tmp_path, "html")
@@ -256,8 +263,14 @@ class TestDiagramGeneratorIntegration:
             patch("docs_mcp.generators.diagrams.DiagramGenerator._generate_pattern_card") as mock,
         ):
             mock.return_value = MagicMock(
-                diagram_type="pattern_card", format="mermaid", content="flowchart TD",
-                node_count=0, edge_count=0, degraded=False, scanned_dirs=[], skipped_count=0,
+                diagram_type="pattern_card",
+                format="mermaid",
+                content="flowchart TD",
+                node_count=0,
+                edge_count=0,
+                degraded=False,
+                scanned_dirs=[],
+                skipped_count=0,
             )
             result = gen.generate(tmp_path, diagram_type="pattern_card", output_format="mermaid")
         mock.assert_called_once_with(tmp_path, "mermaid")
@@ -270,17 +283,21 @@ class TestDiagramGeneratorIntegration:
             ) as mock,
         ):
             mock.return_value = MagicMock(
-                diagram_type="pattern_comparison", format="html", content="<html/>",
-                node_count=6, edge_count=0, degraded=False, scanned_dirs=[], skipped_count=0,
+                diagram_type="pattern_comparison",
+                format="html",
+                content="<html/>",
+                node_count=6,
+                edge_count=0,
+                degraded=False,
+                scanned_dirs=[],
+                skipped_count=0,
             )
             gen.generate(tmp_path, diagram_type="pattern_comparison", output_format="html")
         mock.assert_called_once_with(tmp_path, "html")
 
     def test_pattern_comparison_non_html_returns_degraded(self, tmp_path: Path) -> None:
         gen = DiagramGenerator()
-        result = gen.generate(
-            tmp_path, diagram_type="pattern_comparison", output_format="mermaid"
-        )
+        result = gen.generate(tmp_path, diagram_type="pattern_comparison", output_format="mermaid")
         assert result.degraded is True
         assert result.content == ""
 
@@ -298,9 +315,7 @@ class TestDiagramGeneratorIntegration:
 class TestAutoPosterForSmallProjects:
     """dependency diagram auto-selects pattern_card when project is small."""
 
-    def test_small_project_redirects_dependency_to_pattern_card(
-        self, tmp_path: Path
-    ) -> None:
+    def test_small_project_redirects_dependency_to_pattern_card(self, tmp_path: Path) -> None:
         gen = DiagramGenerator()
         fake_mm = MagicMock()
         # 5 nodes → below _POSTER_AUTO_THRESHOLD (15)
@@ -345,9 +360,7 @@ class TestAutoPosterForSmallProjects:
                 "docs_mcp.analyzers.module_map.ModuleMapAnalyzer.analyze",
                 return_value=fake_mm,
             ),
-            patch(
-                "docs_mcp.generators.diagrams.DiagramGenerator._generate_dependency"
-            ) as mock_dep,
+            patch("docs_mcp.generators.diagrams.DiagramGenerator._generate_dependency") as mock_dep,
         ):
             mock_dep.return_value = MagicMock(
                 diagram_type="dependency",
@@ -368,9 +381,7 @@ class TestAutoPosterForSmallProjects:
         """d2/plantuml formats skip auto-redirect (only mermaid/html trigger it)."""
         gen = DiagramGenerator()
         with (
-            patch(
-                "docs_mcp.generators.diagrams.DiagramGenerator._generate_dependency"
-            ) as mock_dep,
+            patch("docs_mcp.generators.diagrams.DiagramGenerator._generate_dependency") as mock_dep,
         ):
             mock_dep.return_value = MagicMock(
                 diagram_type="dependency",
@@ -399,7 +410,7 @@ class TestAdrCrossLink:
 
     def test_returns_none_when_no_adr_dirs(self, tmp_path: Path) -> None:
         gen = DiagramGenerator()
-        result = gen._find_adr_for_archetype(tmp_path, "layered")  # noqa: SLF001
+        result = gen._find_adr_for_archetype(tmp_path, "layered")
         assert result is None
 
     def test_finds_adr_in_docs_adr(self, tmp_path: Path) -> None:
@@ -409,7 +420,7 @@ class TestAdrCrossLink:
         adr_file.write_text("# ADR-0001\n\nWe adopt the layered pattern.\n")
 
         gen = DiagramGenerator()
-        result = gen._find_adr_for_archetype(tmp_path, "layered")  # noqa: SLF001
+        result = gen._find_adr_for_archetype(tmp_path, "layered")
         assert result == "docs/adr/0001-layered-architecture.md"
 
     def test_finds_adr_in_docs_decisions(self, tmp_path: Path) -> None:
@@ -418,7 +429,7 @@ class TestAdrCrossLink:
         (dec_dir / "0002-event-driven.md").write_text("Use event_driven approach.\n")
 
         gen = DiagramGenerator()
-        result = gen._find_adr_for_archetype(tmp_path, "event_driven")  # noqa: SLF001
+        result = gen._find_adr_for_archetype(tmp_path, "event_driven")
         assert result == "docs/decisions/0002-event-driven.md"
 
     def test_returns_none_when_no_keyword_match(self, tmp_path: Path) -> None:
@@ -427,21 +438,19 @@ class TestAdrCrossLink:
         (adr_dir / "0001-something-else.md").write_text("Nothing about architecture here.\n")
 
         gen = DiagramGenerator()
-        result = gen._find_adr_for_archetype(tmp_path, "hexagonal")  # noqa: SLF001
+        result = gen._find_adr_for_archetype(tmp_path, "hexagonal")
         assert result is None
 
     def test_mermaid_output_includes_adr_comment(self) -> None:
         gen = DiagramGenerator()
         result = _mock_result("layered", 0.9)
-        output = gen._render_pattern_card_mermaid(  # noqa: SLF001
-            result, [], adr_link="docs/adr/0001-layered.md"
-        )
+        output = gen._render_pattern_card_mermaid(result, [], adr_link="docs/adr/0001-layered.md")
         assert "%% ADR: docs/adr/0001-layered.md" in output
 
     def test_mermaid_output_no_comment_when_no_adr(self) -> None:
         gen = DiagramGenerator()
         result = _mock_result("layered", 0.9)
-        output = gen._render_pattern_card_mermaid(result, [])  # noqa: SLF001
+        output = gen._render_pattern_card_mermaid(result, [])
         assert "%% ADR:" not in output
 
     def test_generate_single_includes_adr_link_html(self) -> None:
@@ -457,6 +466,7 @@ class TestAdrCrossLink:
 
     def test_diagram_result_carries_adr_link(self) -> None:
         from docs_mcp.generators.diagrams import DiagramResult
+
         r = DiagramResult(
             diagram_type="pattern_card",
             format="mermaid",
@@ -467,6 +477,7 @@ class TestAdrCrossLink:
 
     def test_diagram_result_adr_link_defaults_none(self) -> None:
         from docs_mcp.generators.diagrams import DiagramResult
+
         r = DiagramResult(diagram_type="pattern_card", format="mermaid", content="")
         assert r.adr_link is None
 
@@ -486,13 +497,15 @@ class TestAdrCrossLink:
 
         with (
             patch("docs_mcp.analyzers.module_map.ModuleMapAnalyzer.analyze", return_value=mock_mm),
-            patch("docs_mcp.analyzers.dependency.ImportGraphBuilder.build", return_value=mock_graph),
+            patch(
+                "docs_mcp.analyzers.dependency.ImportGraphBuilder.build", return_value=mock_graph
+            ),
             patch(
                 "docs_mcp.analyzers.pattern.PatternClassifier.classify",
                 return_value=mock_cls_result,
             ),
         ):
-            diagram = gen._generate_pattern_card(tmp_path, "mermaid")  # noqa: SLF001
+            diagram = gen._generate_pattern_card(tmp_path, "mermaid")
 
         assert diagram.adr_link == "docs/adr/0001-layered.md"
         assert "%% ADR: docs/adr/0001-layered.md" in diagram.content

@@ -26,9 +26,7 @@ _REQUIRED_INSTANCE_FIELDS: dict[str, Any] = {
     "instance_id": "cli-test-001",
     "repo": "owner/repo",
     "problem_description": "Fix the bug.",
-    "clean_pr_patch": (
-        "--- a/f.py\n+++ b/f.py\n@@ -1 +1 @@\n-old\n+new\n"
-    ),
+    "clean_pr_patch": ("--- a/f.py\n+++ b/f.py\n@@ -1 +1 @@\n-old\n+new\n"),
     "test_commands": ["pytest tests/"],
     "test_file_names": ["tests/test_foo.py"],
     "test_file_contents": {"tests/test_foo.py": "def test(): pass"},
@@ -77,11 +75,7 @@ def _write_run_data(
             f.write(result.model_dump_json() + "\n")
 
     # Write metadata
-    mode = (
-        effective_results[0].context_mode
-        if effective_results
-        else effective_config.context_mode
-    )
+    mode = effective_results[0].context_mode if effective_results else effective_config.context_mode
     metadata = RunMetadata(
         run_id=run_id,
         config=effective_config,
@@ -118,7 +112,8 @@ class TestBenchmarkGroupHelp:
         """``tapps-mcp benchmark run --help`` shows all options."""
         runner = CliRunner()
         result = runner.invoke(
-            main, ["benchmark", "run", "--help"],
+            main,
+            ["benchmark", "run", "--help"],
         )
 
         assert result.exit_code == 0
@@ -135,7 +130,8 @@ class TestBenchmarkGroupHelp:
         """``tapps-mcp benchmark analyze --help`` shows options."""
         runner = CliRunner()
         result = runner.invoke(
-            main, ["benchmark", "analyze", "--help"],
+            main,
+            ["benchmark", "analyze", "--help"],
         )
 
         assert result.exit_code == 0
@@ -148,7 +144,8 @@ class TestBenchmarkGroupHelp:
         """``tapps-mcp benchmark report --help`` shows options."""
         runner = CliRunner()
         result = runner.invoke(
-            main, ["benchmark", "report", "--help"],
+            main,
+            ["benchmark", "report", "--help"],
         )
 
         assert result.exit_code == 0
@@ -208,7 +205,8 @@ class TestBenchmarkRunCommand:
         """Verify default option values appear in help."""
         runner = CliRunner()
         result = runner.invoke(
-            main, ["benchmark", "run", "--help"],
+            main,
+            ["benchmark", "run", "--help"],
         )
 
         assert result.exit_code == 0
@@ -252,15 +250,13 @@ class TestBenchmarkRunCommand:
 
         assert result.exit_code == 0, result.output
         run_dir = output_dir / "out-test-tapps"
-        assert run_dir.exists(), (
-            f"Expected {run_dir} to exist. "
-            f"Output: {result.output}"
-        )
+        assert run_dir.exists(), f"Expected {run_dir} to exist. Output: {result.output}"
         assert (run_dir / "results.jsonl").exists()
         assert (run_dir / "metadata.json").exists()
 
     def test_run_all_modes_creates_multiple_dirs(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Run with --context-mode all creates dirs for each mode."""
         dataset_file = tmp_path / "dataset.jsonl"
@@ -372,7 +368,8 @@ class TestBenchmarkAnalyzeCommand:
         assert "Run:" in result.output
 
     def test_analyze_compare_wrong_count(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Compare with 1 or 3 IDs shows error."""
         output_dir = tmp_path / "bench"
@@ -411,7 +408,8 @@ class TestBenchmarkAnalyzeCommand:
         assert "exactly 2" in result_three.output
 
     def test_analyze_compare_two_runs(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Compare two runs produces comparison output."""
         output_dir = tmp_path / "bench"
@@ -442,13 +440,11 @@ class TestBenchmarkAnalyzeCommand:
         )
 
         assert result.exit_code == 0
-        assert (
-            "Comparison" in result.output
-            or "Resolution" in result.output
-        )
+        assert "Comparison" in result.output or "Resolution" in result.output
 
     def test_analyze_compare_json_format(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Compare with --format json produces valid JSON."""
         output_dir = tmp_path / "bench"
@@ -487,7 +483,8 @@ class TestBenchmarkAnalyzeCommand:
         assert "resolution_delta" in parsed
 
     def test_analyze_compare_missing_run(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Compare with a nonexistent run ID shows error."""
         output_dir = tmp_path / "bench"
@@ -584,7 +581,8 @@ class TestBenchmarkReportCommand:
         assert "run-file" in content
 
     def test_report_include_redundancy(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Report with --include-redundancy adds a note."""
         output_dir = tmp_path / "bench"

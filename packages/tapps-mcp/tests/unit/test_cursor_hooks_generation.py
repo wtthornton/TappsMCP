@@ -123,9 +123,7 @@ class TestCursorHooksConfig:
         data = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
         for event, entries in data["hooks"].items():
             for entry in entries:
-                assert entry["command"].endswith(".sh"), (
-                    f"Should use .sh: {entry['command']}"
-                )
+                assert entry["command"].endswith(".sh"), f"Should use .sh: {entry['command']}"
 
 
 class TestCursorHooksMerge:
@@ -160,9 +158,7 @@ class TestCursorHooksMerge:
                 {"event": "afterFileEdit", "command": "my-custom-script.sh"},
             ],
         }
-        (cursor_dir / "hooks.json").write_text(
-            json.dumps(old_format), encoding="utf-8"
-        )
+        (cursor_dir / "hooks.json").write_text(json.dumps(old_format), encoding="utf-8")
 
         generate_cursor_hooks(tmp_path, force_windows=False)
 
@@ -402,9 +398,7 @@ class TestCursorHooksPlatformMigration:
                 "postCompact": [{"command": "echo x"}],  # not in Cursor schema
             },
         }
-        (cursor_dir / "hooks.json").write_text(
-            json.dumps(config, indent=2), encoding="utf-8"
-        )
+        (cursor_dir / "hooks.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
         generate_cursor_hooks(tmp_path, force_windows=False)
         data = json.loads((cursor_dir / "hooks.json").read_text())
         assert "postCompact" not in data.get("hooks", {})

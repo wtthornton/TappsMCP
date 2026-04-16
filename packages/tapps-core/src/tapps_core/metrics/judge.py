@@ -144,7 +144,7 @@ async def _run_pytest_judge(jd: JudgeDefinition, label: str, cwd: Path) -> Judge
         )
         try:
             _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             return JudgeResult(
                 judge=label,
@@ -217,9 +217,7 @@ async def run_judges(
 
     results = await asyncio.gather(*[run_judge(jd, cwd) for jd in parsed])
 
-    any_blocking_fail = any(
-        r.result in {"fail", "error"} and r.blocking for r in results
-    )
+    any_blocking_fail = any(r.result in {"fail", "error"} and r.blocking for r in results)
 
     return {
         "judge_results": [r.model_dump() for r in results],

@@ -31,7 +31,7 @@ def _mock_session(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture()
-def mock_store(tmp_path: Path):  # noqa: ANN201
+def mock_store(tmp_path: Path):
     """Create a real MemoryStore backed by tmp_path and patch _get_memory_store."""
     from tapps_core.memory.store import MemoryStore
 
@@ -96,14 +96,18 @@ class TestRankedSearch:
     async def test_ranked_search_empty_query(self, mock_store: object) -> None:
         """Empty query with tags falls back to unranked."""
         await tapps_memory(
-            action="save", key="tagged", value="tagged value", tags="mylib",
+            action="save",
+            key="tagged",
+            value="tagged value",
+            tags="mylib",
         )
         result = await tapps_memory(action="search", tags="mylib", ranked=True)
         # tags-only search falls back to unranked since there's no query
         assert result["data"]["ranked"] is False
 
     async def test_search_response_has_total_and_returned_count(
-        self, mock_store: object,
+        self,
+        mock_store: object,
     ) -> None:
         """Search responses include total_count and returned_count."""
         await tapps_memory(action="save", key="k1", value="search term here")
@@ -155,7 +159,8 @@ class TestContradictions:
     async def test_contradictions_detects_issues(self, mock_store: object) -> None:
         """Contradictions detects a memory that disagrees with project state."""
         await tapps_memory(
-            action="save", key="web-fw",
+            action="save",
+            key="web-fw",
             value="We use django for the web framework",
             tags="framework",
         )
@@ -221,7 +226,9 @@ class TestImportExport:
     """Story 42.2: import and export actions."""
 
     async def test_export_creates_file(
-        self, mock_store: object, tmp_path: Path,
+        self,
+        mock_store: object,
+        tmp_path: Path,
     ) -> None:
         """Export writes memories to a JSON file."""
         await tapps_memory(action="save", key="k1", value="v1")
@@ -231,7 +238,8 @@ class TestImportExport:
         with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value.project_root = tmp_path
             result = await tapps_memory(
-                action="export", file_path=export_path,
+                action="export",
+                file_path=export_path,
             )
 
         assert result["success"] is True
@@ -245,7 +253,9 @@ class TestImportExport:
         assert "memories" in content
 
     async def test_import_reads_file(
-        self, mock_store: object, tmp_path: Path,
+        self,
+        mock_store: object,
+        tmp_path: Path,
     ) -> None:
         """Import reads memories from a JSON file."""
         # Create export file first
@@ -277,7 +287,8 @@ class TestImportExport:
         with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value.project_root = tmp_path
             result = await tapps_memory(
-                action="import", file_path=str(import_path),
+                action="import",
+                file_path=str(import_path),
             )
 
         assert result["success"] is True
@@ -286,7 +297,9 @@ class TestImportExport:
         assert data["imported_count"] == 1
 
     async def test_import_respects_overwrite(
-        self, mock_store: object, tmp_path: Path,
+        self,
+        mock_store: object,
+        tmp_path: Path,
     ) -> None:
         """Import skips existing keys by default, overwrites when overwrite=True."""
         await tapps_memory(action="save", key="existing-key", value="original")
@@ -325,7 +338,9 @@ class TestImportExport:
 
             # With overwrite: import
             r2 = await tapps_memory(
-                action="import", file_path=str(import_path), overwrite=True,
+                action="import",
+                file_path=str(import_path),
+                overwrite=True,
             )
             assert r2["data"]["imported_count"] == 1
 
@@ -335,15 +350,21 @@ class TestImportExport:
         assert result["data"]["error"] == "missing_file_path"
 
     async def test_export_filters(
-        self, mock_store: object, tmp_path: Path,
+        self,
+        mock_store: object,
+        tmp_path: Path,
     ) -> None:
         """Export respects tier and confidence filters."""
         await tapps_memory(
-            action="save", key="arch", value="Arch decision",
+            action="save",
+            key="arch",
+            value="Arch decision",
             tier="architectural",
         )
         await tapps_memory(
-            action="save", key="ctx", value="Context note",
+            action="save",
+            key="ctx",
+            value="Context note",
             tier="context",
         )
 
@@ -352,7 +373,8 @@ class TestImportExport:
         with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value.project_root = tmp_path
             result = await tapps_memory(
-                action="export", file_path=export_path,
+                action="export",
+                file_path=export_path,
                 tier="architectural",
             )
 
@@ -370,7 +392,8 @@ class TestCuratedResponses:
     """Story 42.3: Curated search/list responses."""
 
     async def test_list_has_total_and_returned_count(
-        self, mock_store: object,
+        self,
+        mock_store: object,
     ) -> None:
         """List response includes total_count and returned_count."""
         for i in range(3):
@@ -393,7 +416,8 @@ class TestCuratedResponses:
         """List shows summaries for entries past the threshold."""
         for i in range(8):
             await tapps_memory(
-                action="save", key=f"k{i}",
+                action="save",
+                key=f"k{i}",
                 value=f"A very long value that should be summarized {i} " * 5,
             )
         result = await tapps_memory(action="list", include_summary=True)
@@ -420,11 +444,14 @@ class TestCuratedResponses:
         """Ranked search shows summaries past the threshold."""
         for i in range(8):
             await tapps_memory(
-                action="save", key=f"item-{i}",
+                action="save",
+                key=f"item-{i}",
                 value=f"Test search item with long content number {i} " * 5,
             )
         result = await tapps_memory(
-            action="search", query="Test search item", limit=8,
+            action="search",
+            query="Test search item",
+            limit=8,
         )
         data = result["data"]
         if data["returned_count"] > 5:
@@ -447,14 +474,38 @@ class TestValidActions:
         from tapps_mcp.server_memory_tools import _VALID_ACTIONS
 
         expected = {
-            "save", "save_bulk", "get", "list", "delete", "search",
-            "reinforce", "gc", "contradictions", "reseed",
-            "import", "export", "consolidate", "unconsolidate",
-            "federate_register", "federate_publish", "federate_subscribe",
-            "federate_sync", "federate_search", "federate_status",
-            "index_session", "validate", "maintain",
-            "health", "profile_info", "profile_list", "profile_switch",
-            "safety_check", "verify_integrity",
-            "hive_status", "hive_search", "hive_propagate", "agent_register",
+            "save",
+            "save_bulk",
+            "get",
+            "list",
+            "delete",
+            "search",
+            "reinforce",
+            "gc",
+            "contradictions",
+            "reseed",
+            "import",
+            "export",
+            "consolidate",
+            "unconsolidate",
+            "federate_register",
+            "federate_publish",
+            "federate_subscribe",
+            "federate_sync",
+            "federate_search",
+            "federate_status",
+            "index_session",
+            "validate",
+            "maintain",
+            "health",
+            "profile_info",
+            "profile_list",
+            "profile_switch",
+            "safety_check",
+            "verify_integrity",
+            "hive_status",
+            "hive_search",
+            "hive_propagate",
+            "agent_register",
         }
-        assert _VALID_ACTIONS == expected
+        assert expected == _VALID_ACTIONS

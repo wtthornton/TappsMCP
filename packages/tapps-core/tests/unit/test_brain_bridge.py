@@ -11,13 +11,11 @@ Coverage targets:
 
 from __future__ import annotations
 
-import asyncio
 import time
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -126,9 +124,7 @@ class TestCreateBrainBridge:
 
         assert isinstance(result, BrainBridge)
 
-    def test_exports_project_id_to_env_when_set(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_exports_project_id_to_env_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """ADR-010: ``memory.project_id`` must be exported as TAPPS_BRAIN_PROJECT
         so AgentBrain resolves to the registered tenant, not a per-dir hash.
         """
@@ -152,9 +148,7 @@ class TestCreateBrainBridge:
 
         assert os.environ.get("TAPPS_BRAIN_PROJECT") == "my-project"
 
-    def test_exports_pool_tuning_env_when_set(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_exports_pool_tuning_env_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """tapps-brain v3.7.0 pool-tuning knobs must be exported when non-zero."""
         monkeypatch.delenv("TAPPS_BRAIN_PG_POOL_MAX_WAITING", raising=False)
         monkeypatch.delenv("TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS", raising=False)
@@ -178,9 +172,7 @@ class TestCreateBrainBridge:
         assert os.environ.get("TAPPS_BRAIN_PG_POOL_MAX_WAITING") == "40"
         assert os.environ.get("TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS") == "1800"
 
-    def test_leaves_pool_env_untouched_when_zero(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_leaves_pool_env_untouched_when_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Zero pool settings must not clobber operator-provided env values."""
         monkeypatch.setenv("TAPPS_BRAIN_PG_POOL_MAX_WAITING", "99")
         monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "postgresql://x/db")
@@ -474,7 +466,6 @@ class TestMaintenance:
     @pytest.mark.asyncio()
     async def test_detect_conflicts_runs_detector(self, bridge: Any) -> None:
         from pathlib import Path
-
         from unittest.mock import patch as _patch
 
         fake_contradictions = [
@@ -489,7 +480,7 @@ class TestMaintenance:
             "tapps_brain.contradictions.ContradictionDetector",
             return_value=fake_detector,
         ):
-            result = await bridge.detect_conflicts(profile=MagicMock(), project_root=Path("."))
+            result = await bridge.detect_conflicts(profile=MagicMock(), project_root=Path())
 
         assert result["count"] == 1
         assert result["checked_count"] == 1
@@ -534,21 +525,15 @@ class TestMaintenance:
             source=MagicMock(value="agent"),
             tags=[],
         )
-        with patch(
-            "tapps_brain.backends.PropagationEngine.propagate", return_value=None
-        ):
-            result = await bridge.hive_propagate(
-                [entry], agent_id="a1", agent_profile="repo-brain"
-            )
+        with patch("tapps_brain.backends.PropagationEngine.propagate", return_value=None):
+            result = await bridge.hive_propagate([entry], agent_id="a1", agent_profile="repo-brain")
         assert result["propagated"] == 0
         assert result["skipped_private"] == 1
 
     @pytest.mark.asyncio()
     async def test_hive_propagate_degraded_when_no_hive(self, bridge: Any) -> None:
         bridge._brain.hive = None
-        result = await bridge.hive_propagate(
-            [], agent_id="a1", agent_profile="repo-brain"
-        )
+        result = await bridge.hive_propagate([], agent_id="a1", agent_profile="repo-brain")
         assert result["degraded"] is True
         assert result["propagated"] == 0
 
@@ -573,9 +558,7 @@ class TestMaintenance:
             return_value=MagicMock(model_dump=lambda: {"archived_count": 2})
         )
         # consolidate path uses run_periodic_consolidation_scan via patched import
-        bridge._brain.store.snapshot = MagicMock(
-            return_value=MagicMock(entries=[])
-        )
+        bridge._brain.store.snapshot = MagicMock(return_value=MagicMock(entries=[]))
 
         with patch(
             "tapps_brain.auto_consolidation.run_periodic_consolidation_scan",

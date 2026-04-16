@@ -10,8 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from docs_mcp.generators.api_docs import (
     APIDocClass,
     APIDocFunction,
@@ -23,10 +21,8 @@ from docs_mcp.generators.api_docs import (
     _full_description,
     _generation_date,
     _is_noise_constant,
-    _is_reexport_module,
 )
 from tests.helpers import make_settings as _make_settings
-
 
 # ---------------------------------------------------------------------------
 # Sample source code fixtures
@@ -95,7 +91,7 @@ MAX_RETRIES: int = 3
 _PRIVATE_CONST: int = 42
 '''
 
-SAMPLE_MODULE_NO_DOCS = '''\
+SAMPLE_MODULE_NO_DOCS = """\
 class Bare:
     x = 1
 
@@ -106,7 +102,7 @@ def bare_func(x):
     return x * 2
 
 SOME_CONST = 99
-'''
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +601,7 @@ class TestAPIDocExamples:
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "test_mylib.py").write_text(
-            'def test_compute():\n    from mylib import compute\n    assert compute(5) == 10\n',
+            "def test_compute():\n    from mylib import compute\n    assert compute(5) == 10\n",
             encoding="utf-8",
         )
         gen = APIDocGenerator()
@@ -645,7 +641,7 @@ class TestAPIDocExamples:
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "test_mylib.py").write_text(
-            'def test_compute():\n    assert True\n',
+            "def test_compute():\n    assert True\n",
             encoding="utf-8",
         )
         gen = APIDocGenerator()
@@ -1060,7 +1056,9 @@ class TestReturnType:
 
         gen = APIDocGenerator()
         result = gen.generate(
-            source, project_root=tmp_path, output_format="sphinx_rst",
+            source,
+            project_root=tmp_path,
+            output_format="sphinx_rst",
         )
 
         assert ":rtype: list[str]" in result
@@ -1134,7 +1132,9 @@ class TestIncludePrivate:
 
         gen = APIDocGenerator()
         result = gen.generate(
-            source, project_root=tmp_path, include_private=True,
+            source,
+            project_root=tmp_path,
+            include_private=True,
         )
 
         assert "_private_with_docs" in result
@@ -1143,21 +1143,39 @@ class TestIncludePrivate:
 
     def test_should_include_symbol_private_with_docstring(self) -> None:
         """_should_include_symbol includes documented private when flagged."""
-        assert APIDocGenerator._should_include_symbol(
-            "_helper", "public", True, "Has docs",
-        ) is True
+        assert (
+            APIDocGenerator._should_include_symbol(
+                "_helper",
+                "public",
+                True,
+                "Has docs",
+            )
+            is True
+        )
 
     def test_should_include_symbol_private_no_docstring(self) -> None:
         """_should_include_symbol excludes undocumented private even when flagged."""
-        assert APIDocGenerator._should_include_symbol(
-            "_helper", "public", True, None,
-        ) is False
+        assert (
+            APIDocGenerator._should_include_symbol(
+                "_helper",
+                "public",
+                True,
+                None,
+            )
+            is False
+        )
 
     def test_should_include_symbol_public_unaffected(self) -> None:
         """_should_include_symbol does not affect public symbols."""
-        assert APIDocGenerator._should_include_symbol(
-            "public_func", "public", False, None,
-        ) is True
+        assert (
+            APIDocGenerator._should_include_symbol(
+                "public_func",
+                "public",
+                False,
+                None,
+            )
+            is True
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1170,7 +1188,7 @@ class TestEnhancedExamples:
 
     def test_extract_doctest_finds_pattern(self) -> None:
         """_extract_doctest finds >>> func_name patterns."""
-        content = '''\
+        content = """\
 Some text.
 
     >>> my_func(1, 2)
@@ -1179,7 +1197,7 @@ Some text.
     0
 
 More text.
-'''
+"""
         result = _extract_doctest(content, "my_func")
         assert ">>> my_func(1, 2)" in result
         assert "3" in result
@@ -1191,12 +1209,12 @@ More text.
 
     def test_extract_doctest_continuation(self) -> None:
         """_extract_doctest includes ... continuation lines."""
-        content = '''\
+        content = """\
     >>> result = my_func(
     ...     long_arg="value",
     ... )
     True
-'''
+"""
         result = _extract_doctest(content, "my_func")
         assert ">>> result = my_func(" in result
         assert '...     long_arg="value",' in result

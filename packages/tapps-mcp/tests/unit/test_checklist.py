@@ -13,7 +13,6 @@ from tapps_mcp.tools.checklist import (
     TASK_TOOL_MAP_LOW,
     CallTracker,
     ChecklistResult,
-    CrossFileSummary,
     EpicChecklistResult,
     EpicValidation,
     ToolCallRecord,
@@ -462,18 +461,14 @@ class TestValidateEpicMarkdown:
         result = validate_epic_markdown(_EPIC_STORY_NO_AC)
         assert result.valid is False
         errors = [f for f in result.findings if f.severity == "error"]
-        assert any(
-            "101.1" in f.message and "Acceptance Criteria" in f.message
-            for f in errors
-        )
+        assert any("101.1" in f.message and "Acceptance Criteria" in f.message for f in errors)
 
     def test_point_size_mismatch_warning(self) -> None:
         result = validate_epic_markdown(_EPIC_SIZE_POINT_MISMATCH)
         # Mismatch is a warning, not an error
         warnings = [f for f in result.findings if f.severity == "warning"]
         assert any(
-            "102.1" in f.message and "expects 1-2 points but has 8" in f.message
-            for f in warnings
+            "102.1" in f.message and "expects 1-2 points but has 8" in f.message for f in warnings
         )
 
     def test_point_size_mismatch_does_not_fail_valid(self) -> None:
@@ -597,7 +592,8 @@ class TestEvaluateEpic:
         epic_file = tmp_path / "EPIC-99.md"
         epic_file.write_text(_WELL_FORMED_EPIC, encoding="utf-8")
         result = CallTracker.evaluate_epic(
-            file_path=str(epic_file), engagement_level="medium",
+            file_path=str(epic_file),
+            engagement_level="medium",
         )
         assert result.epic_validation is not None
         assert result.epic_validation.valid is True
@@ -607,7 +603,8 @@ class TestEvaluateEpic:
         epic_file = tmp_path / "EPIC-BAD.md"
         epic_file.write_text(_EPIC_MISSING_STORIES_SECTION, encoding="utf-8")
         result = CallTracker.evaluate_epic(
-            file_path=str(epic_file), engagement_level="medium",
+            file_path=str(epic_file),
+            engagement_level="medium",
         )
         assert result.epic_validation is not None
         assert result.epic_validation.valid is False
@@ -626,7 +623,9 @@ class TestEvaluateEpic:
         assert result.epic_validation is not None
         assert result.epic_validation.valid is True
 
-    def test_evaluate_epic_relative_path_without_project_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_evaluate_epic_relative_path_without_project_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Relative path without project_root falls back to cwd."""
         docs = tmp_path / "docs"
         docs.mkdir()
@@ -654,7 +653,9 @@ class TestEvaluateEpic:
 
     def test_evaluate_epic_nonexistent_file_error_message(self, tmp_path: Path) -> None:
         """Non-existent file gives clear error with resolved path."""
-        with pytest.raises(FileNotFoundError, match=r"Epic file not found:.*no-such-epic\.md.*resolved from"):
+        with pytest.raises(
+            FileNotFoundError, match=r"Epic file not found:.*no-such-epic\.md.*resolved from"
+        ):
             CallTracker.evaluate_epic(
                 file_path="no-such-epic.md",
                 engagement_level="medium",
@@ -936,11 +937,10 @@ class TestCrossFileStoryValidation:
 
         story_lines = []
         for i, (fname, _) in enumerate(story_files.items(), 1):
-            story_lines.append(
-                f"| S{i} | [{fname}](stories/{fname}) | M | P1 |"
-            )
+            story_lines.append(f"| S{i} | [{fname}](stories/{fname}) | M | P1 |")
 
-        epic_content = dedent("""\
+        epic_content = (
+            dedent("""\
         # Epic 96: Cross-File Test
 
         ## Goal
@@ -955,7 +955,10 @@ class TestCrossFileStoryValidation:
 
         | ID | Story | Size | Priority |
         |---|---|---|---|
-        """) + "\n".join(story_lines) + "\n"
+        """)
+            + "\n".join(story_lines)
+            + "\n"
+        )
 
         fp = epic_dir / "EPIC-96.md"
         fp.write_text(epic_content, encoding="utf-8")
@@ -978,9 +981,7 @@ class TestCrossFileStoryValidation:
 
         **Points:** 3 | **Size:** M
         """)
-        fp = self._make_epic_with_stories(
-            tmp_path, {"s1.md": full, "s2.md": full}
-        )
+        fp = self._make_epic_with_stories(tmp_path, {"s1.md": full, "s2.md": full})
         content = fp.read_text(encoding="utf-8")
         result = validate_epic_markdown(content, epic_file_path=fp)
 
@@ -1021,7 +1022,9 @@ class TestCrossFileStoryValidation:
         assert result.cross_file_summary.files_missing == 1
         assert result.cross_file_summary.files_found == 0
 
-        warnings = [f for f in result.findings if f.severity == "warning" and "not found" in f.message]
+        warnings = [
+            f for f in result.findings if f.severity == "warning" and "not found" in f.message
+        ]
         assert len(warnings) >= 1
 
     def test_no_epic_file_path_skips_cross_file(self) -> None:
@@ -1048,7 +1051,9 @@ class TestCrossFileStoryValidation:
         fp = self._make_epic_with_stories(tmp_path, {"s1.md": full})
         content = fp.read_text(encoding="utf-8")
         result = validate_epic_markdown(
-            content, epic_file_path=fp, validate_linked_stories=False,
+            content,
+            epic_file_path=fp,
+            validate_linked_stories=False,
         )
         assert result.cross_file_summary is None
 
@@ -1061,7 +1066,8 @@ class TestCrossFileStoryValidation:
         assert result.cross_file_summary is not None
         assert result.cross_file_summary.with_acceptance_criteria == 0
         info_findings = [
-            f for f in result.findings
+            f
+            for f in result.findings
             if f.severity == "info" and "Acceptance Criteria" in f.message
         ]
         assert len(info_findings) >= 1
@@ -1082,12 +1088,13 @@ class TestCrossFileStoryValidation:
 # TAP-476: TDD stage validation
 # ---------------------------------------------------------------------------
 
+
 class TestCheckTDDStages:
     """Tests for check_tdd_stages and helpers."""
 
     @pytest.mark.asyncio
     async def test_no_git_returns_skipped(self, tmp_path: Path) -> None:
-        from unittest.mock import patch, AsyncMock, MagicMock
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         from tapps_mcp.tools.checklist import check_tdd_stages
 
@@ -1106,13 +1113,15 @@ class TestCheckTDDStages:
 
     @pytest.mark.asyncio
     async def test_red_commit_found(self, tmp_path: Path) -> None:
-        from unittest.mock import patch, AsyncMock, MagicMock
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         from tapps_mcp.tools.checklist import check_tdd_stages
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = "abc1234 test: add failing test for auth\ndef5678 fix: implement auth\n"
+        mock_result.stdout = (
+            "abc1234 test: add failing test for auth\ndef5678 fix: implement auth\n"
+        )
         with patch(
             "tapps_mcp.tools.subprocess_runner.run_command_async",
             new=AsyncMock(return_value=mock_result),
@@ -1125,7 +1134,7 @@ class TestCheckTDDStages:
 
     @pytest.mark.asyncio
     async def test_missing_red_commit_fails(self, tmp_path: Path) -> None:
-        from unittest.mock import patch, AsyncMock, MagicMock
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         from tapps_mcp.tools.checklist import check_tdd_stages
 
@@ -1146,8 +1155,7 @@ class TestCheckTDDStages:
         from tapps_mcp.tools.checklist import _check_coverage
 
         (tmp_path / "coverage.xml").write_text(
-            '<?xml version="1.0" ?>\n<coverage line-rate="0.92" branch-rate="0.0">'
-            "</coverage>\n"
+            '<?xml version="1.0" ?>\n<coverage line-rate="0.92" branch-rate="0.0"></coverage>\n'
         )
         check = _check_coverage(tmp_path)
         assert check.result == "passed"
@@ -1157,8 +1165,7 @@ class TestCheckTDDStages:
         from tapps_mcp.tools.checklist import _check_coverage
 
         (tmp_path / "coverage.xml").write_text(
-            '<?xml version="1.0" ?>\n<coverage line-rate="0.55" branch-rate="0.0">'
-            "</coverage>\n"
+            '<?xml version="1.0" ?>\n<coverage line-rate="0.55" branch-rate="0.0"></coverage>\n'
         )
         check = _check_coverage(tmp_path)
         assert check.result == "failed"

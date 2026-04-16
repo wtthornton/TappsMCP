@@ -18,7 +18,6 @@ from docs_mcp.generators.guides import ContributingGuideGenerator, OnboardingGui
 from docs_mcp.generators.metadata import ProjectMetadata
 from tests.helpers import make_settings as _make_settings
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -254,7 +253,8 @@ class TestOnboardingSections:
     def test_next_steps_links_contributing(self, python_project: Path) -> None:
         """Next steps links to CONTRIBUTING.md when it exists."""
         (python_project / "CONTRIBUTING.md").write_text(
-            "# Contributing\n", encoding="utf-8",
+            "# Contributing\n",
+            encoding="utf-8",
         )
 
         gen = OnboardingGuideGenerator()
@@ -547,8 +547,7 @@ class TestDocsGenerateOnboarding:
         root = tmp_path / "proj"
         root.mkdir()
         (root / "pyproject.toml").write_text(
-            '[project]\nname = "onboard-test"\nversion = "1.0.0"\n'
-            'requires-python = ">=3.12"\n',
+            '[project]\nname = "onboard-test"\nversion = "1.0.0"\nrequires-python = ">=3.12"\n',
             encoding="utf-8",
         )
 
@@ -598,8 +597,7 @@ class TestDocsGenerateContributing:
         root = tmp_path / "proj"
         root.mkdir()
         (root / "pyproject.toml").write_text(
-            '[project]\nname = "contrib-test"\nversion = "1.0.0"\n'
-            'requires-python = ">=3.12"\n',
+            '[project]\nname = "contrib-test"\nversion = "1.0.0"\nrequires-python = ">=3.12"\n',
             encoding="utf-8",
         )
 
@@ -653,12 +651,12 @@ class TestKeyConceptsGeneration:
         src = tmp_path / "models.py"
         src.write_text(
             '"""Models module."""\n\n'
-            'class UserProfile:\n'
+            "class UserProfile:\n"
             '    """Represents a user profile in the system."""\n'
-            '    pass\n\n'
-            'class Settings:\n'
+            "    pass\n\n"
+            "class Settings:\n"
             '    """Application configuration settings."""\n'
-            '    pass\n',
+            "    pass\n",
             encoding="utf-8",
         )
 

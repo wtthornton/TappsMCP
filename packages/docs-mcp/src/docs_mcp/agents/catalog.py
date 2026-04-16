@@ -33,7 +33,7 @@ def _parse_frontmatter(content: str) -> dict[str, Any]:
         return {}
 
     # +3 to skip past the opening ---
-    frontmatter_text = content[3:end_idx + 3]
+    frontmatter_text = content[3 : end_idx + 3]
     # Find the actual end of the opening --- line
     first_newline = content.index("\n", 0)
     closing_marker = content.find("---", first_newline + 1)

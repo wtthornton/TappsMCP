@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from docs_mcp.validators.completeness import (
     CompletenessCategory,
     CompletenessChecker,
@@ -15,7 +13,6 @@ from docs_mcp.validators.completeness import (
     _check_project_docs,
     _file_exists_case_insensitive,
 )
-
 
 # ---------------------------------------------------------------------------
 # Model tests
@@ -150,8 +147,7 @@ class TestCompletenessChecker:
         src = tmp_path / "src"
         src.mkdir()
         (src / "app.py").write_text(
-            '"""App module."""\n\n'
-            'def run() -> None:\n    """Run the app."""\n    pass\n',
+            '"""App module."""\n\ndef run() -> None:\n    """Run the app."""\n    pass\n',
             encoding="utf-8",
         )
 
@@ -211,8 +207,7 @@ class TestCompletenessChecker:
         )
         # Undocumented module
         (src / "bad.py").write_text(
-            "def func_b() -> None:\n    pass\n\n"
-            "class ClassB:\n    pass\n",
+            "def func_b() -> None:\n    pass\n\nclass ClassB:\n    pass\n",
             encoding="utf-8",
         )
 

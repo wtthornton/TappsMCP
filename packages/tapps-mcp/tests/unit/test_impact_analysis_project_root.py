@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 
@@ -29,9 +28,7 @@ def _make_impact_report(changed_file: str = "mod.py") -> object:
 def _patch_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch recording and nudge helpers so tests don't need full server state."""
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_call", lambda *_a, **_k: None)
-    monkeypatch.setattr(
-        "tapps_mcp.server_analysis_tools._record_execution", lambda *_a, **_k: None
-    )
+    monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_execution", lambda *_a, **_k: None)
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda _t, r: r)
     monkeypatch.setattr(
         "tapps_mcp.server_analysis_tools.build_impact_memory_context",
@@ -91,9 +88,7 @@ async def test_explicit_project_root_resolves_files(
         lambda: SimpleNamespace(project_root=tmp_path),
     )
 
-    result = await tapps_impact_analysis(
-        "lib/foo.py", project_root=str(ext_project)
-    )
+    result = await tapps_impact_analysis("lib/foo.py", project_root=str(ext_project))
     assert result["success"] is True
     assert result["data"]["changed_file"] == "lib/foo.py"
 
@@ -115,9 +110,7 @@ async def test_file_outside_custom_project_root_rejected(
         lambda: SimpleNamespace(project_root=tmp_path),
     )
 
-    result = await tapps_impact_analysis(
-        str(outside), project_root=str(ext_project)
-    )
+    result = await tapps_impact_analysis(str(outside), project_root=str(ext_project))
     assert result["success"] is False
     assert result["error"]["code"] == "path_denied"
 
@@ -133,9 +126,7 @@ async def test_nonexistent_project_root_returns_error(
         lambda: SimpleNamespace(project_root=tmp_path),
     )
 
-    result = await tapps_impact_analysis(
-        "foo.py", project_root=str(tmp_path / "does_not_exist")
-    )
+    result = await tapps_impact_analysis("foo.py", project_root=str(tmp_path / "does_not_exist"))
     assert result["success"] is False
     assert result["error"]["code"] == "invalid_project_root"
     assert "not an existing directory" in result["error"]["message"]

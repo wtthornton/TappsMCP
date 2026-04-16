@@ -20,13 +20,17 @@ if TYPE_CHECKING:
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 # Source file extensions handled by extractors (Python always, others via tree-sitter).
-_SOURCE_EXTENSIONS: frozenset[str] = frozenset({
-    ".py", ".pyi",       # Python (AST)
-    ".ts", ".tsx",       # TypeScript (tree-sitter)
-    ".go",               # Go (tree-sitter)
-    ".rs",               # Rust (tree-sitter)
-    ".java",             # Java (tree-sitter)
-})
+_SOURCE_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".py",
+        ".pyi",  # Python (AST)
+        ".ts",
+        ".tsx",  # TypeScript (tree-sitter)
+        ".go",  # Go (tree-sitter)
+        ".rs",  # Rust (tree-sitter)
+        ".java",  # Java (tree-sitter)
+    }
+)
 
 
 class ModuleMapAnalyzer:
@@ -143,9 +147,7 @@ class ModuleMapAnalyzer:
             packages = [
                 d
                 for d in src_dir.iterdir()
-                if d.is_dir()
-                and not self._should_skip_dir(d)
-                and (d / "__init__.py").exists()
+                if d.is_dir() and not self._should_skip_dir(d) and (d / "__init__.py").exists()
             ]
             if packages:
                 return packages
@@ -345,9 +347,7 @@ class ModuleMapAnalyzer:
             counts["public_api"] += node.public_api_count
             if node.has_main or node.name == "__main__":
                 entry_points.append(node.path)
-            self._aggregate(
-                node.submodules, entry_points=entry_points, counts=counts
-            )
+            self._aggregate(node.submodules, entry_points=entry_points, counts=counts)
 
     def _collect_entry_points(
         self,

@@ -29,9 +29,7 @@ class TestAutoCaptureRunner:
         bridge = MagicMock()
         bridge.save = AsyncMock(return_value={"key": "k", "value": "v"})
         bridge.close = MagicMock()
-        return patch(
-            "tapps_core.brain_bridge.create_brain_bridge", return_value=bridge
-        ), bridge
+        return patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge), bridge
 
     @pytest.mark.asyncio
     async def test_stop_hook_active_skips(self, tmp_path: Path) -> None:
@@ -76,11 +74,13 @@ class TestAutoCaptureRunner:
     async def test_messages_field_used(self, tmp_path: Path) -> None:
         """Messages field is extracted from payload."""
         ctx = "We agreed on using ruff for linting across the project."
-        stdin = json.dumps({
-            "messages": [
-                {"content": ctx},
-            ],
-        })
+        stdin = json.dumps(
+            {
+                "messages": [
+                    {"content": ctx},
+                ],
+            }
+        )
         ctx_mgr, _ = self._patch_bridge()
         with ctx_mgr:
             result = await run_auto_capture(stdin, tmp_path, min_context_length=10)
@@ -98,9 +98,7 @@ class TestAutoCaptureRunner:
         """When bridge is None (no DSN), result has degraded=True."""
         ctx = "We chose pytest as the test framework."
         stdin = json.dumps({"transcript": ctx})
-        with patch(
-            "tapps_core.brain_bridge.create_brain_bridge", return_value=None
-        ):
+        with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=None):
             result = await run_auto_capture(stdin, tmp_path, min_context_length=10)
         assert result["saved"] == 0
         assert result.get("degraded") is True
@@ -165,8 +163,6 @@ class TestGenerateMemoryAutoCaptureHook:
         assert "hooks" in data
         assert "Stop" in data["hooks"]
         stop_commands = [
-            h.get("command", "")
-            for e in data["hooks"]["Stop"]
-            for h in e.get("hooks", [e])
+            h.get("command", "") for e in data["hooks"]["Stop"] for h in e.get("hooks", [e])
         ]
         assert any("tapps-memory-auto-capture" in c for c in stop_commands)

@@ -176,9 +176,7 @@ class GoScorer(ScorerBase):
 
         # Read file content
         try:
-            code = await asyncio.to_thread(
-                resolved.read_text, encoding="utf-8", errors="replace"
-            )
+            code = await asyncio.to_thread(resolved.read_text, encoding="utf-8", errors="replace")
         except (OSError, PermissionError) as exc:
             logger.error("file_read_failed", path=str_path, error=str(exc))
             return self._error_result(str_path)
@@ -208,9 +206,7 @@ class GoScorer(ScorerBase):
     # Tree-sitter based scoring
     # ------------------------------------------------------------------
 
-    def _score_with_treesitter(
-        self, code: str, file_path: Path
-    ) -> dict[str, CategoryScore]:
+    def _score_with_treesitter(self, code: str, file_path: Path) -> dict[str, CategoryScore]:
         """Score using tree-sitter AST analysis."""
         source_bytes = code.encode("utf-8")
         parser = tree_sitter.Parser(_GO_LANGUAGE)
@@ -247,9 +243,7 @@ class GoScorer(ScorerBase):
 
         return cats
 
-    def _score_complexity_go(
-        self, root: Any, source: bytes, weight: float
-    ) -> CategoryScore:
+    def _score_complexity_go(self, root: Any, source: bytes, weight: float) -> CategoryScore:
         """Calculate complexity score via AST branch counting."""
         branch_types = {
             "if_statement",
@@ -319,7 +313,7 @@ class GoScorer(ScorerBase):
         for node in self._walk_tree(root):
             # Detect unsafe package usage
             if node.type == "selector_expression":
-                text = source[node.start_byte:node.end_byte].decode()
+                text = source[node.start_byte : node.end_byte].decode()
                 if text.startswith("unsafe.") and "unsafe" not in str(issues_found):
                     if "unsafe.Pointer usage" not in issues_found:
                         issues_found.append("unsafe package usage")
@@ -351,7 +345,7 @@ class GoScorer(ScorerBase):
             if node.type in ("function_declaration", "method_declaration", "type_declaration"):
                 name_node = node.child_by_field_name("name")
                 if name_node:
-                    name = source[name_node.start_byte:name_node.end_byte].decode()
+                    name = source[name_node.start_byte : name_node.end_byte].decode()
                     # Exported if starts with uppercase
                     if name and name[0].isupper():
                         exported_count += 1
@@ -408,7 +402,7 @@ class GoScorer(ScorerBase):
                 if node.type == "function_declaration":
                     name_node = node.child_by_field_name("name")
                     if name_node:
-                        func_name = source[name_node.start_byte:name_node.end_byte].decode()
+                        func_name = source[name_node.start_byte : name_node.end_byte].decode()
                         if func_name.startswith("Test"):
                             test_count += 1
             score = 5.0  # Neutral for test files
@@ -516,9 +510,7 @@ class GoScorer(ScorerBase):
             },
         )
 
-    def _score_devex_go(
-        self, code: str, root: Any, source: bytes, weight: float
-    ) -> CategoryScore:
+    def _score_devex_go(self, code: str, root: Any, source: bytes, weight: float) -> CategoryScore:
         """Calculate developer experience score."""
         issues: list[str] = []
 
@@ -562,9 +554,7 @@ class GoScorer(ScorerBase):
     # Regex-based fallback scoring
     # ------------------------------------------------------------------
 
-    def _score_with_regex(
-        self, code: str, file_path: Path
-    ) -> dict[str, CategoryScore]:
+    def _score_with_regex(self, code: str, file_path: Path) -> dict[str, CategoryScore]:
         """Score using regex-based analysis (fallback when tree-sitter unavailable)."""
         w = self._weights
         cats: dict[str, CategoryScore] = {}
@@ -573,13 +563,15 @@ class GoScorer(ScorerBase):
         line_count = len(lines)
 
         # 1) Complexity (regex approximation)
-        branch_count = sum([
-            len(re.findall(r"\bif\s+", code)),
-            len(re.findall(r"\bfor\s+", code)),
-            len(re.findall(r"\bswitch\s+", code)),
-            len(re.findall(r"\bselect\s*\{", code)),
-            len(re.findall(r"\bcase\s+", code)),
-        ])
+        branch_count = sum(
+            [
+                len(re.findall(r"\bif\s+", code)),
+                len(re.findall(r"\bfor\s+", code)),
+                len(re.findall(r"\bswitch\s+", code)),
+                len(re.findall(r"\bselect\s*\{", code)),
+                len(re.findall(r"\bcase\s+", code)),
+            ]
+        )
         complexity_score = clamp_individual(branch_count / 5.0)
         cats["complexity"] = CategoryScore(
             name="complexity",
@@ -750,9 +742,7 @@ class GoScorer(ScorerBase):
                 suggestions.append("Validate and sanitize inputs before exec")
         return suggestions[:3]
 
-    def _suggest_maintainability(
-        self, doc_ratio: float, exported_count: int
-    ) -> list[str]:
+    def _suggest_maintainability(self, doc_ratio: float, exported_count: int) -> list[str]:
         """Generate maintainability improvement suggestions."""
         suggestions: list[str] = []
         if doc_ratio < 0.5 and exported_count > 0:

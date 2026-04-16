@@ -22,15 +22,24 @@ class TestDeadCodeCtx:
         mock_result.files_scanned = 5
         mock_result.degraded = False
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True), \
-             patch("tapps_mcp.tools.vulture.collect_python_files", return_value=["/a.py", "/b.py"]), \
-             patch("tapps_mcp.tools.vulture.run_vulture_multi_async", new_callable=AsyncMock, return_value=mock_result):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True),
+            patch("tapps_mcp.tools.vulture.collect_python_files", return_value=["/a.py", "/b.py"]),
+            patch(
+                "tapps_mcp.tools.vulture.run_vulture_multi_async",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
             from pathlib import Path
+
             mock_settings.return_value = MagicMock(
                 project_root=Path("/fake"),
                 dead_code_whitelist_patterns=[],
@@ -46,15 +55,22 @@ class TestDeadCodeCtx:
         ctx = MagicMock()
         ctx.info = AsyncMock()
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.server_analysis_tools._validate_file_path_lazy") as mock_validate, \
-             patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True), \
-             patch("tapps_mcp.tools.vulture.run_vulture_async", new_callable=AsyncMock, return_value=[]):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch("tapps_mcp.server_analysis_tools._validate_file_path_lazy") as mock_validate,
+            patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True),
+            patch(
+                "tapps_mcp.tools.vulture.run_vulture_async", new_callable=AsyncMock, return_value=[]
+            ),
+        ):
             from pathlib import Path
+
             mock_settings.return_value = MagicMock(
                 project_root=Path("/fake"),
                 dead_code_whitelist_patterns=[],
@@ -73,15 +89,24 @@ class TestDeadCodeCtx:
         mock_result.files_scanned = 3
         mock_result.degraded = False
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True), \
-             patch("tapps_mcp.tools.vulture.collect_python_files", return_value=["/a.py"]), \
-             patch("tapps_mcp.tools.vulture.run_vulture_multi_async", new_callable=AsyncMock, return_value=mock_result):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True),
+            patch("tapps_mcp.tools.vulture.collect_python_files", return_value=["/a.py"]),
+            patch(
+                "tapps_mcp.tools.vulture.run_vulture_multi_async",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
             from pathlib import Path
+
             mock_settings.return_value = MagicMock(
                 project_root=Path("/fake"),
                 dead_code_whitelist_patterns=[],
@@ -102,15 +127,24 @@ class TestDeadCodeCtx:
         mock_result.files_scanned = 2
         mock_result.degraded = False
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True), \
-             patch("tapps_mcp.tools.vulture.collect_python_files", return_value=["/a.py"]), \
-             patch("tapps_mcp.tools.vulture.run_vulture_multi_async", new_callable=AsyncMock, return_value=mock_result):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True),
+            patch("tapps_mcp.tools.vulture.collect_python_files", return_value=["/a.py"]),
+            patch(
+                "tapps_mcp.tools.vulture.run_vulture_multi_async",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
             from pathlib import Path
+
             mock_settings.return_value = MagicMock(
                 project_root=Path("/fake"),
                 dead_code_whitelist_patterns=[],

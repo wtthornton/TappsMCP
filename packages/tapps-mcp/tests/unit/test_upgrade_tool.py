@@ -7,8 +7,6 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from tapps_mcp.distribution.doctor import (
     check_binary_on_path,
     check_json_config,
@@ -21,7 +19,6 @@ from tapps_mcp.distribution.setup_generator import (
     _merge_config,
     _validate_config_file,
 )
-
 
 # ---------------------------------------------------------------------------
 # Story 2: _detect_command_path tests
@@ -44,7 +41,10 @@ class TestDetectCommandPath:
         """When tapps-mcp is on PATH, returns 'tapps-mcp'."""
         with (
             patch.object(sys, "frozen", False, create=True),
-            patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/usr/bin/tapps-mcp"),
+            patch(
+                "tapps_mcp.distribution.setup_generator.shutil.which",
+                return_value="/usr/bin/tapps-mcp",
+            ),
         ):
             result = _detect_command_path()
         assert result == "tapps-mcp"
@@ -488,9 +488,7 @@ class TestUpgradePipeline:
         assert "security_policy" in governance
         assert "codeowners" in governance
 
-    def test_dry_run_reports_would_regenerate_for_github_templates(
-        self, tmp_path: Path
-    ) -> None:
+    def test_dry_run_reports_would_regenerate_for_github_templates(self, tmp_path: Path) -> None:
         """Dry run reports would-regenerate for github_templates."""
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 

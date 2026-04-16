@@ -139,14 +139,10 @@ def _upgrade_platform(
                 "hooks_added": hooks_result.get("hooks_added", 0),
             }
 
-            agents_result = generate_subagent_definitions(
-                project_root, "claude", overwrite=True
-            )
+            agents_result = generate_subagent_definitions(project_root, "claude", overwrite=True)
             result["components"]["agents"] = agents_result
 
-            skills_result = generate_skills(
-                project_root, "claude", overwrite=True
-            )
+            skills_result = generate_skills(project_root, "claude", overwrite=True)
             result["components"]["skills"] = skills_result
 
             rule_result = generate_claude_python_quality_rule(
@@ -178,14 +174,10 @@ def _upgrade_platform(
                 "hooks_added": hooks_result.get("hooks_added", 0),
             }
 
-            agents_result = generate_subagent_definitions(
-                project_root, "cursor", overwrite=True
-            )
+            agents_result = generate_subagent_definitions(project_root, "cursor", overwrite=True)
             result["components"]["agents"] = agents_result
 
-            skills_result = generate_skills(
-                project_root, "cursor", overwrite=True
-            )
+            skills_result = generate_skills(project_root, "cursor", overwrite=True)
             result["components"]["skills"] = skills_result
 
             rules_result = generate_cursor_rules(project_root)
@@ -276,26 +268,30 @@ def _upgrade_platform_content_return(
         content = load_platform_rules("claude", engagement_level=engagement_level)
         claude_md_path = project_root / "CLAUDE.md"
         mode = "overwrite" if (claude_md_path.exists() or force) else "create"
-        ops.append(FileOperation(
-            path="CLAUDE.md",
-            content=content,
-            mode=mode,
-            description="Claude Code platform rules with TappsMCP pipeline.",
-            priority=2,
-        ))
+        ops.append(
+            FileOperation(
+                path="CLAUDE.md",
+                content=content,
+                mode=mode,
+                description="Claude Code platform rules with TappsMCP pipeline.",
+                priority=2,
+            )
+        )
         result["components"]["claude_md"] = "content_return"
 
     elif host == "cursor":
         content = load_platform_rules("cursor", engagement_level=engagement_level)
         cursor_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
         mode = "overwrite" if (cursor_path.exists() or force) else "create"
-        ops.append(FileOperation(
-            path=".cursor/rules/tapps-pipeline.md",
-            content=content,
-            mode=mode,
-            description="Cursor platform rules with TappsMCP pipeline.",
-            priority=2,
-        ))
+        ops.append(
+            FileOperation(
+                path=".cursor/rules/tapps-pipeline.md",
+                content=content,
+                mode=mode,
+                description="Cursor platform rules with TappsMCP pipeline.",
+                priority=2,
+            )
+        )
         result["components"]["cursor_rules"] = "content_return"
 
     elif host == "vscode":
@@ -317,10 +313,7 @@ def _build_upgrade_manifest(
 ) -> FileManifest:
     """Build a :class:`FileManifest` for the upgrade pipeline."""
     return FileManifest(
-        summary=(
-            f"TappsMCP upgrade v{version}: "
-            f"{len(file_ops)} file(s) to write"
-        ),
+        summary=(f"TappsMCP upgrade v{version}: {len(file_ops)} file(s) to write"),
         source_version=version,
         files=file_ops,
         agent_instructions=AgentInstructions(

@@ -22,9 +22,7 @@ def extractor() -> GenericExtractor:
 class TestPythonExtraction:
     """Python regex extraction (fallback when AST fails)."""
 
-    def test_extracts_function_names(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_function_names(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "mod.py"
         src.write_text(
             "def hello(name: str) -> str:\n"
@@ -40,9 +38,7 @@ class TestPythonExtraction:
         assert "hello" in names
         assert "goodbye" in names
 
-    def test_extracts_async_function(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_async_function(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "async_mod.py"
         src.write_text(
             "async def fetch(url: str) -> bytes:\n    pass\n",
@@ -53,17 +49,10 @@ class TestPythonExtraction:
         assert info.functions[0].name == "fetch"
         assert info.functions[0].is_async is True
 
-    def test_extracts_class_names(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_class_names(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "cls.py"
         src.write_text(
-            "class Animal(Base, Mixin):\n"
-            '    """An animal."""\n'
-            "    pass\n"
-            "\n"
-            "class Dog:\n"
-            "    pass\n",
+            'class Animal(Base, Mixin):\n    """An animal."""\n    pass\n\nclass Dog:\n    pass\n',
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)
@@ -74,22 +63,16 @@ class TestPythonExtraction:
         assert "Base" in animal.bases
         assert "Mixin" in animal.bases
 
-    def test_extracts_class_docstring(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_class_docstring(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "doc.py"
         src.write_text(
-            "class Foo:\n"
-            '    """This is Foo."""\n'
-            "    pass\n",
+            'class Foo:\n    """This is Foo."""\n    pass\n',
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)
         assert info.classes[0].docstring == "This is Foo."
 
-    def test_handles_syntax_error_python(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_handles_syntax_error_python(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "broken.py"
         src.write_text(
             "def still_found():\n"
@@ -109,9 +92,7 @@ class TestPythonExtraction:
         class_names = [c.name for c in info.classes]
         assert "AlsoFound" in class_names
 
-    def test_extracts_all_exports(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_all_exports(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "exports.py"
         src.write_text(
             '__all__ = ["foo", "bar", "baz"]\n'
@@ -124,39 +105,25 @@ class TestPythonExtraction:
         info = extractor.extract(src, project_root=tmp_path)
         assert info.all_exports == ["foo", "bar", "baz"]
 
-    def test_detects_main_block(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_detects_main_block(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "main.py"
         src.write_text(
-            "def run():\n"
-            "    pass\n"
-            "\n"
-            'if __name__ == "__main__":\n'
-            "    run()\n",
+            'def run():\n    pass\n\nif __name__ == "__main__":\n    run()\n',
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)
         assert info.has_main_block is True
 
-    def test_no_main_block(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_no_main_block(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "lib.py"
         src.write_text("def helper(): pass\n", encoding="utf-8")
         info = extractor.extract(src, project_root=tmp_path)
         assert info.has_main_block is False
 
-    def test_extracts_imports(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_imports(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "imports.py"
         src.write_text(
-            "import os\n"
-            "from pathlib import Path\n"
-            "import sys, json\n"
-            "\n"
-            "def work(): pass\n",
+            "import os\nfrom pathlib import Path\nimport sys, json\n\ndef work(): pass\n",
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)
@@ -164,14 +131,10 @@ class TestPythonExtraction:
         assert any("os" in i for i in info.imports)
         assert any("pathlib" in i for i in info.imports)
 
-    def test_extracts_constants(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_constants(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "consts.py"
         src.write_text(
-            'MAX_SIZE = 100\n'
-            'DEFAULT_NAME = "hello"\n'
-            'not_a_constant = 42\n',
+            'MAX_SIZE = 100\nDEFAULT_NAME = "hello"\nnot_a_constant = 42\n',
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)
@@ -180,14 +143,10 @@ class TestPythonExtraction:
         assert "DEFAULT_NAME" in const_names
         assert "not_a_constant" not in const_names
 
-    def test_extracts_module_docstring(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_module_docstring(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "documented.py"
         src.write_text(
-            '"""This is the module docstring."""\n'
-            "\n"
-            "def foo(): pass\n",
+            '"""This is the module docstring."""\n\ndef foo(): pass\n',
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)
@@ -210,9 +169,7 @@ class TestPythonExtraction:
         assert params[1].name == "count"
         assert params[1].default == "3"
 
-    def test_extracts_return_annotation(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_return_annotation(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "ret.py"
         src.write_text("def get_value() -> int:\n    return 42\n", encoding="utf-8")
         info = extractor.extract(src, project_root=tmp_path)
@@ -227,9 +184,7 @@ class TestPythonExtraction:
 class TestJavaScriptExtraction:
     """JS/TS regex extraction."""
 
-    def test_extracts_regular_functions(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_regular_functions(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "app.js"
         src.write_text(
             "function handleClick(event) {\n"
@@ -248,9 +203,7 @@ class TestJavaScriptExtraction:
         fetch_fn = next(f for f in info.functions if f.name == "fetchData")
         assert fetch_fn.is_async is True
 
-    def test_extracts_arrow_functions(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_arrow_functions(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "utils.ts"
         src.write_text(
             "export const add = (a: number, b: number) => a + b;\n"
@@ -264,9 +217,7 @@ class TestJavaScriptExtraction:
         mul = next(f for f in info.functions if f.name == "multiply")
         assert mul.is_async is True
 
-    def test_extracts_class_declarations(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_class_declarations(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "models.ts"
         src.write_text(
             "export class UserService extends BaseService {\n"
@@ -285,9 +236,7 @@ class TestJavaScriptExtraction:
         user_svc = next(c for c in info.classes if c.name == "UserService")
         assert "BaseService" in user_svc.bases
 
-    def test_extracts_imports(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_imports(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "index.js"
         src.write_text(
             "import React from 'react';\n"
@@ -300,9 +249,7 @@ class TestJavaScriptExtraction:
         assert len(info.imports) == 2
         assert any("React" in i for i in info.imports)
 
-    def test_extracts_jsdoc_as_docstring(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_jsdoc_as_docstring(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "jsdoc.js"
         src.write_text(
             "/**\n"
@@ -320,14 +267,10 @@ class TestJavaScriptExtraction:
         assert info.functions[0].docstring is not None
         assert "sum of two numbers" in info.functions[0].docstring
 
-    def test_typescript_tsx_extension(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_typescript_tsx_extension(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "component.tsx"
         src.write_text(
-            "export function MyComponent() {\n"
-            "  return <div/>;\n"
-            "}\n",
+            "export function MyComponent() {\n  return <div/>;\n}\n",
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)
@@ -343,14 +286,12 @@ class TestJavaScriptExtraction:
 class TestGoExtraction:
     """Go regex extraction."""
 
-    def test_extracts_func_declarations(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_func_declarations(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "main.go"
         src.write_text(
             "package main\n"
             "\n"
-            "import \"fmt\"\n"
+            'import "fmt"\n'
             "\n"
             "// Greet prints a greeting.\n"
             "func Greet(name string) {\n"
@@ -368,9 +309,7 @@ class TestGoExtraction:
         assert greet.docstring is not None
         assert "greeting" in greet.docstring
 
-    def test_extracts_type_declarations(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_type_declarations(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "types.go"
         src.write_text(
             "package models\n"
@@ -395,16 +334,14 @@ class TestGoExtraction:
         assert user.docstring is not None
         assert "user" in user.docstring.lower()
 
-    def test_extracts_methods(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_methods(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "methods.go"
         src.write_text(
             "package models\n"
             "\n"
             "// String returns the string representation.\n"
             "func (u *User) String() string {\n"
-            '    return u.Name\n'
+            "    return u.Name\n"
             "}\n",
             encoding="utf-8",
         )
@@ -412,18 +349,10 @@ class TestGoExtraction:
         assert len(info.functions) == 1
         assert info.functions[0].name == "String"
 
-    def test_extracts_go_imports(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_go_imports(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "imports.go"
         src.write_text(
-            "package main\n"
-            "\n"
-            'import "fmt"\n'
-            "import (\n"
-            '    "os"\n'
-            '    "strings"\n'
-            ")\n",
+            'package main\n\nimport "fmt"\nimport (\n    "os"\n    "strings"\n)\n',
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)
@@ -438,9 +367,7 @@ class TestGoExtraction:
 class TestRustExtraction:
     """Rust regex extraction."""
 
-    def test_extracts_fn_declarations(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_fn_declarations(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "lib.rs"
         src.write_text(
             "/// Add two numbers together.\n"
@@ -488,9 +415,7 @@ class TestRustExtraction:
         assert config.docstring is not None
         assert "configuration" in config.docstring.lower()
 
-    def test_extracts_rust_doc_comments(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_extracts_rust_doc_comments(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "docs.rs"
         src.write_text(
             "/// First line of documentation.\n"
@@ -512,9 +437,7 @@ class TestRustExtraction:
 class TestEdgeCases:
     """Edge cases and error handling."""
 
-    def test_empty_file(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_empty_file(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "empty.py"
         src.write_text("", encoding="utf-8")
         info = extractor.extract(src, project_root=tmp_path)
@@ -522,9 +445,7 @@ class TestEdgeCases:
         assert info.functions == []
         assert info.classes == []
 
-    def test_binary_file(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_binary_file(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "binary.bin"
         src.write_bytes(bytes(range(256)) * 100)
         info = extractor.extract(src, project_root=tmp_path)
@@ -532,17 +453,13 @@ class TestEdgeCases:
         assert info.path == "binary.bin"
         assert info.functions == []
 
-    def test_nonexistent_file(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_nonexistent_file(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "does_not_exist.py"
         info = extractor.extract(src, project_root=tmp_path)
         assert info.path == "does_not_exist.py"
         assert info.functions == []
 
-    def test_unknown_extension(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_unknown_extension(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "config.yaml"
         src.write_text("# YAML config file\nkey: value\n", encoding="utf-8")
         info = extractor.extract(src, project_root=tmp_path)
@@ -551,9 +468,7 @@ class TestEdgeCases:
         assert info.docstring is not None
         assert "YAML config" in info.docstring
 
-    def test_large_file_skipped(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_large_file_skipped(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "huge.py"
         # Write just over 10MB of content.
         src.write_text("x = 1\n" * (2_000_000), encoding="utf-8")
@@ -562,9 +477,7 @@ class TestEdgeCases:
         assert info.path == "huge.py"
         assert info.functions == []
 
-    def test_mixed_encoding_file(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_mixed_encoding_file(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "mixed.py"
         # Write valid UTF-8 with some Latin-1 bytes injected.
         content = b"def hello():\n    pass\n\xff\xfe\n"
@@ -574,9 +487,7 @@ class TestEdgeCases:
         names = [f.name for f in info.functions]
         assert "hello" in names
 
-    def test_can_handle_always_true(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_can_handle_always_true(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         assert extractor.can_handle(tmp_path / "anything.xyz") is True
         assert extractor.can_handle(tmp_path / "code.py") is True
         assert extractor.can_handle(tmp_path / "data.csv") is True
@@ -601,13 +512,10 @@ class TestEdgeCases:
         # Path should be absolute since no project_root given.
         assert str(tmp_path) in info.path
 
-    def test_file_with_only_comments(
-        self, extractor: GenericExtractor, tmp_path: Path
-    ) -> None:
+    def test_file_with_only_comments(self, extractor: GenericExtractor, tmp_path: Path) -> None:
         src = tmp_path / "comments.py"
         src.write_text(
-            "# This file has only comments\n"
-            "# No actual code\n",
+            "# This file has only comments\n# No actual code\n",
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)
@@ -619,11 +527,7 @@ class TestEdgeCases:
     ) -> None:
         src = tmp_path / "multiline.py"
         src.write_text(
-            'def example():\n'
-            '    """This is a\n'
-            '    multi-line docstring.\n'
-            '    """\n'
-            '    pass\n',
+            'def example():\n    """This is a\n    multi-line docstring.\n    """\n    pass\n',
             encoding="utf-8",
         )
         info = extractor.extract(src, project_root=tmp_path)

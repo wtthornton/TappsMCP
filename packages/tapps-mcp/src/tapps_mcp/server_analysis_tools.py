@@ -224,14 +224,10 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
         data = {"action": "clear", "cleared_count": store.clear(key or None)}
     elif action == "promote":
         if not key:
-            return error_response(
-                "tapps_session_notes", "missing_params", "promote requires key"
-            )
+            return error_response("tapps_session_notes", "missing_params", "promote requires key")
         found = store.get(key)
         if found is None:
-            return error_response(
-                "tapps_session_notes", "not_found", f"Note '{key}' not found"
-            )
+            return error_response("tapps_session_notes", "not_found", f"Note '{key}' not found")
         data = await _promote_note_to_memory(found, value or "context")
     else:
         return error_response(
@@ -368,18 +364,22 @@ class _ReportProgressTracker:
             self._sidecar_path = None
 
     def record_file_result(self, file_path: str, result: dict[str, Any]) -> None:
-        self._results.append({
-            "file": file_path,
-            "score": result.get("overall_score", 0),
-        })
+        self._results.append(
+            {
+                "file": file_path,
+                "score": result.get("overall_score", 0),
+            }
+        )
         self._write_sidecar({})
 
     def finalize(self, summary: str, elapsed_ms: int) -> None:
-        self._write_sidecar({
-            "status": "completed",
-            "summary": summary,
-            "elapsed_ms": elapsed_ms,
-        })
+        self._write_sidecar(
+            {
+                "status": "completed",
+                "summary": summary,
+                "elapsed_ms": elapsed_ms,
+            }
+        )
 
     def finalize_error(self, error: str) -> None:
         self._write_sidecar({"status": "error", "error": error})
@@ -397,9 +397,7 @@ class _ReportProgressTracker:
         }
         data.update(extra)
         try:
-            self._sidecar_path.write_text(
-                _json.dumps(data, indent=2), encoding="utf-8"
-            )
+            self._sidecar_path.write_text(_json.dumps(data, indent=2), encoding="utf-8")
         except Exception:
             pass
 
@@ -472,6 +470,7 @@ async def tapps_report(
         _heartbeat_task: asyncio.Task[None] | None = None
         report_fn = getattr(ctx, "report_progress", None) if ctx else None
         if callable(report_fn):
+
             async def _report_heartbeat() -> None:
                 while not _stop_event.is_set():
                     with contextlib.suppress(Exception):
@@ -494,9 +493,7 @@ async def tapps_report(
                     gate_results.append(out[1])
 
             elapsed_ms_inner = (time.perf_counter_ns() - start) // 1_000_000
-            tracker.finalize(
-                f"{len(score_results)} files scored", elapsed_ms_inner
-            )
+            tracker.finalize(f"{len(score_results)} files scored", elapsed_ms_inner)
         except Exception as exc:
             tracker.finalize_error(str(exc))
             raise
@@ -561,7 +558,8 @@ async def tapps_dead_code(
     if scope == "file":
         if not file_path:
             return error_response(
-                "tapps_dead_code", "missing_file_path",
+                "tapps_dead_code",
+                "missing_file_path",
                 "file_path is required when scope='file'",
             )
         try:
@@ -633,7 +631,9 @@ async def tapps_dead_code(
         by_type.setdefault(f.finding_type, []).append(entry)
 
     if scope != "file":
-        await emit_ctx_info(ctx, f"Dead code scan complete: {len(findings)} items in {files_scanned} file(s)")
+        await emit_ctx_info(
+            ctx, f"Dead code scan complete: {len(findings)} items in {files_scanned} file(s)"
+        )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_dead_code", start, file_path=display_path)
@@ -762,10 +762,7 @@ async def tapps_dependency_scan(
         )
 
     sev_counts = {k: len(v) for k, v in by_severity.items()}
-    summary = (
-        f"Scanned {result.scanned_packages} packages: "
-        f"{len(result.findings)} vulnerabilities"
-    )
+    summary = f"Scanned {result.scanned_packages} packages: {len(result.findings)} vulnerabilities"
     if sev_counts:
         parts = [f"{count} {sev}" for sev, count in sorted(sev_counts.items())]
         summary += f" ({', '.join(parts)})"

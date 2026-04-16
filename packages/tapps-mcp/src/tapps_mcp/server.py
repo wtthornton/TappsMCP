@@ -93,8 +93,10 @@ def _bootstrap_cache_dir(project_root: Path) -> tuple[Path, bool]:
     2. ``<project_root>/.tapps-mcp-cache``
     3. ``<tempdir>/.tapps-mcp-cache`` (fallback when project root not writable)
     """
-    cache_dir = Path(os.environ["TAPPS_CACHE_DIR"]) if os.environ.get("TAPPS_CACHE_DIR") else (
-        project_root / ".tapps-mcp-cache"
+    cache_dir = (
+        Path(os.environ["TAPPS_CACHE_DIR"])
+        if os.environ.get("TAPPS_CACHE_DIR")
+        else (project_root / ".tapps-mcp-cache")
     )
     fallback_used = False
 
@@ -152,130 +154,168 @@ def _validate_file_path(file_path: str) -> Path:
     return validator.validate_read_path(path_str)
 
 
-
 # ---------------------------------------------------------------------------
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
 # Canonical list of all TappsMCP tools (26).
 # Used for filtering and fallback.
-ALL_TOOL_NAMES: frozenset[str] = frozenset({
-    "tapps_server_info",
-    "tapps_session_start",
-    "tapps_score_file",
-    "tapps_security_scan",
-    "tapps_quality_gate",
-    "tapps_lookup_docs",
-    "tapps_validate_config",
-    "tapps_validate_changed",
-    "tapps_quick_check",
-    "tapps_checklist",
-    "tapps_session_notes",
-    "tapps_impact_analysis",
-    "tapps_report",
-    "tapps_init",
-    "tapps_upgrade",
-    "tapps_doctor",
-    "tapps_set_engagement_level",
-    "tapps_dashboard",
-    "tapps_stats",
-    "tapps_feedback",
-    "tapps_dead_code",
-    "tapps_dependency_scan",
-    "tapps_dependency_graph",
-    "tapps_memory",
-    "tapps_pipeline",
-    "tapps_decompose",
-})
+ALL_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "tapps_server_info",
+        "tapps_session_start",
+        "tapps_score_file",
+        "tapps_security_scan",
+        "tapps_quality_gate",
+        "tapps_lookup_docs",
+        "tapps_validate_config",
+        "tapps_validate_changed",
+        "tapps_quick_check",
+        "tapps_checklist",
+        "tapps_session_notes",
+        "tapps_impact_analysis",
+        "tapps_report",
+        "tapps_init",
+        "tapps_upgrade",
+        "tapps_doctor",
+        "tapps_set_engagement_level",
+        "tapps_dashboard",
+        "tapps_stats",
+        "tapps_feedback",
+        "tapps_dead_code",
+        "tapps_dependency_scan",
+        "tapps_dependency_graph",
+        "tapps_memory",
+        "tapps_pipeline",
+        "tapps_decompose",
+    }
+)
 
 # Tier 1 from TOOL-TIER-RANKING (Epic 79.1)
-TOOL_PRESET_CORE: frozenset[str] = frozenset({
-    "tapps_session_start",
-    "tapps_quick_check",
-    "tapps_validate_changed",
-    "tapps_quality_gate",
-    "tapps_checklist",
-    "tapps_lookup_docs",
-    "tapps_security_scan",
-    "tapps_pipeline",
-})
+TOOL_PRESET_CORE: frozenset[str] = frozenset(
+    {
+        "tapps_session_start",
+        "tapps_quick_check",
+        "tapps_validate_changed",
+        "tapps_quality_gate",
+        "tapps_checklist",
+        "tapps_lookup_docs",
+        "tapps_security_scan",
+        "tapps_pipeline",
+    }
+)
 
 # Tier 1 + Tier 2
-TOOL_PRESET_PIPELINE: frozenset[str] = TOOL_PRESET_CORE | frozenset({
-    "tapps_score_file",
-    "tapps_memory",
-    "tapps_impact_analysis",
-    "tapps_validate_config",
-})
+TOOL_PRESET_PIPELINE: frozenset[str] = TOOL_PRESET_CORE | frozenset(
+    {
+        "tapps_score_file",
+        "tapps_memory",
+        "tapps_impact_analysis",
+        "tapps_validate_config",
+    }
+)
 
 # Role presets Phase 1 (Epic 79.5) — from ROLE-PRESETS-IMPLEMENT-FIRST.md
-TOOL_PRESET_REVIEWER: frozenset[str] = frozenset({
-    "tapps_session_start", "tapps_quick_check", "tapps_validate_changed",
-    "tapps_quality_gate", "tapps_checklist", "tapps_security_scan",
-    "tapps_score_file", "tapps_dead_code", "tapps_dependency_scan",
-})
-TOOL_PRESET_PLANNER: frozenset[str] = frozenset({
-    "tapps_session_start", "tapps_checklist", "tapps_validate_changed",
-    "tapps_quality_gate", "tapps_score_file", "tapps_memory",
-})
-TOOL_PRESET_FRONTEND: frozenset[str] = frozenset({
-    "tapps_session_start", "tapps_quick_check", "tapps_score_file",
-    "tapps_lookup_docs", "tapps_quality_gate",
-})
-TOOL_PRESET_DEVELOPER: frozenset[str] = frozenset({
-    "tapps_session_start", "tapps_quick_check", "tapps_validate_changed",
-    "tapps_quality_gate", "tapps_checklist", "tapps_score_file",
-    "tapps_security_scan", "tapps_lookup_docs", "tapps_memory",
-    "tapps_impact_analysis",
-})
+TOOL_PRESET_REVIEWER: frozenset[str] = frozenset(
+    {
+        "tapps_session_start",
+        "tapps_quick_check",
+        "tapps_validate_changed",
+        "tapps_quality_gate",
+        "tapps_checklist",
+        "tapps_security_scan",
+        "tapps_score_file",
+        "tapps_dead_code",
+        "tapps_dependency_scan",
+    }
+)
+TOOL_PRESET_PLANNER: frozenset[str] = frozenset(
+    {
+        "tapps_session_start",
+        "tapps_checklist",
+        "tapps_validate_changed",
+        "tapps_quality_gate",
+        "tapps_score_file",
+        "tapps_memory",
+    }
+)
+TOOL_PRESET_FRONTEND: frozenset[str] = frozenset(
+    {
+        "tapps_session_start",
+        "tapps_quick_check",
+        "tapps_score_file",
+        "tapps_lookup_docs",
+        "tapps_quality_gate",
+    }
+)
+TOOL_PRESET_DEVELOPER: frozenset[str] = frozenset(
+    {
+        "tapps_session_start",
+        "tapps_quick_check",
+        "tapps_validate_changed",
+        "tapps_quality_gate",
+        "tapps_checklist",
+        "tapps_score_file",
+        "tapps_security_scan",
+        "tapps_lookup_docs",
+        "tapps_memory",
+        "tapps_impact_analysis",
+    }
+)
 
 # TAP-485: Mode presets for --mode quality|admin|all
 # quality mode: coding session tools (reduces context overhead for daily use)
-TAPPS_TOOL_PRESET_QUALITY: frozenset[str] = frozenset({
-    "tapps_session_start",
-    "tapps_quick_check",
-    "tapps_score_file",
-    "tapps_quality_gate",
-    "tapps_checklist",
-    "tapps_validate_changed",
-    "tapps_security_scan",
-    "tapps_lookup_docs",
-    "tapps_memory",
-    "tapps_dead_code",
-    "tapps_impact_analysis",
-    "tapps_validate_config",
-    "tapps_dependency_scan",
-    "tapps_dependency_graph",
-})
+TAPPS_TOOL_PRESET_QUALITY: frozenset[str] = frozenset(
+    {
+        "tapps_session_start",
+        "tapps_quick_check",
+        "tapps_score_file",
+        "tapps_quality_gate",
+        "tapps_checklist",
+        "tapps_validate_changed",
+        "tapps_security_scan",
+        "tapps_lookup_docs",
+        "tapps_memory",
+        "tapps_dead_code",
+        "tapps_impact_analysis",
+        "tapps_validate_config",
+        "tapps_dependency_scan",
+        "tapps_dependency_graph",
+    }
+)
 
 # admin mode: setup/troubleshooting tools
-TAPPS_TOOL_PRESET_ADMIN: frozenset[str] = frozenset({
-    "tapps_init",
-    "tapps_upgrade",
-    "tapps_doctor",
-    "tapps_server_info",
-    "tapps_set_engagement_level",
-    "tapps_dashboard",
-    "tapps_stats",
-    "tapps_feedback",
-    "tapps_report",
-    "tapps_pipeline",
-    "tapps_decompose",
-    "tapps_session_notes",
-})
+TAPPS_TOOL_PRESET_ADMIN: frozenset[str] = frozenset(
+    {
+        "tapps_init",
+        "tapps_upgrade",
+        "tapps_doctor",
+        "tapps_server_info",
+        "tapps_set_engagement_level",
+        "tapps_dashboard",
+        "tapps_stats",
+        "tapps_feedback",
+        "tapps_report",
+        "tapps_pipeline",
+        "tapps_decompose",
+        "tapps_session_notes",
+    }
+)
 
 _FALLBACK_TOOL_LIST: list[str] = sorted(ALL_TOOL_NAMES)
 
 _SECURITY_SCAN_FINDING_LIMIT: int = 50
 
-_VALID_CONFIG_TYPES: frozenset[str] = frozenset({
-    "dockerfile",
-    "docker_compose",
-    "websocket",
-    "mqtt",
-    "influxdb",
-    "mcp",
-})
+_VALID_CONFIG_TYPES: frozenset[str] = frozenset(
+    {
+        "dockerfile",
+        "docker_compose",
+        "websocket",
+        "mqtt",
+        "influxdb",
+        "mcp",
+    }
+)
 
 _MAX_CONFIG_FILE_SIZE: int = 1_048_576  # 1 MB
 
@@ -335,8 +375,7 @@ def _get_available_tools() -> list[str]:
 def _current_docs_provider_summary() -> dict[str, Any]:
     """Return the active docs-lookup provider summary (Issue #79)."""
     has_key = bool(
-        os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY")
-        or os.environ.get("CONTEXT7_API_KEY")
+        os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY") or os.environ.get("CONTEXT7_API_KEY")
     )
     summary: dict[str, Any] = {
         "primary": "context7" if has_key else "llmstxt",
@@ -344,8 +383,7 @@ def _current_docs_provider_summary() -> dict[str, Any]:
     }
     if not has_key:
         summary["hint"] = (
-            "Set TAPPS_MCP_CONTEXT7_API_KEY for richer docs via Context7. "
-            "https://context7.com"
+            "Set TAPPS_MCP_CONTEXT7_API_KEY for richer docs via Context7. https://context7.com"
         )
     return summary
 
@@ -681,9 +719,7 @@ def tapps_security_scan(
         "medium_count": result.medium_count,
         "low_count": result.low_count,
         "bandit_available": result.bandit_available,
-        "bandit_issues": serialize_issues(
-            result.bandit_issues, limit=_SECURITY_SCAN_FINDING_LIMIT
-        ),
+        "bandit_issues": serialize_issues(result.bandit_issues, limit=_SECURITY_SCAN_FINDING_LIMIT),
         "secret_findings": serialize_issues(
             result.secret_findings, limit=_SECURITY_SCAN_FINDING_LIMIT
         ),
@@ -782,8 +818,7 @@ def _build_lookup_data(result: LookupResult) -> dict[str, Any]:
     # running in degraded mode.
     source_str = str(result.source or "").lower()
     has_key = bool(
-        os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY")
-        or os.environ.get("CONTEXT7_API_KEY")
+        os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY") or os.environ.get("CONTEXT7_API_KEY")
     )
     if not has_key and ("llmstxt" in source_str or source_str == "fallback"):
         data["context7_hint"] = (
@@ -1072,9 +1107,7 @@ def _checklist_compact_format(
         parts.append(f"{len(result.missing_required)} required missing ({missing_names})")
     if result.missing_recommended:
         missing_names = ", ".join(result.missing_recommended)
-        parts.append(
-            f"{len(result.missing_recommended)} recommended missing ({missing_names})"
-        )
+        parts.append(f"{len(result.missing_recommended)} recommended missing ({missing_names})")
 
     summary = f"Checklist {result.task_type}: {', '.join(parts)}"
 

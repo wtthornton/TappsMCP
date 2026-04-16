@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from docs_mcp.extractors.dispatcher import get_extractor
 from docs_mcp.extractors.generic import GenericExtractor
 from docs_mcp.extractors.python import PythonExtractor

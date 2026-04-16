@@ -27,7 +27,9 @@ class TestProvenanceAnnotation:
         assert a.is_federated is False
 
     def test_federated_flag(self):
-        a = ProvenanceAnnotation(key="test.key", recalled_from="tapps-brain:other", is_federated=True)
+        a = ProvenanceAnnotation(
+            key="test.key", recalled_from="tapps-brain:other", is_federated=True
+        )
         assert a.is_federated is True
 
     def test_summary_line_local(self):

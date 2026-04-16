@@ -113,9 +113,7 @@ class TestPluginHooks:
         builder = PluginBuilder(output_dir=plugin_dir)
         builder.build()
 
-        hooks = json.loads(
-            (plugin_dir / "hooks" / "hooks.json").read_text(encoding="utf-8")
-        )
+        hooks = json.loads((plugin_dir / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         assert "SessionStart" in hooks
         assert "PostToolUse" in hooks
 
@@ -132,9 +130,7 @@ class TestPluginMCPConfig:
         builder = PluginBuilder(output_dir=plugin_dir)
         builder.build()
 
-        mcp = json.loads(
-            (plugin_dir / ".mcp.json").read_text(encoding="utf-8")
-        )
+        mcp = json.loads((plugin_dir / ".mcp.json").read_text(encoding="utf-8"))
         assert "tapps-mcp" in mcp["mcpServers"]
         assert mcp["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
 
@@ -151,9 +147,7 @@ class TestPluginRules:
         builder = PluginBuilder(output_dir=plugin_dir, engagement_level="high")
         builder.build()
 
-        content = (plugin_dir / "rules" / "python-quality.md").read_text(
-            encoding="utf-8"
-        )
+        content = (plugin_dir / "rules" / "python-quality.md").read_text(encoding="utf-8")
         assert "high" in content
 
 
@@ -169,9 +163,7 @@ class TestPluginSettings:
         builder = PluginBuilder(output_dir=plugin_dir)
         builder.build()
 
-        settings = json.loads(
-            (plugin_dir / "settings.json").read_text(encoding="utf-8")
-        )
+        settings = json.loads((plugin_dir / "settings.json").read_text(encoding="utf-8"))
         assert "permissions" in settings
         assert "mcp__tapps-mcp__*" in settings["permissions"]["allow"]
 

@@ -22,7 +22,6 @@ from tapps_mcp.server_scoring_tools import (
     tapps_score_file,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -73,9 +72,7 @@ def _make_gate_result(passed: bool = True, preset: str = "standard") -> GateResu
     )
 
 
-def _make_security_scan_result(
-    passed: bool = True, total_issues: int = 0
-) -> SecurityScanResult:
+def _make_security_scan_result(passed: bool = True, total_issues: int = 0) -> SecurityScanResult:
     return SecurityScanResult(
         passed=passed,
         total_issues=total_issues,
@@ -86,15 +83,9 @@ def _make_security_scan_result(
 # Standard patches — _record_call, _record_execution, _validate_file_path, _with_nudges
 # are imported inside function bodies from tapps_mcp.server, so we patch at source.
 # ensure_session_initialized and _get_scorer_for_file are imported at module level from server_helpers.
-_PATCH_RECORD_CALL = patch(
-    "tapps_mcp.server._record_call", side_effect=lambda *a, **kw: None
-)
-_PATCH_RECORD_EXEC = patch(
-    "tapps_mcp.server._record_execution", side_effect=lambda *a, **kw: None
-)
-_PATCH_WITH_NUDGES = patch(
-    "tapps_mcp.server._with_nudges", side_effect=lambda _t, resp, _c: resp
-)
+_PATCH_RECORD_CALL = patch("tapps_mcp.server._record_call", side_effect=lambda *a, **kw: None)
+_PATCH_RECORD_EXEC = patch("tapps_mcp.server._record_execution", side_effect=lambda *a, **kw: None)
+_PATCH_WITH_NUDGES = patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, resp, _c: resp)
 _PATCH_SESSION = patch(
     "tapps_mcp.server_scoring_tools.ensure_session_initialized",
     new_callable=AsyncMock,
@@ -416,13 +407,9 @@ class TestTappsQuickCheck:
             patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.server_scoring_tools.load_settings") as mock_settings,
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
-            patch(
-                "tapps_mcp.security.security_scanner.run_security_scan", return_value=sec
-            ),
+            patch("tapps_mcp.security.security_scanner.run_security_scan", return_value=sec),
         ):
-            mock_settings.return_value = MagicMock(
-                project_root=tmp_path, tool_timeout=30
-            )
+            mock_settings.return_value = MagicMock(project_root=tmp_path, tool_timeout=30)
             result = await tapps_quick_check(str(f))
 
         assert result["success"] is True
@@ -450,14 +437,10 @@ class TestTappsQuickCheck:
             patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.server_scoring_tools.load_settings") as mock_settings,
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
-            patch(
-                "tapps_mcp.security.security_scanner.run_security_scan", return_value=sec
-            ),
+            patch("tapps_mcp.security.security_scanner.run_security_scan", return_value=sec),
             patch("tapps_mcp.tools.ruff.run_ruff_fix", return_value=5),
         ):
-            mock_settings.return_value = MagicMock(
-                project_root=tmp_path, tool_timeout=30
-            )
+            mock_settings.return_value = MagicMock(project_root=tmp_path, tool_timeout=30)
             result = await tapps_quick_check(str(f), fix=True)
 
         assert result["success"] is True
@@ -503,9 +486,7 @@ class TestTappsQuickCheck:
                 return_value=_make_security_scan_result(),
             ),
         ):
-            mock_settings.return_value = MagicMock(
-                project_root=tmp_path, tool_timeout=30
-            )
+            mock_settings.return_value = MagicMock(project_root=tmp_path, tool_timeout=30)
             result = await tapps_quick_check(str(f))
 
         assert result["success"] is False
@@ -532,13 +513,9 @@ class TestTappsQuickCheck:
             patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
             patch("tapps_mcp.server_scoring_tools.load_settings") as mock_settings,
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
-            patch(
-                "tapps_mcp.security.security_scanner.run_security_scan", return_value=sec
-            ),
+            patch("tapps_mcp.security.security_scanner.run_security_scan", return_value=sec),
         ):
-            mock_settings.return_value = MagicMock(
-                project_root=tmp_path, tool_timeout=30
-            )
+            mock_settings.return_value = MagicMock(project_root=tmp_path, tool_timeout=30)
             result = await tapps_quick_check(str(f))
 
         assert result["data"]["gate_passed"] is False
@@ -570,12 +547,7 @@ class TestAstQuickComplexity:
         assert cc >= 3  # 1 base + 2 if/elif
 
     def test_function_with_loop_and_if(self) -> None:
-        code = (
-            "def foo(items):\n"
-            "    for item in items:\n"
-            "        if item:\n"
-            "            pass\n"
-        )
+        code = "def foo(items):\n    for item in items:\n        if item:\n            pass\n"
         cc = ast_quick_complexity(code)
         assert cc is not None
         assert cc >= 3
@@ -599,12 +571,7 @@ class TestAstQuickComplexity:
         assert cc >= 3  # 1 base + 1 if + 2 bool ops
 
     def test_async_function(self) -> None:
-        code = (
-            "async def foo(x):\n"
-            "    if x:\n"
-            "        return 1\n"
-            "    return 0\n"
-        )
+        code = "async def foo(x):\n    if x:\n        return 1\n    return 0\n"
         cc = ast_quick_complexity(code)
         assert cc is not None
         assert cc >= 2
@@ -738,7 +705,14 @@ class TestBuildQuickCheckData:
         sec = _make_security_scan_result()
 
         data, suggestions = _build_quick_check_data(
-            resolved, score, sec, gate, "standard", None, 0, False,
+            resolved,
+            score,
+            sec,
+            gate,
+            "standard",
+            None,
+            0,
+            False,
         )
 
         assert data["gate_passed"] is True
@@ -754,7 +728,14 @@ class TestBuildQuickCheckData:
         hint = {"max_cc_estimate": 15, "level": "high"}
 
         data, suggestions = _build_quick_check_data(
-            resolved, score, sec, gate, "standard", hint, 0, False,
+            resolved,
+            score,
+            sec,
+            gate,
+            "standard",
+            hint,
+            0,
+            False,
         )
 
         assert data["complexity_hint"] == hint
