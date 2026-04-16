@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **tapps-brain pin floor → 3.7.2** — bumped `tapps-core` dependency from `>=3.7.0,<4` to [`>=3.7.2,<4`](https://github.com/wtthornton/tapps-brain/releases/tag/v3.7.2). 3.7.1 fixed a `RuntimeError: Task group is not initialized` crash in the MCP streamable-HTTP `/mcp` transport lifespan ordering and a 404 bug in `TappsBrainClient`/`AsyncTappsBrainClient` against unimplemented `/v1/tools/*` REST routes. 3.7.2 fixed the client path (`/mcp` → `/mcp/mcp`) since FastMCP's mounted sub-app serves at the nested path. No tapps-mcp code change required — usage is in-process `AgentBrain` via `BrainBridge` ([packages/tapps-core/src/tapps_core/brain_bridge.py](packages/tapps-core/src/tapps_core/brain_bridge.py)), not the HTTP network client or `/mcp` endpoint. Floor bump is preventative: any future migration to remote brain-as-a-service inherits a working client. Fixes stale CLAUDE.md gotcha note (was still referencing `v2.0.4`).
+
 ## [2.7.3] - 2026-04-14
 
 ### Changed

@@ -102,7 +102,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Ruff RUF012**: Mutable class-level attributes need `ClassVar` annotation.
 - **Windows testing**: Use `python -c "import time; time.sleep(N)"` for timeout tests -- Git Bash intercepts `cmd /c timeout`.
 - **Patching lazy imports**: Some imports happen inside tool handlers from `tapps_core`. Patch at source modules, not `tapps_mcp.server`.
-- **tapps-brain version**: TappsMCP pins tapps-brain at `v2.0.4` (git tag). Profile/promotion modules (`tapps_brain.profile`, `tapps_brain.promotion`) are available. Imports still use `try/except ImportError` for defensive degradation in non-standard installs.
+- **tapps-brain version**: TappsMCP pins tapps-brain at [`>=3.7.2,<4`](https://github.com/wtthornton/tapps-brain/releases/tag/v3.7.2) in `packages/tapps-core/pyproject.toml`. 3.7.2 fixes the `TappsBrainClient` `/mcp` → `/mcp/mcp` path and the 3.7.1 streamable-HTTP lifespan crash — not load-bearing for tapps-mcp (in-process `AgentBrain` via `BrainBridge`, not the network client), but the floor is bumped so any future migration to remote brain-as-a-service gets a working client. Imports still use `try/except ImportError` for defensive degradation in non-standard installs.
 - **MCP server zombies**: Claude Code spawns a new MCP server process per session but never cleans up old ones. The `.claude/hooks/tapps-session-start.sh` hook kills tapps-mcp/docsmcp processes older than 2 hours at startup. Do not remove this cleanup block.
 
 ## Important context

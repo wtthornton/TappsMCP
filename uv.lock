@@ -2448,7 +2448,7 @@ wheels = [
 
 [[package]]
 name = "tapps-brain"
-version = "3.7.0"
+version = "3.7.2"
 source = { directory = "/home/wtthornton/code/tapps-brain" }
 dependencies = [
     { name = "numpy" },
