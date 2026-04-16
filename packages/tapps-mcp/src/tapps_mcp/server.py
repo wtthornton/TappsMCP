@@ -417,6 +417,7 @@ def _build_server_info_data(
         ),
         "docs_provider": _current_docs_provider_summary(),
         "diagnostics": diagnostics.model_dump(),
+        "brain_bridge": _brain_bridge_status_for_server_info(),
         "recommended_workflow": RECOMMENDED_WORKFLOW_TEXT,
         "quick_start": list(DAILY_STEPS),
         "critical_rules": [
@@ -437,6 +438,24 @@ def _build_server_info_data(
             "prompts_available": True,
         },
     }
+
+
+def _brain_bridge_status_for_server_info() -> dict[str, Any]:
+    """Non-blocking BrainBridge snapshot for ``tapps_server_info`` (TAP-517).
+
+    Peeks the cached singleton so the info tool does not force a Postgres
+    connection just to answer a status query. When the bridge has not been
+    initialized yet, reports ``{"initialized": False}``.
+    """
+    try:
+        from tapps_mcp.server_helpers import _peek_brain_bridge
+
+        bridge = _peek_brain_bridge()
+    except Exception as exc:
+        return {"initialized": False, "error": str(exc)}
+    if bridge is None:
+        return {"initialized": False}
+    return {"initialized": True, **bridge.status()}
 
 
 _checklist_state: dict[str, bool] = {"persist_configured": False}
