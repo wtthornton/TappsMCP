@@ -59,6 +59,35 @@ Doctor prints **Memory pipeline (effective config)** — a read-only summary of 
 
 **Non-interactive init:** If `tapps-mcp init` skips merging an existing MCP entry (no TTY), pass `--force` or set `TAPPS_MCP_INIT_ASSUME_YES=1` to overwrite without prompts.
 
+## Zombie MCP server processes
+
+**Problem:** After multiple Claude Code sessions, running `ps aux | grep tapps-mcp` shows many old Python processes from previous sessions consuming memory.
+
+**Root cause:** Claude Code spawns a new MCP server process per session but never terminates old ones. Over several sessions, these accumulate and become a resource leak.
+
+**Solution:** The `.claude/hooks/tapps-session-start.sh` hook automatically kills tapps-mcp and docsmcp processes older than 2 hours on session startup. This is enabled by default when you run `tapps_init`. The cleanup uses `ps -eo pid,etimes,cmd` and `awk` to find processes matching the `serve` command and terminates them with `kill`.
+
+**Manual cleanup:** If you have accumulated processes, clean them up manually:
+
+```bash
+# Find old tapps-mcp processes
+ps aux | grep "tapps-mcp serve"
+
+# Kill a specific PID
+kill -9 <pid>
+
+# Kill all tapps-mcp processes (use with caution)
+pkill -f "tapps-mcp serve"
+pkill -f "docsmcp serve"
+```
+
+If hook cleanup is not running, check:
+1. `.claude/hooks/tapps-session-start.sh` exists and is executable (`chmod +x`)
+2. `.claude/settings.json` has a SessionStart hook entry pointing to it
+3. On Windows, ensure PowerShell hooks exist instead (`.ps1` files)
+
+---
+
 ## Common issues
 
 ### Too many automatic memory writes or hook injections

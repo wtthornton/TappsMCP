@@ -26,11 +26,11 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 **Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **58 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
-### What's new in v2.4.0
+### What's new in v2.7+
 
-- **Enhanced performance scoring** — the performance category now uses three data sources instead of one: radon Halstead metrics (code volume, difficulty, effort, predicted bugs), perflint anti-pattern detection (11 pylint checks for loop invariants, unnecessary casts, inefficient iteration), and the existing AST heuristics. All three signals layer additively with configurable penalty weights and a perflint penalty cap.
-- **New optional dependency group** — `pip install tapps-mcp[perf]` installs pylint + perflint for full performance scoring. Without them, performance scoring gracefully degrades to AST-only analysis.
-- **Pylint tool detection** — `tapps_doctor` and `tapps_session_start` now report pylint availability alongside other checkers.
+- **Zero-friction quality pipeline** (EPIC-101) — new `tapps_pipeline` orchestrator collapses the recommended `session_start → quick_check → validate_changed → checklist` loop into a single call. Content-hash cache serves repeated checks instantly. Auto-detect budget (30s wall-clock) prevents hangs on large changesets.
+- **MCP server zombie cleanup** — `.claude/hooks/tapps-session-start.sh` now kills stale tapps-mcp/docsmcp processes (older than 2 hours) at session startup, solving resource leak from Claude Code spawning per-session servers without cleanup.
+- **Enhanced permission safety** — `.claude/settings.json` denyList now includes `Read(**/__pycache__/**)`, `Read(.venv/**)`, `Read(**/*.egg-info/**)` to prevent reads of cache/virtual-env artifacts. `BASH_MAX_OUTPUT_LENGTH=150000` caps verbose Bash output.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
@@ -528,6 +528,10 @@ The MCP tool version has all CLI options plus additional parameters for fine-gra
 | `mcp_config` | bool | `false` | Write MCP config file only (no other files). |
 | `output_mode` | str | `"auto"` | `"auto"` (write or return), `"content_return"` (always return file content), `"direct_write"` (always write). |
 | `verify_only` | bool | `false` | Check which external checkers are installed. |
+
+**Settings notes:**
+- `.claude/settings.json` (Claude Code): Auto-populated with denyList patterns (`Read(**/__pycache__/**)`, `Read(.venv/**)`, `Read(**/*.egg-info/**)`) to prevent reads of build artifacts, and `BASH_MAX_OUTPUT_LENGTH: 150000` to cap verbose output.
+- Hook scripts (`.claude/hooks/tapps-session-start.sh`): Auto-generated to kill stale MCP processes (older than 2 hours) at session startup, preventing zombie process accumulation.
 
 ### `tapps-mcp upgrade`
 

@@ -170,6 +170,16 @@ Split across `pipeline/` modules: hooks, rules, skills, subagents, bundles. AGEN
 
 6 category scores + overall against thresholds. Failures sorted by weight (security 0.27 > maintainability 0.24 > complexity 0.18 > test coverage 0.13 > performance 0.08 > structure/devex 0.05). Security floor: 50.
 
+## Hook system and MCP server lifecycle
+
+TappsMCP generates platform-specific hooks at `tapps_init()` that run at key moments during a Claude Code or Cursor session:
+
+- **SessionStart** (`tapps-session-start.sh`): Fires on session startup/resume. Kills stale tapps-mcp and docsmcp processes (older than 2 hours) to prevent zombie process accumulation. Claude Code spawns a new MCP server process per session but does not clean up old ones; this hook prevents resource leaks over multiple sessions.
+- **PostToolUse** (after edits, file writes): Runs `tapps-post-edit.sh` for quick quality feedback.
+- **Stop** (on session end): Saves session notes and memories.
+
+Each hook is a Bash script on macOS/Linux or PowerShell on Windows (auto-detected by `tapps_init`).
+
 ## Doctor diagnostics
 
 The `tapps_doctor` tool/CLI command runs configuration and connectivity checks:
@@ -178,7 +188,7 @@ The `tapps_doctor` tool/CLI command runs configuration and connectivity checks:
 - **MCP client configs**: Claude Code, Cursor, VS Code (project + user scope)
 - **Platform rules**: CLAUDE.md, `.cursor/rules/tapps-pipeline.md`
 - **AGENTS.md**: Version parity with installed TappsMCP
-- **Hooks**: Script presence, `.cursor/hooks.json` schema, Windows .sh detection
+- **Hooks**: Script presence, `.cursor/hooks.json` schema, Windows .sh detection. On Windows, warns if hooks are still configured as `.sh` (they should be `.ps1`)
 - **Settings**: `.claude/settings.json` permissions and hook key validation
 - **Quality tools**: ruff, mypy, bandit, radon installation
 - **tapps-brain library**: Importability check for the memory subsystem

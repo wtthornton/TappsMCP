@@ -103,6 +103,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Windows testing**: Use `python -c "import time; time.sleep(N)"` for timeout tests -- Git Bash intercepts `cmd /c timeout`.
 - **Patching lazy imports**: Some imports happen inside tool handlers from `tapps_core`. Patch at source modules, not `tapps_mcp.server`.
 - **tapps-brain version**: TappsMCP pins tapps-brain at `v2.0.4` (git tag). Profile/promotion modules (`tapps_brain.profile`, `tapps_brain.promotion`) are available. Imports still use `try/except ImportError` for defensive degradation in non-standard installs.
+- **MCP server zombies**: Claude Code spawns a new MCP server process per session but never cleans up old ones. The `.claude/hooks/tapps-session-start.sh` hook kills tapps-mcp/docsmcp processes older than 2 hours at startup. Do not remove this cleanup block.
 
 ## Important context
 
