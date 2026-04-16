@@ -2,7 +2,12 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-tapps-brain = { path = "/home/wtthornton/code/tapps-brain" }
+# tapps-brain is sourced from its GitHub repo pinned to the v3.8.0 commit SHA so
+# both local dev and CI resolve the same artifact. When v3.8.0 is tagged/released
+# on GitHub (or published to PyPI), swap this for ``tag = "v3.8.0"`` or remove
+# the ``[tool.uv.sources]`` entry entirely and rely on the version pin in
+# ``packages/tapps-core/pyproject.toml``.
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "a3654693df32d64f65cd3d97e7e28b2499a5308b" }
 
 [tool.uv]
 dev-dependencies = [

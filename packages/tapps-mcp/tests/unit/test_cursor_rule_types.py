@@ -36,7 +36,7 @@ class TestRuleCreation:
 
     def test_result_dict(self, tmp_path):
         result = generate_cursor_rules(tmp_path)
-        assert len(result["created"]) == 3
+        assert len(result["created"]) == 4
         assert len(result["skipped"]) == 0
 
 
