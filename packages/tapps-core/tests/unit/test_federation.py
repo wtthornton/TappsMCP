@@ -1,4 +1,8 @@
-"""Tests for tapps_core.memory.federation — cross-project memory federation."""
+"""Tests for tapps_core.memory.federation — cross-project memory federation.
+
+tapps-brain v3 (ADR-007): File-based federation was removed.  These tests are
+skipped when ``tapps_brain.federation`` is not importable.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+# Skip the entire module when tapps_brain.federation is unavailable (tapps-brain v3).
+try:
+    import tapps_brain.federation as _tb_fed  # noqa: F401
+except ImportError:
+    pytest.skip(
+        "tapps_brain.federation removed in tapps-brain v3 (ADR-007) — "
+        "file-based federation tests skipped",
+        allow_module_level=True,
+    )
 
 from tapps_core.memory.federation import (
     FederatedSearchResult,

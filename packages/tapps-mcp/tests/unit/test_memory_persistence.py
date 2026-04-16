@@ -1,10 +1,20 @@
-"""Unit tests for memory persistence layer (Epic 23, Story 2)."""
+"""Unit tests for memory persistence layer (Epic 23, Story 2).
+
+tapps-brain v3 (ADR-007) removed the SQLite-backed MemoryPersistence layer.
+These tests verify the old API that no longer exists.  The equivalent
+behaviour lives in tapps-brain's own test suite.  All tests are skipped.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="MemoryPersistence (SQLite) was removed in tapps-brain v3 (ADR-007). "
+    "Equivalent tests live in tapps-brain's test suite."
+)
 
 from tapps_mcp.memory.models import (
     MemoryEntry,

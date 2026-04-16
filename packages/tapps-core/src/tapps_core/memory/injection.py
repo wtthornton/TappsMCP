@@ -40,11 +40,11 @@ def inject_memories(
 
     settings = load_settings()
     rr = settings.memory.reranker
+    # tapps-brain v3: reranker_provider and reranker_api_key removed from
+    # InjectionConfig (Cohere replaced by FlashRank; no API key needed).
     config = InjectionConfig(
         reranker_enabled=rr.enabled,
-        reranker_provider=rr.provider,
         reranker_top_k=rr.top_k,
-        reranker_api_key=rr.api_key,
         injection_max_tokens=settings.memory.injection_max_tokens,
     )
     return _brain_inject_memories(

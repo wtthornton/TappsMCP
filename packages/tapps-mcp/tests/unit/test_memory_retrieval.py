@@ -280,8 +280,8 @@ class TestScoringHelpers:
         assert self._retriever()._normalize_relevance(0.0) == 0.0
 
     def test_normalize_relevance_positive(self) -> None:
-        # BM25 normalization: score / (score + 5.0)
-        score = self._retriever()._normalize_relevance(5.0)
+        # v3: per-query min-max normalization: (raw - rmin) / (rmax - rmin)
+        score = self._retriever()._normalize_relevance(5.0, rmin=0.0, rmax=10.0)
         assert 0.0 < score < 1.0
         assert score == pytest.approx(0.5)
 

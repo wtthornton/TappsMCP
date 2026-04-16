@@ -194,6 +194,7 @@ class TestConcurrency:
         assert not errors
 
 
+@pytest.mark.skip(reason="TestPersistenceEdgeCases tests the removed SQLite MemoryPersistence layer (tapps-brain v3 ADR-007). Behaviour is now in tapps-brain's own test suite.")
 class TestPersistenceEdgeCases:
     """Edge cases for the SQLite persistence layer."""
 

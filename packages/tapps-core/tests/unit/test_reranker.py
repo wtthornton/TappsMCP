@@ -1,12 +1,11 @@
 """Unit tests for optional reranker (Epic 65.9).
 
-Requires: cohere (optional dep, install via ``pip install tapps-core[reranker]``).
+tapps-brain v3 replaced CohereReranker with FlashRankReranker.
+``get_reranker`` now accepts ``(enabled, model=None)`` — provider/api_key removed.
 Run with: ``pytest -m optional_deps`` to include these tests.
 """
 
 from __future__ import annotations
-
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -62,48 +61,35 @@ class TestNoopReranker:
 
 
 # ---------------------------------------------------------------------------
-# get_reranker
+# get_reranker (v3 API: enabled + optional model; no provider/api_key)
 # ---------------------------------------------------------------------------
 
 
 class TestGetReranker:
     def test_disabled_returns_noop(self) -> None:
-        r = get_reranker(enabled=False, provider="cohere", api_key="x")
+        # tapps-brain v3: provider/api_key args removed.
+        r = get_reranker(enabled=False)
         assert isinstance(r, NoopReranker)
 
-    def test_provider_noop_returns_noop(self) -> None:
-        r = get_reranker(enabled=True, provider="noop")
-        assert isinstance(r, NoopReranker)
-
-    def test_provider_cohere_no_key_returns_noop(self) -> None:
-        r = get_reranker(enabled=True, provider="cohere", api_key=None)
-        assert isinstance(r, NoopReranker)
-
-    def test_provider_cohere_unavailable_returns_noop(self) -> None:
-        with patch(
-            "tapps_brain.reranker._create_cohere_reranker",
-            return_value=None,
-        ):
-            r = get_reranker(
-                enabled=True,
-                provider="cohere",
-                api_key="sk-test",
-            )
-        assert isinstance(r, NoopReranker)
-
-    def test_provider_cohere_with_key_and_package_returns_cohere(self) -> None:
+    def test_enabled_without_flashrank_returns_noop(self) -> None:
+        """When flashrank is not installed, get_reranker falls back to NoopReranker."""
         try:
-            import cohere  # noqa: F401
+            import flashrank  # type: ignore[import-untyped]  # noqa: F401
+            pytest.skip("flashrank is installed — fallback path not exercised")
         except ImportError:
-            pytest.skip("cohere not installed")
-        r = get_reranker(
-            enabled=True,
-            provider="cohere",
-            api_key="sk-test",
-        )
-        from tapps_core.memory.reranker import CohereReranker
+            pass
+        r = get_reranker(enabled=True)
+        assert isinstance(r, NoopReranker)
 
-        assert isinstance(r, CohereReranker)
+    def test_enabled_with_flashrank_returns_flashrank(self) -> None:
+        """When flashrank is available, get_reranker returns FlashRankReranker."""
+        try:
+            import flashrank  # type: ignore[import-untyped]  # noqa: F401
+        except ImportError:
+            pytest.skip("flashrank not installed")
+        from tapps_core.memory.reranker import FlashRankReranker
+        r = get_reranker(enabled=True)
+        assert isinstance(r, FlashRankReranker)
 
 
 # ---------------------------------------------------------------------------

@@ -534,6 +534,25 @@ class MemorySettings(BaseSettings):
         ),
     )
 
+    # EPIC-95: tapps-brain v3 Postgres connection (BrainBridge)
+    database_url: str = Field(
+        default="",
+        description=(
+            "Postgres DSN for tapps-brain v3 (e.g. postgresql://user:pass@host/db). "
+            "Falls back to TAPPS_BRAIN_DATABASE_URL env var when empty. "
+            "Required to enable BrainBridge memory backend. "
+            "Env: TAPPS_MCP_MEMORY_DATABASE_URL."
+        ),
+    )
+    hive_dsn: str = Field(
+        default="",
+        description=(
+            "Optional separate Postgres DSN for the hive namespace. "
+            "When set, enables hive_search and hive_propagate across agents. "
+            "Env: TAPPS_MCP_MEMORY_HIVE_DSN."
+        ),
+    )
+
 
 class DocSourceConfig(BaseModel):
     """Custom documentation source for a specific library."""

@@ -10,9 +10,10 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import Context
-    from tapps_brain.hive import AgentRegistry as _HiveAgentRegistryType
-    from tapps_brain.hive import HiveStore as _HiveStoreType
+    from tapps_brain.backends import AgentRegistry as _HiveAgentRegistryType
+    from tapps_brain import HiveBackend as _HiveStoreType
 
+    from tapps_core.brain_bridge import BrainBridge as _BrainBridgeType
     from tapps_core.config.settings import TappsMCPSettings
     from tapps_core.knowledge.lookup import LookupEngine as _LookupEngineType
     from tapps_core.memory.store import MemoryStore as _MemoryStoreType
@@ -121,70 +122,62 @@ def _reset_lookup_engine_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# MemoryStore singleton — avoids re-instantiating on every tool call.
+# BrainBridge singleton — async-safe wrapper over tapps-brain v3 AgentBrain.
+# TAP-408: Replaces the SQLite-backed MemoryStore init with a Postgres-backed
+# BrainBridge.  _get_memory_store() is kept as a thin compat shim so that
+# existing sync callers continue to work against the same MemoryStore API.
 # ---------------------------------------------------------------------------
 
-_memory_store: _MemoryStoreType | None = None
+_brain_bridge: _BrainBridgeType | None = None
+_brain_bridge_lock = threading.Lock()
+
+
+def _get_brain_bridge() -> _BrainBridgeType | None:
+    """Return a lazily-initialized :class:`BrainBridge` singleton.
+
+    Returns ``None`` when ``TAPPS_BRAIN_DATABASE_URL`` is not configured,
+    which allows callers to gate memory operations gracefully.
+    """
+    global _brain_bridge
+    if _brain_bridge is None:
+        with _brain_bridge_lock:
+            if _brain_bridge is None:
+                from tapps_core.brain_bridge import create_brain_bridge
+                from tapps_core.config.settings import load_settings
+
+                _brain_bridge = create_brain_bridge(load_settings())
+    return _brain_bridge
+
+
+def _reset_brain_bridge_cache() -> None:
+    """Reset the cached :class:`BrainBridge` singleton (for testing)."""
+    global _brain_bridge
+    with _brain_bridge_lock:
+        if _brain_bridge is not None:
+            _brain_bridge.close()
+        _brain_bridge = None
 
 
 def _get_memory_store() -> _MemoryStoreType:
-    """Return a lazily-initialized :class:`MemoryStore` singleton."""
-    global _memory_store
-    if _memory_store is None:
-        from tapps_core.config.settings import load_settings
-        from tapps_core.memory.embeddings import get_embedding_provider
-        from tapps_core.memory.store import ConsolidationConfig, MemoryStore
+    """Return the Postgres-backed :class:`MemoryStore` from the BrainBridge.
 
-        settings = load_settings()
-
-        # Configure auto-consolidation from settings (Epic 58)
-        consolidation_config = ConsolidationConfig(
-            enabled=settings.memory.consolidation.auto_consolidate,
-            threshold=settings.memory.consolidation.threshold,
-            min_entries=settings.memory.consolidation.min_entries,
+    Raises ``RuntimeError`` when ``TAPPS_BRAIN_DATABASE_URL`` is not set.
+    Kept as a compat shim for sync callers; prefer ``_get_brain_bridge()``
+    and its async methods in new code.
+    """
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        raise RuntimeError(
+            "Memory store unavailable: TAPPS_BRAIN_DATABASE_URL is not configured. "
+            "Set this environment variable to enable memory operations."
         )
-
-        # Optional embedding provider for semantic search (Epic 65.7)
-        ss = settings.memory.semantic_search
-        embedding_provider = get_embedding_provider(
-            semantic_search_enabled=ss.enabled,
-            provider=ss.provider,
-            model=ss.model,
-        )
-
-        # Epic M2.4: Resolve memory profile from settings or auto-detect
-        profile = None
-        try:
-            from tapps_brain.profile import get_builtin_profile, resolve_profile
-
-            profile_name = settings.memory.profile
-            if profile_name:
-                profile = get_builtin_profile(profile_name)
-            else:
-                profile = resolve_profile(settings.project_root)
-        except (ImportError, Exception):
-            pass  # Falls back to tapps-brain's default resolution
-
-        # Only pass profile kwarg when the store constructor supports it
-        store_kwargs: dict[str, Any] = {
-            "store_dir": ".tapps-mcp",
-            "consolidation_config": consolidation_config,
-            "embedding_provider": embedding_provider,
-        }
-        if profile is not None:
-            store_kwargs["profile"] = profile
-
-        _memory_store = MemoryStore(
-            settings.project_root,
-            **store_kwargs,
-        )
-    return _memory_store
+    store: _MemoryStoreType = bridge.store
+    return store
 
 
 def _reset_memory_store_cache() -> None:
-    """Reset the cached :class:`MemoryStore` singleton (for testing)."""
-    global _memory_store
-    _memory_store = None
+    """Compat alias for :func:`_reset_brain_bridge_cache` (for testing)."""
+    _reset_brain_bridge_cache()
 
 
 _IMPACT_MEMORY_CONTEXT_LIMIT = 5
@@ -326,12 +319,19 @@ def _ensure_hive_singletons() -> tuple[
         if _hive_import_error is not None:
             return None, None, _hive_import_error
         try:
-            from tapps_brain.hive import AgentRegistry, HiveStore
+            # tapps-brain v3: AgentRegistry moved from hive to backends.
+            # File-backed HiveStore was removed (ADR-007); postgres hive is
+            # available via create_hive_backend() when DATABASE_URL is set.
+            from tapps_brain.backends import AgentRegistry
         except ImportError as exc:
             _hive_import_error = str(exc)
             return None, None, _hive_import_error
         if _hive_store is None:
-            _hive_store = HiveStore()
+            dsn = os.environ.get("TAPPS_BRAIN_DATABASE_URL", "")
+            if dsn and dsn.startswith(("postgres://", "postgresql://")):
+                with contextlib.suppress(Exception):
+                    from tapps_brain.backends import create_hive_backend
+                    _hive_store = create_hive_backend(dsn)
         if _hive_registry is None:
             _hive_registry = AgentRegistry()
     return _hive_store, _hive_registry, None
@@ -420,7 +420,7 @@ def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, Any]:
                 **propagation,
             }
 
-        from tapps_brain.hive import AgentRegistration
+        from tapps_brain.models import AgentRegistration
 
         active_profile = settings.memory.profile or "repo-brain"
         agent_id = os.environ.get("CLAUDE_AGENT_ID", f"agent-{os.getpid()}")

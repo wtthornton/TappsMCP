@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -726,16 +727,23 @@ from tapps_mcp.scoring.suggestions import (
 _SCORE_LOW = 5
 
 
+def _num(v: object, default: float = 0.0) -> float:
+    """Safely coerce a dict value (from untyped radon output) to float."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    return default
+
+
 def _halstead_issues(hal_entries: list[dict[str, object]]) -> list[str]:
     """Derive performance issue labels from Halstead metrics."""
     if not hal_entries:
         return []
     seen: set[str] = set()
     for entry in hal_entries:
-        volume = float(entry.get("volume", 0))
-        difficulty = float(entry.get("difficulty", 0))
-        effort = float(entry.get("effort", 0))
-        bugs = float(entry.get("bugs", 0))
+        volume = _num(entry.get("volume"))
+        difficulty = _num(entry.get("difficulty"))
+        effort = _num(entry.get("effort"))
+        bugs = _num(entry.get("bugs"))
 
         if volume > HALSTEAD_VERY_HIGH_VOLUME:
             seen.add("halstead_very_high_volume")
@@ -750,7 +758,7 @@ def _halstead_issues(hal_entries: list[dict[str, object]]) -> list[str]:
     return sorted(seen)
 
 
-def _perflint_issues(findings: list[object]) -> list[str]:
+def _perflint_issues(findings: Sequence[object]) -> list[str]:
     """Derive performance issue labels from perflint findings."""
     if not findings:
         return []

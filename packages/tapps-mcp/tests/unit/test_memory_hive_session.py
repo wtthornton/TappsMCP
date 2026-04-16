@@ -28,13 +28,35 @@ def test_collect_session_hive_status_happy_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    """Happy-path hive status — mocks the hive store (v3 removed file-backed HiveStore).
+
+    tapps-brain v3 (ADR-007) removed the file-backed HiveStore; a Postgres DSN is
+    required for a real hive backend.  The test mocks _ensure_hive_singletons to
+    inject a minimal stub and a real AgentRegistry, exercising the non-degraded
+    code path without requiring Postgres.
+    """
+    from unittest.mock import MagicMock
+
+    from tapps_brain.backends import AgentRegistry
+
     monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from tapps_mcp.server_helpers import _reset_hive_store_cache, collect_session_hive_status
 
     _reset_hive_store_cache()
     settings = load_settings()
-    result = collect_session_hive_status(settings)
+
+    # Stub hive store with list_namespaces (file-backed store removed in v3).
+    mock_store = MagicMock()
+    mock_store.list_namespaces.return_value = ["universal", "test"]
+    real_registry = AgentRegistry(registry_path=tmp_path / "agents.yaml")
+
+    with patch(
+        "tapps_mcp.server_helpers._ensure_hive_singletons",
+        return_value=(mock_store, real_registry, None),
+    ):
+        result = collect_session_hive_status(settings)
+
     assert result["enabled"] is True
     assert result.get("degraded") is False
     assert "agent_id" in result

@@ -41,9 +41,7 @@ class TestAutoCaptureRunner:
         result = run_auto_capture(stdin, tmp_path, min_context_length=10)
         assert result["saved"] >= 1
         assert result["extracted_keys"]
-        # Verify persisted
-        store_path = tmp_path / ".tapps-mcp" / "memory" / "memory.db"
-        assert store_path.exists()
+        # Note: v3 (ADR-007) removed SQLite; no memory.db file is written.
 
     def test_transcript_field_used(self, tmp_path: Path) -> None:
         """Transcript field is extracted from payload."""

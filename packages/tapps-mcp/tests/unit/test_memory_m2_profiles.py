@@ -388,6 +388,8 @@ class TestReinforcePromotionSurfacing:
         entry.key = "test-key"
         entry.confidence = 0.5
         entry.tier = "pattern"
+        entry.source = "agent"  # v3: reinforce validates source against MemorySource
+        entry.reinforce_count = 0
         entry.model_dump.return_value = {"key": "test-key", "confidence": 0.6}
 
         mock_store = MagicMock()
@@ -422,6 +424,8 @@ class TestReinforcePromotionSurfacing:
         entry.key = "test-key"
         entry.confidence = 0.5
         entry.tier = "context"
+        entry.source = "agent"  # v3: reinforce validates source against MemorySource
+        entry.reinforce_count = 0
         entry.model_dump.return_value = {"key": "test-key", "confidence": 0.6}
 
         mock_profile = _make_mock_profile()
