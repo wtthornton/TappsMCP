@@ -67,14 +67,36 @@ def mock_memory_store() -> MagicMock:
     return store
 
 
-def test_handle_hive_search_missing_query(mock_memory_store: MagicMock) -> None:
-    out = _handle_hive_search(mock_memory_store, _minimal_params())
+def _fake_bridge_with_hive(hive: Any | None) -> Any:
+    """Build a fake BrainBridge wrapping a brain whose .hive is *hive*.
+
+    Used to exercise hive handlers without a real Postgres DSN.
+    """
+    from types import SimpleNamespace
+
+    from tapps_core.brain_bridge import BrainBridge
+
+    fake_brain = SimpleNamespace(
+        store=MagicMock(),
+        hive=hive,
+        recall=lambda query, max_results=10: [],
+        close=lambda: None,
+    )
+    return BrainBridge(fake_brain)
+
+
+@pytest.mark.asyncio
+async def test_handle_hive_search_missing_query(mock_memory_store: MagicMock) -> None:
+    out = await _handle_hive_search(mock_memory_store, _minimal_params())
     assert out["error"] == "missing_query"
 
 
-def test_handle_hive_search_disabled_env(mock_memory_store: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_handle_hive_search_disabled_env(
+    mock_memory_store: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.delenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", raising=False)
-    out = _handle_hive_search(
+    out = await _handle_hive_search(
         mock_memory_store,
         _minimal_params(query="auth"),
     )
@@ -82,50 +104,52 @@ def test_handle_hive_search_disabled_env(mock_memory_store: MagicMock, monkeypat
     assert out["result_count"] == 0
 
 
-def test_handle_hive_search_degraded_on_import(
+@pytest.mark.asyncio
+async def test_handle_hive_search_degraded_when_hive_missing(
     mock_memory_store: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
+    bridge = _fake_bridge_with_hive(None)
 
-    def _fail() -> tuple[None, None, str]:
-        return None, None, "no hive"
-
-    with patch("tapps_mcp.server_memory_tools._ensure_hive_singletons", _fail):
-        out = _handle_hive_search(
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge
+    ):
+        out = await _handle_hive_search(
             mock_memory_store,
             _minimal_params(query="x"),
         )
     assert out.get("degraded") is True
-    assert "no hive" in (out.get("message") or "")
 
 
-def test_handle_hive_search_happy_path(
+@pytest.mark.asyncio
+async def test_handle_hive_search_happy_path(
     mock_memory_store: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
     hive = MagicMock()
     hive.search.return_value = [{"key": "k1", "namespace": "universal"}]
+    bridge = _fake_bridge_with_hive(hive)
 
-    def _ok() -> tuple[MagicMock, None, None]:
-        return hive, None, None
-
-    with patch("tapps_mcp.server_memory_tools._ensure_hive_singletons", _ok):
-        out = _handle_hive_search(
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge
+    ):
+        out = await _handle_hive_search(
             mock_memory_store,
             _minimal_params(query="jwt", limit=5, tag_list=["universal"]),
         )
     assert out["degraded"] is False
     assert out["result_count"] == 1
     hive.search.assert_called_once()
-    call_kw = hive.search.call_args
-    assert call_kw[0][0] == "jwt"
-    assert call_kw[1]["namespaces"] == ["universal"]
-    assert call_kw[1]["limit"] == 5
+    call_args = hive.search.call_args
+    assert call_args[0][0] == "jwt"
+    assert call_args[1]["namespaces"] == ["universal"]
+    assert call_args[1]["limit"] == 5
 
 
-def test_handle_hive_propagate_skips_private(
+@pytest.mark.asyncio
+async def test_handle_hive_propagate_skips_private(
     mock_memory_store: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -145,25 +169,27 @@ def test_handle_hive_propagate_skips_private(
     mock_memory_store.snapshot.return_value = snap
 
     hive = MagicMock()
-
-    def _ok() -> tuple[MagicMock, None, None]:
-        return hive, None, None
+    bridge = _fake_bridge_with_hive(hive)
 
     with (
-        patch("tapps_mcp.server_memory_tools._ensure_hive_singletons", _ok),
+        patch(
+            "tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge
+        ),
         patch("tapps_core.config.settings.load_settings") as ls,
+        patch("tapps_brain.backends.PropagationEngine.propagate", return_value=None),
     ):
         mset = MagicMock()
         mset.memory.profile = "repo-brain"
         mset.project_root = Path("/tmp")
         ls.return_value = mset
-        out = _handle_hive_propagate(mock_memory_store, _minimal_params(limit=10))
+        out = await _handle_hive_propagate(mock_memory_store, _minimal_params(limit=10))
     assert out["propagated"] == 0
     assert out["skipped_private"] == 1
 
 
-def test_handle_agent_register_missing_key(mock_memory_store: MagicMock) -> None:
-    out = _handle_agent_register(mock_memory_store, _minimal_params())
+@pytest.mark.asyncio
+async def test_handle_agent_register_missing_key(mock_memory_store: MagicMock) -> None:
+    out = await _handle_agent_register(mock_memory_store, _minimal_params())
     assert out.get("error") == "missing_key"
 
 

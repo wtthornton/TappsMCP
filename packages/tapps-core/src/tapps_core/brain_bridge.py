@@ -15,6 +15,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import random
 import time
@@ -252,6 +253,8 @@ class BrainBridge:
         self,
         query: str,
         limit: int = 10,
+        namespaces: list[str] | None = None,
+        min_confidence: float = 0.0,
     ) -> list[dict[str, Any]]:
         """Search the hive namespace. Returns [] when hive DSN is not configured."""
 
@@ -259,8 +262,175 @@ class BrainBridge:
             hive = self._brain.hive
             if hive is None:
                 return []
-            results: list[dict[str, Any]] = hive.search(query, limit=limit)
+            kwargs: dict[str, Any] = {"limit": limit}
+            if namespaces is not None:
+                kwargs["namespaces"] = namespaces
+            if min_confidence > 0.0:
+                kwargs["min_confidence"] = min_confidence
+            results: list[dict[str, Any]] = hive.search(query, **kwargs)
             return results
+
+        return await self._call(_fn)
+
+    async def hive_status(
+        self,
+        *,
+        agent_id: str,
+        agent_name: str = "unnamed",
+        agent_profile: str = "repo-brain",
+        project_root: str = ".",
+        register: bool = True,
+    ) -> dict[str, Any]:
+        """Snapshot Hive state. Optionally registers this process as an agent.
+
+        TAP-413 / EPIC-95.4: replaces direct ``tapps_brain.backends.AgentRegistry``
+        + ``HiveBackend`` singletons in tapps-mcp. Returns ``degraded: true`` when
+        the hive backend is not available (no DSN or init failed).
+        """
+
+        def _fn() -> dict[str, Any]:
+            from tapps_brain.backends import AgentRegistry
+            from tapps_brain.models import AgentRegistration
+
+            hive = self._brain.hive
+            if hive is None:
+                return {
+                    "enabled": True,
+                    "degraded": True,
+                    "message": "Hive backend not available (no DSN or init failed).",
+                }
+
+            registry = AgentRegistry()
+            if register:
+                with contextlib.suppress(Exception):
+                    registry.register(
+                        AgentRegistration(
+                            id=agent_id,
+                            name=agent_name,
+                            profile=agent_profile,
+                            project_root=project_root,
+                        )
+                    )
+
+            namespaces = list(hive.list_namespaces())
+            agents = [self._to_dict(a) for a in registry.list_agents()]
+            return {
+                "enabled": True,
+                "degraded": False,
+                "namespaces": namespaces,
+                "namespace_count": len(namespaces),
+                "agents": agents,
+                "agent_count": len(agents),
+            }
+
+        return await self._call(_fn)
+
+    async def hive_propagate(
+        self,
+        entries: list[Any],
+        *,
+        agent_id: str,
+        agent_profile: str,
+    ) -> dict[str, Any]:
+        """Propagate local memory entries into Hive per their ``agent_scope``.
+
+        Each entry's ``agent_scope`` decides routing: ``private`` stays local
+        (counted as ``skipped_private``); ``domain`` goes to the agent profile
+        namespace; ``hive`` goes to ``universal``. Returns ``degraded: true`` when
+        the hive backend is not available.
+        """
+
+        def _fn() -> dict[str, Any]:
+            from tapps_brain.backends import PropagationEngine
+
+            hive = self._brain.hive
+            if hive is None:
+                return {
+                    "enabled": True,
+                    "degraded": True,
+                    "propagated": 0,
+                    "skipped_private": 0,
+                    "scanned": 0,
+                    "details": [],
+                    "message": "Hive backend not available.",
+                }
+
+            propagated = 0
+            skipped_private = 0
+            details: list[dict[str, Any]] = []
+
+            for entry in entries:
+                conf = entry.confidence if entry.confidence >= 0.0 else 0.6
+                tier_val = getattr(entry.tier, "value", str(entry.tier))
+                source_val = getattr(entry.source, "value", str(entry.source))
+                saved = PropagationEngine.propagate(
+                    key=entry.key,
+                    value=entry.value,
+                    agent_scope=entry.agent_scope,
+                    agent_id=agent_id,
+                    agent_profile=agent_profile,
+                    tier=str(tier_val),
+                    confidence=conf,
+                    source=str(source_val),
+                    tags=entry.tags,
+                    hive_store=hive,
+                    auto_propagate_tiers=None,
+                    private_tiers=None,
+                )
+                if saved is None:
+                    skipped_private += 1
+                else:
+                    propagated += 1
+                    details.append(
+                        {"key": entry.key, "namespace": saved.get("namespace", "")}
+                    )
+
+            return {
+                "enabled": True,
+                "degraded": False,
+                "propagated": propagated,
+                "skipped_private": skipped_private,
+                "scanned": len(entries),
+                "details": details,
+            }
+
+        return await self._call(_fn)
+
+    async def agent_register(
+        self,
+        *,
+        agent_id: str,
+        name: str,
+        profile: str = "repo-brain",
+        skills: list[str] | None = None,
+        project_root: str = ".",
+    ) -> dict[str, Any]:
+        """Register an agent in the AgentRegistry (YAML-backed).
+
+        Independent of hive backend availability — the registry is a local YAML
+        file that records agents in the project. ``skills`` defaults to ``[]``.
+        """
+
+        def _fn() -> dict[str, Any]:
+            from tapps_brain.backends import AgentRegistry
+            from tapps_brain.models import AgentRegistration
+
+            registry = AgentRegistry()
+            registry.register(
+                AgentRegistration(
+                    id=agent_id,
+                    name=name,
+                    profile=profile,
+                    skills=skills or [],
+                    project_root=project_root,
+                )
+            )
+            return {
+                "agent_id": agent_id,
+                "agent_name": name,
+                "profile": profile,
+                "skills": skills or [],
+            }
 
         return await self._call(_fn)
 

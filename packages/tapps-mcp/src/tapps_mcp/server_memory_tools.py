@@ -17,12 +17,12 @@ import structlog
 
 from tapps_mcp.server_helpers import (
     _agent_teams_env_enabled,
-    _ensure_hive_singletons,
     _get_brain_bridge,
     _get_memory_store,
-    collect_session_hive_status,
+    _hive_propagation_config_payload,
     ensure_session_initialized,
     error_response,
+    initial_session_hive_status,
     success_response,
 )
 
@@ -99,6 +99,11 @@ _ASYNC_ACTIONS = {
     "verify_integrity",
     "maintain",
     "health",
+    # TAP-413 / EPIC-95.4: hive operations delegate to BrainBridge.
+    "hive_status",
+    "hive_search",
+    "hive_propagate",
+    "agent_register",
 }
 
 
@@ -1956,21 +1961,49 @@ def _hive_search_text(p: _Params) -> str:
     return (p.query or "").strip() or (p.value or "").strip()
 
 
-def _handle_hive_status(store: MemoryStore, _p: _Params) -> dict[str, Any]:
-    """Hive snapshot + optional registration (Epic M3)."""
+async def _handle_hive_status(store: MemoryStore, _p: _Params) -> dict[str, Any]:
+    """Hive snapshot via BrainBridge (TAP-413 / EPIC-95.4)."""
     from tapps_core.config.settings import load_settings
 
+    if not _agent_teams_env_enabled():
+        return {
+            "action": "hive_status",
+            **initial_session_hive_status(),
+            "store_metadata": _store_metadata(store),
+        }
+
+    bridge = _get_brain_bridge()
+    propagation = {"propagation_config": _hive_propagation_config_payload()}
+    if bridge is None:
+        return {
+            "action": "hive_status",
+            "enabled": True,
+            "degraded": True,
+            "message": "BrainBridge unavailable (TAPPS_BRAIN_DATABASE_URL not configured).",
+            **propagation,
+            "store_metadata": _store_metadata(store),
+        }
+
     settings = load_settings()
-    status = collect_session_hive_status(settings)
+    agent_id = os.environ.get("CLAUDE_AGENT_ID", f"agent-{os.getpid()}")
+    agent_name = os.environ.get("CLAUDE_AGENT_NAME", "unnamed")
+
+    status = await bridge.hive_status(
+        agent_id=agent_id,
+        agent_name=agent_name,
+        agent_profile=settings.memory.profile or "repo-brain",
+        project_root=str(settings.project_root),
+    )
     return {
         "action": "hive_status",
         **status,
+        **propagation,
         "store_metadata": _store_metadata(store),
     }
 
 
-def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
-    """Search Hive namespaces via FTS5 / LIKE fallback (Epic M3)."""
+async def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Search Hive namespaces via BrainBridge (TAP-413 / EPIC-95.4)."""
     text = _hive_search_text(p)
     if not text:
         return {
@@ -1990,13 +2023,13 @@ def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "store_metadata": _store_metadata(store),
         }
 
-    hive_store, _reg, import_err = _ensure_hive_singletons()
-    if import_err or hive_store is None:
+    bridge = _get_brain_bridge()
+    if bridge is None:
         return {
             "action": "hive_search",
             "enabled": True,
             "degraded": True,
-            "message": f"Hive unavailable: {import_err or 'init failed'}",
+            "message": "BrainBridge unavailable (TAPPS_BRAIN_DATABASE_URL not configured).",
             "results": [],
             "result_count": 0,
             "store_metadata": _store_metadata(store),
@@ -2004,12 +2037,24 @@ def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
 
     limit = p.limit if p.limit > 0 else _HIVE_SEARCH_DEFAULT_LIMIT
     namespaces = p.tag_list if p.tag_list else None
-    raw = hive_store.search(
+
+    raw = await bridge.hive_search(
         text,
+        limit=limit,
         namespaces=namespaces,
         min_confidence=p.min_confidence,
-        limit=limit,
     )
+    if raw == [] and bridge._brain.hive is None:
+        return {
+            "action": "hive_search",
+            "enabled": True,
+            "degraded": True,
+            "message": "Hive backend unavailable (no DSN or init failed).",
+            "results": [],
+            "result_count": 0,
+            "store_metadata": _store_metadata(store),
+        }
+
     return {
         "action": "hive_search",
         "enabled": True,
@@ -2022,10 +2067,8 @@ def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
     }
 
 
-def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, Any]:
-    """Propagate local memories into Hive per entry agent_scope (Epic M3)."""
-    from tapps_brain.backends import PropagationEngine
-
+async def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Propagate local memories into Hive via BrainBridge (TAP-413 / EPIC-95.4)."""
     from tapps_core.config.settings import load_settings
 
     if not _agent_teams_env_enabled():
@@ -2038,15 +2081,15 @@ def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "store_metadata": _store_metadata(store),
         }
 
-    hive_s, _reg, import_err = _ensure_hive_singletons()
-    if import_err or hive_s is None:
+    bridge = _get_brain_bridge()
+    if bridge is None:
         return {
             "action": "hive_propagate",
             "enabled": True,
             "degraded": True,
             "propagated": 0,
             "skipped_private": 0,
-            "message": f"Hive unavailable: {import_err or 'init failed'}",
+            "message": "BrainBridge unavailable (TAPPS_BRAIN_DATABASE_URL not configured).",
             "store_metadata": _store_metadata(store),
         }
 
@@ -2057,49 +2100,21 @@ def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, Any]:
     cap = p.limit if p.limit > 0 else _HIVE_PROPAGATE_DEFAULT_LIMIT
     entries = store.snapshot().entries[:cap]
 
-    propagated = 0
-    skipped_private = 0
-    details: list[dict[str, Any]] = []
-
-    for entry in entries:
-        conf = entry.confidence if entry.confidence >= 0.0 else 0.6
-        saved = PropagationEngine.propagate(
-            key=entry.key,
-            value=entry.value,
-            agent_scope=entry.agent_scope,
-            agent_id=agent_id,
-            agent_profile=active_profile,
-            tier=_memory_tier_str(entry.tier),
-            confidence=conf,
-            source=_memory_source_str(entry.source),
-            tags=entry.tags,
-            hive_store=hive_s,
-            auto_propagate_tiers=None,
-            private_tiers=None,
-        )
-        if saved is None:
-            skipped_private += 1
-        else:
-            propagated += 1
-            ns = saved.get("namespace", "")
-            details.append({"key": entry.key, "namespace": ns})
-
+    result = await bridge.hive_propagate(
+        entries,
+        agent_id=agent_id,
+        agent_profile=active_profile,
+    )
     return {
         "action": "hive_propagate",
-        "enabled": True,
-        "degraded": False,
-        "propagated": propagated,
-        "skipped_private": skipped_private,
-        "scanned": len(entries),
-        "details": details[:50],
+        **result,
+        "details": list(result.get("details", []))[:50],
         "store_metadata": _store_metadata(store),
     }
 
 
-def _handle_agent_register(store: MemoryStore, p: _Params) -> dict[str, Any]:
-    """Register an agent in the Hive YAML registry (Epic M3)."""
-    from tapps_brain.models import AgentRegistration
-
+async def _handle_agent_register(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Register an agent via BrainBridge (TAP-413 / EPIC-95.4)."""
     from tapps_core.config.settings import load_settings
 
     aid = (p.key or "").strip()
@@ -2119,13 +2134,13 @@ def _handle_agent_register(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "store_metadata": _store_metadata(store),
         }
 
-    _hive, registry, import_err = _ensure_hive_singletons()
-    if import_err or registry is None:
+    bridge = _get_brain_bridge()
+    if bridge is None:
         return {
             "action": "agent_register",
             "enabled": True,
             "degraded": True,
-            "message": f"Hive registry unavailable: {import_err or 'init failed'}",
+            "message": "BrainBridge unavailable (TAPPS_BRAIN_DATABASE_URL not configured).",
             "store_metadata": _store_metadata(store),
         }
 
@@ -2133,23 +2148,18 @@ def _handle_agent_register(store: MemoryStore, p: _Params) -> dict[str, Any]:
     display = (p.value or "").strip() or aid
     profile_name = settings.memory.profile or "repo-brain"
 
-    reg = AgentRegistration(
-        id=aid,
+    result = await bridge.agent_register(
+        agent_id=aid,
         name=display,
         profile=profile_name,
         skills=p.tag_list,
         project_root=str(settings.project_root),
     )
-    registry.register(reg)
-
     return {
         "action": "agent_register",
         "enabled": True,
         "degraded": False,
-        "agent_id": aid,
-        "agent_name": display,
-        "profile": profile_name,
-        "skills": p.tag_list,
+        **result,
         "store_metadata": _store_metadata(store),
     }
 
@@ -2194,14 +2204,10 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "profile_info": _handle_profile_info,
     "profile_list": _handle_profile_list,
     "profile_switch": _handle_profile_switch,
-    # Epic M3: Hive / Agent Teams
-    "hive_status": _handle_hive_status,
-    "hive_search": _handle_hive_search,
-    "hive_propagate": _handle_hive_propagate,
-    "agent_register": _handle_agent_register,
     # NOTE: gc, consolidate, unconsolidate, contradictions, verify_integrity,
-    # maintain, and health moved to _ASYNC_DISPATCH (TAP-412 / EPIC-95.3) —
-    # they delegate to BrainBridge async methods.
+    # maintain, and health moved to _ASYNC_DISPATCH (TAP-412 / EPIC-95.3).
+    # NOTE: hive_status, hive_search, hive_propagate, agent_register moved to
+    # _ASYNC_DISPATCH (TAP-413 / EPIC-95.4) — they delegate to BrainBridge.
 }
 
 
@@ -2299,6 +2305,11 @@ _ASYNC_DISPATCH: dict[str, Any] = {
     "verify_integrity": _handle_verify_integrity,
     "maintain": _handle_maintain,
     "health": _handle_health,
+    # TAP-413 / EPIC-95.4: hive operations delegate to BrainBridge.
+    "hive_status": _handle_hive_status,
+    "hive_search": _handle_hive_search,
+    "hive_propagate": _handle_hive_propagate,
+    "agent_register": _handle_agent_register,
 }
 
 

@@ -413,6 +413,78 @@ class TestMaintenance:
         assert result["checked_count"] == 1
         bridge._brain.store.update_fields.assert_called_once_with("k1", contradicted=True)
 
+    # TAP-413 / EPIC-95.4: hive operations.
+
+    @pytest.mark.asyncio()
+    async def test_hive_status_degraded_when_no_hive(self, bridge: Any) -> None:
+        bridge._brain.hive = None
+        result = await bridge.hive_status(agent_id="a1")
+        assert result["enabled"] is True
+        assert result["degraded"] is True
+
+    @pytest.mark.asyncio()
+    async def test_hive_status_returns_namespaces(self, bridge: Any) -> None:
+        hive = MagicMock()
+        hive.list_namespaces.return_value = ["universal", "domain-foo"]
+        bridge._brain.hive = hive
+
+        with patch("tapps_brain.backends.AgentRegistry") as reg_cls:
+            reg = MagicMock()
+            reg.list_agents.return_value = []
+            reg_cls.return_value = reg
+            result = await bridge.hive_status(
+                agent_id="a1", agent_name="x", agent_profile="repo-brain"
+            )
+
+        assert result["degraded"] is False
+        assert result["namespace_count"] == 2
+        assert "universal" in result["namespaces"]
+
+    @pytest.mark.asyncio()
+    async def test_hive_propagate_skips_private(self, bridge: Any) -> None:
+        bridge._brain.hive = MagicMock()
+        entry = MagicMock(
+            key="k1",
+            value="v1",
+            agent_scope="private",
+            tier="pattern",
+            confidence=0.7,
+            source=MagicMock(value="agent"),
+            tags=[],
+        )
+        with patch(
+            "tapps_brain.backends.PropagationEngine.propagate", return_value=None
+        ):
+            result = await bridge.hive_propagate(
+                [entry], agent_id="a1", agent_profile="repo-brain"
+            )
+        assert result["propagated"] == 0
+        assert result["skipped_private"] == 1
+
+    @pytest.mark.asyncio()
+    async def test_hive_propagate_degraded_when_no_hive(self, bridge: Any) -> None:
+        bridge._brain.hive = None
+        result = await bridge.hive_propagate(
+            [], agent_id="a1", agent_profile="repo-brain"
+        )
+        assert result["degraded"] is True
+        assert result["propagated"] == 0
+
+    @pytest.mark.asyncio()
+    async def test_agent_register_calls_registry(self, bridge: Any) -> None:
+        with patch("tapps_brain.backends.AgentRegistry") as reg_cls:
+            reg = MagicMock()
+            reg_cls.return_value = reg
+            result = await bridge.agent_register(
+                agent_id="a1",
+                name="display",
+                profile="repo-brain",
+                skills=["python"],
+            )
+        reg.register.assert_called_once()
+        assert result["agent_id"] == "a1"
+        assert result["skills"] == ["python"]
+
     @pytest.mark.asyncio()
     async def test_maintain_chains_phases(self, bridge: Any) -> None:
         bridge._brain.store.gc = MagicMock(
