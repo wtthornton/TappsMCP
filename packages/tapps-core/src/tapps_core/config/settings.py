@@ -757,11 +757,13 @@ class TappsMCPSettings(BaseSettings):
     tool_preset: Literal[
         "full", "core", "pipeline",
         "reviewer", "planner", "frontend", "developer",
+        "quality", "admin",
     ] | None = Field(
         default=None,
         description=(
             "Predefined tool set: 'full' = all tools, 'core' = Tier 1 (7 tools), "
-            "'pipeline' = Tier 1 + Tier 2; 'reviewer'|'planner'|'frontend'|'developer' = role presets (Epic 79.5). "
+            "'pipeline' = Tier 1 + Tier 2; 'reviewer'|'planner'|'frontend'|'developer' = role presets (Epic 79.5); "
+            "'quality' = coding session tools (TAP-485); 'admin' = setup/troubleshooting tools (TAP-485). "
             "Used when enabled_tools is not set. Env: TAPPS_MCP_TOOL_PRESET."
         ),
     )

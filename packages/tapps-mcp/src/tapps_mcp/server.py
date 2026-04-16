@@ -157,7 +157,7 @@ def _validate_file_path(file_path: str) -> Path:
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
-# Canonical list of all TappsMCP tools (26, including 2 deprecated stubs).
+# Canonical list of all TappsMCP tools (26).
 # Used for filtering and fallback.
 ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_server_info",
@@ -184,8 +184,6 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_dependency_scan",
     "tapps_dependency_graph",
     "tapps_memory",
-    "tapps_consult_expert",
-    "tapps_research",
     "tapps_pipeline",
     "tapps_decompose",
 })
@@ -229,6 +227,41 @@ TOOL_PRESET_DEVELOPER: frozenset[str] = frozenset({
     "tapps_quality_gate", "tapps_checklist", "tapps_score_file",
     "tapps_security_scan", "tapps_lookup_docs", "tapps_memory",
     "tapps_impact_analysis",
+})
+
+# TAP-485: Mode presets for --mode quality|admin|all
+# quality mode: coding session tools (reduces context overhead for daily use)
+TAPPS_TOOL_PRESET_QUALITY: frozenset[str] = frozenset({
+    "tapps_session_start",
+    "tapps_quick_check",
+    "tapps_score_file",
+    "tapps_quality_gate",
+    "tapps_checklist",
+    "tapps_validate_changed",
+    "tapps_security_scan",
+    "tapps_lookup_docs",
+    "tapps_memory",
+    "tapps_dead_code",
+    "tapps_impact_analysis",
+    "tapps_validate_config",
+    "tapps_dependency_scan",
+    "tapps_dependency_graph",
+})
+
+# admin mode: setup/troubleshooting tools
+TAPPS_TOOL_PRESET_ADMIN: frozenset[str] = frozenset({
+    "tapps_init",
+    "tapps_upgrade",
+    "tapps_doctor",
+    "tapps_server_info",
+    "tapps_set_engagement_level",
+    "tapps_dashboard",
+    "tapps_stats",
+    "tapps_feedback",
+    "tapps_report",
+    "tapps_pipeline",
+    "tapps_decompose",
+    "tapps_session_notes",
 })
 
 _FALLBACK_TOOL_LIST: list[str] = sorted(ALL_TOOL_NAMES)
@@ -277,6 +310,10 @@ def _resolve_allowed_tools(settings: TappsMCPSettings) -> frozenset[str]:
         allowed = set(TOOL_PRESET_FRONTEND)
     elif settings.tool_preset == "developer":
         allowed = set(TOOL_PRESET_DEVELOPER)
+    elif settings.tool_preset == "quality":
+        allowed = set(TAPPS_TOOL_PRESET_QUALITY)
+    elif settings.tool_preset == "admin":
+        allowed = set(TAPPS_TOOL_PRESET_ADMIN)
     elif settings.tool_preset == "full":
         allowed = set(ALL_TOOL_NAMES)
     else:
@@ -668,9 +705,9 @@ def tapps_security_scan(
             SecurityScanOutput,
         )
 
-        findings: list[SecurityFindingOutput] = []
+        sec_findings: list[SecurityFindingOutput] = []
         for i in result.bandit_issues[:_SECURITY_SCAN_FINDING_LIMIT]:
-            findings.append(
+            sec_findings.append(
                 SecurityFindingOutput(
                     code=i.code,
                     message=i.message,
@@ -681,7 +718,7 @@ def tapps_security_scan(
                 )
             )
         for f in result.secret_findings[:_SECURITY_SCAN_FINDING_LIMIT]:
-            findings.append(
+            sec_findings.append(
                 SecurityFindingOutput(
                     code=f.secret_type,
                     message=f.context or f.secret_type,
@@ -700,7 +737,7 @@ def tapps_security_scan(
             medium_count=result.medium_count,
             low_count=result.low_count,
             bandit_available=result.bandit_available,
-            findings=findings,
+            findings=sec_findings,
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:

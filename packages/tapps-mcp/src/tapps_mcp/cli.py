@@ -40,8 +40,23 @@ def main() -> None:
     type=int,
     help="Port to bind HTTP transport to.",
 )
-def serve(transport: str, host: str, port: int) -> None:
+@click.option(
+    "--mode",
+    type=click.Choice(["quality", "admin", "all"]),
+    default="all",
+    help=(
+        "Tool mode: quality (coding session tools, ~14 tools), "
+        "admin (setup/troubleshooting tools, ~12 tools), "
+        "all (default, all tools — backward compatible)."
+    ),
+)
+def serve(transport: str, host: str, port: int, mode: str) -> None:
     """Start the TappsMCP MCP server."""
+    # Set TAPPS_MCP_TOOL_PRESET before importing server.py so _register_tool_modules()
+    # picks up the mode. Same pattern as docs-mcp --mode flag (TAP-485).
+    if mode != "all":
+        os.environ["TAPPS_MCP_TOOL_PRESET"] = mode
+
     from tapps_mcp.server import run_server
 
     run_server(transport=transport, host=host, port=port)

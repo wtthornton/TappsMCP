@@ -492,59 +492,6 @@ def _adjust_domain_weights(domain: str, helpful: bool) -> tuple[bool, str | None
         return False, None
 
 
-async def tapps_research(
-    question: str,
-    domain: str = "",
-    library: str = "",
-    topic: str = "",
-    file_context: str = "",
-) -> dict[str, Any]:
-    """**DEPRECATED** — Expert system removed (EPIC-94).
-
-    Use tapps_lookup_docs for documentation, or AgentForge for expert consultation.
-    """
-    return error_response(
-        "tapps_research",
-        "TOOL_DEPRECATED",
-        "tapps_research has been removed (EPIC-94). "
-        "Use tapps_lookup_docs for documentation lookup, "
-        "or AgentForge for expert consultation.",
-        extra={
-            "deprecated_since": "EPIC-94",
-            "alternatives": [
-                {"tool": "tapps_lookup_docs", "use_for": "library documentation lookup"},
-                {"tool": "AgentForge", "use_for": "expert consultation"},
-            ],
-        },
-    )
-
-
-async def tapps_consult_expert(
-    question: str,
-    domain: str = "",
-) -> dict[str, Any]:
-    """**DEPRECATED** — Expert system removed (EPIC-94).
-
-    The RAG-based expert consultation system has been removed.
-    Use tapps_lookup_docs for documentation, or AgentForge for expert consultation.
-    """
-    return error_response(
-        "tapps_consult_expert",
-        "TOOL_DEPRECATED",
-        "tapps_consult_expert has been removed (EPIC-94). "
-        "The RAG-based expert system no longer exists. "
-        "Use tapps_lookup_docs for documentation lookup, "
-        "or AgentForge for expert consultation.",
-        extra={
-            "deprecated_since": "EPIC-94",
-            "alternatives": [
-                {"tool": "tapps_lookup_docs", "use_for": "library documentation lookup"},
-                {"tool": "AgentForge", "use_for": "expert consultation"},
-            ],
-        },
-    )
-
-
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register metrics/feedback tools on *mcp_instance*."""
     if "tapps_dashboard" in allowed_tools:
@@ -553,7 +500,3 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_stats)
     if "tapps_feedback" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT)(tapps_feedback)
-    if "tapps_research" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_research)
-    if "tapps_consult_expert" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_consult_expert)

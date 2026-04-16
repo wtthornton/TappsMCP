@@ -64,11 +64,9 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "tapps_doctor": _READ_ONLY,
     "tapps_pipeline": _READ_ONLY,
     "tapps_decompose": _READ_ONLY,
-    # Read-only, open-world (4 tools)
+    # Read-only, open-world (2 tools)
     "tapps_lookup_docs": _READ_ONLY_OPEN,
     "tapps_dependency_scan": _READ_ONLY_OPEN,
-    "tapps_research": _READ_ONLY_OPEN,
-    "tapps_consult_expert": _READ_ONLY_OPEN,
     # Side-effect, idempotent (4 tools)
     "tapps_session_start": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_init": _SIDE_EFFECT_IDEMPOTENT,
@@ -83,9 +81,9 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
 class TestToolAnnotationsPresent:
     """Every registered tool must have annotations set (not None)."""
 
-    def test_all_27_tools_registered(self) -> None:
+    def test_all_26_tools_registered(self) -> None:
         tools = mcp._tool_manager._tools
-        assert len(tools) == 28, f"Expected 28 tools, got {len(tools)}: {sorted(tools)}"
+        assert len(tools) == 26, f"Expected 26 tools, got {len(tools)}: {sorted(tools)}"
 
     def test_all_tools_have_annotations(self) -> None:
         tools = mcp._tool_manager._tools
@@ -138,7 +136,7 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.readOnlyHint
         ]
-        assert len(read_only) == 22, f"Expected 22 read-only tools, got {len(read_only)}"
+        assert len(read_only) == 20, f"Expected 20 read-only tools, got {len(read_only)}"  # TAP-483: -2
 
     def test_side_effect_count(self) -> None:
         tools = mcp._tool_manager._tools
@@ -156,7 +154,7 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.openWorldHint
         ]
-        assert len(open_world) == 4, f"Expected 4 open-world tools, got {len(open_world)}"
+        assert len(open_world) == 2, f"Expected 2 open-world tools, got {len(open_world)}"  # TAP-483: -2
 
     def test_idempotent_count(self) -> None:
         tools = mcp._tool_manager._tools

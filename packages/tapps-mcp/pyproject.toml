@@ -34,6 +34,12 @@ dependencies = [
     "anyio>=4.12.1,<5",
     "httpx>=0.28.1,<1",
     "filelock>=3.24.3,<4",
+    "bandit>=1.8",
+    "radon>=6.0",
+    "vulture>=2.14",
+    "pylint>=3.3",
+    "perflint>=0.8",
+    "pip-audit>=2.8",
 ]
 
 [project.optional-dependencies]
@@ -49,8 +55,7 @@ dev = [
     "playwright>=1.58.0,<2",
 ]
 perf = [
-    "pylint>=3.0.0,<4",
-    "perflint>=0.8.0,<1",
+    # pylint and perflint are now base dependencies
 ]
 rag = [
     "faiss-cpu>=1.13.2,<2",
@@ -63,7 +68,7 @@ vector = [
     "numpy>=2.4.2,<3",
 ]
 pip-audit = [
-    "pip-audit>=2.7.0",
+    # pip-audit is now a base dependency
 ]
 treesitter = [
     "tree-sitter>=0.24.0,<1",

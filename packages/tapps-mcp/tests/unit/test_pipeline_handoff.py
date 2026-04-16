@@ -98,7 +98,7 @@ class TestParseHandoff:
                 StageResult(
                     stage=PipelineStage.RESEARCH,
                     completed_at=datetime(2026, 1, 15, 10, 5, 0),
-                    tools_called=["tapps_lookup_docs", "tapps_consult_expert"],
+                    tools_called=["tapps_lookup_docs", "tapps_dependency_scan"],
                     findings=["FastAPI uses Depends() for DI"],
                     decisions=["Use JWT auth"],
                 ),

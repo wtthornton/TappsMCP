@@ -29,7 +29,7 @@ class TestFeedbackTracker:
         assert entry.helpful is True
 
     def test_record_not_helpful(self, tracker):
-        entry = tracker.record("tapps_consult_expert", helpful=False)
+        entry = tracker.record("tapps_lookup_docs", helpful=False)
         assert entry.helpful is False
 
     def test_get_statistics(self, tracker):
@@ -164,7 +164,7 @@ class TestStatsRecommendations:
 
         breakdowns = [
             {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
-            {"tool_name": "tapps_research", "call_count": 2, "avg_duration_ms": 100},
+            {"tool_name": "tapps_lookup_docs", "call_count": 2, "avg_duration_ms": 100},
             {"tool_name": "tapps_checklist", "call_count": 1, "avg_duration_ms": 50},
         ]
         recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
@@ -178,7 +178,7 @@ class TestStatsRecommendations:
 
         breakdowns = [
             {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
-            {"tool_name": "tapps_research", "call_count": 2, "avg_duration_ms": 100},
+            {"tool_name": "tapps_lookup_docs", "call_count": 2, "avg_duration_ms": 100},
             {"tool_name": "tapps_security_scan", "call_count": 5, "avg_duration_ms": 30},
         ]
         recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
@@ -192,7 +192,7 @@ class TestStatsRecommendations:
 
         breakdowns = [
             {"tool_name": "tapps_validate_changed", "call_count": 5, "avg_duration_ms": 90000},
-            {"tool_name": "tapps_research", "call_count": 2, "avg_duration_ms": 100},
+            {"tool_name": "tapps_lookup_docs", "call_count": 2, "avg_duration_ms": 100},
             {"tool_name": "tapps_checklist", "call_count": 1, "avg_duration_ms": 50},
             {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
             {"tool_name": "tapps_security_scan", "call_count": 5, "avg_duration_ms": 30},
@@ -209,7 +209,7 @@ class TestStatsRecommendations:
         breakdowns = [
             {"tool_name": "tapps_score_file", "call_count": 10, "avg_duration_ms": 50},
             {"tool_name": "tapps_security_scan", "call_count": 5, "avg_duration_ms": 30},
-            {"tool_name": "tapps_research", "call_count": 2, "avg_duration_ms": 100},
+            {"tool_name": "tapps_lookup_docs", "call_count": 2, "avg_duration_ms": 100},
             {"tool_name": "tapps_checklist", "call_count": 1, "avg_duration_ms": 50},
         ]
         recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
