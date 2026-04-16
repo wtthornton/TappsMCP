@@ -588,6 +588,7 @@ async def tapps_validate_changed(
     security_depth: str = "basic",
     include_impact: bool = True,
     correlation_id: str = "",
+    judges: list[dict[str, Any]] | None = None,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """REQUIRED before declaring multi-file work complete.
@@ -621,6 +622,10 @@ async def tapps_validate_changed(
         include_impact: Whether to run impact analysis on changed files (default: True).
         correlation_id: Optional caller-provided ID echoed in the response for traceability.
             Empty string (default) means no correlation ID is included in the response.
+        judges: Optional list of judge dicts. Each judge has: type (pytest|grep|exists),
+            target (str), expect (str, regex for grep), description (str), blocking (bool).
+            Judges run after the quality gate and results appear under judge_results.
+            blocking=False (default) means failures are advisory only.
         ctx: Optional MCP context (injected by host); used for progress notifications.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
@@ -758,6 +763,18 @@ async def tapps_validate_changed(
         resp_data["files_remaining"] = len(files_remaining)
         resp_data["files_remaining_paths"] = [str(p) for p in files_remaining]
         resp_data["auto_detect_budget_s"] = _AUTO_DETECT_BUDGET_S
+
+    # Judge pattern (TAP-478) — run after quality gate, advisory by default
+    if judges:
+        try:
+            from tapps_core.metrics.judge import run_judges
+
+            judge_data = await run_judges(judges, cwd=settings.project_root)
+            resp_data.update(judge_data)
+        except Exception:
+            _logger.debug("judge_run_failed", exc_info=True)
+            resp_data["judge_results"] = []
+            resp_data["judges_passed"] = False
 
     resp = success_response("tapps_validate_changed", elapsed_ms, resp_data)
     _build_structured_validation_output(results, all_passed, security_depth, impact_data, resp)
@@ -1377,6 +1394,129 @@ def _collect_memory_status(settings: Any) -> dict[str, Any]:
     return status
 
 
+# ---------------------------------------------------------------------------
+# Search-first: proactive "look these up before coding" list (TAP-475)
+# ---------------------------------------------------------------------------
+
+# Static mapping: normalised package name → (suggested topic, reason)
+# Only libraries with reliable Context7 / tapps_lookup_docs coverage.
+_DOCS_COVERED: dict[str, tuple[str, str]] = {
+    "pydantic": ("models", "Validate fields, validators, model_config"),
+    "fastapi": ("routing", "Path params, deps, request/response models"),
+    "fastmcp": ("tools", "MCP tool registration, context, annotations"),
+    "mcp": ("server", "FastMCP server, tool handler patterns"),
+    "structlog": ("configuration", "Processor chains, bound loggers, async logging"),
+    "httpx": ("async client", "AsyncClient, request methods, auth"),
+    "requests": ("sessions", "Session, auth, retry, timeout patterns"),
+    "sqlalchemy": ("orm", "Session, relationship, async engine patterns"),
+    "alembic": ("migrations", "env.py, autogenerate, revision"),
+    "pytest": ("fixtures", "Conftest, fixtures, parametrize, async tests"),
+    "mypy": ("configuration", "strict mode, type ignore, overrides"),
+    "ruff": ("configuration", "rule selectors, per-file ignores, pyproject"),
+    "pandas": ("dataframe", "DataFrame, groupby, merge, IO methods"),
+    "numpy": ("arrays", "ndarray, broadcasting, vectorised ops"),
+    "click": ("commands", "Command, option, argument, groups"),
+    "typer": ("commands", "App, argument, option, callbacks"),
+    "rich": ("console", "Console, Panel, Table, Progress, Markdown"),
+    "jinja2": ("templates", "Environment, Template, filters, macros"),
+    "aiohttp": ("client", "ClientSession, request, streaming"),
+    "celery": ("tasks", "Task, apply_async, beat schedule"),
+    "redis": ("commands", "Pipeline, pubsub, async client"),
+    "motor": ("async ops", "AsyncIOMotorClient, collection, find"),
+    "beanie": ("documents", "Document, find, insert, update"),
+    "tortoise": ("models", "Model, fields, Tortoise.init"),
+    "django": ("orm", "Model, QuerySet, views, urls"),
+    "flask": ("routing", "Blueprint, request, response, app factory"),
+    "starlette": ("middleware", "Middleware, routing, TestClient"),
+    "uvicorn": ("configuration", "Config, lifespan, SSL, workers"),
+    "boto3": ("s3", "S3 client, put_object, presigned URLs"),
+    "anthropic": ("messages", "Client, messages.create, prompt caching, streaming"),
+    "openai": ("chat", "ChatCompletion, streaming, function calling"),
+    "langchain": ("chains", "Chain, LLM, PromptTemplate, memory"),
+    "tomllib": ("parsing", "tomllib.loads, tomllib.load — stdlib in 3.11+"),
+    "pathlib": ("Path", "Path operations, glob, read_text — stdlib"),
+    "asyncio": ("event loop", "gather, create_task, Queue, timeout"),
+    "dataclasses": ("fields", "field, dataclass, post_init — stdlib"),
+    "typing": ("generics", "Generic, Protocol, TypeVar, Annotated — stdlib"),
+}
+
+
+def _normalise_dep(name: str) -> str:
+    """Lowercase and replace hyphens with underscores for uniform lookup."""
+    return name.lower().replace("-", "_").split("[")[0].strip()
+
+
+def _build_search_first(project_root: Path) -> dict[str, Any] | None:
+    """Parse pyproject.toml deps and return search-first coverage hints.
+
+    Returns None when no pyproject.toml is found so callers can omit the
+    field entirely (TAP-475 requirement: omit, not empty list).
+    """
+    pyproject = project_root / "pyproject.toml"
+    if not pyproject.exists():
+        return None
+
+    try:
+        import tomllib  # stdlib 3.11+
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]
+        except ImportError:
+            return None
+
+    try:
+        with pyproject.open("rb") as fh:
+            data = tomllib.load(fh)
+    except Exception:
+        _logger.debug("search_first_pyproject_parse_failed", exc_info=True)
+        return None
+
+    # Collect all dependency names from [project].dependencies and
+    # [tool.uv.sources] / workspace dependencies.
+    raw_deps: list[str] = []
+    project_section = data.get("project", {})
+    for dep in project_section.get("dependencies", []):
+        # PEP 508: name may have extras, version specifiers
+        raw_deps.append(dep.split(">")[0].split("<")[0].split("=")[0].split("!")[0].split("~")[0])
+
+    # workspace members — scan their pyproject.tomls too (best-effort)
+    ws_members = data.get("tool", {}).get("uv", {}).get("workspace", {}).get("members", [])
+    for member_glob in ws_members:
+        for member_pyproject in project_root.glob(f"{member_glob}/pyproject.toml"):
+            try:
+                with member_pyproject.open("rb") as fh:
+                    member_data = tomllib.load(fh)
+                for dep in member_data.get("project", {}).get("dependencies", []):
+                    raw_deps.append(
+                        dep.split(">")[0].split("<")[0].split("=")[0].split("!")[0].split("~")[0]
+                    )
+            except Exception:
+                pass
+
+    covered: list[dict[str, str]] = []
+    unknown: list[str] = []
+    seen: set[str] = set()
+
+    for raw in raw_deps:
+        norm = _normalise_dep(raw.strip())
+        if not norm or norm in seen:
+            continue
+        seen.add(norm)
+        if norm in _DOCS_COVERED:
+            topic, reason = _DOCS_COVERED[norm]
+            covered.append({"library": norm, "topic": topic, "reason": reason})
+        else:
+            unknown.append(norm)
+
+    # Sort covered by library name for stable output
+    covered.sort(key=lambda x: x["library"])
+
+    result: dict[str, Any] = {"covered": covered}
+    if unknown:
+        result["unknown_deps"] = sorted(unknown)
+    return result
+
+
 async def tapps_session_start(
     project_root: str = "",
     quick: bool = False,
@@ -1497,6 +1637,11 @@ async def tapps_session_start(
 
     if container_warning:
         data["warnings"] = [container_warning]
+
+    # Search-first phase: proactive lookup hints from pyproject.toml (TAP-475)
+    search_first = _build_search_first(settings.project_root)
+    if search_first is not None:
+        data["search_first"] = search_first
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
 
@@ -2329,6 +2474,193 @@ def _summarize_quick_check(qc_data: dict[str, Any]) -> str:
     return f"score={score}" if score is not None else "ok"
 
 
+# ---------------------------------------------------------------------------
+# tapps_decompose — task decomposition into 15-minute units (TAP-479)
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel as _BaseModel  # noqa: E402 (local alias)
+
+# Model tier keyword sets (order matters — checked from highest to lowest tier)
+_OPUS_KEYWORDS = frozenset(
+    {"design", "architect", "architecture", "audit", "review", "security", "threat", "model"}
+)
+_SONNET_KEYWORDS = frozenset(
+    {"implement", "refactor", "test", "fix", "write", "build", "create", "migrate", "integrate"}
+)
+_HAIKU_KEYWORDS = frozenset(
+    {"search", "list", "read", "grep", "find", "format", "parse", "display", "show", "check"}
+)
+
+# Risk classification keywords
+_HIGH_RISK_KEYWORDS = frozenset(
+    {"security", "auth", "payment", "database", "migration", "deploy", "delete", "remove",
+     "architect", "design", "threat"}
+)
+_LOW_RISK_KEYWORDS = frozenset(
+    {"read", "search", "list", "format", "display", "show", "grep", "find"}
+)
+
+
+class TaskUnit(_BaseModel):
+    """A single 15-minute decomposed work unit."""
+
+    id: str
+    title: str
+    description: str
+    estimated_minutes: int = 15
+    model_tier: str  # haiku | sonnet | opus
+    model_tier_reason: str
+    dominant_risk: str  # high | medium | low
+    done_condition: str
+    depends_on: list[str] = []
+
+
+def _classify_model_tier(text: str) -> tuple[str, str]:
+    """Return (tier, reason) for a task text using keyword matching."""
+    words = set(text.lower().split())
+    if words & _OPUS_KEYWORDS:
+        matched = sorted(words & _OPUS_KEYWORDS)
+        return "opus", f"Keywords suggest architectural/security work: {matched}"
+    if words & _SONNET_KEYWORDS:
+        matched = sorted(words & _SONNET_KEYWORDS)
+        return "sonnet", f"Keywords suggest implementation/refactor work: {matched}"
+    if words & _HAIKU_KEYWORDS:
+        matched = sorted(words & _HAIKU_KEYWORDS)
+        return "haiku", f"Keywords suggest read/search/format work: {matched}"
+    return "sonnet", "No strong signal — defaulting to sonnet"
+
+
+def _classify_risk(text: str) -> str:
+    """Return 'high' | 'medium' | 'low' based on keyword presence."""
+    words = set(text.lower().split())
+    if words & _HIGH_RISK_KEYWORDS:
+        return "high"
+    if words & _LOW_RISK_KEYWORDS:
+        return "low"
+    return "medium"
+
+
+def _split_task_into_phrases(task: str) -> list[str]:
+    """Split a free-text task into candidate sub-task phrases."""
+    import re as _re
+
+    # Split on common sentence/clause separators.
+    # Comma-space splits when followed by a known verb/keyword to avoid splitting
+    # within a noun phrase.  Plain semicolons and newlines always split.
+    parts = _re.split(
+        r"(?:\.\s+|\band\s+also\b|\bthen\s+|\bthen,\s+|;\s*|\n|,\s+(?=[a-z]+\s))",
+        task,
+        flags=_re.IGNORECASE,
+    )
+    phrases = [p.strip().rstrip(",") for p in parts if p.strip() and len(p.strip()) > 5]
+    return phrases or [task.strip()]
+
+
+def _decompose_task(
+    task: str,
+    context_files: list[str],
+) -> list[TaskUnit]:
+    """Break *task* into independently-verifiable ~15-minute units.
+
+    Uses keyword matching only — no LLM calls.  Units are ordered risk-first
+    (highest risk first) so failures surface early.
+    """
+    phrases = _split_task_into_phrases(task)
+    units: list[TaskUnit] = []
+
+    for idx, phrase in enumerate(phrases, start=1):
+        tier, reason = _classify_model_tier(phrase)
+        risk = _classify_risk(phrase)
+        unit_id = f"u{idx}"
+
+        # Enrich first unit description with context file names
+        desc = phrase
+        if idx == 1 and context_files:
+            file_names = ", ".join(context_files[:5])
+            desc = f"{phrase} [context: {file_names}]"
+
+        # Simple done condition heuristic
+        verb = phrase.lower().split()[0] if phrase.split() else "complete"
+        done = f"{verb.capitalize()} done and verified independently"
+
+        units.append(
+            TaskUnit(
+                id=unit_id,
+                title=phrase[:80],
+                description=desc,
+                estimated_minutes=15,
+                model_tier=tier,
+                model_tier_reason=reason,
+                dominant_risk=risk,
+                done_condition=done,
+                depends_on=[f"u{idx - 1}"] if idx > 1 else [],
+            )
+        )
+
+    # Risk-first ordering: high → medium → low
+    _RISK_ORDER = {"high": 0, "medium": 1, "low": 2}
+    units.sort(key=lambda u: _RISK_ORDER.get(u.dominant_risk, 1))
+
+    # Re-assign IDs after sort, reset depends_on to sequential
+    for pos, unit in enumerate(units, start=1):
+        unit.id = f"u{pos}"
+        unit.depends_on = [f"u{pos - 1}"] if pos > 1 else []
+
+    return units
+
+
+async def tapps_decompose(
+    task: str,
+    context_files: list[str] | None = None,
+) -> dict[str, Any]:
+    """Break a task into independently-verifiable ~15-minute work units with
+    model tier recommendations.
+
+    Decomposition is deterministic (keyword-based, no LLM calls).  Units are
+    ordered risk-first (highest-risk first) so failures surface early.
+
+    Args:
+        task: Free-text description of the work to decompose.
+        context_files: Optional list of file paths that provide context.
+            File names and sizes are used to inform decomposition (no content read).
+    """
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
+
+    start = time.perf_counter_ns()
+    _record_call("tapps_decompose")
+
+    if not task.strip():
+        return error_response("tapps_decompose", "empty_task", "task must not be empty")
+
+    files = context_files or []
+    # Collect file sizes for context (best-effort)
+    file_summaries: list[dict[str, Any]] = []
+    for fp in files[:10]:
+        try:
+            p = Path(fp)
+            size = p.stat().st_size if p.exists() else None
+            file_summaries.append({"path": fp, "size_bytes": size, "exists": p.exists()})
+        except Exception:
+            file_summaries.append({"path": fp, "size_bytes": None, "exists": False})
+
+    units = _decompose_task(task, [p["path"] for p in file_summaries])
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_decompose", start)
+
+    data: dict[str, Any] = {
+        "task": task,
+        "unit_count": len(units),
+        "units": [u.model_dump() for u in units],
+        "context_files": file_summaries,
+        "ordering": "risk-first (highest-risk units first)",
+        "note": "Decomposition is advisory — units are suggestions, not requirements.",
+    }
+
+    resp = success_response("tapps_decompose", elapsed_ms, data)
+    return _with_nudges("tapps_decompose", resp, {})
+
+
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register pipeline/validation tools on *mcp_instance* (Epic 79.1: conditional)."""
     if "tapps_validate_changed" in allowed_tools:
@@ -2345,3 +2677,5 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_doctor)
     if "tapps_pipeline" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_pipeline)
+    if "tapps_decompose" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_decompose)

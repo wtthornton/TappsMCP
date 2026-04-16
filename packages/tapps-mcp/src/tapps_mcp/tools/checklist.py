@@ -128,6 +128,9 @@ TOOL_REASONS: dict[str, str] = {
         "When the user requests to change enforcement intensity"
         " (e.g. 'set tappsmcp to high' or 'make checks optional')."
     ),
+    "tapps_decompose": (
+        "Decompose a task into ~15-minute units with model tier hints before starting work."
+    ),
 }
 
 
@@ -1426,3 +1429,202 @@ def validate_epic_markdown(
         valid=not has_errors,
         cross_file_summary=cross_file_summary,
     )
+
+
+# ---------------------------------------------------------------------------
+# TDD stage validation (TAP-476)
+# ---------------------------------------------------------------------------
+
+_TDD_RED_PREFIXES = ("test:", "tests:")
+_TDD_GREEN_PREFIXES = ("fix:", "feat:")
+_TDD_REFACTOR_PREFIXES = ("refactor:", "chore:")
+_COVERAGE_MIN = 80.0
+
+
+class TDDStageCheck(BaseModel):
+    """Result of a single TDD stage check."""
+
+    stage: str = Field(description="TDD stage name: red | green | refactor | coverage")
+    result: str = Field(description="passed | failed | skipped")
+    message: str = Field(default="", description="Human-readable explanation.")
+
+
+class TDDCheckResult(BaseModel):
+    """Aggregate result of TDD stage validation."""
+
+    checks: list[TDDStageCheck] = Field(default_factory=list)
+    passed: bool = Field(description="True only when all non-skipped checks pass.")
+    summary: str = Field(default="", description="One-line summary.")
+
+
+def _check_compile_time_red(repo_root: Path) -> TDDStageCheck:
+    """Validate that RED state is runtime RED (test failure) not compile-time RED.
+
+    Compile-time RED means a syntax/import error that prevents even running
+    pytest — that is invalid TDD RED state.  We check whether any Python file
+    in the repo is unparseable.
+    """
+    import ast
+
+    broken: list[str] = []
+    for py_file in repo_root.rglob("*.py"):
+        if ".venv" in py_file.parts or "__pycache__" in py_file.parts:
+            continue
+        try:
+            ast.parse(py_file.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            broken.append(py_file.name)
+        if len(broken) >= 3:
+            break
+
+    if broken:
+        return TDDStageCheck(
+            stage="red_state",
+            result="failed",
+            message=(
+                f"Compile-time RED detected — syntax errors in: {', '.join(broken)}. "
+                "Fix syntax before committing RED checkpoint."
+            ),
+        )
+    return TDDStageCheck(
+        stage="red_state",
+        result="passed",
+        message="No compile-time errors found; RED state is valid runtime RED.",
+    )
+
+
+async def _check_git_commits(
+    red_prefixes: tuple[str, ...],
+    green_prefixes: tuple[str, ...],
+    refactor_prefixes: tuple[str, ...],
+) -> list[TDDStageCheck]:
+    """Scan recent git log for RED/GREEN/REFACTOR checkpoint commits."""
+    from tapps_mcp.tools.subprocess_runner import run_command_async
+
+    try:
+        result = await run_command_async(["git", "log", "--oneline", "-30"], timeout=5)
+        if result.returncode != 0:
+            return [
+                TDDStageCheck(stage="red", result="skipped", message="git log unavailable."),
+                TDDStageCheck(stage="green", result="skipped", message="git log unavailable."),
+                TDDStageCheck(stage="refactor", result="skipped", message="git log unavailable."),
+            ]
+        log_lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+    except Exception:
+        return [
+            TDDStageCheck(stage="red", result="skipped", message="git not available."),
+            TDDStageCheck(stage="green", result="skipped", message="git not available."),
+            TDDStageCheck(stage="refactor", result="skipped", message="git not available."),
+        ]
+
+    def _has_prefix(lines: list[str], prefixes: tuple[str, ...]) -> bool:
+        return any(
+            # git log --oneline format: "<sha> <message>"
+            " ".join(ln.split()[1:]).lower().startswith(pfx)
+            for ln in lines
+            for pfx in prefixes
+        )
+
+    red_ok = _has_prefix(log_lines, red_prefixes)
+    green_ok = _has_prefix(log_lines, green_prefixes)
+    refactor_ok = _has_prefix(log_lines, refactor_prefixes)
+
+    return [
+        TDDStageCheck(
+            stage="red",
+            result="passed" if red_ok else "failed",
+            message=(
+                "RED checkpoint commit found (test: prefix)."
+                if red_ok
+                else "No RED checkpoint commit found. Expected a commit starting with 'test:'."
+            ),
+        ),
+        TDDStageCheck(
+            stage="green",
+            result="passed" if green_ok else "failed",
+            message=(
+                "GREEN checkpoint commit found (fix:/feat: prefix)."
+                if green_ok
+                else "No GREEN checkpoint found. Expected a commit starting with 'fix:' or 'feat:'."
+            ),
+        ),
+        TDDStageCheck(
+            stage="refactor",
+            result="passed" if refactor_ok else "skipped",
+            message=(
+                "REFACTOR checkpoint commit found."
+                if refactor_ok
+                else "No REFACTOR checkpoint found (optional — skipped)."
+            ),
+        ),
+    ]
+
+
+def _check_coverage(repo_root: Path) -> TDDStageCheck:
+    """Check coverage threshold from .coverage or coverage.xml."""
+    import xml.etree.ElementTree as ET
+
+    # Try coverage.xml first (generated by pytest-cov --cov-report=xml)
+    xml_path = repo_root / "coverage.xml"
+    if xml_path.exists():
+        try:
+            tree = ET.parse(xml_path)  # noqa: S314
+            root_el = tree.getroot()
+            line_rate = float(root_el.attrib.get("line-rate", "0"))
+            pct = round(line_rate * 100, 1)
+            passed = pct >= _COVERAGE_MIN
+            return TDDStageCheck(
+                stage="coverage",
+                result="passed" if passed else "failed",
+                message=(
+                    f"Coverage {pct}% {'meets' if passed else 'below'} "
+                    f"{_COVERAGE_MIN}% threshold (from coverage.xml)."
+                ),
+            )
+        except Exception:
+            pass
+
+    # Try .coverage binary presence as a weak signal
+    dot_coverage = repo_root / ".coverage"
+    if dot_coverage.exists():
+        return TDDStageCheck(
+            stage="coverage",
+            result="skipped",
+            message=".coverage file exists but cannot be parsed without coverage.py CLI. "
+            "Run `coverage report` to verify >= 80%.",
+        )
+
+    return TDDStageCheck(
+        stage="coverage",
+        result="skipped",
+        message="No coverage.xml or .coverage found. "
+        "Run pytest with --cov --cov-report=xml to generate coverage data.",
+    )
+
+
+async def check_tdd_stages(repo_root: Path | None = None) -> TDDCheckResult:
+    """Run all TDD stage checks and return an aggregate result.
+
+    Args:
+        repo_root: Root of the repository. Defaults to cwd.
+    """
+    root = repo_root or Path.cwd()
+
+    compile_check = _check_compile_time_red(root)
+    git_checks = await _check_git_commits(
+        _TDD_RED_PREFIXES, _TDD_GREEN_PREFIXES, _TDD_REFACTOR_PREFIXES
+    )
+    coverage_check = _check_coverage(root)
+
+    all_checks = [compile_check, *git_checks, coverage_check]
+
+    failed = [c for c in all_checks if c.result == "failed"]
+    passed_all = len(failed) == 0
+
+    summary = (
+        "All TDD stage checks passed."
+        if passed_all
+        else f"{len(failed)} TDD stage check(s) failed: {', '.join(c.stage for c in failed)}."
+    )
+
+    return TDDCheckResult(checks=all_checks, passed=passed_all, summary=summary)

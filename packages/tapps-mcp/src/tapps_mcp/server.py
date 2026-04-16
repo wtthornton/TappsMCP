@@ -187,6 +187,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "tapps_consult_expert",
     "tapps_research",
     "tapps_pipeline",
+    "tapps_decompose",
 })
 
 # Tier 1 from TOOL-TIER-RANKING (Epic 79.1)
@@ -531,13 +532,22 @@ async def _server_info_async() -> dict[str, Any]:
     return _with_nudges("tapps_server_info", resp)
 
 
-def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, Any]:
+def tapps_security_scan(
+    file_path: str,
+    scan_secrets: bool = True,
+    domain: str | None = None,
+) -> dict[str, Any]:
     """REQUIRED when changes touch security-sensitive code. Runs bandit and
     secret detection on a Python file.
 
     Args:
         file_path: Path to the Python file to scan.
         scan_secrets: Whether to scan for hardcoded secrets (default: True).
+        domain: Optional domain selector for additional domain-specific checks.
+            Supported values: auth | payments | uploads | api | data.
+            When omitted, domain is auto-detected from file path and source.
+            Pass domain=None to suppress domain checks entirely is not supported —
+            omitting runs auto-detection; pass an empty string "" to skip domain scan.
     """
     from tapps_mcp.server_helpers import ensure_session_initialized_sync
 
@@ -564,6 +574,59 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
     if not result.passed:
         _record_call("tapps_security_scan", success=False)
 
+    # Domain-specific checks (TAP-477) — additive on top of generic scan
+    domain_data: dict[str, object] | None = None
+    if domain != "":  # empty string skips; None triggers auto-detect
+        try:
+            from tapps_mcp.security.domain_patterns import (
+                SUPPORTED_DOMAINS,
+                detect_domain,
+                run_domain_scan,
+            )
+
+            source_text = resolved.read_text(encoding="utf-8", errors="replace")
+            effective_domain: str | None = domain
+            auto_detected = False
+            if effective_domain is None:
+                effective_domain = detect_domain(resolved, source_text)
+                auto_detected = True
+
+            if effective_domain and effective_domain in SUPPORTED_DOMAINS:
+                findings = run_domain_scan(resolved, source_text, effective_domain)
+                domain_data = {
+                    "domain": effective_domain,
+                    "auto_detected": auto_detected,
+                    "findings": [
+                        {
+                            "pattern": f.pattern,
+                            "severity": f.severity,
+                            "description": f.description,
+                            "fail_example": f.fail_example,
+                            "fix": f.fix,
+                            "line": f.line,
+                            "matched_text": f.matched_text,
+                        }
+                        for f in findings
+                    ],
+                }
+            elif effective_domain and effective_domain not in SUPPORTED_DOMAINS:
+                domain_data = {
+                    "domain": effective_domain,
+                    "auto_detected": auto_detected,
+                    "error": f"Unknown domain '{effective_domain}'. "
+                    f"Supported: {sorted(SUPPORTED_DOMAINS)}. Generic scan still ran.",
+                    "findings": [],
+                }
+            else:
+                domain_data = {
+                    "domain": None,
+                    "auto_detected": True,
+                    "note": "Domain could not be inferred from file path or content.",
+                    "findings": [],
+                }
+        except Exception:
+            logger.debug("domain_scan_failed", exc_info=True)
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
         "tapps_security_scan",
@@ -572,25 +635,29 @@ def tapps_security_scan(file_path: str, scan_secrets: bool = True) -> dict[str, 
         degraded=not result.bandit_available,
     )
 
+    resp_payload: dict[str, object] = {
+        "file_path": str(resolved),
+        "passed": result.passed,
+        "total_issues": result.total_issues,
+        "critical_count": result.critical_count,
+        "high_count": result.high_count,
+        "medium_count": result.medium_count,
+        "low_count": result.low_count,
+        "bandit_available": result.bandit_available,
+        "bandit_issues": serialize_issues(
+            result.bandit_issues, limit=_SECURITY_SCAN_FINDING_LIMIT
+        ),
+        "secret_findings": serialize_issues(
+            result.secret_findings, limit=_SECURITY_SCAN_FINDING_LIMIT
+        ),
+    }
+    if domain_data is not None:
+        resp_payload["domain_scan"] = domain_data
+
     resp = success_response(
         "tapps_security_scan",
         elapsed_ms,
-        {
-            "file_path": str(resolved),
-            "passed": result.passed,
-            "total_issues": result.total_issues,
-            "critical_count": result.critical_count,
-            "high_count": result.high_count,
-            "medium_count": result.medium_count,
-            "low_count": result.low_count,
-            "bandit_available": result.bandit_available,
-            "bandit_issues": serialize_issues(
-                result.bandit_issues, limit=_SECURITY_SCAN_FINDING_LIMIT
-            ),
-            "secret_findings": serialize_issues(
-                result.secret_findings, limit=_SECURITY_SCAN_FINDING_LIMIT
-            ),
-        },
+        resp_payload,
         degraded=not result.bandit_available,
     )
 
@@ -1009,6 +1076,7 @@ async def tapps_checklist(
     commit_sha: str = "",
     epic_file_path: str = "",
     reset_checklist_session: bool = False,
+    tdd: bool = False,
 ) -> dict[str, Any]:
     """REQUIRED as the FINAL step before declaring work complete.
 
@@ -1023,6 +1091,7 @@ async def tapps_checklist(
             (``task_type`` should usually be ``epic``).
         reset_checklist_session: When True, starts a new checklist session boundary
             before evaluating (rotates session id; call from long-lived servers).
+        tdd: When True, adds TDD stage checks (RED/GREEN/REFACTOR commits + coverage).
     """
     start = time.perf_counter_ns()
 
@@ -1117,6 +1186,18 @@ async def tapps_checklist(
         except Exception:
             git_context = None
 
+        # TDD stage validation (TAP-476)
+        tdd_results: dict[str, Any] | None = None
+        if tdd:
+            try:
+                from tapps_mcp.tools.checklist import check_tdd_stages
+
+                settings = load_settings()
+                tdd_result = await check_tdd_stages(repo_root=settings.project_root)
+                tdd_results = tdd_result.model_dump()
+            except Exception as exc:
+                tdd_results = {"error": str(exc), "passed": False, "checks": []}
+
         resp_data: dict[str, Any]
         if output_format == "json":
             resp_data = _checklist_json_format(
@@ -1138,6 +1219,8 @@ async def tapps_checklist(
                 resp_data["auto_run_results"] = auto_run_results
 
         resp_data["git_context"] = git_context
+        if tdd_results is not None:
+            resp_data["tdd_stages"] = tdd_results
         resp_data["checklist_session_id"] = session_id
         resp_data["otel_trace_hint"] = trace_hint
         if result.checklist_policy_version:

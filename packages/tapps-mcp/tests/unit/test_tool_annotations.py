@@ -63,6 +63,7 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "tapps_dependency_graph": _READ_ONLY,
     "tapps_doctor": _READ_ONLY,
     "tapps_pipeline": _READ_ONLY,
+    "tapps_decompose": _READ_ONLY,
     # Read-only, open-world (4 tools)
     "tapps_lookup_docs": _READ_ONLY_OPEN,
     "tapps_dependency_scan": _READ_ONLY_OPEN,
@@ -84,7 +85,7 @@ class TestToolAnnotationsPresent:
 
     def test_all_27_tools_registered(self) -> None:
         tools = mcp._tool_manager._tools
-        assert len(tools) == 27, f"Expected 27 tools, got {len(tools)}: {sorted(tools)}"
+        assert len(tools) == 28, f"Expected 28 tools, got {len(tools)}: {sorted(tools)}"
 
     def test_all_tools_have_annotations(self) -> None:
         tools = mcp._tool_manager._tools
@@ -137,7 +138,7 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.readOnlyHint
         ]
-        assert len(read_only) == 21, f"Expected 21 read-only tools, got {len(read_only)}"
+        assert len(read_only) == 22, f"Expected 22 read-only tools, got {len(read_only)}"
 
     def test_side_effect_count(self) -> None:
         tools = mcp._tool_manager._tools
@@ -164,4 +165,4 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.idempotentHint
         ]
-        assert len(idempotent) == 21, f"Expected 21 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        assert len(idempotent) == 22, f"Expected 22 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"

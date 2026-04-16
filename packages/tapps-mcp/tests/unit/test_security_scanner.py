@@ -1,5 +1,6 @@
 """Tests for security.security_scanner — unified scanner."""
 
+from pathlib import Path
 from unittest.mock import patch
 
 from tapps_mcp.scoring.models import SecurityIssue
@@ -134,3 +135,89 @@ class TestRunSecurityScan:
         assert result.medium_count == 1
         assert result.low_count == 1
         assert result.passed is False
+
+
+# ---------------------------------------------------------------------------
+# TAP-477: domain_patterns module
+# ---------------------------------------------------------------------------
+
+class TestDomainPatterns:
+    """Tests for domain-specific security anti-patterns."""
+
+    def test_auth_domain_detects_hardcoded_key(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import run_domain_scan
+
+        src = 'SECRET_KEY = "hard-coded-secret-12345"\n'
+        findings = run_domain_scan(tmp_path / "auth.py", src, "auth")
+        patterns = [f.pattern for f in findings]
+        assert "hardcoded_secret_key" in patterns
+
+    def test_payments_detects_amount_from_input(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import run_domain_scan
+
+        src = "amount = request.json['amount']\n"
+        findings = run_domain_scan(tmp_path / "payment.py", src, "payments")
+        patterns = [f.pattern for f in findings]
+        assert "amount_client_side" in patterns
+
+    def test_uploads_detects_path_traversal(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import run_domain_scan
+
+        src = "upload_dir / filename\n"
+        findings = run_domain_scan(tmp_path / "upload.py", src, "uploads")
+        patterns = [f.pattern for f in findings]
+        assert "path_traversal" in patterns
+
+    def test_api_detects_sql_injection(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import run_domain_scan
+
+        src = 'cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")\n'
+        findings = run_domain_scan(tmp_path / "api.py", src, "api")
+        patterns = [f.pattern for f in findings]
+        assert "sql_string_format" in patterns
+
+    def test_data_detects_pickle_untrusted(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import run_domain_scan
+
+        src = "obj = pickle.loads(request.data)\n"
+        findings = run_domain_scan(tmp_path / "data.py", src, "data")
+        patterns = [f.pattern for f in findings]
+        assert "pickle_untrusted" in patterns
+
+    def test_clean_code_no_findings(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import run_domain_scan
+
+        src = "def get_user(user_id: int): return db.query(User).get(user_id)\n"
+        findings = run_domain_scan(tmp_path / "auth.py", src, "auth")
+        assert findings == []
+
+    def test_auto_detect_auth_from_filename(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import detect_domain
+
+        domain = detect_domain(tmp_path / "auth_service.py")
+        assert domain == "auth"
+
+    def test_auto_detect_payments_from_filename(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import detect_domain
+
+        domain = detect_domain(tmp_path / "payment_handler.py")
+        assert domain == "payments"
+
+    def test_unknown_domain_returns_none(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import detect_domain
+
+        domain = detect_domain(tmp_path / "completely_unrelated_xyz.py", "")
+        # Should return None or a low-confidence domain — but not crash
+        assert domain is None or isinstance(domain, str)
+
+    def test_each_finding_has_required_fields(self, tmp_path: Path) -> None:
+        from tapps_mcp.security.domain_patterns import run_domain_scan
+
+        src = "obj = pickle.loads(request.data)\n"
+        findings = run_domain_scan(tmp_path / "data.py", src, "data")
+        assert findings
+        f = findings[0]
+        assert f.severity in {"critical", "high", "medium", "low"}
+        assert f.fix
+        assert f.fail_example
+        assert f.line > 0

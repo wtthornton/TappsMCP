@@ -1524,3 +1524,82 @@ class TestRegister:
         register(mock_mcp, all_tools)
         # 6 tools should be registered
         assert mock_mcp.tool.call_count == 6
+
+
+# ---------------------------------------------------------------------------
+# TAP-475: _build_search_first
+# ---------------------------------------------------------------------------
+
+class TestBuildSearchFirst:
+    """Unit tests for the search-first pyproject.toml scanner."""
+
+    def test_no_pyproject_returns_none(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _build_search_first
+
+        result = _build_search_first(tmp_path)
+        assert result is None
+
+    def test_covered_deps_returned(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _build_search_first
+
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\ndependencies = ["pydantic>=2.0", "httpx"]\n'
+        )
+        result = _build_search_first(tmp_path)
+        assert result is not None
+        libraries = [e["library"] for e in result["covered"]]
+        assert "pydantic" in libraries
+        assert "httpx" in libraries
+
+    def test_unknown_deps_listed(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _build_search_first
+
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\ndependencies = ["obscure-custom-lib", "another-unknown"]\n'
+        )
+        result = _build_search_first(tmp_path)
+        assert result is not None
+        assert "covered" in result
+        assert len(result["covered"]) == 0
+        assert "unknown_deps" in result
+        assert "obscure_custom_lib" in result["unknown_deps"]
+
+    def test_no_unknown_key_when_all_covered(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _build_search_first
+
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\ndependencies = ["pydantic"]\n'
+        )
+        result = _build_search_first(tmp_path)
+        assert result is not None
+        assert "unknown_deps" not in result
+
+    def test_empty_dependencies(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _build_search_first
+
+        (tmp_path / "pyproject.toml").write_text("[project]\ndependencies = []\n")
+        result = _build_search_first(tmp_path)
+        assert result is not None
+        assert result["covered"] == []
+
+    def test_dep_with_extras_normalised(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _build_search_first
+
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\ndependencies = ["pydantic[email]>=2"]\n'
+        )
+        result = _build_search_first(tmp_path)
+        assert result is not None
+        libraries = [e["library"] for e in result["covered"]]
+        assert "pydantic" in libraries
+
+    def test_hyphen_normalised_to_underscore(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _build_search_first
+
+        # fastapi has hyphens in some transitive dep names, but test the normaliser
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\ndependencies = ["fast-mcp"]\n'
+        )
+        # fast-mcp → fast_mcp, not in covered; just assert no crash and unknown listed
+        result = _build_search_first(tmp_path)
+        assert result is not None

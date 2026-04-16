@@ -71,6 +71,7 @@ a = Analysis(
         "tapps_mcp.security.secret_scanner",
         "tapps_mcp.security.content_safety",
         "tapps_mcp.security.security_scanner",
+        "tapps_mcp.security.domain_patterns",
         "tapps_mcp.scoring",
         "tapps_mcp.scoring.cross_ref",
         "tapps_mcp.scoring.language_detector",
