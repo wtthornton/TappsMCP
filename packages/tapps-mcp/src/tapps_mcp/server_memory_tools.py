@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import structlog
 
+from tapps_core.brain_bridge import BrainBridgeUnavailable
 from tapps_mcp.server_helpers import (
     _agent_teams_env_enabled,
     _get_brain_bridge,
@@ -117,6 +118,42 @@ def _bridge_unavailable_response(action: str) -> dict[str, Any]:
             "Set TAPPS_BRAIN_DATABASE_URL in your environment or .tapps-mcp.yaml",
         ],
     }
+
+
+def _bridge_call_failed_response(
+    action: str,
+    exc: BaseException,
+    *,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Structured response when a BrainBridge call raises BrainBridgeUnavailable (TAP-515).
+
+    Distinct from :func:`_bridge_unavailable_response` which covers the "bridge is
+    unconfigured" case. This covers the "bridge is configured but unreachable"
+    case: circuit breaker open, or all retries exhausted against tapps-brain.
+    """
+    payload: dict[str, Any] = {
+        "action": action,
+        "success": False,
+        "ok": False,
+        "degraded": True,
+        "retryable": True,
+        "reason": "brain_bridge_call_failed",
+        "error": str(exc) or type(exc).__name__,
+        "remediation": (
+            "tapps-brain is unreachable (circuit open or retries exhausted). "
+            "Verify TAPPS_BRAIN_DATABASE_URL is reachable, then retry after ~30s "
+            "for the circuit breaker to reset."
+        ),
+        "next_steps": [
+            "Check TAPPS_BRAIN_DATABASE_URL is reachable from this host",
+            "Retry after 30s to allow the circuit breaker to reset",
+        ],
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
 
 _BULK_SAVE_MAX_ENTRIES = 50
 
@@ -887,7 +924,14 @@ async def _handle_gc(store: MemoryStore, p: _Params) -> dict[str, Any]:
     if bridge is None:
         return _bridge_unavailable_response("gc")
 
-    result = await bridge.gc(dry_run=p.dry_run)
+    try:
+        result = await bridge.gc(dry_run=p.dry_run)
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response(
+            "gc",
+            exc,
+            extra={"store_metadata": _store_metadata(store)},
+        )
     return {
         "action": "gc",
         "success": True,
@@ -913,10 +957,17 @@ async def _handle_contradictions(store: MemoryStore, _p: _Params) -> dict[str, A
     profile = detect_project_profile(settings.project_root)
     profile.project_type = profile.project_type or ""
 
-    result = await bridge.detect_conflicts(
-        profile=profile,
-        project_root=settings.project_root,
-    )
+    try:
+        result = await bridge.detect_conflicts(
+            profile=profile,
+            project_root=settings.project_root,
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response(
+            "contradictions",
+            exc,
+            extra={"store_metadata": _store_metadata(store)},
+        )
 
     return {
         "action": "contradictions",
@@ -1142,7 +1193,14 @@ async def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
                 "store_metadata": _store_metadata(store),
             }
 
-        scan = await bridge.consolidate(dry_run=False)
+        try:
+            scan = await bridge.consolidate(dry_run=False)
+        except BrainBridgeUnavailable as exc:
+            return _bridge_call_failed_response(
+                "consolidate",
+                exc,
+                extra={"store_metadata": _store_metadata(store)},
+            )
         groups_found = int(scan.get("groups_found", 0))
         consolidated_flag = groups_found > 0
         skipped_reason = str(scan.get("skipped_reason", "") or "")
@@ -1669,7 +1727,14 @@ async def _handle_maintain(store: MemoryStore, _p: _Params) -> dict[str, Any]:
     if bridge is None:
         return _bridge_unavailable_response("maintain")
 
-    result = await bridge.maintain()
+    try:
+        result = await bridge.maintain()
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response(
+            "maintain",
+            exc,
+            extra={"store_metadata": _store_metadata(store)},
+        )
     return {
         "action": "maintain",
         "success": True,
@@ -1694,7 +1759,14 @@ async def _handle_health(store: MemoryStore, _p: _Params) -> dict[str, Any]:
             "configured": False,
         }
 
-    health = await bridge.health()
+    try:
+        health = await bridge.health()
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response(
+            "health",
+            exc,
+            extra={"status": "degraded", "configured": True},
+        )
 
     integrity_tampered = int(health.get("integrity_tampered", 0))
     return {
@@ -1771,7 +1843,14 @@ async def _handle_verify_integrity(store: MemoryStore, _p: _Params) -> dict[str,
     if bridge is None:
         return _bridge_unavailable_response("verify_integrity")
 
-    result = await bridge.verify_integrity()
+    try:
+        result = await bridge.verify_integrity()
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response(
+            "verify_integrity",
+            exc,
+            extra={"store_metadata": _store_metadata(store)},
+        )
     return {
         "action": "verify_integrity",
         "success": True,
@@ -1986,12 +2065,19 @@ async def _handle_hive_status(store: MemoryStore, _p: _Params) -> dict[str, Any]
     agent_id = os.environ.get("CLAUDE_AGENT_ID", f"agent-{os.getpid()}")
     agent_name = os.environ.get("CLAUDE_AGENT_NAME", "unnamed")
 
-    status = await bridge.hive_status(
-        agent_id=agent_id,
-        agent_name=agent_name,
-        agent_profile=settings.memory.profile or "repo-brain",
-        project_root=str(settings.project_root),
-    )
+    try:
+        status = await bridge.hive_status(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            agent_profile=settings.memory.profile or "repo-brain",
+            project_root=str(settings.project_root),
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response(
+            "hive_status",
+            exc,
+            extra={"enabled": True, "store_metadata": _store_metadata(store)},
+        )
     return {
         "action": "hive_status",
         **status,
@@ -2035,12 +2121,24 @@ async def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
     limit = p.limit if p.limit > 0 else _HIVE_SEARCH_DEFAULT_LIMIT
     namespaces = p.tag_list if p.tag_list else None
 
-    raw = await bridge.hive_search(
-        text,
-        limit=limit,
-        namespaces=namespaces,
-        min_confidence=p.min_confidence,
-    )
+    try:
+        raw = await bridge.hive_search(
+            text,
+            limit=limit,
+            namespaces=namespaces,
+            min_confidence=p.min_confidence,
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response(
+            "hive_search",
+            exc,
+            extra={
+                "enabled": True,
+                "results": [],
+                "result_count": 0,
+                "store_metadata": _store_metadata(store),
+            },
+        )
     if raw == [] and bridge._brain.hive is None:
         return {
             "action": "hive_search",
@@ -2097,11 +2195,23 @@ async def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, An
     cap = p.limit if p.limit > 0 else _HIVE_PROPAGATE_DEFAULT_LIMIT
     entries = store.snapshot().entries[:cap]
 
-    result = await bridge.hive_propagate(
-        entries,
-        agent_id=agent_id,
-        agent_profile=active_profile,
-    )
+    try:
+        result = await bridge.hive_propagate(
+            entries,
+            agent_id=agent_id,
+            agent_profile=active_profile,
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response(
+            "hive_propagate",
+            exc,
+            extra={
+                "enabled": True,
+                "propagated": 0,
+                "skipped_private": 0,
+                "store_metadata": _store_metadata(store),
+            },
+        )
     return {
         "action": "hive_propagate",
         **result,
@@ -2145,13 +2255,20 @@ async def _handle_agent_register(store: MemoryStore, p: _Params) -> dict[str, An
     display = (p.value or "").strip() or aid
     profile_name = settings.memory.profile or "repo-brain"
 
-    result = await bridge.agent_register(
-        agent_id=aid,
-        name=display,
-        profile=profile_name,
-        skills=p.tag_list,
-        project_root=str(settings.project_root),
-    )
+    try:
+        result = await bridge.agent_register(
+            agent_id=aid,
+            name=display,
+            profile=profile_name,
+            skills=p.tag_list,
+            project_root=str(settings.project_root),
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response(
+            "agent_register",
+            exc,
+            extra={"enabled": True, "store_metadata": _store_metadata(store)},
+        )
     return {
         "action": "agent_register",
         "enabled": True,
