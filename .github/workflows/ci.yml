@@ -45,4 +45,4 @@ jobs:
         run: uv run pytest packages/docs-mcp/tests/ -x -q
 
       - name: Build
-        run: uv build
+        run: uv build --all-packages
