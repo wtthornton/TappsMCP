@@ -87,6 +87,7 @@ def _upgrade_platform(
         _bootstrap_cursor,
     )
     from tapps_mcp.pipeline.platform_generators import (
+        generate_claude_agent_scope_rule,
         generate_claude_hooks,
         generate_claude_python_quality_rule,
         generate_cursor_hooks,
@@ -120,6 +121,7 @@ def _upgrade_platform(
             result["components"]["agents"] = "would-regenerate"
             result["components"]["skills"] = "would-regenerate"
             result["components"]["python_quality_rule"] = "would-regenerate"
+            result["components"]["agent_scope_rule"] = "would-regenerate"
         elif "CLAUDE.md" in _skip:
             result["components"]["claude_md"] = "skipped (upgrade_skip_files)"
         else:
@@ -151,6 +153,9 @@ def _upgrade_platform(
                 project_root, engagement_level=engagement_level
             )
             result["components"]["python_quality_rule"] = rule_result
+
+            scope_rule_result = generate_claude_agent_scope_rule(project_root)
+            result["components"]["agent_scope_rule"] = scope_rule_result
 
             from tapps_mcp.pipeline.platform_bundles import generate_claude_pipeline_rule
 

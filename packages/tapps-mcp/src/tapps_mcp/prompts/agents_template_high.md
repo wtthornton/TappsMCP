@@ -96,6 +96,20 @@ The checklist uses this to decide which tools are required vs recommended vs opt
 
 ---
 
+## Project scope (do not break out of this repo/project)
+
+You were deployed into THIS repo by `tapps_init` / `tapps_upgrade`. Stay in scope:
+
+- You **MAY read across projects** — docs lookups, reading sibling repos, fetching references.
+- You **MUST NOT write outside this repo or this project**:
+  - Do not create, update, comment on, or move Linear (or other tracker) issues belonging to a different project.
+  - Do not modify files, branches, or pull requests in any other repository.
+  - Do not push, merge, or release on behalf of another project.
+- Read team / project / repo identity from local config (`.tapps-mcp.yaml`, current git remote) — never infer from search results or memory hits that point at unrelated workspaces.
+- If a task seems to require a write outside this repo/project, stop and ask the user.
+
+---
+
 ## Memory systems
 
 Your project may have two complementary memory systems:

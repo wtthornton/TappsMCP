@@ -721,6 +721,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             from tapps_mcp.pipeline.platform_generators import (
                 generate_agent_teams_hooks,
                 generate_ci_workflow,
+                generate_claude_agent_scope_rule,
                 generate_claude_hooks,
                 generate_claude_python_quality_rule,
                 generate_copilot_instructions,
@@ -739,6 +740,9 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             )
             state.result["python_quality_rule"] = generate_claude_python_quality_rule(
                 state.project_root, engagement_level=engagement
+            )
+            state.result["agent_scope_rule"] = generate_claude_agent_scope_rule(
+                state.project_root,
             )
             # Epic 86: Doc automation when DocsMCP is detected
             if cfg.docs_automation and state.result.get("docsmcp_detected", False):

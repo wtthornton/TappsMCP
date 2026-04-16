@@ -99,11 +99,44 @@ tapps_lookup_docs(
 Returns documentation excerpts and API references for the specified library.
 """
 
+_CURSOR_RULE_AGENT_SCOPE = """\
+---
+alwaysApply: true
+---
+
+# Deployed Agent Scope (TappsMCP)
+
+Agents deployed by `tapps_init` / `tapps_upgrade` must stay scoped to THIS
+repo and THIS project for any **write** operation.
+
+## Allowed (read)
+
+- Documentation lookups across any project.
+- Searching memory across federated projects to inform decisions.
+- Browsing sibling repositories for reference only.
+
+## Forbidden (write outside the deploying project)
+
+- Creating, updating, commenting on, or moving Linear (or other tracker)
+  issues that belong to a different project than this repo.
+- Modifying files, branches, or pull requests in any other repository.
+- Pushing, merging, releasing, or running automation for another project.
+
+## How to apply
+
+- Read team / project / repo identity from `.tapps-mcp.yaml` or the current
+  git remote, NOT from arbitrary search results that may point at other
+  workspaces.
+- When in doubt whether a target belongs to this project, stop and ask the
+  user instead of writing.
+"""
+
 # Make rule templates accessible for plugin bundle generation
 CURSOR_RULE_TEMPLATES: dict[str, str] = {
     "tapps-pipeline.mdc": _CURSOR_RULE_PIPELINE,
     "tapps-python-quality.mdc": _CURSOR_RULE_PYTHON_QUALITY,
     "tapps-expert-consultation.mdc": _CURSOR_RULE_EXPERT,
+    "tapps-agent-scope.mdc": _CURSOR_RULE_AGENT_SCOPE,
 }
 
 
@@ -172,6 +205,20 @@ following tools to maintain code quality throughout development.
 TappsMCP scores code across 7 categories (0-100 each):
 correctness, security, maintainability, performance, documentation,
 testing, and style.
+
+## Project Scope (do not break out of this repo/project)
+
+This Copilot instance was configured for THIS repo by `tapps_init` /
+`tapps_upgrade`. Reading docs across projects is fine; **writing** outside
+this repo or the linked tracker project is not. Specifically:
+
+- Do not create, update, comment on, or move issues that belong to a
+  different project than this repo.
+- Do not modify files, branches, or pull requests in any other repository.
+- Read team / project identity from `.tapps-mcp.yaml` or the current git
+  remote, not from arbitrary search results.
+- If a task seems to require a write outside this repo/project, ask the
+  user before proceeding.
 """
 
 
@@ -252,6 +299,13 @@ Flag the following as non-blocking warnings:
 This `BUGBOT.md` applies to all files in `.cursor/` and subdirectories.
 Place a subdirectory `BUGBOT.md` to override these rules for specific
 sub-packages with different thresholds.
+
+## Cross-Project Write Boundary
+
+BugBot must not file issues, leave comments, or trigger automation in any
+project other than the one this PR belongs to. Reads across projects are
+fine. If a finding implies a change in another repo or tracker project,
+flag it in this PR's review instead of acting on it directly.
 """
 
 

@@ -12,6 +12,32 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 # ---------------------------------------------------------------------------
+# Project-scope rule (shared across every deployed agent)
+# ---------------------------------------------------------------------------
+#
+# Bootstrapped agents must remain scoped to the deploying project's repo for
+# any *write* action. Reading external context is fine; modifying issues,
+# PRs, or files outside the deploying repo/project is not.
+
+_PROJECT_SCOPE_RULE = """
+## Project scope (do not break out of this repo/project)
+
+You were deployed into THIS repo by `tapps_init` / `tapps_upgrade`. Stay in scope:
+
+- You MAY read across projects (docs lookups, browsing other repos, fetching references).
+- You MUST NOT write outside this repo or this project. Specifically:
+  - Do not create, update, comment on, or move Linear (or other tracker) issues
+    that belong to a different project than this repo.
+  - Do not modify files, branches, or pull requests in any other repository.
+  - Do not push, merge, or release on behalf of another project.
+- Pull team / project / repo identity from local config (`.tapps-mcp.yaml`,
+  the current git remote) — never infer it from search results or memory hits
+  that point at unrelated workspaces.
+- If a task seems to require a write outside this repo/project, stop and ask
+  the user instead of doing it.
+"""
+
+# ---------------------------------------------------------------------------
 # Subagent templates (Story 12.6)
 # ---------------------------------------------------------------------------
 
@@ -234,6 +260,15 @@ Do not refactor beyond what the issues require.
 }
 
 
+def _with_scope_rule(template: str) -> str:
+    """Append the shared project-scope rule to an agent template body.
+
+    Every deployed agent gets the same trailing scope guard so the rule is
+    enforced consistently regardless of which agent runs.
+    """
+    return template.rstrip() + "\n" + _PROJECT_SCOPE_RULE
+
+
 def generate_subagent_definitions(
     project_root: Path,
     platform: str,
@@ -246,6 +281,9 @@ def generate_subagent_definitions(
     depending on the platform. Existing files are skipped to preserve
     user customizations unless *overwrite* is ``True`` (used by the
     upgrade path to refresh corrected frontmatter).
+
+    Each agent receives the shared :data:`_PROJECT_SCOPE_RULE` appended to its
+    prompt body so deployed agents stay scoped to the deploying project.
 
     Returns a summary dict with ``created``, ``updated``, and ``skipped`` lists.
     """
@@ -263,7 +301,8 @@ def generate_subagent_definitions(
     created: list[str] = []
     updated: list[str] = []
     skipped: list[str] = []
-    for name, content in templates.items():
+    for name, raw_content in templates.items():
+        content = _with_scope_rule(raw_content)
         target = agents_dir / name
         if target.exists():
             if overwrite:
