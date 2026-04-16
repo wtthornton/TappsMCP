@@ -26,7 +26,6 @@ Public API
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 import structlog
@@ -271,9 +270,7 @@ class ArchPatternPosterGenerator:
                 )
 
         # Animated dot (positioned at origin; CSS moves it)
-        lines.append(
-            '<circle class="flow-dot dot-lyr" r="4" fill="#fff"/>'
-        )
+        lines.append('<circle class="flow-dot dot-lyr" r="4" fill="#fff"/>')
         return "\n".join(lines)
 
     def _svg_event_driven(self, packages: list[tuple[str, str]]) -> str:
@@ -306,7 +303,7 @@ class ArchPatternPosterGenerator:
             "Publisher",
         ]
         pw, ph = 54, 22
-        for (px, py), lbl in zip(pub_positions, pub_labels):
+        for (px, py), lbl in zip(pub_positions, pub_labels, strict=True):
             short = (lbl[:9] + "\u2026") if len(lbl) > 9 else lbl
             lines.append(
                 f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}"'
@@ -330,7 +327,7 @@ class ArchPatternPosterGenerator:
             "Consumer",
         ]
         cw, ch = 54, 22
-        for (cx3, cy3), lbl in zip(cons_positions, cons_labels):
+        for (cx3, cy3), lbl in zip(cons_positions, cons_labels, strict=True):
             short = (lbl[:9] + "\u2026") if len(lbl) > 9 else lbl
             lines.append(
                 f'<rect x="{cx3}" y="{cy3}" width="{cw}" height="{ch}"'
@@ -348,9 +345,9 @@ class ArchPatternPosterGenerator:
             )
 
         lines.append(
-            f'<text x="140" y="185" fill="#555" font-size="7"'
-            f' text-anchor="middle" font-family="system-ui,sans-serif">'
-            f"Publishers \u2192 Bus \u2192 Consumers</text>"
+            '<text x="140" y="185" fill="#555" font-size="7"'
+            ' text-anchor="middle" font-family="system-ui,sans-serif">'
+            "Publishers \u2192 Bus \u2192 Consumers</text>"
         )
         lines.append('<circle class="flow-dot dot-evt" r="4" fill="#14B8A6"/>')
         return "\n".join(lines)
@@ -447,8 +444,8 @@ class ArchPatternPosterGenerator:
             f' font-family="system-ui,sans-serif">API Gateway</text>'
         )
 
-        for i, (sx, color, fg, name) in enumerate(
-            zip(svc_xs, svc_colors, svc_fgs, svc_names)
+        for _i, (sx, color, fg, name) in enumerate(
+            zip(svc_xs, svc_colors, svc_fgs, svc_names, strict=True)
         ):
             scx = sx + svc_w // 2
             short = (name[:8] + "\u2026") if len(name) > 8 else name
@@ -550,7 +547,7 @@ class ArchPatternPosterGenerator:
             (cx_cont + 78, cy_cont + 60),
             (cx_cont + 144, cy_cont + 60),
         ]
-        for (mx, my), (name, role) in zip(positions, modules):
+        for (mx, my), (name, role) in zip(positions, modules, strict=True):
             color = _ROLE_COLORS.get(role, "#6B7280")
             text_col = _ROLE_TEXT.get(role, "#fff")
             short = (name[:6] + "\u2026") if len(name) > 6 else name
@@ -585,15 +582,9 @@ class ArchPatternPosterGenerator:
         # Shared DB at bottom of container
         db_x = cx_cont + (cw - 60) // 2
         db_y = cy_cont + ch - 30
-        lines.append(
-            f'<ellipse cx="{db_x + 30}" cy="{db_y + 5}" rx="30" ry="6" fill="#374151"/>'
-        )
-        lines.append(
-            f'<rect x="{db_x}" y="{db_y + 5}" width="60" height="14" fill="#374151"/>'
-        )
-        lines.append(
-            f'<ellipse cx="{db_x + 30}" cy="{db_y + 19}" rx="30" ry="6" fill="#2d3748"/>'
-        )
+        lines.append(f'<ellipse cx="{db_x + 30}" cy="{db_y + 5}" rx="30" ry="6" fill="#374151"/>')
+        lines.append(f'<rect x="{db_x}" y="{db_y + 5}" width="60" height="14" fill="#374151"/>')
+        lines.append(f'<ellipse cx="{db_x + 30}" cy="{db_y + 19}" rx="30" ry="6" fill="#2d3748"/>')
         lines.append(
             f'<text x="{db_x + 30}" y="{db_y + 14}" fill="#9ca3af"'
             f' font-size="7" text-anchor="middle" font-family="system-ui,sans-serif">'
@@ -613,9 +604,9 @@ class ArchPatternPosterGenerator:
         )
 
         lines.append(
-            f'<text x="140" y="185" fill="#555" font-size="7"'
-            f' text-anchor="middle" font-family="system-ui,sans-serif">'
-            f"All components in one deployable unit</text>"
+            '<text x="140" y="185" fill="#555" font-size="7"'
+            ' text-anchor="middle" font-family="system-ui,sans-serif">'
+            "All components in one deployable unit</text>"
         )
         return "\n".join(lines)
 
@@ -634,8 +625,7 @@ class ArchPatternPosterGenerator:
         stage_names: list[str]
         if packages:
             stage_names = [
-                (packages[i][0] if i < len(packages) else default_stages[i][0])
-                for i in range(5)
+                (packages[i][0] if i < len(packages) else default_stages[i][0]) for i in range(5)
             ]
         else:
             stage_names = [n for n, _ in default_stages]
@@ -647,7 +637,7 @@ class ArchPatternPosterGenerator:
         y0 = 75
 
         stage_xs: list[int] = []
-        for i, (name, color) in enumerate(zip(stage_names, stage_colors)):
+        for i, (name, color) in enumerate(zip(stage_names, stage_colors, strict=True)):
             sx = x0 + i * (stg_w + inter)
             sy = y0
             scx = sx + stg_w // 2

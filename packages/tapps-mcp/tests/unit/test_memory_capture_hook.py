@@ -9,10 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock
-
-import pytest
 
 from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOK_SCRIPTS,
@@ -21,7 +18,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_CAPTURE_HOOKS_CONFIG_PS,
 )
 from tapps_mcp.pipeline.platform_hooks import generate_memory_capture_hook
-
 
 # ---------------------------------------------------------------------------
 # Hook template content tests
@@ -41,9 +37,9 @@ class TestMemoryCaptureHookTemplate:
 
     def test_bash_script_exits_zero_on_active(self) -> None:
         script = CLAUDE_HOOK_SCRIPTS["tapps-memory-capture.sh"]
-        assert 'exit 0' in script
+        assert "exit 0" in script
         # Should NOT block (no exit 2)
-        assert 'exit 2' not in script
+        assert "exit 2" not in script
 
     def test_bash_script_writes_session_capture_json(self) -> None:
         script = CLAUDE_HOOK_SCRIPTS["tapps-memory-capture.sh"]
@@ -82,11 +78,7 @@ class TestMemoryCaptureHookConfig:
 
     def test_config_command_references_script(self) -> None:
         entries = MEMORY_CAPTURE_HOOKS_CONFIG["Stop"]
-        commands = [
-            h["command"]
-            for e in entries
-            for h in e.get("hooks", [])
-        ]
+        commands = [h["command"] for e in entries for h in e.get("hooks", [])]
         assert any("tapps-memory-capture" in c for c in commands)
 
 

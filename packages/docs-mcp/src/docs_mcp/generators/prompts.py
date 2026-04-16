@@ -94,10 +94,12 @@ class PromptGenerator:
         sections: list[str] = []
 
         # Identity
-        sections.append(_section(
-            "metadata",
-            f"# Prompt: {config.name}\n\n**When to use:** {config.when_to_use or '(not specified)'}",
-        ))
+        sections.append(
+            _section(
+                "metadata",
+                f"# Prompt: {config.name}\n\n**When to use:** {config.when_to_use or '(not specified)'}",
+            )
+        )
 
         # Purpose & Intent (required)
         p_intent = (
@@ -221,20 +223,26 @@ def _append_success_brief_section(sections: list[str], config: PromptConfig) -> 
 def _append_tail_sections(sections: list[str], config: PromptConfig) -> None:
     """Append conversation, plan, alignment, allowed-tools, output-format, and don't sections."""
     if config.conversation_first:
-        sections.append(_section(
-            "conversation",
-            "## Conversation\n\nDo not start executing yet; ask clarifying questions to refine approach step by step.",
-        ))
+        sections.append(
+            _section(
+                "conversation",
+                "## Conversation\n\nDo not start executing yet; ask clarifying questions to refine approach step by step.",
+            )
+        )
 
     if config.plan_steps is not False:
         n = config.plan_steps if isinstance(config.plan_steps, int) else 5
-        sections.append(_section(
-            "plan",
-            f"## Plan\n\nBefore writing: list the key rules from context that matter most; then give execution plan ({n} steps max).",
-        ))
+        sections.append(
+            _section(
+                "plan",
+                f"## Plan\n\nBefore writing: list the key rules from context that matter most; then give execution plan ({n} steps max).",
+            )
+        )
 
     if config.alignment_required:
-        sections.append(_section("alignment", "## Alignment\n\nOnly begin work once we've aligned."))
+        sections.append(
+            _section("alignment", "## Alignment\n\nOnly begin work once we've aligned.")
+        )
 
     if config.allowed_tools:
         tools_list = "\n".join(f"- {t}" for t in config.allowed_tools)

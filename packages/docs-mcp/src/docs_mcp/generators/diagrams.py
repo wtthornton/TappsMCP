@@ -59,29 +59,71 @@ _ROLE_COLORS: dict[str, str] = {
 _ROLE_KEYWORDS: dict[str, frozenset[str]] = {
     "presentation": frozenset(
         {
-            "api", "web", "ui", "views", "controllers", "routes",
-            "presentation", "cli", "server", "handlers", "endpoints",
+            "api",
+            "web",
+            "ui",
+            "views",
+            "controllers",
+            "routes",
+            "presentation",
+            "cli",
+            "server",
+            "handlers",
+            "endpoints",
         }
     ),
     "business": frozenset(
         {
-            "services", "service", "business", "domain", "usecases",
-            "use_cases", "application", "core", "generators", "analyzers",
-            "validators", "extractors", "pipeline", "tools", "workflow",
+            "services",
+            "service",
+            "business",
+            "domain",
+            "usecases",
+            "use_cases",
+            "application",
+            "core",
+            "generators",
+            "analyzers",
+            "validators",
+            "extractors",
+            "pipeline",
+            "tools",
+            "workflow",
         }
     ),
     "data": frozenset(
         {
-            "repositories", "repository", "dao", "data_access", "models",
-            "entities", "persistence", "db", "database", "memory",
-            "storage", "cache", "store",
+            "repositories",
+            "repository",
+            "dao",
+            "data_access",
+            "models",
+            "entities",
+            "persistence",
+            "db",
+            "database",
+            "memory",
+            "storage",
+            "cache",
+            "store",
         }
     ),
     "infra": frozenset(
         {
-            "config", "settings", "security", "logging", "metrics",
-            "telemetry", "infrastructure", "distribution", "integrations",
-            "utils", "common", "constants", "monitoring", "observability",
+            "config",
+            "settings",
+            "security",
+            "logging",
+            "metrics",
+            "telemetry",
+            "infrastructure",
+            "distribution",
+            "integrations",
+            "utils",
+            "common",
+            "constants",
+            "monitoring",
+            "observability",
         }
     ),
 }
@@ -203,16 +245,12 @@ class DiagramGenerator:
 
         if diagram_type not in self.VALID_TYPES:
             logger.warning("invalid_diagram_type", diagram_type=diagram_type)
-            return DiagramResult(
-                diagram_type=diagram_type, format=output_format, content=""
-            )
+            return DiagramResult(diagram_type=diagram_type, format=output_format, content="")
 
         html_ok = diagram_type in self._HTML_CAPABLE_TYPES and output_format == "html"
         if output_format not in self.VALID_FORMATS and not html_ok:
             logger.warning("invalid_format", format=output_format)
-            return DiagramResult(
-                diagram_type=diagram_type, format=output_format, content=""
-            )
+            return DiagramResult(diagram_type=diagram_type, format=output_format, content="")
 
         # Store theme for D2 renderers to access.
         self._d2_theme = theme if theme in self.VALID_THEMES else "default"
@@ -227,24 +265,14 @@ class DiagramGenerator:
             "module_map": lambda: self._generate_module_map(
                 project_root, depth, direction, output_format
             ),
-            "er_diagram": lambda: self._generate_er_diagram(
-                project_root, scope, output_format
-            ),
-            "c4_context": lambda: self._generate_c4_context(
-                project_root, output_format
-            ),
-            "c4_container": lambda: self._generate_c4_container(
-                project_root, output_format
-            ),
-            "c4_component": lambda: self._generate_c4_component(
-                project_root, scope, output_format
-            ),
+            "er_diagram": lambda: self._generate_er_diagram(project_root, scope, output_format),
+            "c4_context": lambda: self._generate_c4_context(project_root, output_format),
+            "c4_container": lambda: self._generate_c4_container(project_root, output_format),
+            "c4_component": lambda: self._generate_c4_component(project_root, scope, output_format),
             "sequence": lambda: self._generate_sequence(
                 project_root, output_format, depth, flow_spec
             ),
-            "pattern_card": lambda: self._generate_pattern_card(
-                project_root, output_format
-            ),
+            "pattern_card": lambda: self._generate_pattern_card(project_root, output_format),
             "pattern_comparison": lambda: self._generate_pattern_comparison(
                 project_root, output_format
             ),
@@ -267,9 +295,7 @@ class DiagramGenerator:
             packages = [
                 d
                 for d in src_dir.iterdir()
-                if d.is_dir()
-                and not self._should_skip_dir(d)
-                and (d / "__init__.py").exists()
+                if d.is_dir() and not self._should_skip_dir(d) and (d / "__init__.py").exists()
             ]
             if packages:
                 return packages
@@ -323,28 +349,20 @@ class DiagramGenerator:
             graph = builder.build(project_root)
         except Exception:
             logger.warning("dependency_build_failed", path=str(project_root))
-            return DiagramResult(
-                diagram_type="dependency", format=output_format, content=""
-            )
+            return DiagramResult(diagram_type="dependency", format=output_format, content="")
 
         try:
             if output_format == "mermaid":
-                content, nodes, edges = self._dependency_to_mermaid(
-                    graph, direction, show_external
-                )
+                content, nodes, edges = self._dependency_to_mermaid(graph, direction, show_external)
             elif output_format == "d2":
-                content, nodes, edges = self._dependency_to_d2(
-                    graph, direction, show_external
-                )
+                content, nodes, edges = self._dependency_to_d2(graph, direction, show_external)
             else:
                 content, nodes, edges = self._dependency_to_plantuml(
                     graph, direction, show_external
                 )
         except Exception:
             logger.warning("dependency_render_failed")
-            return DiagramResult(
-                diagram_type="dependency", format=output_format, content=""
-            )
+            return DiagramResult(diagram_type="dependency", format=output_format, content="")
 
         return DiagramResult(
             diagram_type="dependency",
@@ -437,9 +455,7 @@ class DiagramGenerator:
                     ext_top = ext_name.split(".")[0]
                     ext_id = self._sanitize_id(ext_top)
                     if ext_id not in external_ids:
-                        lines.append(
-                            f'    {ext_id}["{ext_top}"]:::external'
-                        )
+                        lines.append(f'    {ext_id}["{ext_top}"]:::external')
                         external_ids.add(ext_id)
                         node_count += 1
                     lines.append(f"    {src_id} -.-> {ext_id}")
@@ -447,8 +463,7 @@ class DiagramGenerator:
 
         if truncated:
             lines.append(
-                f"    %% Truncated: showing {_MAX_DEPENDENCY_NODES}"
-                f" of {len(graph.modules)} modules"
+                f"    %% Truncated: showing {_MAX_DEPENDENCY_NODES} of {len(graph.modules)} modules"
             )
 
         lines.extend(self._role_classdef_mermaid_lines())
@@ -532,8 +547,7 @@ class DiagramGenerator:
 
         if truncated:
             lines.append(
-                f"' Truncated: showing {_MAX_DEPENDENCY_NODES}"
-                f" of {len(graph.modules)} modules"
+                f"' Truncated: showing {_MAX_DEPENDENCY_NODES} of {len(graph.modules)} modules"
             )
 
         lines.append("")
@@ -786,28 +800,18 @@ class DiagramGenerator:
             result = analyzer.analyze(project_root, depth=depth)
         except Exception:
             logger.warning("module_map_failed", path=str(project_root))
-            return DiagramResult(
-                diagram_type="module_map", format=output_format, content=""
-            )
+            return DiagramResult(diagram_type="module_map", format=output_format, content="")
 
         try:
             if output_format == "mermaid":
-                content, nodes, edges = self._module_map_to_mermaid(
-                    result, direction
-                )
+                content, nodes, edges = self._module_map_to_mermaid(result, direction)
             elif output_format == "d2":
-                content, nodes, edges = self._module_map_to_d2(
-                    result, direction
-                )
+                content, nodes, edges = self._module_map_to_d2(result, direction)
             else:
-                content, nodes, edges = self._module_map_to_plantuml(
-                    result, direction
-                )
+                content, nodes, edges = self._module_map_to_plantuml(result, direction)
         except Exception:
             logger.warning("module_map_render_failed")
-            return DiagramResult(
-                diagram_type="module_map", format=output_format, content=""
-            )
+            return DiagramResult(diagram_type="module_map", format=output_format, content="")
 
         return DiagramResult(
             diagram_type="module_map",
@@ -900,9 +904,7 @@ class DiagramGenerator:
         lines: list[str] = ["@startuml", puml_direction, ""]
 
         lines.append(f'package "{module_map.project_name}" {{')
-        node_count = self._emit_module_nodes_plantuml(
-            module_map.module_tree, lines, indent=4
-        )
+        node_count = self._emit_module_nodes_plantuml(module_map.module_tree, lines, indent=4)
         lines.append("}")
 
         lines.append("")
@@ -928,9 +930,7 @@ class DiagramGenerator:
         for node in nodes:
             if node.is_package:
                 lines.append(f'{pad}package "{node.name}/" {{')
-                count += self._emit_module_nodes_plantuml(
-                    node.submodules, lines, indent + 4
-                )
+                count += self._emit_module_nodes_plantuml(node.submodules, lines, indent + 4)
                 lines.append(f"{pad}}}")
             else:
                 stats: list[str] = []
@@ -959,13 +959,9 @@ class DiagramGenerator:
             classes, scanned_dirs, skipped = self._collect_classes(project_root, scope)
         except Exception:
             logger.warning("er_class_collection_failed", path=str(project_root))
-            return DiagramResult(
-                diagram_type="er_diagram", format=output_format, content=""
-            )
+            return DiagramResult(diagram_type="er_diagram", format=output_format, content="")
 
-        models = [
-            (mod, cls) for mod, cls in classes if self._is_model_class(cls)
-        ]
+        models = [(mod, cls) for mod, cls in classes if self._is_model_class(cls)]
 
         if not models:
             return DiagramResult(
@@ -985,9 +981,7 @@ class DiagramGenerator:
                 content, nodes, edges = self._models_to_plantuml_er(models)
         except Exception:
             logger.warning("er_render_failed")
-            return DiagramResult(
-                diagram_type="er_diagram", format=output_format, content=""
-            )
+            return DiagramResult(diagram_type="er_diagram", format=output_format, content="")
 
         return DiagramResult(
             diagram_type="er_diagram",
@@ -1048,9 +1042,7 @@ class DiagramGenerator:
                         continue
                     if other_name in annotation:
                         other_id = self._sanitize_id(other_name)
-                        lines.append(
-                            f'    {cls_id} ||--o{{ {other_id} : "has"'
-                        )
+                        lines.append(f'    {cls_id} ||--o{{ {other_id} : "has"')
                         edge_count += 1
 
         content = "\n".join(lines) + "\n"
@@ -1087,9 +1079,7 @@ class DiagramGenerator:
                     if other_name == cls.name:
                         continue
                     if other_name in annotation:
-                        lines.append(
-                            f'{cls.name} ||--o{{ {other_name} : "has"'
-                        )
+                        lines.append(f'{cls.name} ||--o{{ {other_name} : "has"')
                         edge_count += 1
 
         lines.append("")
@@ -1116,8 +1106,10 @@ class DiagramGenerator:
 
         # Detect external actors from common patterns
         actors: list[tuple[str, str]] = []  # (name, description)
-        deps = [d.split("[")[0].split(">")[0].split("=")[0].strip().lower()
-                for d in metadata.dependencies]
+        deps = [
+            d.split("[")[0].split(">")[0].split("=")[0].strip().lower()
+            for d in metadata.dependencies
+        ]
 
         if any(d in deps for d in ("fastapi", "flask", "django", "starlette")):
             actors.append(("User", "End user interacting via web browser or API client"))
@@ -1132,17 +1124,11 @@ class DiagramGenerator:
             actors.append(("User", "Primary system user"))
 
         if output_format == "mermaid":
-            content, nodes, edges = self._c4_context_mermaid(
-                project_name, description, actors
-            )
+            content, nodes, edges = self._c4_context_mermaid(project_name, description, actors)
         elif output_format == "d2":
-            content, nodes, edges = self._c4_context_d2(
-                project_name, description, actors
-            )
+            content, nodes, edges = self._c4_context_d2(project_name, description, actors)
         else:
-            content, nodes, edges = self._c4_context_plantuml(
-                project_name, description, actors
-            )
+            content, nodes, edges = self._c4_context_plantuml(project_name, description, actors)
 
         return DiagramResult(
             diagram_type="c4_context",
@@ -1159,7 +1145,7 @@ class DiagramGenerator:
         actors: list[tuple[str, str]],
     ) -> tuple[str, int, int]:
         lines = ["C4Context"]
-        lines.append(f'    title System Context diagram for {name}')
+        lines.append(f"    title System Context diagram for {name}")
         lines.append("")
 
         node_count = 1 + len(actors)
@@ -1265,11 +1251,13 @@ class DiagramGenerator:
             for pkg_dir in sorted(packages_dir.iterdir()):
                 if pkg_dir.is_dir() and (pkg_dir / "pyproject.toml").exists():
                     pkg_meta = extractor.extract(pkg_dir)
-                    containers.append((
-                        pkg_meta.name or pkg_dir.name,
-                        "Python",
-                        pkg_meta.description or f"Package: {pkg_dir.name}",
-                    ))
+                    containers.append(
+                        (
+                            pkg_meta.name or pkg_dir.name,
+                            "Python",
+                            pkg_meta.description or f"Package: {pkg_dir.name}",
+                        )
+                    )
 
         # Check for src layout
         if not containers:
@@ -1277,15 +1265,14 @@ class DiagramGenerator:
             if src_dir.is_dir():
                 for pkg_dir in sorted(src_dir.iterdir()):
                     if pkg_dir.is_dir() and (pkg_dir / "__init__.py").exists():
-                        containers.append((
-                            pkg_dir.name, "Python", f"Python package: {pkg_dir.name}"
-                        ))
+                        containers.append(
+                            (pkg_dir.name, "Python", f"Python package: {pkg_dir.name}")
+                        )
 
         # Fallback: top-level Python packages
         if not containers:
             for d in sorted(project_root.iterdir()):
-                if (d.is_dir() and (d / "__init__.py").exists()
-                        and not self._should_skip_dir(d)):
+                if d.is_dir() and (d / "__init__.py").exists() and not self._should_skip_dir(d):
                     containers.append((d.name, "Python", f"Package: {d.name}"))
 
         # Detect infrastructure containers
@@ -1320,7 +1307,7 @@ class DiagramGenerator:
         containers: list[tuple[str, str, str]],
     ) -> tuple[str, int, int]:
         lines = ["C4Container"]
-        lines.append(f'    title Container diagram for {name}')
+        lines.append(f"    title Container diagram for {name}")
         lines.append("")
         lines.append(f'    System_Boundary({self._sanitize_id(name)}, "{name}") {{')
 
@@ -1446,7 +1433,7 @@ class DiagramGenerator:
         components: list[tuple[str, str, int]],
     ) -> tuple[str, int, int]:
         lines = ["C4Component"]
-        lines.append(f'    title Component diagram for {container_name}')
+        lines.append(f"    title Component diagram for {container_name}")
         lines.append("")
         cid = self._sanitize_id(container_name)
         lines.append(f'    Container_Boundary({cid}, "{container_name}") {{')
@@ -1542,9 +1529,7 @@ class DiagramGenerator:
             spec = json.loads(flow_spec)
         except (json.JSONDecodeError, TypeError) as exc:
             logger.warning("invalid_flow_spec", error=str(exc))
-            return DiagramResult(
-                diagram_type="sequence", format=output_format, content=""
-            )
+            return DiagramResult(diagram_type="sequence", format=output_format, content="")
 
         participants: list[str] = spec.get("participants", [])
         messages: list[dict[str, str]] = spec.get("messages", [])
@@ -1554,9 +1539,7 @@ class DiagramGenerator:
 
         if not participants or not messages:
             logger.warning("empty_flow_spec")
-            return DiagramResult(
-                diagram_type="sequence", format=output_format, content=""
-            )
+            return DiagramResult(diagram_type="sequence", format=output_format, content="")
 
         # Enforce limits
         participants = participants[:_MAX_SEQUENCE_PARTICIPANTS]
@@ -1565,22 +1548,17 @@ class DiagramGenerator:
 
         # Filter messages to only reference known participants
         valid_messages = [
-            m for m in messages
+            m
+            for m in messages
             if m.get("from") in participant_set and m.get("to") in participant_set
         ]
 
         if output_format == "mermaid":
-            content = self._sequence_mermaid(
-                title, participants, valid_messages, notes, groups
-            )
+            content = self._sequence_mermaid(title, participants, valid_messages, notes, groups)
         elif output_format == "d2":
-            content = self._sequence_d2(
-                title, participants, valid_messages, notes, groups
-            )
+            content = self._sequence_d2(title, participants, valid_messages, notes, groups)
         else:
-            content = self._sequence_plantuml(
-                title, participants, valid_messages, notes, groups
-            )
+            content = self._sequence_plantuml(title, participants, valid_messages, notes, groups)
 
         return DiagramResult(
             diagram_type="sequence",
@@ -1630,9 +1608,7 @@ class DiagramGenerator:
         visited_modules: set[str] = set()
 
         for ep in entry_points[:5]:
-            self._walk_imports(
-                ep, adjacency, effective_depth, 0, visited_modules, visited_edges
-            )
+            self._walk_imports(ep, adjacency, effective_depth, 0, visited_modules, visited_edges)
 
         if not visited_edges:
             return DiagramResult(
@@ -1696,8 +1672,12 @@ class DiagramGenerator:
                 if len(visited_edges) >= _MAX_SEQUENCE_MESSAGES:
                     return
             self._walk_imports(
-                target, adjacency, max_depth, current_depth + 1,
-                visited_modules, visited_edges,
+                target,
+                adjacency,
+                max_depth,
+                current_depth + 1,
+                visited_modules,
+                visited_edges,
             )
 
     # -- Mermaid renderer -----------------------------------------------
@@ -1728,14 +1708,10 @@ class DiagramGenerator:
         group_starts: dict[int, dict[str, object]] = {
             int(str(g.get("start", -1))): g for g in groups
         }
-        group_ends: set[int] = {
-            int(str(g.get("end", -1))) for g in groups
-        }
+        group_ends: set[int] = {int(str(g.get("end", -1))) for g in groups}
 
         # Render messages with interleaved notes and groups
-        note_map: dict[str, str] = {
-            str(n.get("over", "")): str(n.get("text", "")) for n in notes
-        }
+        note_map: dict[str, str] = {str(n.get("over", "")): str(n.get("text", "")) for n in notes}
         for idx, msg in enumerate(messages):
             # Open group if one starts at this index
             if idx in group_starts:
@@ -1760,9 +1736,7 @@ class DiagramGenerator:
             target_name = msg["to"]
             if target_name in note_map:
                 note_alias = self._sanitize_id(target_name)
-                lines.append(
-                    f"    Note over {note_alias}: {note_map.pop(target_name)}"
-                )
+                lines.append(f"    Note over {note_alias}: {note_map.pop(target_name)}")
 
             # Close group if one ends at this index
             if idx in group_ends:
@@ -1797,13 +1771,9 @@ class DiagramGenerator:
         group_starts: dict[int, dict[str, object]] = {
             int(str(g.get("start", -1))): g for g in groups
         }
-        group_ends: set[int] = {
-            int(str(g.get("end", -1))) for g in groups
-        }
+        group_ends: set[int] = {int(str(g.get("end", -1))) for g in groups}
 
-        note_map: dict[str, str] = {
-            str(n.get("over", "")): str(n.get("text", "")) for n in notes
-        }
+        note_map: dict[str, str] = {str(n.get("over", "")): str(n.get("text", "")) for n in notes}
 
         for idx, msg in enumerate(messages):
             if idx in group_starts:
@@ -1827,7 +1797,7 @@ class DiagramGenerator:
             target_name = msg["to"]
             if target_name in note_map:
                 note_alias = self._sanitize_id(target_name)
-                lines.append(f'note over {note_alias}: {note_map.pop(target_name)}')
+                lines.append(f"note over {note_alias}: {note_map.pop(target_name)}")
 
             if idx in group_ends:
                 lines.append("end")
@@ -1933,15 +1903,12 @@ class DiagramGenerator:
                         lines.append(f"{ext_id}: {ext_top} {{shape: cloud}}")
                         external_ids.add(ext_id)
                         node_count += 1
-                    lines.append(
-                        f"{src_id} -> {ext_id}: {{style.stroke-dash: 3}}"
-                    )
+                    lines.append(f"{src_id} -> {ext_id}: {{style.stroke-dash: 3}}")
                     edge_count += 1
 
         if truncated:
             lines.append(
-                f"# Truncated: showing {_MAX_DEPENDENCY_NODES}"
-                f" of {len(graph.modules)} modules"
+                f"# Truncated: showing {_MAX_DEPENDENCY_NODES} of {len(graph.modules)} modules"
             )
 
         content = "\n".join(lines) + "\n"
@@ -1994,9 +1961,7 @@ class DiagramGenerator:
                 base_simple = base.split(".")[-1]
                 if base_simple in class_names:
                     base_id = self._sanitize_id(base_simple)
-                    lines.append(
-                        f"{cls_id} -> {base_id}: {{style.stroke-dash: 3}}"
-                    )
+                    lines.append(f"{cls_id} -> {base_id}: {{style.stroke-dash: 3}}")
                     edge_count += 1
 
         content = "\n".join(lines) + "\n"
@@ -2021,9 +1986,7 @@ class DiagramGenerator:
 
         project_id = self._sanitize_id(module_map.project_name)
         lines.append(f"{project_id}: {module_map.project_name} {{")
-        node_count = self._emit_module_nodes_d2(
-            module_map.module_tree, lines, indent=2
-        )
+        node_count = self._emit_module_nodes_d2(module_map.module_tree, lines, indent=2)
         lines.append("}")
 
         content = "\n".join(lines) + "\n"
@@ -2048,9 +2011,7 @@ class DiagramGenerator:
             if node.is_package:
                 label = f"{node.name}/"
                 lines.append(f"{pad}{node_id}: {label} {{")
-                count += self._emit_module_nodes_d2(
-                    node.submodules, lines, indent + 2
-                )
+                count += self._emit_module_nodes_d2(node.submodules, lines, indent + 2)
                 lines.append(f"{pad}}}")
             else:
                 label_parts: list[str] = [node.name]
@@ -2169,7 +2130,7 @@ class DiagramGenerator:
         for cname, tech, desc in containers:
             cid = self._sanitize_id(cname)
             lines.append(f"  {cid}: {cname} {{")
-            lines.append(f"    tooltip: \"{tech} - {desc}\"")
+            lines.append(f'    tooltip: "{tech} - {desc}"')
             lines.append("  }")
 
         lines.append("}")
@@ -2203,7 +2164,7 @@ class DiagramGenerator:
         for cname, desc, _ in components[:_MAX_DEPENDENCY_NODES]:
             comp_id = self._sanitize_id(cname)
             lines.append(f"  {comp_id}: {cname} {{")
-            lines.append(f"    tooltip: \"{desc}\"")
+            lines.append(f'    tooltip: "{desc}"')
             lines.append("  }")
 
         lines.append("}")
@@ -2236,9 +2197,7 @@ class DiagramGenerator:
             lines.append(f"{alias}: {display}")
         lines.append("")
 
-        note_map: dict[str, str] = {
-            str(n.get("over", "")): str(n.get("text", "")) for n in notes
-        }
+        note_map: dict[str, str] = {str(n.get("over", "")): str(n.get("text", "")) for n in notes}
 
         for msg in messages:
             src = self._sanitize_id(msg["from"])
@@ -2247,22 +2206,16 @@ class DiagramGenerator:
             msg_type = msg.get("type", "sync")
 
             if msg_type == "reply":
-                lines.append(
-                    f"{src} -> {tgt}: {label} {{style.stroke-dash: 3}}"
-                )
+                lines.append(f"{src} -> {tgt}: {label} {{style.stroke-dash: 3}}")
             elif msg_type == "async":
-                lines.append(
-                    f"{src} -> {tgt}: {label} {{style.stroke-dash: 5}}"
-                )
+                lines.append(f"{src} -> {tgt}: {label} {{style.stroke-dash: 5}}")
             else:
                 lines.append(f"{src} -> {tgt}: {label}")
 
             target_name = msg["to"]
             if target_name in note_map:
                 note_alias = self._sanitize_id(target_name)
-                lines.append(
-                    f"{note_alias}.\"note\": {note_map.pop(target_name)}"
-                )
+                lines.append(f'{note_alias}."note": {note_map.pop(target_name)}')
 
         lines.append("")
         return "\n".join(lines) + "\n"
@@ -2343,7 +2296,10 @@ class DiagramGenerator:
 
         if output_format == "html":
             from docs_mcp.generators.pattern_poster import ArchPatternPosterGenerator
-            content = ArchPatternPosterGenerator().generate_single(packages, result, adr_link=adr_link)
+
+            content = ArchPatternPosterGenerator().generate_single(
+                packages, result, adr_link=adr_link
+            )
             return DiagramResult(
                 diagram_type="pattern_card",
                 format="html",
@@ -2407,9 +2363,8 @@ class DiagramGenerator:
             logger.warning("pattern_comparison_classify_failed", path=str(project_root))
 
         from docs_mcp.generators.pattern_poster import ArchPatternPosterGenerator
-        content = ArchPatternPosterGenerator().generate_comparison(
-            detected_archetype=detected
-        )
+
+        content = ArchPatternPosterGenerator().generate_comparison(detected_archetype=detected)
         return DiagramResult(
             diagram_type="pattern_comparison",
             format="html",
@@ -2456,7 +2411,7 @@ class DiagramGenerator:
             color = _ROLE_COLORS[role]
             text = "#000" if role == "presentation" else "#fff"
             out.append(
-                f'{indent}UpdateElementStyle({element_id}, '
+                f"{indent}UpdateElementStyle({element_id}, "
                 f'$bgColor="{color}", $fontColor="{text}", $borderColor="#333")'
             )
         return out
@@ -2467,9 +2422,7 @@ class DiagramGenerator:
         out: list[str] = []
         for role, color in _ROLE_COLORS.items():
             text = "#000" if role == "presentation" else "#fff"
-            out.append(
-                f"    classDef {role} fill:{color},stroke:#333,color:{text}"
-            )
+            out.append(f"    classDef {role} fill:{color},stroke:#333,color:{text}")
         return out
 
     def _role_for_top_component(self, path_or_name: str) -> str:
@@ -2525,17 +2478,13 @@ class DiagramGenerator:
                 prev_anchor = role_nodes[role][0]
 
         # Legend block (always present, regardless of which roles fired).
-        lines.append("    subgraph legend[\"Legend\"]")
+        lines.append('    subgraph legend["Legend"]')
         for role in _ROLE_COLORS:
-            lines.append(
-                f'        L_{role}["{role.capitalize()}"]:::{role}'
-            )
+            lines.append(f'        L_{role}["{role.capitalize()}"]:::{role}')
         lines.append("    end")
 
         for role, color in _ROLE_COLORS.items():
             text = "#000" if role == "presentation" else "#fff"
-            lines.append(
-                f"    classDef {role} fill:{color},stroke:#333,color:{text}"
-            )
+            lines.append(f"    classDef {role} fill:{color},stroke:#333,color:{text}")
 
         return "\n".join(lines) + "\n"

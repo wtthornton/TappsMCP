@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from docs_mcp.generators.metadata import MetadataExtractor, ProjectMetadata
+from docs_mcp.generators.metadata import MetadataExtractor
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ class TestPyprojectParsing:
 
     def test_basic_fields(self, tmp_path: Path, extractor: MetadataExtractor) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\n'
+            "[project]\n"
             'name = "my-lib"\n'
             'version = "1.2.3"\n'
             'description = "A cool library"\n'
@@ -40,11 +40,11 @@ class TestPyprojectParsing:
 
     def test_author_extraction(self, tmp_path: Path, extractor: MetadataExtractor) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\n'
+            "[project]\n"
             'name = "test"\n'
             'version = "0.1.0"\n'
-            '\n'
-            '[[project.authors]]\n'
+            "\n"
+            "[[project.authors]]\n"
             'name = "Alice"\n'
             'email = "alice@example.com"\n',
             encoding="utf-8",
@@ -72,7 +72,7 @@ class TestPyprojectParsing:
     def test_urls_extraction(self, tmp_path: Path, extractor: MetadataExtractor) -> None:
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname = "test"\n\n'
-            '[project.urls]\n'
+            "[project.urls]\n"
             'Homepage = "https://example.com"\n'
             'Repository = "https://github.com/user/repo"\n',
             encoding="utf-8",
@@ -83,9 +83,7 @@ class TestPyprojectParsing:
 
     def test_dependencies_extraction(self, tmp_path: Path, extractor: MetadataExtractor) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\n'
-            'name = "test"\n'
-            'dependencies = ["click>=8.0", "pydantic>=2.0"]\n',
+            '[project]\nname = "test"\ndependencies = ["click>=8.0", "pydantic>=2.0"]\n',
             encoding="utf-8",
         )
         meta = extractor.extract(tmp_path)
@@ -93,10 +91,10 @@ class TestPyprojectParsing:
 
     def test_optional_dependencies(self, tmp_path: Path, extractor: MetadataExtractor) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\n'
+            "[project]\n"
             'name = "test"\n'
-            '\n'
-            '[project.optional-dependencies]\n'
+            "\n"
+            "[project.optional-dependencies]\n"
             'dev = ["pytest", "mypy"]\n'
             'docs = ["sphinx"]\n',
             encoding="utf-8",
@@ -108,11 +106,7 @@ class TestPyprojectParsing:
 
     def test_scripts_as_entry_points(self, tmp_path: Path, extractor: MetadataExtractor) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\n'
-            'name = "test"\n'
-            '\n'
-            '[project.scripts]\n'
-            'mycli = "test.cli:main"\n',
+            '[project]\nname = "test"\n\n[project.scripts]\nmycli = "test.cli:main"\n',
             encoding="utf-8",
         )
         meta = extractor.extract(tmp_path)
@@ -207,7 +201,7 @@ class TestCargoTomlParsing:
 
     def test_basic_fields(self, tmp_path: Path, extractor: MetadataExtractor) -> None:
         (tmp_path / "Cargo.toml").write_text(
-            '[package]\n'
+            "[package]\n"
             'name = "my-crate"\n'
             'version = "0.3.0"\n'
             'description = "A Rust crate"\n'
@@ -251,23 +245,17 @@ class TestCargoTomlParsing:
 class TestFallbackBehavior:
     """Tests for fallback when no config file is found."""
 
-    def test_fallback_to_directory_name(
-        self, tmp_path: Path, extractor: MetadataExtractor
-    ) -> None:
+    def test_fallback_to_directory_name(self, tmp_path: Path, extractor: MetadataExtractor) -> None:
         meta = extractor.extract(tmp_path)
         assert meta.name == tmp_path.name
         assert meta.source_file == ""
 
-    def test_pyproject_takes_precedence(
-        self, tmp_path: Path, extractor: MetadataExtractor
-    ) -> None:
+    def test_pyproject_takes_precedence(self, tmp_path: Path, extractor: MetadataExtractor) -> None:
         """pyproject.toml is tried before package.json."""
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname = "from-pyproject"\n', encoding="utf-8"
         )
-        (tmp_path / "package.json").write_text(
-            '{"name": "from-package-json"}', encoding="utf-8"
-        )
+        (tmp_path / "package.json").write_text('{"name": "from-package-json"}', encoding="utf-8")
         meta = extractor.extract(tmp_path)
         assert meta.name == "from-pyproject"
         assert meta.source_file == "pyproject.toml"

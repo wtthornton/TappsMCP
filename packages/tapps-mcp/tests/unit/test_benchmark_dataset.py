@@ -63,23 +63,15 @@ class TestSampleSubset:
 
     def test_deterministic(self) -> None:
         """Same seed produces the same sample."""
-        instances = [
-            _make_instance(instance_id=f"i-{i}")
-            for i in range(20)
-        ]
+        instances = [_make_instance(instance_id=f"i-{i}") for i in range(20)]
         loader = DatasetLoader(_make_config())
         result_a = loader.sample_subset(instances, 5, seed=42)
         result_b = loader.sample_subset(instances, 5, seed=42)
-        assert [r.instance_id for r in result_a] == [
-            r.instance_id for r in result_b
-        ]
+        assert [r.instance_id for r in result_a] == [r.instance_id for r in result_b]
 
     def test_different_seed_different_result(self) -> None:
         """Different seeds produce different samples."""
-        instances = [
-            _make_instance(instance_id=f"i-{i}")
-            for i in range(20)
-        ]
+        instances = [_make_instance(instance_id=f"i-{i}") for i in range(20)]
         loader = DatasetLoader(_make_config())
         result_a = loader.sample_subset(instances, 5, seed=42)
         result_b = loader.sample_subset(instances, 5, seed=99)
@@ -89,10 +81,7 @@ class TestSampleSubset:
 
     def test_returns_all_when_n_exceeds_size(self) -> None:
         """When n >= len(instances), all are returned."""
-        instances = [
-            _make_instance(instance_id=f"i-{i}")
-            for i in range(3)
-        ]
+        instances = [_make_instance(instance_id=f"i-{i}") for i in range(3)]
         loader = DatasetLoader(_make_config())
         result = loader.sample_subset(instances, 10, seed=42)
         assert len(result) == 3
@@ -101,10 +90,7 @@ class TestSampleSubset:
 
     def test_returns_all_when_n_is_zero(self) -> None:
         """When n=0, all instances are returned."""
-        instances = [
-            _make_instance(instance_id=f"i-{i}")
-            for i in range(5)
-        ]
+        instances = [_make_instance(instance_id=f"i-{i}") for i in range(5)]
         loader = DatasetLoader(_make_config())
         result = loader.sample_subset(instances, 0, seed=42)
         assert len(result) == 5
@@ -121,31 +107,21 @@ class TestFilterByRepo:
     def test_case_insensitive(self) -> None:
         """Filtering is case-insensitive."""
         instances = [
-            _make_instance(
-                instance_id="a", repo="Owner/Repo"
-            ),
-            _make_instance(
-                instance_id="b", repo="other/lib"
-            ),
+            _make_instance(instance_id="a", repo="Owner/Repo"),
+            _make_instance(instance_id="b", repo="other/lib"),
         ]
         loader = DatasetLoader(_make_config())
-        result = loader.filter_by_repo(
-            instances, ["owner/repo"]
-        )
+        result = loader.filter_by_repo(instances, ["owner/repo"])
         assert len(result) == 1
         assert result[0].instance_id == "a"
 
     def test_no_matches(self) -> None:
         """Returns empty list when no repos match."""
         instances = [
-            _make_instance(
-                instance_id="a", repo="owner/repo"
-            ),
+            _make_instance(instance_id="a", repo="owner/repo"),
         ]
         loader = DatasetLoader(_make_config())
-        result = loader.filter_by_repo(
-            instances, ["nonexistent/lib"]
-        )
+        result = loader.filter_by_repo(instances, ["nonexistent/lib"])
         assert result == []
 
 
@@ -268,61 +244,38 @@ class TestLoadJsonFile:
     """Tests for JSON file loading."""
 
     @pytest.mark.asyncio()
-    async def test_load_json_file(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_load_json_file(self, tmp_path: Path) -> None:
         """Loading from a .json file works."""
         data = [_REQUIRED_ROW]
         json_file = tmp_path / "data.json"
-        json_file.write_text(
-            json.dumps(data), encoding="utf-8"
-        )
-        config = _make_config(
-            dataset_name=str(json_file), subset_size=0
-        )
+        json_file.write_text(json.dumps(data), encoding="utf-8")
+        config = _make_config(dataset_name=str(json_file), subset_size=0)
         loader = DatasetLoader(config)
         instances = await loader.load()
         assert len(instances) == 1
         assert instances[0].instance_id == "test-001"
 
     @pytest.mark.asyncio()
-    async def test_load_jsonl_file(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_load_jsonl_file(self, tmp_path: Path) -> None:
         """Loading from a .jsonl file works."""
-        rows = [
-            {**_REQUIRED_ROW, "instance_id": f"jsonl-{i}"}
-            for i in range(3)
-        ]
+        rows = [{**_REQUIRED_ROW, "instance_id": f"jsonl-{i}"} for i in range(3)]
         jsonl_file = tmp_path / "data.jsonl"
         lines = [json.dumps(r) for r in rows]
-        jsonl_file.write_text(
-            "\n".join(lines) + "\n", encoding="utf-8"
-        )
-        config = _make_config(
-            dataset_name=str(jsonl_file), subset_size=0
-        )
+        jsonl_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        config = _make_config(dataset_name=str(jsonl_file), subset_size=0)
         loader = DatasetLoader(config)
         instances = await loader.load()
         assert len(instances) == 3
         assert instances[0].instance_id == "jsonl-0"
 
     @pytest.mark.asyncio()
-    async def test_json_not_array_raises(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_json_not_array_raises(self, tmp_path: Path) -> None:
         """JSON file that is not an array raises DatasetLoadError."""
         json_file = tmp_path / "bad.json"
-        json_file.write_text(
-            '{"key": "value"}', encoding="utf-8"
-        )
-        config = _make_config(
-            dataset_name=str(json_file), subset_size=0
-        )
+        json_file.write_text('{"key": "value"}', encoding="utf-8")
+        config = _make_config(dataset_name=str(json_file), subset_size=0)
         loader = DatasetLoader(config)
-        with pytest.raises(
-            DatasetLoadError, match="Expected JSON array"
-        ):
+        with pytest.raises(DatasetLoadError, match="Expected JSON array"):
             await loader.load()
 
 
@@ -335,16 +288,12 @@ class TestLoadParquet:
     """Tests for Parquet file dispatch."""
 
     @pytest.mark.asyncio()
-    async def test_dispatches_to_parquet(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_dispatches_to_parquet(self, tmp_path: Path) -> None:
         """A .parquet extension dispatches to parquet loader."""
         pq_file = tmp_path / "data.parquet"
         pq_file.touch()
 
-        config = _make_config(
-            dataset_name=str(pq_file), subset_size=0
-        )
+        config = _make_config(dataset_name=str(pq_file), subset_size=0)
         loader = DatasetLoader(config)
 
         with patch(
@@ -355,19 +304,13 @@ class TestLoadParquet:
             mock_pq.assert_called_once()
             assert len(instances) == 1
 
-    def test_parquet_file_not_found(
-        self, tmp_path: Path
-    ) -> None:
+    def test_parquet_file_not_found(self, tmp_path: Path) -> None:
         """DatasetNotFoundError for missing parquet file."""
         missing = tmp_path / "nonexistent.parquet"
-        with pytest.raises(
-            DatasetNotFoundError, match="not found"
-        ):
+        with pytest.raises(DatasetNotFoundError, match="not found"):
             _load_from_parquet(missing)
 
-    def test_parquet_deps_missing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_parquet_deps_missing(self, tmp_path: Path) -> None:
         """DependencyMissingError when no parquet library."""
         pq_file = tmp_path / "data.parquet"
         pq_file.write_bytes(b"PAR1fake")
@@ -397,9 +340,7 @@ class TestLoadHuggingFace:
     @pytest.mark.asyncio()
     async def test_huggingface_not_installed(self) -> None:
         """DependencyMissingError when datasets not importable."""
-        config = _make_config(
-            dataset_name="eth-sri/agentbench", subset_size=0
-        )
+        config = _make_config(dataset_name="eth-sri/agentbench", subset_size=0)
         loader = DatasetLoader(config)
 
         with (
@@ -412,18 +353,15 @@ class TestLoadHuggingFace:
     async def test_huggingface_not_found(self) -> None:
         """DatasetNotFoundError when fetch fails."""
         mock_datasets = MagicMock()
-        mock_datasets.load_dataset.side_effect = Exception(
-            "Dataset not found"
-        )
+        mock_datasets.load_dataset.side_effect = Exception("Dataset not found")
 
-        config = _make_config(
-            dataset_name="nonexistent/dataset", subset_size=0
-        )
+        config = _make_config(dataset_name="nonexistent/dataset", subset_size=0)
         loader = DatasetLoader(config)
 
-        with patch.dict(
-            sys.modules, {"datasets": mock_datasets}
-        ), pytest.raises(DatasetNotFoundError):
+        with (
+            patch.dict(sys.modules, {"datasets": mock_datasets}),
+            pytest.raises(DatasetNotFoundError),
+        ):
             await loader.load()
 
 
@@ -436,18 +374,11 @@ class TestLoadWithSubset:
     """Tests for load() with subset sampling."""
 
     @pytest.mark.asyncio()
-    async def test_subset_applied(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_subset_applied(self, tmp_path: Path) -> None:
         """When subset_size < total, sampling is applied."""
-        rows = [
-            {**_REQUIRED_ROW, "instance_id": f"sub-{i}"}
-            for i in range(10)
-        ]
+        rows = [{**_REQUIRED_ROW, "instance_id": f"sub-{i}"} for i in range(10)]
         json_file = tmp_path / "data.json"
-        json_file.write_text(
-            json.dumps(rows), encoding="utf-8"
-        )
+        json_file.write_text(json.dumps(rows), encoding="utf-8")
         config = _make_config(
             dataset_name=str(json_file),
             subset_size=3,
@@ -458,18 +389,11 @@ class TestLoadWithSubset:
         assert len(instances) == 3
 
     @pytest.mark.asyncio()
-    async def test_subset_not_applied_when_larger(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_subset_not_applied_when_larger(self, tmp_path: Path) -> None:
         """When subset_size >= total, no sampling occurs."""
-        rows = [
-            {**_REQUIRED_ROW, "instance_id": f"eq-{i}"}
-            for i in range(3)
-        ]
+        rows = [{**_REQUIRED_ROW, "instance_id": f"eq-{i}"} for i in range(3)]
         json_file = tmp_path / "data.json"
-        json_file.write_text(
-            json.dumps(rows), encoding="utf-8"
-        )
+        json_file.write_text(json.dumps(rows), encoding="utf-8")
         config = _make_config(
             dataset_name=str(json_file),
             subset_size=5,

@@ -145,7 +145,7 @@ class TestExpandPath:
     def test_expand_user_tilde(self) -> None:
         result = _expand_path("~/projects/foo")
         assert "~" not in str(result)
-        assert str(result).endswith(os.path.join("projects", "foo"))
+        assert str(result).endswith(str(Path("projects") / "foo"))
 
     def test_no_expansion_needed(self, tmp_path: Path) -> None:
         result = _expand_path(str(tmp_path))

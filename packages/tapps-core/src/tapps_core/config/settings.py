@@ -85,7 +85,9 @@ class MemoryDecaySettings(BaseSettings):
         default=60, ge=1, description="Half-life for pattern memories (days)."
     )
     procedural_half_life_days: int = Field(
-        default=30, ge=1, description="Epic 65.11: Half-life for procedural memories (workflows, steps)."
+        default=30,
+        ge=1,
+        description="Epic 65.11: Half-life for procedural memories (workflows, steps).",
     )
     context_half_life_days: int = Field(
         default=14, ge=1, description="Half-life for context memories (days)."
@@ -807,11 +809,20 @@ class TappsMCPSettings(BaseSettings):
             "Env: TAPPS_MCP_DISABLED_TOOLS (comma-separated)."
         ),
     )
-    tool_preset: Literal[
-        "full", "core", "pipeline",
-        "reviewer", "planner", "frontend", "developer",
-        "quality", "admin",
-    ] | None = Field(
+    tool_preset: (
+        Literal[
+            "full",
+            "core",
+            "pipeline",
+            "reviewer",
+            "planner",
+            "frontend",
+            "developer",
+            "quality",
+            "admin",
+        ]
+        | None
+    ) = Field(
         default=None,
         description=(
             "Predefined tool set: 'full' = all tools, 'core' = Tier 1 (7 tools), "

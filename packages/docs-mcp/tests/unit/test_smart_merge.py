@@ -47,15 +47,9 @@ class TestPreserveHumanSections:
 
     def test_human_section_preserved(self, merger: SmartMerger) -> None:
         existing = (
-            "# Old Title\n\n"
-            "## Custom Notes\n\n"
-            "This is my custom section that should be kept.\n"
+            "# Old Title\n\n## Custom Notes\n\nThis is my custom section that should be kept.\n"
         )
-        generated = (
-            "# New Title\n\n"
-            "## Installation\n\n"
-            "pip install foo\n"
-        )
+        generated = "# New Title\n\n## Installation\n\npip install foo\n"
         result = merger.merge(existing, generated)
         assert "Custom Notes" in result.sections_preserved
         assert "This is my custom section that should be kept." in result.content
@@ -63,11 +57,7 @@ class TestPreserveHumanSections:
         assert "# New Title" in result.content
 
     def test_multiple_human_sections_preserved(self, merger: SmartMerger) -> None:
-        existing = (
-            "# Title\n\n"
-            "## My Notes\n\nNotes content\n\n"
-            "## My FAQ\n\nFAQ content\n"
-        )
+        existing = "# Title\n\n## My Notes\n\nNotes content\n\n## My FAQ\n\nFAQ content\n"
         generated = "# New Title\n\n## Installation\n\npip install\n"
         result = merger.merge(existing, generated)
         assert "My Notes" in result.sections_preserved
@@ -91,10 +81,7 @@ class TestUpdateMachineSections:
             "## Installation\n\nOLD pip install foo\n"
             "<!-- docsmcp:end:installation -->\n"
         )
-        generated = (
-            "# New Title\n\n"
-            "## Installation\n\nNEW pip install bar\n"
-        )
+        generated = "# New Title\n\n## Installation\n\nNEW pip install bar\n"
         result = merger.merge(existing, generated)
         assert "Installation" in result.sections_updated
         assert "NEW pip install bar" in result.content
@@ -110,11 +97,7 @@ class TestUpdateMachineSections:
             "## Features\n\nOLD features\n"
             "<!-- docsmcp:end:features -->\n"
         )
-        generated = (
-            "# Title\n\n"
-            "## Installation\n\nNEW install\n\n"
-            "## Features\n\nNEW features\n"
-        )
+        generated = "# Title\n\n## Installation\n\nNEW install\n\n## Features\n\nNEW features\n"
         result = merger.merge(existing, generated)
         assert "Installation" in result.sections_updated
         assert "Features" in result.sections_updated
@@ -133,9 +116,7 @@ class TestAddNewSections:
     def test_new_section_added_at_end(self, merger: SmartMerger) -> None:
         existing = "# Title\n\n## Existing\n\nSome content\n"
         generated = (
-            "# Title\n\n"
-            "## Existing\n\nUpdated content\n\n"
-            "## Brand New\n\nNew section content\n"
+            "# Title\n\n## Existing\n\nUpdated content\n\n## Brand New\n\nNew section content\n"
         )
         result = merger.merge(existing, generated)
         assert "Brand New" in result.sections_added
@@ -143,11 +124,7 @@ class TestAddNewSections:
 
     def test_multiple_new_sections_added(self, merger: SmartMerger) -> None:
         existing = "# Title\n"
-        generated = (
-            "# Title\n\n"
-            "## Section A\n\nContent A\n\n"
-            "## Section B\n\nContent B\n"
-        )
+        generated = "# Title\n\n## Section A\n\nContent A\n\n## Section B\n\nContent B\n"
         result = merger.merge(existing, generated)
         assert "Section A" in result.sections_added
         assert "Section B" in result.sections_added
@@ -169,9 +146,7 @@ class TestTitleUpdate:
         # Old title should not be present
         assert "# Old Title" not in result.content
 
-    def test_title_from_generated_even_if_existing_has_none(
-        self, merger: SmartMerger
-    ) -> None:
+    def test_title_from_generated_even_if_existing_has_none(self, merger: SmartMerger) -> None:
         existing = "## Section\n\nContent\n"
         generated = "# My Project\n\n## Section\n\nNew content\n"
         result = merger.merge(existing, generated)
@@ -197,9 +172,7 @@ class TestEdgeCases:
         assert result.content == ""
         assert result.sections_added == []
 
-    def test_content_before_first_section_not_duplicated(
-        self, merger: SmartMerger
-    ) -> None:
+    def test_content_before_first_section_not_duplicated(self, merger: SmartMerger) -> None:
         existing = "# Title\n\nSome intro text\n\n## Section\n\nContent\n"
         generated = "# Title\n\nNew intro\n\n## Section\n\nNew content\n"
         result = merger.merge(existing, generated)
@@ -238,9 +211,7 @@ class TestEdgeCases:
         assert "<!-- docsmcp:start:b -->" in wrapped
         assert "<!-- docsmcp:end:b -->" in wrapped
 
-    def test_marked_section_not_in_generated_is_preserved(
-        self, merger: SmartMerger
-    ) -> None:
+    def test_marked_section_not_in_generated_is_preserved(self, merger: SmartMerger) -> None:
         """If existing has a marked section not present in generated, keep it."""
         existing = (
             "# Title\n\n"

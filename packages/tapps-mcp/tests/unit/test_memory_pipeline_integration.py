@@ -22,11 +22,7 @@ class TestDefaultYamlMemoryConfig:
 
     def test_default_yaml_has_memory_section(self) -> None:
         default_yaml = (
-            Path(__file__).resolve().parents[2]
-            / "src"
-            / "tapps_mcp"
-            / "config"
-            / "default.yaml"
+            Path(__file__).resolve().parents[2] / "src" / "tapps_mcp" / "config" / "default.yaml"
         )
         data = yaml.safe_load(default_yaml.read_text(encoding="utf-8"))
         assert "memory" in data
@@ -40,11 +36,7 @@ class TestDefaultYamlMemoryConfig:
     def test_default_yaml_has_capture_prompt_and_write_rules(self) -> None:
         """Verify default.yaml includes capture_prompt and write_rules (Epic 65.3)."""
         default_yaml = (
-            Path(__file__).resolve().parents[2]
-            / "src"
-            / "tapps_mcp"
-            / "config"
-            / "default.yaml"
+            Path(__file__).resolve().parents[2] / "src" / "tapps_mcp" / "config" / "default.yaml"
         )
         data = yaml.safe_load(default_yaml.read_text(encoding="utf-8"))
         mem = data["memory"]
@@ -58,11 +50,7 @@ class TestDefaultYamlMemoryConfig:
 
     def test_default_yaml_has_decay_config(self) -> None:
         default_yaml = (
-            Path(__file__).resolve().parents[2]
-            / "src"
-            / "tapps_mcp"
-            / "config"
-            / "default.yaml"
+            Path(__file__).resolve().parents[2] / "src" / "tapps_mcp" / "config" / "default.yaml"
         )
         data = yaml.safe_load(default_yaml.read_text(encoding="utf-8"))
         decay = data["memory"]["decay"]

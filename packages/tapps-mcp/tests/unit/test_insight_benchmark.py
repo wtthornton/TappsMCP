@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,7 +12,6 @@ from tapps_mcp.benchmark.insight_benchmark import (
     InsightBenchmarkResult,
     run_insight_benchmark,
 )
-
 
 # ---------------------------------------------------------------------------
 # BenchmarkLatencies
@@ -152,6 +150,7 @@ class TestRunInsightBenchmark:
 
     def test_unavailable_on_import_error(self, tmp_path: Path):
         import sys
+
         with pytest.MonkeyPatch().context() as mp:
             mp.setitem(sys.modules, "tapps_brain", None)  # type: ignore[arg-type]
             mp.setitem(sys.modules, "tapps_brain.store", None)  # type: ignore[arg-type]

@@ -118,6 +118,7 @@ def _bridge_unavailable_response(action: str) -> dict[str, Any]:
         ],
     }
 
+
 _BULK_SAVE_MAX_ENTRIES = 50
 
 # Curated response limits

@@ -369,7 +369,9 @@ async def tapps_quality_gate(
     )
 
     gate_data, gate_suggestions = _build_quality_gate_data(
-        resolved, score_result, gate_result,
+        resolved,
+        score_result,
+        gate_result,
     )
 
     resp = success_response(
@@ -379,7 +381,11 @@ async def tapps_quality_gate(
         degraded=score_result.degraded,
     )
     _attach_quality_gate_structured_output(
-        resp, resolved, score_result, gate_result, gate_suggestions,
+        resp,
+        resolved,
+        score_result,
+        gate_result,
+        gate_suggestions,
     )
 
     return _with_nudges(
@@ -419,9 +425,7 @@ def _build_quick_check_data(
 ) -> tuple[dict[str, Any], list[str]]:
     """Build the response data dict and suggestions list for quick_check."""
     quick_categories: dict[str, float] = {
-        name: round(cat.score, 2)
-        for name, cat in score_result.categories.items()
-        if cat.weight > 0
+        name: round(cat.score, 2) for name, cat in score_result.categories.items() if cat.weight > 0
     }
 
     data: dict[str, Any] = {
@@ -436,8 +440,13 @@ def _build_quick_check_data(
     }
 
     _add_optional_quick_check_fields(
-        data, score_result, sec_result, gate_result,
-        complexity_hint, fixes_applied, fix,
+        data,
+        score_result,
+        sec_result,
+        gate_result,
+        complexity_hint,
+        fixes_applied,
+        fix,
     )
     suggestions = _build_quick_check_suggestions(score_result, complexity_hint)
     if suggestions:
@@ -525,8 +534,7 @@ def _attach_uncached_libraries_hint(
         if uncached:
             data["uncached_libraries"] = uncached[:10]
             data["docs_hint"] = (
-                f"Call tapps_lookup_docs for {', '.join(uncached[:5])} "
-                "to avoid hallucinated APIs"
+                f"Call tapps_lookup_docs for {', '.join(uncached[:5])} to avoid hallucinated APIs"
             )
     except Exception:
         logger.debug("uncached_libraries detection failed", exc_info=True)
@@ -638,8 +646,14 @@ async def _quick_check_single(
     gate_result = evaluate_gate(score_result, preset=preset)
 
     data, _suggestions = _build_quick_check_data(
-        resolved, score_result, sec_result, gate_result,
-        preset, complexity_hint, fixes_applied, fix,
+        resolved,
+        score_result,
+        sec_result,
+        gate_result,
+        preset,
+        complexity_hint,
+        fixes_applied,
+        fix,
     )
     data.update(
         record_quick_check_recurring(settings, resolved, gate_result.passed, gate_result.failures)
@@ -714,7 +728,9 @@ async def tapps_quick_check(
                     return await _quick_check_single(resolved, preset, fix, settings)
                 except Exception as exc:
                     logger.error(
-                        "quick_check_batch_file_failed", file_path=fp, error=str(exc),
+                        "quick_check_batch_file_failed",
+                        file_path=fp,
+                        error=str(exc),
                     )
                     return {
                         "file_path": fp,
@@ -849,8 +865,14 @@ async def tapps_quick_check(
     )
 
     data, suggestions = _build_quick_check_data(
-        resolved, score_result, sec_result, gate_result,
-        preset, complexity_hint, fixes_applied, fix,
+        resolved,
+        score_result,
+        sec_result,
+        gate_result,
+        preset,
+        complexity_hint,
+        fixes_applied,
+        fix,
     )
     data.update(
         record_quick_check_recurring(settings, resolved, gate_result.passed, gate_result.failures)
@@ -871,8 +893,15 @@ async def tapps_quick_check(
 
     quick_categories = data.get("quick_categories", {})
     _attach_quick_check_structured_output(
-        resp, resolved, score_result, sec_result, gate_result,
-        preset, suggestions, complexity_hint, quick_categories,
+        resp,
+        resolved,
+        score_result,
+        sec_result,
+        gate_result,
+        preset,
+        suggestions,
+        complexity_hint,
+        quick_categories,
         fixes_applied if fix else None,
         recurring_events=data.get("recurring_quality_memory_events", []),
     )

@@ -5,12 +5,9 @@ Tests the full lifecycle: seed -> use -> retrieve -> inject -> export/import.
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from tapps_mcp.memory.injection import inject_memories
 from tapps_mcp.memory.io import export_memories, import_memories
@@ -127,7 +124,9 @@ class TestSeedSearchInjectLifecycle:
         """Mock seeded entries and verify search finds them."""
         entries = [
             _make_entry("language-python", "Project uses python", tags=["auto-seeded"]),
-            _make_entry("framework-fastapi", "Project uses fastapi framework", tags=["auto-seeded"]),
+            _make_entry(
+                "framework-fastapi", "Project uses fastapi framework", tags=["auto-seeded"]
+            ),
         ]
         store = _make_mock_store(entries)
         retriever = MemoryRetriever()

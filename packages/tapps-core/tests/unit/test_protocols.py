@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from tapps_core.adaptive.models import CodeOutcome, ExpertPerformance
 from tapps_core.adaptive.persistence import FileOutcomeTracker, FilePerformanceTracker
 from tapps_core.adaptive.protocols import (
     OutcomeTrackerProtocol,

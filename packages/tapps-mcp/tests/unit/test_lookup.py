@@ -10,6 +10,7 @@ from tapps_mcp.knowledge.cache import KBCache
 from tapps_mcp.knowledge.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from tapps_mcp.knowledge.lookup import LookupEngine
 from tapps_mcp.knowledge.models import CacheEntry, LibraryMatch
+
 # _library_to_domain removed (EPIC-94 expert extraction)
 
 
@@ -107,9 +108,6 @@ class TestLookupCacheMiss:
     @pytest.mark.asyncio
     async def test_cache_stores_provider_source(self, cache):
         """When content comes from a provider, cache entry has provider_source."""
-        from unittest.mock import MagicMock
-
-        from pydantic import SecretStr
 
         from tapps_mcp.knowledge.providers.base import DocumentationProvider
         from tapps_mcp.knowledge.providers.registry import ProviderRegistry
@@ -409,26 +407,6 @@ class TestLookupEdgeCases:
         await engine.close()
 
 
-class _TestLibraryDomainMap_REMOVED:
-    """Removed: expert domain mapping (EPIC-94)."""
-
-    """Verify _LIBRARY_DOMAIN_MAP includes new operational mappings."""
-
-    @pytest.mark.parametrize(
-        "library,expected_domain",
-        [
-            ("docker-compose", "cloud-infrastructure"),
-            ("github-actions", "development-workflow"),
-            ("ci", "development-workflow"),
-            ("httpx", "api-design-integration"),
-            # Existing mappings still work
-            ("pytest", "testing-strategies"),
-            ("docker", "cloud-infrastructure"),
-            ("fastapi", "api-design-integration"),
-        ],
-    )
-    def test_domain_mapping(self, library: str, expected_domain: str) -> None:
-        assert _library_to_domain(library) == expected_domain
-
-    def test_unknown_library_defaults(self) -> None:
-        assert _library_to_domain("unknown-lib-xyz") == "software-architecture"
+# Note: TestLibraryDomainMap was removed in EPIC-94 (expert domain mapping
+# was deleted from the codebase). The test class has been removed entirely
+# rather than kept as commented-out dead code.

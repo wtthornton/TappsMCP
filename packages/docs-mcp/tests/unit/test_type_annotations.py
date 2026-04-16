@@ -8,10 +8,7 @@ from __future__ import annotations
 
 import ast
 
-import pytest
-
 from docs_mcp.extractors.type_annotations import (
-    TypeInfo,
     annotation_to_string,
     parse_annotation_string,
     resolve_annotation,

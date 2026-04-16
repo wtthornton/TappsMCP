@@ -12,7 +12,7 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 ts = pytest.importorskip("tree_sitter", reason="tree-sitter not installed")
 ts_java = pytest.importorskip("tree_sitter_java", reason="tree-sitter-java not installed")
 
-from docs_mcp.extractors.treesitter_java import JavaExtractor  # noqa: E402
+from docs_mcp.extractors.treesitter_java import JavaExtractor
 
 
 @pytest.fixture

@@ -25,12 +25,20 @@ class TestDependencyScanCtx:
         mock_result.scan_source = "pip-audit"
         mock_result.error = None
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.tools.pip_audit.run_pip_audit_async", new_callable=AsyncMock, return_value=mock_result):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch(
+                "tapps_mcp.tools.pip_audit.run_pip_audit_async",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
             mock_settings.return_value = MagicMock(
                 dependency_scan_enabled=True,
                 dependency_scan_source="pip-audit",
@@ -56,12 +64,20 @@ class TestDependencyScanCtx:
         mock_result.scan_source = "pip-audit"
         mock_result.error = None
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.tools.pip_audit.run_pip_audit_async", new_callable=AsyncMock, return_value=mock_result):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch(
+                "tapps_mcp.tools.pip_audit.run_pip_audit_async",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
             mock_settings.return_value = MagicMock(
                 dependency_scan_enabled=True,
                 dependency_scan_source="pip-audit",
@@ -88,12 +104,20 @@ class TestDependencyScanCtx:
         mock_result.scan_source = "pip-audit"
         mock_result.error = None
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.tools.pip_audit.run_pip_audit_async", new_callable=AsyncMock, return_value=mock_result):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch(
+                "tapps_mcp.tools.pip_audit.run_pip_audit_async",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
             mock_settings.return_value = MagicMock(
                 dependency_scan_enabled=True,
                 dependency_scan_source="pip-audit",

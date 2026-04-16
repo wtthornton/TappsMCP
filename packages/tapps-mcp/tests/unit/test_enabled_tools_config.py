@@ -193,7 +193,7 @@ class TestToolPresetConstants:
             "tapps_security_scan",
             "tapps_pipeline",
         }
-        assert TOOL_PRESET_CORE == expected
+        assert expected == TOOL_PRESET_CORE
 
     def test_pipeline_includes_core_and_tier2(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_CORE, TOOL_PRESET_PIPELINE

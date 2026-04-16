@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -243,14 +244,18 @@ class TestForceRefresh:
 
     def test_force_refresh_bypasses_memory_cache(self) -> None:
         """force_refresh=True ignores in-memory cache."""
-        with patch(
-            "tapps_mcp.tools.tool_detection.shutil.which",
-            return_value=None,
-        ) as mock_which, patch(
-            "tapps_mcp.tools.tool_detection._read_disk_cache",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.tools.tool_detection._write_disk_cache",
+        with (
+            patch(
+                "tapps_mcp.tools.tool_detection.shutil.which",
+                return_value=None,
+            ) as mock_which,
+            patch(
+                "tapps_mcp.tools.tool_detection._read_disk_cache",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.tools.tool_detection._write_disk_cache",
+            ),
         ):
             # First call populates memory cache
             detect_installed_tools()
@@ -301,14 +306,18 @@ class TestForceRefresh:
     @pytest.mark.asyncio
     async def test_async_force_refresh_bypasses_cache(self) -> None:
         """Async force_refresh=True ignores both caches."""
-        with patch(
-            "tapps_mcp.tools.tool_detection.shutil.which",
-            return_value=None,
-        ) as mock_which, patch(
-            "tapps_mcp.tools.tool_detection._read_disk_cache",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.tools.tool_detection._write_disk_cache",
+        with (
+            patch(
+                "tapps_mcp.tools.tool_detection.shutil.which",
+                return_value=None,
+            ) as mock_which,
+            patch(
+                "tapps_mcp.tools.tool_detection._read_disk_cache",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.tools.tool_detection._write_disk_cache",
+            ),
         ):
             # First call populates
             await detect_installed_tools_async()
@@ -383,7 +392,8 @@ class TestInstallHints:
                 delattr(_is_uv_tool_env, "_cached")
             # Patch at the function level
             with patch(
-                "tapps_mcp.tools.tool_detection._is_uv_tool_env", return_value=False,
+                "tapps_mcp.tools.tool_detection._is_uv_tool_env",
+                return_value=False,
             ):
                 hint = _install_hint("bandit")
             assert hint == "pip install bandit"
@@ -396,7 +406,8 @@ class TestInstallHints:
         if hasattr(_is_uv_tool_env, "_cached"):
             delattr(_is_uv_tool_env, "_cached")
         with patch(
-            "tapps_mcp.tools.tool_detection._is_uv_tool_env", return_value=True,
+            "tapps_mcp.tools.tool_detection._is_uv_tool_env",
+            return_value=True,
         ):
             hint = _install_hint("bandit")
         assert hint == "uv tool install tapps-mcp --with bandit"
@@ -406,7 +417,8 @@ class TestInstallHints:
     def test_uv_hint_for_pip_audit(self) -> None:
         """Hyphenated tool names preserved in hint."""
         with patch(
-            "tapps_mcp.tools.tool_detection._is_uv_tool_env", return_value=True,
+            "tapps_mcp.tools.tool_detection._is_uv_tool_env",
+            return_value=True,
         ):
             hint = _install_hint("pip-audit")
         assert hint == "uv tool install tapps-mcp --with pip-audit"

@@ -7,7 +7,6 @@ Story 56.1: Abstract Scorer Base Class
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
 
 import pytest
 
@@ -155,7 +154,7 @@ class TestStandardCategories:
             "structure",
             "devex",
         ]
-        assert STANDARD_CATEGORIES == expected
+        assert expected == STANDARD_CATEGORIES
 
     def test_standard_categories_count(self) -> None:
         """STANDARD_CATEGORIES should have 7 categories."""

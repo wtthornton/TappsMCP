@@ -136,9 +136,14 @@ class InteractiveHtmlGenerator:
     and a table of contents.
     """
 
-    VALID_THEMES: ClassVar[frozenset[str]] = frozenset({
-        "default", "dark", "forest", "neutral",
-    })
+    VALID_THEMES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "default",
+            "dark",
+            "forest",
+            "neutral",
+        }
+    )
 
     def generate(
         self,
@@ -239,8 +244,5 @@ class InteractiveHtmlGenerator:
 def _escape(text: str) -> str:
     """HTML-escape text for safe embedding."""
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )

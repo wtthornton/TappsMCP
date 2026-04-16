@@ -32,10 +32,7 @@ SKIP_DIRS: frozenset[str] = frozenset(
 
 def should_skip_path(path: Path) -> bool:
     """Return True if any component of *path* is in SKIP_DIRS or matches a skip prefix."""
-    return any(
-        part in SKIP_DIRS or part.startswith(".venv")
-        for part in path.parts
-    )
+    return any(part in SKIP_DIRS or part.startswith(".venv") for part in path.parts)
 
 
 def utc_now() -> datetime:
@@ -121,7 +118,7 @@ def translate_path(host_path: str) -> str:
     host_root_norm = host_root.replace("\\", "/").rstrip("/")
 
     if normalised.startswith(host_root_norm):
-        suffix = normalised[len(host_root_norm):]
+        suffix = normalised[len(host_root_norm) :]
         container_root = str(Path.cwd())
         return container_root.rstrip("/") + suffix
 

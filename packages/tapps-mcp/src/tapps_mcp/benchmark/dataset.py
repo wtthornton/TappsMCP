@@ -146,7 +146,7 @@ class DatasetLoader:
         """
         if n <= 0 or n >= len(instances):
             return list(instances)
-        rng = random.Random(seed)  # noqa: S311
+        rng = random.Random(seed)
         return rng.sample(instances, n)
 
     def filter_by_repo(
@@ -208,10 +208,7 @@ def _load_from_huggingface(
             split="test",
             revision=revision,
         )
-        return [
-            dict(row)
-            for row in ds
-        ]
+        return [dict(row) for row in ds]
     except Exception as exc:
         msg = f"Failed to load dataset '{dataset_name}' from HuggingFace: {exc}"
         raise DatasetNotFoundError(msg) from exc

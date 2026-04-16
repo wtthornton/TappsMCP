@@ -38,13 +38,13 @@ def _get_call_tracker() -> type[Any] | None:
 # Impact constants control priority when multiple rules fire simultaneously.
 _MAX_NUDGES = 1
 
-_IMPACT_CRITICAL = 90   # missing session/config — results may be wrong
-_IMPACT_BLOCKING = 80   # failure or incomplete — must fix before proceeding
-_IMPACT_HIGH = 70       # important next action (quality gate, etc.)
-_IMPACT_MEDIUM = 60     # recommended follow-up
-_IMPACT_LOW = 50        # suggested next step
-_IMPACT_INFO = 40       # informational (e.g. skipped-step telemetry)
-_IMPACT_REMINDER = 30   # low-priority global reminders
+_IMPACT_CRITICAL = 90  # missing session/config — results may be wrong
+_IMPACT_BLOCKING = 80  # failure or incomplete — must fix before proceeding
+_IMPACT_HIGH = 70  # important next action (quality gate, etc.)
+_IMPACT_MEDIUM = 60  # recommended follow-up
+_IMPACT_LOW = 50  # suggested next step
+_IMPACT_INFO = 40  # informational (e.g. skipped-step telemetry)
+_IMPACT_REMINDER = 30  # low-priority global reminders
 
 # Discover-stage tools that should NOT trigger "you haven't called lookup_docs"
 _DISCOVER_TOOLS = frozenset(STAGE_TOOLS[PipelineStage.DISCOVER])
@@ -172,16 +172,18 @@ _SESSION_INIT_NUDGE = (
 )
 
 # Tools that benefit from session initialization (scoring, validation, security)
-_SESSION_DEPENDENT_TOOLS = frozenset({
-    "tapps_score_file",
-    "tapps_quick_check",
-    "tapps_quality_gate",
-    "tapps_validate_changed",
-    "tapps_security_scan",
-    "tapps_dead_code",
-    "tapps_dependency_scan",
-    "tapps_dependency_graph",
-})
+_SESSION_DEPENDENT_TOOLS = frozenset(
+    {
+        "tapps_score_file",
+        "tapps_quick_check",
+        "tapps_quality_gate",
+        "tapps_validate_changed",
+        "tapps_security_scan",
+        "tapps_dead_code",
+        "tapps_dependency_scan",
+        "tapps_dependency_graph",
+    }
+)
 
 
 def compute_next_steps(
@@ -215,10 +217,7 @@ def compute_next_steps(
             candidates.append((impact, text))
 
     # Global nudge: session-init guard for scoring/validation tools.
-    if (
-        tool_name in _SESSION_DEPENDENT_TOOLS
-        and not _SESSION_INIT_TOOLS.intersection(called)
-    ):
+    if tool_name in _SESSION_DEPENDENT_TOOLS and not _SESSION_INIT_TOOLS.intersection(called):
         candidates.append((_IMPACT_CRITICAL, _SESSION_INIT_NUDGE))
 
     # Global nudge: lookup_docs reminder (only for non-discover tools).
@@ -258,9 +257,7 @@ _WORKFLOW_RULES: dict[str, list[_WorkflowRule]] = {
     ],
     "tapps_score_file": [
         (
-            lambda ctx: (
-                (ctx or {}).get("overall_score", 100) < _WORKFLOW_LOW_SCORE_THRESHOLD
-            ),
+            lambda ctx: (ctx or {}).get("overall_score", 100) < _WORKFLOW_LOW_SCORE_THRESHOLD,
             [
                 "Score is below 70 - fix the issues flagged above.",
                 "Re-run tapps_score_file() to verify improvements.",

@@ -1,4 +1,5 @@
 """Backward-compatible re-export."""
+
 from __future__ import annotations
 
 from tapps_core.memory.injection import _MAX_INJECT_HIGH as _MAX_INJECT_HIGH

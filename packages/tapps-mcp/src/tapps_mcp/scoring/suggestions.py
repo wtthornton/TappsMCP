@@ -109,12 +109,9 @@ def suggest_test_coverage(
 
 _PERFORMANCE_SUGGESTIONS: dict[str, str] = {
     "very_large_function": (
-        f"Function exceeds {VERY_LARGE_FUNCTION_LINES} lines. "
-        "Decompose into smaller functions."
+        f"Function exceeds {VERY_LARGE_FUNCTION_LINES} lines. Decompose into smaller functions."
     ),
-    "large_function": (
-        f"Function exceeds {LARGE_FUNCTION_LINES} lines. Consider breaking it up."
-    ),
+    "large_function": (f"Function exceeds {LARGE_FUNCTION_LINES} lines. Consider breaking it up."),
     "very_deep_nesting": (
         f"Nesting depth > {VERY_DEEP_NESTING_THRESHOLD}. "
         "Extract inner logic into helpers or use early returns."
@@ -149,9 +146,7 @@ _PERFORMANCE_SUGGESTIONS: dict[str, str] = {
         "This function is complex enough to likely harbor bugs."
     ),
     # Perflint anti-patterns
-    "perflint_loop_invariant": (
-        "Loop-invariant statement detected. Move it outside the loop."
-    ),
+    "perflint_loop_invariant": ("Loop-invariant statement detected. Move it outside the loop."),
     "perflint_dotted_import_in_loop": (
         "Dotted import inside loop. Cache the import outside the loop."
     ),
@@ -161,18 +156,12 @@ _PERFORMANCE_SUGGESTIONS: dict[str, str] = {
     "perflint_incorrect_dict_iterator": (
         "Incorrect dictionary iterator. Use .items() or .values() as appropriate."
     ),
-    "perflint_loop_global_usage": (
-        "Global variable used in loop. Cache in a local variable."
-    ),
+    "perflint_loop_global_usage": ("Global variable used in loop. Cache in a local variable."),
     "perflint_memoryview_over_bytes": (
         "Consider memoryview over bytes for better loop performance."
     ),
-    "perflint_use_tuple_over_list": (
-        "Use tuple instead of list for immutable sequences."
-    ),
-    "perflint_use_comprehension": (
-        "Use list/dict comprehension instead of manual loop."
-    ),
+    "perflint_use_tuple_over_list": ("Use tuple instead of list for immutable sequences."),
+    "perflint_use_comprehension": ("Use list/dict comprehension instead of manual loop."),
 }
 
 
@@ -186,11 +175,7 @@ def suggest_performance(
     issues = details.get("issues_found")
     if not isinstance(issues, list) or not issues:
         return []
-    return [
-        _PERFORMANCE_SUGGESTIONS[str(i)]
-        for i in issues
-        if str(i) in _PERFORMANCE_SUGGESTIONS
-    ]
+    return [_PERFORMANCE_SUGGESTIONS[str(i)] for i in issues if str(i) in _PERFORMANCE_SUGGESTIONS]
 
 
 def suggest_structure(score: float) -> list[str]:

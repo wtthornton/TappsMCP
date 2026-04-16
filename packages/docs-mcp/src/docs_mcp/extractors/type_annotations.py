@@ -22,9 +22,7 @@ _TYPING_TO_BUILTIN: dict[str, str] = {
 }
 
 # typing.X prefixed forms
-_TYPING_DOT_TO_BUILTIN: dict[str, str] = {
-    f"typing.{k}": v for k, v in _TYPING_TO_BUILTIN.items()
-}
+_TYPING_DOT_TO_BUILTIN: dict[str, str] = {f"typing.{k}": v for k, v in _TYPING_TO_BUILTIN.items()}
 
 
 class TypeInfo(BaseModel):
@@ -193,7 +191,7 @@ def _resolve_attribute(node: ast.Attribute, raw: str) -> TypeInfo:
         return TypeInfo(raw=raw, resolved=resolved, base_type=resolved)
     # Strip typing. prefix for simple types
     if full_name.startswith("typing."):
-        short = full_name[len("typing."):]
+        short = full_name[len("typing.") :]
         return TypeInfo(raw=raw, resolved=short, base_type=short)
     return TypeInfo(raw=raw, resolved=full_name, base_type=full_name)
 
@@ -229,7 +227,7 @@ def _normalize_base_name(name: str) -> str:
     """Normalize a base type name, handling typing module prefixes."""
     # Handle typing.X prefixed names
     if name.startswith("typing."):
-        short = name[len("typing."):]
+        short = name[len("typing.") :]
         # Check if it maps to a builtin
         if short in _TYPING_TO_BUILTIN:
             return _TYPING_TO_BUILTIN[short]

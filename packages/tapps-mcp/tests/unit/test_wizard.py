@@ -45,11 +45,11 @@ class TestRunInitWizard:
         responses = [
             _ElicitResult("accept", MagicMock(preset="strict")),
             _ElicitResult("accept", MagicMock(level="high")),
-            _ElicitResult("accept", MagicMock(scope="project")),   # config scope
+            _ElicitResult("accept", MagicMock(scope="project")),  # config scope
             _ElicitResult("accept", MagicMock(enabled=True)),
             _ElicitResult("accept", MagicMock(tier="core")),
             _ElicitResult("accept", MagicMock(enabled=True)),
-            _ElicitResult("accept", MagicMock(enabled=False)),     # other MCPs
+            _ElicitResult("accept", MagicMock(enabled=False)),  # other MCPs
         ]
         ctx = _make_ctx(responses)
         result = await run_init_wizard(ctx)
@@ -99,11 +99,11 @@ class TestRunInitWizard:
         responses = [
             _ElicitResult("accept", MagicMock(preset="standard")),
             _ElicitResult("accept", MagicMock(level="low")),
-            _ElicitResult("accept", MagicMock(scope="project")),   # config scope
+            _ElicitResult("accept", MagicMock(scope="project")),  # config scope
             _ElicitResult("accept", MagicMock(enabled=False)),
             _ElicitResult("accept", MagicMock(tier="full")),
             _ElicitResult("accept", MagicMock(enabled=False)),
-            _ElicitResult("accept", MagicMock(enabled=False)),     # other MCPs
+            _ElicitResult("accept", MagicMock(enabled=False)),  # other MCPs
         ]
         ctx = _make_ctx(responses)
         result = await run_init_wizard(ctx)
@@ -150,9 +150,7 @@ class TestMaybeRunWizard:
         (tmp_path / ".tapps-mcp.yaml").write_text("quality_preset: standard\n")
 
         ctx = MagicMock()
-        with patch(
-            "tapps_mcp.server_pipeline_tools.load_settings"
-        ) as mock_settings:
+        with patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(project_root=tmp_path)
             result = await _maybe_run_wizard(
                 ctx,
@@ -169,17 +167,15 @@ class TestMaybeRunWizard:
         responses = [
             _ElicitResult("accept", MagicMock(preset="strict")),
             _ElicitResult("accept", MagicMock(level="high")),
-            _ElicitResult("accept", MagicMock(scope="project")),   # config scope
+            _ElicitResult("accept", MagicMock(scope="project")),  # config scope
             _ElicitResult("accept", MagicMock(enabled=False)),
             _ElicitResult("accept", MagicMock(tier="full")),
             _ElicitResult("accept", MagicMock(enabled=False)),
-            _ElicitResult("accept", MagicMock(enabled=False)),     # other MCPs
+            _ElicitResult("accept", MagicMock(enabled=False)),  # other MCPs
         ]
         ctx = _make_ctx(responses)
 
-        with patch(
-            "tapps_mcp.server_pipeline_tools.load_settings"
-        ) as mock_settings:
+        with patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(project_root=tmp_path)
             result = await _maybe_run_wizard(
                 ctx,
@@ -199,17 +195,15 @@ class TestMaybeRunWizard:
         responses = [
             _ElicitResult("accept", MagicMock(preset="framework")),
             _ElicitResult("accept", MagicMock(level="low")),
-            _ElicitResult("accept", MagicMock(scope="project")),   # config scope
+            _ElicitResult("accept", MagicMock(scope="project")),  # config scope
             _ElicitResult("accept", MagicMock(enabled=True)),
             _ElicitResult("accept", MagicMock(tier="core")),
             _ElicitResult("accept", MagicMock(enabled=True)),
-            _ElicitResult("accept", MagicMock(enabled=False)),     # other MCPs
+            _ElicitResult("accept", MagicMock(enabled=False)),  # other MCPs
         ]
         ctx = _make_ctx(responses)
 
-        with patch(
-            "tapps_mcp.server_pipeline_tools.load_settings"
-        ) as mock_settings:
+        with patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(project_root=tmp_path)
             await _maybe_run_wizard(
                 ctx,

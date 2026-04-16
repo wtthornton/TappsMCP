@@ -6,18 +6,12 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from tapps_core.common.file_operations import WriteMode
 from tapps_mcp.pipeline.upgrade import (
     _build_upgrade_manifest,
-    _detect_platform,
     _upgrade_agents_md_content_return,
-    _upgrade_content_return,
     _upgrade_platform_content_return,
     upgrade_pipeline,
 )
-
 
 # ---------------------------------------------------------------------------
 # _upgrade_agents_md_content_return tests
@@ -87,9 +81,7 @@ class TestUpgradePlatformContentReturn:
     """Test platform file generation in content-return mode."""
 
     def test_claude_platform(self, tmp_path: Path) -> None:
-        ops, result = _upgrade_platform_content_return(
-            "claude-code", tmp_path
-        )
+        ops, result = _upgrade_platform_content_return("claude-code", tmp_path)
 
         assert len(ops) >= 1
         claude_op = ops[0]
@@ -99,9 +91,7 @@ class TestUpgradePlatformContentReturn:
         assert "generators_skipped" in result["components"]
 
     def test_cursor_platform(self, tmp_path: Path) -> None:
-        ops, result = _upgrade_platform_content_return(
-            "cursor", tmp_path
-        )
+        ops, result = _upgrade_platform_content_return("cursor", tmp_path)
 
         assert len(ops) >= 1
         cursor_op = ops[0]
@@ -109,9 +99,7 @@ class TestUpgradePlatformContentReturn:
         assert result["components"]["cursor_rules"] == "content_return"
 
     def test_vscode_no_ops(self, tmp_path: Path) -> None:
-        ops, result = _upgrade_platform_content_return(
-            "vscode", tmp_path
-        )
+        ops, result = _upgrade_platform_content_return("vscode", tmp_path)
 
         assert len(ops) == 0
         assert result["components"]["note"] == "no platform rules to upgrade"
@@ -119,16 +107,12 @@ class TestUpgradePlatformContentReturn:
     def test_existing_claude_md_uses_overwrite(self, tmp_path: Path) -> None:
         (tmp_path / "CLAUDE.md").write_text("old", encoding="utf-8")
 
-        ops, _result = _upgrade_platform_content_return(
-            "claude-code", tmp_path
-        )
+        ops, _result = _upgrade_platform_content_return("claude-code", tmp_path)
 
         assert ops[0].mode == "overwrite"
 
     def test_new_claude_md_uses_create(self, tmp_path: Path) -> None:
-        ops, _result = _upgrade_platform_content_return(
-            "claude-code", tmp_path
-        )
+        ops, _result = _upgrade_platform_content_return("claude-code", tmp_path)
 
         assert ops[0].mode == "create"
 
@@ -137,9 +121,7 @@ class TestUpgradePlatformContentReturn:
         assert not (tmp_path / "CLAUDE.md").exists()
 
     def test_generators_skipped_note(self, tmp_path: Path) -> None:
-        _ops, result = _upgrade_platform_content_return(
-            "claude-code", tmp_path
-        )
+        _ops, result = _upgrade_platform_content_return("claude-code", tmp_path)
 
         skipped = result["components"]["generators_skipped"]
         assert skipped["reason"] == "content_return"
@@ -239,9 +221,7 @@ class TestUpgradePipelineContentReturn:
 
     def test_content_return_merge_existing_agents(self, tmp_path: Path) -> None:
         """When AGENTS.md exists and is outdated, file op has mode='merge'."""
-        (tmp_path / "AGENTS.md").write_text(
-            "# AGENTS.md\n\nMinimal.\n", encoding="utf-8"
-        )
+        (tmp_path / "AGENTS.md").write_text("# AGENTS.md\n\nMinimal.\n", encoding="utf-8")
 
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
             result = upgrade_pipeline(tmp_path)

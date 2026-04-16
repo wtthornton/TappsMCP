@@ -22,9 +22,7 @@ def set_dependency_findings(project_root: str, findings: list[VulnerabilityFindi
     _cache[str(project_root)] = (findings, time.monotonic())
 
 
-def get_dependency_findings(
-    project_root: str, ttl: int = _CACHE_TTL
-) -> list[VulnerabilityFinding]:
+def get_dependency_findings(project_root: str, ttl: int = _CACHE_TTL) -> list[VulnerabilityFinding]:
     """Return cached dependency findings if present and not expired."""
     entry = _cache.get(str(project_root))
     if entry is None:

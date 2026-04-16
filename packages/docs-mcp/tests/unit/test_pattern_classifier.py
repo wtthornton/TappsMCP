@@ -13,10 +13,7 @@ from docs_mcp.analyzers.pattern import PatternClassifier
 
 
 def _make_map(package_names: list[str], *, total_packages: int | None = None) -> ModuleMap:
-    tree = [
-        ModuleNode(name=name, path=f"src/{name}", is_package=True)
-        for name in package_names
-    ]
+    tree = [ModuleNode(name=name, path=f"src/{name}", is_package=True) for name in package_names]
     return ModuleMap(
         project_root="/tmp/x",
         project_name="x",
@@ -103,9 +100,7 @@ class TestClassifier:
         (["extract", "transform", "load"], "pipeline"),
     ],
 )
-def test_parametrized_archetypes(
-    packages: list[str], expected: str, tmp_path: Path
-) -> None:
+def test_parametrized_archetypes(packages: list[str], expected: str, tmp_path: Path) -> None:
     mm = _make_map(packages)
     graph = _make_graph(edges=list(pairwise(packages)))
     result = PatternClassifier().classify(tmp_path, module_map=mm, import_graph=graph)

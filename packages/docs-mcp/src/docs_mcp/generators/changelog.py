@@ -160,7 +160,8 @@ class ChangelogGenerator:
         template = self._load_template("keep_a_changelog.md.j2")
         if template is not None:
             return self._render_keep_a_changelog_template(
-                template, versions,
+                template,
+                versions,
                 include_unreleased=include_unreleased,
                 unreleased_commits=unreleased_commits,
             )
@@ -190,11 +191,13 @@ class ChangelogGenerator:
         for vb in versions:
             entries = self._commits_to_entries(vb.commits, format="keep-a-changelog")
             grouped = self._group_entries(entries, _KEEP_A_CHANGELOG_CATEGORIES)
-            version_data.append({
-                "version": vb.version,
-                "date": self._format_date(vb.date),
-                "grouped_entries": grouped,
-            })
+            version_data.append(
+                {
+                    "version": vb.version,
+                    "date": self._format_date(vb.date),
+                    "grouped_entries": grouped,
+                }
+            )
 
         result: str = template.render(
             unreleased_entries=unreleased_entries,
@@ -270,7 +273,8 @@ class ChangelogGenerator:
         template = self._load_template("conventional.md.j2")
         if template is not None:
             return self._render_conventional_template(
-                template, versions,
+                template,
+                versions,
                 include_unreleased=include_unreleased,
                 unreleased_commits=unreleased_commits,
             )
@@ -304,12 +308,14 @@ class ChangelogGenerator:
             entries = self._commits_to_entries(vb.commits, format="conventional")
             grouped = self._group_entries(entries, _CONVENTIONAL_CATEGORIES)
             breaking = [e for e in entries if e.breaking]
-            version_data.append({
-                "version": vb.version,
-                "date": self._format_date(vb.date),
-                "grouped_entries": grouped,
-                "breaking_entries": breaking if breaking else None,
-            })
+            version_data.append(
+                {
+                    "version": vb.version,
+                    "date": self._format_date(vb.date),
+                    "grouped_entries": grouped,
+                    "breaking_entries": breaking if breaking else None,
+                }
+            )
 
         result: str = template.render(
             unreleased_entries=unreleased_entries,
@@ -397,8 +403,12 @@ class ChangelogGenerator:
 
         for commit in commits:
             parsed = classify_commit(commit.message)
-            category = type_map.get(parsed.type, "Changed" if format == "keep-a-changelog" else "Chores")
-            description = parsed.description if parsed.description else commit.message.split("\n")[0]
+            category = type_map.get(
+                parsed.type, "Changed" if format == "keep-a-changelog" else "Chores"
+            )
+            description = (
+                parsed.description if parsed.description else commit.message.split("\n")[0]
+            )
             entries.append(
                 ChangelogEntry(
                     type=category,

@@ -37,9 +37,7 @@ class TestUpgradeCtx:
         }
 
         with (
-            patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings,
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.pipeline.upgrade.upgrade_pipeline",
                 return_value=mock_result,
@@ -75,9 +73,7 @@ class TestUpgradeCtx:
         }
 
         with (
-            patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings,
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.pipeline.upgrade.upgrade_pipeline",
                 return_value=mock_result,
@@ -115,9 +111,7 @@ class TestUpgradeCtx:
         }
 
         with (
-            patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings,
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.pipeline.upgrade.upgrade_pipeline",
                 return_value=mock_result,
@@ -155,9 +149,7 @@ class TestUpgradeCtx:
         }
 
         with (
-            patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings,
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.pipeline.upgrade.upgrade_pipeline",
                 return_value=mock_result,
@@ -195,9 +187,7 @@ class TestUpgradeCtx:
         }
 
         with (
-            patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings,
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch(
                 "tapps_mcp.pipeline.upgrade.upgrade_pipeline",
                 return_value=mock_result,

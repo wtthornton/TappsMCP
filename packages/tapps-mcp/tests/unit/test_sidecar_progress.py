@@ -11,11 +11,10 @@ import pytest
 
 from tapps_mcp.server_pipeline_tools import (
     _VALIDATION_PROGRESS_FILE,
-    _ProgressTracker,
     _emit_file_info,
+    _ProgressTracker,
     _validate_single_file,
 )
-
 
 # ---------------------------------------------------------------------------
 # _ProgressTracker sidecar tests
@@ -205,16 +204,24 @@ class TestValidateSingleFileCtxInfo:
         sem = asyncio.Semaphore(10)
         tracker = _ProgressTracker(total=1)
 
-        with patch(
-            "tapps_mcp.server_pipeline_tools.asyncio.to_thread",
-            return_value=mock_score,
-        ), patch(
-            "tapps_mcp.gates.evaluator.evaluate_gate",
-            return_value=mock_gate,
+        with (
+            patch(
+                "tapps_mcp.server_pipeline_tools.asyncio.to_thread",
+                return_value=mock_score,
+            ),
+            patch(
+                "tapps_mcp.gates.evaluator.evaluate_gate",
+                return_value=mock_gate,
+            ),
         ):
             result = await _validate_single_file(
-                Path("test.py"), "standard", True, False, sem,
-                tracker, ctx,
+                Path("test.py"),
+                "standard",
+                True,
+                False,
+                sem,
+                tracker,
+                ctx,
             )
 
         assert result["gate_passed"] is True

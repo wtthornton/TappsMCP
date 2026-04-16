@@ -35,10 +35,10 @@ class ParsedCommit(BaseModel):
 # Matches: type(scope)!: description
 # Groups:  1=type  2=scope (without parens, optional)  3=! (optional)  4=description
 _CONVENTIONAL_RE = re.compile(
-    r"^(?P<type>[a-zA-Z]+)"         # type (e.g. feat, fix)
-    r"(?:\((?P<scope>[^)]*)\))?"    # optional (scope)
-    r"(?P<bang>!)?"                  # optional breaking-change indicator
-    r":\s*(?P<desc>.+)",            # colon + description
+    r"^(?P<type>[a-zA-Z]+)"  # type (e.g. feat, fix)
+    r"(?:\((?P<scope>[^)]*)\))?"  # optional (scope)
+    r"(?P<bang>!)?"  # optional breaking-change indicator
+    r":\s*(?P<desc>.+)",  # colon + description
 )
 
 

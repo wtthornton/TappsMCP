@@ -16,7 +16,6 @@ from docs_mcp.validators.freshness import (
     _freshness_weight,
 )
 
-
 # ---------------------------------------------------------------------------
 # Model tests
 # ---------------------------------------------------------------------------
@@ -290,5 +289,8 @@ class TestFreshnessChecker:
         """Empty report should have zeroed category counts."""
         report = FreshnessReport()
         assert report.category_counts == {
-            "fresh": 0, "aging": 0, "stale": 0, "ancient": 0,
+            "fresh": 0,
+            "aging": 0,
+            "stale": 0,
+            "ancient": 0,
         }

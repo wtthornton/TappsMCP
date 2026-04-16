@@ -64,9 +64,7 @@ class TestContextInjector:
         "tapps_mcp.benchmark.context_injector.load_agents_template",
         return_value=_FAKE_TEMPLATE,
     )
-    def test_generate_returns_nonempty_template(
-        self, mock_load: object, tmp_path: Path
-    ) -> None:
+    def test_generate_returns_nonempty_template(self, mock_load: object, tmp_path: Path) -> None:
         injector = ContextInjector(engagement_level="medium")
         content = injector.generate_tapps_context(tmp_path)
         assert len(content) > 0
@@ -76,9 +74,7 @@ class TestContextInjector:
         "tapps_mcp.benchmark.context_injector.load_agents_template",
         return_value=_FAKE_TEMPLATE,
     )
-    def test_generate_uses_engagement_level(
-        self, mock_load: object, tmp_path: Path
-    ) -> None:
+    def test_generate_uses_engagement_level(self, mock_load: object, tmp_path: Path) -> None:
         injector = ContextInjector(engagement_level="high")
         injector.generate_tapps_context(tmp_path)
         from tapps_mcp.benchmark.context_injector import (
@@ -95,9 +91,7 @@ class TestContextInjector:
 
     def test_inject_custom_filename(self, tmp_path: Path) -> None:
         injector = ContextInjector()
-        result = injector.inject_context(
-            tmp_path, "custom", filename="CLAUDE.md"
-        )
+        result = injector.inject_context(tmp_path, "custom", filename="CLAUDE.md")
         assert result == tmp_path / "CLAUDE.md"
         assert result.read_text(encoding="utf-8") == "custom"
 
@@ -198,8 +192,7 @@ class TestRedundancyAnalyzer:
     def test_collect_repo_docs_reads_pyproject(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
-            '[project]\nname = "foo"\n'
-            'description = "A test project"\n',
+            '[project]\nname = "foo"\ndescription = "A test project"\n',
             encoding="utf-8",
         )
         analyzer = RedundancyAnalyzer()
@@ -269,11 +262,11 @@ class TestSectionRedundancy:
             redundancy_score=0.5,
             recommendation="keep",
         )
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             sr.section_name = "Changed"  # type: ignore[misc]
 
     def test_score_bounds(self) -> None:
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             SectionRedundancy(
                 section_name="Bad",
                 redundancy_score=1.5,

@@ -111,18 +111,14 @@ class TestCopilotSetupSteps:
         from tapps_mcp.pipeline.github_ci import generate_copilot_setup_steps
 
         generate_copilot_setup_steps(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "copilot-setup-steps.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "copilot-setup-steps.yml").read_text()
         assert "tapps-mcp" in content
 
     def test_installs_quality_checkers(self, tmp_path):
         from tapps_mcp.pipeline.github_ci import generate_copilot_setup_steps
 
         generate_copilot_setup_steps(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "copilot-setup-steps.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "copilot-setup-steps.yml").read_text()
         assert "ruff" in content
         assert "mypy" in content
         assert "bandit" in content
@@ -141,26 +137,20 @@ class TestDependabotAutoMerge:
         from tapps_mcp.pipeline.github_ci import generate_dependabot_auto_merge
 
         generate_dependabot_auto_merge(tmp_path)
-        assert (
-            tmp_path / ".github" / "workflows" / "dependabot-auto-merge.yml"
-        ).exists()
+        assert (tmp_path / ".github" / "workflows" / "dependabot-auto-merge.yml").exists()
 
     def test_only_auto_merges_non_major(self, tmp_path):
         from tapps_mcp.pipeline.github_ci import generate_dependabot_auto_merge
 
         generate_dependabot_auto_merge(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "dependabot-auto-merge.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "dependabot-auto-merge.yml").read_text()
         assert "semver-patch" in content or "semver-minor" in content
 
     def test_uses_github_token(self, tmp_path):
         from tapps_mcp.pipeline.github_ci import generate_dependabot_auto_merge
 
         generate_dependabot_auto_merge(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "dependabot-auto-merge.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "dependabot-auto-merge.yml").read_text()
         assert "GITHUB_TOKEN" in content
 
 
@@ -171,35 +161,27 @@ class TestReusableQualityWorkflow:
         from tapps_mcp.pipeline.github_ci import generate_reusable_quality_workflow
 
         generate_reusable_quality_workflow(tmp_path)
-        assert (
-            tmp_path / ".github" / "workflows" / "tapps-quality-reusable.yml"
-        ).exists()
+        assert (tmp_path / ".github" / "workflows" / "tapps-quality-reusable.yml").exists()
 
     def test_has_workflow_call_trigger(self, tmp_path):
         from tapps_mcp.pipeline.github_ci import generate_reusable_quality_workflow
 
         generate_reusable_quality_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "tapps-quality-reusable.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "tapps-quality-reusable.yml").read_text()
         assert "workflow_call:" in content
 
     def test_has_preset_input(self, tmp_path):
         from tapps_mcp.pipeline.github_ci import generate_reusable_quality_workflow
 
         generate_reusable_quality_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "tapps-quality-reusable.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "tapps-quality-reusable.yml").read_text()
         assert "preset:" in content
 
     def test_has_python_version_input(self, tmp_path):
         from tapps_mcp.pipeline.github_ci import generate_reusable_quality_workflow
 
         generate_reusable_quality_workflow(tmp_path)
-        content = (
-            tmp_path / ".github" / "workflows" / "tapps-quality-reusable.yml"
-        ).read_text()
+        content = (tmp_path / ".github" / "workflows" / "tapps-quality-reusable.yml").read_text()
         assert "python-version:" in content
 
 

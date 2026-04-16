@@ -45,18 +45,22 @@ _MAX_EXAMPLES = 5
 _MAX_SNIPPET_LINES = 20
 
 # Logger constant patterns to filter from API docs.
-_LOGGER_PATTERNS: frozenset[str] = frozenset({
-    "logger",
-    "log",
-    "LOG",
-    "LOGGER",
-})
+_LOGGER_PATTERNS: frozenset[str] = frozenset(
+    {
+        "logger",
+        "log",
+        "LOG",
+        "LOGGER",
+    }
+)
 
 # Noise constant name patterns (exact matches) to filter.
-_NOISE_CONSTANTS: frozenset[str] = frozenset({
-    "__all__",
-    "__version__",
-})
+_NOISE_CONSTANTS: frozenset[str] = frozenset(
+    {
+        "__all__",
+        "__version__",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -351,15 +355,24 @@ class APIDocGenerator:
             module_name = file_path.stem
 
         functions, func_total, func_documented = self._extract_module_functions(
-            module_info.functions, depth, include_private, include_examples, project_root,
+            module_info.functions,
+            depth,
+            include_private,
+            include_examples,
+            project_root,
             parse_docstring,
         )
         classes, cls_total, cls_documented = self._extract_module_classes(
-            module_info.classes, depth, include_private, include_examples, project_root,
+            module_info.classes,
+            depth,
+            include_private,
+            include_examples,
+            project_root,
             parse_docstring,
         )
         constants, const_total, const_documented = self._extract_module_constants(
-            module_info.constants, depth,
+            module_info.constants,
+            depth,
         )
 
         total_items = func_total + cls_total + const_total
@@ -370,9 +383,7 @@ class APIDocGenerator:
         is_reexport = _is_reexport_module(file_path, module_info)
 
         # Quality metrics
-        missing_returns = sum(
-            1 for f in functions if not f.returns and not f.return_type
-        )
+        missing_returns = sum(1 for f in functions if not f.returns and not f.return_type)
         missing_examples = sum(1 for f in functions if not f.examples)
 
         return APIDocModule(
@@ -407,7 +418,10 @@ class APIDocGenerator:
         documented = 0
         for func_info in func_infos:
             if not self._should_include_symbol(
-                func_info.name, depth, include_private, func_info.docstring,
+                func_info.name,
+                depth,
+                include_private,
+                func_info.docstring,
             ):
                 continue
             total += 1
@@ -469,7 +483,11 @@ class APIDocGenerator:
                 documented += 1
 
             methods, m_total, m_documented = self._extract_class_methods(
-                class_info, depth, include_examples, project_root, parse_docstring,
+                class_info,
+                depth,
+                include_examples,
+                project_root,
+                parse_docstring,
                 include_private=include_private,
             )
             total += m_total
@@ -479,7 +497,9 @@ class APIDocGenerator:
             for cv in class_info.class_variables:
                 if not self._should_include(cv.name, depth):
                     continue
-                class_vars.append(APIDocParam(name=cv.name, type=cv.annotation or "", default=cv.value))
+                class_vars.append(
+                    APIDocParam(name=cv.name, type=cv.annotation or "", default=cv.value)
+                )
 
             decorators_cls = [d.name for d in class_info.decorators]
             classes.append(
@@ -546,7 +566,10 @@ class APIDocGenerator:
 
         for method_info in class_info.methods:
             if not self._should_include_symbol(
-                method_info.name, depth, include_private, method_info.docstring,
+                method_info.name,
+                depth,
+                include_private,
+                method_info.docstring,
             ):
                 continue
             total += 1
@@ -715,7 +738,9 @@ class APIDocGenerator:
                 if not tests_dir.is_dir():
                     continue
                 self._find_test_examples(
-                    tests_dir, func_name, examples,
+                    tests_dir,
+                    func_name,
+                    examples,
                 )
                 if len(examples) >= _MAX_EXAMPLES:
                     break
@@ -903,8 +928,10 @@ class APIDocGenerator:
 
         # Re-export notice
         if module.is_reexport:
-            lines.append("> **Note:** This module re-exports symbols from "
-                         "other modules. See source modules for full documentation.")
+            lines.append(
+                "> **Note:** This module re-exports symbols from "
+                "other modules. See source modules for full documentation."
+            )
             lines.append("")
 
         # Quality footer
@@ -915,19 +942,13 @@ class APIDocGenerator:
             quality_notes: list[str] = []
             if module.missing_returns:
                 label = "function" if module.missing_returns == 1 else "functions"
-                quality_notes.append(
-                    f"{module.missing_returns} {label} missing return docs"
-                )
+                quality_notes.append(f"{module.missing_returns} {label} missing return docs")
             if module.missing_examples:
                 label = "function" if module.missing_examples == 1 else "functions"
-                quality_notes.append(
-                    f"{module.missing_examples} {label} missing examples"
-                )
-            lines.append(f"*Quality: {", ".join(quality_notes)}*")
+                quality_notes.append(f"{module.missing_examples} {label} missing examples")
+            lines.append(f"*Quality: {', '.join(quality_notes)}*")
         lines.append("")
-        lines.append(
-            f"*Auto-generated by DocsMCP on {_generation_date()}*"
-        )
+        lines.append(f"*Auto-generated by DocsMCP on {_generation_date()}*")
         lines.append("")
 
         return "\n".join(lines)
@@ -1372,7 +1393,7 @@ def _extract_doctest(content: str, func_name: str) -> str:
     if not match:
         return ""
 
-    lines = content[match.start():].split("\n")
+    lines = content[match.start() :].split("\n")
     block: list[str] = []
     for line in lines:
         stripped = line.strip()

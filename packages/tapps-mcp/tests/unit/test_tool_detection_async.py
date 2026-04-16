@@ -19,8 +19,10 @@ from tapps_mcp.tools.tool_detection import (
 def _clear_cache() -> None:  # type: ignore[misc]
     """Reset tool cache before each test and disable disk cache."""
     _reset_tools_cache()
-    with patch("tapps_mcp.tools.tool_detection._read_disk_cache", return_value=None), \
-         patch("tapps_mcp.tools.tool_detection._write_disk_cache"):
+    with (
+        patch("tapps_mcp.tools.tool_detection._read_disk_cache", return_value=None),
+        patch("tapps_mcp.tools.tool_detection._write_disk_cache"),
+    ):
         yield  # type: ignore[misc]
     _reset_tools_cache()
 
@@ -66,9 +68,7 @@ class TestDetectInstalledToolsAsync:
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.tool_detection._venv_bin_dirs", return_value=[])
     @patch("tapps_mcp.tools.tool_detection.shutil.which", return_value=None)
-    async def test_no_tools_available(
-        self, mock_which: object, mock_venv: object
-    ) -> None:
+    async def test_no_tools_available(self, mock_which: object, mock_venv: object) -> None:
         """All tools missing returns unavailable entries."""
         results = await detect_installed_tools_async()
         assert len(results) == 7
@@ -80,9 +80,7 @@ class TestDetectInstalledToolsAsync:
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.tool_detection.run_command_async")
     @patch("tapps_mcp.tools.tool_detection.shutil.which", return_value="/usr/bin/ruff")
-    async def test_all_tools_available(
-        self, mock_which: object, mock_run: AsyncMock
-    ) -> None:
+    async def test_all_tools_available(self, mock_which: object, mock_run: AsyncMock) -> None:
         """All tools found returns version strings."""
         mock_run.return_value = CommandResult(
             returncode=0,
@@ -152,9 +150,7 @@ class TestDetectInstalledToolsAsync:
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.tool_detection.run_command_async")
     @patch("tapps_mcp.tools.tool_detection.shutil.which", return_value="/usr/bin/tool")
-    async def test_version_command_failure(
-        self, mock_which: object, mock_run: AsyncMock
-    ) -> None:
+    async def test_version_command_failure(self, mock_which: object, mock_run: AsyncMock) -> None:
         """Tool found but version command fails: available=True, version=None."""
         mock_run.return_value = CommandResult(
             returncode=1,

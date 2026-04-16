@@ -29,19 +29,28 @@ class TestDepGraphCtx:
 
         mock_couplings = []
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.project.import_graph.build_import_graph", return_value=mock_graph), \
-             patch("tapps_mcp.project.cycle_detector.detect_cycles", return_value=mock_analysis), \
-             patch("tapps_mcp.project.cycle_detector.suggest_cycle_fixes", return_value=[]), \
-             patch("tapps_mcp.project.coupling_metrics.calculate_coupling", return_value=mock_couplings), \
-             patch("tapps_mcp.project.coupling_metrics.suggest_coupling_fixes", return_value=[]):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch("tapps_mcp.project.import_graph.build_import_graph", return_value=mock_graph),
+            patch("tapps_mcp.project.cycle_detector.detect_cycles", return_value=mock_analysis),
+            patch("tapps_mcp.project.cycle_detector.suggest_cycle_fixes", return_value=[]),
+            patch(
+                "tapps_mcp.project.coupling_metrics.calculate_coupling", return_value=mock_couplings
+            ),
+            patch("tapps_mcp.project.coupling_metrics.suggest_coupling_fixes", return_value=[]),
+        ):
             from pathlib import Path
+
             mock_settings.return_value = MagicMock(project_root=Path("/fake"))
-            result = await tapps_dependency_graph(detect_cycles=True, include_coupling=True, ctx=ctx)
+            result = await tapps_dependency_graph(
+                detect_cycles=True, include_coupling=True, ctx=ctx
+            )
 
         assert result["success"] is True
         # Should have: "Building import graph..." + cycle result + coupling result + final
@@ -59,15 +68,22 @@ class TestDepGraphCtx:
         mock_graph.edges = []
         mock_graph.external_imports = {}
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.project.import_graph.build_import_graph", return_value=mock_graph):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch("tapps_mcp.project.import_graph.build_import_graph", return_value=mock_graph),
+        ):
             from pathlib import Path
+
             mock_settings.return_value = MagicMock(project_root=Path("/fake"))
-            result = await tapps_dependency_graph(detect_cycles=False, include_coupling=False, ctx=ctx)
+            result = await tapps_dependency_graph(
+                detect_cycles=False, include_coupling=False, ctx=ctx
+            )
 
         assert result["success"] is True
         # No cycle/coupling messages, just "Building..." and "Analysis complete"
@@ -84,15 +100,22 @@ class TestDepGraphCtx:
         mock_graph.edges = []
         mock_graph.external_imports = {}
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.project.import_graph.build_import_graph", return_value=mock_graph):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch("tapps_mcp.project.import_graph.build_import_graph", return_value=mock_graph),
+        ):
             from pathlib import Path
+
             mock_settings.return_value = MagicMock(project_root=Path("/fake"))
-            result = await tapps_dependency_graph(detect_cycles=False, include_coupling=False, ctx=None)
+            result = await tapps_dependency_graph(
+                detect_cycles=False, include_coupling=False, ctx=None
+            )
 
         assert result["success"] is True
 
@@ -108,14 +131,21 @@ class TestDepGraphCtx:
         mock_graph.edges = []
         mock_graph.external_imports = {}
 
-        with patch("tapps_mcp.server_analysis_tools._record_call"), \
-             patch("tapps_mcp.server_analysis_tools._record_execution"), \
-             patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r), \
-             patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings, \
-             patch("tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock), \
-             patch("tapps_mcp.project.import_graph.build_import_graph", return_value=mock_graph):
+        with (
+            patch("tapps_mcp.server_analysis_tools._record_call"),
+            patch("tapps_mcp.server_analysis_tools._record_execution"),
+            patch("tapps_mcp.server_analysis_tools._with_nudges", side_effect=lambda _n, r: r),
+            patch("tapps_mcp.server_analysis_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.server_analysis_tools.ensure_session_initialized", new_callable=AsyncMock
+            ),
+            patch("tapps_mcp.project.import_graph.build_import_graph", return_value=mock_graph),
+        ):
             from pathlib import Path
+
             mock_settings.return_value = MagicMock(project_root=Path("/fake"))
-            result = await tapps_dependency_graph(detect_cycles=False, include_coupling=False, ctx=ctx)
+            result = await tapps_dependency_graph(
+                detect_cycles=False, include_coupling=False, ctx=ctx
+            )
 
         assert result["success"] is True

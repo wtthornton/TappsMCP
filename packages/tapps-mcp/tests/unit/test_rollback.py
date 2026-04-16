@@ -37,9 +37,7 @@ class TestBackupCreation:
         files = [project / "AGENTS.md"]
         backup_dir = mgr.create_backup(files, version="0.5.0", reason="test")
 
-        manifest = json.loads(
-            (backup_dir / "manifest.json").read_text(encoding="utf-8")
-        )
+        manifest = json.loads((backup_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["version"] == "0.5.0"
         assert manifest["reason"] == "test"
         assert "AGENTS.md" in manifest["files"]
@@ -59,9 +57,7 @@ class TestBackupCreation:
         files = [project / "AGENTS.md", project / "nonexistent.md"]
         backup_dir = mgr.create_backup(files, version="0.5.0")
 
-        manifest = json.loads(
-            (backup_dir / "manifest.json").read_text(encoding="utf-8")
-        )
+        manifest = json.loads((backup_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["files"] == ["AGENTS.md"]
 
     def test_skips_files_outside_root(self, tmp_path: Path) -> None:
@@ -77,9 +73,7 @@ class TestBackupCreation:
         mgr = BackupManager(proj)
         backup_dir = mgr.create_backup([outside], version="0.5.0")
 
-        manifest = json.loads(
-            (backup_dir / "manifest.json").read_text(encoding="utf-8")
-        )
+        manifest = json.loads((backup_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["files"] == []
 
 
@@ -116,9 +110,7 @@ class TestBackupRestore:
 
     def test_restores_from_specific_backup(self, project: Path) -> None:
         mgr = BackupManager(project)
-        backup_dir = mgr.create_backup(
-            [project / "AGENTS.md"], version="0.5.0"
-        )
+        backup_dir = mgr.create_backup([project / "AGENTS.md"], version="0.5.0")
 
         (project / "AGENTS.md").write_text("MODIFIED", encoding="utf-8")
 

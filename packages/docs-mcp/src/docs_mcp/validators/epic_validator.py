@@ -783,9 +783,7 @@ class EpicValidator:
                 )
                 continue
 
-            has_ac, has_tasks_sec, has_dod, points, size = (
-                _check_story_file_structure(content)
-            )
+            has_ac, has_tasks_sec, has_dod, points, size = _check_story_file_structure(content)
 
             # Merge with inline metadata (linked file wins if present)
             if has_ac:

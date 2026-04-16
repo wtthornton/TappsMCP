@@ -12,8 +12,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from docs_mcp.integrations.brain_writer import (
     ArchitectureBrainWriter,
     BrainWriteResult,
@@ -21,7 +19,6 @@ from docs_mcp.integrations.brain_writer import (
     _slugify,
     _truncate,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers / stubs

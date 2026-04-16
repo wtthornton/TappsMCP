@@ -19,7 +19,6 @@ import pytest
 
 from tapps_mcp.server_scoring_tools import QUICK_CHECK_BUDGET_MS, tapps_quick_check
 
-
 # ---------------------------------------------------------------------------
 # 101.6-A: budget constant
 # ---------------------------------------------------------------------------

@@ -138,13 +138,10 @@ class PurposeGenerator:
             for decision in decisions:
                 decision_lines.append(f"- {decision}")
         else:
-            decision_lines.append(
-                "- [Document major technology choices and their rationale]"
-            )
+            decision_lines.append("- [Document major technology choices and their rationale]")
         decision_lines.append("")
         decision_lines.append(
-            "*For detailed decision records, generate ADRs with "
-            "`docs_generate_adr`.*"
+            "*For detailed decision records, generate ADRs with `docs_generate_adr`.*"
         )
         decision_lines.append("")
         sections.append("\n".join(decision_lines))
@@ -155,7 +152,9 @@ class PurposeGenerator:
         audience_lines.append("| Audience | What they need |")
         audience_lines.append("|---|---|")
         audience_lines.append("| Developers | API reference, setup guide, contribution guide |")
-        audience_lines.append("| Operators | Deployment guide, configuration reference, monitoring |")
+        audience_lines.append(
+            "| Operators | Deployment guide, configuration reference, monitoring |"
+        )
         audience_lines.append("| Users | Getting started, tutorials, FAQ |")
         audience_lines.append("")
         sections.append("\n".join(audience_lines))
@@ -168,7 +167,9 @@ class PurposeGenerator:
             for quality in qualities:
                 quality_lines.append(f"- {quality}")
         else:
-            quality_lines.append("- [List quality attributes: performance, security, reliability, etc.]")
+            quality_lines.append(
+                "- [List quality attributes: performance, security, reliability, etc.]"
+            )
         quality_lines.append("")
         sections.append("\n".join(quality_lines))
         section_names.append("quality_attributes")
@@ -176,9 +177,7 @@ class PurposeGenerator:
         content = "\n".join(sections)
         return PurposeResult(content=content, sections=section_names)
 
-    def _infer_principles(
-        self, project_root: Path, metadata: ProjectMetadata | None
-    ) -> list[str]:
+    def _infer_principles(self, project_root: Path, metadata: ProjectMetadata | None) -> list[str]:
         """Infer design principles from project dependencies."""
         principles: list[str] = []
         if metadata and metadata.dependencies:
@@ -188,16 +187,18 @@ class PurposeGenerator:
                     principles.append(self._PRINCIPLE_HINTS[dep_name])
         return principles[:6]
 
-    def _infer_decisions(
-        self, project_root: Path, metadata: ProjectMetadata | None
-    ) -> list[str]:
+    def _infer_decisions(self, project_root: Path, metadata: ProjectMetadata | None) -> list[str]:
         """Infer key decisions from project structure."""
         decisions: list[str] = []
 
         # Check for monorepo
         packages_dir = project_root / "packages"
         if packages_dir.is_dir():
-            sub_pkgs = [d.name for d in packages_dir.iterdir() if d.is_dir() and (d / "pyproject.toml").exists()]
+            sub_pkgs = [
+                d.name
+                for d in packages_dir.iterdir()
+                if d.is_dir() and (d / "pyproject.toml").exists()
+            ]
             if sub_pkgs:
                 decisions.append(
                     f"**Monorepo structure** with {len(sub_pkgs)} packages: "

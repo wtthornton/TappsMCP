@@ -436,8 +436,7 @@ class PRDGenerator:
             commits = git_analyzer.get_commits(limit=5)
             if commits:
                 enrichment["git_summary"] = (
-                    f"{len(commits)} recent commits, "
-                    f"latest: {commits[0].message[:50]}"
+                    f"{len(commits)} recent commits, latest: {commits[0].message[:50]}"
                 )
         except Exception:
             logger.debug("prd_auto_populate_git_failed", exc_info=True)

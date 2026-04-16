@@ -55,6 +55,7 @@ def _install_hint(tool_name: str) -> str:
         return f"uv tool install tapps-mcp --with {pkg}"
     return f"pip install {pkg}"
 
+
 # Per-tool timeout overrides for version checks (seconds).
 # mypy can be slow on first run in cold environments.
 _TOOL_TIMEOUTS: dict[str, int] = {"mypy": 20}
@@ -292,7 +293,8 @@ async def _check_tool_async(spec: dict[str, str]) -> InstalledTool:
 
 
 async def detect_installed_tools_async(
-    *, force_refresh: bool = False,
+    *,
+    force_refresh: bool = False,
 ) -> list[InstalledTool]:
     """Probe for known external tools in parallel using async subprocesses.
 

@@ -55,9 +55,7 @@ def _docs_status() -> str:
     # Critical docs check
     from docs_mcp.server import _CRITICAL_DOCS
 
-    existing_basenames = {
-        d["path"].rsplit("/", 1)[-1].lower() for d in all_docs
-    }
+    existing_basenames = {d["path"].rsplit("/", 1)[-1].lower() for d in all_docs}
     existing_paths = {d["path"].lower() for d in all_docs}
 
     critical_docs: dict[str, dict[str, object]] = {}

@@ -105,15 +105,11 @@ class PythonExtractor:
     # Function extraction
     # ------------------------------------------------------------------
 
-    def _extract_function(
-        self, node: ast.FunctionDef | ast.AsyncFunctionDef
-    ) -> FunctionInfo:
+    def _extract_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> FunctionInfo:
         """Extract information from a function or async function definition."""
         decorators = [self._extract_decorator(d) for d in node.decorator_list]
         parameters = self._extract_parameters(node.args)
-        return_annotation = (
-            ast.unparse(node.returns) if node.returns is not None else None
-        )
+        return_annotation = ast.unparse(node.returns) if node.returns is not None else None
         signature = self._build_signature(node, parameters, return_annotation)
 
         return FunctionInfo(
@@ -138,9 +134,7 @@ class PythonExtractor:
 
         # Positional-only parameters
         for i, arg in enumerate(args.posonlyargs):
-            default = self._get_positional_default(
-                i, args.posonlyargs, args.args, args.defaults
-            )
+            default = self._get_positional_default(i, args.posonlyargs, args.args, args.defaults)
             params.append(
                 ParameterInfo(
                     name=arg.arg,
@@ -170,9 +164,7 @@ class PythonExtractor:
                 ParameterInfo(
                     name=args.vararg.arg,
                     annotation=(
-                        ast.unparse(args.vararg.annotation)
-                        if args.vararg.annotation
-                        else None
+                        ast.unparse(args.vararg.annotation) if args.vararg.annotation else None
                     ),
                     kind="VAR_POSITIONAL",
                 )
@@ -198,9 +190,7 @@ class PythonExtractor:
                 ParameterInfo(
                     name=args.kwarg.arg,
                     annotation=(
-                        ast.unparse(args.kwarg.annotation)
-                        if args.kwarg.annotation
-                        else None
+                        ast.unparse(args.kwarg.annotation) if args.kwarg.annotation else None
                     ),
                     kind="VAR_KEYWORD",
                 )
@@ -254,10 +244,7 @@ class PythonExtractor:
             else:
                 if has_posonly and param.kind == "POSITIONAL_OR_KEYWORD":
                     # Insert / separator after positional-only params
-                    if parts and all(
-                        p.kind == "POSITIONAL_ONLY"
-                        for p in parameters[: len(parts)]
-                    ):
+                    if parts and all(p.kind == "POSITIONAL_ONLY" for p in parameters[: len(parts)]):
                         parts.append("/")
                     has_posonly = False
                 parts.append(self._format_param(param))
@@ -394,9 +381,7 @@ class PythonExtractor:
             ):
                 names: list[str] = []
                 for elt in node.value.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(
-                        elt.value, str
-                    ):
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
                         names.append(elt.value)
                 return names
         return None

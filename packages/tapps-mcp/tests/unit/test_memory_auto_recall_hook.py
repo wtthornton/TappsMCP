@@ -17,7 +17,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_hooks import generate_memory_auto_recall_hook
 
-
 # ---------------------------------------------------------------------------
 # Hook template content tests
 # ---------------------------------------------------------------------------

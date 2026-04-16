@@ -10,7 +10,6 @@ from docs_mcp.analyzers.commit_parser import (
     parse_conventional_commit,
 )
 
-
 # ---------------------------------------------------------------------------
 # Model tests
 # ---------------------------------------------------------------------------
@@ -62,9 +61,7 @@ class TestParseConventionalCommit:
         ],
         ids=["feat", "fix", "docs", "chore", "refactor", "test"],
     )
-    def test_type_no_scope(
-        self, message: str, expected_type: str, expected_desc: str
-    ) -> None:
+    def test_type_no_scope(self, message: str, expected_type: str, expected_desc: str) -> None:
         result = parse_conventional_commit(message)
         assert result.type == expected_type
         assert result.scope == ""

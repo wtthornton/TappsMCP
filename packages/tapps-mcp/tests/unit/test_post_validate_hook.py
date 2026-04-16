@@ -5,12 +5,11 @@ from __future__ import annotations
 from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOK_SCRIPTS,
     CLAUDE_HOOK_SCRIPTS_BLOCKING,
-    CLAUDE_HOOK_SCRIPTS_PS,
     CLAUDE_HOOK_SCRIPTS_BLOCKING_PS,
+    CLAUDE_HOOK_SCRIPTS_PS,
     CLAUDE_HOOKS_CONFIG,
     CLAUDE_HOOKS_CONFIG_PS,
 )
-
 
 # ---------------------------------------------------------------------------
 # PostToolUse validate hook template tests
@@ -87,7 +86,7 @@ class TestPostValidateHookConfig:
                 assert hook.get("timeout") == 10
                 break
         else:
-            raise AssertionError("validate_changed matcher not found")  # noqa: TRY003
+            raise AssertionError("validate_changed matcher not found")
 
     def test_ps_config_has_validate_matcher(self) -> None:
         post_tool_entries = CLAUDE_HOOKS_CONFIG_PS["PostToolUse"]
@@ -102,7 +101,7 @@ class TestPostValidateHookConfig:
                 assert hook.get("timeout") == 10
                 break
         else:
-            raise AssertionError("validate_changed PS matcher not found")  # noqa: TRY003
+            raise AssertionError("validate_changed PS matcher not found")
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +203,7 @@ class TestPostReportHookTemplate:
                 assert hook.get("timeout") == 10
                 break
         else:
-            raise AssertionError("tapps_report matcher not found")  # noqa: TRY003
+            raise AssertionError("tapps_report matcher not found")
 
     def test_config_ps_has_report_matcher(self) -> None:
         post_tool_entries = CLAUDE_HOOKS_CONFIG_PS["PostToolUse"]

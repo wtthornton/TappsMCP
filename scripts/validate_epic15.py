@@ -13,8 +13,8 @@ os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 async def main() -> None:
     from tapps_mcp.config.settings import load_settings
-    from tapps_mcp.server_pipeline_tools import tapps_session_start, tapps_validate_changed
     from tapps_mcp.server import tapps_dependency_scan
+    from tapps_mcp.server_pipeline_tools import tapps_session_start, tapps_validate_changed
 
     settings = load_settings()
     root = str(settings.project_root)

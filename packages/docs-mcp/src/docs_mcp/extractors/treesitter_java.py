@@ -184,9 +184,12 @@ class JavaExtractor(TreeSitterExtractor):
                     vname_node = self._child_by_field(child, "name")
                     if vname_node:
                         vname = self._node_text(vname_node, source)
-                        variants.append(ConstantInfo(
-                            name=vname, line=self._node_line(child),
-                        ))
+                        variants.append(
+                            ConstantInfo(
+                                name=vname,
+                                line=self._node_line(child),
+                            )
+                        )
 
         return self._build_class(
             name=name,
@@ -318,12 +321,14 @@ class JavaExtractor(TreeSitterExtractor):
                 name = self._node_text(name_node, source)
                 val_node = self._child_by_field(child, "value")
                 value = self._node_text(val_node, source) if val_node else None
-                fields.append(ConstantInfo(
-                    name=name,
-                    line=self._node_line(node),
-                    value=value,
-                    annotation=annotation,
-                ))
+                fields.append(
+                    ConstantInfo(
+                        name=name,
+                        line=self._node_line(node),
+                        value=value,
+                        annotation=annotation,
+                    )
+                )
         return fields
 
     # ------------------------------------------------------------------

@@ -43,9 +43,7 @@ _MOCK_DIAGNOSTICS = StartupDiagnostics(
         numpy_available=False,
         status="keyword_only",
     ),
-    knowledge_base=KnowledgeBaseDiagnostic(
-        total_domains=0, total_files=0, expected_domains=16
-    ),
+    knowledge_base=KnowledgeBaseDiagnostic(total_domains=0, total_files=0, expected_domains=16),
 )
 
 
@@ -390,9 +388,7 @@ class TestTappsValidateChanged:
         assert result["data"]["files_validated"] == 1
 
     @pytest.mark.asyncio
-    async def test_no_progress_when_ctx_lacks_report_progress(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_no_progress_when_ctx_lacks_report_progress(self, tmp_path: Path) -> None:
         """Tool completes when ctx exists but has no report_progress attribute."""
         from tapps_mcp.scoring.models import ScoreResult
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
@@ -461,9 +457,7 @@ class TestTappsValidateChanged:
         mock_report.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_no_python_files_from_git_fast_path_no_session_init(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_no_python_files_from_git_fast_path_no_session_init(self, tmp_path: Path) -> None:
         """When git returns only non-Python files, return immediately without session init.
         Guards against stall when all changes are committed and diff has no .py files.
         """
@@ -538,9 +532,7 @@ class TestTappsValidateChanged:
         assert "warnings" not in result["data"]
 
     @pytest.mark.asyncio
-    async def test_explicit_non_python_files_returns_fast_no_scorer(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_explicit_non_python_files_returns_fast_no_scorer(self, tmp_path: Path) -> None:
         """Explicit file_paths with only non-Python files returns immediately without scorer.
         Prevents stall when client passes changed file list that contains only .json/.md etc.
         """
@@ -684,9 +676,7 @@ class TestTappsValidateChanged:
         mock_scorer.score_file = AsyncMock(return_value=mock_score)
 
         mock_gate = MagicMock(passed=True, failures=[])
-        mock_secret_result = SecretScanResult(
-            total_findings=0, high_severity=0, scanned_files=1
-        )
+        mock_secret_result = SecretScanResult(total_findings=0, high_severity=0, scanned_files=1)
         mock_scanner_instance = MagicMock()
         mock_scanner_instance.scan_file.return_value = mock_secret_result
 
@@ -703,16 +693,12 @@ class TestTappsValidateChanged:
             mock_settings.return_value.project_root = tmp_path
             mock_settings.return_value.tool_timeout = 30
             mock_settings.return_value.dependency_scan_enabled = False
-            await tapps_validate_changed(
-                file_paths=str(f), include_security=True, quick=False
-            )
+            await tapps_validate_changed(file_paths=str(f), include_security=True, quick=False)
 
         mock_scanner_instance.scan_file.assert_called_once_with(str(f))
 
     @pytest.mark.asyncio
-    async def test_individual_file_error_doesnt_abort_batch(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_individual_file_error_doesnt_abort_batch(self, tmp_path: Path) -> None:
         """One file raising an exception doesn't prevent others from validating."""
         from tapps_mcp.scoring.models import ScoreResult
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
@@ -791,9 +777,7 @@ class TestTappsValidateChanged:
         mock_scorer.score_file = AsyncMock(return_value=mock_score)
 
         mock_gate = MagicMock(passed=True, failures=[])
-        mock_secret_result = SecretScanResult(
-            total_findings=1, high_severity=1, scanned_files=1
-        )
+        mock_secret_result = SecretScanResult(total_findings=1, high_severity=1, scanned_files=1)
         mock_scanner_instance = MagicMock()
         mock_scanner_instance.scan_file.return_value = mock_secret_result
 
@@ -978,8 +962,15 @@ class TestTappsQuickCheck:
         cats = result["data"]["quick_categories"]
         assert isinstance(cats, dict)
         # Should have all 7 weighted categories
-        expected = {"complexity", "security", "maintainability", "test_coverage",
-                    "performance", "structure", "devex"}
+        expected = {
+            "complexity",
+            "security",
+            "maintainability",
+            "test_coverage",
+            "performance",
+            "structure",
+            "devex",
+        }
         assert set(cats.keys()) == expected
 
     @pytest.mark.asyncio
@@ -1018,9 +1009,7 @@ class TestTappsQuickCheck:
         from tapps_mcp.tools.checklist import CallTracker
 
         CallTracker.record("tapps_session_start")
-        with patch(
-            "tapps_mcp.server_scoring_tools._get_scorer_for_file"
-        ) as mock_scorer_fn:
+        with patch("tapps_mcp.server_scoring_tools._get_scorer_for_file") as mock_scorer_fn:
             mock_scorer = MagicMock()
             mock_scorer.language = "python"
             mock_scorer.score_file_quick_enriched.return_value = low_result
@@ -1291,9 +1280,7 @@ class TestTappsQuickCheckBatch:
         mock_settings.return_value.quality_preset = "standard"
         mock_settings.return_value.tool_timeout = 30
 
-        result = await tapps_quick_check(
-            file_path="", file_paths=f"{f1},{f2}"
-        )
+        result = await tapps_quick_check(file_path="", file_paths=f"{f1},{f2}")
         assert result["success"] is True
         data = result["data"]
         assert data["files_checked"] == 2
@@ -1332,9 +1319,7 @@ class TestTappsQuickCheckBatch:
         mock_settings.return_value.quality_preset = "standard"
         mock_settings.return_value.tool_timeout = 30
 
-        result = await tapps_quick_check(
-            file_path="", file_paths=f"{f_good},/nonexistent/bad.py"
-        )
+        result = await tapps_quick_check(file_path="", file_paths=f"{f_good},/nonexistent/bad.py")
         assert result["success"] is True
         data = result["data"]
         assert data["files_checked"] == 2
@@ -1364,9 +1349,7 @@ class TestTappsQuickCheckBatch:
         mock_settings.return_value.quality_preset = "standard"
         mock_settings.return_value.tool_timeout = 30
 
-        result = await tapps_quick_check(
-            file_path="/ignored/single.py", file_paths=str(f)
-        )
+        result = await tapps_quick_check(file_path="/ignored/single.py", file_paths=str(f))
         assert result["success"] is True
         data = result["data"]
         assert "files_checked" in data
@@ -1382,9 +1365,7 @@ class TestValidateChangedCorrelationId:
     """Tests for optional correlation_id parameter on tapps_validate_changed."""
 
     @pytest.mark.asyncio
-    async def test_validate_changed_correlation_id_no_changed_files(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_validate_changed_correlation_id_no_changed_files(self, tmp_path: Path) -> None:
         """correlation_id is included even when no files are changed."""
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 

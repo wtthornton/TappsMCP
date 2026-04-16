@@ -120,7 +120,9 @@ class LlmsTxtGenerator:
         )
 
     def _title_section(
-        self, project_name: str, metadata: ProjectMetadata,
+        self,
+        project_name: str,
+        metadata: ProjectMetadata,
     ) -> LlmsTxtSection:
         """Generate the title/overview section."""
         lines = [f"# {project_name}"]
@@ -139,7 +141,9 @@ class LlmsTxtGenerator:
         return LlmsTxtSection(heading="Title", content="\n".join(lines))
 
     def _tech_stack_section(
-        self, project_root: Path, metadata: ProjectMetadata,
+        self,
+        project_root: Path,
+        metadata: ProjectMetadata,
     ) -> LlmsTxtSection:
         """Detect and list the technology stack."""
         techs: list[str] = []
@@ -190,7 +194,9 @@ class LlmsTxtGenerator:
         return LlmsTxtSection(heading="Tech Stack", content="\n".join(lines))
 
     def _entry_points_section(
-        self, project_root: Path, metadata: ProjectMetadata,
+        self,
+        project_root: Path,
+        metadata: ProjectMetadata,
     ) -> LlmsTxtSection:
         """List project entry points from metadata and common patterns."""
         entries: list[str] = []
@@ -218,11 +224,23 @@ class LlmsTxtGenerator:
     def _key_files_section(self, project_root: Path) -> LlmsTxtSection:
         """List key project files that AI assistants should know about."""
         key_patterns = [
-            "README.md", "CLAUDE.md", "AGENTS.md", "CONTRIBUTING.md",
-            "CHANGELOG.md", "LICENSE", "pyproject.toml", "package.json",
-            "Cargo.toml", "go.mod", "Makefile", "Dockerfile",
-            "docker-compose.yml", "docker-compose.yaml",
-            ".env.example", "setup.cfg", "setup.py",
+            "README.md",
+            "CLAUDE.md",
+            "AGENTS.md",
+            "CONTRIBUTING.md",
+            "CHANGELOG.md",
+            "LICENSE",
+            "pyproject.toml",
+            "package.json",
+            "Cargo.toml",
+            "go.mod",
+            "Makefile",
+            "Dockerfile",
+            "docker-compose.yml",
+            "docker-compose.yaml",
+            ".env.example",
+            "setup.cfg",
+            "setup.py",
         ]
         found: list[str] = []
         for pattern in key_patterns:
@@ -276,7 +294,9 @@ class LlmsTxtGenerator:
         return LlmsTxtSection(heading="Documentation Map", content="\n".join(lines))
 
     def _api_summary_section(
-        self, project_root: Path, module_map: object | None,
+        self,
+        project_root: Path,
+        module_map: object | None,
     ) -> LlmsTxtSection:
         """Summarise the public API surface (full mode only)."""
         if module_map is None:
@@ -300,9 +320,19 @@ class LlmsTxtGenerator:
     def _project_structure_section(self, project_root: Path) -> LlmsTxtSection:
         """Show top-level project structure (full mode only)."""
         skip = {
-            "__pycache__", ".git", ".venv", "venv", "node_modules",
-            ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache",
-            "dist", "build", ".eggs", "site-packages",
+            "__pycache__",
+            ".git",
+            ".venv",
+            "venv",
+            "node_modules",
+            ".tox",
+            ".mypy_cache",
+            ".pytest_cache",
+            ".ruff_cache",
+            "dist",
+            "build",
+            ".eggs",
+            "site-packages",
         }
         lines = ["## Project Structure", "", "```"]
         entries: list[str] = []

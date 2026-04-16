@@ -225,12 +225,8 @@ def hello():
     def test_build_result_severity_counts(self) -> None:
         findings = [
             SecretFinding(file_path="t.py", line_number=1, secret_type="api_key", severity="high"),
-            SecretFinding(
-                file_path="t.py", line_number=2, secret_type="token", severity="medium"
-            ),
-            SecretFinding(
-                file_path="t.py", line_number=3, secret_type="password", severity="low"
-            ),
+            SecretFinding(file_path="t.py", line_number=2, secret_type="token", severity="medium"),
+            SecretFinding(file_path="t.py", line_number=3, secret_type="password", severity="low"),
         ]
         result = SecretScanner._build_result(findings)
         assert result.high_severity == 1

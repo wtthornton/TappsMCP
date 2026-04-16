@@ -59,12 +59,18 @@ class TestConsolidateAction:
     async def test_consolidate_no_similar_entries(self, mock_store) -> None:
         """Consolidate fails when entries are not similar."""
         await tapps_memory(
-            action="save", key="database-config", value="Use PostgreSQL",
-            tier="architectural", tags="database",
+            action="save",
+            key="database-config",
+            value="Use PostgreSQL",
+            tier="architectural",
+            tags="database",
         )
         await tapps_memory(
-            action="save", key="ui-framework", value="Use React",
-            tier="pattern", tags="frontend,ui",
+            action="save",
+            key="ui-framework",
+            value="Use React",
+            tier="pattern",
+            tags="frontend,ui",
         )
 
         result = await tapps_memory(action="consolidate")
@@ -81,12 +87,18 @@ class TestConsolidateWithEntryIds:
     async def test_consolidate_explicit_ids_success(self, mock_store) -> None:
         """Consolidate specific entries by IDs."""
         await tapps_memory(
-            action="save", key="db-choice-1", value="Use PostgreSQL for main database",
-            tier="architectural", tags="database",
+            action="save",
+            key="db-choice-1",
+            value="Use PostgreSQL for main database",
+            tier="architectural",
+            tags="database",
         )
         await tapps_memory(
-            action="save", key="db-choice-2", value="PostgreSQL with read replicas",
-            tier="architectural", tags="database",
+            action="save",
+            key="db-choice-2",
+            value="PostgreSQL with read replicas",
+            tier="architectural",
+            tags="database",
         )
 
         result = await tapps_memory(
@@ -136,16 +148,25 @@ class TestConsolidateWithQuery:
     async def test_consolidate_query_success(self, mock_store) -> None:
         """Consolidate entries found by query."""
         await tapps_memory(
-            action="save", key="auth-jwt", value="Use JWT for authentication tokens",
-            tier="pattern", tags="auth,security",
+            action="save",
+            key="auth-jwt",
+            value="Use JWT for authentication tokens",
+            tier="pattern",
+            tags="auth,security",
         )
         await tapps_memory(
-            action="save", key="auth-session", value="JWT tokens stored in session",
-            tier="pattern", tags="auth,session",
+            action="save",
+            key="auth-session",
+            value="JWT tokens stored in session",
+            tier="pattern",
+            tags="auth,session",
         )
         await tapps_memory(
-            action="save", key="unrelated", value="Use blue theme",
-            tier="context", tags="ui",
+            action="save",
+            key="unrelated",
+            value="Use blue theme",
+            tier="context",
+            tags="ui",
         )
 
         result = await tapps_memory(
@@ -179,12 +200,18 @@ class TestConsolidateDryRun:
     async def test_dry_run_preview_explicit_ids(self, mock_store) -> None:
         """Dry run previews consolidation without making changes."""
         await tapps_memory(
-            action="save", key="cache-redis-1", value="Use Redis for caching",
-            tier="pattern", tags="cache,redis",
+            action="save",
+            key="cache-redis-1",
+            value="Use Redis for caching",
+            tier="pattern",
+            tags="cache,redis",
         )
         await tapps_memory(
-            action="save", key="cache-redis-2", value="Redis with 1h TTL",
-            tier="pattern", tags="cache,redis",
+            action="save",
+            key="cache-redis-2",
+            value="Redis with 1h TTL",
+            tier="pattern",
+            tags="cache,redis",
         )
 
         result = await tapps_memory(
@@ -206,12 +233,18 @@ class TestConsolidateDryRun:
     async def test_dry_run_shows_source_entries(self, mock_store) -> None:
         """Dry run includes source entry details."""
         await tapps_memory(
-            action="save", key="e1", value="Entry 1",
-            tier="architectural", tags="test",
+            action="save",
+            key="e1",
+            value="Entry 1",
+            tier="architectural",
+            tags="test",
         )
         await tapps_memory(
-            action="save", key="e2", value="Entry 2",
-            tier="pattern", tags="test",
+            action="save",
+            key="e2",
+            value="Entry 2",
+            tier="pattern",
+            tags="test",
         )
 
         result = await tapps_memory(
@@ -235,16 +268,25 @@ class TestConsolidateAutoDiscovery:
         """Auto-discovery finds and consolidates similar entries."""
         # Create multiple similar entries
         await tapps_memory(
-            action="save", key="api-rest-1", value="Use REST for API",
-            tier="architectural", tags="api",
+            action="save",
+            key="api-rest-1",
+            value="Use REST for API",
+            tier="architectural",
+            tags="api",
         )
         await tapps_memory(
-            action="save", key="api-rest-2", value="REST API with versioning",
-            tier="architectural", tags="api",
+            action="save",
+            key="api-rest-2",
+            value="REST API with versioning",
+            tier="architectural",
+            tags="api",
         )
         await tapps_memory(
-            action="save", key="api-rest-3", value="REST endpoints follow naming",
-            tier="architectural", tags="api",
+            action="save",
+            key="api-rest-3",
+            value="REST endpoints follow naming",
+            tier="architectural",
+            tags="api",
         )
 
         result = await tapps_memory(action="consolidate")
@@ -263,12 +305,18 @@ class TestConsolidateProvenance:
     async def test_consolidated_entry_has_source_keys(self, mock_store) -> None:
         """Consolidated entry tracks source keys."""
         await tapps_memory(
-            action="save", key="src1", value="Source value 1",
-            tier="pattern", tags="test",
+            action="save",
+            key="src1",
+            value="Source value 1",
+            tier="pattern",
+            tags="test",
         )
         await tapps_memory(
-            action="save", key="src2", value="Source value 2",
-            tier="pattern", tags="test",
+            action="save",
+            key="src2",
+            value="Source value 2",
+            tier="pattern",
+            tags="test",
         )
 
         result = await tapps_memory(
@@ -284,12 +332,18 @@ class TestConsolidateProvenance:
     async def test_source_entries_marked_contradicted(self, mock_store) -> None:
         """Source entries are marked as contradicted after consolidation."""
         await tapps_memory(
-            action="save", key="old1", value="Old value 1",
-            tier="pattern", tags="test",
+            action="save",
+            key="old1",
+            value="Old value 1",
+            tier="pattern",
+            tags="test",
         )
         await tapps_memory(
-            action="save", key="old2", value="Old value 2",
-            tier="pattern", tags="test",
+            action="save",
+            key="old2",
+            value="Old value 2",
+            tier="pattern",
+            tags="test",
         )
 
         result = await tapps_memory(
@@ -307,12 +361,20 @@ class TestConsolidateProvenance:
     async def test_consolidated_confidence_is_weighted(self, mock_store) -> None:
         """Consolidated entry has weighted confidence."""
         await tapps_memory(
-            action="save", key="high-conf", value="High confidence",
-            tier="pattern", tags="test", confidence=0.9,
+            action="save",
+            key="high-conf",
+            value="High confidence",
+            tier="pattern",
+            tags="test",
+            confidence=0.9,
         )
         await tapps_memory(
-            action="save", key="low-conf", value="Low confidence",
-            tier="pattern", tags="test", confidence=0.5,
+            action="save",
+            key="low-conf",
+            value="Low confidence",
+            tier="pattern",
+            tags="test",
+            confidence=0.5,
         )
 
         result = await tapps_memory(
@@ -333,12 +395,18 @@ class TestConsolidateReason:
     async def test_same_topic_reason(self, mock_store) -> None:
         """Detects same_topic consolidation reason."""
         await tapps_memory(
-            action="save", key="topic1", value="Topic content A",
-            tier="architectural", tags="same-tag",
+            action="save",
+            key="topic1",
+            value="Topic content A",
+            tier="architectural",
+            tags="same-tag",
         )
         await tapps_memory(
-            action="save", key="topic2", value="Topic content B",
-            tier="architectural", tags="same-tag",
+            action="save",
+            key="topic2",
+            value="Topic content B",
+            tier="architectural",
+            tags="same-tag",
         )
 
         result = await tapps_memory(
@@ -351,7 +419,10 @@ class TestConsolidateReason:
             assert "consolidation_reason" in result["data"]
             # Reason could be same_topic, similarity, or manual
             assert result["data"]["consolidation_reason"] in (
-                "same_topic", "similarity", "supersession", "manual",
+                "same_topic",
+                "similarity",
+                "supersession",
+                "manual",
             )
 
 
@@ -370,12 +441,18 @@ class TestConsolidateEdgeCases:
     async def test_consolidate_already_consolidated_skipped(self, mock_store) -> None:
         """Already-consolidated entries are skipped."""
         await tapps_memory(
-            action="save", key="e1", value="Entry 1",
-            tier="pattern", tags="test",
+            action="save",
+            key="e1",
+            value="Entry 1",
+            tier="pattern",
+            tags="test",
         )
         await tapps_memory(
-            action="save", key="e2", value="Entry 2",
-            tier="pattern", tags="test",
+            action="save",
+            key="e2",
+            value="Entry 2",
+            tier="pattern",
+            tags="test",
         )
 
         # First consolidation
@@ -395,16 +472,25 @@ class TestConsolidateEdgeCases:
     async def test_consolidate_with_tags_filter(self, mock_store) -> None:
         """Consolidate respects tag filtering in search."""
         await tapps_memory(
-            action="save", key="tagged1", value="Tagged value 1",
-            tier="pattern", tags="specific-tag",
+            action="save",
+            key="tagged1",
+            value="Tagged value 1",
+            tier="pattern",
+            tags="specific-tag",
         )
         await tapps_memory(
-            action="save", key="tagged2", value="Tagged value 2",
-            tier="pattern", tags="specific-tag",
+            action="save",
+            key="tagged2",
+            value="Tagged value 2",
+            tier="pattern",
+            tags="specific-tag",
         )
         await tapps_memory(
-            action="save", key="other", value="Other value",
-            tier="pattern", tags="different",
+            action="save",
+            key="other",
+            value="Other value",
+            tier="pattern",
+            tags="different",
         )
 
         # Query should find tagged entries

@@ -17,12 +17,26 @@ from pydantic import BaseModel
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 # Directories to skip when scanning.
-_SKIP_DIRS: frozenset[str] = frozenset({
-    ".git", ".hg", ".svn", "__pycache__", "node_modules",
-    ".venv", "venv", ".env", ".tox", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", "dist", "build",
-    ".eggs", ".tapps-mcp",
-})
+_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".env",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".eggs",
+        ".tapps-mcp",
+    }
+)
 
 # Documentation file extensions.
 _DOC_EXTENSIONS: frozenset[str] = frozenset({".md", ".rst", ".txt"})
@@ -62,10 +76,19 @@ class CrossRefValidator:
     """
 
     # Files that are allowed to be orphans (typically entry points)
-    _ENTRY_POINT_NAMES: ClassVar[frozenset[str]] = frozenset({
-        "readme", "index", "changelog", "license", "contributing",
-        "code_of_conduct", "security", "agents", "claude",
-    })
+    _ENTRY_POINT_NAMES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "readme",
+            "index",
+            "changelog",
+            "license",
+            "contributing",
+            "code_of_conduct",
+            "security",
+            "agents",
+            "claude",
+        }
+    )
 
     def validate(
         self,
@@ -86,9 +109,13 @@ class CrossRefValidator:
         """
         if not project_root.is_dir():
             return CrossRefReport(
-                issues=[], total_files=0, total_refs=0,
-                orphan_count=0, broken_count=0,
-                missing_backlink_count=0, score=100,
+                issues=[],
+                total_files=0,
+                total_refs=0,
+                orphan_count=0,
+                broken_count=0,
+                missing_backlink_count=0,
+                score=100,
             )
 
         # Collect all doc files
@@ -108,13 +135,18 @@ class CrossRefValidator:
 
         if not doc_files:
             return CrossRefReport(
-                issues=[], total_files=0, total_refs=0,
-                orphan_count=0, broken_count=0,
-                missing_backlink_count=0, score=100,
+                issues=[],
+                total_files=0,
+                total_refs=0,
+                orphan_count=0,
+                broken_count=0,
+                missing_backlink_count=0,
+                score=100,
             )
 
         ref_graph, total_refs, issues = self._build_ref_graph(
-            doc_files, project_root,
+            doc_files,
+            project_root,
         )
 
         orphan_count = self._find_orphans(doc_files, ref_graph, issues)
@@ -169,12 +201,14 @@ class CrossRefValidator:
                 if normalized not in doc_files:
                     target_path = project_root / normalized
                     if not target_path.exists():
-                        issues.append(CrossRefIssue(
-                            source_file=rel_path,
-                            issue_type="broken_ref",
-                            target=normalized,
-                            message=f"Reference to '{normalized}' but file does not exist",
-                        ))
+                        issues.append(
+                            CrossRefIssue(
+                                source_file=rel_path,
+                                issue_type="broken_ref",
+                                target=normalized,
+                                message=f"Reference to '{normalized}' but file does not exist",
+                            )
+                        )
 
         return ref_graph, total_refs, issues
 
@@ -194,11 +228,13 @@ class CrossRefValidator:
             if rel_path not in linked_files:
                 stem = Path(rel_path).stem.lower()
                 if stem not in self._ENTRY_POINT_NAMES:
-                    issues.append(CrossRefIssue(
-                        source_file=rel_path,
-                        issue_type="orphan",
-                        message=f"'{rel_path}' is not linked from any other document",
-                    ))
+                    issues.append(
+                        CrossRefIssue(
+                            source_file=rel_path,
+                            issue_type="orphan",
+                            message=f"'{rel_path}' is not linked from any other document",
+                        )
+                    )
                     orphan_count += 1
         return orphan_count
 
@@ -218,21 +254,21 @@ class CrossRefValidator:
                         source_stem not in self._ENTRY_POINT_NAMES
                         and target_stem not in self._ENTRY_POINT_NAMES
                     ):
-                        issues.append(CrossRefIssue(
-                            source_file=source,
-                            issue_type="missing_backlink",
-                            target=target,
-                            message=(
-                                f"'{source}' links to '{target}' but "
-                                f"'{target}' does not link back"
-                            ),
-                        ))
+                        issues.append(
+                            CrossRefIssue(
+                                source_file=source,
+                                issue_type="missing_backlink",
+                                target=target,
+                                message=(
+                                    f"'{source}' links to '{target}' but "
+                                    f"'{target}' does not link back"
+                                ),
+                            )
+                        )
                         missing_backlink_count += 1
         return missing_backlink_count
 
-    def _collect_docs(
-        self, project_root: Path, scan_dir: Path, doc_files: set[str]
-    ) -> None:
+    def _collect_docs(self, project_root: Path, scan_dir: Path, doc_files: set[str]) -> None:
         """Recursively collect documentation files."""
         try:
             for item in scan_dir.iterdir():
@@ -246,9 +282,7 @@ class CrossRefValidator:
         except PermissionError:
             pass
 
-    def _extract_refs(
-        self, content: str, source_path: str, project_root: Path
-    ) -> list[str]:
+    def _extract_refs(self, content: str, source_path: str, project_root: Path) -> list[str]:
         """Extract documentation references from content."""
         refs: list[str] = []
         in_code_block = False

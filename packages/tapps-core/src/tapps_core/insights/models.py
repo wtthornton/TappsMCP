@@ -24,7 +24,6 @@ from enum import StrEnum
 from typing import Literal
 
 from pydantic import Field
-
 from tapps_brain.models import MemoryEntry
 
 # ---------------------------------------------------------------------------

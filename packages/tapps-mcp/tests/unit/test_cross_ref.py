@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from tapps_mcp.scoring.cross_ref import (
     CrossRefResult,
     _extract_call_kwargs,
@@ -14,19 +12,21 @@ from tapps_mcp.scoring.cross_ref import (
     analyze_cross_references,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helper: parse AST from string
 # ---------------------------------------------------------------------------
 
+
 def _parse(code: str):
     import ast
+
     return ast.parse(code)
 
 
 # ---------------------------------------------------------------------------
 # Tests for _extract_imports
 # ---------------------------------------------------------------------------
+
 
 class TestExtractImports:
     def test_import_module(self) -> None:
@@ -54,6 +54,7 @@ class TestExtractImports:
 # ---------------------------------------------------------------------------
 # Tests for _extract_call_kwargs
 # ---------------------------------------------------------------------------
+
 
 class TestExtractCallKwargs:
     def test_call_with_kwargs(self) -> None:
@@ -85,6 +86,7 @@ class TestExtractCallKwargs:
 # Tests for _extract_function_params
 # ---------------------------------------------------------------------------
 
+
 class TestExtractFunctionParams:
     def test_simple_params(self) -> None:
         tree = _parse("def foo(a, b, c): pass")
@@ -111,6 +113,7 @@ class TestExtractFunctionParams:
 # ---------------------------------------------------------------------------
 # Tests for analyze_cross_references
 # ---------------------------------------------------------------------------
+
 
 class TestAnalyzeCrossReferences:
     def test_no_calls_returns_full(self, tmp_path: Path) -> None:
@@ -145,8 +148,7 @@ class TestAnalyzeCrossReferences:
         # Create caller
         caller = tmp_path / "caller.py"
         caller.write_text(
-            "from mymod.helper import generate\n"
-            "generate(user_id=1, context='x', query_id=2)\n",
+            "from mymod.helper import generate\ngenerate(user_id=1, context='x', query_id=2)\n",
             encoding="utf-8",
         )
 
@@ -169,8 +171,7 @@ class TestAnalyzeCrossReferences:
 
         caller = tmp_path / "caller.py"
         caller.write_text(
-            "from mymod.flexible import do_stuff\n"
-            "do_stuff(any_kwarg=1, another=2)\n",
+            "from mymod.flexible import do_stuff\ndo_stuff(any_kwarg=1, another=2)\n",
             encoding="utf-8",
         )
 
@@ -189,8 +190,7 @@ class TestAnalyzeCrossReferences:
 
         caller = tmp_path / "caller.py"
         caller.write_text(
-            "from mymod.exact import process\n"
-            "process(name='test', value=42)\n",
+            "from mymod.exact import process\nprocess(name='test', value=42)\n",
             encoding="utf-8",
         )
 
@@ -201,8 +201,7 @@ class TestAnalyzeCrossReferences:
         """Imports that can't be resolved set status to degraded/partial."""
         caller = tmp_path / "caller.py"
         caller.write_text(
-            "from nonexistent_package import func\n"
-            "func(bad_kwarg=1)\n",
+            "from nonexistent_package import func\nfunc(bad_kwarg=1)\n",
             encoding="utf-8",
         )
 

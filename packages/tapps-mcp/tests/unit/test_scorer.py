@@ -597,6 +597,7 @@ class TestSuggestionsInScoring:
             mock_tools.return_value = parallel
             # Clear dependency cache so a perfect file has no dependency suggestions
             from tapps_mcp.tools.dependency_scan_cache import clear_dependency_cache
+
             clear_dependency_cache()
             scorer = CodeScorer()
             result = await scorer.score_file(f)
@@ -624,8 +625,14 @@ class TestScoreFileQuickEnriched:
         scorer = CodeScorer()
         result = scorer.score_file_quick_enriched(f)
         expected = {
-            "complexity", "security", "maintainability", "test_coverage",
-            "performance", "structure", "devex", "linting",
+            "complexity",
+            "security",
+            "maintainability",
+            "test_coverage",
+            "performance",
+            "structure",
+            "devex",
+            "linting",
         }
         assert set(result.categories.keys()) == expected
 
@@ -868,7 +875,13 @@ class TestPerformanceCategoryScoring:
         scorer = CodeScorer()
         parallel = ParallelResults(
             radon_hal=[
-                {"name": "big_func", "volume": 4000.0, "difficulty": 40.0, "effort": 200000.0, "bugs": 2.0},
+                {
+                    "name": "big_func",
+                    "volume": 4000.0,
+                    "difficulty": 40.0,
+                    "effort": 200000.0,
+                    "bugs": 2.0,
+                },
             ]
         )
         code = "def f():\n    return 1"
@@ -898,7 +911,9 @@ class TestPerformanceCategoryScoring:
 
         scorer = CodeScorer()
         parallel = ParallelResults(
-            radon_hal=[{"name": "f", "volume": 4000.0, "difficulty": 5.0, "effort": 100.0, "bugs": 0.01}],
+            radon_hal=[
+                {"name": "f", "volume": 4000.0, "difficulty": 5.0, "effort": 100.0, "bugs": 0.01}
+            ],
             perflint=[PerflintFinding(code="W8101", symbol="unnecessary-list-cast")],
         )
         # Code with nested loops → AST penalty

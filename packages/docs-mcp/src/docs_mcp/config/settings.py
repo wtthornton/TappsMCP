@@ -92,11 +92,14 @@ class DocsMCPSettings(BaseSettings):
     # Style checking (Epic 84)
     style_enabled_rules: list[str] = Field(
         default_factory=lambda: [
-            "passive_voice", "jargon", "sentence_length",
-            "heading_consistency", "tense_consistency",
+            "passive_voice",
+            "jargon",
+            "sentence_length",
+            "heading_consistency",
+            "tense_consistency",
         ],
         description="Style rules to enable. Available: passive_voice, jargon, "
-                    "sentence_length, heading_consistency, tense_consistency.",
+        "sentence_length, heading_consistency, tense_consistency.",
     )
     style_heading: Literal["sentence", "title"] = Field(
         default="sentence",

@@ -10,11 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from docs_mcp.generators.adr import ADRGenerator, ADRRecord
 from tests.helpers import make_settings as _make_settings
-
 
 # ---------------------------------------------------------------------------
 # ADRRecord model
@@ -302,7 +299,11 @@ class TestADRGeneratorIndex:
         assert "# Architecture Decision Records" in index
         assert "| Number | Title | Status | Date |" in index
         # No data rows
-        lines = [l for l in index.strip().splitlines() if l.startswith("| ") and "Number" not in l and "---" not in l]
+        lines = [
+            l
+            for l in index.strip().splitlines()
+            if l.startswith("| ") and "Number" not in l and "---" not in l
+        ]
         assert len(lines) == 0
 
     def test_index_nonexistent_dir(self, tmp_path: Path) -> None:

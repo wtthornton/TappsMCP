@@ -6,12 +6,10 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
 from tapps_brain.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
 
 from tapps_core.insights.client import InsightClient
 from tapps_core.insights.models import InsightEntry, InsightOrigin, InsightType
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -31,7 +29,9 @@ class FakeStore:
         return list(self._results)
 
 
-def _make_client(tmp_path: Path, *, store: FakeStore | None = None) -> tuple[InsightClient, FakeStore]:
+def _make_client(
+    tmp_path: Path, *, store: FakeStore | None = None
+) -> tuple[InsightClient, FakeStore]:
     fake = store or FakeStore()
     client = InsightClient(tmp_path)
     client._store = fake

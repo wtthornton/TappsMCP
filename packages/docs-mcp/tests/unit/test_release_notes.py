@@ -39,63 +39,91 @@ class TestReleaseNotesModel:
 
 class TestReleaseNotesGeneration:
     def test_features_extracted(self, generator: ReleaseNotesGenerator) -> None:
-        vb = _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-            _commit("feat: add user dashboard"),
-            _commit("feat(api): add REST endpoints"),
-        ])
+        vb = _version(
+            "1.0.0",
+            "2026-01-15T00:00:00+00:00",
+            [
+                _commit("feat: add user dashboard"),
+                _commit("feat(api): add REST endpoints"),
+            ],
+        )
         notes = generator.generate(vb)
         assert len(notes.features) == 2
         assert "add user dashboard" in notes.features[0]
         assert "**api:**" in notes.features[1]
 
     def test_fixes_extracted(self, generator: ReleaseNotesGenerator) -> None:
-        vb = _version("1.0.1", "2026-01-20T00:00:00+00:00", [
-            _commit("fix: resolve crash on login"),
-            _commit("fix(db): connection timeout"),
-        ])
+        vb = _version(
+            "1.0.1",
+            "2026-01-20T00:00:00+00:00",
+            [
+                _commit("fix: resolve crash on login"),
+                _commit("fix(db): connection timeout"),
+            ],
+        )
         notes = generator.generate(vb)
         assert len(notes.fixes) == 2
 
     def test_breaking_changes_listed(self, generator: ReleaseNotesGenerator) -> None:
-        vb = _version("2.0.0", "2026-02-01T00:00:00+00:00", [
-            _commit("feat!: redesign API contract"),
-        ])
+        vb = _version(
+            "2.0.0",
+            "2026-02-01T00:00:00+00:00",
+            [
+                _commit("feat!: redesign API contract"),
+            ],
+        )
         notes = generator.generate(vb)
         assert len(notes.breaking_changes) == 1
         assert "redesign API contract" in notes.breaking_changes[0]
 
     def test_contributors_extracted(self, generator: ReleaseNotesGenerator) -> None:
-        vb = _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-            _commit("feat: feature A", author="Alice"),
-            _commit("fix: fix B", author="Bob"),
-            _commit("feat: feature C", author="Alice"),
-        ])
+        vb = _version(
+            "1.0.0",
+            "2026-01-15T00:00:00+00:00",
+            [
+                _commit("feat: feature A", author="Alice"),
+                _commit("fix: fix B", author="Bob"),
+                _commit("feat: feature C", author="Alice"),
+            ],
+        )
         notes = generator.generate(vb)
         assert sorted(notes.contributors) == ["Alice", "Bob"]
 
     def test_highlights_from_features(self, generator: ReleaseNotesGenerator) -> None:
-        vb = _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-            _commit("feat: dashboard"),
-            _commit("feat: reports"),
-        ])
+        vb = _version(
+            "1.0.0",
+            "2026-01-15T00:00:00+00:00",
+            [
+                _commit("feat: dashboard"),
+                _commit("feat: reports"),
+            ],
+        )
         notes = generator.generate(vb)
         assert len(notes.highlights) >= 1
         assert len(notes.highlights) <= 5
 
     def test_highlights_prioritize_breaking(self, generator: ReleaseNotesGenerator) -> None:
-        vb = _version("2.0.0", "2026-02-01T00:00:00+00:00", [
-            _commit("feat!: redesign API"),
-            _commit("feat: new feature"),
-        ])
+        vb = _version(
+            "2.0.0",
+            "2026-02-01T00:00:00+00:00",
+            [
+                _commit("feat!: redesign API"),
+                _commit("feat: new feature"),
+            ],
+        )
         notes = generator.generate(vb)
         assert notes.highlights[0].startswith("BREAKING:")
 
     def test_other_changes_captured(self, generator: ReleaseNotesGenerator) -> None:
-        vb = _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-            _commit("docs: update readme"),
-            _commit("refactor: clean up code"),
-            _commit("chore: update deps"),
-        ])
+        vb = _version(
+            "1.0.0",
+            "2026-01-15T00:00:00+00:00",
+            [
+                _commit("docs: update readme"),
+                _commit("refactor: clean up code"),
+                _commit("chore: update deps"),
+            ],
+        )
         notes = generator.generate(vb)
         assert len(notes.other_changes) == 3
 
@@ -115,12 +143,20 @@ class TestReleaseNotesGeneration:
 
     def test_generate_from_versions_latest(self, generator: ReleaseNotesGenerator) -> None:
         versions = [
-            _version("2.0.0", "2026-02-15T00:00:00+00:00", [
-                _commit("feat: v2 feature"),
-            ]),
-            _version("1.0.0", "2026-01-01T00:00:00+00:00", [
-                _commit("feat: v1 feature"),
-            ]),
+            _version(
+                "2.0.0",
+                "2026-02-15T00:00:00+00:00",
+                [
+                    _commit("feat: v2 feature"),
+                ],
+            ),
+            _version(
+                "1.0.0",
+                "2026-01-01T00:00:00+00:00",
+                [
+                    _commit("feat: v1 feature"),
+                ],
+            ),
         ]
         notes = generator.generate_from_versions(versions)
         assert notes is not None
@@ -128,12 +164,20 @@ class TestReleaseNotesGeneration:
 
     def test_generate_from_versions_specific(self, generator: ReleaseNotesGenerator) -> None:
         versions = [
-            _version("2.0.0", "2026-02-15T00:00:00+00:00", [
-                _commit("feat: v2 feature"),
-            ]),
-            _version("1.0.0", "2026-01-01T00:00:00+00:00", [
-                _commit("feat: v1 feature"),
-            ]),
+            _version(
+                "2.0.0",
+                "2026-02-15T00:00:00+00:00",
+                [
+                    _commit("feat: v2 feature"),
+                ],
+            ),
+            _version(
+                "1.0.0",
+                "2026-01-01T00:00:00+00:00",
+                [
+                    _commit("feat: v1 feature"),
+                ],
+            ),
         ]
         notes = generator.generate_from_versions(versions, version="1.0.0")
         assert notes is not None

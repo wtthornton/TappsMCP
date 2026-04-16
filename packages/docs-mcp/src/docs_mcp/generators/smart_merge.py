@@ -169,9 +169,7 @@ class SmartMerger:
         """Normalize a section name for comparison."""
         return name.lower().strip().replace(" ", "-")
 
-    def _find_section(
-        self, sections: list[tuple[str, str]], name: str
-    ) -> str | None:
+    def _find_section(self, sections: list[tuple[str, str]], name: str) -> str | None:
         """Find a section by name (case-insensitive)."""
         norm = self._normalize_name(name)
         for section_name, section_content in sections:

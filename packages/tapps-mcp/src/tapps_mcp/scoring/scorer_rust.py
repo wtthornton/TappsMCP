@@ -177,9 +177,7 @@ class RustScorer(ScorerBase):
 
         # Read file content
         try:
-            code = await asyncio.to_thread(
-                resolved.read_text, encoding="utf-8", errors="replace"
-            )
+            code = await asyncio.to_thread(resolved.read_text, encoding="utf-8", errors="replace")
         except (OSError, PermissionError) as exc:
             logger.error("file_read_failed", path=str_path, error=str(exc))
             return self._error_result(str_path)
@@ -209,9 +207,7 @@ class RustScorer(ScorerBase):
     # Tree-sitter based scoring
     # ------------------------------------------------------------------
 
-    def _score_with_treesitter(
-        self, code: str, file_path: Path
-    ) -> dict[str, CategoryScore]:
+    def _score_with_treesitter(self, code: str, file_path: Path) -> dict[str, CategoryScore]:
         """Score using tree-sitter AST analysis."""
         source_bytes = code.encode("utf-8")
         parser = tree_sitter.Parser(_RUST_LANGUAGE)
@@ -248,9 +244,7 @@ class RustScorer(ScorerBase):
 
         return cats
 
-    def _score_complexity_rs(
-        self, root: Any, source: bytes, weight: float
-    ) -> CategoryScore:
+    def _score_complexity_rs(self, root: Any, source: bytes, weight: float) -> CategoryScore:
         """Calculate complexity score via AST branch counting."""
         branch_types = {
             "if_expression",
@@ -331,7 +325,7 @@ class RustScorer(ScorerBase):
                 if func_node and func_node.type == "field_expression":
                     field_node = func_node.child_by_field_name("field")
                     if field_node:
-                        field_text = source[field_node.start_byte:field_node.end_byte].decode()
+                        field_text = source[field_node.start_byte : field_node.end_byte].decode()
                         if field_text == "unwrap":
                             unwrap_count += 1
 
@@ -476,7 +470,7 @@ class RustScorer(ScorerBase):
                         if func_node and func_node.type == "field_expression":
                             field = func_node.child_by_field_name("field")
                             if field:
-                                text = source[field.start_byte:field.end_byte].decode()
+                                text = source[field.start_byte : field.end_byte].decode()
                                 if text == "clone":
                                     if "clone() in loop" not in issues_found:
                                         issues_found.append("clone() in loop")
@@ -548,9 +542,7 @@ class RustScorer(ScorerBase):
             },
         )
 
-    def _score_devex_rs(
-        self, code: str, root: Any, source: bytes, weight: float
-    ) -> CategoryScore:
+    def _score_devex_rs(self, code: str, root: Any, source: bytes, weight: float) -> CategoryScore:
         """Calculate developer experience score."""
         issues: list[str] = []
 
@@ -600,9 +592,7 @@ class RustScorer(ScorerBase):
     # Regex-based fallback scoring
     # ------------------------------------------------------------------
 
-    def _score_with_regex(
-        self, code: str, file_path: Path
-    ) -> dict[str, CategoryScore]:
+    def _score_with_regex(self, code: str, file_path: Path) -> dict[str, CategoryScore]:
         """Score using regex-based analysis (fallback when tree-sitter unavailable)."""
         w = self._weights
         cats: dict[str, CategoryScore] = {}
@@ -611,14 +601,16 @@ class RustScorer(ScorerBase):
         line_count = len(lines)
 
         # 1) Complexity (regex approximation)
-        branch_count = sum([
-            len(re.findall(r"\bif\s+", code)),
-            len(re.findall(r"\bfor\s+", code)),
-            len(re.findall(r"\bwhile\s+", code)),
-            len(re.findall(r"\bmatch\s+", code)),
-            len(re.findall(r"\bloop\s*\{", code)),
-            len(re.findall(r"=>\s*\{", code)),  # match arms
-        ])
+        branch_count = sum(
+            [
+                len(re.findall(r"\bif\s+", code)),
+                len(re.findall(r"\bfor\s+", code)),
+                len(re.findall(r"\bwhile\s+", code)),
+                len(re.findall(r"\bmatch\s+", code)),
+                len(re.findall(r"\bloop\s*\{", code)),
+                len(re.findall(r"=>\s*\{", code)),  # match arms
+            ]
+        )
         complexity_score = clamp_individual(branch_count / 5.0)
         cats["complexity"] = CategoryScore(
             name="complexity",
@@ -666,7 +658,11 @@ class RustScorer(ScorerBase):
             name="test_coverage",
             score=5.0 if test_count > 0 or has_test_module else 0.0,
             weight=w.test_coverage,
-            details={"test_count": test_count, "has_test_module": has_test_module, "fallback": True},
+            details={
+                "test_count": test_count,
+                "has_test_module": has_test_module,
+                "fallback": True,
+            },
         )
 
         # 5) Performance
@@ -806,9 +802,7 @@ class RustScorer(ScorerBase):
                 suggestions.append("Avoid transmute - use safer alternatives")
         return suggestions[:3]
 
-    def _suggest_maintainability(
-        self, doc_ratio: float, pub_count: int
-    ) -> list[str]:
+    def _suggest_maintainability(self, doc_ratio: float, pub_count: int) -> list[str]:
         """Generate maintainability improvement suggestions."""
         suggestions: list[str] = []
         if doc_ratio < 0.5 and pub_count > 0:

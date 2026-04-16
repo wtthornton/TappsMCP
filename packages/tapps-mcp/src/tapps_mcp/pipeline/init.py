@@ -31,7 +31,16 @@ from tapps_mcp.prompts.prompt_loader import (
 # Allowlist of packages that _run_server_verification may pip-install.
 # install_hints come from hardcoded CHECKER_SPECS in tool_detection.py;
 # this allowlist is defence-in-depth against unexpected hint values.
-_ALLOWED_CHECKER_PACKAGES = {"ruff", "mypy", "bandit", "radon", "vulture", "pip-audit", "pylint", "perflint"}
+_ALLOWED_CHECKER_PACKAGES = {
+    "ruff",
+    "mypy",
+    "bandit",
+    "radon",
+    "vulture",
+    "pip-audit",
+    "pylint",
+    "perflint",
+}
 
 
 class _SafeWriter(Protocol):
@@ -115,12 +124,14 @@ class _BootstrapState:
             self.errors.append(f"{rel_path}: path escapes project root")
             return
         if self.content_return:
-            self.file_ops.append(FileOperation(
-                path=rel_path,
-                content=content,
-                mode="create",
-                description=f"Template file: {rel_path}",
-            ))
+            self.file_ops.append(
+                FileOperation(
+                    path=rel_path,
+                    content=content,
+                    mode="create",
+                    description=f"Template file: {rel_path}",
+                )
+            )
             self.created.append(rel_path)
             return
         if target.exists():
@@ -141,12 +152,14 @@ class _BootstrapState:
             return "skipped"
         if self.content_return:
             mode = "overwrite" if target.exists() else "create"
-            self.file_ops.append(FileOperation(
-                path=rel_path,
-                content=content,
-                mode=mode,
-                description=f"Template file: {rel_path}",
-            ))
+            self.file_ops.append(
+                FileOperation(
+                    path=rel_path,
+                    content=content,
+                    mode=mode,
+                    description=f"Template file: {rel_path}",
+                )
+            )
             if mode == "create":
                 self.created.append(rel_path)
             return "created" if mode == "create" else "updated"
@@ -175,10 +188,7 @@ class _BootstrapState:
         files into a structured response the AI client can apply.
         """
         return FileManifest(
-            summary=(
-                f"TappsMCP init v{__version__}: "
-                f"{len(self.file_ops)} file(s) to write"
-            ),
+            summary=(f"TappsMCP init v{__version__}: {len(self.file_ops)} file(s) to write"),
             source_version=__version__,
             files=self.file_ops,
             agent_instructions=AgentInstructions(
@@ -385,8 +395,6 @@ def _load_business_experts(cfg: BootstrapConfig, state: _BootstrapState) -> None
 
 def _suggest_auto_generate(state: _BootstrapState) -> None:
     """Expert system removed (EPIC-94). No-op."""
-
-
 
 
 def _memory_hooks_defaults_for_engagement(engagement_level: str) -> dict[str, Any]:
@@ -638,27 +646,31 @@ def _generate_platform_file_ops(cfg: BootstrapConfig, state: _BootstrapState) ->
     # CLAUDE.md or Cursor rules
     if platform == "claude":
         content = load_platform_rules("claude", engagement_level=engagement)
-        state.file_ops.append(FileOperation(
-            path="CLAUDE.md",
-            content=content,
-            mode="merge",
-            description=(
-                "TappsMCP pipeline section for CLAUDE.md. "
-                "Append to existing file (do not overwrite). "
-                "If a '# TAPPS Quality Pipeline' section already exists, replace only that section."
-            ),
-            priority=2,
-        ))
+        state.file_ops.append(
+            FileOperation(
+                path="CLAUDE.md",
+                content=content,
+                mode="merge",
+                description=(
+                    "TappsMCP pipeline section for CLAUDE.md. "
+                    "Append to existing file (do not overwrite). "
+                    "If a '# TAPPS Quality Pipeline' section already exists, replace only that section."
+                ),
+                priority=2,
+            )
+        )
         state.created.append("CLAUDE.md")
     elif platform == "cursor":
         content = load_platform_rules("cursor", engagement_level=engagement)
-        state.file_ops.append(FileOperation(
-            path=".cursor/rules/tapps-pipeline.md",
-            content=content,
-            mode="create",
-            description="Cursor platform rules with TappsMCP pipeline reference.",
-            priority=2,
-        ))
+        state.file_ops.append(
+            FileOperation(
+                path=".cursor/rules/tapps-pipeline.md",
+                content=content,
+                mode="create",
+                description="Cursor platform rules with TappsMCP pipeline reference.",
+                priority=2,
+            )
+        )
         state.created.append(".cursor/rules/tapps-pipeline.md")
 
     state.result["platform_rules"] = {
@@ -1045,18 +1057,22 @@ def _render_tech_stack_md(profile: ProjectProfile) -> str:
         "",
     ]
     if low_conf:
-        lines.extend([
-            "> **Low confidence:** Auto-detected project type may be wrong (e.g. docs-only root "
-            "with code in a subfolder). Confirm or edit sections below; optionally add "
-            "`pyproject.toml` / `package.json` where the real code lives.",
-            "",
-        ])
-    lines.extend([
-        "## Project Type",
-        f"- **Type:** {profile.project_type or 'unknown'}",
-        f"- **Confidence:** {profile.project_type_confidence:.2f}",
-        f"- **Reason:** {profile.project_type_reason or 'N/A'}",
-    ])
+        lines.extend(
+            [
+                "> **Low confidence:** Auto-detected project type may be wrong (e.g. docs-only root "
+                "with code in a subfolder). Confirm or edit sections below; optionally add "
+                "`pyproject.toml` / `package.json` where the real code lives.",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## Project Type",
+            f"- **Type:** {profile.project_type or 'unknown'}",
+            f"- **Confidence:** {profile.project_type_confidence:.2f}",
+            f"- **Reason:** {profile.project_type_reason or 'N/A'}",
+        ]
+    )
     lines.extend(_render_list_section("Languages", ts.languages))
     lines.extend(_render_list_section("Frameworks", ts.frameworks))
     lines.extend(_render_list_section("Libraries", ts.libraries))

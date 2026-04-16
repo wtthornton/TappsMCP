@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from tapps_mcp.memory.injection import (
     _MAX_INJECT_HIGH,
     _MAX_INJECT_MEDIUM,
-    _MIN_SCORE,
     append_memory_to_answer,
     inject_memories,
 )
@@ -99,10 +96,7 @@ class TestInjectMemories:
         assert result["memory_section"] == ""
 
     def test_high_engagement_max_limit(self) -> None:
-        entries = [
-            _make_entry(f"key-{i}", f"matching search term {i}")
-            for i in range(10)
-        ]
+        entries = [_make_entry(f"key-{i}", f"matching search term {i}") for i in range(10)]
         store = _make_store(entries)
 
         result = inject_memories("matching search term", store, "high")
@@ -111,8 +105,7 @@ class TestInjectMemories:
 
     def test_medium_engagement_max_limit(self) -> None:
         entries = [
-            _make_entry(f"key-{i}", f"matching value {i}", confidence=0.9)
-            for i in range(10)
+            _make_entry(f"key-{i}", f"matching value {i}", confidence=0.9) for i in range(10)
         ]
         store = _make_store(entries)
 

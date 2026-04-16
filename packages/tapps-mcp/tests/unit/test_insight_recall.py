@@ -6,10 +6,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from tapps_mcp.tools.insight_recall import recall_insights_for_validate
-
 
 # ---------------------------------------------------------------------------
 # Helpers

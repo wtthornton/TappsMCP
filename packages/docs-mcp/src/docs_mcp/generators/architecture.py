@@ -51,14 +51,29 @@ _COUPLING_HIGH = 20
 _DEP_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+")
 
 # Directories to exclude from architecture analysis beyond SKIP_DIRS.
-_ARCH_SKIP_DIRS: frozenset[str] = frozenset({
-    "tests", "test", "integration", "scripts", "examples", "docs",
-    "benchmarks", "docker-mcp", ".github", ".claude", ".tapps-mcp",
-})
+_ARCH_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        "tests",
+        "test",
+        "integration",
+        "scripts",
+        "examples",
+        "docs",
+        "benchmarks",
+        "docker-mcp",
+        ".github",
+        ".claude",
+        ".tapps-mcp",
+    }
+)
 
 # Patterns that indicate a file/package is not a real source package.
 _NOISE_PATTERNS: tuple[str, ...] = (
-    "conftest", "test_", "sample", "example", "fixture",
+    "conftest",
+    "test_",
+    "sample",
+    "example",
+    "fixture",
 )
 _GOOGLE_FONTS_URL = (
     "https://fonts.googleapis.com/css2?"
@@ -178,9 +193,7 @@ class ArchitectureGenerator:
 
         # 5c. Classify architectural archetype — reuses already-built module_map
         # and dep_graph so no extra analysis cost (STORY-100.11).
-        archetype_html = self._build_archetype_hero_html(
-            project_root, module_map, dep_graph
-        )
+        archetype_html = self._build_archetype_hero_html(project_root, module_map, dep_graph)
 
         # 6. Render HTML (pass pre-collected packages to avoid re-collection)
         content = self._render_html(
@@ -283,21 +296,22 @@ class ArchitectureGenerator:
                 for cls in info.classes:
                     if cls.name.startswith("_"):
                         continue
-                    public_methods = [
-                        m.name for m in cls.methods if not m.name.startswith("_")
-                    ]
-                    results.append({
-                        "name": cls.name,
-                        "module": py_file.stem,
-                        "path": str(py_file.relative_to(project_root)).replace(
-                            "\\", "/",
-                        ),
-                        "bases": cls.bases,
-                        "docstring": cls.docstring or "",
-                        "method_count": len(cls.methods),
-                        "public_methods": public_methods[:10],
-                        "decorators": [d.name for d in cls.decorators],
-                    })
+                    public_methods = [m.name for m in cls.methods if not m.name.startswith("_")]
+                    results.append(
+                        {
+                            "name": cls.name,
+                            "module": py_file.stem,
+                            "path": str(py_file.relative_to(project_root)).replace(
+                                "\\",
+                                "/",
+                            ),
+                            "bases": cls.bases,
+                            "docstring": cls.docstring or "",
+                            "method_count": len(cls.methods),
+                            "public_methods": public_methods[:10],
+                            "decorators": [d.name for d in cls.decorators],
+                        }
+                    )
 
                 if len(results) >= _MAX_CLASSES_LISTED:
                     break
@@ -320,10 +334,7 @@ class ArchitectureGenerator:
 
         # Scan for markdown directories with architecture/component content
         for dirpath, dirnames, filenames in os.walk(project_root):
-            dirnames[:] = [
-                d for d in dirnames
-                if d not in skip_all and not d.startswith(".")
-            ]
+            dirnames[:] = [d for d in dirnames if d not in skip_all and not d.startswith(".")]
             current = Path(dirpath)
             md_files = [f for f in filenames if f.lower().endswith((".md", ".rst"))]
             if not md_files:
@@ -338,22 +349,22 @@ class ArchitectureGenerator:
                         continue
                     seen.add(name)
                     try:
-                        content = (current / md_file).read_text(
-                            encoding="utf-8", errors="replace"
-                        )
+                        content = (current / md_file).read_text(encoding="utf-8", errors="replace")
                         docstring = self._extract_first_paragraph(content)
                     except OSError:
                         docstring = ""
-                    packages.append({
-                        "name": name,
-                        "path": md_file,
-                        "is_package": False,
-                        "docstring": docstring,
-                        "module_count": 1,
-                        "function_count": 0,
-                        "class_count": 0,
-                        "submodules": [],
-                    })
+                    packages.append(
+                        {
+                            "name": name,
+                            "path": md_file,
+                            "is_package": False,
+                            "docstring": docstring,
+                            "module_count": 1,
+                            "function_count": 0,
+                            "class_count": 0,
+                            "submodules": [],
+                        }
+                    )
             else:
                 # Directory with docs - treat as a component
                 dir_name = current.name
@@ -372,16 +383,20 @@ class ArchitectureGenerator:
                             pass
                         break
 
-                packages.append({
-                    "name": dir_name,
-                    "path": rel_dir,
-                    "is_package": True,
-                    "docstring": docstring,
-                    "module_count": len(md_files),
-                    "function_count": 0,
-                    "class_count": 0,
-                    "submodules": [Path(f).stem for f in sorted(md_files)[:_MAX_SUBMODULES_SHOWN]],
-                })
+                packages.append(
+                    {
+                        "name": dir_name,
+                        "path": rel_dir,
+                        "is_package": True,
+                        "docstring": docstring,
+                        "module_count": len(md_files),
+                        "function_count": 0,
+                        "class_count": 0,
+                        "submodules": [
+                            Path(f).stem for f in sorted(md_files)[:_MAX_SUBMODULES_SHOWN]
+                        ],
+                    }
+                )
 
             if len(packages) >= _MAX_COMPONENTS:
                 break
@@ -464,8 +479,16 @@ class ArchitectureGenerator:
     def _is_noise_path(path: Path) -> bool:
         """Check if a path belongs to noise directories like .venv, tests, etc."""
         parts = {p.lower() for p in path.parts}
-        noise = {"tests", "test", "scripts", "examples", ".venv",
-                 ".venv-pyinstaller", "venv", "benchmarks"}
+        noise = {
+            "tests",
+            "test",
+            "scripts",
+            "examples",
+            ".venv",
+            ".venv-pyinstaller",
+            "venv",
+            "benchmarks",
+        }
         return bool(parts & noise)
 
     # ------------------------------------------------------------------
@@ -497,9 +520,7 @@ class ArchitectureGenerator:
         sections: list[str] = []
 
         # Skip link (accessibility)
-        sections.append(
-            '<a href="#main-content" class="skip-link">Skip to main content</a>'
-        )
+        sections.append('<a href="#main-content" class="skip-link">Skip to main content</a>')
 
         # Hero / title (with optional archetype badge + animated panel)
         sections.append(self._render_hero(safe_name, safe_subtitle, archetype_html))
@@ -508,16 +529,30 @@ class ArchitectureGenerator:
         sections.append(self._render_document_purpose())
 
         # Table of contents
-        toc_ids = ["executive-summary", "architecture-diagram", "data-flow",
-                   "component-details", "dependency-flow", "api-surface",
-                   "tech-stack", "health-insights"]
+        toc_ids = [
+            "executive-summary",
+            "architecture-diagram",
+            "data-flow",
+            "component-details",
+            "dependency-flow",
+            "api-surface",
+            "tech-stack",
+            "health-insights",
+        ]
         sections.append(self._render_toc(toc_ids, packages, dep_edges, api_info, metadata))
 
         # Executive summary (use filtered packages for accurate counts)
-        sections.append(self._render_executive_summary(
-            safe_name, safe_subtitle, metadata, module_map, dep_graph,
-            api_info, packages,
-        ))
+        sections.append(
+            self._render_executive_summary(
+                safe_name,
+                safe_subtitle,
+                metadata,
+                module_map,
+                dep_graph,
+                api_info,
+                packages,
+            )
+        )
 
         # Architecture overview SVG
         sections.append(self._render_architecture_diagram(safe_name, packages))
@@ -539,17 +574,25 @@ class ArchitectureGenerator:
         sections.append(self._render_tech_stack(metadata))
 
         # Architecture health & insights
-        sections.append(self._render_health_insights(
-            metadata, module_map, dep_graph, api_info, packages,
-        ))
+        sections.append(
+            self._render_health_insights(
+                metadata,
+                module_map,
+                dep_graph,
+                api_info,
+                packages,
+            )
+        )
 
         # Footer with generation metadata (filtered counts)
         filtered_mod_count = sum(int(p.get("module_count", 0)) for p in packages)
-        sections.append(self._render_footer(
-            pkg_count=len(packages),
-            mod_count=filtered_mod_count,
-            cls_count=len(api_info),
-        ))
+        sections.append(
+            self._render_footer(
+                pkg_count=len(packages),
+                mod_count=filtered_mod_count,
+                cls_count=len(api_info),
+            )
+        )
 
         body = "\n".join(sections)
         return self._wrap_html(safe_name, body)
@@ -590,7 +633,9 @@ class ArchitectureGenerator:
         }
         skip = set()
         if not packages:
-            skip.update({"architecture-diagram", "data-flow", "component-details", "dependency-flow"})
+            skip.update(
+                {"architecture-diagram", "data-flow", "component-details", "dependency-flow"}
+            )
         if not dep_edges and packages:
             skip.add("dependency-flow")
         if not api_info:
@@ -614,9 +659,7 @@ class ArchitectureGenerator:
         lines.append("</section>")
         return "\n".join(lines)
 
-    def _render_hero(
-        self, name: str, subtitle: str, archetype_html: str = ""
-    ) -> str:
+    def _render_hero(self, name: str, subtitle: str, archetype_html: str = "") -> str:
         desc = f'<p class="hero-subtitle">{subtitle}</p>' if subtitle else ""
         arch_block = (
             f'<div class="hero-arch">{archetype_html}</div>'
@@ -648,10 +691,10 @@ class ArchitectureGenerator:
         try:
             from docs_mcp.analyzers.pattern import PatternClassifier
             from docs_mcp.generators.pattern_poster import (
-                ArchPatternPosterGenerator,
                 _ARCHETYPE_LABELS,
                 _BADGE_BG,
                 _BADGE_FG,
+                ArchPatternPosterGenerator,
             )
 
             result = PatternClassifier().classify(
@@ -679,7 +722,7 @@ class ArchitectureGenerator:
             )
 
             poster = ArchPatternPosterGenerator()
-            svg = poster._panel_svg(arch, [], w=360, h=257)  # noqa: SLF001
+            svg = poster._panel_svg(arch, [], w=360, h=257)
             return f"{badge}{svg}"
 
         except Exception:
@@ -697,7 +740,9 @@ class ArchitectureGenerator:
         packages: list[dict[str, Any]] | None = None,
     ) -> str:
         parts: list[str] = []
-        parts.append('<section class="section" id="executive-summary" role="region" aria-labelledby="exec-summary-heading">')
+        parts.append(
+            '<section class="section" id="executive-summary" role="region" aria-labelledby="exec-summary-heading">'
+        )
         parts.append('<h2 class="section-title" id="exec-summary-heading">Executive Summary</h2>')
         parts.append(
             "<p><strong>Why this matters:</strong> Quick overview for stakeholders; "
@@ -751,18 +796,12 @@ class ArchitectureGenerator:
         if metadata.version or metadata.license or metadata.python_requires:
             parts.append('<div class="meta-details">')
             if metadata.version:
-                parts.append(
-                    f'<span class="meta-badge">v{html.escape(metadata.version)}</span>'
-                )
+                parts.append(f'<span class="meta-badge">v{html.escape(metadata.version)}</span>')
             if metadata.python_requires:
                 py_req = html.escape(metadata.python_requires)
-                parts.append(
-                    f'<span class="meta-badge">Python {py_req}</span>'
-                )
+                parts.append(f'<span class="meta-badge">Python {py_req}</span>')
             if metadata.license:
-                parts.append(
-                    f'<span class="meta-badge">{html.escape(metadata.license)}</span>'
-                )
+                parts.append(f'<span class="meta-badge">{html.escape(metadata.license)}</span>')
             parts.append("</div>")
 
         parts.append("</section>")
@@ -789,7 +828,9 @@ class ArchitectureGenerator:
         svg = self._build_architecture_svg(name, packages)
         parts.append('<figure role="figure" aria-labelledby="arch-figcaption">')
         parts.append(f'<div class="diagram-container">{svg}</div>')
-        parts.append('<figcaption id="arch-figcaption">High-level architecture overview</figcaption>')
+        parts.append(
+            '<figcaption id="arch-figcaption">High-level architecture overview</figcaption>'
+        )
         parts.append("</figure>")
         parts.append("</section>")
         return "\n".join(parts)
@@ -824,7 +865,11 @@ class ArchitectureGenerator:
             submodules: list[str] = list(pkg.get("submodules", []))
             # Generate a value description
             value_text = self._generate_component_value(
-                pkg_name, docstring, mod_count, func_count, cls_count,
+                pkg_name,
+                docstring,
+                mod_count,
+                func_count,
+                cls_count,
             )
 
             parts.append(f"""
@@ -849,9 +894,7 @@ class ArchitectureGenerator:
                     parts.append(f"        <li><code>{html.escape(sub)}</code></li>")
                 if len(submodules) > _MAX_SUBMODULES_SHOWN:
                     extra = len(submodules) - _MAX_SUBMODULES_SHOWN
-                    parts.append(
-                        f"        <li><em>... and {extra} more</em></li>"
-                    )
+                    parts.append(f"        <li><em>... and {extra} more</em></li>")
                 parts.append("      </ul>")
                 parts.append("    </div>")
 
@@ -871,7 +914,9 @@ class ArchitectureGenerator:
             return ""
 
         parts: list[str] = []
-        parts.append('<section class="section" id="dependency-flow" role="region" aria-labelledby="dep-flow-heading">')
+        parts.append(
+            '<section class="section" id="dependency-flow" role="region" aria-labelledby="dep-flow-heading">'
+        )
         parts.append('<h2 class="section-title" id="dep-flow-heading">Dependency Flow</h2>')
         parts.append(
             "<p><strong>Why this matters:</strong> The dependency flow reveals coupling between "
@@ -883,15 +928,17 @@ class ArchitectureGenerator:
             svg = self._build_dependency_svg(packages, edges)
             parts.append('<figure role="figure" aria-labelledby="dep-flow-figcaption">')
             parts.append(f'<div class="diagram-container">{svg}</div>')
-            parts.append('<figcaption id="dep-flow-figcaption">Package import relationships</figcaption>')
+            parts.append(
+                '<figcaption id="dep-flow-figcaption">Package import relationships</figcaption>'
+            )
             parts.append("</figure>")
         else:
             parts.append(
                 '<div class="purpose-block">'
                 '<p class="purpose-text">No cross-package dependencies detected. '
-                'The analyzer may need monorepo-aware path resolution; '
-                'or packages may be loosely coupled with few direct imports.</p>'
-                '</div>'
+                "The analyzer may need monorepo-aware path resolution; "
+                "or packages may be loosely coupled with few direct imports.</p>"
+                "</div>"
             )
         parts.append("</section>")
         return "\n".join(parts)
@@ -912,9 +959,16 @@ class ArchitectureGenerator:
         by_module: dict[str, list[dict[str, Any]]] = {}
         for cls in api_info:
             mod = str(cls.get("path", cls.get("module", "unknown")))
-            if any(noise in mod.lower() for noise in (
-                "test", ".venv", "conftest", "sample", "fixture",
-            )):
+            if any(
+                noise in mod.lower()
+                for noise in (
+                    "test",
+                    ".venv",
+                    "conftest",
+                    "sample",
+                    "fixture",
+                )
+            ):
                 continue
             by_module.setdefault(mod, []).append(cls)
 
@@ -936,9 +990,7 @@ class ArchitectureGenerator:
                 methods = list(cls.get("public_methods", []))
                 if bases:
                     joined = html.escape(", ".join(str(b) for b in bases))
-                    base_text = (
-                        f' <span class="api-bases">extends {joined}</span>'
-                    )
+                    base_text = f' <span class="api-bases">extends {joined}</span>'
                 else:
                     base_text = ""
                 first_line = docstring.split("\n", maxsplit=1)[0]
@@ -953,22 +1005,17 @@ class ArchitectureGenerator:
                     parts.append(f'    <p class="api-doc">{doc_summary}</p>')
                 if methods:
                     methods_str = ", ".join(
-                        f"<code>{html.escape(str(m))}</code>"
-                        for m in methods[:_MAX_METHODS_SHOWN]
+                        f"<code>{html.escape(str(m))}</code>" for m in methods[:_MAX_METHODS_SHOWN]
                     )
                     if len(methods) > _MAX_METHODS_SHOWN:
                         extra = len(methods) - _MAX_METHODS_SHOWN
                         methods_str += f" <em>+{extra} more</em>"
-                    parts.append(
-                        f'    <div class="api-methods">Methods: {methods_str}</div>'
-                    )
+                    parts.append(f'    <div class="api-methods">Methods: {methods_str}</div>')
                 parts.append("  </div>")
 
             remaining = len(classes) - min(len(classes), _MAX_API_PER_MODULE)
             if remaining > 0:
-                parts.append(
-                    f'  <p class="api-doc"><em>+{remaining} more classes</em></p>'
-                )
+                parts.append(f'  <p class="api-doc"><em>+{remaining} more classes</em></p>')
             parts.append("</div>")
 
         omitted = len(api_info) - total_shown
@@ -985,7 +1032,9 @@ class ArchitectureGenerator:
     def _render_tech_stack(self, metadata: ProjectMetadata) -> str:
         """Render the technology stack section (always show; message when empty)."""
         parts: list[str] = []
-        parts.append('<section class="section" id="tech-stack" role="region" aria-labelledby="tech-stack-heading">')
+        parts.append(
+            '<section class="section" id="tech-stack" role="region" aria-labelledby="tech-stack-heading">'
+        )
         parts.append('<h2 class="section-title" id="tech-stack-heading">Technology Stack</h2>')
         parts.append(
             "<p><strong>Why this matters:</strong> Understanding dependencies helps set up your "
@@ -995,8 +1044,8 @@ class ArchitectureGenerator:
             parts.append(
                 '<div class="purpose-block">'
                 '<p class="purpose-text">No dependencies extracted. For uv/poetry workspaces, '
-                'ensure root and package pyproject.toml files are parseable.</p>'
-                '</div>'
+                "ensure root and package pyproject.toml files are parseable.</p>"
+                "</div>"
             )
             parts.append("</section>")
             return "\n".join(parts)
@@ -1041,7 +1090,9 @@ class ArchitectureGenerator:
     def _render_data_flow(self, packages: list[dict[str, Any]]) -> str:
         """Render a data flow / pipeline diagram (or fallback when single layer)."""
         parts: list[str] = []
-        parts.append('<section class="section" id="data-flow" role="region" aria-labelledby="data-flow-heading">')
+        parts.append(
+            '<section class="section" id="data-flow" role="region" aria-labelledby="data-flow-heading">'
+        )
         parts.append('<h2 class="section-title" id="data-flow-heading">Data Flow Pipeline</h2>')
         parts.append(
             "<p><strong>Why this matters:</strong> Understanding runtime flow helps trace "
@@ -1053,21 +1104,23 @@ class ArchitectureGenerator:
             parts.append(
                 '<div class="purpose-block">'
                 '<p class="purpose-text">Single-package or minimal project; '
-                'data flow diagram requires at least two logical layers.</p>'
-                '</div>'
+                "data flow diagram requires at least two logical layers.</p>"
+                "</div>"
             )
         else:
             svg = self._build_flow_pipeline_svg(packages)
             if svg:
                 parts.append('<figure role="figure" aria-labelledby="data-flow-figcaption">')
                 parts.append(f'<div class="diagram-container">{svg}</div>')
-                parts.append('<figcaption id="data-flow-figcaption">Data flow pipeline</figcaption>')
+                parts.append(
+                    '<figcaption id="data-flow-figcaption">Data flow pipeline</figcaption>'
+                )
                 parts.append("</figure>")
             else:
                 parts.append(
                     '<div class="purpose-block">'
                     '<p class="purpose-text">Could not group packages into flow layers.</p>'
-                    '</div>'
+                    "</div>"
                 )
         parts.append("</section>")
         return "\n".join(parts)
@@ -1098,12 +1151,12 @@ class ArchitectureGenerator:
 
         # Large packages (complexity risk)
         large_pkgs = [
-            p for p in packages
-            if int(p.get("module_count", 0)) > _LARGE_PACKAGE_THRESHOLD
+            p for p in packages if int(p.get("module_count", 0)) > _LARGE_PACKAGE_THRESHOLD
         ]
         # Top function-heavy packages
         top_func = sorted(
-            packages, key=lambda p: int(p.get("function_count", 0)),
+            packages,
+            key=lambda p: int(p.get("function_count", 0)),
             reverse=True,
         )[:5]
 
@@ -1111,13 +1164,12 @@ class ArchitectureGenerator:
         parts.append('<div class="stats-grid">')
 
         # Modularity score
-        modularity = "High" if pkg_count >= _MODULARITY_HIGH else (
-            "Medium" if pkg_count >= _MODULARITY_MED else "Low"
+        modularity = (
+            "High"
+            if pkg_count >= _MODULARITY_HIGH
+            else ("Medium" if pkg_count >= _MODULARITY_MED else "Low")
         )
-        mod_color = (
-            "var(--accent-primary)" if modularity == "High"
-            else "var(--accent-secondary)"
-        )
+        mod_color = "var(--accent-primary)" if modularity == "High" else "var(--accent-secondary)"
         parts.append(f"""
 <div class="stat-card">
   <div class="stat-number" style="color:{mod_color}">{modularity}</div>
@@ -1130,12 +1182,16 @@ class ArchitectureGenerator:
   <div class="stat-label">Avg Modules/Package</div>
 </div>""")
 
-        coupling = "Low" if dep_count < _COUPLING_LOW else (
-            "Medium" if dep_count < _COUPLING_HIGH else "High"
+        coupling = (
+            "Low"
+            if dep_count < _COUPLING_LOW
+            else ("Medium" if dep_count < _COUPLING_HIGH else "High")
         )
         coup_color = (
-            "var(--accent-primary)" if coupling == "Low"
-            else "#ef4444" if coupling == "High"
+            "var(--accent-primary)"
+            if coupling == "Low"
+            else "#ef4444"
+            if coupling == "High"
             else "var(--accent-secondary)"
         )
         parts.append(f"""
@@ -1157,8 +1213,8 @@ class ArchitectureGenerator:
         if large_pkgs:
             parts.append('<div class="purpose-block">')
             parts.append(
-                '<h3>Complexity Hotspots</h3>'
-                "<p class=\"purpose-text\">The following packages have more "
+                "<h3>Complexity Hotspots</h3>"
+                '<p class="purpose-text">The following packages have more '
                 "than 15 modules, suggesting potential candidates for "
                 "decomposition or boundary refinement:</p>"
             )
@@ -1166,17 +1222,15 @@ class ArchitectureGenerator:
             for pkg in large_pkgs:
                 name = html.escape(str(pkg["name"]))
                 mc = pkg.get("module_count", 0)
-                parts.append(
-                    f'<span class="dep-tag">{name} ({mc} modules)</span>'
-                )
+                parts.append(f'<span class="dep-tag">{name} ({mc} modules)</span>')
             parts.append("</div></div>")
 
         # Top contributors by function count
         if top_func:
             parts.append('<div class="purpose-block">')
             parts.append(
-                '<h3>Highest Functionality Concentration</h3>'
-                "<p class=\"purpose-text\">"
+                "<h3>Highest Functionality Concentration</h3>"
+                '<p class="purpose-text">'
                 "Packages with the most functions represent the core "
                 "business logic. These are the most critical to test "
                 "thoroughly and document carefully:</p>"
@@ -1186,14 +1240,12 @@ class ArchitectureGenerator:
                 name = html.escape(str(pkg["name"]))
                 fc = pkg.get("function_count", 0)
                 if fc > 0:
-                    parts.append(
-                        f'<span class="dep-tag">{name} ({fc} fn)</span>'
-                    )
+                    parts.append(f'<span class="dep-tag">{name} ({fc} fn)</span>')
             parts.append("</div></div>")
 
         # Recommendations
         parts.append('<div class="purpose-block">')
-        parts.append('<h3>Recommendations</h3>')
+        parts.append("<h3>Recommendations</h3>")
         recs: list[str] = []
         if large_pkgs:
             recs.append(
@@ -1206,16 +1258,14 @@ class ArchitectureGenerator:
                 "risk. Audit dependencies for overlap and necessity."
             )
         if not metadata.license:
-            recs.append(
-                "No license detected. Add a license to clarify usage rights."
-            )
+            recs.append("No license detected. Add a license to clarify usage rights.")
         if not recs:
             recs.append(
                 "Architecture appears well-structured. Continue monitoring "
                 "package boundaries as the codebase evolves."
             )
         for rec in recs:
-            parts.append(f"<p class=\"purpose-text\">{html.escape(rec)}</p>")
+            parts.append(f'<p class="purpose-text">{html.escape(rec)}</p>')
         parts.append("</div>")
 
         parts.append("</section>")
@@ -1383,23 +1433,17 @@ class ArchitectureGenerator:
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" '
             f'class="arch-svg" role="img" aria-labelledby="arch-svg-title">'
         )
-        lines.append(f'  <title id="arch-svg-title">High-level architecture: {html.escape(name)}</title>')
+        lines.append(
+            f'  <title id="arch-svg-title">High-level architecture: {html.escape(name)}</title>'
+        )
 
         # Defs: gradients, shadows, filters
         lines.append("  <defs>")
-        lines.append(
-            '    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">'
-        )
-        lines.append(
-            '      <feDropShadow dx="2" dy="4" stdDeviation="6" flood-opacity="0.15"/>'
-        )
+        lines.append('    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">')
+        lines.append('      <feDropShadow dx="2" dy="4" stdDeviation="6" flood-opacity="0.15"/>')
         lines.append("    </filter>")
-        lines.append(
-            '    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">'
-        )
-        lines.append(
-            '      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>'
-        )
+        lines.append('    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">')
+        lines.append('      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>')
         lines.append("      <feMerge>")
         lines.append('        <feMergeNode in="coloredBlur"/>')
         lines.append('        <feMergeNode in="SourceGraphic"/>')
@@ -1408,9 +1452,7 @@ class ArchitectureGenerator:
 
         for i, _pkg in enumerate(packages):
             g_start, g_end, _ = _PALETTE[i % len(_PALETTE)]
-            lines.append(
-                f'    <linearGradient id="grad{i}" x1="0%" y1="0%" x2="100%" y2="100%">'
-            )
+            lines.append(f'    <linearGradient id="grad{i}" x1="0%" y1="0%" x2="100%" y2="100%">')
             lines.append(f'      <stop offset="0%" stop-color="{g_start}"/>')
             lines.append(f'      <stop offset="100%" stop-color="{g_end}"/>')
             lines.append("    </linearGradient>")
@@ -1418,10 +1460,7 @@ class ArchitectureGenerator:
         lines.append("  </defs>")
 
         # Background
-        lines.append(
-            f'  <rect width="{svg_w}" height="{svg_h}" rx="16" '
-            f'fill="#0a0a0f" />'
-        )
+        lines.append(f'  <rect width="{svg_w}" height="{svg_h}" rx="16" fill="#0a0a0f" />')
 
         # Title
         lines.append(
@@ -1494,17 +1533,12 @@ class ArchitectureGenerator:
             '    <marker id="flowArrow" markerWidth="8" markerHeight="6" '
             'refX="7" refY="3" orient="auto">'
         )
-        lines.append(
-            '      <polygon points="0 0, 8 3, 0 6" fill="#14b8a6"/>'
-        )
+        lines.append('      <polygon points="0 0, 8 3, 0 6" fill="#14b8a6"/>')
         lines.append("    </marker>")
         lines.append("  </defs>")
 
         # Background
-        lines.append(
-            f'  <rect width="{svg_w}" height="{svg_h}" '
-            f'rx="8" fill="#0a0a0f"/>'
-        )
+        lines.append(f'  <rect width="{svg_w}" height="{svg_h}" rx="8" fill="#0a0a0f"/>')
 
         # Title
         font = "Outfit, Inter, system-ui, sans-serif"
@@ -1585,13 +1619,30 @@ class ArchitectureGenerator:
             name = str(pkg["name"]).lower()
             if any(k in name for k in ("config", "setting", "common", "util")):
                 layers["Input / Config"].append(str(pkg["name"]))
-            elif any(k in name for k in (
-                "server", "cli", "api", "pipeline", "distribution", "mcp", "docs",
-            )):
+            elif any(
+                k in name
+                for k in (
+                    "server",
+                    "cli",
+                    "api",
+                    "pipeline",
+                    "distribution",
+                    "mcp",
+                    "docs",
+                )
+            ):
                 layers["Output / API"].append(str(pkg["name"]))
-            elif any(k in name for k in (
-                "scor", "gate", "valid", "check", "analyz", "extract",
-            )):
+            elif any(
+                k in name
+                for k in (
+                    "scor",
+                    "gate",
+                    "valid",
+                    "check",
+                    "analyz",
+                    "extract",
+                )
+            ):
                 layers["Processing"].append(str(pkg["name"]))
             else:
                 layers["Core Logic"].append(str(pkg["name"]))
@@ -1644,23 +1695,19 @@ class ArchitectureGenerator:
 
         # Defs
         lines.append("  <defs>")
-        lines.append(
-            '    <filter id="dshadow" x="-15%" y="-15%" width="130%" height="130%">'
-        )
-        lines.append(
-            '      <feDropShadow dx="1" dy="3" stdDeviation="4" flood-opacity="0.2"/>'
-        )
+        lines.append('    <filter id="dshadow" x="-15%" y="-15%" width="130%" height="130%">')
+        lines.append('      <feDropShadow dx="1" dy="3" stdDeviation="4" flood-opacity="0.2"/>')
         lines.append("    </filter>")
-        lines.append('    <marker id="arrowhead" markerWidth="10" markerHeight="7" '
-                      'refX="9" refY="3.5" orient="auto">')
+        lines.append(
+            '    <marker id="arrowhead" markerWidth="10" markerHeight="7" '
+            'refX="9" refY="3.5" orient="auto">'
+        )
         lines.append('      <polygon points="0 0, 10 3.5, 0 7" fill="#a1a1aa"/>')
         lines.append("    </marker>")
 
         for i in range(count):
             g_start, g_end, _ = _PALETTE[i % len(_PALETTE)]
-            lines.append(
-                f'    <linearGradient id="dgrad{i}" x1="0%" y1="0%" x2="100%" y2="100%">'
-            )
+            lines.append(f'    <linearGradient id="dgrad{i}" x1="0%" y1="0%" x2="100%" y2="100%">')
             lines.append(f'      <stop offset="0%" stop-color="{g_start}"/>')
             lines.append(f'      <stop offset="100%" stop-color="{g_end}"/>')
             lines.append("    </linearGradient>")
@@ -1668,9 +1715,7 @@ class ArchitectureGenerator:
         lines.append("  </defs>")
 
         # Background
-        lines.append(
-            f'  <rect width="{svg_w}" height="{svg_h}" rx="16" fill="#0a0a0f"/>'
-        )
+        lines.append(f'  <rect width="{svg_w}" height="{svg_h}" rx="16" fill="#0a0a0f"/>')
 
         # Title
         lines.append(
@@ -1752,15 +1797,15 @@ class ArchitectureGenerator:
         )
 
         lines.append("  <defs>")
-        lines.append('    <marker id="garrow" markerWidth="8" markerHeight="6" '
-                      'refX="7" refY="3" orient="auto">')
+        lines.append(
+            '    <marker id="garrow" markerWidth="8" markerHeight="6" '
+            'refX="7" refY="3" orient="auto">'
+        )
         lines.append('      <polygon points="0 0, 8 3, 0 6" fill="#a1a1aa"/>')
         lines.append("    </marker>")
         for i in range(count):
             g_start, g_end, _ = _PALETTE[i % len(_PALETTE)]
-            lines.append(
-                f'    <linearGradient id="gg{i}" x1="0%" y1="0%" x2="100%" y2="100%">'
-            )
+            lines.append(f'    <linearGradient id="gg{i}" x1="0%" y1="0%" x2="100%" y2="100%">')
             lines.append(f'      <stop offset="0%" stop-color="{g_start}"/>')
             lines.append(f'      <stop offset="100%" stop-color="{g_end}"/>')
             lines.append("    </linearGradient>")

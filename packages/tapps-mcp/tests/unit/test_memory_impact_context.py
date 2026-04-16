@@ -125,9 +125,7 @@ async def test_tapps_impact_analysis_merges_memory_context(
     )
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda _t, r: r)
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_call", lambda *_a, **_k: None)
-    monkeypatch.setattr(
-        "tapps_mcp.server_analysis_tools._record_execution", lambda *_a, **_k: None
-    )
+    monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_execution", lambda *_a, **_k: None)
 
     result = await tapps_impact_analysis(str(target))
     assert result["success"] is True

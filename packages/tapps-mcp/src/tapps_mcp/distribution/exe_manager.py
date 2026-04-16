@@ -132,17 +132,11 @@ def _validate_new_exe(new_exe_path: Path, current_exe_path: Path) -> Path:
         )
         raise click.ClickException(msg)
     if size > _MAX_EXE_SIZE:
-        msg = (
-            f"New exe is too large ({size:,} bytes). "
-            f"Maximum allowed: {_MAX_EXE_SIZE:,} bytes."
-        )
+        msg = f"New exe is too large ({size:,} bytes). Maximum allowed: {_MAX_EXE_SIZE:,} bytes."
         raise click.ClickException(msg)
 
     if sys.platform == "win32" and resolved.suffix.lower() != ".exe":
-        msg = (
-            f"On Windows, the new file must have a .exe extension "
-            f"(got: {resolved.suffix})"
-        )
+        msg = f"On Windows, the new file must have a .exe extension (got: {resolved.suffix})"
         raise click.ClickException(msg)
 
     return resolved
@@ -167,9 +161,7 @@ def _choose_old_path(current_exe_path: Path) -> Path:
         except OSError:
             # File locked by another process -- use timestamped name
             ts = int(time.time())
-            old_path = current_exe_path.with_name(
-                f"{current_exe_path.name}{_OLD_SUFFIX}.{ts}"
-            )
+            old_path = current_exe_path.with_name(f"{current_exe_path.name}{_OLD_SUFFIX}.{ts}")
 
     return old_path
 
@@ -221,10 +213,7 @@ def replace_exe(new_exe_path: Path) -> dict[str, str]:
                 f"({rollback_exc}). The original exe is at: {old_path}"
             )
             raise click.ClickException(msg) from exc
-        msg = (
-            f"Failed to copy new exe: {exc}\n"
-            "The original exe has been restored."
-        )
+        msg = f"Failed to copy new exe: {exc}\nThe original exe has been restored."
         raise click.ClickException(msg) from exc
 
     log.info("replace_exe_success", backup=str(old_path))

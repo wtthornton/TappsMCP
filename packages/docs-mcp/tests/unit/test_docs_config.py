@@ -93,9 +93,7 @@ class TestDocsConfigSet:
         from docs_mcp.server import docs_config
 
         _seed_cache(sample_project)
-        result = await docs_config(
-            action="set", key="default_style", value="comprehensive"
-        )
+        result = await docs_config(action="set", key="default_style", value="comprehensive")
 
         assert result["success"] is True
         data = result["data"]
@@ -118,9 +116,7 @@ class TestDocsConfigSet:
         from docs_mcp.server import docs_config
 
         _seed_cache(sample_project)
-        result = await docs_config(
-            action="set", key="nonexistent_key", value="foo"
-        )
+        result = await docs_config(action="set", key="nonexistent_key", value="foo")
 
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_KEY"
@@ -145,9 +141,7 @@ class TestDocsConfigSet:
         from docs_mcp.server import docs_config
 
         _seed_cache(sample_project)
-        result = await docs_config(
-            action="set", key="include_toc", value="false"
-        )
+        result = await docs_config(action="set", key="include_toc", value="false")
 
         assert result["success"] is True
         assert result["data"]["new_value"] is False
@@ -156,9 +150,7 @@ class TestDocsConfigSet:
         from docs_mcp.server import docs_config
 
         _seed_cache(sample_project)
-        result = await docs_config(
-            action="set", key="git_log_limit", value="1000"
-        )
+        result = await docs_config(action="set", key="git_log_limit", value="1000")
 
         assert result["success"] is True
         assert result["data"]["new_value"] == 1000

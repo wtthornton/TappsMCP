@@ -3,6 +3,7 @@
 This replaces ~60 duplicate test files that only differed in import paths.
 The actual behavioral tests live in packages/tapps-core/tests/unit/.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -112,7 +113,13 @@ _REEXPORT_PAIRS: list[tuple[str, str, list[str]]] = [
     (
         "tapps_core.knowledge.cache",
         "tapps_mcp.knowledge.cache",
-        ["CacheStats", "DEFAULT_STALENESS_POLICIES", "DEFAULT_TTL_SECONDS", "KBCache", "_safe_name"],
+        [
+            "CacheStats",
+            "DEFAULT_STALENESS_POLICIES",
+            "DEFAULT_TTL_SECONDS",
+            "KBCache",
+            "_safe_name",
+        ],
     ),
     (
         "tapps_core.knowledge.circuit_breaker",

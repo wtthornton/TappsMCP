@@ -6,8 +6,6 @@ import os
 import time
 from pathlib import Path
 
-import pytest
-
 from docs_mcp.validators.drift import (
     DriftDetector,
     DriftItem,
@@ -16,7 +14,6 @@ from docs_mcp.validators.drift import (
     _find_python_files,
     _iso_from_mtime,
 )
-
 
 # ---------------------------------------------------------------------------
 # Model tests

@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from tapps_mcp.memory.contradictions import ContradictionDetector
 from tapps_mcp.memory.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
 from tapps_mcp.project.models import ProjectProfile, TechStack

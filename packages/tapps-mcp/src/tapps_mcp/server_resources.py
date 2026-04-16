@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
 
-
 def _get_quality_presets() -> str:
     """Get available quality gate presets and their thresholds."""
     from tapps_core.config.settings import PRESETS

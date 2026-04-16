@@ -134,10 +134,14 @@ class TestMemorySave:
             result = runner.invoke(
                 main,
                 [
-                    "memory", "save",
-                    "--key", "test-key",
-                    "--value", "test value",
-                    "--tags", "python,testing",
+                    "memory",
+                    "save",
+                    "--key",
+                    "test-key",
+                    "--value",
+                    "test value",
+                    "--tags",
+                    "python,testing",
                 ],
             )
         assert result.exit_code == 0
@@ -225,9 +229,7 @@ class TestMemorySearch:
             patch(_ROOT_PATCH, return_value=Path("/fake")),
             patch(_STORE_PATCH, return_value=store),
         ):
-            result = runner.invoke(
-                main, ["memory", "search", "--query", "test", "--limit", "2"]
-            )
+            result = runner.invoke(main, ["memory", "search", "--query", "test", "--limit", "2"])
         assert result.exit_code == 0
 
 
@@ -270,9 +272,7 @@ class TestMemoryImportExport:
                 "skipped_count": 1,
                 "error_count": 0,
             }
-            result = runner.invoke(
-                main, ["memory", "import-file", "--file", str(import_file)]
-            )
+            result = runner.invoke(main, ["memory", "import-file", "--file", str(import_file)])
         # import_memories is imported locally in the CLI function, so we need
         # to patch at the right level. Since it's a local import, we patch the
         # function that the CLI calls.
@@ -290,7 +290,5 @@ class TestMemoryImportExport:
                 "exported_count": 5,
                 "file_path": str(export_file),
             }
-            result = runner.invoke(
-                main, ["memory", "export-file", "--file", str(export_file)]
-            )
+            result = runner.invoke(main, ["memory", "export-file", "--file", str(export_file)])
         assert result.exit_code == 0 or "Exported" in result.output or result.exit_code == 0

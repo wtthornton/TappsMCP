@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, call
-
-import pytest
+from unittest.mock import MagicMock
 
 from tapps_mcp.memory.models import (
     MemoryEntry,
@@ -21,7 +19,6 @@ from tapps_mcp.memory.seeding import (
     seed_from_profile,
 )
 from tapps_mcp.project.models import ProjectProfile, TechStack
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -132,9 +129,7 @@ class TestSeedFromProfile:
 
     def test_languages_seeded(self) -> None:
         store = _make_store(count=0)
-        profile = _make_profile(
-            tech_stack=TechStack(languages=["python", "typescript"])
-        )
+        profile = _make_profile(tech_stack=TechStack(languages=["python", "typescript"]))
 
         seed_from_profile(store, profile)
 

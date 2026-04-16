@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -78,9 +77,7 @@ class TestValidateChangedP0:
             patch("tapps_mcp.server._validate_file_path", side_effect=Path),
             patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=scorer),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
-            patch(
-                "tapps_mcp.security.secret_scanner.SecretScanner"
-            ) as mock_secret_scanner,
+            patch("tapps_mcp.security.secret_scanner.SecretScanner") as mock_secret_scanner,
         ):
             mock_settings.return_value.project_root = tmp_path
             mock_settings.return_value.tool_timeout = 30
@@ -120,9 +117,7 @@ class TestValidateChangedP0:
                 return_value=scorer,
             ),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
-            patch(
-                "tapps_mcp.security.secret_scanner.SecretScanner"
-            ) as mock_secret_scanner_cls,
+            patch("tapps_mcp.security.secret_scanner.SecretScanner") as mock_secret_scanner_cls,
         ):
             mock_secret_scanner_cls.return_value.scan_file.return_value = mock_secret_result
             mock_settings.return_value.project_root = tmp_path

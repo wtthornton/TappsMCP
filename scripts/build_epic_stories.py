@@ -14,7 +14,6 @@ a different epic. Requires docs-mcp and tapps-core (uv sync --all-packages).
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 

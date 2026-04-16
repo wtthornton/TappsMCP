@@ -201,7 +201,7 @@ class TestModelEdgeCases:
 
     def test_key_too_long_rejected(self) -> None:
         key = "a" * (MAX_KEY_LENGTH + 1)
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             MemoryEntry(key=key, value="test")
 
     def test_max_value_length(self) -> None:
@@ -211,11 +211,11 @@ class TestModelEdgeCases:
 
     def test_value_too_long_rejected(self) -> None:
         value = "x" * (MAX_VALUE_LENGTH + 1)
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             MemoryEntry(key="too-big", value=value)
 
     def test_empty_value_rejected(self) -> None:
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             MemoryEntry(key="empty-val", value="   ")
 
     def test_max_tags(self) -> None:
@@ -225,15 +225,15 @@ class TestModelEdgeCases:
 
     def test_too_many_tags_rejected(self) -> None:
         tags = [f"tag-{i}" for i in range(MAX_TAGS + 1)]
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             MemoryEntry(key="too-many-tags", value="test", tags=tags)
 
     def test_invalid_key_format(self) -> None:
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             MemoryEntry(key="UPPERCASE", value="test")
 
     def test_branch_required_for_branch_scope(self) -> None:
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             MemoryEntry(key="branch-test", value="test", scope=MemoryScope.branch)
 
     def test_branch_scope_with_branch(self) -> None:

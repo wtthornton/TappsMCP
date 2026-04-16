@@ -89,7 +89,9 @@ class TestErrorResponseExtra:
         from docs_mcp.server_helpers import error_response
 
         result = error_response(
-            "test_tool", "NO_FILES_FOUND", "No files matched",
+            "test_tool",
+            "NO_FILES_FOUND",
+            "No files matched",
             extra={"requested_files": ["a.md"], "project_root": "/tmp"},
         )
         assert result["error"]["requested_files"] == ["a.md"]

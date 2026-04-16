@@ -320,8 +320,7 @@ class GenericExtractor:
             body = m.group(1)
             # Strip leading * from each line.
             cleaned = "\n".join(
-                line.strip().lstrip("*").strip()
-                for line in body.split("\n")
+                line.strip().lstrip("*").strip() for line in body.split("\n")
             ).strip()
             if cleaned:
                 jsdoc_by_end_line[end_line] = cleaned
@@ -405,9 +404,7 @@ class GenericExtractor:
             line_no = content[: m.start()].count("\n") + 1
             name = m.group(1)
             doc = _go_comment_before(lines, line_no - 1)
-            state.classes.append(
-                ClassInfo(name=name, line=line_no, docstring=doc)
-            )
+            state.classes.append(ClassInfo(name=name, line=line_no, docstring=doc))
 
     # ------------------------------------------------------------------
     # Rust extraction
@@ -437,9 +434,7 @@ class GenericExtractor:
             line_no = content[: m.start()].count("\n") + 1
             name = m.group(2)
             doc = _rust_doc_before(lines, line_no - 1)
-            state.classes.append(
-                ClassInfo(name=name, line=line_no, docstring=doc)
-            )
+            state.classes.append(ClassInfo(name=name, line=line_no, docstring=doc))
 
 
 # =========================================================================
@@ -548,9 +543,7 @@ def _parse_python_params(raw: str) -> list[ParameterInfo]:
                     annotation = rest_after_name.strip() or None
             elif "=" in part:
                 default = part.split("=", 1)[1].strip() or None
-            params.append(
-                ParameterInfo(name=name, annotation=annotation, default=default)
-            )
+            params.append(ParameterInfo(name=name, annotation=annotation, default=default))
     return params
 
 

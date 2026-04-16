@@ -26,8 +26,14 @@ def _mock_profile_module():
     """Inject a fake tapps_brain.profile module into sys.modules."""
     mod = types.ModuleType("tapps_brain.profile")
     mod.list_builtin_profiles = MagicMock(  # type: ignore[attr-defined]
-        return_value=["repo-brain", "personal-assistant", "customer-support",
-                      "research-knowledge", "project-management", "home-automation"]
+        return_value=[
+            "repo-brain",
+            "personal-assistant",
+            "customer-support",
+            "research-knowledge",
+            "project-management",
+            "home-automation",
+        ]
     )
     mod.get_builtin_profile = MagicMock(  # type: ignore[attr-defined]
         side_effect=lambda name: _make_mock_profile(name)
@@ -93,16 +99,18 @@ class TestProfileInfoAction:
         mock_store.project_root = tmp_path
         mock_store.snapshot.return_value = MagicMock(total_count=10, tier_counts={})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
-            result = asyncio.run(
-                tapps_memory(action="profile_info")
-            )
+            result = asyncio.run(tapps_memory(action="profile_info"))
 
         assert result["success"] is True
         data = result["data"]
@@ -122,16 +130,18 @@ class TestProfileInfoAction:
         type(mock_store).profile = PropertyMock(return_value=None)
         mock_store.snapshot.return_value = MagicMock(total_count=0, tier_counts={})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
-            result = asyncio.run(
-                tapps_memory(action="profile_info")
-            )
+            result = asyncio.run(tapps_memory(action="profile_info"))
 
         assert result["success"] is True
         data = result["data"]
@@ -153,16 +163,18 @@ class TestProfileInfoAction:
         mock_store.project_root = tmp_path
         mock_store.snapshot.return_value = MagicMock(total_count=0, tier_counts={})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
-            result = asyncio.run(
-                tapps_memory(action="profile_info")
-            )
+            result = asyncio.run(tapps_memory(action="profile_info"))
 
         assert result["data"]["source"] == "project_override"
 
@@ -183,16 +195,18 @@ class TestProfileListAction:
         mock_store = MagicMock()
         mock_store.snapshot.return_value = MagicMock(total_count=0, tier_counts={})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
-            result = asyncio.run(
-                tapps_memory(action="profile_list")
-            )
+            result = asyncio.run(tapps_memory(action="profile_list"))
 
         assert result["success"] is True
         data = result["data"]
@@ -209,16 +223,18 @@ class TestProfileListAction:
         mock_store = MagicMock()
         mock_store.snapshot.return_value = MagicMock(total_count=0, tier_counts={})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
-            result = asyncio.run(
-                tapps_memory(action="profile_list")
-            )
+            result = asyncio.run(tapps_memory(action="profile_list"))
 
         assert result["success"] is True
         data = result["data"]
@@ -243,16 +259,18 @@ class TestProfileSwitchAction:
         mock_store = MagicMock()
         mock_store.snapshot.return_value = MagicMock(total_count=0, tier_counts={})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
-            result = asyncio.run(
-                tapps_memory(action="profile_switch", value="")
-            )
+            result = asyncio.run(tapps_memory(action="profile_switch", value=""))
 
         assert result["success"] is True
         data = result["data"]
@@ -265,16 +283,18 @@ class TestProfileSwitchAction:
         mock_store = MagicMock()
         mock_store.snapshot.return_value = MagicMock(total_count=0, tier_counts={})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
-            result = asyncio.run(
-                tapps_memory(action="profile_switch", value="nonexistent-profile")
-            )
+            result = asyncio.run(tapps_memory(action="profile_switch", value="nonexistent-profile"))
 
         assert result["success"] is True
         data = result["data"]
@@ -289,16 +309,18 @@ class TestProfileSwitchAction:
         type(mock_store).profile = PropertyMock(return_value=mock_profile)
         mock_store.snapshot.return_value = MagicMock(total_count=0, tier_counts={})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
-            result = asyncio.run(
-                tapps_memory(action="profile_switch", value="repo-brain")
-            )
+            result = asyncio.run(tapps_memory(action="profile_switch", value="repo-brain"))
 
         assert result["success"] is True
         data = result["data"]
@@ -326,18 +348,19 @@ class TestProfileSwitchAction:
             call_count += 1
             return mock_store if call_count <= 1 else new_store
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            side_effect=get_store_side_effect,
-        ), patch(
-            "tapps_mcp.server_helpers._reset_memory_store_cache"
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                side_effect=get_store_side_effect,
+            ),
+            patch("tapps_mcp.server_helpers._reset_memory_store_cache"),
         ):
-            result = asyncio.run(
-                tapps_memory(action="profile_switch", value="research-knowledge")
-            )
+            result = asyncio.run(tapps_memory(action="profile_switch", value="research-knowledge"))
 
         assert result["success"] is True
         data = result["data"]
@@ -354,17 +377,19 @@ class TestProfileSwitchAction:
         mock_store = MagicMock()
         mock_store.snapshot.return_value = MagicMock(total_count=0, tier_counts={})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
             # Don't mock tapps_brain.profile -- let the ImportError happen naturally
-            result = asyncio.run(
-                tapps_memory(action="profile_switch", value="research-knowledge")
-            )
+            result = asyncio.run(tapps_memory(action="profile_switch", value="research-knowledge"))
 
         assert result["success"] is True
         data = result["data"]
@@ -398,16 +423,18 @@ class TestReinforcePromotionSurfacing:
         type(mock_store).profile = PropertyMock(return_value=None)
         mock_store.snapshot.return_value = MagicMock(total_count=1, tier_counts={"pattern": 1})
 
-        with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            return_value=None,
-        ), patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=mock_store,
+        with (
+            patch("tapps_mcp.server_memory_tools._record_call"),
+            patch(
+                "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store",
+                return_value=mock_store,
+            ),
         ):
-            result = asyncio.run(
-                tapps_memory(action="reinforce", key="test-key")
-            )
+            result = asyncio.run(tapps_memory(action="reinforce", key="test-key"))
 
         assert result["success"] is True
         data = result["data"]
@@ -445,16 +472,18 @@ class TestReinforcePromotionSurfacing:
         sys.modules["tapps_brain.promotion"] = promotion_mod
 
         try:
-            with patch("tapps_mcp.server_memory_tools._record_call"), patch(
-                "tapps_mcp.server_memory_tools.ensure_session_initialized",
-                return_value=None,
-            ), patch(
-                "tapps_mcp.server_memory_tools._get_memory_store",
-                return_value=mock_store,
+            with (
+                patch("tapps_mcp.server_memory_tools._record_call"),
+                patch(
+                    "tapps_mcp.server_memory_tools.ensure_session_initialized",
+                    return_value=None,
+                ),
+                patch(
+                    "tapps_mcp.server_memory_tools._get_memory_store",
+                    return_value=mock_store,
+                ),
             ):
-                result = asyncio.run(
-                    tapps_memory(action="reinforce", key="test-key")
-                )
+                result = asyncio.run(tapps_memory(action="reinforce", key="test-key"))
 
             assert result["success"] is True
             data = result["data"]

@@ -302,11 +302,7 @@ def is_tapps_mcp_package_layout(project_root: Path) -> bool:
     resolved = project_root.resolve()
     parts = resolved.parts
     min_segments = 2
-    return (
-        len(parts) >= min_segments
-        and parts[-2] == "packages"
-        and parts[-1] == "tapps-mcp"
-    )
+    return len(parts) >= min_segments and parts[-2] == "packages" and parts[-1] == "tapps-mcp"
 
 
 # ---------------------------------------------------------------------------
@@ -468,12 +464,14 @@ def _merge_config(
 # are treated as secrets when written in plaintext to .mcp.json.
 _SECRET_KEY_PATTERNS = ("key", "token", "secret", "password", "passwd", "credential")
 # Known non-secret env keys TappsMCP itself emits — skip these.
-_NON_SECRET_ENV_KEYS = frozenset({
-    "TAPPS_MCP_PROJECT_ROOT",
-    "DOCS_MCP_PROJECT_ROOT",
-    "VIRTUAL_ENV",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
-})
+_NON_SECRET_ENV_KEYS = frozenset(
+    {
+        "TAPPS_MCP_PROJECT_ROOT",
+        "DOCS_MCP_PROJECT_ROOT",
+        "VIRTUAL_ENV",
+        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+    }
+)
 
 
 def _looks_like_secret_key(name: str) -> bool:
@@ -663,9 +661,7 @@ def _generate_config(
                         )
                         return True
 
-        merged = _merge_config(
-            existing, host, upgrade_mode=upgrade_mode, uv_launch=uv_launch
-        )
+        merged = _merge_config(existing, host, upgrade_mode=upgrade_mode, uv_launch=uv_launch)
     else:
         servers_key_new = _get_servers_key(host)
         merged = {
@@ -689,14 +685,11 @@ def _generate_config(
             # pull in any other keys from the old scope that are not already set.
             entry["env"] = {**migrated_env, **cur_env}
             other_path = _other_scope_config_path(host, project_root, scope)
-            migrated_keys = sorted(
-                k for k in migrated_env if k not in (cur_env or {})
-            )
+            migrated_keys = sorted(k for k in migrated_env if k not in (cur_env or {}))
             if migrated_keys and not dry_run:
                 click.echo(
                     click.style(
-                        f"  Migrated env vars from {other_path}: "
-                        f"{', '.join(migrated_keys)}",
+                        f"  Migrated env vars from {other_path}: {', '.join(migrated_keys)}",
                         fg="cyan",
                     )
                 )
@@ -773,14 +766,11 @@ def _warn_plaintext_secrets(
     names = sorted({name for vals in flagged.values() for name in vals})
     click.echo(
         click.style(
-            f"  WARNING: {config_path.name} contains plaintext secret(s): "
-            f"{', '.join(names)}",
+            f"  WARNING: {config_path.name} contains plaintext secret(s): {', '.join(names)}",
             fg="yellow",
         )
     )
-    click.echo(
-        "    Use env-var interpolation instead (Claude Code supports ${VAR}):"
-    )
+    click.echo("    Use env-var interpolation instead (Claude Code supports ${VAR}):")
     example = names[0]
     click.echo(f"      export {example}=...   # in ~/.bashrc or ~/.zshrc")
     click.echo(f'      "{example}": "${{{example}}}"   # in {config_path.name}')
@@ -845,9 +835,7 @@ def _print_context7_hint_if_missing() -> None:
             fg="cyan",
         )
     )
-    click.echo(
-        "  Without it, tapps_lookup_docs falls back to LlmsTxt (reduced coverage)."
-    )
+    click.echo("  Without it, tapps_lookup_docs falls back to LlmsTxt (reduced coverage).")
     click.echo("  Get a key: https://context7.com")
 
 
@@ -1028,15 +1016,11 @@ def _generate_rules(
             click.echo(click.style("  Updated .claude/settings.json with permissions", fg="green"))
         elif settings_action == "skipped":
             click.echo("  .claude/settings.json already has TappsMCP permissions (skipped)")
-        hooks_result = generate_claude_hooks(
-            project_root, engagement_level=engagement_level
-        )
+        hooks_result = generate_claude_hooks(project_root, engagement_level=engagement_level)
         _echo_gen_result("hooks", hooks_result)
         agents_result = generate_subagent_definitions(project_root, "claude")
         _echo_gen_result("agents", agents_result)
-        skills_result = generate_skills(
-            project_root, "claude", engagement_level=engagement_level
-        )
+        skills_result = generate_skills(project_root, "claude", engagement_level=engagement_level)
         _echo_gen_result("skills", skills_result)
         generate_ci_workflow(project_root)
         click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
@@ -1050,15 +1034,11 @@ def _generate_rules(
             click.echo(click.style("  Updated .cursor/rules/tapps-pipeline.md", fg="green"))
         elif action == "skipped":
             click.echo("  .cursor/rules/tapps-pipeline.md already exists (skipped)")
-        hooks_result = generate_cursor_hooks(
-            project_root, engagement_level=engagement_level
-        )
+        hooks_result = generate_cursor_hooks(project_root, engagement_level=engagement_level)
         _echo_gen_result("hooks", hooks_result)
         agents_result = generate_subagent_definitions(project_root, "cursor")
         _echo_gen_result("agents", agents_result)
-        skills_result = generate_skills(
-            project_root, "cursor", engagement_level=engagement_level
-        )
+        skills_result = generate_skills(project_root, "cursor", engagement_level=engagement_level)
         _echo_gen_result("skills", skills_result)
         rules_result = generate_cursor_rules(project_root)
         _echo_gen_result("cursor rules", rules_result)
@@ -1135,37 +1115,45 @@ def _preview_rules(
     files: list[str] = []
 
     if host == "claude-code":
-        files.extend([
-            "CLAUDE.md",
-            ".claude/settings.json",
-            ".claude/hooks/ (tapps-session-start, tapps-stop, ...)",
-            ".claude/agents/ (tapps-reviewer, tapps-validator, ...)",
-            ".claude/skills/ (tapps-score, tapps-validate, ...)",
-            ".github/workflows/tapps-quality.yml",
-            ".github/copilot-instructions.md",
-        ])
+        files.extend(
+            [
+                "CLAUDE.md",
+                ".claude/settings.json",
+                ".claude/hooks/ (tapps-session-start, tapps-stop, ...)",
+                ".claude/agents/ (tapps-reviewer, tapps-validator, ...)",
+                ".claude/skills/ (tapps-score, tapps-validate, ...)",
+                ".github/workflows/tapps-quality.yml",
+                ".github/copilot-instructions.md",
+            ]
+        )
     elif host == "cursor":
-        files.extend([
-            ".cursor/rules/tapps-pipeline.md",
-            ".cursor/hooks/ (tapps-before-mcp, ...)",
-            ".cursor/agents/ (tapps-reviewer, tapps-validator, ...)",
-            ".cursor/skills/ (tapps-score, tapps-validate, ...)",
-            ".cursor/rules/ (tapps-quality, ...)",
-            ".cursor/BUGBOT.md",
-            ".github/workflows/tapps-quality.yml",
-            ".github/copilot-instructions.md",
-        ])
+        files.extend(
+            [
+                ".cursor/rules/tapps-pipeline.md",
+                ".cursor/hooks/ (tapps-before-mcp, ...)",
+                ".cursor/agents/ (tapps-reviewer, tapps-validator, ...)",
+                ".cursor/skills/ (tapps-score, tapps-validate, ...)",
+                ".cursor/rules/ (tapps-quality, ...)",
+                ".cursor/BUGBOT.md",
+                ".github/workflows/tapps-quality.yml",
+                ".github/copilot-instructions.md",
+            ]
+        )
     elif host == "vscode":
-        files.extend([
-            ".github/workflows/tapps-quality.yml",
-            ".github/copilot-instructions.md",
-        ])
+        files.extend(
+            [
+                ".github/workflows/tapps-quality.yml",
+                ".github/copilot-instructions.md",
+            ]
+        )
 
     # Common files generated by bootstrap_pipeline (via MCP tool or upgrade)
-    files.extend([
-        "AGENTS.md",
-        "TECH_STACK.md",
-    ])
+    files.extend(
+        [
+            "AGENTS.md",
+            "TECH_STACK.md",
+        ]
+    )
 
     if files:
         click.echo(click.style("[DRY-RUN] Would also create/update:", fg="cyan"))
@@ -1276,11 +1264,7 @@ def run_init(
         "TAPPS_MCP_ALLOW_PACKAGE_INIT",
         "",
     ).strip().lower() in ("1", "true", "yes", "y", "on")
-    if (
-        not check
-        and not allow_pkg
-        and is_tapps_mcp_package_layout(root)
-    ):
+    if not check and not allow_pkg and is_tapps_mcp_package_layout(root):
         click.echo(
             click.style(
                 "Refusing init: project root is the tapps-mcp package directory "
@@ -1294,8 +1278,7 @@ def run_init(
             "--project-root <consumer-app>"
         )
         click.echo(
-            "  Package maintainers: set TAPPS_MCP_ALLOW_PACKAGE_INIT=1 or use "
-            "--allow-package-init."
+            "  Package maintainers: set TAPPS_MCP_ALLOW_PACKAGE_INIT=1 or use --allow-package-init."
         )
         return False
 
@@ -1324,8 +1307,7 @@ def run_init(
             )
         )
         click.echo(
-            f"  Add to your shell profile:  "
-            f"export TAPPS_MCP_CONTEXT7_API_KEY='{context7_api_key}'"
+            f"  Add to your shell profile:  export TAPPS_MCP_CONTEXT7_API_KEY='{context7_api_key}'"
         )
 
     if mcp_host == "auto":
@@ -1422,9 +1404,7 @@ def _format_upgrade_result(result: dict[str, Any], *, dry_run: bool = False) -> 
             if isinstance(value, dict):
                 created = value.get("scripts_created") or value.get("created") or []
                 if created:
-                    click.echo(
-                        click.style(f"  Generated {key}: {', '.join(created)}", fg="green")
-                    )
+                    click.echo(click.style(f"  Generated {key}: {', '.join(created)}", fg="green"))
                 else:
                     click.echo(f"  {key.capitalize()} already up to date (skipped)")
             elif isinstance(value, str):
@@ -1442,15 +1422,12 @@ def _format_upgrade_result(result: dict[str, Any], *, dry_run: bool = False) -> 
     elif not errors:
         click.echo(click.style("Upgrade complete!", fg="green"))
         click.echo(
-            "\nFor the full consumer requirements checklist, "
-            "see docs/TAPPS_MCP_REQUIREMENTS.md"
+            "\nFor the full consumer requirements checklist, see docs/TAPPS_MCP_REQUIREMENTS.md"
         )
     else:
         for err in errors:
             click.echo(click.style(f"  Error: {err}", fg="red"))
-        click.echo(
-            click.style("Upgrade completed with issues. Check output above.", fg="yellow")
-        )
+        click.echo(click.style("Upgrade completed with issues. Check output above.", fg="yellow"))
 
 
 def run_upgrade(

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 
-import structlog
-
 from tapps_core.common.logging import get_logger, setup_logging
 
 

@@ -169,9 +169,7 @@ class TestUrlDocSource:
         engine._registry.healthy_providers.return_value = []
         engine._api_key = None  # disable legacy Context7 fallback
 
-        with patch.object(
-            real_httpx, "AsyncClient", side_effect=Exception("Connection failed")
-        ):
+        with patch.object(real_httpx, "AsyncClient", side_effect=Exception("Connection failed")):
             result = await engine.lookup("remote-lib", "overview")
         await engine.close()
 

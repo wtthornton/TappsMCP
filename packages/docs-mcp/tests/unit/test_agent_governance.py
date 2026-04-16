@@ -9,8 +9,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
-
 from docs_mcp.agents.catalog import AgentCatalog
 from docs_mcp.agents.dedup import DedupResult, check_dedup
 from docs_mcp.agents.embeddings import StubEmbeddingBackend
@@ -261,9 +259,12 @@ class TestCatalogHealth:
 
     def test_health_score_decreases_with_overlaps(self) -> None:
         report_clean = CatalogHealthReport(
-            total_agents=5, active_agents=5, overlap_pairs=[],
+            total_agents=5,
+            active_agents=5,
+            overlap_pairs=[],
         )
         from docs_mcp.agents.health import OverlapPair
+
         report_dirty = CatalogHealthReport(
             total_agents=5,
             active_agents=5,
@@ -374,11 +375,13 @@ class TestLifecycle:
         assert result.agents_removed == 0
 
     def test_active_agents_excludes_deprecated(self) -> None:
-        catalog = AgentCatalog([
-            AgentConfig(name="active1"),
-            AgentConfig(name="deprecated1", deprecated=True),
-            AgentConfig(name="active2"),
-        ])
+        catalog = AgentCatalog(
+            [
+                AgentConfig(name="active1"),
+                AgentConfig(name="deprecated1", deprecated=True),
+                AgentConfig(name="active2"),
+            ]
+        )
         assert len(catalog.active_agents) == 2
 
 

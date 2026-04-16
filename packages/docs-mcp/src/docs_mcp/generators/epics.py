@@ -124,16 +124,23 @@ class EpicGenerator:
     compatibility.
     """
 
-    VALID_STYLES: ClassVar[frozenset[str]] = frozenset({
-        "minimal", "standard", "comprehensive", "auto",
-    })
-    VALID_STATUSES: ClassVar[frozenset[str]] = frozenset({
-        "Proposed",
-        "In Progress",
-        "Complete",
-        "Blocked",
-        "Cancelled",
-    })
+    VALID_STYLES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "minimal",
+            "standard",
+            "comprehensive",
+            "auto",
+        }
+    )
+    VALID_STATUSES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Proposed",
+            "In Progress",
+            "Complete",
+            "Blocked",
+            "Cancelled",
+        }
+    )
 
     # Keyword → suggested story titles (keyword-to-pattern mapping for suggestion engine).
     _STORY_PATTERNS: ClassVar[dict[str, list[str]]] = {
@@ -146,7 +153,13 @@ class EpicGenerator:
         "rest": ["Schema & Models", "Endpoint Handlers", "Validation", "Client SDK", "Tests"],
         "graphql": ["Schema & Models", "Endpoint Handlers", "Validation", "Client SDK", "Tests"],
         "ui": ["Component Scaffold", "State Management", "Form Validation", "Styling", "Tests"],
-        "frontend": ["Component Scaffold", "State Management", "Form Validation", "Styling", "Tests"],
+        "frontend": [
+            "Component Scaffold",
+            "State Management",
+            "Form Validation",
+            "Styling",
+            "Tests",
+        ],
         "page": ["Component Scaffold", "State Management", "Form Validation", "Styling", "Tests"],
         "form": ["Component Scaffold", "State Management", "Form Validation", "Styling", "Tests"],
         "database": ["Schema Design", "Migration Scripts", "Query Layer", "Seed Data", "Tests"],
@@ -239,14 +252,10 @@ class EpicGenerator:
         updates: dict[str, Any] = {}
 
         if not config.goal:
-            updates["goal"] = (
-                f"Implement {title} with full test coverage and documentation."
-            )
+            updates["goal"] = f"Implement {title} with full test coverage and documentation."
 
         if not config.motivation:
-            updates["motivation"] = (
-                f"This epic addresses the need for {title} in the project."
-            )
+            updates["motivation"] = f"This epic addresses the need for {title} in the project."
 
         if not config.acceptance_criteria:
             updates["acceptance_criteria"] = [
@@ -362,12 +371,8 @@ class EpicGenerator:
 
             # File hints: render file-specific sections when files are provided
             if config.files and project_root:
-                lines.extend(
-                    self._render_file_hints(config.files, project_root, config)
-                )
-                lines.extend(
-                    self._render_related_epics(config.files, project_root)
-                )
+                lines.extend(self._render_file_hints(config.files, project_root, config))
+                lines.extend(self._render_related_epics(config.files, project_root))
 
             if style == "comprehensive":
                 lines.extend(self._render_success_metrics(config))
@@ -525,9 +530,7 @@ class EpicGenerator:
             for criterion in config.acceptance_criteria:
                 lines.append(f"- [ ] {criterion}")
         elif config.title.strip():
-            lines.append(
-                f"- [ ] Define verifiable criteria for **{config.title.strip()}**..."
-            )
+            lines.append(f"- [ ] Define verifiable criteria for **{config.title.strip()}**...")
             lines.append("- [ ] All stories completed and passing tests")
             lines.append("- [ ] Documentation updated")
         else:
@@ -587,8 +590,10 @@ class EpicGenerator:
                     lines.append("- [ ] Write unit tests")
                     lines.append("- [ ] Update documentation")
                 lines.append("")
-                lines.append(f"**Definition of Done:** {story.title} is implemented, tests "
-                             "pass, and documentation is updated.")
+                lines.append(
+                    f"**Definition of Done:** {story.title} is implemented, tests "
+                    "pass, and documentation is updated."
+                )
                 lines.append("")
                 lines.append("---")
                 lines.append("")
@@ -608,8 +613,10 @@ class EpicGenerator:
                 lines.append("- [ ] Write unit tests")
                 lines.append("- [ ] Update documentation")
                 lines.append("")
-                lines.append(f"**Definition of Done:** {story.title} is implemented, "
-                             "tests pass, and documentation is updated.")
+                lines.append(
+                    f"**Definition of Done:** {story.title} is implemented, "
+                    "tests pass, and documentation is updated."
+                )
                 lines.append("")
                 lines.append("---")
                 lines.append("")
@@ -641,13 +648,9 @@ class EpicGenerator:
                     f"Key tech: **{tech_stack}**."
                 )
             elif title:
-                lines.append(
-                    f"- Document architecture decisions for **{title}**..."
-                )
+                lines.append(f"- Document architecture decisions for **{title}**...")
             else:
-                lines.append(
-                    "- Document architecture decisions and key dependencies..."
-                )
+                lines.append("- Document architecture decisions and key dependencies...")
 
         module_summary = enrichment.get("module_summary")
         if module_summary:
@@ -667,10 +670,7 @@ class EpicGenerator:
             lines.append("### Expert Recommendations")
             lines.append("")
             for item in rendered_guidance:
-                lines.append(
-                    f"- **{item['expert']}** ({item['confidence']}): "
-                    f"{item['advice']}"
-                )
+                lines.append(f"- **{item['expert']}** ({item['confidence']}): {item['advice']}")
 
         lines.extend(["", "<!-- docsmcp:end:technical-notes -->", ""])
         return lines
@@ -696,13 +696,9 @@ class EpicGenerator:
                     f"**{title}**. Consider: {', '.join(hints)}"
                 )
             else:
-                lines.append(
-                    f"- Define what is explicitly out of scope for **{title}**..."
-                )
+                lines.append(f"- Define what is explicitly out of scope for **{title}**...")
         else:
-            lines.append(
-                "- Define what is explicitly deferred to prevent scope creep..."
-            )
+            lines.append("- Define what is explicitly deferred to prevent scope creep...")
 
         lines.extend(["", "<!-- docsmcp:end:non-goals -->", ""])
         return lines
@@ -761,9 +757,7 @@ class EpicGenerator:
                     f"| 0/{story_count} | {story_count}/{story_count} | Sprint board |"
                 )
             if not ac_count and not story_count:
-                lines.append(
-                    "| Define success metrics... | - | - | - |"
-                )
+                lines.append("| Define success metrics... | - | - | - |")
 
         lines.extend(["", "<!-- docsmcp:end:success-metrics -->", ""])
         return lines
@@ -836,7 +830,9 @@ class EpicGenerator:
         return lines
 
     def _render_risk_assessment(
-        self, config: EpicConfig, enrichment: dict[str, Any] | None = None,
+        self,
+        config: EpicConfig,
+        enrichment: dict[str, Any] | None = None,
     ) -> list[str]:
         """Render the Risk Assessment section (comprehensive only).
 
@@ -869,7 +865,8 @@ class EpicGenerator:
                 probability, impact, _score = classifier.classify(risk)
                 # Try to find relevant expert advice for mitigation.
                 mitigation = classifier.derive_mitigation(
-                    risk, expert_advice=self._find_risk_expert_advice(risk, risk_experts),
+                    risk,
+                    expert_advice=self._find_risk_expert_advice(risk, risk_experts),
                 )
                 lines.append(f"| {risk} | {probability} | {impact} | {mitigation} |")
         else:
@@ -882,8 +879,7 @@ class EpicGenerator:
                     lines.append(f"| {risk} | {probability} | {impact} | {mitigation} |")
             else:
                 lines.append(
-                    "| No risks identified | - | - "
-                    "| Consider adding risks during planning |"
+                    "| No risks identified | - | - | Consider adding risks during planning |"
                 )
 
         # Add expert-identified risks from security/performance domains.
@@ -933,21 +929,14 @@ class EpicGenerator:
             sorted_files = sorted(file_stories.items())
             max_files = 20
             for file_path, story_ids in sorted_files[:max_files]:
-                lines.append(
-                    f"| `{file_path}` | {', '.join(story_ids)} | Modify |"
-                )
+                lines.append(f"| `{file_path}` | {', '.join(story_ids)} | Modify |")
             remaining = len(sorted_files) - max_files
             if remaining > 0:
                 story_count = len(config.stories) if config.stories else 0
                 lines.append("")
-                lines.append(
-                    f"*and {remaining} more files across {story_count} stories*"
-                )
+                lines.append(f"*and {remaining} more files across {story_count} stories*")
         else:
-            lines.append(
-                "| Files will be determined during story refinement "
-                "| - | - |"
-            )
+            lines.append("| Files will be determined during story refinement | - | - |")
 
         lines.extend(["", "<!-- docsmcp:end:files-affected -->", ""])
         return lines
@@ -973,7 +962,8 @@ class EpicGenerator:
         from docs_mcp.generators.expert_utils import parse_confidence
 
         perf_experts = [
-            g for g in expert_guidance
+            g
+            for g in expert_guidance
             if g.get("domain") == "performance"
             and g.get("advice", "").strip()
             and parse_confidence(g.get("confidence", "0%")) >= 0.5
@@ -1009,10 +999,12 @@ class EpicGenerator:
             lines.append("")
 
         # Config-derived table (always present)
-        lines.extend([
-            "| Metric | Baseline | Target | Measurement |",
-            "|--------|----------|--------|-------------|",
-        ])
+        lines.extend(
+            [
+                "| Metric | Baseline | Target | Measurement |",
+                "|--------|----------|--------|-------------|",
+            ]
+        )
         for metric, baseline, target, measurement in derived:
             lines.append(f"| {metric} | {baseline} | {target} | {measurement} |")
         lines.append("")
@@ -1137,10 +1129,8 @@ class EpicGenerator:
                 # Show count + latest commit message
                 latest = commit_lines[0]
                 if len(latest) > _MAX_COMMIT_DISPLAY_LEN:
-                    latest = latest[:_MAX_COMMIT_DISPLAY_LEN - 3] + "..."
-                info["commits_summary"] = (
-                    f"{len(commit_lines)} recent: {latest}"
-                )
+                    latest = latest[: _MAX_COMMIT_DISPLAY_LEN - 3] + "..."
+                info["commits_summary"] = f"{len(commit_lines)} recent: {latest}"
         except (subprocess.TimeoutExpired, OSError, ValueError):
             pass
 
@@ -1148,18 +1138,21 @@ class EpicGenerator:
         if str(file_path).endswith(".py"):
             try:
                 source = _Path(file_path).read_text(
-                    encoding="utf-8", errors="replace",
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 tree = ast.parse(source)
                 funcs = 0
                 classes = 0
                 for node in ast.iter_child_nodes(tree):
                     if isinstance(
-                        node, ast.FunctionDef | ast.AsyncFunctionDef,
+                        node,
+                        ast.FunctionDef | ast.AsyncFunctionDef,
                     ) and not node.name.startswith("_"):
                         funcs += 1
                     elif isinstance(
-                        node, ast.ClassDef,
+                        node,
+                        ast.ClassDef,
                     ) and not node.name.startswith("_"):
                         classes += 1
                 parts: list[str] = []
@@ -1236,7 +1229,9 @@ class EpicGenerator:
     _AUTO_POPULATE_TIMEOUT_S: ClassVar[float] = 15.0
 
     def _auto_populate(
-        self, project_root: Path, config: EpicConfig | None = None,
+        self,
+        project_root: Path,
+        config: EpicConfig | None = None,
     ) -> tuple[dict[str, Any], dict[str, int]]:
         """Gather enrichment data from project analyzers and domain experts.
 
@@ -1333,8 +1328,7 @@ class EpicGenerator:
             commits = git_analyzer.get_commits(limit=5)
             if commits:
                 enrichment["git_summary"] = (
-                    f"{len(commits)} recent commits, "
-                    f"latest: {commits[0].message[:50]}"
+                    f"{len(commits)} recent commits, latest: {commits[0].message[:50]}"
                 )
         except Exception:
             logger.debug("epic_auto_populate_git_failed", exc_info=True)

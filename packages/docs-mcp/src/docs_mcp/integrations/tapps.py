@@ -120,15 +120,10 @@ class TappsIntegration:
                 )
                 return TappsEnrichment(available=False)
 
-            quality_scores = [
-                TappsQualityScore(**qs)
-                for qs in data.get("quality_scores", [])
-            ]
+            quality_scores = [TappsQualityScore(**qs) for qs in data.get("quality_scores", [])]
 
             profile_raw = data.get("project_profile")
-            profile = (
-                TappsProjectProfile(**profile_raw) if profile_raw else None
-            )
+            profile = TappsProjectProfile(**profile_raw) if profile_raw else None
 
             dep_raw = data.get("dependency_data")
             dep_data = TappsDependencyData(**dep_raw) if dep_raw else None
@@ -184,10 +179,7 @@ class TappsIntegration:
             if data is None:
                 return []
 
-            return [
-                TappsQualityScore(**qs)
-                for qs in data.get("quality_scores", [])
-            ]
+            return [TappsQualityScore(**qs) for qs in data.get("quality_scores", [])]
         except Exception:
             log.debug(
                 "tapps_quality_scores_load_failed",
@@ -216,10 +208,7 @@ class TappsIntegration:
             color = "red"
 
         encoded_score = urllib.parse.quote(f"{score:.0f}%")
-        return (
-            f"![Quality]"
-            f"(https://img.shields.io/badge/quality-{encoded_score}-{color})"
-        )
+        return f"![Quality](https://img.shields.io/badge/quality-{encoded_score}-{color})"
 
     @staticmethod
     def generate_gate_badge(passed: bool) -> str:
@@ -238,10 +227,7 @@ class TappsIntegration:
             label = "failing"
             color = "red"
 
-        return (
-            f"![Quality Gate]"
-            f"(https://img.shields.io/badge/quality_gate-{label}-{color})"
-        )
+        return f"![Quality Gate](https://img.shields.io/badge/quality_gate-{label}-{color})"
 
     # -- internal helpers ---------------------------------------------------
 
