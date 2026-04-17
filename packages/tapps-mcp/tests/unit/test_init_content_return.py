@@ -6,11 +6,8 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from tapps_core.common.file_operations import WriteMode
 from tapps_mcp.pipeline.init import BootstrapConfig, _BootstrapState, bootstrap_pipeline
-
 
 # ---------------------------------------------------------------------------
 # _BootstrapState content-return tests
@@ -88,9 +85,7 @@ class TestBootstrapStateContentReturn:
         assert state.file_ops[0].mode == "create"
         assert not (tmp_path / "config.yaml").exists()
 
-    def test_safe_write_or_overwrite_existing_content_return(
-        self, tmp_path: Path
-    ) -> None:
+    def test_safe_write_or_overwrite_existing_content_return(self, tmp_path: Path) -> None:
         (tmp_path / "config.yaml").write_text("old: val\n", encoding="utf-8")
         state = _BootstrapState(
             project_root=tmp_path,

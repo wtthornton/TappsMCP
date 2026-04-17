@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from docs_mcp.generators.llms_txt import LlmsTxtGenerator, LlmsTxtResult
 from tests.helpers import make_settings
@@ -24,10 +23,10 @@ def _make_pyproject(root: Path, *, name: str = "my-project", **kwargs: Any) -> N
     content = f"""
 [project]
 name = "{name}"
-version = "{kwargs.get('version', '1.0.0')}"
-description = "{kwargs.get('description', 'A test project')}"
-license = "{kwargs.get('license', 'MIT')}"
-requires-python = "{kwargs.get('python_requires', '>=3.12')}"
+version = "{kwargs.get("version", "1.0.0")}"
+description = "{kwargs.get("description", "A test project")}"
+license = "{kwargs.get("license", "MIT")}"
+requires-python = "{kwargs.get("python_requires", ">=3.12")}"
 dependencies = [{deps_str}]
 
 [project.scripts]

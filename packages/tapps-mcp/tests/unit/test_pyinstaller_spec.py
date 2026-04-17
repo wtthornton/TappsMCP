@@ -70,9 +70,8 @@ class TestSpecCompleteness:
         stale = tapps_imports - self.source_modules
         if stale:
             stale_sorted = sorted(stale)
-            msg = (
-                f"{len(stale)} stale hidden import(s) in tapps_mcp.spec:\n"
-                + "\n".join(f"  - {s}" for s in stale_sorted)
+            msg = f"{len(stale)} stale hidden import(s) in tapps_mcp.spec:\n" + "\n".join(
+                f"  - {s}" for s in stale_sorted
             )
             pytest.fail(msg)
 

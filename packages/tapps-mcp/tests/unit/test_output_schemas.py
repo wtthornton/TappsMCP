@@ -477,55 +477,9 @@ class TestImpactOutput:
         assert content["recommendations"] == ["Run full test suite"]
 
 
-# ---------------------------------------------------------------------------
-# ExpertOutput
-# ---------------------------------------------------------------------------
-
-
-class _TestExpertOutput_REMOVED:
-    """Tests for ExpertOutput model."""
-
-    def test_expert_output_schema(self) -> None:
-        """Verify schema has expected properties."""
-        schema = ExpertOutput.to_output_schema()
-        props = schema["properties"]
-        assert "domain" in props
-        assert "expert_name" in props
-        assert "answer" in props
-        assert "confidence" in props
-        assert "sources" in props
-
-    def test_expert_output_serialize(self) -> None:
-        """Full serialization with sources."""
-        output = ExpertOutput(
-            domain="security",
-            expert_name="Security Expert",
-            answer="Use parameterized queries to prevent SQL injection.",
-            confidence=0.92,
-            sources=["owasp-top10.md", "sql-injection.md"],
-        )
-        content = output.to_structured_content()
-        assert content["domain"] == "security"
-        assert content["expert_name"] == "Security Expert"
-        assert content["confidence"] == 0.92
-        assert len(content["sources"]) == 2
-
-    def test_expert_output_confidence_validation(self) -> None:
-        """Confidence out of [0, 1] range raises ValidationError."""
-        with pytest.raises(ValidationError):
-            ExpertOutput(
-                domain="testing",
-                expert_name="Test Expert",
-                answer="Write more tests.",
-                confidence=1.5,
-            )
-        with pytest.raises(ValidationError):
-            ExpertOutput(
-                domain="testing",
-                expert_name="Test Expert",
-                answer="Write more tests.",
-                confidence=-0.1,
-            )
+# Note: TestExpertOutput and TestResearchOutput were removed when the
+# ExpertOutput / ResearchOutput models were deleted (EPIC-94). The test
+# classes have been removed entirely rather than kept as dead code.
 
 
 # ---------------------------------------------------------------------------
@@ -792,71 +746,6 @@ class TestRegistry:
             schema = cls.to_output_schema()
             assert isinstance(schema, dict), f"{cls.__name__} schema is not a dict"
             assert "properties" in schema, f"{cls.__name__} lacks 'properties'"
-
-
-# ---------------------------------------------------------------------------
-# ResearchOutput
-# ---------------------------------------------------------------------------
-
-
-class _TestResearchOutput_REMOVED:
-    """Tests for ResearchOutput model."""
-
-    def test_research_output_schema(self) -> None:
-        """Verify schema has expected properties."""
-        schema = ResearchOutput.to_output_schema()
-        props = schema["properties"]
-        assert "domain" in props
-        assert "expert_name" in props
-        assert "answer" in props
-        assert "confidence" in props
-        assert "sources" in props
-        assert "docs_supplemented" in props
-        assert "docs_library" in props
-        assert "docs_topic" in props
-
-    def test_research_output_serialize(self) -> None:
-        """Full serialization with docs supplemented."""
-        output = ResearchOutput(
-            domain="security",
-            expert_name="Security Expert",
-            answer="Use parameterized queries.",
-            confidence=0.85,
-            sources=["sql-injection.md"],
-            docs_supplemented=True,
-            docs_library="sqlalchemy",
-            docs_topic="queries",
-        )
-        content = output.to_structured_content()
-        assert content["domain"] == "security"
-        assert content["expert_name"] == "Security Expert"
-        assert content["confidence"] == 0.85
-        assert content["docs_supplemented"] is True
-        assert content["docs_library"] == "sqlalchemy"
-        assert content["docs_topic"] == "queries"
-
-    def test_research_output_defaults(self) -> None:
-        """Default values are correct."""
-        output = ResearchOutput(
-            domain="testing",
-            expert_name="Test Expert",
-            answer="Write more tests.",
-            confidence=0.7,
-        )
-        assert output.docs_supplemented is False
-        assert output.docs_library is None
-        assert output.docs_topic is None
-        assert output.sources == []
-
-    def test_research_output_confidence_validation(self) -> None:
-        """Confidence out of range raises ValidationError."""
-        with pytest.raises(ValidationError):
-            ResearchOutput(
-                domain="x",
-                expert_name="X",
-                answer="y",
-                confidence=1.5,
-            )
 
 
 # ---------------------------------------------------------------------------

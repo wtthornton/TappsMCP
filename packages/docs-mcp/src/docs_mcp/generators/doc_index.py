@@ -16,12 +16,26 @@ from pydantic import BaseModel
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 # Directories to skip when scanning.
-_SKIP_DIRS: frozenset[str] = frozenset({
-    ".git", ".hg", ".svn", "__pycache__", "node_modules",
-    ".venv", "venv", ".env", ".tox", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", "dist", "build",
-    ".eggs", ".tapps-mcp",
-})
+_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".env",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".eggs",
+        ".tapps-mcp",
+    }
+)
 
 # Extensions considered documentation.
 _DOC_EXTENSIONS: frozenset[str] = frozenset({".md", ".rst", ".txt", ".adoc"})
@@ -60,13 +74,24 @@ class DocIndexGenerator:
         "Architecture": ["architecture", "design", "adr", "c4", "diagram"],
         "API Reference": ["api", "reference", "endpoint"],
         "Guides": [
-            "guide", "tutorial", "howto", "how-to", "walkthrough",
-            "onboarding", "contributing",
+            "guide",
+            "tutorial",
+            "howto",
+            "how-to",
+            "walkthrough",
+            "onboarding",
+            "contributing",
         ],
         "Configuration": ["config", "settings", "env", "environment"],
         "Operations": [
-            "deploy", "docker", "ci", "cd", "pipeline",
-            "monitoring", "runbook", "ops",
+            "deploy",
+            "docker",
+            "ci",
+            "cd",
+            "pipeline",
+            "monitoring",
+            "runbook",
+            "ops",
         ],
         "Planning": ["epic", "story", "prd", "roadmap", "plan", "rfc", "proposal"],
         "Release": ["changelog", "release", "migration", "upgrade"],
@@ -84,9 +109,7 @@ class DocIndexGenerator:
             DocIndexResult with the markdown index.
         """
         if not project_root.is_dir():
-            return DocIndexResult(
-                content="", entries=[], total_files=0, categories={}
-            )
+            return DocIndexResult(content="", entries=[], total_files=0, categories={})
 
         # Collect doc files
         entries: list[DocEntry] = []
@@ -155,9 +178,7 @@ class DocIndexGenerator:
         # Last modified
         try:
             mtime = file_path.stat().st_mtime
-            last_modified = datetime.fromtimestamp(mtime, tz=UTC).strftime(
-                "%Y-%m-%d"
-            )
+            last_modified = datetime.fromtimestamp(mtime, tz=UTC).strftime("%Y-%m-%d")
         except OSError:
             last_modified = ""
 

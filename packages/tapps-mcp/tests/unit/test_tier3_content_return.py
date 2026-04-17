@@ -6,8 +6,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 
 class TestSetEngagementLevelContentReturn:
     """Test tapps_set_engagement_level in content-return mode."""
@@ -38,68 +36,8 @@ class TestSetEngagementLevelContentReturn:
         assert "file_manifest" not in data
 
 
-class _TestManageExpertsContentReturn_REMOVED:
-    """Test tapps_manage_experts add/scaffold in content-return mode."""
-
-    def test_add_content_return(self, tmp_path: Path) -> None:
-        from tapps_mcp.server_expert_tools import _handle_add
-
-        # Create the experts.yaml first
-        experts_dir = tmp_path / ".tapps-mcp"
-        experts_dir.mkdir(parents=True)
-        (experts_dir / "experts.yaml").write_text(
-            "experts: []\n", encoding="utf-8"
-        )
-
-        with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
-            result = _handle_add(
-                tmp_path,
-                expert_id="expert-test",
-                expert_name="Test Expert",
-                primary_domain="testing",
-                description="A test expert",
-                keywords=["test"],
-                rag_enabled=True,
-                knowledge_dir="",
-            )
-
-        assert result.get("content_return") is True
-        assert "file_manifest" in result
-        manifest = result["file_manifest"]
-        assert manifest["file_count"] == 1
-        assert ".tapps-mcp/experts.yaml" in manifest["files"][0]["path"]
-
-    def test_scaffold_content_return(self, tmp_path: Path) -> None:
-        import yaml
-
-        from tapps_mcp.server_expert_tools import _handle_scaffold
-
-        # Create experts.yaml with an expert
-        experts_dir = tmp_path / ".tapps-mcp"
-        experts_dir.mkdir(parents=True)
-        data = {
-            "experts": [
-                {
-                    "expert_id": "expert-test",
-                    "expert_name": "Test Expert",
-                    "primary_domain": "testing",
-                },
-            ],
-        }
-        (experts_dir / "experts.yaml").write_text(
-            yaml.dump(data), encoding="utf-8"
-        )
-
-        with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
-            result = _handle_scaffold(tmp_path, "expert-test")
-
-        assert result.get("content_return") is True
-        assert "file_manifest" in result
-        manifest = result["file_manifest"]
-        assert manifest["file_count"] == 2  # README.md + overview.md
-        paths = [f["path"] for f in manifest["files"]]
-        assert any("README.md" in p for p in paths)
-        assert any("overview.md" in p for p in paths)
+# Note: TestManageExpertsContentReturn was removed when manage_experts
+# was deleted (EPIC-94).
 
 
 class TestMemoryExportContentReturn:
@@ -137,9 +75,8 @@ class TestMemoryExportContentReturn:
         return _Params(**defaults)  # type: ignore[arg-type]
 
     def test_export_content_return_json(self, tmp_path: Path) -> None:
-        from tapps_mcp.server_memory_tools import _handle_export
-
         from tapps_core.memory.store import MemoryStore
+        from tapps_mcp.server_memory_tools import _handle_export
 
         store = MemoryStore(project_root=tmp_path)
         p = self._make_params(export_format="json")
@@ -156,9 +93,8 @@ class TestMemoryExportContentReturn:
     def test_export_direct_write(self, tmp_path: Path) -> None:
         from unittest.mock import MagicMock
 
-        from tapps_mcp.server_memory_tools import _handle_export
-
         from tapps_core.memory.store import MemoryStore
+        from tapps_mcp.server_memory_tools import _handle_export
 
         store = MemoryStore(project_root=tmp_path)
         p = self._make_params(

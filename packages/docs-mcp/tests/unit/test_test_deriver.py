@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from docs_mcp.generators.test_deriver import _criterion_to_test_name, derive_test_names
 
-
 # ---------------------------------------------------------------------------
 # derive_test_names
 # ---------------------------------------------------------------------------

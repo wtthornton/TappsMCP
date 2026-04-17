@@ -272,9 +272,7 @@ class TestDomainWeightStore:
         assert entry.negative_count == 1
 
     def test_update_creates_new_entry_if_missing(self, store: DomainWeightStore):
-        entry = store.update_from_feedback(
-            "new-domain", helpful=True, domain_type="business"
-        )
+        entry = store.update_from_feedback("new-domain", helpful=True, domain_type="business")
         assert entry.domain == "new-domain"
         assert entry.weight > 1.0
         assert entry.samples == 1
@@ -402,11 +400,15 @@ class TestDomainWeightStore:
         store_dir = tmp_path / ".tapps-mcp" / "adaptive"
         store_dir.mkdir(parents=True, exist_ok=True)
         json_file = store_dir / "domain_weights.json"
-        json_file.write_text(json.dumps({
-            "technical": {"security": {"weight": 1.3, "samples": 5}},
-            "business": {},
-            "version": 1,
-        }))
+        json_file.write_text(
+            json.dumps(
+                {
+                    "technical": {"security": {"weight": 1.3, "samples": 5}},
+                    "business": {},
+                    "version": 1,
+                }
+            )
+        )
         store = DomainWeightStore(tmp_path)
         snapshot = store.load_weights()
         assert "security" in snapshot.technical

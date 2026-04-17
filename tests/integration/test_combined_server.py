@@ -17,7 +17,6 @@ from docs_mcp.server import mcp as docs_server
 from tapps_mcp.platform.combined_server import create_combined_server
 from tapps_mcp.server import mcp as tapps_server
 
-
 # ---------------------------------------------------------------------------
 # Expected tool sets (authoritative lists)
 # ---------------------------------------------------------------------------
@@ -139,12 +138,12 @@ class TestAllTappsToolsRegistered:
     def test_tapps_tool_count(self, tapps_tool_names: set[str]) -> None:
         """TappsMCP registers at least 26 tools."""
         assert len(tapps_tool_names) >= len(EXPECTED_TAPPS_TOOLS), (
-            f"Expected >= {len(EXPECTED_TAPPS_TOOLS)} tapps tools, "
-            f"got {len(tapps_tool_names)}"
+            f"Expected >= {len(EXPECTED_TAPPS_TOOLS)} tapps tools, got {len(tapps_tool_names)}"
         )
 
     def test_no_unexpected_tapps_tools_missing(
-        self, tapps_tool_names: set[str],
+        self,
+        tapps_tool_names: set[str],
     ) -> None:
         """Every tool from the expected list is registered on the standalone server."""
         missing = EXPECTED_TAPPS_TOOLS - tapps_tool_names
@@ -164,12 +163,12 @@ class TestAllDocsToolsRegistered:
     def test_docs_tool_count(self, docs_tool_names: set[str]) -> None:
         """DocsMCP registers at least 19 tools."""
         assert len(docs_tool_names) >= len(EXPECTED_DOCS_TOOLS), (
-            f"Expected >= {len(EXPECTED_DOCS_TOOLS)} docs tools, "
-            f"got {len(docs_tool_names)}"
+            f"Expected >= {len(EXPECTED_DOCS_TOOLS)} docs tools, got {len(docs_tool_names)}"
         )
 
     def test_no_unexpected_docs_tools_missing(
-        self, docs_tool_names: set[str],
+        self,
+        docs_tool_names: set[str],
     ) -> None:
         """Every tool from the expected list is registered on the standalone server."""
         missing = EXPECTED_DOCS_TOOLS - docs_tool_names
@@ -183,16 +182,12 @@ class TestResourcesNoCollision:
     def test_tapps_resources_use_tapps_uri(self) -> None:
         """All TappsMCP resources use the tapps:// URI scheme."""
         for uri in tapps_server._resource_manager._resources:
-            assert str(uri).startswith("tapps://"), (
-                f"TappsMCP resource with unexpected URI: {uri}"
-            )
+            assert str(uri).startswith("tapps://"), f"TappsMCP resource with unexpected URI: {uri}"
 
     def test_docs_resources_use_docs_uri(self) -> None:
         """All DocsMCP resources use the docs:// URI scheme."""
         for uri in docs_server._resource_manager._resources:
-            assert str(uri).startswith("docs://"), (
-                f"DocsMCP resource with unexpected URI: {uri}"
-            )
+            assert str(uri).startswith("docs://"), f"DocsMCP resource with unexpected URI: {uri}"
 
     def test_no_resource_uri_collisions(self) -> None:
         """Resource URIs from both servers must be disjoint."""
@@ -255,8 +250,8 @@ class TestSettingsSingletonShared:
 
     def test_cross_server_project_root_matches(self) -> None:
         """TappsMCP and DocsMCP resolve to the same project root."""
-        from tapps_core.config.settings import load_settings
         from docs_mcp.server_helpers import _get_settings as docs_get
+        from tapps_core.config.settings import load_settings
 
         core_settings = load_settings()
         docs_settings = docs_get()
@@ -296,16 +291,21 @@ class TestGracefulDegradationWithoutDocsMCP:
 
     def test_combined_works_without_docs_mcp(self) -> None:
         """If docs_mcp is unavailable, create_combined_server returns tapps-only."""
-        with patch(
-            "tapps_mcp.platform.combined_server._DOCS_MCP_AVAILABLE", False,
-        ), patch(
-            "tapps_mcp.platform.combined_server.docs_server", None,
+        with (
+            patch(
+                "tapps_mcp.platform.combined_server._DOCS_MCP_AVAILABLE",
+                False,
+            ),
+            patch(
+                "tapps_mcp.platform.combined_server.docs_server",
+                None,
+            ),
         ):
             combined = create_combined_server()
 
         # Should have all tapps tools
         combined_names = set(combined._tool_manager._tools.keys())
-        assert EXPECTED_TAPPS_TOOLS <= combined_names
+        assert combined_names >= EXPECTED_TAPPS_TOOLS
 
         # Should have zero docs tools
         docs_in_combined = {n for n in combined_names if n.startswith("docs_")}
@@ -314,7 +314,7 @@ class TestGracefulDegradationWithoutDocsMCP:
     def test_tapps_tools_independent_of_docs(self) -> None:
         """TappsMCP tool registration is not affected by DocsMCP presence."""
         tapps_names = set(tapps_server._tool_manager._tools.keys())
-        assert EXPECTED_TAPPS_TOOLS <= tapps_names
+        assert tapps_names >= EXPECTED_TAPPS_TOOLS
 
 
 # ===========================================================================

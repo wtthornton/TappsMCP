@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -106,9 +106,6 @@ class TestLookupCacheMiss:
     @pytest.mark.asyncio
     async def test_cache_stores_provider_source(self, cache):
         """When content comes from a provider, cache entry has provider_source."""
-        from unittest.mock import MagicMock
-
-        from pydantic import SecretStr
 
         from tapps_core.knowledge.providers.base import DocumentationProvider
         from tapps_core.knowledge.providers.registry import ProviderRegistry
@@ -412,42 +409,46 @@ class TestIsTocOnly:
 
     def test_toc_content_detected(self) -> None:
         """Content dominated by links/headings with little prose is TOC."""
-        toc = "\n".join([
-            "# Documentation",
-            "- [Getting Started](https://example.com/start)",
-            "- [API Reference](https://example.com/api)",
-            "- [Configuration](https://example.com/config)",
-            "## More Links",
-            "- [Deployment](https://example.com/deploy)",
-            "- [Troubleshooting](https://example.com/trouble)",
-            "## Resources",
-            "- [FAQ](https://example.com/faq)",
-        ])
+        toc = "\n".join(
+            [
+                "# Documentation",
+                "- [Getting Started](https://example.com/start)",
+                "- [API Reference](https://example.com/api)",
+                "- [Configuration](https://example.com/config)",
+                "## More Links",
+                "- [Deployment](https://example.com/deploy)",
+                "- [Troubleshooting](https://example.com/trouble)",
+                "## Resources",
+                "- [FAQ](https://example.com/faq)",
+            ]
+        )
         assert _is_toc_only(toc) is True
 
     def test_prose_content_not_detected(self) -> None:
         """Content with substantial prose is NOT TOC-only."""
-        prose = "\n".join([
-            "# Docker Compose Best Practices",
-            "",
-            "Docker Compose is a tool for defining and running multi-container "
-            "Docker applications. With Compose, you use a YAML file to configure "
-            "your application's services. Then, with a single command, you create "
-            "and start all the services from your configuration.",
-            "",
-            "When working with production deployments, always pin your image "
-            "versions to specific tags rather than using 'latest'. This ensures "
-            "reproducible builds and prevents unexpected breaking changes when "
-            "upstream images are updated.",
-            "",
-            "Use health checks in your services to ensure containers are ready "
-            "before dependent services attempt to connect. This prevents race "
-            "conditions during startup sequences.",
-            "",
-            "Volume mounts should be used for persistent data. Named volumes "
-            "are preferred over bind mounts in production because they are "
-            "managed by Docker and work consistently across different host OSes.",
-        ])
+        prose = "\n".join(
+            [
+                "# Docker Compose Best Practices",
+                "",
+                "Docker Compose is a tool for defining and running multi-container "
+                "Docker applications. With Compose, you use a YAML file to configure "
+                "your application's services. Then, with a single command, you create "
+                "and start all the services from your configuration.",
+                "",
+                "When working with production deployments, always pin your image "
+                "versions to specific tags rather than using 'latest'. This ensures "
+                "reproducible builds and prevents unexpected breaking changes when "
+                "upstream images are updated.",
+                "",
+                "Use health checks in your services to ensure containers are ready "
+                "before dependent services attempt to connect. This prevents race "
+                "conditions during startup sequences.",
+                "",
+                "Volume mounts should be used for persistent data. Named volumes "
+                "are preferred over bind mounts in production because they are "
+                "managed by Docker and work consistently across different host OSes.",
+            ]
+        )
         assert _is_toc_only(prose) is False
 
     def test_empty_content_is_toc(self) -> None:
@@ -456,15 +457,17 @@ class TestIsTocOnly:
 
     def test_mixed_content_below_threshold(self) -> None:
         """Content with some prose but under threshold is TOC."""
-        mixed = "\n".join([
-            "# Tools",
-            "Some intro.",
-            "- [Tool A](https://a.com)",
-            "- [Tool B](https://b.com)",
-            "- [Tool C](https://c.com)",
-            "## More",
-            "- [Tool D](https://d.com)",
-        ])
+        mixed = "\n".join(
+            [
+                "# Tools",
+                "Some intro.",
+                "- [Tool A](https://a.com)",
+                "- [Tool B](https://b.com)",
+                "- [Tool C](https://c.com)",
+                "## More",
+                "- [Tool D](https://d.com)",
+            ]
+        )
         assert _is_toc_only(mixed) is True
 
 
@@ -477,15 +480,17 @@ class TestTocWarningInLookup:
         from tapps_core.knowledge.providers.base import DocumentationProvider
         from tapps_core.knowledge.providers.registry import ProviderRegistry
 
-        toc_content = "\n".join([
-            "# Docs",
-            "- [A](https://a.com)",
-            "- [B](https://b.com)",
-            "- [C](https://c.com)",
-            "## Links",
-            "- [D](https://d.com)",
-            "- [E](https://e.com)",
-        ])
+        toc_content = "\n".join(
+            [
+                "# Docs",
+                "- [A](https://a.com)",
+                "- [B](https://b.com)",
+                "- [C](https://c.com)",
+                "## Links",
+                "- [D](https://d.com)",
+                "- [E](https://e.com)",
+            ]
+        )
 
         class TocProvider(DocumentationProvider):
             def name(self) -> str:

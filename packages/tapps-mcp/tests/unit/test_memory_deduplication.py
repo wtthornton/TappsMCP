@@ -308,12 +308,18 @@ class TestRetrievalDeduplicationIntegration:
         """After consolidation, search hides source entries."""
         # Create entries that will be consolidated
         await tapps_memory(
-            action="save", key="cache-1", value="Use Redis cache",
-            tier="pattern", tags="cache",
+            action="save",
+            key="cache-1",
+            value="Use Redis cache",
+            tier="pattern",
+            tags="cache",
         )
         await tapps_memory(
-            action="save", key="cache-2", value="Redis with TTL",
-            tier="pattern", tags="cache",
+            action="save",
+            key="cache-2",
+            value="Redis with TTL",
+            tier="pattern",
+            tags="cache",
         )
 
         # Consolidate
@@ -334,12 +340,18 @@ class TestRetrievalDeduplicationIntegration:
     async def test_consolidate_then_list_hides_sources(self, mock_store) -> None:
         """After consolidation, list hides source entries."""
         await tapps_memory(
-            action="save", key="api-1", value="REST API",
-            tier="pattern", tags="api",
+            action="save",
+            key="api-1",
+            value="REST API",
+            tier="pattern",
+            tags="api",
         )
         await tapps_memory(
-            action="save", key="api-2", value="API versioning",
-            tier="pattern", tags="api",
+            action="save",
+            key="api-2",
+            value="API versioning",
+            tier="pattern",
+            tags="api",
         )
 
         # Consolidate
@@ -384,7 +396,9 @@ class TestParameterInteraction:
     async def test_include_sources_with_tier_filter(self, mock_store) -> None:
         """include_sources works with tier filtering."""
         await tapps_memory(
-            action="save", key="arch", value="arch entry",
+            action="save",
+            key="arch",
+            value="arch entry",
             tier="architectural",
         )
         mock_store.update_fields(

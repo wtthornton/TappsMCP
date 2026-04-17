@@ -22,11 +22,23 @@ _MAX_FILES = 200
 class DiataxisValidator:
     """Validates Diataxis coverage balance across project documentation."""
 
-    SKIP_DIRS: ClassVar[frozenset[str]] = frozenset({
-        "__pycache__", ".git", ".venv", "venv", "node_modules",
-        ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache",
-        "dist", "build", ".eggs", "site-packages",
-    })
+    SKIP_DIRS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "__pycache__",
+            ".git",
+            ".venv",
+            "venv",
+            "node_modules",
+            ".tox",
+            ".mypy_cache",
+            ".pytest_cache",
+            ".ruff_cache",
+            "dist",
+            "build",
+            ".eggs",
+            "site-packages",
+        }
+    )
 
     # Ideal distribution targets (adjustable per project type)
     _IDEAL_BALANCE: ClassVar[dict[str, float]] = {
@@ -84,7 +96,10 @@ class DiataxisValidator:
 
         # Calculate coverage percentages
         counts: dict[str, int] = {
-            "tutorial": 0, "how-to": 0, "reference": 0, "explanation": 0,
+            "tutorial": 0,
+            "how-to": 0,
+            "reference": 0,
+            "explanation": 0,
         }
         for r in results:
             if r.primary_quadrant in counts:

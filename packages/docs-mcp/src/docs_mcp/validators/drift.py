@@ -221,18 +221,19 @@ class DriftDetector:
                 if doc_mtime > 0 and code_mtime > doc_mtime:
                     drift_type = "modified_undocumented"
 
-                items.append(DriftItem(
-                    file_path=rel_path,
-                    drift_type=drift_type,
-                    severity=severity,
-                    description=(
-                        f"Public names not found in docs: {', '.join(undocumented[:5])}"
-                        + (f" (+{len(undocumented) - 5} more)"
-                           if len(undocumented) > 5 else "")
-                    ),
-                    code_last_modified=code_iso,
-                    doc_last_modified=doc_iso,
-                ))
+                items.append(
+                    DriftItem(
+                        file_path=rel_path,
+                        drift_type=drift_type,
+                        severity=severity,
+                        description=(
+                            f"Public names not found in docs: {', '.join(undocumented[:5])}"
+                            + (f" (+{len(undocumented) - 5} more)" if len(undocumented) > 5 else "")
+                        ),
+                        code_last_modified=code_iso,
+                        doc_last_modified=doc_iso,
+                    )
+                )
 
         # Calculate drift score
         drift_score = len(items) / checked if checked > 0 else 0.0

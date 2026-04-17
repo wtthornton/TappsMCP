@@ -22,8 +22,7 @@ def real_project(tmp_path: Path) -> Path:
     root.mkdir()
     (root / ".git").mkdir()
     (root / "pyproject.toml").write_text(
-        '[project]\nname = "integration-test"\nversion = "0.1.0"\n'
-        'requires-python = ">=3.12"\n',
+        '[project]\nname = "integration-test"\nversion = "0.1.0"\nrequires-python = ">=3.12"\n',
         encoding="utf-8",
     )
     src = root / "src" / "mypackage"
@@ -36,8 +35,7 @@ def real_project(tmp_path: Path) -> Path:
     tests_dir = root / "tests"
     tests_dir.mkdir()
     (tests_dir / "test_core.py").write_text(
-        "from mypackage.core import compute\n\ndef test_compute():\n"
-        "    assert compute(2) == 4\n",
+        "from mypackage.core import compute\n\ndef test_compute():\n    assert compute(2) == 4\n",
         encoding="utf-8",
     )
     return root

@@ -58,9 +58,7 @@ async def test_auto_detect_budget_respected(tmp_path: Path) -> None:
     """Auto-detect with many slow files returns partial results within budget."""
     files = _make_files(tmp_path, 10)
 
-    async def slow_validate(
-        path: Path, *args: Any, **kwargs: Any
-    ) -> dict[str, Any]:
+    async def slow_validate(path: Path, *args: Any, **kwargs: Any) -> dict[str, Any]:
         await asyncio.sleep(5.0)  # well over the tiny budget
         return _fast_result(path)
 
@@ -81,9 +79,7 @@ async def test_auto_detect_budget_respected(tmp_path: Path) -> None:
             "tapps_mcp.server_pipeline_tools._compute_impact_analysis",
             return_value=None,
         ),
-        patch(
-            "tapps_mcp.server_pipeline_tools._AUTO_DETECT_BUDGET_S", 0.3
-        ),
+        patch("tapps_mcp.server_pipeline_tools._AUTO_DETECT_BUDGET_S", 0.3),
     ):
         loop = asyncio.get_running_loop()
         t0 = loop.time()
@@ -139,9 +135,7 @@ async def test_cached_files_do_not_count_against_budget(tmp_path: Path) -> None:
             "tapps_mcp.server_pipeline_tools._compute_impact_analysis",
             return_value=None,
         ),
-        patch(
-            "tapps_mcp.server_pipeline_tools._AUTO_DETECT_BUDGET_S", 0.05
-        ),
+        patch("tapps_mcp.server_pipeline_tools._AUTO_DETECT_BUDGET_S", 0.05),
     ):
         result = await tapps_validate_changed(file_paths="", include_impact=False)
 
@@ -160,9 +154,7 @@ async def test_timed_out_response_shape(tmp_path: Path) -> None:
     """Timed-out responses expose files_remaining + copy-paste next_steps."""
     files = _make_files(tmp_path, 3)
 
-    async def slow_validate(
-        path: Path, *args: Any, **kwargs: Any
-    ) -> dict[str, Any]:
+    async def slow_validate(path: Path, *args: Any, **kwargs: Any) -> dict[str, Any]:
         await asyncio.sleep(2.0)
         return _fast_result(path)
 
@@ -183,9 +175,7 @@ async def test_timed_out_response_shape(tmp_path: Path) -> None:
             "tapps_mcp.server_pipeline_tools._compute_impact_analysis",
             return_value=None,
         ),
-        patch(
-            "tapps_mcp.server_pipeline_tools._AUTO_DETECT_BUDGET_S", 0.1
-        ),
+        patch("tapps_mcp.server_pipeline_tools._AUTO_DETECT_BUDGET_S", 0.1),
     ):
         result = await tapps_validate_changed(file_paths="", include_impact=False)
 
@@ -208,9 +198,7 @@ async def test_explicit_file_paths_ignores_cap(tmp_path: Path) -> None:
 
     call_order: list[str] = []
 
-    async def moderately_slow(
-        path: Path, *args: Any, **kwargs: Any
-    ) -> dict[str, Any]:
+    async def moderately_slow(path: Path, *args: Any, **kwargs: Any) -> dict[str, Any]:
         await asyncio.sleep(0.15)
         call_order.append(str(path))
         return _fast_result(path)
@@ -234,13 +222,9 @@ async def test_explicit_file_paths_ignores_cap(tmp_path: Path) -> None:
             "tapps_mcp.server_pipeline_tools._compute_impact_analysis",
             return_value=None,
         ),
-        patch(
-            "tapps_mcp.server_pipeline_tools._AUTO_DETECT_BUDGET_S", 0.01
-        ),
+        patch("tapps_mcp.server_pipeline_tools._AUTO_DETECT_BUDGET_S", 0.01),
     ):
-        result = await tapps_validate_changed(
-            file_paths=explicit, include_impact=False
-        )
+        result = await tapps_validate_changed(file_paths=explicit, include_impact=False)
 
     data = result["data"]
     assert data.get("timed_out") is not True

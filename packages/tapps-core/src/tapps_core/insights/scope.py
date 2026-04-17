@@ -29,7 +29,7 @@ from tapps_brain.models import MemoryScope
 from tapps_core.insights.models import InsightEntry, InsightOrigin
 
 
-class ScopeViolation(ValueError):
+class ScopeViolation(ValueError):  # noqa: N818  (public API name predates the lint rule; renaming would break consumers)
     """Raised when an InsightEntry has an illegal scope/origin combination."""
 
 
@@ -103,9 +103,7 @@ def validate_origin_scope(entry: InsightEntry) -> list[str]:
         )
 
     if scope == "session":
-        warnings.append(
-            "scope=session: insights will not survive beyond the current session."
-        )
+        warnings.append("scope=session: insights will not survive beyond the current session.")
 
     if scope == "branch" and not entry.branch:
         warnings.append("scope=branch but no branch name set.")

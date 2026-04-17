@@ -8,7 +8,7 @@ important FAIL/PASS examples for that attack surface.  Domain checks are additiv
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -91,7 +91,7 @@ _AUTH_PATTERNS: list[SecurityPattern] = [
         description="Session cookie without Secure or HttpOnly flags",
         fail_example='response.set_cookie("session", token)',
         fix='response.set_cookie("session", token, secure=True, httponly=True, samesite="lax")',
-        pattern=r'set_cookie\s*\([^)]*\)(?!.*secure\s*=\s*True)',
+        pattern=r"set_cookie\s*\([^)]*\)(?!.*secure\s*=\s*True)",
     ),
 ]
 
@@ -299,7 +299,7 @@ def detect_domain(file_path: Path, source: str = "") -> str | None:
 
     # Fall back to source content scanning (first 2000 chars)
     sample = source[:2000].lower()
-    scores: dict[str, int] = {d: 0 for d in _DOMAIN_HINTS}
+    scores: dict[str, int] = dict.fromkeys(_DOMAIN_HINTS, 0)
     for domain, hints in _DOMAIN_HINTS.items():
         for h in hints:
             scores[domain] += sample.count(h)
@@ -311,6 +311,7 @@ def detect_domain(file_path: Path, source: str = "") -> str | None:
 # ---------------------------------------------------------------------------
 # Domain scan runner
 # ---------------------------------------------------------------------------
+
 
 def run_domain_scan(
     file_path: Path,

@@ -27,9 +27,7 @@ class TestGetGitContext:
                 result.stdout = ""
             return result
 
-        with patch(
-            "tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run
-        ):
+        with patch("tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run):
             ctx = await _get_git_context()
             assert ctx is not None
             assert ctx["branch"] == "master"
@@ -47,9 +45,7 @@ class TestGetGitContext:
             result.stdout = ""
             return result
 
-        with patch(
-            "tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run
-        ):
+        with patch("tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run):
             ctx = await _get_git_context()
             assert ctx is None
 
@@ -70,9 +66,7 @@ class TestGetGitContext:
                 result.stdout = "M file.py\n"
             return result
 
-        with patch(
-            "tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run
-        ):
+        with patch("tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run):
             ctx = await _get_git_context(commit_sha="deadbeef12345678")
             assert ctx is not None
             assert ctx["head_sha"] == "deadbeef"
@@ -107,9 +101,7 @@ class TestGetGitContext:
                 result.stdout = " M src/file.py\n?? new.py\n"
             return result
 
-        with patch(
-            "tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run
-        ):
+        with patch("tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run):
             ctx = await _get_git_context()
             assert ctx is not None
             assert ctx["dirty"] is True
@@ -131,9 +123,7 @@ class TestGetGitContext:
                 result.stdout = ""
             return result
 
-        with patch(
-            "tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run
-        ):
+        with patch("tapps_mcp.tools.subprocess_runner.run_command_async", side_effect=mock_run):
             ctx = await _get_git_context(commit_sha="   ")
             assert ctx is not None
             assert ctx["head_sha"] == "abcd1234"

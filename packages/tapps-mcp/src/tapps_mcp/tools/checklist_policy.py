@@ -30,9 +30,9 @@ class ChecklistPolicyExtras:
 
 
 def _stable_fingerprint(obj: object) -> str:
-    return hashlib.sha256(
-        json.dumps(obj, sort_keys=True, default=str).encode("utf-8")
-    ).hexdigest()[:20]
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode("utf-8")).hexdigest()[
+        :20
+    ]
 
 
 def load_checklist_policy_extras(project_root: Path) -> ChecklistPolicyExtras | None:

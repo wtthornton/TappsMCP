@@ -11,29 +11,32 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 
 
 def get_tools_from_server(command: list[str], server_name: str) -> list[dict]:
     """Start an MCP server and get its tool list via stdio JSON-RPC."""
     # Send initialize + tools/list via stdin
-    initialize_request = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2025-11-25",
-            "capabilities": {},
-            "clientInfo": {"name": "tools-json-generator", "version": "1.0.0"},
-        },
-    })
-    tools_list_request = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 2,
-        "method": "tools/list",
-        "params": {},
-    })
+    initialize_request = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "tools-json-generator", "version": "1.0.0"},
+            },
+        }
+    )
+    tools_list_request = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {},
+        }
+    )
 
     stdin_data = initialize_request + "\n" + tools_list_request + "\n"
 
@@ -94,7 +97,7 @@ def main() -> None:
 
         if not tools:
             print(f"  WARN: No tools returned from {name}")
-            print(f"  Creating placeholder tools.json")
+            print("  Creating placeholder tools.json")
             tools_data = {"tools": [], "_note": "Placeholder — regenerate with working server"}
         else:
             print(f"  Found {len(tools)} tools (expected {server['expected_tools']})")

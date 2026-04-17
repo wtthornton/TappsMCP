@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from docs_mcp.generators.risk_classifier import RiskClassifier
 
-
 # ---------------------------------------------------------------------------
 # Impact classification
 # ---------------------------------------------------------------------------

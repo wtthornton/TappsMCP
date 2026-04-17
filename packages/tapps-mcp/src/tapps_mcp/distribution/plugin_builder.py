@@ -71,9 +71,7 @@ class PluginBuilder:
             "author": {"name": "TappsMCP"},
             "license": "MIT",
         }
-        (manifest_dir / "plugin.json").write_text(
-            json.dumps(manifest, indent=2), encoding="utf-8"
-        )
+        (manifest_dir / "plugin.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         self._result["components"]["manifest"] = "created"
 
     # ------------------------------------------------------------------
@@ -122,9 +120,7 @@ class PluginBuilder:
         for event, entries in CLAUDE_HOOKS_CONFIG.items():
             hooks_json[event] = list(entries)
 
-        (hooks_dir / "hooks.json").write_text(
-            json.dumps(hooks_json, indent=2), encoding="utf-8"
-        )
+        (hooks_dir / "hooks.json").write_text(json.dumps(hooks_json, indent=2), encoding="utf-8")
         self._result["components"]["hooks"] = list(hooks_json.keys())
 
     # ------------------------------------------------------------------
@@ -165,9 +161,7 @@ class PluginBuilder:
             "2. Use `tapps_quick_check` after editing Python files\n"
             "3. Run `tapps_validate_changed` before declaring work complete\n"
         )
-        (rules_dir / "python-quality.md").write_text(
-            rule_content, encoding="utf-8"
-        )
+        (rules_dir / "python-quality.md").write_text(rule_content, encoding="utf-8")
         self._result["components"]["rules"] = "created"
 
     # ------------------------------------------------------------------

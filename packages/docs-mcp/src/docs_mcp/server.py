@@ -71,50 +71,54 @@ def _reset_tool_calls() -> None:
 # ---------------------------------------------------------------------------
 
 # Canonical list of all DocsMCP tools (32). Used for filtering.
-ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset({
-    "docs_session_start",
-    "docs_project_scan",
-    "docs_config",
-    "docs_module_map",
-    "docs_api_surface",
-    "docs_git_summary",
-    "docs_generate_changelog",
-    "docs_generate_release_notes",
-    "docs_generate_readme",
-    "docs_generate_api",
-    "docs_generate_adr",
-    "docs_generate_onboarding",
-    "docs_generate_contributing",
-    "docs_generate_prd",
-    "docs_generate_diagram",
-    "docs_generate_architecture",
-    "docs_generate_epic",
-    "docs_generate_story",
-    "docs_generate_prompt",
-    "docs_check_drift",
-    "docs_check_completeness",
-    "docs_check_links",
-    "docs_check_freshness",
-    "docs_validate_epic",
-    "docs_generate_llms_txt",
-    "docs_generate_frontmatter",
-    "docs_check_diataxis",
-    "docs_generate_interactive_diagrams",
-    "docs_generate_purpose",
-    "docs_generate_doc_index",
-    "docs_check_cross_refs",
-    "docs_check_style",
-})
+ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "docs_session_start",
+        "docs_project_scan",
+        "docs_config",
+        "docs_module_map",
+        "docs_api_surface",
+        "docs_git_summary",
+        "docs_generate_changelog",
+        "docs_generate_release_notes",
+        "docs_generate_readme",
+        "docs_generate_api",
+        "docs_generate_adr",
+        "docs_generate_onboarding",
+        "docs_generate_contributing",
+        "docs_generate_prd",
+        "docs_generate_diagram",
+        "docs_generate_architecture",
+        "docs_generate_epic",
+        "docs_generate_story",
+        "docs_generate_prompt",
+        "docs_check_drift",
+        "docs_check_completeness",
+        "docs_check_links",
+        "docs_check_freshness",
+        "docs_validate_epic",
+        "docs_generate_llms_txt",
+        "docs_generate_frontmatter",
+        "docs_check_diataxis",
+        "docs_generate_interactive_diagrams",
+        "docs_generate_purpose",
+        "docs_generate_doc_index",
+        "docs_check_cross_refs",
+        "docs_check_style",
+    }
+)
 
 # Core preset (Epic 79.2): session start, project scan, drift, readme, completeness, links.
-DOCS_TOOL_PRESET_CORE: frozenset[str] = frozenset({
-    "docs_session_start",
-    "docs_project_scan",
-    "docs_check_drift",
-    "docs_generate_readme",
-    "docs_check_completeness",
-    "docs_check_links",
-})
+DOCS_TOOL_PRESET_CORE: frozenset[str] = frozenset(
+    {
+        "docs_session_start",
+        "docs_project_scan",
+        "docs_check_drift",
+        "docs_generate_readme",
+        "docs_check_completeness",
+        "docs_check_links",
+    }
+)
 
 
 def _resolve_allowed_tools(
@@ -182,24 +186,26 @@ _RECOMMENDED_DOCS: list[str] = [
 ]
 
 # Directories to skip when scanning for documentation files.
-_SKIP_DIRS: frozenset[str] = frozenset({
-    ".git",
-    ".hg",
-    ".svn",
-    "__pycache__",
-    "node_modules",
-    ".venv",
-    "venv",
-    ".env",
-    ".tox",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    "dist",
-    "build",
-    ".eggs",
-    "*.egg-info",
-})
+_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".env",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".eggs",
+        "*.egg-info",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -285,16 +291,18 @@ def _scan_doc_files(project_root: Path) -> list[dict[str, Any]]:
             try:
                 stat = fpath.stat()
                 rel_path = fpath.relative_to(project_root)
-                docs.append({
-                    "path": str(rel_path).replace("\\", "/"),
-                    "size_bytes": stat.st_size,
-                    "last_modified": time.strftime(
-                        "%Y-%m-%dT%H:%M:%SZ",
-                        time.gmtime(stat.st_mtime),
-                    ),
-                    "format": _detect_doc_format(fpath),
-                    "category": _categorize_doc(fpath, project_root),
-                })
+                docs.append(
+                    {
+                        "path": str(rel_path).replace("\\", "/"),
+                        "size_bytes": stat.st_size,
+                        "last_modified": time.strftime(
+                            "%Y-%m-%dT%H:%M:%SZ",
+                            time.gmtime(stat.st_mtime),
+                        ),
+                        "format": _detect_doc_format(fpath),
+                        "category": _categorize_doc(fpath, project_root),
+                    }
+                )
             except OSError:
                 continue
 
@@ -408,9 +416,7 @@ async def docs_session_start(
     # Determine which recommended docs are missing
     existing_names_lower = {d["path"].lower() for d in existing_docs}
     # Also check just filenames for root-level docs
-    existing_basenames_lower = {
-        d["path"].rsplit("/", 1)[-1].lower() for d in existing_docs
-    }
+    existing_basenames_lower = {d["path"].rsplit("/", 1)[-1].lower() for d in existing_docs}
 
     missing_recommended: list[str] = []
     recommendations: list[str] = []
@@ -418,12 +424,12 @@ async def docs_session_start(
     for rec in _RECOMMENDED_DOCS:
         if rec.endswith("/"):
             # Check if directory has any docs
-            has_docs_in_dir = any(
-                d["path"].lower().startswith(rec.lower()) for d in existing_docs
-            )
+            has_docs_in_dir = any(d["path"].lower().startswith(rec.lower()) for d in existing_docs)
             if not has_docs_in_dir:
                 missing_recommended.append(rec.rstrip("/"))
-                recommendations.append(f"Consider creating a '{rec.rstrip('/')}/' directory for documentation.")
+                recommendations.append(
+                    f"Consider creating a '{rec.rstrip('/')}/' directory for documentation."
+                )
         else:
             rec_lower = rec.lower()
             # Check both full path and basename (for LICENSE without extension)
@@ -555,7 +561,8 @@ def _check_critical_docs(
         if found:
             match = next(
                 (
-                    d for d in all_docs
+                    d
+                    for d in all_docs
                     if d["path"].lower() == doc_lower
                     or d["path"].rsplit("/", 1)[-1].lower() == doc_lower
                     or d["path"].rsplit("/", 1)[-1].lower() == name_without_ext
@@ -667,8 +674,7 @@ def _calculate_completeness(
 
     # Docs directory with content: 10 points
     has_docs_dir = any(
-        "/" in d["path"] and d["path"].split("/")[0].lower() == "docs"
-        for d in all_docs
+        "/" in d["path"] and d["path"].split("/")[0].lower() == "docs" for d in all_docs
     )
     if has_docs_dir:
         score += 10
@@ -735,19 +741,21 @@ def _calculate_inline_doc_coverage(project_root: Path) -> int:
 # ---------------------------------------------------------------------------
 
 # Valid config keys that can be set via docs_config.
-_VALID_CONFIG_KEYS: frozenset[str] = frozenset({
-    "output_dir",
-    "default_style",
-    "default_format",
-    "include_toc",
-    "include_badges",
-    "changelog_format",
-    "adr_format",
-    "diagram_format",
-    "git_log_limit",
-    "log_level",
-    "log_json",
-})
+_VALID_CONFIG_KEYS: frozenset[str] = frozenset(
+    {
+        "output_dir",
+        "default_style",
+        "default_format",
+        "include_toc",
+        "include_badges",
+        "changelog_format",
+        "adr_format",
+        "diagram_format",
+        "git_log_limit",
+        "log_level",
+        "log_json",
+    }
+)
 
 # Keys that accept boolean values.
 _BOOL_KEYS: frozenset[str] = frozenset({"include_toc", "include_badges", "log_json"})
@@ -865,9 +873,7 @@ async def docs_config(
     existing_data: dict[str, Any] = {}
     if config_path.exists():
         try:
-            raw_text = await asyncio.to_thread(
-                config_path.read_text, encoding="utf-8-sig"
-            )
+            raw_text = await asyncio.to_thread(config_path.read_text, encoding="utf-8-sig")
             raw = yaml.safe_load(raw_text)
             if isinstance(raw, dict):
                 existing_data = raw
@@ -901,12 +907,8 @@ async def docs_config(
     if can_write_to_project(root):
         # Write back
         try:
-            await asyncio.to_thread(
-                config_path.parent.mkdir, parents=True, exist_ok=True
-            )
-            await asyncio.to_thread(
-                config_path.write_text, yaml_content, encoding="utf-8"
-            )
+            await asyncio.to_thread(config_path.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(config_path.write_text, yaml_content, encoding="utf-8")
         except OSError as exc:
             return error_response(
                 "docs_config",

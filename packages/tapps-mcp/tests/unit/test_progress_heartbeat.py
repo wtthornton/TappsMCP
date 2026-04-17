@@ -20,9 +20,7 @@ async def test_heartbeat_sends_progress_without_tracker() -> None:
     start_ns = time.perf_counter_ns()
 
     with patch(INTERVAL_PATCH, 0.1):
-        task = asyncio.create_task(
-            _validate_progress_heartbeat(ctx, 3, start_ns, stop_event)
-        )
+        task = asyncio.create_task(_validate_progress_heartbeat(ctx, 3, start_ns, stop_event))
         await asyncio.sleep(0.35)
         stop_event.set()
         await task
@@ -80,9 +78,7 @@ async def test_heartbeat_survives_report_exception() -> None:
     start_ns = time.perf_counter_ns()
 
     with patch(INTERVAL_PATCH, 0.1):
-        task = asyncio.create_task(
-            _validate_progress_heartbeat(ctx, 3, start_ns, stop_event)
-        )
+        task = asyncio.create_task(_validate_progress_heartbeat(ctx, 3, start_ns, stop_event))
         await asyncio.sleep(0.25)
         stop_event.set()
         await task
@@ -100,9 +96,7 @@ async def test_heartbeat_progress_increases_monotonically() -> None:
     start_ns = time.perf_counter_ns()
 
     with patch(INTERVAL_PATCH, 0.05):
-        task = asyncio.create_task(
-            _validate_progress_heartbeat(ctx, 5, start_ns, stop_event)
-        )
+        task = asyncio.create_task(_validate_progress_heartbeat(ctx, 5, start_ns, stop_event))
         await asyncio.sleep(0.3)
         stop_event.set()
         await task
@@ -110,9 +104,7 @@ async def test_heartbeat_progress_increases_monotonically() -> None:
     values = [call.kwargs["progress"] for call in ctx.report_progress.call_args_list]
     assert len(values) >= 2, f"Expected >= 2 progress reports, got {len(values)}"
     for i in range(1, len(values)):
-        assert values[i] > values[i - 1], (
-            f"Progress not monotonic: {values[i]} <= {values[i - 1]}"
-        )
+        assert values[i] > values[i - 1], f"Progress not monotonic: {values[i]} <= {values[i - 1]}"
 
 
 # --- Tracker-based progress tests ---

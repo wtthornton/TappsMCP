@@ -81,7 +81,6 @@ class TestTappsSetEngagementLevel:
 
     def test_valid_level_writes_yaml(self, tmp_path, monkeypatch):
         from tapps_mcp.config.settings import load_settings
-
         from tapps_mcp.server_pipeline_tools import tapps_set_engagement_level
 
         def _load(project_root=None):
@@ -104,11 +103,12 @@ class TestTappsSetEngagementLevel:
         import yaml
 
         from tapps_mcp.config.settings import load_settings
-
         from tapps_mcp.server_pipeline_tools import tapps_set_engagement_level
 
         config = tmp_path / ".tapps-mcp.yaml"
-        config.write_text("quality_preset: strict\nllm_engagement_level: medium\n", encoding="utf-8")
+        config.write_text(
+            "quality_preset: strict\nllm_engagement_level: medium\n", encoding="utf-8"
+        )
 
         monkeypatch.setattr(
             "tapps_mcp.server_pipeline_tools.load_settings",

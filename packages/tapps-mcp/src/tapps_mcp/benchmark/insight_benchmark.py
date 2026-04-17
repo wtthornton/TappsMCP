@@ -105,15 +105,15 @@ class InsightBenchmarkResult(BaseModel):
     def markdown_report(self) -> str:
         """Return a markdown-formatted benchmark report."""
         if not self.available:
-            return f"## Insight Benchmark\n\nSkipped: tapps-brain unavailable.\n"
+            return "## Insight Benchmark\n\nSkipped: tapps-brain unavailable.\n"
         if self.error:
             return f"## Insight Benchmark\n\nError: {self.error}\n"
 
         lines = [
             "## Insight Benchmark",
-            f"",
+            "",
             f"**Backend:** {self.backend}  **N:** {self.n}  **Root:** `{self.project_root}`",
-            f"",
+            "",
             "| Operation | Count | p50 ms | p95 ms | p99 ms | Mean ms | Throughput/s |",
             "|-----------|-------|--------|--------|--------|---------|-------------|",
         ]
@@ -218,10 +218,28 @@ def run_insight_benchmark(
     # ------------------------------------------------------------------
     # Phase 2: Search
     # ------------------------------------------------------------------
-    search_queries = ["architecture", "quality", "security", "pattern",
-                      "dependency", "shim", "test", "config", "memory", "async",
-                      "scorer", "complexity", "docs", "brain", "federat",
-                      "tapps", "api", "pydantic", "structlog", "path"]
+    search_queries = [
+        "architecture",
+        "quality",
+        "security",
+        "pattern",
+        "dependency",
+        "shim",
+        "test",
+        "config",
+        "memory",
+        "async",
+        "scorer",
+        "complexity",
+        "docs",
+        "brain",
+        "federat",
+        "tapps",
+        "api",
+        "pydantic",
+        "structlog",
+        "path",
+    ]
     search_samples: list[float] = []
     try:
         for q in search_queries:

@@ -43,6 +43,7 @@ _ANNOTATIONS_SIDE_EFFECT = ToolAnnotations(
     openWorldHint=False,
 )
 
+
 def _sanitize_param(value: str, max_len: int = 100) -> str:
     """Strip control characters and truncate a parameter value."""
     cleaned = re.sub(r"[\x00-\x1f\x7f]", "", value).strip()
@@ -251,17 +252,13 @@ def _generate_stats_recommendations(
 ) -> list[str]:
     """Generate actionable recommendations from usage patterns."""
     recommendations: list[str] = []
-    tools_by_name: dict[str, dict[str, Any]] = {
-        t["tool_name"]: t for t in tool_breakdowns
-    }
+    tools_by_name: dict[str, dict[str, Any]] = {t["tool_name"]: t for t in tool_breakdowns}
 
     score_calls = tools_by_name.get("tapps_score_file", {}).get("call_count", 0)
     security_calls = tools_by_name.get("tapps_security_scan", {}).get("call_count", 0)
 
     if score_calls > 0 and security_calls < score_calls * 0.2:
-        recommendations.append(
-            "Consider enabling auto-security in tapps_quick_check"
-        )
+        recommendations.append("Consider enabling auto-security in tapps_quick_check")
 
     gate_rate = getattr(summary, "gate_pass_rate", None)
     if gate_rate is not None and gate_rate < _GATE_FAIL_THRESHOLD:
@@ -271,53 +268,53 @@ def _generate_stats_recommendations(
         )
 
     if "tapps_checklist" not in tools_by_name:
-        recommendations.append(
-            "Always run tapps_checklist as your final verification step"
-        )
+        recommendations.append("Always run tapps_checklist as your final verification step")
 
     vc = tools_by_name.get("tapps_validate_changed", {})
     if vc.get("avg_duration_ms", 0) > _SLOW_VALIDATE_MS:
-        recommendations.append(
-            "Consider using tapps_quick_check per-file for faster feedback"
-        )
+        recommendations.append("Consider using tapps_quick_check per-file for faster feedback")
 
     return recommendations
 
 
 # Known tool names for validation.
-_VALID_TOOL_NAMES: frozenset[str] = frozenset({
-    "tapps_checklist",
-    "tapps_dashboard",
-    "tapps_dead_code",
-    "tapps_dependency_graph",
-    "tapps_dependency_scan",
-    "tapps_doctor",
-    "tapps_feedback",
-    "tapps_impact_analysis",
-    "tapps_init",
-    "tapps_lookup_docs",
-    "tapps_memory",
-    "tapps_quality_gate",
-    "tapps_quick_check",
-    "tapps_report",
-    "tapps_score_file",
-    "tapps_security_scan",
-    "tapps_server_info",
-    "tapps_session_notes",
-    "tapps_session_start",
-    "tapps_set_engagement_level",
-    "tapps_stats",
-    "tapps_upgrade",
-    "tapps_validate_changed",
-    "tapps_validate_config",
-})
+_VALID_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "tapps_checklist",
+        "tapps_dashboard",
+        "tapps_dead_code",
+        "tapps_dependency_graph",
+        "tapps_dependency_scan",
+        "tapps_doctor",
+        "tapps_feedback",
+        "tapps_impact_analysis",
+        "tapps_init",
+        "tapps_lookup_docs",
+        "tapps_memory",
+        "tapps_quality_gate",
+        "tapps_quick_check",
+        "tapps_report",
+        "tapps_score_file",
+        "tapps_security_scan",
+        "tapps_server_info",
+        "tapps_session_notes",
+        "tapps_session_start",
+        "tapps_set_engagement_level",
+        "tapps_stats",
+        "tapps_upgrade",
+        "tapps_validate_changed",
+        "tapps_validate_config",
+    }
+)
 
 # Scoring tools whose feedback triggers adaptive weight adjustment.
-_SCORING_TOOLS: frozenset[str] = frozenset({
-    "tapps_score_file",
-    "tapps_quality_gate",
-    "tapps_quick_check",
-})
+_SCORING_TOOLS: frozenset[str] = frozenset(
+    {
+        "tapps_score_file",
+        "tapps_quality_gate",
+        "tapps_quick_check",
+    }
+)
 
 _WEIGHT_DELTA = 0.02
 
@@ -350,8 +347,7 @@ def tapps_feedback(
         return error_response(
             "tapps_feedback",
             "invalid_tool_name",
-            f"Unknown tool '{tool_name}'. Valid tools: "
-            + ", ".join(sorted(_VALID_TOOL_NAMES)),
+            f"Unknown tool '{tool_name}'. Valid tools: " + ", ".join(sorted(_VALID_TOOL_NAMES)),
         )
 
     # Sanitize context and domain
@@ -438,9 +434,7 @@ def _adjust_scoring_weights(helpful: bool) -> bool:
     except Exception:
         import structlog as _structlog
 
-        _structlog.get_logger(__name__).debug(
-            "weight_adjustment_failed", exc_info=True
-        )
+        _structlog.get_logger(__name__).debug("weight_adjustment_failed", exc_info=True)
         return False
 
 
@@ -459,7 +453,6 @@ def _adjust_domain_weights(domain: str, helpful: bool) -> tuple[bool, str | None
         "technical", "business", or None if adjustment failed.
     """
     try:
-
         from tapps_core.adaptive.persistence import DomainWeightStore
         from tapps_core.config.settings import load_settings
 

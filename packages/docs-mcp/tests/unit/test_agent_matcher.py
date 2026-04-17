@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from docs_mcp.agents.embeddings import StubEmbeddingBackend, cosine_similarity
 from docs_mcp.agents.keyword_matcher import keyword_score, tokenize
 from docs_mcp.agents.matcher import HybridMatcher, MatchResult
 from docs_mcp.agents.models import AgentConfig
-
 
 # --- Keyword matcher tests ---
 
@@ -325,4 +326,4 @@ class TestEmbeddingCache:
         assert len(results) > 0
 
 
-import pytest  # noqa: E402
+import pytest

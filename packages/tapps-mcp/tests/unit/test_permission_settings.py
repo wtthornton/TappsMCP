@@ -49,9 +49,7 @@ class TestGeneratePermissionSettings:
                 "deny": ["rm -rf /"],
             },
         }
-        result = generate_permission_settings(
-            tmp_path, existing_settings=existing
-        )
+        result = generate_permission_settings(tmp_path, existing_settings=existing)
         assert result["theme"] == "dark"
         assert "Bash(*)" in result["permissions"]["allow"]
         assert "rm -rf /" in result["permissions"]["deny"]
@@ -67,9 +65,7 @@ class TestGeneratePermissionSettings:
                 "allow": ["mcp__tapps-mcp", "mcp__tapps-mcp__*"],
             },
         }
-        result = generate_permission_settings(
-            tmp_path, existing_settings=existing
-        )
+        result = generate_permission_settings(tmp_path, existing_settings=existing)
         allow = result["permissions"]["allow"]
         assert allow.count("mcp__tapps-mcp") == 1
         assert allow.count("mcp__tapps-mcp__*") == 1
@@ -95,9 +91,7 @@ class TestBootstrapClaudeSettingsEngagement:
         """Creating new settings at high engagement includes extra perms."""
         action = _bootstrap_claude_settings(tmp_path, engagement_level="high")
         assert action == "created"
-        data = json.loads(
-            (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
         allow = data["permissions"]["allow"]
         assert "Bash(uv run ruff *)" in allow
         assert "Bash(uv run mypy *)" in allow
@@ -106,9 +100,7 @@ class TestBootstrapClaudeSettingsEngagement:
         """Creating new settings at medium engagement has no extra perms."""
         action = _bootstrap_claude_settings(tmp_path, engagement_level="medium")
         assert action == "created"
-        data = json.loads(
-            (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
         allow = data["permissions"]["allow"]
         assert "Bash(uv run ruff *)" not in allow
         assert "Bash(uv run mypy *)" not in allow
@@ -125,9 +117,7 @@ class TestBootstrapClaudeSettingsEngagement:
         action = _bootstrap_claude_settings(tmp_path, engagement_level="high")
         assert action == "updated"
 
-        data = json.loads(
-            (settings_dir / "settings.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
         allow = data["permissions"]["allow"]
         assert "Bash(uv run ruff *)" in allow
         assert "Bash(uv run mypy *)" in allow
@@ -136,9 +126,7 @@ class TestBootstrapClaudeSettingsEngagement:
         """Skips when all desired entries (including high) are present."""
         settings_dir = tmp_path / ".claude"
         settings_dir.mkdir()
-        all_entries = list(_CLAUDE_PERMISSION_ENTRIES) + list(
-            _CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS
-        )
+        all_entries = list(_CLAUDE_PERMISSION_ENTRIES) + list(_CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS)
         config = {
             "$schema": _CLAUDE_SETTINGS_SCHEMA,
             "enableAllProjectMcpServers": True,

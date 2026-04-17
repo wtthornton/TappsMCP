@@ -119,7 +119,10 @@ async def docs_generate_changelog(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_changelog", content, target, root,
+        "docs_generate_changelog",
+        content,
+        target,
+        root,
         description="CHANGELOG file.",
     )
     if not out.get("success", True):
@@ -315,7 +318,10 @@ async def docs_generate_readme(
 
     # Three-tier output: write-first / inline / manifest
     out_result = await finalize_output(
-        "docs_generate_readme", final_content, rel_path, root,
+        "docs_generate_readme",
+        final_content,
+        rel_path,
+        root,
         description="Project README.",
     )
     if not out_result.get("success", True):
@@ -422,7 +428,10 @@ async def docs_generate_api(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_api", content, target, root,
+        "docs_generate_api",
+        content,
+        target,
+        root,
         description="API reference documentation.",
     )
     if not out.get("success", True):
@@ -514,7 +523,10 @@ async def docs_generate_adr(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_adr", content, adr_rel, root,
+        "docs_generate_adr",
+        content,
+        adr_rel,
+        root,
         description=f"Architecture Decision Record: {title}",
     )
     if not out.get("success", True):
@@ -581,7 +593,10 @@ async def docs_generate_onboarding(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_onboarding", content, target, root,
+        "docs_generate_onboarding",
+        content,
+        target,
+        root,
         description="Getting-started / onboarding guide.",
     )
     if not out.get("success", True):
@@ -644,7 +659,10 @@ async def docs_generate_contributing(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_contributing", content, target, root,
+        "docs_generate_contributing",
+        content,
+        target,
+        root,
         description="Contribution guide with development setup and PR workflow.",
     )
     if not out.get("success", True):
@@ -794,7 +812,10 @@ async def docs_generate_prd(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_prd", content, target, root,
+        "docs_generate_prd",
+        content,
+        target,
+        root,
         description=f"Product Requirements Document: {title}",
     )
     if not out.get("success", True):
@@ -987,7 +1008,10 @@ async def docs_generate_architecture(
 
     # Three-tier output: write-first / inline / manifest
     out_data = await finalize_output(
-        "docs_generate_architecture", result.content, target, root,
+        "docs_generate_architecture",
+        result.content,
+        target,
+        root,
         description="Architecture report (HTML with SVG diagrams).",
     )
     if not out_data.get("success", True):
@@ -1158,9 +1182,7 @@ async def docs_generate_epic(
             )
 
     # Parse files list
-    files_list = (
-        [f.strip() for f in files.split(",") if f.strip()] if files else []
-    )
+    files_list = [f.strip() for f in files.split(",") if f.strip()] if files else []
 
     config = EpicConfig(
         title=title,
@@ -1216,7 +1238,10 @@ async def docs_generate_epic(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_epic", content, target, root,
+        "docs_generate_epic",
+        content,
+        target,
+        root,
         description=f"Epic planning document: {title}",
     )
     if not out.get("success", True):
@@ -1421,7 +1446,10 @@ async def docs_generate_story(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_story", content, target, root,
+        "docs_generate_story",
+        content,
+        target,
+        root,
         description=f"User story: {title}",
     )
     if not out.get("success", True):
@@ -1528,7 +1556,10 @@ async def docs_generate_prompt(
             "name is required",
         )
 
-    purpose = purpose_and_intent.strip() or "This prompt is for the given task so that success criteria are met."
+    purpose = (
+        purpose_and_intent.strip()
+        or "This prompt is for the given task so that success criteria are met."
+    )
 
     cf_list: list[ContextFileEntry] = []
     if context_files:
@@ -1537,7 +1568,11 @@ async def docs_generate_prompt(
             if isinstance(raw, list):
                 for item in raw:
                     if isinstance(item, dict):
-                        cf_list.append(ContextFileEntry(path=item.get("path", ""), description=item.get("description", "")))
+                        cf_list.append(
+                            ContextFileEntry(
+                                path=item.get("path", ""), description=item.get("description", "")
+                            )
+                        )
                     else:
                         cf_list.append(ContextFileEntry(path=str(item), description=""))
         except (json_mod.JSONDecodeError, TypeError):
@@ -1566,9 +1601,7 @@ async def docs_generate_prompt(
     )
 
     gen = PromptGenerator()
-    content = (
-        gen.generate_compact(config) if compact_llm_view else gen.generate(config)
-    )
+    content = gen.generate_compact(config) if compact_llm_view else gen.generate(config)
 
     # Auto-compute output_path when not provided
     slug = name.strip().replace(" ", "-").lower()
@@ -1580,7 +1613,10 @@ async def docs_generate_prompt(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_prompt", content, rel, root,
+        "docs_generate_prompt",
+        content,
+        rel,
+        root,
         description=f"Prompt template: {name}",
     )
     if not out.get("success", True):
@@ -1679,7 +1715,10 @@ async def docs_generate_llms_txt(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_llms_txt", content, target, root,
+        "docs_generate_llms_txt",
+        content,
+        target,
+        root,
         description="Machine-readable llms.txt project summary for AI assistants.",
     )
     if not out.get("success", True):
@@ -1769,7 +1808,10 @@ async def docs_generate_frontmatter(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_frontmatter", content, file_path, root,
+        "docs_generate_frontmatter",
+        content,
+        file_path,
+        root,
         description=f"Markdown file with updated YAML frontmatter: {file_path}",
     )
     if not out.get("success", True):
@@ -1863,9 +1905,7 @@ async def docs_generate_interactive_diagrams(
         if dt not in DiagramGenerator.VALID_TYPES:
             continue
         try:
-            result = diagram_gen.generate(
-                root, diagram_type=dt, output_format="mermaid"
-            )
+            result = diagram_gen.generate(root, diagram_type=dt, output_format="mermaid")
             if result.content:
                 label = type_labels.get(dt, dt.replace("_", " ").title())
                 diagrams.append((label, result.content))
@@ -1892,7 +1932,10 @@ async def docs_generate_interactive_diagrams(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_interactive_diagrams", content, target, root,
+        "docs_generate_interactive_diagrams",
+        content,
+        target,
+        root,
         description="Interactive HTML architecture diagrams with Mermaid.js.",
     )
     if not out.get("success", True):
@@ -1979,7 +2022,10 @@ async def docs_generate_purpose(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_purpose", content, target, root,
+        "docs_generate_purpose",
+        content,
+        target,
+        root,
         description="Architecture purpose/intent template.",
     )
     if not out.get("success", True):
@@ -2064,7 +2110,10 @@ async def docs_generate_doc_index(
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(
-        "docs_generate_doc_index", content, target, root,
+        "docs_generate_doc_index",
+        content,
+        target,
+        root,
         description="Documentation index/map.",
     )
     if not out.get("success", True):
@@ -2110,13 +2159,17 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "docs_generate_onboarding" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_onboarding)
     if "docs_generate_contributing" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_contributing)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
+            docs_generate_contributing
+        )
     if "docs_generate_prd" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_prd)
     if "docs_generate_diagram" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_generate_diagram)
     if "docs_generate_architecture" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_architecture)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
+            docs_generate_architecture
+        )
     if "docs_generate_epic" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_epic)
     if "docs_generate_story" in allowed_tools:
@@ -2126,9 +2179,13 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "docs_generate_llms_txt" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_llms_txt)
     if "docs_generate_frontmatter" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_frontmatter)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
+            docs_generate_frontmatter
+        )
     if "docs_generate_interactive_diagrams" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_interactive_diagrams)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
+            docs_generate_interactive_diagrams
+        )
     if "docs_generate_purpose" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_purpose)
     if "docs_generate_doc_index" in allowed_tools:

@@ -61,7 +61,9 @@ def check_dedup(
     """
     if not catalog_agents:
         return DedupResult(
-            is_duplicate=False, overlapping_agents=[], threshold=threshold,
+            is_duplicate=False,
+            overlapping_agents=[],
+            threshold=threshold,
         )
 
     # Compute proposal embedding

@@ -312,13 +312,25 @@ class ImportGraphBuilder:
 
             if isinstance(node, ast.Import):
                 self._process_plain_import(
-                    node, import_type, source_rel, source_module,
-                    module_paths, project_root, edges, externals,
+                    node,
+                    import_type,
+                    source_rel,
+                    source_module,
+                    module_paths,
+                    project_root,
+                    edges,
+                    externals,
                 )
             elif isinstance(node, ast.ImportFrom):
                 self._process_from_import(
-                    node, import_type, source_rel, source_module,
-                    module_paths, project_root, edges, externals,
+                    node,
+                    import_type,
+                    source_rel,
+                    source_module,
+                    module_paths,
+                    project_root,
+                    edges,
+                    externals,
                 )
 
         return edges, externals
@@ -338,13 +350,21 @@ class ImportGraphBuilder:
         for alias in node.names:
             top_level = alias.name.split(".")[0]
             target_path = self._resolve_import(
-                alias.name, source_module, module_paths, project_root,
+                alias.name,
+                source_module,
+                module_paths,
+                project_root,
             )
             if target_path is not None:
-                edges.append(ImportEdge(
-                    source=source_rel, target=target_path,
-                    import_type=import_type, line=node.lineno, names=[],
-                ))
+                edges.append(
+                    ImportEdge(
+                        source=source_rel,
+                        target=target_path,
+                        import_type=import_type,
+                        line=node.lineno,
+                        names=[],
+                    )
+                )
             elif top_level not in self.STDLIB_TOP_LEVEL:
                 externals.append(alias.name)
 
@@ -366,32 +386,57 @@ class ImportGraphBuilder:
             module_name = node.module or ""
             if node.level > 0:
                 resolved_module = self._resolve_relative_import(
-                    module_name, node.level, source_module,
+                    module_name,
+                    node.level,
+                    source_module,
                 )
             else:
                 resolved_module = module_name
 
         names = [alias.name for alias in (node.names or []) if alias.name != "*"]
         target_path = self._resolve_import(
-            resolved_module, source_module, module_paths, project_root,
+            resolved_module,
+            source_module,
+            module_paths,
+            project_root,
         )
 
         is_package = target_path is not None and target_path.endswith("__init__.py")
         if is_package and names and target_path is not None:
             self._resolve_package_names(
-                names, resolved_module, target_path, source_rel,
-                import_type, node.lineno, source_module, module_paths,
-                project_root, edges,
+                names,
+                resolved_module,
+                target_path,
+                source_rel,
+                import_type,
+                node.lineno,
+                source_module,
+                module_paths,
+                project_root,
+                edges,
             )
         elif target_path is not None:
-            edges.append(ImportEdge(
-                source=source_rel, target=target_path,
-                import_type=import_type, line=node.lineno, names=names,
-            ))
+            edges.append(
+                ImportEdge(
+                    source=source_rel,
+                    target=target_path,
+                    import_type=import_type,
+                    line=node.lineno,
+                    names=names,
+                )
+            )
         else:
             self._resolve_fallback_names(
-                names, resolved_module, source_rel, import_type, node.lineno,
-                source_module, module_paths, project_root, edges, externals,
+                names,
+                resolved_module,
+                source_rel,
+                import_type,
+                node.lineno,
+                source_module,
+                module_paths,
+                project_root,
+                edges,
+                externals,
             )
 
     def _resolve_package_names(
@@ -411,19 +456,32 @@ class ImportGraphBuilder:
         for name in names:
             sub_module = f"{resolved_module}.{name}" if resolved_module else name
             sub_path = self._resolve_import(
-                sub_module, source_module, module_paths, project_root,
+                sub_module,
+                source_module,
+                module_paths,
+                project_root,
             )
             if sub_path is not None:
-                edges.append(ImportEdge(
-                    source=source_rel, target=sub_path,
-                    import_type=import_type, line=lineno, names=[name],
-                ))
+                edges.append(
+                    ImportEdge(
+                        source=source_rel,
+                        target=sub_path,
+                        import_type=import_type,
+                        line=lineno,
+                        names=[name],
+                    )
+                )
             else:
                 # Name is an attribute of the package, not a submodule
-                edges.append(ImportEdge(
-                    source=source_rel, target=target_path,
-                    import_type=import_type, line=lineno, names=[name],
-                ))
+                edges.append(
+                    ImportEdge(
+                        source=source_rel,
+                        target=target_path,
+                        import_type=import_type,
+                        line=lineno,
+                        names=[name],
+                    )
+                )
 
     def _resolve_fallback_names(
         self,
@@ -443,13 +501,21 @@ class ImportGraphBuilder:
         for name in names:
             sub_module = f"{resolved_module}.{name}" if resolved_module else name
             sub_path = self._resolve_import(
-                sub_module, source_module, module_paths, project_root,
+                sub_module,
+                source_module,
+                module_paths,
+                project_root,
             )
             if sub_path is not None:
-                edges.append(ImportEdge(
-                    source=source_rel, target=sub_path,
-                    import_type=import_type, line=lineno, names=[name],
-                ))
+                edges.append(
+                    ImportEdge(
+                        source=source_rel,
+                        target=sub_path,
+                        import_type=import_type,
+                        line=lineno,
+                        names=[name],
+                    )
+                )
                 resolved_any = True
 
         if not resolved_any:

@@ -24,9 +24,7 @@ def validator(tmp_project: Path) -> PathValidator:
 
 
 class TestPathValidator:
-    def test_validate_path_within_root(
-        self, validator: PathValidator, tmp_project: Path
-    ) -> None:
+    def test_validate_path_within_root(self, validator: PathValidator, tmp_project: Path) -> None:
         f = tmp_project / "src" / "main.py"
         result = validator.validate_path(f, must_exist=True)
         assert result == f.resolve()
@@ -51,9 +49,7 @@ class TestPathValidator:
         result = validator.validate_path(tmp_project / "new.py", must_exist=False)
         assert result == (tmp_project / "new.py").resolve()
 
-    def test_validate_path_too_large(
-        self, validator: PathValidator, tmp_project: Path
-    ) -> None:
+    def test_validate_path_too_large(self, validator: PathValidator, tmp_project: Path) -> None:
         big = tmp_project / "big.bin"
         big.write_bytes(b"x" * 100)
         with pytest.raises(PathValidationError, match="too large"):
@@ -67,15 +63,11 @@ class TestPathValidator:
         result = validator.validate_path(big, must_exist=True, max_file_size=None)
         assert result == big.resolve()
 
-    def test_validate_read_path(
-        self, validator: PathValidator, tmp_project: Path
-    ) -> None:
+    def test_validate_read_path(self, validator: PathValidator, tmp_project: Path) -> None:
         f = tmp_project / "src" / "main.py"
         assert validator.validate_read_path(f) == f.resolve()
 
-    def test_validate_write_path(
-        self, validator: PathValidator, tmp_project: Path
-    ) -> None:
+    def test_validate_write_path(self, validator: PathValidator, tmp_project: Path) -> None:
         f = tmp_project / "output.txt"
         assert validator.validate_write_path(f) == f.resolve()
 

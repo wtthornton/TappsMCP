@@ -169,7 +169,10 @@ class GoExtractor(TreeSitterExtractor):
 
         result: list[ParameterInfo] = []
         for child in params_node.children:
-            if child.type == "parameter_declaration" or child.type == "variadic_parameter_declaration":
+            if (
+                child.type == "parameter_declaration"
+                or child.type == "variadic_parameter_declaration"
+            ):
                 p = self._parse_go_param(child, source)
                 if p:
                     result.append(p)
@@ -226,7 +229,9 @@ class GoExtractor(TreeSitterExtractor):
         )
 
     def _extract_struct_fields(
-        self, node: Any, source: bytes,
+        self,
+        node: Any,
+        source: bytes,
     ) -> list[ConstantInfo]:
         """Extract struct field declarations as ConstantInfo."""
         fields: list[ConstantInfo] = []
@@ -239,26 +244,32 @@ class GoExtractor(TreeSitterExtractor):
                         if name_node:
                             name = self._node_text(name_node, source)
                             ann = self._node_text(type_node, source) if type_node else None
-                            fields.append(ConstantInfo(
-                                name=name,
-                                line=self._node_line(fc),
-                                annotation=ann,
-                            ))
+                            fields.append(
+                                ConstantInfo(
+                                    name=name,
+                                    line=self._node_line(fc),
+                                    annotation=ann,
+                                )
+                            )
             elif child.type == "field_declaration":
                 name_node = self._child_by_field(child, "name")
                 type_node = self._child_by_field(child, "type")
                 if name_node:
                     name = self._node_text(name_node, source)
                     ann = self._node_text(type_node, source) if type_node else None
-                    fields.append(ConstantInfo(
-                        name=name,
-                        line=self._node_line(child),
-                        annotation=ann,
-                    ))
+                    fields.append(
+                        ConstantInfo(
+                            name=name,
+                            line=self._node_line(child),
+                            annotation=ann,
+                        )
+                    )
         return fields
 
     def _extract_interface_methods(
-        self, node: Any, source: bytes,
+        self,
+        node: Any,
+        source: bytes,
     ) -> list[FunctionInfo]:
         """Extract interface method specs."""
         methods: list[FunctionInfo] = []
@@ -270,12 +281,14 @@ class GoExtractor(TreeSitterExtractor):
                 name = self._node_text(name_node, source)
                 params = self._extract_go_params(child, source)
                 ret = self._extract_go_return(child, source)
-                methods.append(self._build_function(
-                    name=name,
-                    line=self._node_line(child),
-                    parameters=params,
-                    return_annotation=ret,
-                ))
+                methods.append(
+                    self._build_function(
+                        name=name,
+                        line=self._node_line(child),
+                        parameters=params,
+                        return_annotation=ret,
+                    )
+                )
         return methods
 
     # ------------------------------------------------------------------
@@ -283,7 +296,9 @@ class GoExtractor(TreeSitterExtractor):
     # ------------------------------------------------------------------
 
     def _extract_constants(
-        self, node: Any, source: bytes,
+        self,
+        node: Any,
+        source: bytes,
     ) -> list[ConstantInfo]:
         """Extract const/var declarations."""
         consts: list[ConstantInfo] = []
@@ -297,12 +312,14 @@ class GoExtractor(TreeSitterExtractor):
                 val_node = self._child_by_field(child, "value")
                 ann = self._node_text(type_node, source) if type_node else None
                 val = self._node_text(val_node, source) if val_node else None
-                consts.append(ConstantInfo(
-                    name=name,
-                    line=self._node_line(child),
-                    value=val,
-                    annotation=ann,
-                ))
+                consts.append(
+                    ConstantInfo(
+                        name=name,
+                        line=self._node_line(child),
+                        value=val,
+                        annotation=ann,
+                    )
+                )
         return consts
 
     # ------------------------------------------------------------------

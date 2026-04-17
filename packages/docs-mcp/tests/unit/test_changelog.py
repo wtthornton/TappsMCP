@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from docs_mcp.analyzers.commit_parser import ParsedCommit
 from docs_mcp.generators.changelog import (
     ChangelogEntry,
     ChangelogGenerator,
@@ -66,9 +65,13 @@ class TestKeepAChangelog:
 
     def test_single_version_with_feat(self, generator: ChangelogGenerator) -> None:
         versions = [
-            _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-                _commit("feat: add user auth"),
-            ]),
+            _version(
+                "1.0.0",
+                "2026-01-15T00:00:00+00:00",
+                [
+                    _commit("feat: add user auth"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="keep-a-changelog", include_unreleased=False)
         assert "## [1.0.0] - 2026-01-15" in result
@@ -77,9 +80,13 @@ class TestKeepAChangelog:
 
     def test_single_version_with_fix(self, generator: ChangelogGenerator) -> None:
         versions = [
-            _version("1.0.1", "2026-01-20T00:00:00+00:00", [
-                _commit("fix: resolve login bug"),
-            ]),
+            _version(
+                "1.0.1",
+                "2026-01-20T00:00:00+00:00",
+                [
+                    _commit("fix: resolve login bug"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="keep-a-changelog", include_unreleased=False)
         assert "## [1.0.1] - 2026-01-20" in result
@@ -88,12 +95,20 @@ class TestKeepAChangelog:
 
     def test_multiple_versions(self, generator: ChangelogGenerator) -> None:
         versions = [
-            _version("2.0.0", "2026-02-15T00:00:00+00:00", [
-                _commit("feat: new dashboard"),
-            ]),
-            _version("1.0.0", "2026-01-01T00:00:00+00:00", [
-                _commit("feat: initial release"),
-            ]),
+            _version(
+                "2.0.0",
+                "2026-02-15T00:00:00+00:00",
+                [
+                    _commit("feat: new dashboard"),
+                ],
+            ),
+            _version(
+                "1.0.0",
+                "2026-01-01T00:00:00+00:00",
+                [
+                    _commit("feat: initial release"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="keep-a-changelog", include_unreleased=False)
         assert "## [2.0.0] - 2026-02-15" in result
@@ -105,18 +120,26 @@ class TestKeepAChangelog:
 
     def test_breaking_change_highlighted(self, generator: ChangelogGenerator) -> None:
         versions = [
-            _version("2.0.0", "2026-02-15T00:00:00+00:00", [
-                _commit("feat!: redesign API"),
-            ]),
+            _version(
+                "2.0.0",
+                "2026-02-15T00:00:00+00:00",
+                [
+                    _commit("feat!: redesign API"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="keep-a-changelog", include_unreleased=False)
         assert "**BREAKING**" in result
 
     def test_scope_included(self, generator: ChangelogGenerator) -> None:
         versions = [
-            _version("1.1.0", "2026-02-01T00:00:00+00:00", [
-                _commit("feat(auth): add OAuth support"),
-            ]),
+            _version(
+                "1.1.0",
+                "2026-02-01T00:00:00+00:00",
+                [
+                    _commit("feat(auth): add OAuth support"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="keep-a-changelog", include_unreleased=False)
         assert "auth" in result
@@ -124,14 +147,18 @@ class TestKeepAChangelog:
 
     def test_commit_type_mapping(self, generator: ChangelogGenerator) -> None:
         versions = [
-            _version("1.2.0", "2026-02-10T00:00:00+00:00", [
-                _commit("feat: new feature"),
-                _commit("fix: bug fix"),
-                _commit("docs: update readme"),
-                _commit("refactor: clean code"),
-                _commit("revert: undo change"),
-                _commit("security: patch vuln"),
-            ]),
+            _version(
+                "1.2.0",
+                "2026-02-10T00:00:00+00:00",
+                [
+                    _commit("feat: new feature"),
+                    _commit("fix: bug fix"),
+                    _commit("docs: update readme"),
+                    _commit("refactor: clean code"),
+                    _commit("revert: undo change"),
+                    _commit("security: patch vuln"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="keep-a-changelog", include_unreleased=False)
         assert "### Added" in result
@@ -145,9 +172,13 @@ class TestKeepAChangelog:
             _commit("feat: work in progress"),
         ]
         versions = [
-            _version("1.0.0", "2026-01-01T00:00:00+00:00", [
-                _commit("feat: initial release"),
-            ]),
+            _version(
+                "1.0.0",
+                "2026-01-01T00:00:00+00:00",
+                [
+                    _commit("feat: initial release"),
+                ],
+            ),
         ]
         result = generator.generate(
             versions,
@@ -163,9 +194,13 @@ class TestKeepAChangelog:
             _commit("feat: work in progress"),
         ]
         versions = [
-            _version("1.0.0", "2026-01-01T00:00:00+00:00", [
-                _commit("feat: initial release"),
-            ]),
+            _version(
+                "1.0.0",
+                "2026-01-01T00:00:00+00:00",
+                [
+                    _commit("feat: initial release"),
+                ],
+            ),
         ]
         result = generator.generate(
             versions,
@@ -187,9 +222,13 @@ class TestKeepAChangelog:
     def test_non_conventional_commit_classified(self, generator: ChangelogGenerator) -> None:
         """Non-conventional commits fall back to keyword classification."""
         versions = [
-            _version("1.0.0", "2026-01-01T00:00:00+00:00", [
-                _commit("Add new login page"),
-            ]),
+            _version(
+                "1.0.0",
+                "2026-01-01T00:00:00+00:00",
+                [
+                    _commit("Add new login page"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="keep-a-changelog", include_unreleased=False)
         # "Add" keyword -> feat -> "Added"
@@ -208,10 +247,14 @@ class TestConventionalFormat:
 
     def test_single_version(self, generator: ChangelogGenerator) -> None:
         versions = [
-            _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-                _commit("feat: add user auth"),
-                _commit("fix: resolve login bug"),
-            ]),
+            _version(
+                "1.0.0",
+                "2026-01-15T00:00:00+00:00",
+                [
+                    _commit("feat: add user auth"),
+                    _commit("fix: resolve login bug"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="conventional", include_unreleased=False)
         assert "## 1.0.0 (2026-01-15)" in result
@@ -220,9 +263,13 @@ class TestConventionalFormat:
 
     def test_scope_in_conventional(self, generator: ChangelogGenerator) -> None:
         versions = [
-            _version("1.0.0", "2026-01-15T00:00:00+00:00", [
-                _commit("feat(api): add endpoint", short_hash="abc1234"),
-            ]),
+            _version(
+                "1.0.0",
+                "2026-01-15T00:00:00+00:00",
+                [
+                    _commit("feat(api): add endpoint", short_hash="abc1234"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="conventional", include_unreleased=False)
         assert "**api:**" in result
@@ -231,9 +278,13 @@ class TestConventionalFormat:
 
     def test_breaking_changes_section(self, generator: ChangelogGenerator) -> None:
         versions = [
-            _version("2.0.0", "2026-02-01T00:00:00+00:00", [
-                _commit("feat!: redesign API"),
-            ]),
+            _version(
+                "2.0.0",
+                "2026-02-01T00:00:00+00:00",
+                [
+                    _commit("feat!: redesign API"),
+                ],
+            ),
         ]
         result = generator.generate(versions, format="conventional", include_unreleased=False)
         assert "### BREAKING CHANGES" in result
@@ -315,9 +366,18 @@ class TestHelperMethods:
     def test_conventional_type_map_coverage(self) -> None:
         """All mapped types should produce valid conventional categories."""
         valid_categories = {
-            "Features", "Bug Fixes", "Documentation", "Refactoring",
-            "Performance", "Tests", "Build", "CI", "Chores", "Reverts",
-            "Deprecated", "Security",
+            "Features",
+            "Bug Fixes",
+            "Documentation",
+            "Refactoring",
+            "Performance",
+            "Tests",
+            "Build",
+            "CI",
+            "Chores",
+            "Reverts",
+            "Deprecated",
+            "Security",
         }
         for commit_type, category in ChangelogGenerator.CONVENTIONAL_TYPE_MAP.items():
             assert category in valid_categories, (

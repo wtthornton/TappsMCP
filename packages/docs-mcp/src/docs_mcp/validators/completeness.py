@@ -347,9 +347,7 @@ class CompletenessChecker:
                             f"{count} public function(s)/class(es) are missing docstrings."
                         )
                 elif cat.name == "project_docs":
-                    recommendations.append(
-                        "Create a docs/ directory with project documentation."
-                    )
+                    recommendations.append("Create a docs/ directory with project documentation.")
 
         return CompletenessReport(
             overall_score=round(overall_score, 1),

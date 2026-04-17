@@ -24,7 +24,6 @@ import pytest
 from docs_mcp.generators.diagrams import DiagramGenerator, DiagramResult
 from tests.helpers import make_settings as _make_settings
 
-
 # ---------------------------------------------------------------------------
 # Sample source snippets for tmp_path fixtures
 # ---------------------------------------------------------------------------
@@ -141,8 +140,8 @@ def python_project(tmp_path: Path) -> Path:
     (pkg / "__init__.py").write_text('"""My app."""\n')
     (pkg / "models.py").write_text(
         '"""Models."""\n\nfrom pydantic import BaseModel\n\n'
-        'class User(BaseModel):\n    name: str\n    email: str\n\n'
-        'class Post(BaseModel):\n    title: str\n    author: User\n'
+        "class User(BaseModel):\n    name: str\n    email: str\n\n"
+        "class Post(BaseModel):\n    title: str\n    author: User\n"
     )
     (pkg / "service.py").write_text(
         '"""Service."""\n\nfrom myapp.models import User\n\n'
@@ -232,7 +231,7 @@ class TestSanitizeId:
         result = generator._sanitize_id("hello@world!")
         assert "@" not in result
         assert "!" not in result
-        assert "helloworld" == result
+        assert result == "helloworld"
 
     def test_leading_digit_gets_prefix(self, generator: DiagramGenerator) -> None:
         result = generator._sanitize_id("3module")
@@ -266,28 +265,20 @@ class TestDiagramValidation:
     def test_invalid_format_returns_empty(
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="dependency", output_format="svg"
-        )
+        result = generator.generate(python_project, diagram_type="dependency", output_format="svg")
         assert result.content == ""
         assert result.format == "svg"
 
-    def test_valid_types_accepted(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_valid_types_accepted(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """All members of VALID_TYPES are accepted without raising."""
         for dtype in DiagramGenerator.VALID_TYPES:
             result = generator.generate(tmp_path, diagram_type=dtype)
             assert isinstance(result, DiagramResult)
 
-    def test_valid_formats_accepted(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_valid_formats_accepted(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """Both mermaid and plantuml are accepted."""
         for fmt in DiagramGenerator.VALID_FORMATS:
-            result = generator.generate(
-                tmp_path, diagram_type="dependency", output_format=fmt
-            )
+            result = generator.generate(tmp_path, diagram_type="dependency", output_format=fmt)
             assert isinstance(result, DiagramResult)
 
 
@@ -310,15 +301,11 @@ class TestDependencyDiagramMermaid:
         result = generator.generate(large_python_project, diagram_type="dependency")
         assert result.content.startswith("graph TD")
 
-    def test_has_subgraphs(
-        self, generator: DiagramGenerator, large_python_project: Path
-    ) -> None:
+    def test_has_subgraphs(self, generator: DiagramGenerator, large_python_project: Path) -> None:
         result = generator.generate(large_python_project, diagram_type="dependency")
         assert "subgraph" in result.content
 
-    def test_has_solid_edges(
-        self, generator: DiagramGenerator, large_python_project: Path
-    ) -> None:
+    def test_has_solid_edges(self, generator: DiagramGenerator, large_python_project: Path) -> None:
         result = generator.generate(large_python_project, diagram_type="dependency")
         assert "-->" in result.content
 
@@ -344,18 +331,14 @@ class TestDependencyDiagramMermaid:
 class TestDependencyDiagramPlantUML:
     """Dependency diagrams in PlantUML format."""
 
-    def test_startuml_enduml(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_startuml_enduml(self, generator: DiagramGenerator, python_project: Path) -> None:
         result = generator.generate(
             python_project, diagram_type="dependency", output_format="plantuml"
         )
         assert "@startuml" in result.content
         assert "@enduml" in result.content
 
-    def test_has_package(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_has_package(self, generator: DiagramGenerator, python_project: Path) -> None:
         result = generator.generate(
             python_project, diagram_type="dependency", output_format="plantuml"
         )
@@ -373,18 +356,14 @@ class TestDependencyShowExternal:
     def test_external_shown_mermaid(
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="dependency", show_external=True
-        )
+        result = generator.generate(python_project, diagram_type="dependency", show_external=True)
         # pydantic is an external dep imported in models.py
         assert "pydantic" in result.content.lower() or result.node_count >= 1
 
     def test_external_hidden_mermaid(
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="dependency", show_external=False
-        )
+        result = generator.generate(python_project, diagram_type="dependency", show_external=False)
         # With show_external=False, external nodes should not be labelled as
         # :::external in the output.
         assert ":::external" not in result.content
@@ -414,32 +393,22 @@ class TestClassHierarchyMermaid:
     def test_generates_class_diagram(
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="class_hierarchy"
-        )
+        result = generator.generate(python_project, diagram_type="class_hierarchy")
         assert "classDiagram" in result.content
 
-    def test_inheritance_edges(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="class_hierarchy"
-        )
+    def test_inheritance_edges(self, generator: DiagramGenerator, python_project: Path) -> None:
+        result = generator.generate(python_project, diagram_type="class_hierarchy")
         assert "class " in result.content
 
-    def test_method_visibility_prefix(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_method_visibility_prefix(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         root = tmp_path / "vis"
         root.mkdir()
         (root / "widget.py").write_text(
-            'class Widget:\n'
-            '    def public_method(self) -> None: ...\n'
-            '    def _private_method(self) -> None: ...\n'
+            "class Widget:\n"
+            "    def public_method(self) -> None: ...\n"
+            "    def _private_method(self) -> None: ...\n"
         )
-        result = generator.generate(
-            root, diagram_type="class_hierarchy"
-        )
+        result = generator.generate(root, diagram_type="class_hierarchy")
         assert "+public_method()" in result.content
         assert "-_private_method()" in result.content
 
@@ -457,9 +426,7 @@ class TestClassHierarchyMermaid:
         # Animal, Dog, Puppy -> 3 nodes
         assert result.node_count == 3
 
-    def test_single_file_scope(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_single_file_scope(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """scope=<file> limits extraction to a single file."""
         pkg = tmp_path / "pkg"
         _write_py(pkg, "a.py", CLASS_HIERARCHY_CODE)
@@ -484,9 +451,7 @@ class TestClassHierarchyMermaid:
 class TestClassHierarchyPlantUML:
     """Class hierarchy diagrams in PlantUML format."""
 
-    def test_startuml_enduml(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_startuml_enduml(self, generator: DiagramGenerator, python_project: Path) -> None:
         result = generator.generate(
             python_project,
             diagram_type="class_hierarchy",
@@ -495,9 +460,7 @@ class TestClassHierarchyPlantUML:
         assert "@startuml" in result.content
         assert "@enduml" in result.content
 
-    def test_class_keyword(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_class_keyword(self, generator: DiagramGenerator, python_project: Path) -> None:
         result = generator.generate(
             python_project,
             diagram_type="class_hierarchy",
@@ -505,9 +468,7 @@ class TestClassHierarchyPlantUML:
         )
         assert "class " in result.content
 
-    def test_plantuml_inheritance_edges(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_plantuml_inheritance_edges(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """PlantUML output includes inheritance edges."""
         _write_py(tmp_path, "animals.py", CLASS_HIERARCHY_CODE)
         result = generator.generate(
@@ -525,60 +486,42 @@ class TestClassHierarchyPlantUML:
 class TestModuleMapMermaid:
     """Module map diagrams in Mermaid format."""
 
-    def test_nested_subgraphs(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="module_map"
-        )
+    def test_nested_subgraphs(self, generator: DiagramGenerator, python_project: Path) -> None:
+        result = generator.generate(python_project, diagram_type="module_map")
         assert "subgraph" in result.content
 
     def test_node_labels_with_counts(
         self, generator: DiagramGenerator, python_project: Path
     ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="module_map"
-        )
+        result = generator.generate(python_project, diagram_type="module_map")
         assert result.node_count >= 1
 
-    def test_direction_td(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_direction_td(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """TD direction is reflected in the output."""
         pkg = tmp_path / "mypkg"
         pkg.mkdir()
         (pkg / "__init__.py").write_text("", encoding="utf-8")
         _write_py(pkg, "core.py", "def hello(): pass\n")
-        result = generator.generate(
-            tmp_path, diagram_type="module_map", direction="TD"
-        )
+        result = generator.generate(tmp_path, diagram_type="module_map", direction="TD")
         assert "graph TD" in result.content
 
-    def test_direction_lr(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_direction_lr(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """LR direction is reflected in the output."""
         pkg = tmp_path / "mypkg"
         pkg.mkdir()
         (pkg / "__init__.py").write_text("", encoding="utf-8")
         _write_py(pkg, "core.py", "def hello(): pass\n")
-        result = generator.generate(
-            tmp_path, diagram_type="module_map", direction="LR"
-        )
+        result = generator.generate(tmp_path, diagram_type="module_map", direction="LR")
         assert "graph LR" in result.content
 
-    def test_package_with_init(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_package_with_init(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """A package with __init__.py produces nodes."""
         pkg = tmp_path / "mypkg"
         pkg.mkdir()
         (pkg / "__init__.py").write_text("", encoding="utf-8")
         _write_py(pkg, "alpha.py", "x = 1\n")
         _write_py(pkg, "beta.py", "y = 2\n")
-        result = generator.generate(
-            tmp_path, diagram_type="module_map", output_format="mermaid"
-        )
+        result = generator.generate(tmp_path, diagram_type="module_map", output_format="mermaid")
         assert result.node_count >= 2
 
 
@@ -590,9 +533,7 @@ class TestModuleMapMermaid:
 class TestModuleMapPlantUML:
     """Module map diagrams in PlantUML format."""
 
-    def test_startuml_enduml(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_startuml_enduml(self, generator: DiagramGenerator, python_project: Path) -> None:
         result = generator.generate(
             python_project,
             diagram_type="module_map",
@@ -601,9 +542,7 @@ class TestModuleMapPlantUML:
         assert "@startuml" in result.content
         assert "@enduml" in result.content
 
-    def test_package_keyword(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_package_keyword(self, generator: DiagramGenerator, python_project: Path) -> None:
         result = generator.generate(
             python_project,
             diagram_type="module_map",
@@ -620,39 +559,23 @@ class TestModuleMapPlantUML:
 class TestERDiagramMermaid:
     """ER diagrams in Mermaid format from Pydantic models."""
 
-    def test_generates_er_diagram(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="er_diagram"
-        )
+    def test_generates_er_diagram(self, generator: DiagramGenerator, python_project: Path) -> None:
+        result = generator.generate(python_project, diagram_type="er_diagram")
         assert "erDiagram" in result.content
 
-    def test_has_fields(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="er_diagram"
-        )
+    def test_has_fields(self, generator: DiagramGenerator, python_project: Path) -> None:
+        result = generator.generate(python_project, diagram_type="er_diagram")
         assert "string" in result.content.lower() or "name" in result.content.lower()
 
-    def test_has_relationships(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
-        result = generator.generate(
-            python_project, diagram_type="er_diagram"
-        )
+    def test_has_relationships(self, generator: DiagramGenerator, python_project: Path) -> None:
+        result = generator.generate(python_project, diagram_type="er_diagram")
         # Post.author is typed User, so there should be a relationship edge
         assert result.edge_count >= 1 or "has" in result.content
 
-    def test_non_model_classes_excluded(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_non_model_classes_excluded(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """Plain classes (not BaseModel/dataclass) are excluded from ER."""
         _write_py(tmp_path, "mixed.py", DATACLASS_CODE)
-        result = generator.generate(
-            tmp_path, diagram_type="er_diagram", output_format="mermaid"
-        )
+        result = generator.generate(tmp_path, diagram_type="er_diagram", output_format="mermaid")
         # Config (dataclass) should be included, PlainClass should not.
         assert "Config" in result.content
         assert "PlainClass" not in result.content
@@ -662,29 +585,19 @@ class TestERDiagramMermaid:
     ) -> None:
         """Order.user: User produces a relationship edge."""
         _write_py(tmp_path, "models.py", MODEL_CODE)
-        result = generator.generate(
-            tmp_path, diagram_type="er_diagram", output_format="mermaid"
-        )
+        result = generator.generate(tmp_path, diagram_type="er_diagram", output_format="mermaid")
         assert result.edge_count >= 1
 
-    def test_er_empty_for_no_models(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_er_empty_for_no_models(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """A project with no model classes returns empty ER content."""
         _write_py(tmp_path, "utils.py", "def add(a, b): return a + b\n")
-        result = generator.generate(
-            tmp_path, diagram_type="er_diagram", output_format="mermaid"
-        )
+        result = generator.generate(tmp_path, diagram_type="er_diagram", output_format="mermaid")
         assert result.content == ""
 
-    def test_dataclass_included_in_er(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_dataclass_included_in_er(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """Dataclass-decorated classes are recognised as models."""
         _write_py(tmp_path, "dc.py", DATACLASS_CODE)
-        result = generator.generate(
-            tmp_path, diagram_type="er_diagram", output_format="mermaid"
-        )
+        result = generator.generate(tmp_path, diagram_type="er_diagram", output_format="mermaid")
         assert result.node_count >= 1
         assert "Config" in result.content
 
@@ -697,9 +610,7 @@ class TestERDiagramMermaid:
 class TestERDiagramPlantUML:
     """ER diagrams in PlantUML format."""
 
-    def test_startuml_enduml(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_startuml_enduml(self, generator: DiagramGenerator, python_project: Path) -> None:
         result = generator.generate(
             python_project,
             diagram_type="er_diagram",
@@ -708,9 +619,7 @@ class TestERDiagramPlantUML:
         assert "@startuml" in result.content
         assert "@enduml" in result.content
 
-    def test_entity_keyword(
-        self, generator: DiagramGenerator, python_project: Path
-    ) -> None:
+    def test_entity_keyword(self, generator: DiagramGenerator, python_project: Path) -> None:
         result = generator.generate(
             python_project,
             diagram_type="er_diagram",
@@ -718,14 +627,10 @@ class TestERDiagramPlantUML:
         )
         assert "entity " in result.content
 
-    def test_plantuml_er_from_model_code(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_plantuml_er_from_model_code(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """PlantUML ER from MODEL_CODE contains entity definitions."""
         _write_py(tmp_path, "models.py", MODEL_CODE)
-        result = generator.generate(
-            tmp_path, diagram_type="er_diagram", output_format="plantuml"
-        )
+        result = generator.generate(tmp_path, diagram_type="er_diagram", output_format="plantuml")
         assert "entity " in result.content
         assert "@startuml" in result.content
 
@@ -783,34 +688,26 @@ class TestIsModelClass:
 class TestEmptyProject:
     """Empty project directories produce empty content."""
 
-    def test_dependency_empty(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_dependency_empty(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         empty = tmp_path / "empty"
         empty.mkdir()
         result = generator.generate(empty, diagram_type="dependency")
         assert result.node_count == 0
         assert result.edge_count == 0
 
-    def test_class_hierarchy_empty(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_class_hierarchy_empty(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         empty = tmp_path / "empty"
         empty.mkdir()
         result = generator.generate(empty, diagram_type="class_hierarchy")
         assert result.content == ""
 
-    def test_module_map_empty(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_module_map_empty(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         empty = tmp_path / "empty"
         empty.mkdir()
         result = generator.generate(empty, diagram_type="module_map")
         assert result.node_count == 0 or result.content == ""
 
-    def test_er_diagram_empty(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_er_diagram_empty(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         empty = tmp_path / "empty"
         empty.mkdir()
         result = generator.generate(empty, diagram_type="er_diagram")
@@ -990,9 +887,7 @@ class TestDiagramMCPTool:
 class TestSourceDirResolution:
     """_resolve_source_dirs auto-detects src/ layout and monorepo structure."""
 
-    def test_src_layout_detected(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_src_layout_detected(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """A project with src/<pkg>/ scans only the package dir."""
         root = tmp_path / "project"
         root.mkdir()
@@ -1008,9 +903,7 @@ class TestSourceDirResolution:
         assert "Animal" in result.content
         assert "SetupDecoy" not in result.content
 
-    def test_flat_layout_fallback(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_flat_layout_fallback(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """Without src/, scans project root."""
         root = tmp_path / "flat"
         root.mkdir()
@@ -1040,9 +933,7 @@ class TestSourceDirResolution:
         assert "AlphaClass" in result.content
         assert "BetaClass" in result.content
 
-    def test_venv_not_scanned(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_venv_not_scanned(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """Files inside .venv/ are skipped."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -1056,9 +947,7 @@ class TestSourceDirResolution:
         assert "Animal" in result.content
         assert "VenvJunk" not in result.content
 
-    def test_site_packages_not_scanned(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_site_packages_not_scanned(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """Files inside site-packages/ are skipped."""
         root = tmp_path / "proj"
         root.mkdir()
@@ -1081,24 +970,16 @@ class TestSourceDirResolution:
 class TestDiagramResultMetadata:
     """DiagramResult includes degraded flag and scanned_dirs metadata."""
 
-    def test_scanned_dirs_populated(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_scanned_dirs_populated(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """scanned_dirs lists the directories that were actually scanned."""
         _write_py(tmp_path, "models.py", CLASS_HIERARCHY_CODE)
-        result = generator.generate(
-            tmp_path, diagram_type="class_hierarchy"
-        )
+        result = generator.generate(tmp_path, diagram_type="class_hierarchy")
         assert len(result.scanned_dirs) >= 1
 
-    def test_degraded_false_with_classes(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_degraded_false_with_classes(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """degraded is False when enough classes are found."""
         _write_py(tmp_path, "animals.py", CLASS_HIERARCHY_CODE)
-        result = generator.generate(
-            tmp_path, diagram_type="class_hierarchy"
-        )
+        result = generator.generate(tmp_path, diagram_type="class_hierarchy")
         # 3 classes (Animal, Dog, Puppy) meets the threshold
         assert result.degraded is False
 
@@ -1107,9 +988,7 @@ class TestDiagramResultMetadata:
     ) -> None:
         """degraded is True when fewer than threshold classes found."""
         _write_py(tmp_path, "tiny.py", "class Solo:\n    pass\n")
-        result = generator.generate(
-            tmp_path, diagram_type="class_hierarchy"
-        )
+        result = generator.generate(tmp_path, diagram_type="class_hierarchy")
         # Only 1 class, below _MIN_RESULTS_THRESHOLD (3)
         assert result.degraded is True
 
@@ -1126,14 +1005,10 @@ class TestDiagramResultMetadata:
         # Single-file scope should not trigger degraded
         assert result.degraded is False
 
-    def test_er_diagram_has_scanned_dirs(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_er_diagram_has_scanned_dirs(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """ER diagrams also include scanned_dirs metadata."""
         _write_py(tmp_path, "models.py", MODEL_CODE)
-        result = generator.generate(
-            tmp_path, diagram_type="er_diagram"
-        )
+        result = generator.generate(tmp_path, diagram_type="er_diagram")
         assert len(result.scanned_dirs) >= 1
 
     def test_default_metadata_values(self) -> None:
@@ -1224,17 +1099,13 @@ def monolith_project(tmp_path: Path) -> Path:
 class TestPatternCard:
     """pattern_card diagram renders an archetype poster with role palette."""
 
-    def test_layered_renders(
-        self, generator: DiagramGenerator, layered_project: Path
-    ) -> None:
+    def test_layered_renders(self, generator: DiagramGenerator, layered_project: Path) -> None:
         r = generator.generate(layered_project, diagram_type="pattern_card")
         assert r.diagram_type == "pattern_card"
         assert r.content.startswith("flowchart")
         assert "LAYERED" in r.content
 
-    def test_hexagonal_renders(
-        self, generator: DiagramGenerator, hexagonal_project: Path
-    ) -> None:
+    def test_hexagonal_renders(self, generator: DiagramGenerator, hexagonal_project: Path) -> None:
         r = generator.generate(hexagonal_project, diagram_type="pattern_card")
         assert "HEXAGONAL" in r.content
 
@@ -1252,16 +1123,12 @@ class TestPatternCard:
         # Small project classifies as monolith or unknown — both valid.
         assert ("MONOLITH" in r.content) or ("UNKNOWN" in r.content)
 
-    def test_evidence_in_output(
-        self, generator: DiagramGenerator, layered_project: Path
-    ) -> None:
+    def test_evidence_in_output(self, generator: DiagramGenerator, layered_project: Path) -> None:
         """Evidence from classifier appears in rendered content."""
         r = generator.generate(layered_project, diagram_type="pattern_card")
         assert "canonical layer packages matched" in r.content
 
-    def test_node_cap_respected(
-        self, generator: DiagramGenerator, tmp_path: Path
-    ) -> None:
+    def test_node_cap_respected(self, generator: DiagramGenerator, tmp_path: Path) -> None:
         """A project with many packages is capped at _MAX_PATTERN_NODES."""
         from docs_mcp.generators.diagrams import _MAX_PATTERN_NODES
 
@@ -1272,17 +1139,13 @@ class TestPatternCard:
         r = generator.generate(root, diagram_type="pattern_card")
         assert r.node_count <= _MAX_PATTERN_NODES
 
-    def test_legend_present(
-        self, generator: DiagramGenerator, layered_project: Path
-    ) -> None:
+    def test_legend_present(self, generator: DiagramGenerator, layered_project: Path) -> None:
         r = generator.generate(layered_project, diagram_type="pattern_card")
         assert 'subgraph legend["Legend"]' in r.content
         for role in ("Presentation", "Business", "Data", "Infra"):
             assert role in r.content
 
-    def test_role_colors_applied(
-        self, generator: DiagramGenerator, layered_project: Path
-    ) -> None:
+    def test_role_colors_applied(self, generator: DiagramGenerator, layered_project: Path) -> None:
         """classDef lines for all four roles are emitted."""
         r = generator.generate(layered_project, diagram_type="pattern_card")
         from docs_mcp.generators.diagrams import _ROLE_COLORS
@@ -1290,17 +1153,13 @@ class TestPatternCard:
         for role, color in _ROLE_COLORS.items():
             assert f"classDef {role} fill:{color}" in r.content
 
-    def test_classify_role_known_names(
-        self, generator: DiagramGenerator
-    ) -> None:
+    def test_classify_role_known_names(self, generator: DiagramGenerator) -> None:
         assert generator._classify_role("api") == "presentation"
         assert generator._classify_role("services") == "business"
         assert generator._classify_role("models") == "data"
         assert generator._classify_role("config") == "infra"
 
-    def test_classify_role_unknown_defaults_to_infra(
-        self, generator: DiagramGenerator
-    ) -> None:
+    def test_classify_role_unknown_defaults_to_infra(self, generator: DiagramGenerator) -> None:
         assert generator._classify_role("zzz_xyz_nothing") == "infra"
 
     def test_empty_project_degrades_gracefully(
@@ -1376,6 +1235,7 @@ class TestC4RolePalette:
         assert "UpdateElementStyle" in r.content
         # At least one role color from _ROLE_COLORS appears.
         from docs_mcp.generators.diagrams import _ROLE_COLORS
+
         assert any(c in r.content for c in _ROLE_COLORS.values())
 
     def test_c4_component_emits_updateelementstyle(

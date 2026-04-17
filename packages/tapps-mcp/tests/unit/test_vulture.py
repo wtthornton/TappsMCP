@@ -373,9 +373,7 @@ class TestCollectPythonFiles:
 # ---------------------------------------------------------------------------
 class TestCollectChangedPythonFiles:
     @patch("tapps_mcp.tools.vulture.subprocess.run")
-    def test_collects_changed_files(
-        self, mock_run: object, tmp_path: Path
-    ) -> None:
+    def test_collects_changed_files(self, mock_run: object, tmp_path: Path) -> None:
         (tmp_path / "changed.py").write_text("pass")
 
         import subprocess as sp
@@ -405,9 +403,7 @@ class TestCollectChangedPythonFiles:
         import subprocess as sp
 
         mock_run.side_effect = [  # type: ignore[union-attr]
-            sp.CompletedProcess(
-                args=[], returncode=0, stdout="readme.md\napp.js\n", stderr=""
-            ),
+            sp.CompletedProcess(args=[], returncode=0, stdout="readme.md\napp.js\n", stderr=""),
             sp.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
         ]
         result = collect_changed_python_files(tmp_path)
@@ -445,9 +441,7 @@ class TestRunVultureMultiAsync:
         mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
             returncode=1, stdout=SAMPLE_VULTURE_OUTPUT, stderr=""
         )
-        result = await run_vulture_multi_async(
-            ["a.py", "b.py"], min_confidence=60
-        )
+        result = await run_vulture_multi_async(["a.py", "b.py"], min_confidence=60)
         assert result.files_scanned == 2
         assert len(result.findings) == 5
         assert result.degraded is False
@@ -466,15 +460,11 @@ class TestRunVultureMultiAsync:
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.vulture.run_command_async")
     @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True)
-    async def test_passes_all_files_in_command(
-        self, _mock_avail: object, mock_cmd: object
-    ) -> None:
+    async def test_passes_all_files_in_command(self, _mock_avail: object, mock_cmd: object) -> None:
         mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
             returncode=0, stdout="", stderr=""
         )
-        await run_vulture_multi_async(
-            ["a.py", "b.py", "c.py"], min_confidence=70, cwd="/proj"
-        )
+        await run_vulture_multi_async(["a.py", "b.py", "c.py"], min_confidence=70, cwd="/proj")
         mock_cmd.assert_called_once_with(  # type: ignore[union-attr]
             ["vulture", "a.py", "b.py", "c.py", "--min-confidence=70"],
             cwd="/proj",
@@ -484,9 +474,7 @@ class TestRunVultureMultiAsync:
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.vulture.run_command_async")
     @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True)
-    async def test_whitelist_filters_multi(
-        self, _mock_avail: object, mock_cmd: object
-    ) -> None:
+    async def test_whitelist_filters_multi(self, _mock_avail: object, mock_cmd: object) -> None:
         mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
             returncode=1,
             stdout=(
@@ -506,9 +494,7 @@ class TestRunVultureMultiAsync:
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.vulture.is_vulture_available", return_value=True)
     @patch("tapps_mcp.tools.vulture.run_command_async")
-    async def test_clamps_confidence(
-        self, mock_cmd: object, _mock_avail: object
-    ) -> None:
+    async def test_clamps_confidence(self, mock_cmd: object, _mock_avail: object) -> None:
         mock_cmd.return_value = CommandResult(  # type: ignore[union-attr]
             returncode=0, stdout="", stderr=""
         )

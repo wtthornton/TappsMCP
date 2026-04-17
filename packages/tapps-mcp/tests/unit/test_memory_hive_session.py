@@ -142,9 +142,7 @@ def test_ensure_hive_singletons_caches_backend_failure(
         call_count["n"] += 1
         raise RuntimeError("connection refused")
 
-    monkeypatch.setattr(
-        "tapps_brain.backends.create_hive_backend", _boom, raising=True
-    )
+    monkeypatch.setattr("tapps_brain.backends.create_hive_backend", _boom, raising=True)
 
     _, _, err1 = _ensure_hive_singletons()
     _, _, err2 = _ensure_hive_singletons()

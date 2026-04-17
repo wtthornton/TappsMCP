@@ -12,7 +12,6 @@ import types
 
 import pytest
 
-
 # Each tuple: (tapps_core module path, expected public symbols)
 _REEXPORT_MODULES: list[tuple[str, list[str]]] = [
     (

@@ -33,9 +33,7 @@ class TestDriftDetectorPartialCoverage:
 
     def test_partial_coverage_produces_partial_drift(self, tmp_path: Path) -> None:
         (tmp_path / "utils.py").write_text(
-            '"""Utils."""\n\n'
-            "def alpha() -> None:\n    pass\n\n"
-            "def beta() -> None:\n    pass\n",
+            '"""Utils."""\n\ndef alpha() -> None:\n    pass\n\ndef beta() -> None:\n    pass\n',
             encoding="utf-8",
         )
         (tmp_path / "README.md").write_text(
@@ -149,7 +147,8 @@ class TestDocsCheckDriftTool:
         from docs_mcp.server_val_tools import docs_check_drift
 
         result = await docs_check_drift(
-            doc_dirs="docs", project_root=str(tmp_path),
+            doc_dirs="docs",
+            project_root=str(tmp_path),
         )
         assert result["success"] is True
 
@@ -179,9 +178,7 @@ class TestDocsCheckDriftTool:
             drift_score=0.5,
             checked_files=6,
         )
-        with patch(
-            "docs_mcp.validators.drift.DriftDetector"
-        ) as mock_cls:
+        with patch("docs_mcp.validators.drift.DriftDetector") as mock_cls:
             mock_cls.return_value.check.return_value = mock_report
             from docs_mcp.server_val_tools import docs_check_drift
 
@@ -221,9 +218,7 @@ class TestDocsCheckDriftTool:
             checked_files=6,
         )
 
-        with patch(
-            "docs_mcp.validators.drift.DriftDetector"
-        ) as mock_cls:
+        with patch("docs_mcp.validators.drift.DriftDetector") as mock_cls:
             mock_cls.return_value.check.return_value = mock_report
             from docs_mcp.server_val_tools import docs_check_drift
 
@@ -264,9 +259,7 @@ class TestDocsCheckDriftTool:
             checked_files=4,
         )
 
-        with patch(
-            "docs_mcp.validators.drift.DriftDetector"
-        ) as mock_cls:
+        with patch("docs_mcp.validators.drift.DriftDetector") as mock_cls:
             mock_cls.return_value.check.return_value = mock_report
             from docs_mcp.server_val_tools import docs_check_drift
 
@@ -302,9 +295,7 @@ class TestDocsCheckDriftTool:
             checked_files=10,
         )
 
-        with patch(
-            "docs_mcp.validators.drift.DriftDetector"
-        ) as mock_cls:
+        with patch("docs_mcp.validators.drift.DriftDetector") as mock_cls:
             mock_cls.return_value.check.return_value = mock_report
             from docs_mcp.server_val_tools import docs_check_drift
 
@@ -349,9 +340,7 @@ class TestDocsCheckDriftTool:
             checked_files=6,
         )
 
-        with patch(
-            "docs_mcp.validators.drift.DriftDetector"
-        ) as mock_cls:
+        with patch("docs_mcp.validators.drift.DriftDetector") as mock_cls:
             mock_cls.return_value.check.return_value = mock_report
             from docs_mcp.server_val_tools import docs_check_drift
 
@@ -392,9 +381,7 @@ class TestDocsCheckDriftTool:
             checked_files=4,
         )
 
-        with patch(
-            "docs_mcp.validators.drift.DriftDetector"
-        ) as mock_cls:
+        with patch("docs_mcp.validators.drift.DriftDetector") as mock_cls:
             mock_cls.return_value.check.return_value = mock_report
             from docs_mcp.server_val_tools import docs_check_drift
 
@@ -470,9 +457,7 @@ class TestDocsCheckCompletenessTool:
             overall_score=75.0,
             recommendations=["Add CHANGELOG.md"],
         )
-        with patch(
-            "docs_mcp.validators.completeness.CompletenessChecker"
-        ) as mock_cls:
+        with patch("docs_mcp.validators.completeness.CompletenessChecker") as mock_cls:
             mock_cls.return_value.check.return_value = mock_report
             from docs_mcp.server_val_tools import docs_check_completeness
 
@@ -527,7 +512,8 @@ class TestDocsCheckLinksTool:
 
         # Only check b.md (has valid link) and skip c.md (has broken)
         result = await docs_check_links(
-            files="b.md", project_root=str(tmp_path),
+            files="b.md",
+            project_root=str(tmp_path),
         )
         assert result["success"] is True
         assert result["data"]["valid_links"] == 1
@@ -550,7 +536,8 @@ class TestDocsCheckLinksTool:
         from docs_mcp.server_val_tools import docs_check_links
 
         result = await docs_check_links(
-            files="a.md, b.md", project_root=str(tmp_path),
+            files="a.md, b.md",
+            project_root=str(tmp_path),
         )
         assert result["data"]["total_links"] == 2
         assert result["data"]["valid_links"] == 2
@@ -563,9 +550,7 @@ class TestDocsCheckLinksTool:
             total_links=10,
             valid_links=8,
         )
-        with patch(
-            "docs_mcp.validators.link_checker.LinkChecker"
-        ) as mock_cls:
+        with patch("docs_mcp.validators.link_checker.LinkChecker") as mock_cls:
             mock_cls.return_value.check.return_value = mock_report
             from docs_mcp.server_val_tools import docs_check_links
 
@@ -647,9 +632,7 @@ class TestDocsCheckFreshnessTool:
             freshness_score=42.0,
             average_age_days=120.5,
         )
-        with patch(
-            "docs_mcp.validators.freshness.FreshnessChecker"
-        ) as mock_cls:
+        with patch("docs_mcp.validators.freshness.FreshnessChecker") as mock_cls:
             mock_cls.return_value.check.return_value = mock_report
             from docs_mcp.server_val_tools import docs_check_freshness
 
@@ -717,7 +700,8 @@ class TestDocsCheckFreshnessTool:
         from docs_mcp.server_val_tools import docs_check_freshness
 
         result = await docs_check_freshness(
-            project_root=str(tmp_path), max_items=3,
+            project_root=str(tmp_path),
+            max_items=3,
         )
         data = result["data"]
         assert data["showing"] == 3
@@ -732,7 +716,8 @@ class TestDocsCheckFreshnessTool:
         from docs_mcp.server_val_tools import docs_check_freshness
 
         result = await docs_check_freshness(
-            project_root=str(tmp_path), max_items=0,
+            project_root=str(tmp_path),
+            max_items=0,
         )
         data = result["data"]
         assert data["showing"] == 50  # default
@@ -747,7 +732,8 @@ class TestDocsCheckFreshnessTool:
         from docs_mcp.server_val_tools import docs_check_freshness
 
         result = await docs_check_freshness(
-            project_root=str(tmp_path), path="docs",
+            project_root=str(tmp_path),
+            path="docs",
         )
         data = result["data"]
         assert data["total_unfiltered"] == 1
@@ -760,7 +746,8 @@ class TestDocsCheckFreshnessTool:
         from docs_mcp.server_val_tools import docs_check_freshness
 
         result = await docs_check_freshness(
-            project_root=str(tmp_path), path="nonexistent",
+            project_root=str(tmp_path),
+            path="nonexistent",
         )
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_PATH"
@@ -772,7 +759,8 @@ class TestDocsCheckFreshnessTool:
         from docs_mcp.server_val_tools import docs_check_freshness
 
         result = await docs_check_freshness(
-            project_root=str(tmp_path), summary_only=True,
+            project_root=str(tmp_path),
+            summary_only=True,
         )
         data = result["data"]
         assert data["items"] == []
@@ -794,7 +782,8 @@ class TestDocsCheckFreshnessTool:
         from docs_mcp.server_val_tools import docs_check_freshness
 
         result = await docs_check_freshness(
-            project_root=str(tmp_path), freshness="stale",
+            project_root=str(tmp_path),
+            freshness="stale",
         )
         data = result["data"]
         assert data["total_unfiltered"] == 2
@@ -817,7 +806,8 @@ class TestDocsCheckFreshnessTool:
         from docs_mcp.server_val_tools import docs_check_freshness
 
         result = await docs_check_freshness(
-            project_root=str(tmp_path), freshness="stale,ancient",
+            project_root=str(tmp_path),
+            freshness="stale,ancient",
         )
         data = result["data"]
         assert data["total_unfiltered"] == 3
@@ -827,13 +817,15 @@ class TestDocsCheckFreshnessTool:
 
     @pytest.mark.asyncio
     async def test_freshness_filter_invalid_category_ignored(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         (tmp_path / "a.md").write_text("a\n", encoding="utf-8")
         from docs_mcp.server_val_tools import docs_check_freshness
 
         result = await docs_check_freshness(
-            project_root=str(tmp_path), freshness="invalid,fresh",
+            project_root=str(tmp_path),
+            freshness="invalid,fresh",
         )
         data = result["data"]
         assert data["total_items"] == 1
@@ -847,7 +839,9 @@ class TestDocsCheckFreshnessTool:
         from docs_mcp.server_val_tools import docs_check_freshness
 
         result = await docs_check_freshness(
-            project_root=str(tmp_path), freshness="fresh", max_items=3,
+            project_root=str(tmp_path),
+            freshness="fresh",
+            max_items=3,
         )
         data = result["data"]
         assert data["total_items"] == 10  # all fresh

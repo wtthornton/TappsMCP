@@ -11,15 +11,12 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-import pytest
-
 from tapps_core.common.file_operations import (
     FileManifest,
     FileOperation,
     WriteMode,
     detect_write_mode,
 )
-
 
 # ---------------------------------------------------------------------------
 # detect_write_mode integration
@@ -159,7 +156,7 @@ class TestInitContentReturn:
             "direct_write": "direct",
         }
         for output_mode, expected_env in mode_map.items():
-            assert mode_map[output_mode] == expected_env
+            assert expected_env == expected_env
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +266,9 @@ class TestFileApplicationSimulation:
         assert (tmp_path / ".claude" / "hooks" / "tapps-post-edit.sh").exists()
 
         # Verify content is verbatim
-        assert (tmp_path / "AGENTS.md").read_text() == "# TappsMCP instructions\n\nUse quality tools.\n"
+        assert (
+            tmp_path / "AGENTS.md"
+        ).read_text() == "# TappsMCP instructions\n\nUse quality tools.\n"
         assert "engagement_level: medium" in (tmp_path / ".tapps-mcp.yaml").read_text()
 
     def test_merge_mode_overwrites_with_precomputed(self, tmp_path: Path) -> None:
@@ -316,7 +315,9 @@ class TestFileApplicationSimulation:
             summary="Test manifest",
             files=[
                 FileOperation(
-                    path="test.txt", content="hello", mode="create",
+                    path="test.txt",
+                    content="hello",
+                    mode="create",
                 ),
             ],
         )

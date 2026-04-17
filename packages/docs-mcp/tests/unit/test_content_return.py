@@ -49,23 +49,17 @@ class TestBuildGeneratorManifest:
         assert "agent_instructions" in manifest
 
     def test_persona_for_readme(self) -> None:
-        manifest = build_generator_manifest(
-            "docs_generate_readme", "content", "README.md"
-        )
+        manifest = build_generator_manifest("docs_generate_readme", "content", "README.md")
         persona = manifest["agent_instructions"]["persona"]
         assert "Technical writer" in persona
 
     def test_persona_for_changelog(self) -> None:
-        manifest = build_generator_manifest(
-            "docs_generate_changelog", "content", "CHANGELOG.md"
-        )
+        manifest = build_generator_manifest("docs_generate_changelog", "content", "CHANGELOG.md")
         persona = manifest["agent_instructions"]["persona"]
         assert "Release manager" in persona
 
     def test_unknown_tool_gets_default_persona(self) -> None:
-        manifest = build_generator_manifest(
-            "docs_generate_unknown", "content", "output.md"
-        )
+        manifest = build_generator_manifest("docs_generate_unknown", "content", "output.md")
         persona = manifest["agent_instructions"]["persona"]
         assert "Documentation generator" in persona
 

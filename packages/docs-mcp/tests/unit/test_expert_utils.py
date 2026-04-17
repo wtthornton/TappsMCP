@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from docs_mcp.generators.expert_utils import (
     extract_expert_advice,
     filter_expert_guidance,
@@ -37,8 +35,7 @@ class TestExtractExpertAdvice:
 
     def test_skips_no_knowledge_paragraph(self) -> None:
         answer = (
-            "## X — y\n\n"
-            "No specific knowledge found for this query in the security knowledge base."
+            "## X — y\n\nNo specific knowledge found for this query in the security knowledge base."
         )
         assert extract_expert_advice(answer) == ""
 

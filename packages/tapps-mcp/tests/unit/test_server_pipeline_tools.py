@@ -114,9 +114,8 @@ class TestTappsSessionStart:
         await tapps_session_start()
         assert "tapps_session_start" in CallTracker.get_called_tools()
 
-    @pytest.mark.asyncio
-    async def _test_includes_project_profile_hint_REMOVED(self) -> None:
-        """tapps_project_profile removed (EPIC-96)."""
+    # _test_includes_project_profile_hint: removed because tapps_project_profile
+    # was deleted (EPIC-96).
 
     @pytest.mark.asyncio
     async def test_marks_session_initialized(self) -> None:
@@ -142,9 +141,8 @@ class TestTappsSessionStart:
         for key, val in timings.items():
             assert isinstance(val, int), f"timings[{key}] should be int"
 
-    @pytest.mark.asyncio
-    async def _test_populates_tech_stack_domains_REMOVED(self) -> None:
-        """Expert system removed (EPIC-94). Tech stack domains no longer populated."""
+    # _test_populates_tech_stack_domains: removed because expert system was
+    # deleted (EPIC-94); tech stack domains are no longer populated.
 
     @pytest.mark.asyncio
     async def test_background_maintenance_fields(self) -> None:
@@ -182,9 +180,7 @@ class TestTappsSetEngagementLevel:
         (tmp_path / "pyproject.toml").write_text("[project]\n")
 
         for level in ("high", "medium", "low"):
-            with patch(
-                "tapps_mcp.server_pipeline_tools.load_settings"
-            ) as mock_settings:
+            with patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings:
                 mock_settings.return_value = MagicMock(
                     project_root=str(tmp_path),
                 )
@@ -206,9 +202,7 @@ class TestTappsSetEngagementLevel:
         (tmp_path / ".git").mkdir(exist_ok=True)
         (tmp_path / "pyproject.toml").write_text("[project]\n")
 
-        with patch(
-            "tapps_mcp.server_pipeline_tools.load_settings"
-        ) as mock_settings:
+        with patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(project_root=str(tmp_path))
             tapps_set_engagement_level("low")
 
@@ -357,9 +351,7 @@ class TestTappsDoctor:
 
         result = tapps_doctor(quick=True)
         assert result["success"] is True
-        mock_doctor.assert_called_once_with(
-            project_root=str(tmp_path), quick=True
-        )
+        mock_doctor.assert_called_once_with(project_root=str(tmp_path), quick=True)
 
 
 # ---------------------------------------------------------------------------
@@ -504,9 +496,7 @@ class TestTappsInitMcpConfig:
         )
         mock_bootstrap.return_value = {"errors": [], "created": []}
 
-        with patch(
-            "tapps_mcp.distribution.setup_generator._generate_config"
-        ) as mock_gen:
+        with patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen:
             result = await tapps_init(dry_run=False)
             mock_gen.assert_not_called()
             assert "mcp_config_written" not in result.get("data", {})
@@ -526,9 +516,7 @@ class TestTappsInitMcpConfig:
         )
         mock_bootstrap.return_value = {"errors": [], "created": []}
 
-        with patch(
-            "tapps_mcp.distribution.setup_generator._generate_config"
-        ) as mock_gen:
+        with patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen:
             mock_gen.return_value = True
             result = await tapps_init(mcp_config=True)
             mock_gen.assert_called_once()
@@ -552,9 +540,7 @@ class TestTappsInitMcpConfig:
         )
         mock_bootstrap.return_value = {"errors": [], "dry_run": True, "created": []}
 
-        with patch(
-            "tapps_mcp.distribution.setup_generator._generate_config"
-        ) as mock_gen:
+        with patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen:
             await tapps_init(mcp_config=True, dry_run=True)
             mock_gen.assert_not_called()
 
@@ -573,9 +559,7 @@ class TestTappsInitMcpConfig:
         )
         mock_bootstrap.return_value = {"errors": [], "created": []}
 
-        with patch(
-            "tapps_mcp.distribution.setup_generator._generate_config"
-        ) as mock_gen:
+        with patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen:
             mock_gen.return_value = True
             await tapps_init(mcp_config=True, platform="cursor")
             assert mock_gen.call_args[0][0] == "cursor"
@@ -595,9 +579,7 @@ class TestTappsInitMcpConfig:
         )
         mock_bootstrap.return_value = {"errors": [], "created": []}
 
-        with patch(
-            "tapps_mcp.distribution.setup_generator._generate_config"
-        ) as mock_gen:
+        with patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen:
             mock_gen.return_value = True
             await tapps_init(mcp_config=True, platform="")
             assert mock_gen.call_args[0][0] == "claude-code"
@@ -617,9 +599,7 @@ class TestTappsInitMcpConfig:
         )
         mock_bootstrap.return_value = {"errors": [], "created": []}
 
-        with patch(
-            "tapps_mcp.distribution.setup_generator._generate_config"
-        ) as mock_gen:
+        with patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen:
             mock_gen.return_value = True
             await tapps_init(mcp_config=True)
             call_kwargs = mock_gen.call_args
@@ -640,9 +620,7 @@ class TestTappsValidateChanged:
     async def test_no_files_returns_success(self, tmp_path: Path) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
-        with patch(
-            "tapps_mcp.server_pipeline_tools.load_settings"
-        ) as mock_settings:
+        with patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings:
             mock_settings.return_value = _make_mock_settings(tmp_path)
             with patch(
                 "tapps_mcp.server_pipeline_tools._discover_changed_files",
@@ -657,9 +635,7 @@ class TestTappsValidateChanged:
     async def test_records_call(self, tmp_path: Path) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
-        with patch(
-            "tapps_mcp.server_pipeline_tools.load_settings"
-        ) as mock_settings:
+        with patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings:
             mock_settings.return_value = _make_mock_settings(tmp_path)
             with patch(
                 "tapps_mcp.server_pipeline_tools._discover_changed_files",
@@ -813,9 +789,7 @@ class TestTappsValidateChanged:
                 "tapps_mcp.server_pipeline_tools._discover_changed_files",
                 return_value=[],
             ),
-            patch(
-                "tapps_mcp.server_pipeline_tools._write_validate_ok_marker"
-            ) as mock_marker,
+            patch("tapps_mcp.server_pipeline_tools._write_validate_ok_marker") as mock_marker,
         ):
             ms.return_value = _make_mock_settings(tmp_path)
             await tapps_validate_changed()
@@ -1007,8 +981,11 @@ class TestValidateSingleFile:
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
         ):
             result = await _validate_single_file(
-                f, "standard", quick=True,
-                do_security_full=False, sem=asyncio.Semaphore(1),
+                f,
+                "standard",
+                quick=True,
+                do_security_full=False,
+                sem=asyncio.Semaphore(1),
             )
 
         assert result["overall_score"] == 92.0
@@ -1038,8 +1015,11 @@ class TestValidateSingleFile:
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
         ):
             result = await _validate_single_file(
-                f, "standard", quick=False,
-                do_security_full=False, sem=asyncio.Semaphore(1),
+                f,
+                "standard",
+                quick=False,
+                do_security_full=False,
+                sem=asyncio.Semaphore(1),
             )
 
         assert result["overall_score"] == 88.0
@@ -1061,8 +1041,11 @@ class TestValidateSingleFile:
             return_value=scorer_mock,
         ):
             result = await _validate_single_file(
-                f, "standard", quick=True,
-                do_security_full=False, sem=asyncio.Semaphore(1),
+                f,
+                "standard",
+                quick=True,
+                do_security_full=False,
+                sem=asyncio.Semaphore(1),
             )
 
         assert "errors" in result
@@ -1090,8 +1073,11 @@ class TestValidateSingleFile:
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
         ):
             result = await _validate_single_file(
-                f, "standard", quick=True,
-                do_security_full=False, sem=asyncio.Semaphore(1),
+                f,
+                "standard",
+                quick=True,
+                do_security_full=False,
+                sem=asyncio.Semaphore(1),
             )
 
         assert result["gate_passed"] is False
@@ -1110,8 +1096,11 @@ class TestValidateSingleFile:
             return_value=None,
         ):
             result = await _validate_single_file(
-                f, "standard", quick=True,
-                do_security_full=False, sem=asyncio.Semaphore(1),
+                f,
+                "standard",
+                quick=True,
+                do_security_full=False,
+                sem=asyncio.Semaphore(1),
             )
 
         assert "errors" in result
@@ -1152,13 +1141,20 @@ class TestBuildStructuredValidationOutput:
         )
 
         results = [
-            {"file_path": "a.py", "overall_score": 90.0,
-             "gate_passed": True, "security_passed": True},
+            {
+                "file_path": "a.py",
+                "overall_score": 90.0,
+                "gate_passed": True,
+                "security_passed": True,
+            },
         ]
         resp: dict = {}
         _build_structured_validation_output(
-            results, all_passed=True, security_depth="basic",
-            impact_data=None, resp=resp,
+            results,
+            all_passed=True,
+            security_depth="basic",
+            impact_data=None,
+            resp=resp,
         )
         # Structured output may or may not succeed depending on
         # whether output_schemas is importable - either way no exception
@@ -1171,8 +1167,11 @@ class TestBuildStructuredValidationOutput:
 
         resp: dict = {}
         _build_structured_validation_output(
-            results=[], all_passed=True, security_depth="basic",
-            impact_data=None, resp=resp,
+            results=[],
+            all_passed=True,
+            security_depth="basic",
+            impact_data=None,
+            resp=resp,
         )
         # Should not raise
 
@@ -1203,7 +1202,10 @@ class TestStartProgressReporting:
         from tapps_mcp.server_pipeline_tools import _start_progress_reporting
 
         result = _start_progress_reporting(
-            ctx=None, total_files=5, start=0, stop_event=asyncio.Event(),
+            ctx=None,
+            total_files=5,
+            start=0,
+            stop_event=asyncio.Event(),
         )
         assert result is None
 
@@ -1211,7 +1213,9 @@ class TestStartProgressReporting:
         from tapps_mcp.server_pipeline_tools import _start_progress_reporting
 
         result = _start_progress_reporting(
-            ctx=MagicMock(), total_files=0, start=0,
+            ctx=MagicMock(),
+            total_files=0,
+            start=0,
             stop_event=asyncio.Event(),
         )
         assert result is None
@@ -1513,14 +1517,16 @@ class TestRegister:
         mock_mcp.tool.return_value = lambda fn: fn
 
         # register() now requires allowed_tools; pass all pipeline tool names
-        all_tools = frozenset({
-            "tapps_validate_changed",
-            "tapps_session_start",
-            "tapps_init",
-            "tapps_set_engagement_level",
-            "tapps_upgrade",
-            "tapps_doctor",
-        })
+        all_tools = frozenset(
+            {
+                "tapps_validate_changed",
+                "tapps_session_start",
+                "tapps_init",
+                "tapps_set_engagement_level",
+                "tapps_upgrade",
+                "tapps_doctor",
+            }
+        )
         register(mock_mcp, all_tools)
         # 6 tools should be registered
         assert mock_mcp.tool.call_count == 6
@@ -1529,6 +1535,7 @@ class TestRegister:
 # ---------------------------------------------------------------------------
 # TAP-475: _build_search_first
 # ---------------------------------------------------------------------------
+
 
 class TestBuildSearchFirst:
     """Unit tests for the search-first pyproject.toml scanner."""
@@ -1567,9 +1574,7 @@ class TestBuildSearchFirst:
     def test_no_unknown_key_when_all_covered(self, tmp_path: Path) -> None:
         from tapps_mcp.server_pipeline_tools import _build_search_first
 
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\ndependencies = ["pydantic"]\n'
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\ndependencies = ["pydantic"]\n')
         result = _build_search_first(tmp_path)
         assert result is not None
         assert "unknown_deps" not in result
@@ -1597,9 +1602,7 @@ class TestBuildSearchFirst:
         from tapps_mcp.server_pipeline_tools import _build_search_first
 
         # fastapi has hyphens in some transitive dep names, but test the normaliser
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\ndependencies = ["fast-mcp"]\n'
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\ndependencies = ["fast-mcp"]\n')
         # fast-mcp → fast_mcp, not in covered; just assert no crash and unknown listed
         result = _build_search_first(tmp_path)
         assert result is not None

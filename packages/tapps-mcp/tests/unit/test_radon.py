@@ -302,8 +302,28 @@ SAMPLE_HAL_JSON = json.dumps(
         "test.py": {
             "total": [11, 15, 51.89, 2.86, 148.26, 8.24, 0.017],
             "functions": [
-                ["fibonacci", {"volume": 23.26, "difficulty": 1.5, "effort": 34.90, "bugs": 0.008, "vocabulary": 6, "length": 9}],
-                ["complex_func", {"volume": 2500.0, "difficulty": 35.0, "effort": 120000.0, "bugs": 1.5, "vocabulary": 20, "length": 150}],
+                [
+                    "fibonacci",
+                    {
+                        "volume": 23.26,
+                        "difficulty": 1.5,
+                        "effort": 34.90,
+                        "bugs": 0.008,
+                        "vocabulary": 6,
+                        "length": 9,
+                    },
+                ],
+                [
+                    "complex_func",
+                    {
+                        "volume": 2500.0,
+                        "difficulty": 35.0,
+                        "effort": 120000.0,
+                        "bugs": 1.5,
+                        "vocabulary": 20,
+                        "length": 150,
+                    },
+                ],
             ],
         }
     }

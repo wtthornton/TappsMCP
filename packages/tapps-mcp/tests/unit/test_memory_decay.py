@@ -88,12 +88,8 @@ class TestCalculateDecayedConfidence:
         now = datetime.now(tz=UTC)
         updated = (now - timedelta(days=60)).isoformat()
 
-        arch = _make_entry(
-            tier=MemoryTier.architectural, confidence=0.8, updated_at=updated
-        )
-        pat = _make_entry(
-            tier=MemoryTier.pattern, confidence=0.8, updated_at=updated
-        )
+        arch = _make_entry(tier=MemoryTier.architectural, confidence=0.8, updated_at=updated)
+        pat = _make_entry(tier=MemoryTier.pattern, confidence=0.8, updated_at=updated)
 
         arch_conf = calculate_decayed_confidence(arch, config, now=now)
         pat_conf = calculate_decayed_confidence(pat, config, now=now)

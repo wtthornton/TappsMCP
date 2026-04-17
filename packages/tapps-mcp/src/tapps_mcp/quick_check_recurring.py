@@ -5,8 +5,6 @@ resolved path and gate category trigger a procedural memory save (or reinforce i
 key already exists).
 """
 
-
-
 from __future__ import annotations
 
 import hashlib

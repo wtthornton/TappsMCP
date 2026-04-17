@@ -42,13 +42,15 @@ def generator_no_memory(metrics_dir: Path) -> DashboardGenerator:
 
 class TestDashboardMemoryMetrics:
     def test_dashboard_includes_memory_metrics(
-        self, generator_with_memory: DashboardGenerator,
+        self,
+        generator_with_memory: DashboardGenerator,
     ) -> None:
         data = generator_with_memory.generate_json_dashboard()
         assert "memory_metrics" in data
 
     def test_dashboard_memory_metrics_shape(
-        self, generator_with_memory: DashboardGenerator,
+        self,
+        generator_with_memory: DashboardGenerator,
     ) -> None:
         data = generator_with_memory.generate_json_dashboard(
             sections=["memory_metrics"],
@@ -65,7 +67,9 @@ class TestDashboardMemoryMetrics:
         assert mem["stale_count"] >= 0
 
     def test_dashboard_memory_alert_high_capacity(
-        self, metrics_dir: Path, tmp_path: Path,
+        self,
+        metrics_dir: Path,
+        tmp_path: Path,
     ) -> None:
         """Verify alert fires when memory capacity > 80%."""
         from tapps_core.memory.store import MemoryStore
@@ -89,13 +93,15 @@ class TestDashboardMemoryMetrics:
 
         alerts = data.get("alerts", [])
         memory_alerts = [
-            a for a in alerts
+            a
+            for a in alerts
             if isinstance(a, dict) and a.get("metric_type") == "memory_capacity_pct"
         ]
         assert len(memory_alerts) >= 1
 
     def test_dashboard_memory_empty_store(
-        self, generator_no_memory: DashboardGenerator,
+        self,
+        generator_no_memory: DashboardGenerator,
     ) -> None:
         data = generator_no_memory.generate_json_dashboard(
             sections=["memory_metrics"],
@@ -105,7 +111,8 @@ class TestDashboardMemoryMetrics:
         assert mem["total_entries"] == 0
 
     def test_dashboard_memory_in_markdown(
-        self, generator_with_memory: DashboardGenerator,
+        self,
+        generator_with_memory: DashboardGenerator,
     ) -> None:
         md = generator_with_memory.generate_markdown_dashboard(
             sections=["memory_metrics"],
@@ -114,14 +121,17 @@ class TestDashboardMemoryMetrics:
         assert "Total entries:" in md
 
     def test_dashboard_memory_metrics_default_sections(
-        self, generator_with_memory: DashboardGenerator,
+        self,
+        generator_with_memory: DashboardGenerator,
     ) -> None:
         """memory_metrics should be in the default sections list."""
         data = generator_with_memory.generate_json_dashboard()
         assert "memory_metrics" in data
 
     def test_dashboard_memory_consolidation_stats(
-        self, tmp_path: Path, metrics_dir: Path,
+        self,
+        tmp_path: Path,
+        metrics_dir: Path,
     ) -> None:
         """Epic 65.1: memory_metrics includes consolidation stats."""
         from tapps_core.memory.store import MemoryStore
@@ -152,7 +162,8 @@ class TestDashboardMemoryMetrics:
         assert mem["consolidation_groups"] == 1
 
     def test_dashboard_memory_consolidation_stats_empty(
-        self, generator_with_memory: DashboardGenerator,
+        self,
+        generator_with_memory: DashboardGenerator,
     ) -> None:
         """Epic 65.1: consolidation stats are 0 when no consolidation."""
         data = generator_with_memory.generate_json_dashboard(
@@ -164,7 +175,9 @@ class TestDashboardMemoryMetrics:
         assert mem["consolidation_groups"] == 0
 
     def test_dashboard_memory_federation_stats(
-        self, tmp_path: Path, metrics_dir: Path,
+        self,
+        tmp_path: Path,
+        metrics_dir: Path,
     ) -> None:
         """Epic 65.1: memory_metrics includes federation when available."""
         from tapps_core.memory.store import MemoryStore

@@ -103,24 +103,53 @@ class DiataxisClassifier:
     # Content keywords per quadrant
     _CONTENT_KEYWORDS: ClassVar[dict[str, list[str]]] = {
         "tutorial": [
-            "let's", "we will", "you will learn", "in this tutorial",
-            "follow along", "hands-on", "exercise", "practice",
-            "by the end", "prerequisite",
+            "let's",
+            "we will",
+            "you will learn",
+            "in this tutorial",
+            "follow along",
+            "hands-on",
+            "exercise",
+            "practice",
+            "by the end",
+            "prerequisite",
         ],
         "how-to": [
-            "run the following", "execute", "create a", "add the",
-            "modify", "update the", "ensure that", "verify",
-            "troubleshoot", "resolve",
+            "run the following",
+            "execute",
+            "create a",
+            "add the",
+            "modify",
+            "update the",
+            "ensure that",
+            "verify",
+            "troubleshoot",
+            "resolve",
         ],
         "reference": [
-            "type:", "default:", "required:", "optional:",
-            "raises:", "returns:", "args:", "parameters:",
-            "enum", "schema", "payload",
+            "type:",
+            "default:",
+            "required:",
+            "optional:",
+            "raises:",
+            "returns:",
+            "args:",
+            "parameters:",
+            "enum",
+            "schema",
+            "payload",
         ],
         "explanation": [
-            "the reason", "this is because", "trade-off", "tradeoff",
-            "compared to", "alternative", "motivation",
-            "in contrast", "historically", "evolution",
+            "the reason",
+            "this is because",
+            "trade-off",
+            "tradeoff",
+            "compared to",
+            "alternative",
+            "motivation",
+            "in contrast",
+            "historically",
+            "evolution",
         ],
     }
 
@@ -201,10 +230,7 @@ class DiataxisClassifier:
             )
 
         confidence = primary[1] / total_score if total_score > 0 else 0.0
-        is_mixed = (
-            secondary[1] > 0 and primary[1] > 0
-            and secondary[1] / primary[1] > 0.6
-        )
+        is_mixed = secondary[1] > 0 and primary[1] > 0 and secondary[1] / primary[1] > 0.6
 
         return DiataxisResult(
             file_path=file_path,
@@ -251,7 +277,8 @@ class DiataxisClassifier:
         # Explanation has fewer code blocks, more prose
         lines = content.split("\n")
         prose_lines = sum(
-            1 for ln in lines
+            1
+            for ln in lines
             if ln.strip() and not ln.strip().startswith(("#", "-", "*", "|", "`", ">"))
         )
         if prose_lines > len(lines) * 0.6 and code_blocks < 2:

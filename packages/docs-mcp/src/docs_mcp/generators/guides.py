@@ -104,9 +104,7 @@ class OnboardingGuideGenerator:
         if key_concepts:
             sections.extend(key_concepts)
         else:
-            sections.append(
-                "<!-- Add key concepts and domain terminology here -->"
-            )
+            sections.append("<!-- Add key concepts and domain terminology here -->")
         sections.append("")
 
         # Running the Project
@@ -118,9 +116,7 @@ class OnboardingGuideGenerator:
         # Running Tests
         sections.append("## Running Tests")
         sections.append("")
-        sections.extend(
-            self._testing(metadata, source, project_root)
-        )
+        sections.extend(self._testing(metadata, source, project_root))
         sections.append("")
 
         # Next Steps
@@ -185,9 +181,9 @@ class OnboardingGuideGenerator:
         Returns:
             List of markdown lines.
         """
-        has_uv = (
-            project_root is not None and (project_root / "uv.lock").exists()
-        ) or any("uv" in d for d in metadata.dev_dependencies)
+        has_uv = (project_root is not None and (project_root / "uv.lock").exists()) or any(
+            "uv" in d for d in metadata.dev_dependencies
+        )
 
         # Detect git remote URL
         clone_url = "<repository-url>"
@@ -195,7 +191,7 @@ class OnboardingGuideGenerator:
             import subprocess
 
             try:
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(
                     ["git", "remote", "get-url", "origin"],
                     capture_output=True,
                     text=True,
@@ -266,9 +262,7 @@ class OnboardingGuideGenerator:
                 prefix = "+" if node.is_package else "-"
                 # Truncate docstring to first line to avoid breaking tree layout
                 first_line = (
-                    node.module_docstring.split("\n")[0].strip()
-                    if node.module_docstring
-                    else ""
+                    node.module_docstring.split("\n")[0].strip() if node.module_docstring else ""
                 )
                 doc = f"  # {first_line}" if first_line else ""
                 suffix = "/" if node.is_package else ""
@@ -276,9 +270,7 @@ class OnboardingGuideGenerator:
                 for sub in node.submodules:
                     sub_prefix = "  +" if sub.is_package else "  -"
                     sub_first_line = (
-                        sub.module_docstring.split("\n")[0].strip()
-                        if sub.module_docstring
-                        else ""
+                        sub.module_docstring.split("\n")[0].strip() if sub.module_docstring else ""
                     )
                     sub_doc = f"  # {sub_first_line}" if sub_first_line else ""
                     lines.append(f"{sub_prefix} {sub.name}{sub_doc}")
@@ -409,9 +401,7 @@ class OnboardingGuideGenerator:
         """
         lines: list[str] = ["```bash"]
 
-        all_deps = " ".join(
-            metadata.dependencies + metadata.dev_dependencies
-        ).lower()
+        all_deps = " ".join(metadata.dependencies + metadata.dev_dependencies).lower()
 
         if source == "pyproject.toml" or not source:
             if "pytest" in all_deps or (project_root / "tests").is_dir():
@@ -445,24 +435,17 @@ class OnboardingGuideGenerator:
 
         if (project_root / "CONTRIBUTING.md").exists():
             lines.append(
-                "- Read the [Contributing Guide](CONTRIBUTING.md) "
-                "to learn how to contribute"
+                "- Read the [Contributing Guide](CONTRIBUTING.md) to learn how to contribute"
             )
 
         if (project_root / "docs").is_dir():
-            lines.append(
-                "- Browse the [documentation](docs/) for detailed guides"
-            )
+            lines.append("- Browse the [documentation](docs/) for detailed guides")
 
         if (project_root / "docs" / "api.md").exists():
-            lines.append(
-                "- Check the [API Reference](docs/api.md) for detailed API docs"
-            )
+            lines.append("- Check the [API Reference](docs/api.md) for detailed API docs")
 
         if (project_root / "CHANGELOG.md").exists():
-            lines.append(
-                "- See the [Changelog](CHANGELOG.md) for recent changes"
-            )
+            lines.append("- See the [Changelog](CHANGELOG.md) for recent changes")
 
         if not lines:
             lines.append("- Explore the codebase and documentation")
@@ -548,9 +531,7 @@ class ContributingGuideGenerator:
 
         project_name = metadata.name or project_root.name
         source = metadata.source_file.lower()
-        all_deps = " ".join(
-            metadata.dependencies + metadata.dev_dependencies
-        ).lower()
+        all_deps = " ".join(metadata.dependencies + metadata.dev_dependencies).lower()
 
         sections: list[str] = []
 
@@ -591,25 +572,19 @@ class ContributingGuideGenerator:
         # Development Setup
         sections.append("## Development Setup")
         sections.append("")
-        sections.extend(
-            self._dev_setup(metadata, source, project_name)
-        )
+        sections.extend(self._dev_setup(metadata, source, project_name))
         sections.append("")
 
         # Coding Standards
         sections.append("## Coding Standards")
         sections.append("")
-        sections.extend(
-            self._coding_standards(all_deps, source, project_root)
-        )
+        sections.extend(self._coding_standards(all_deps, source, project_root))
         sections.append("")
 
         # Testing
         sections.append("## Testing")
         sections.append("")
-        sections.extend(
-            self._testing_section(metadata, source, project_root, all_deps)
-        )
+        sections.extend(self._testing_section(metadata, source, project_root, all_deps))
         sections.append("")
 
         # Submitting Changes
@@ -645,9 +620,7 @@ class ContributingGuideGenerator:
         lines: list[str] = ["```bash"]
 
         if source == "pyproject.toml" or not source:
-            all_deps_str = " ".join(
-                metadata.dependencies + metadata.dev_dependencies
-            ).lower()
+            all_deps_str = " ".join(metadata.dependencies + metadata.dev_dependencies).lower()
             if "uv" in all_deps_str:
                 lines.append("# Install with uv")
                 lines.append("uv sync --all-packages")
@@ -696,8 +669,10 @@ class ContributingGuideGenerator:
 
         if source == "pyproject.toml" or not source:
             if "ruff" in all_deps or "ruff" in tool_config:
-                lines.append("This project uses [ruff](https://docs.astral.sh/ruff/) "
-                             "for linting and formatting:")
+                lines.append(
+                    "This project uses [ruff](https://docs.astral.sh/ruff/) "
+                    "for linting and formatting:"
+                )
                 lines.append("")
                 lines.append("```bash")
                 lines.append("ruff check .")
@@ -711,8 +686,9 @@ class ContributingGuideGenerator:
                 lines.append("flake8 .")
                 lines.append("```")
             elif "black" in all_deps:
-                lines.append("This project uses [black](https://black.readthedocs.io/) "
-                             "for code formatting:")
+                lines.append(
+                    "This project uses [black](https://black.readthedocs.io/) for code formatting:"
+                )
                 lines.append("")
                 lines.append("```bash")
                 lines.append("black --check .")
@@ -746,8 +722,10 @@ class ContributingGuideGenerator:
                 lines.append("Please ensure your code follows the project's style conventions.")
 
         elif source == "cargo.toml":
-            lines.append("Please format your code with `cargo fmt` "
-                         "and check for warnings with `cargo clippy`:")
+            lines.append(
+                "Please format your code with `cargo fmt` "
+                "and check for warnings with `cargo clippy`:"
+            )
             lines.append("")
             lines.append("```bash")
             lines.append("cargo fmt --check")
@@ -807,9 +785,7 @@ class ContributingGuideGenerator:
             ci_dir = project_root / ".github" / "workflows"
             if ci_dir.is_dir():
                 try:
-                    workflows = sorted(ci_dir.glob("*.yml")) + sorted(
-                        ci_dir.glob("*.yaml")
-                    )
+                    workflows = sorted(ci_dir.glob("*.yml")) + sorted(ci_dir.glob("*.yaml"))
                     if workflows:
                         names = [w.stem for w in workflows[:3]]
                         lines.append("")

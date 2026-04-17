@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -154,110 +153,5 @@ class TestLookupDocs:
         assert "Stale content returned" in result.output
 
 
-class _TestConsultExpert_REMOVED:
-    def test_consult_success(self, runner: CliRunner) -> None:
-        mock_result = _mock_consultation_result()
-        with patch("tapps_core.experts.engine.consult_expert", return_value=mock_result):
-            result = runner.invoke(
-                main,
-                ["consult-expert", "--question", "How to prevent SQL injection?"],
-            )
-        assert result.exit_code == 0
-        assert "security" in result.output
-        assert "Security Expert" in result.output
-        assert "85%" in result.output
-
-    def test_consult_with_domain(self, runner: CliRunner) -> None:
-        mock_result = _mock_consultation_result()
-        with patch(
-            "tapps_core.experts.engine.consult_expert", return_value=mock_result
-        ) as mock_fn:
-            result = runner.invoke(
-                main,
-                [
-                    "consult-expert",
-                    "--question", "How to prevent SQL injection?",
-                    "--domain", "security",
-                ],
-            )
-        assert result.exit_code == 0
-        mock_fn.assert_called_once_with(
-            question="How to prevent SQL injection?", domain="security"
-        )
-
-    def test_consult_json_output(self, runner: CliRunner) -> None:
-        mock_result = _mock_consultation_result()
-        with patch("tapps_core.experts.engine.consult_expert", return_value=mock_result):
-            result = runner.invoke(
-                main,
-                ["consult-expert", "--question", "test?", "--json"],
-            )
-        assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert data["domain"] == "security"
-
-
-class _TestResearch_REMOVED:
-    def test_research_basic(self, runner: CliRunner) -> None:
-        mock_result = _mock_consultation_result()
-        with patch("tapps_core.experts.engine.consult_expert", return_value=mock_result):
-            result = runner.invoke(
-                main,
-                ["research", "--question", "How to prevent SQL injection?"],
-            )
-        assert result.exit_code == 0
-        assert "security" in result.output
-        assert "Security Expert" in result.output
-
-    def test_research_with_library_supplement(self, runner: CliRunner) -> None:
-        mock_consult = _mock_consultation_result()
-        mock_lookup = _mock_lookup_result(content="FastAPI security docs here.")
-        mock_engine = AsyncMock()
-        mock_engine.lookup = AsyncMock(return_value=mock_lookup)
-        mock_engine.close = AsyncMock()
-
-        with (
-            patch("tapps_core.experts.engine.consult_expert", return_value=mock_consult),
-            patch("tapps_core.config.settings.load_settings", return_value=_mock_settings()),
-            patch("tapps_core.knowledge.cache.KBCache"),
-            patch("tapps_core.knowledge.lookup.LookupEngine", return_value=mock_engine),
-        ):
-            result = runner.invoke(
-                main,
-                [
-                    "research",
-                    "--question", "How to secure FastAPI?",
-                    "--library", "fastapi",
-                ],
-            )
-        assert result.exit_code == 0
-        assert "Documentation supplement" in result.output
-
-    def test_research_json_output(self, runner: CliRunner) -> None:
-        mock_result = _mock_consultation_result()
-        with patch("tapps_core.experts.engine.consult_expert", return_value=mock_result):
-            result = runner.invoke(
-                main,
-                ["research", "--question", "test?", "--json"],
-            )
-        assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert data["domain"] == "security"
-
-    def test_research_with_domain(self, runner: CliRunner) -> None:
-        mock_result = _mock_consultation_result(domain="testing-strategies")
-        with patch(
-            "tapps_core.experts.engine.consult_expert", return_value=mock_result
-        ) as mock_fn:
-            result = runner.invoke(
-                main,
-                [
-                    "research",
-                    "--question", "How to write fixtures?",
-                    "--domain", "testing-strategies",
-                ],
-            )
-        assert result.exit_code == 0
-        mock_fn.assert_called_once_with(
-            question="How to write fixtures?", domain="testing-strategies"
-        )
+# Note: TestConsultExpert and TestResearch were removed when the
+# `consult-expert` and `research` CLI commands were deleted (EPIC-94).

@@ -268,7 +268,9 @@ class TestPRDGeneratorMarkers:
         ]
 
         for section in expected_sections:
-            assert f"<!-- docsmcp:start:{section} -->" in content, f"Missing start marker: {section}"
+            assert f"<!-- docsmcp:start:{section} -->" in content, (
+                f"Missing start marker: {section}"
+            )
             assert f"<!-- docsmcp:end:{section} -->" in content, f"Missing end marker: {section}"
 
     def test_standard_sections_have_markers(self) -> None:
@@ -497,10 +499,12 @@ class TestParsePhases:
     """Tests for PRDGenerator.parse_phases_json."""
 
     def test_valid_json(self) -> None:
-        raw = json.dumps([
-            {"name": "Alpha", "description": "First", "requirements": ["Auth"]},
-            {"name": "Beta", "requirements": ["Search", "Export"]},
-        ])
+        raw = json.dumps(
+            [
+                {"name": "Alpha", "description": "First", "requirements": ["Auth"]},
+                {"name": "Beta", "requirements": ["Search", "Export"]},
+            ]
+        )
         phases = PRDGenerator.parse_phases_json(raw)
         assert len(phases) == 2
         assert phases[0].name == "Alpha"
@@ -715,11 +719,7 @@ class TestDocsGeneratePrdTool:
         root = tmp_path / "proj"
         root.mkdir()
 
-        existing = (
-            "# PRD: Old\n\n"
-            "## Custom Section\n\n"
-            "This is my custom content.\n"
-        )
+        existing = "# PRD: Old\n\n## Custom Section\n\nThis is my custom content.\n"
 
         with patch(
             "docs_mcp.server_gen_tools._get_settings",
@@ -751,9 +751,11 @@ class TestDocsGeneratePrdTool:
         root = tmp_path / "proj"
         root.mkdir()
 
-        phases = json.dumps([
-            {"name": "Alpha", "requirements": ["Feature A"]},
-        ])
+        phases = json.dumps(
+            [
+                {"name": "Alpha", "requirements": ["Feature A"]},
+            ]
+        )
 
         with patch(
             "docs_mcp.server_gen_tools._get_settings",

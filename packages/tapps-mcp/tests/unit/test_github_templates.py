@@ -158,9 +158,7 @@ class TestDependabotConfigGeneration:
         from tapps_mcp.pipeline.github_templates import generate_dependabot_config
 
         generate_dependabot_config(tmp_path)
-        content = yaml.safe_load(
-            (tmp_path / ".github" / "dependabot.yml").read_text()
-        )
+        content = yaml.safe_load((tmp_path / ".github" / "dependabot.yml").read_text())
         ecosystems = [u["package-ecosystem"] for u in content["updates"]]
         assert "pip" in ecosystems
 
@@ -168,9 +166,7 @@ class TestDependabotConfigGeneration:
         from tapps_mcp.pipeline.github_templates import generate_dependabot_config
 
         generate_dependabot_config(tmp_path)
-        content = yaml.safe_load(
-            (tmp_path / ".github" / "dependabot.yml").read_text()
-        )
+        content = yaml.safe_load((tmp_path / ".github" / "dependabot.yml").read_text())
         ecosystems = [u["package-ecosystem"] for u in content["updates"]]
         assert "github-actions" in ecosystems
 
@@ -178,21 +174,15 @@ class TestDependabotConfigGeneration:
         from tapps_mcp.pipeline.github_templates import generate_dependabot_config
 
         generate_dependabot_config(tmp_path)
-        content = yaml.safe_load(
-            (tmp_path / ".github" / "dependabot.yml").read_text()
-        )
-        pip_update = next(
-            u for u in content["updates"] if u["package-ecosystem"] == "pip"
-        )
+        content = yaml.safe_load((tmp_path / ".github" / "dependabot.yml").read_text())
+        pip_update = next(u for u in content["updates"] if u["package-ecosystem"] == "pip")
         assert "groups" in pip_update
 
     def test_dependabot_version_2(self, tmp_path):
         from tapps_mcp.pipeline.github_templates import generate_dependabot_config
 
         generate_dependabot_config(tmp_path)
-        content = yaml.safe_load(
-            (tmp_path / ".github" / "dependabot.yml").read_text()
-        )
+        content = yaml.safe_load((tmp_path / ".github" / "dependabot.yml").read_text())
         assert content["version"] == 2
 
     def test_result_dict(self, tmp_path):

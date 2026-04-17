@@ -29,9 +29,7 @@ class TestDocsProjectScan:
         assert data["total_docs"] >= 5
 
     @pytest.mark.asyncio
-    async def test_project_scan_categorizes_readme(
-        self, sample_project: Path
-    ) -> None:
+    async def test_project_scan_categorizes_readme(self, sample_project: Path) -> None:
         from docs_mcp.server import docs_project_scan
 
         result = await docs_project_scan(project_root=str(sample_project))
@@ -41,9 +39,7 @@ class TestDocsProjectScan:
         assert categories["readme"][0]["path"] == "README.md"
 
     @pytest.mark.asyncio
-    async def test_project_scan_categorizes_changelog(
-        self, docs_project: Path
-    ) -> None:
+    async def test_project_scan_categorizes_changelog(self, docs_project: Path) -> None:
         from docs_mcp.server import docs_project_scan
 
         result = await docs_project_scan(project_root=str(docs_project))
@@ -52,9 +48,7 @@ class TestDocsProjectScan:
         assert len(categories["changelog"]) >= 1
 
     @pytest.mark.asyncio
-    async def test_project_scan_completeness_score(
-        self, docs_project: Path
-    ) -> None:
+    async def test_project_scan_completeness_score(self, docs_project: Path) -> None:
         from docs_mcp.server import docs_project_scan
 
         result = await docs_project_scan(project_root=str(docs_project))
@@ -66,9 +60,7 @@ class TestDocsProjectScan:
         assert score > 0
 
     @pytest.mark.asyncio
-    async def test_project_scan_completeness_score_minimal(
-        self, sample_project: Path
-    ) -> None:
+    async def test_project_scan_completeness_score_minimal(self, sample_project: Path) -> None:
         from docs_mcp.server import docs_project_scan
 
         result = await docs_project_scan(project_root=str(sample_project))

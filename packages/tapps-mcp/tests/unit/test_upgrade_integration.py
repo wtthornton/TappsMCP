@@ -10,12 +10,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _create_old_style_skill(skills_dir: Path, name: str) -> None:
     """Create a skill file with old-style ``tools:`` frontmatter."""

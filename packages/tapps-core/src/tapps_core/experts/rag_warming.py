@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+
     class TechStack:
         """Structural type for tech-stack objects passed into warming helpers.
 
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
         libraries: list[str]
         frameworks: list[str]
         domains: list[str]
+
 
 # Tech stack signals (lowercase) → expert domain names.
 # When a tech_stack contains any of these signals, we warm that expert domain.

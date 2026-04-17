@@ -191,9 +191,9 @@ def _parse_google_params(text: str) -> list[DocstringParam]:
     params: list[DocstringParam] = []
     # Match lines like "  name (type): desc" or "  name: desc"
     entry_re = re.compile(
-        r"^[ \t]+(\w+)"             # indented param name
-        r"(?:\s*\(([^)]*)\))?"      # optional (type)
-        r"\s*:\s*(.*)",             # : description
+        r"^[ \t]+(\w+)"  # indented param name
+        r"(?:\s*\(([^)]*)\))?"  # optional (type)
+        r"\s*:\s*(.*)",  # : description
     )
     lines = text.split("\n")
     i = 0

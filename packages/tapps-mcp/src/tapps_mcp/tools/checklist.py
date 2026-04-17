@@ -195,8 +195,10 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
     },
     "review": {
         "required": [
-            "tapps_score_file", "tapps_security_scan",
-            "tapps_quality_gate", "tapps_checklist",
+            "tapps_score_file",
+            "tapps_security_scan",
+            "tapps_quality_gate",
+            "tapps_checklist",
         ],
         "recommended": ["tapps_dead_code", "tapps_validate_changed"],
         "optional": ["tapps_dependency_scan", "tapps_dependency_graph"],
@@ -396,10 +398,7 @@ def _resolve_task_tool_map(
     resolved_key = task_type
     if task_type not in KNOWN_TASK_TYPES:
         if strict_unknown_task_type:
-            msg = (
-                f"Unknown task_type {task_type!r}; "
-                f"expected one of {sorted(KNOWN_TASK_TYPES)}"
-            )
+            msg = f"Unknown task_type {task_type!r}; expected one of {sorted(KNOWN_TASK_TYPES)}"
             raise ValueError(msg)
         resolved_key = "review"
         policy_fallback = True
@@ -710,10 +709,7 @@ class CallTracker:
             if not resolved.is_absolute() and project_root:
                 resolved = Path(project_root) / resolved
             if not resolved.exists():
-                msg = (
-                    f"Epic file not found: {resolved}"
-                    f" (resolved from {file_path})"
-                )
+                msg = f"Epic file not found: {resolved} (resolved from {file_path})"
                 raise FileNotFoundError(msg)
             content = resolved.read_text(encoding="utf-8")
             validation = validate_epic_markdown(content, epic_file_path=resolved)
@@ -743,9 +739,7 @@ class EpicStoryInfo(BaseModel):
     size: str | None = Field(default=None, description="Size label (S/M/L).")
     priority: str | None = Field(default=None, description="Priority (P0-P4).")
     files: list[str] = Field(default_factory=list, description="Files listed.")
-    has_acceptance_criteria: bool = Field(
-        default=False, description="Whether AC section exists."
-    )
+    has_acceptance_criteria: bool = Field(default=False, description="Whether AC section exists.")
     has_tasks: bool = Field(default=False, description="Whether Tasks section exists.")
     linked_file: str | None = Field(
         default=None, description="File path from a markdown link in the heading or table row."
@@ -757,9 +751,7 @@ class EpicFinding(BaseModel):
 
     severity: str = Field(description="'error' or 'warning'.")
     message: str = Field(description="Human-readable finding description.")
-    story_id: str | None = Field(
-        default=None, description="Story ID if finding is story-specific."
-    )
+    story_id: str | None = Field(default=None, description="Story ID if finding is story-specific.")
 
 
 class CrossFileSummary(BaseModel):
@@ -772,9 +764,7 @@ class CrossFileSummary(BaseModel):
     with_acceptance_criteria: int = Field(
         default=0, description="Stories whose linked file has an AC section."
     )
-    with_tasks: int = Field(
-        default=0, description="Stories whose linked file has a Tasks section."
-    )
+    with_tasks: int = Field(default=0, description="Stories whose linked file has a Tasks section.")
     with_definition_of_done: int = Field(
         default=0, description="Stories whose linked file has a DoD section."
     )
@@ -784,19 +774,13 @@ class CrossFileSummary(BaseModel):
 class EpicValidation(BaseModel):
     """Result of structural validation of an epic markdown file."""
 
-    sections_found: list[str] = Field(
-        default_factory=list, description="Top-level sections found."
-    )
-    stories: list[EpicStoryInfo] = Field(
-        default_factory=list, description="Parsed stories."
-    )
+    sections_found: list[str] = Field(default_factory=list, description="Top-level sections found.")
+    stories: list[EpicStoryInfo] = Field(default_factory=list, description="Parsed stories.")
     files_affected_entries: list[str] = Field(
         default_factory=list,
         description="Files listed in a files-affected table.",
     )
-    findings: list[EpicFinding] = Field(
-        default_factory=list, description="Validation findings."
-    )
+    findings: list[EpicFinding] = Field(default_factory=list, description="Validation findings.")
     valid: bool = Field(
         default=True,
         description="True when no error-severity findings exist.",
@@ -876,7 +860,9 @@ def _parse_table_size_priority(remaining_cols: str) -> tuple[str | None, str | N
     return size, priority
 
 
-def _parse_epic_markdown(content: str) -> tuple[
+def _parse_epic_markdown(
+    content: str,
+) -> tuple[
     list[str],
     list[EpicStoryInfo],
     list[str],
@@ -935,11 +921,7 @@ def _parse_epic_markdown(content: str) -> tuple[
         title = match.group(3).strip()
 
         start = match.end()
-        end = (
-            linked_matches[i + 1].start()
-            if i + 1 < len(linked_matches)
-            else len(content)
-        )
+        end = linked_matches[i + 1].start() if i + 1 < len(linked_matches) else len(content)
         block = content[start:end]
 
         points_m = _POINTS_RE.search(block)
@@ -1326,9 +1308,7 @@ def _validate_linked_stories(
             findings.append(
                 EpicFinding(
                     severity="info",
-                    message=(
-                        f"Story {story.story_id} linked file missing Acceptance Criteria"
-                    ),
+                    message=(f"Story {story.story_id} linked file missing Acceptance Criteria"),
                     story_id=story.story_id,
                 )
             )
@@ -1414,7 +1394,9 @@ def validate_epic_markdown(
         # Cross-file story validation
         if validate_linked_stories and epic_file_path is not None:
             cross_file_summary = _validate_linked_stories(
-                stories, findings, epic_file_path,
+                stories,
+                findings,
+                epic_file_path,
             )
 
     _check_dependency_cycles(content, findings)

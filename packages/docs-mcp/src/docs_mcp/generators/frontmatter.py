@@ -47,10 +47,16 @@ class FrontmatterGenerator:
     supports manual override via existing frontmatter keys.
     """
 
-    MANAGED_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "title", "description", "category", "diataxis_type",
-        "last_modified", "tags",
-    })
+    MANAGED_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "title",
+            "description",
+            "category",
+            "diataxis_type",
+            "last_modified",
+            "tags",
+        }
+    )
 
     def generate(
         self,
@@ -150,7 +156,7 @@ class FrontmatterGenerator:
             return {}, content
 
         fm_text = match.group(1)
-        body = content[match.end():]
+        body = content[match.end() :]
 
         # Simple YAML parser for flat key-value pairs
         fields: dict[str, Any] = {}

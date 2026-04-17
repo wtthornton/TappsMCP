@@ -18,8 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -27,7 +26,6 @@ from docs_mcp.generators.architecture import (
     ArchitectureGenerator,
     ArchitectureResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Sample project fixtures
@@ -76,14 +74,14 @@ def arch_project(tmp_path: Path) -> Path:
     root.mkdir()
     (root / ".git").mkdir()
     (root / "pyproject.toml").write_text(
-        '[project]\n'
+        "[project]\n"
         'name = "my-analytics"\n'
         'version = "3.0.0"\n'
         'description = "Analytics platform for data processing"\n'
         'requires-python = ">=3.12"\n'
         'license = "MIT"\n'
         'dependencies = ["pydantic", "structlog", "httpx"]\n'
-        '\n[project.optional-dependencies]\n'
+        "\n[project.optional-dependencies]\n"
         'dev = ["pytest", "ruff", "mypy"]\n',
         encoding="utf-8",
     )
@@ -260,7 +258,11 @@ class TestComponentValueDescription:
     def test_with_docstring(self) -> None:
         gen = ArchitectureGenerator()
         text = gen._generate_component_value(
-            "analytics", "Provides data analytics features", 5, 10, 3,
+            "analytics",
+            "Provides data analytics features",
+            5,
+            10,
+            3,
         )
         assert "analytics" in text
         assert "5 modules" in text
@@ -329,18 +331,14 @@ class TestDocsGenerateArchitectureTool:
     def test_invalid_root(self) -> None:
         from docs_mcp.server_gen_tools import docs_generate_architecture
 
-        result = asyncio.run(
-            docs_generate_architecture(project_root="/nonexistent/path/xyz")
-        )
+        result = asyncio.run(docs_generate_architecture(project_root="/nonexistent/path/xyz"))
         assert result["success"] is False
         assert result["error"]["code"] == "INVALID_ROOT"
 
     def test_success_envelope(self, arch_project: Path) -> None:
         from docs_mcp.server_gen_tools import docs_generate_architecture
 
-        result = asyncio.run(
-            docs_generate_architecture(project_root=str(arch_project))
-        )
+        result = asyncio.run(docs_generate_architecture(project_root=str(arch_project)))
         assert result["success"] is True
         assert result["tool"] == "docs_generate_architecture"
         assert "data" in result

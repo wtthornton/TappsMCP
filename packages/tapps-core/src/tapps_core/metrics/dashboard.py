@@ -300,7 +300,9 @@ class DashboardGenerator:
     # -- Section builders --
 
     def _build_summary(
-        self, *, since: datetime | None = None,
+        self,
+        *,
+        since: datetime | None = None,
     ) -> dict[str, Any]:
         exec_summary = self._execution.get_summary(since=since)
         conf_stats = self._confidence.get_statistics()
@@ -321,7 +323,9 @@ class DashboardGenerator:
         }
 
     def _build_tool_metrics(
-        self, *, since: datetime | None = None,
+        self,
+        *,
+        since: datetime | None = None,
     ) -> list[dict[str, Any]]:
         breakdowns = self._execution.get_summary_by_tool(since=since)
         return [
@@ -338,7 +342,9 @@ class DashboardGenerator:
         ]
 
     def _build_scoring_trends(
-        self, *, since: datetime | None = None,
+        self,
+        *,
+        since: datetime | None = None,
     ) -> dict[str, Any]:
         # Build trend from metrics (filtered by time range when provided)
         if since is not None:
@@ -401,7 +407,9 @@ class DashboardGenerator:
         return "0-59"
 
     def _build_quality_distribution(
-        self, *, since: datetime | None = None,
+        self,
+        *,
+        since: datetime | None = None,
     ) -> dict[str, int]:
         if since is not None:
             recent = self._execution.get_metrics(since=since)
@@ -410,7 +418,11 @@ class DashboardGenerator:
         scores = [m.score for m in recent if m.score is not None]
 
         distribution: dict[str, int] = {
-            "90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "0-59": 0,
+            "90-100": 0,
+            "80-89": 0,
+            "70-79": 0,
+            "60-69": 0,
+            "0-59": 0,
         }
         for s in scores:
             distribution[self._score_bin(s)] += 1
@@ -532,11 +544,7 @@ class DashboardGenerator:
                 if entry.contradicted:
                     stale_count += 1
 
-            avg_confidence = (
-                round(sum(confidences) / len(confidences), 4)
-                if confidences
-                else 0.0
-            )
+            avg_confidence = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
 
             settings = load_settings()
             max_memories = settings.memory.max_memories
@@ -583,8 +591,7 @@ class DashboardGenerator:
           those source entries (each target = one consolidated entry / group).
         """
         source_entries = [
-            e for e in entries
-            if (e.contradiction_reason or "").find("consolidated into") >= 0
+            e for e in entries if (e.contradiction_reason or "").find("consolidated into") >= 0
         ]
         source_entries_count = len(source_entries)
 
@@ -653,16 +660,12 @@ class DashboardGenerator:
             if subs:
                 sub = subs[0]
                 subscribed_projects = (
-                    len(sub.sources)
-                    if sub.sources
-                    else max(0, len(config.projects) - 1)
+                    len(sub.sources) if sub.sources else max(0, len(config.projects) - 1)
                 )
             else:
                 subscribed_projects = 0
 
-            synced_count = sum(
-                1 for e in entries if "federated" in (e.tags or [])
-            )
+            synced_count = sum(1 for e in entries if "federated" in (e.tags or []))
 
             return {
                 "hub_registered": True,

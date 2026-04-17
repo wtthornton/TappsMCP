@@ -13,7 +13,6 @@ from tapps_mcp.distribution.doctor import (
     _collect_checks,
     _read_engagement_level,
     check_agents_md,
-    check_plaintext_secrets,
     check_binary_on_path,
     check_claude_code_project,
     check_claude_code_user,
@@ -25,6 +24,7 @@ from tapps_mcp.distribution.doctor import (
     check_hooks,
     check_json_config,
     check_mcp_client_config,
+    check_plaintext_secrets,
     check_scope_recommendation,
     check_stale_exe_backups,
     check_uv_path_mismatch,
@@ -152,8 +152,12 @@ class TestCheckJsonConfig:
                 "tapps-mcp": {
                     "command": "uv",
                     "args": [
-                        "--directory", "C:\\cursor\\TappMCP",
-                        "run", "--no-sync", "tapps-mcp", "serve",
+                        "--directory",
+                        "C:\\cursor\\TappMCP",
+                        "run",
+                        "--no-sync",
+                        "tapps-mcp",
+                        "serve",
                     ],
                 }
             }
@@ -475,9 +479,7 @@ class TestCheckClaudeSettings:
         settings_dir = tmp_path / ".claude"
         settings_dir.mkdir()
         config = {"permissions": {"allow": ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]}}
-        (settings_dir / "settings.json").write_text(
-            json.dumps(config, indent=2), encoding="utf-8"
-        )
+        (settings_dir / "settings.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
         result = check_claude_settings(tmp_path)
         assert result.ok is True
         assert "permission" in result.message.lower()
@@ -493,9 +495,7 @@ class TestCheckClaudeSettings:
         settings_dir = tmp_path / ".claude"
         settings_dir.mkdir()
         config = {"permissions": {"allow": ["some_other_permission"]}}
-        (settings_dir / "settings.json").write_text(
-            json.dumps(config, indent=2), encoding="utf-8"
-        )
+        (settings_dir / "settings.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
         result = check_claude_settings(tmp_path)
         assert result.ok is False
         assert "Missing" in result.message or "missing" in result.message.lower()
@@ -526,9 +526,7 @@ class TestCheckClaudeSettings:
                 "allow": ["other_tool", "mcp__tapps-mcp", "mcp__tapps-mcp__*", "another"],
             },
         }
-        (settings_dir / "settings.json").write_text(
-            json.dumps(config, indent=2), encoding="utf-8"
-        )
+        (settings_dir / "settings.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
         result = check_claude_settings(tmp_path)
         assert result.ok is True
 
@@ -537,9 +535,7 @@ class TestCheckClaudeSettings:
         settings_dir = tmp_path / ".claude"
         settings_dir.mkdir()
         config = {"permissions": {"allow": ["mcp__tapps-mcp__*"]}}
-        (settings_dir / "settings.json").write_text(
-            json.dumps(config, indent=2), encoding="utf-8"
-        )
+        (settings_dir / "settings.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
         result = check_claude_settings(tmp_path)
         assert result.ok is False
         assert "mcp__tapps-mcp" in result.message
@@ -550,11 +546,11 @@ class TestCheckClaudeSettings:
         settings_dir.mkdir()
         config = {
             "permissions": {"allow": ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]},
-            "hooks": {"PostCompact": [{"matcher": "*", "hooks": [{"type": "command", "command": "true"}]}]},
+            "hooks": {
+                "PostCompact": [{"matcher": "*", "hooks": [{"type": "command", "command": "true"}]}]
+            },
         }
-        (settings_dir / "settings.json").write_text(
-            json.dumps(config, indent=2), encoding="utf-8"
-        )
+        (settings_dir / "settings.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
         result = check_claude_settings(tmp_path)
         assert result.ok is False
         assert "PostCompact" in result.message
@@ -586,13 +582,16 @@ class TestCheckHooks:
         (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         (hooks_dir / "tapps-after-edit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         (tmp_path / ".cursor" / "hooks.json").write_text(
-            json.dumps({
-                "version": 1,
-                "hooks": {
-                    "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
-                    "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+            json.dumps(
+                {
+                    "version": 1,
+                    "hooks": {
+                        "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                        "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+                    },
                 },
-            }, indent=2),
+                indent=2,
+            ),
             encoding="utf-8",
         )
         with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
@@ -609,13 +608,16 @@ class TestCheckHooks:
         cursor_hooks.mkdir(parents=True)
         (cursor_hooks / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         (tmp_path / ".cursor" / "hooks.json").write_text(
-            json.dumps({
-                "version": 1,
-                "hooks": {
-                    "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
-                    "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+            json.dumps(
+                {
+                    "version": 1,
+                    "hooks": {
+                        "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                        "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+                    },
                 },
-            }, indent=2),
+                indent=2,
+            ),
             encoding="utf-8",
         )
         with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
@@ -690,13 +692,16 @@ class TestCheckHooks:
         (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         (hooks_dir / "tapps-after-edit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         (tmp_path / ".cursor" / "hooks.json").write_text(
-            json.dumps({
-                "version": 1,
-                "hooks": {
-                    "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
-                    "postCompact": [{"command": "echo x"}],
+            json.dumps(
+                {
+                    "version": 1,
+                    "hooks": {
+                        "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                        "postCompact": [{"command": "echo x"}],
+                    },
                 },
-            }, indent=2),
+                indent=2,
+            ),
             encoding="utf-8",
         )
         with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
@@ -711,13 +716,16 @@ class TestCheckHooks:
         (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         (hooks_dir / "tapps-after-edit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
         (tmp_path / ".cursor" / "hooks.json").write_text(
-            json.dumps({
-                "version": 1,
-                "hooks": {
-                    "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
-                    "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+            json.dumps(
+                {
+                    "version": 1,
+                    "hooks": {
+                        "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                        "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+                    },
                 },
-            }, indent=2),
+                indent=2,
+            ),
             encoding="utf-8",
         )
         with patch("tapps_mcp.distribution.doctor.sys.platform", "win32"):
@@ -937,15 +945,13 @@ class TestDoctorQuickMode:
         # Should contain the skip placeholder
         assert "Quality tools" in names
         # The skip entry should pass and mention quick mode
-        skip_check = [c for c in checks if c.name == "Quality tools"][0]
+        skip_check = next(c for c in checks if c.name == "Quality tools")
         assert skip_check.ok is True
         assert "quick mode" in skip_check.message.lower()
 
     def test_collect_checks_full_includes_quality_tools(self, tmp_path):
         """Full mode (default) includes quality tool checks."""
-        with patch(
-            "tapps_mcp.tools.tool_detection.detect_installed_tools", return_value=[]
-        ):
+        with patch("tapps_mcp.tools.tool_detection.detect_installed_tools", return_value=[]):
             checks = _collect_checks(tmp_path, quick=False)
         names = [c.name for c in checks]
         # Should NOT contain the skip placeholder
@@ -953,21 +959,15 @@ class TestDoctorQuickMode:
 
     def test_run_doctor_structured_quick(self, tmp_path):
         """run_doctor_structured with quick=True includes quick_mode flag."""
-        with patch(
-            "tapps_mcp.distribution.doctor._collect_checks"
-        ) as mock_collect:
+        with patch("tapps_mcp.distribution.doctor._collect_checks") as mock_collect:
             mock_collect.return_value = [CheckResult("test", True, "ok")]
-            result = run_doctor_structured(
-                project_root=str(tmp_path), quick=True
-            )
+            result = run_doctor_structured(project_root=str(tmp_path), quick=True)
         assert result["quick_mode"] is True
         mock_collect.assert_called_once_with(tmp_path.resolve(), quick=True)
 
     def test_run_doctor_structured_default_not_quick(self, tmp_path):
         """run_doctor_structured defaults to quick_mode=False."""
-        with patch(
-            "tapps_mcp.distribution.doctor._collect_checks"
-        ) as mock_collect:
+        with patch("tapps_mcp.distribution.doctor._collect_checks") as mock_collect:
             mock_collect.return_value = [CheckResult("test", True, "ok")]
             result = run_doctor_structured(project_root=str(tmp_path))
         assert result["quick_mode"] is False
@@ -975,9 +975,7 @@ class TestDoctorQuickMode:
     def test_cli_doctor_quick_flag(self):
         """CLI doctor --quick flag works."""
         runner = CliRunner()
-        with patch(
-            "tapps_mcp.distribution.doctor.run_doctor", return_value=True
-        ) as mock_run:
+        with patch("tapps_mcp.distribution.doctor.run_doctor", return_value=True) as mock_run:
             result = runner.invoke(main, ["doctor", "--quick"])
         assert result.exit_code == 0
         mock_run.assert_called_once_with(project_root=".", quick=True)
@@ -985,9 +983,7 @@ class TestDoctorQuickMode:
     def test_cli_doctor_without_quick(self):
         """CLI doctor without --quick defaults to quick=False."""
         runner = CliRunner()
-        with patch(
-            "tapps_mcp.distribution.doctor.run_doctor", return_value=True
-        ) as mock_run:
+        with patch("tapps_mcp.distribution.doctor.run_doctor", return_value=True) as mock_run:
             result = runner.invoke(main, ["doctor"])
         assert result.exit_code == 0
         mock_run.assert_called_once_with(project_root=".", quick=False)
@@ -998,15 +994,17 @@ class TestCheckPlaintextSecrets:
 
     def test_clean_config_passes(self, tmp_path):
         (tmp_path / ".mcp.json").write_text(
-            json.dumps({
-                "mcpServers": {
-                    "tapps-mcp": {
-                        "command": "tapps-mcp",
-                        "args": ["serve"],
-                        "env": {"TAPPS_MCP_PROJECT_ROOT": "."},
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "tapps-mcp": {
+                            "command": "tapps-mcp",
+                            "args": ["serve"],
+                            "env": {"TAPPS_MCP_PROJECT_ROOT": "."},
+                        }
                     }
                 }
-            }),
+            ),
             encoding="utf-8",
         )
         result = check_plaintext_secrets(tmp_path)
@@ -1014,15 +1012,17 @@ class TestCheckPlaintextSecrets:
 
     def test_plaintext_api_key_fails(self, tmp_path):
         (tmp_path / ".mcp.json").write_text(
-            json.dumps({
-                "mcpServers": {
-                    "tapps-mcp": {
-                        "command": "tapps-mcp",
-                        "args": ["serve"],
-                        "env": {"CONTEXT7_API_KEY": "ctx7sk-plain"},
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "tapps-mcp": {
+                            "command": "tapps-mcp",
+                            "args": ["serve"],
+                            "env": {"CONTEXT7_API_KEY": "ctx7sk-plain"},
+                        }
                     }
                 }
-            }),
+            ),
             encoding="utf-8",
         )
         result = check_plaintext_secrets(tmp_path)
@@ -1031,15 +1031,17 @@ class TestCheckPlaintextSecrets:
 
     def test_interpolated_value_passes(self, tmp_path):
         (tmp_path / ".mcp.json").write_text(
-            json.dumps({
-                "mcpServers": {
-                    "tapps-mcp": {
-                        "command": "tapps-mcp",
-                        "args": ["serve"],
-                        "env": {"CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"},
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "tapps-mcp": {
+                            "command": "tapps-mcp",
+                            "args": ["serve"],
+                            "env": {"CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"},
+                        }
                     }
                 }
-            }),
+            ),
             encoding="utf-8",
         )
         result = check_plaintext_secrets(tmp_path)
@@ -1068,23 +1070,26 @@ class TestCheckUvPathMismatch:
         # Create a uv project with tapps-mcp extra
         (tmp_path / "uv.lock").write_text("", encoding="utf-8")
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "test"\n[project.optional-dependencies]\n'
-            'mcp = ["tapps-mcp"]\n',
+            '[project]\nname = "test"\n[project.optional-dependencies]\nmcp = ["tapps-mcp"]\n',
             encoding="utf-8",
         )
         # MCP config uses uv command
         (tmp_path / ".mcp.json").write_text(
-            json.dumps({
-                "mcpServers": {
-                    "tapps-mcp": {
-                        "command": "uv",
-                        "args": ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"],
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "tapps-mcp": {
+                            "command": "uv",
+                            "args": ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"],
+                        }
                     }
                 }
-            }),
+            ),
             encoding="utf-8",
         )
-        with patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/usr/bin/uv"):
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which", return_value="/usr/bin/uv"
+        ):
             result = check_uv_path_mismatch(tmp_path)
         assert result.ok is True
 
@@ -1092,23 +1097,26 @@ class TestCheckUvPathMismatch:
         """uv-managed project with bare tapps-mcp command should warn."""
         (tmp_path / "uv.lock").write_text("", encoding="utf-8")
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "test"\n[project.optional-dependencies]\n'
-            'mcp = ["tapps-mcp"]\n',
+            '[project]\nname = "test"\n[project.optional-dependencies]\nmcp = ["tapps-mcp"]\n',
             encoding="utf-8",
         )
         # MCP config uses bare tapps-mcp command
         (tmp_path / ".mcp.json").write_text(
-            json.dumps({
-                "mcpServers": {
-                    "tapps-mcp": {
-                        "command": "tapps-mcp",
-                        "args": ["serve"],
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "tapps-mcp": {
+                            "command": "tapps-mcp",
+                            "args": ["serve"],
+                        }
                     }
                 }
-            }),
+            ),
             encoding="utf-8",
         )
-        with patch("tapps_mcp.distribution.setup_generator.shutil.which", return_value="/usr/bin/uv"):
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which", return_value="/usr/bin/uv"
+        ):
             result = check_uv_path_mismatch(tmp_path)
         assert result.ok is False
         assert "bare" in result.message

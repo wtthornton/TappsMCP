@@ -6,10 +6,9 @@ import pytest
 
 from tapps_core.knowledge.providers.base import DocumentationProvider
 from tapps_core.knowledge.providers.llms_txt_provider import (
-    LlmsTxtProvider,
     _KNOWN_LLMS_TXT,
+    LlmsTxtProvider,
 )
-
 
 # ---------------------------------------------------------------------------
 # Protocol compliance
@@ -51,9 +50,7 @@ class TestKnownLlmsTxtAliases:
             ("fastapi", "fastapi.tiangolo.com"),
         ],
     )
-    def test_library_in_known_llms_txt(
-        self, library: str, expected_url_fragment: str
-    ) -> None:
+    def test_library_in_known_llms_txt(self, library: str, expected_url_fragment: str) -> None:
         assert library in _KNOWN_LLMS_TXT
         assert expected_url_fragment in _KNOWN_LLMS_TXT[library]
 

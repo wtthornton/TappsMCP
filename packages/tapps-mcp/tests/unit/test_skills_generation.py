@@ -76,7 +76,6 @@ class TestClaudeSkills:
         assert "mcp__tapps-mcp__tapps_checklist" in content
         assert "tapps-review-fixer" in content
 
-
     def test_research_skill_references_tools(self, tmp_path):
         generate_skills(tmp_path, "claude")
         base = tmp_path / ".claude" / "skills"

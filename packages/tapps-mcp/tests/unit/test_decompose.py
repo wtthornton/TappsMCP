@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -21,7 +20,9 @@ class TestClassifyModelTier:
     def test_design_keyword_returns_opus(self) -> None:
         tier, reason = _classify_model_tier("design the authentication architecture")
         assert tier == "opus"
-        assert "opus" not in reason or "design" in reason.lower() or "architectural" in reason.lower()
+        assert (
+            "opus" not in reason or "design" in reason.lower() or "architectural" in reason.lower()
+        )
 
     def test_implement_keyword_returns_sonnet(self) -> None:
         tier, _ = _classify_model_tier("implement JWT token refresh")
@@ -83,13 +84,11 @@ class TestDecomposeTask:
         assert len(units) >= 3
 
     def test_risk_first_ordering(self) -> None:
-        units = _decompose_task(
-            "search config, design architecture, implement feature", []
-        )
+        units = _decompose_task("search config, design architecture, implement feature", [])
         risks = [u.dominant_risk for u in units]
-        _RISK_ORDER = {"high": 0, "medium": 1, "low": 2}
+        risk_order = {"high": 0, "medium": 1, "low": 2}
         for i in range(len(risks) - 1):
-            assert _RISK_ORDER[risks[i]] <= _RISK_ORDER[risks[i + 1]], (
+            assert risk_order[risks[i]] <= risk_order[risks[i + 1]], (
                 f"Units not risk-first: {risks}"
             )
 

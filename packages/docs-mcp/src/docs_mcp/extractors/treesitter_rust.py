@@ -131,8 +131,7 @@ class RustExtractor(TreeSitterExtractor):
 
         self._get_visibility(node, source)
         is_async = any(
-            c.type in ("async", "function_modifiers")
-            and "async" in self._node_text(c, source)
+            c.type in ("async", "function_modifiers") and "async" in self._node_text(c, source)
             for c in node.children
         )
         params = self._extract_rust_params(node, source)
@@ -208,14 +207,14 @@ class RustExtractor(TreeSitterExtractor):
                     field_type_node = self._child_by_field(child, "type")
                     if field_name_node:
                         fname = self._node_text(field_name_node, source)
-                        fann = (
-                            self._node_text(field_type_node, source)
-                            if field_type_node
-                            else None
+                        fann = self._node_text(field_type_node, source) if field_type_node else None
+                        fields.append(
+                            ConstantInfo(
+                                name=fname,
+                                line=self._node_line(child),
+                                annotation=fann,
+                            )
                         )
-                        fields.append(ConstantInfo(
-                            name=fname, line=self._node_line(child), annotation=fann,
-                        ))
 
         return self._build_class(
             name=name,
@@ -245,9 +244,12 @@ class RustExtractor(TreeSitterExtractor):
                     vname_node = self._child_by_field(child, "name")
                     if vname_node:
                         vname = self._node_text(vname_node, source)
-                        variants.append(ConstantInfo(
-                            name=vname, line=self._node_line(child),
-                        ))
+                        variants.append(
+                            ConstantInfo(
+                                name=vname,
+                                line=self._node_line(child),
+                            )
+                        )
 
         return self._build_class(
             name=name,
@@ -290,7 +292,9 @@ class RustExtractor(TreeSitterExtractor):
         )
 
     def _extract_function_signature(
-        self, node: Any, source: bytes,
+        self,
+        node: Any,
+        source: bytes,
     ) -> FunctionInfo | None:
         """Extract a function signature item (trait method without body)."""
         name_node = self._child_by_field(node, "name")
@@ -355,8 +359,9 @@ class RustExtractor(TreeSitterExtractor):
         """Get the visibility modifier (pub, pub(crate), etc.)."""
         for child in node.children:
             if child.type == "visibility_modifier":
-                return source[child.start_byte:child.end_byte].decode(
-                    "utf-8", errors="replace",
+                return source[child.start_byte : child.end_byte].decode(
+                    "utf-8",
+                    errors="replace",
                 )
         return None
 

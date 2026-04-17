@@ -18,6 +18,7 @@ try:
 except ImportError:
     # tapps-brain >= 3.0: persistence module removed (ADR-007).
     # Alias MemoryStore as MemoryPersistence; stub the private schema constants.
-    from tapps_brain.store import MemoryStore as MemoryPersistence  # noqa: F401, F811
-    _MAX_AUDIT_LINES = 1000  # noqa: F811
-    _SCHEMA_VERSION = 17  # noqa: F811
+    from tapps_brain.store import MemoryStore as MemoryPersistence  # noqa: F401
+
+    _MAX_AUDIT_LINES = 1000
+    _SCHEMA_VERSION = 17

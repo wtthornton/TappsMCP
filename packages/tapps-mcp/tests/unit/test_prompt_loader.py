@@ -179,11 +179,14 @@ class TestFrozenExeFallback:
             with pytest.raises(FileNotFoundError):
                 _read_resource("nonexistent_file.md")
 
-    @pytest.mark.parametrize("filename", [
-        "overview.md",
-        "discover.md",
-        "handoff_template.md",
-    ])
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            "overview.md",
+            "discover.md",
+            "handoff_template.md",
+        ],
+    )
     def test_frozen_and_importlib_return_same_content(self, filename):
         """Both paths return identical content for the same file."""
         with patch("tapps_mcp.prompts.prompt_loader.sys") as mock_sys:

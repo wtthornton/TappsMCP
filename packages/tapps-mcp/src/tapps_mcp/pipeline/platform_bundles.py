@@ -76,9 +76,7 @@ def generate_agent_teams_hooks(
             existing_hooks[event] = entries
             hooks_added += len(entries)
 
-    config["hooks"] = {
-        k: v for k, v in config["hooks"].items() if k in SUPPORTED_CLAUDE_HOOK_KEYS
-    }
+    config["hooks"] = {k: v for k, v in config["hooks"].items() if k in SUPPORTED_CLAUDE_HOOK_KEYS}
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
@@ -241,9 +239,7 @@ def generate_claude_plugin_bundle(
             },
         },
     }
-    (output_dir / ".mcp.json").write_text(
-        json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8"
-    )
+    (output_dir / ".mcp.json").write_text(json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8")
     files_created.append(".mcp.json")
 
     # README.md
@@ -310,10 +306,7 @@ def generate_cursor_plugin_bundle(
     hooks_dir = output_dir / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
     cursor_hooks_obj: dict[str, list[dict[str, str]]] = {
-        event: [
-            {"command": cmd["command"].replace(".cursor/hooks/", "hooks/")}
-            for cmd in cmds
-        ]
+        event: [{"command": cmd["command"].replace(".cursor/hooks/", "hooks/")} for cmd in cmds]
         for event, cmds in CURSOR_HOOKS_CONFIG.items()
     }
     (hooks_dir / "hooks.json").write_text(
@@ -347,9 +340,7 @@ def generate_cursor_plugin_bundle(
             },
         },
     }
-    (output_dir / "mcp.json").write_text(
-        json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8"
-    )
+    (output_dir / "mcp.json").write_text(json.dumps(mcp_config, indent=2) + "\n", encoding="utf-8")
     files_created.append("mcp.json")
 
     # logo.png placeholder (1x1 transparent PNG)

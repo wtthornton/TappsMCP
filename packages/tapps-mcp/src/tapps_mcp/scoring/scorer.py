@@ -238,9 +238,7 @@ class CodeScorer(ScorerBase):
 
         # Read code for AST-based analysis
         try:
-            code = await asyncio.to_thread(
-                resolved.read_text, encoding="utf-8", errors="replace"
-            )
+            code = await asyncio.to_thread(resolved.read_text, encoding="utf-8", errors="replace")
         except (OSError, PermissionError) as exc:
             logger.error("file_read_failed", path=str_path, error=str(exc))
             return self._error_result(str_path)
@@ -299,9 +297,7 @@ class CodeScorer(ScorerBase):
 
         return cats, dep_vuln_count
 
-    def _score_complexity_category(
-        self, code: str, parallel: ParallelResults
-    ) -> CategoryScore:
+    def _score_complexity_category(self, code: str, parallel: ParallelResults) -> CategoryScore:
         """Complexity category: radon CC or AST fallback (0-10)."""
         w = self._weights
         details: dict[str, object] = {"functions_analysed": len(parallel.radon_cc)}
@@ -437,8 +433,8 @@ class CodeScorer(ScorerBase):
         w = self._weights
         coverage = self._coverage_heuristic(file_path)
         details: dict[str, object] = {"stem": file_path.stem}
-        details["is_test_file"] = (
-            file_path.name.startswith("test_") or file_path.name.endswith("_test.py")
+        details["is_test_file"] = file_path.name.startswith("test_") or file_path.name.endswith(
+            "_test.py"
         )
         return CategoryScore(
             name="test_coverage",
@@ -449,7 +445,9 @@ class CodeScorer(ScorerBase):
         )
 
     def _score_performance_category(
-        self, code: str, parallel: ParallelResults,
+        self,
+        code: str,
+        parallel: ParallelResults,
     ) -> CategoryScore:
         """Performance category: AST heuristics + Halstead metrics + perflint."""
         w = self._weights
@@ -778,12 +776,20 @@ def _check_function_size(node: ast.FunctionDef | ast.AsyncFunctionDef, seen: set
         else 50
     )
     _classify_threshold(
-        func_lines, LARGE_FUNCTION_LINES, VERY_LARGE_FUNCTION_LINES,
-        "large_function", "very_large_function", seen,
+        func_lines,
+        LARGE_FUNCTION_LINES,
+        VERY_LARGE_FUNCTION_LINES,
+        "large_function",
+        "very_large_function",
+        seen,
     )
     _classify_threshold(
-        _max_nesting_depth(node), DEEP_NESTING_THRESHOLD, VERY_DEEP_NESTING_THRESHOLD,
-        "deep_nesting", "very_deep_nesting", seen,
+        _max_nesting_depth(node),
+        DEEP_NESTING_THRESHOLD,
+        VERY_DEEP_NESTING_THRESHOLD,
+        "deep_nesting",
+        "very_deep_nesting",
+        seen,
     )
 
 
@@ -875,5 +881,3 @@ def _max_nesting_depth(node: ast.AST, depth: int = 0) -> int:
         else:
             max_d = max(max_d, _max_nesting_depth(child, depth))
     return max_d
-
-

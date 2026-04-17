@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from tapps_mcp.memory.models import MemoryEntry, MemoryScope, MemoryTier
-from tapps_mcp.memory.store import MemoryStore, _MAX_ENTRIES
+from tapps_mcp.memory.models import MemoryEntry
+from tapps_mcp.memory.store import MemoryStore
 
 
 @pytest.fixture()
@@ -138,9 +138,7 @@ class TestMemoryStoreUpdateFields:
 
     def test_update_contradicted(self, store: MemoryStore) -> None:
         store.save(key="k1", value="v1")
-        updated = store.update_fields(
-            "k1", contradicted=True, contradiction_reason="outdated"
-        )
+        updated = store.update_fields("k1", contradicted=True, contradiction_reason="outdated")
         assert updated is not None
         assert updated.contradicted is True
         assert updated.contradiction_reason == "outdated"
@@ -198,9 +196,7 @@ class TestMemoryStoreRAGSafety:
 
     def test_blocked_content_returns_error(self, store: MemoryStore) -> None:
         # Simulate content that triggers heavy RAG safety flags
-        with patch(
-            "tapps_brain.store.check_content_safety"
-        ) as mock_safety:
+        with patch("tapps_brain.store.check_content_safety") as mock_safety:
             from tapps_brain.safety import SafetyCheckResult
 
             mock_safety.return_value = SafetyCheckResult(

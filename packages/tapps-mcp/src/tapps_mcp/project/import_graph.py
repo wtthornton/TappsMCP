@@ -18,11 +18,25 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
-_DEFAULT_EXCLUDES: frozenset[str] = frozenset({
-    ".git", ".venv", "venv", "env", "node_modules", "__pycache__",
-    ".pytest_cache", "dist", "build", ".tox", ".eggs", "htmlcov",
-    ".mypy_cache", "migrations", "site-packages",
-})
+_DEFAULT_EXCLUDES: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        "__pycache__",
+        ".pytest_cache",
+        "dist",
+        "build",
+        ".tox",
+        ".eggs",
+        "htmlcov",
+        ".mypy_cache",
+        "migrations",
+        "site-packages",
+    }
+)
 
 
 @dataclass
@@ -83,12 +97,16 @@ def build_import_graph(
         _merge_externals(all_external, externals, source_module)
 
     graph = ImportGraph(
-        edges=all_edges, modules=project_modules,
-        project_root=str(project_root), external_imports=all_external,
+        edges=all_edges,
+        modules=project_modules,
+        project_root=str(project_root),
+        external_imports=all_external,
     )
     logger.info(
-        "import_graph_built", modules=len(project_modules),
-        edges=len(all_edges), external_packages=len(all_external),
+        "import_graph_built",
+        modules=len(project_modules),
+        edges=len(all_edges),
+        external_packages=len(all_external),
     )
     return graph
 
@@ -98,7 +116,9 @@ def _should_skip(path: Path, excludes: set[str]) -> bool:
 
 
 def _file_to_module(
-    file_path: Path, project_root: Path, top_level: str,
+    file_path: Path,
+    project_root: Path,
+    top_level: str,
 ) -> str:
     """Convert a file path to a dotted module name."""
     try:
@@ -128,24 +148,23 @@ def _build_context_map(tree: ast.Module) -> dict[int, str]:
 
 def _is_tc_guard(test: ast.expr) -> bool:
     """Check if a test expression is ``TYPE_CHECKING``."""
-    return (
-        (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING")
-        or (isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING")
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
     )
 
 
 def _has_import_error_handler(node: ast.Try) -> bool:
     """Check if a try node catches ImportError."""
     return any(
-        h.type is not None
-        and isinstance(h.type, ast.Name)
-        and h.type.id == "ImportError"
+        h.type is not None and isinstance(h.type, ast.Name) and h.type.id == "ImportError"
         for h in node.handlers
     )
 
 
 def _extract_imports(
-    file_path: Path, source_module: str, project_modules: set[str],
+    file_path: Path,
+    source_module: str,
+    project_modules: set[str],
 ) -> tuple[list[ImportEdge], set[str]]:
     """Extract import edges and external package names from a Python file."""
     try:
@@ -163,33 +182,49 @@ def _extract_imports(
             _collect_import(node, ctx, source_module, project_modules, edges, external)
         elif isinstance(node, ast.ImportFrom):
             _collect_from_import(
-                node, ctx, source_module, project_modules, edges, external,
+                node,
+                ctx,
+                source_module,
+                project_modules,
+                edges,
+                external,
             )
     return edges, external
 
 
 def _collect_import(
-    node: ast.Import, ctx: dict[int, str], source_module: str,
-    project_modules: set[str], edges: list[ImportEdge], external: set[str],
+    node: ast.Import,
+    ctx: dict[int, str],
+    source_module: str,
+    project_modules: set[str],
+    edges: list[ImportEdge],
+    external: set[str],
 ) -> None:
     """Collect edges from ``import X`` statements."""
     itype = ctx.get(id(node), "runtime")
     for alias in node.names:
         target = alias.name
         if _is_project_module(target, project_modules):
-            edges.append(ImportEdge(
-                source_module=source_module,
-                target_module=_resolve_target(target, project_modules),
-                import_type=itype, line_number=node.lineno,
-                import_name=alias.asname or alias.name,
-            ))
+            edges.append(
+                ImportEdge(
+                    source_module=source_module,
+                    target_module=_resolve_target(target, project_modules),
+                    import_type=itype,
+                    line_number=node.lineno,
+                    import_name=alias.asname or alias.name,
+                )
+            )
         else:
             _add_external(target, external)
 
 
 def _collect_from_import(
-    node: ast.ImportFrom, ctx: dict[int, str], source_module: str,
-    project_modules: set[str], edges: list[ImportEdge], external: set[str],
+    node: ast.ImportFrom,
+    ctx: dict[int, str],
+    source_module: str,
+    project_modules: set[str],
+    edges: list[ImportEdge],
+    external: set[str],
 ) -> None:
     """Collect edges from ``from X import Y`` statements."""
     base = _resolve_from_base(node, source_module)
@@ -206,11 +241,15 @@ def _collect_from_import(
             if _is_project_module(full, project_modules)
             else _resolve_target(base, project_modules)
         )
-        edges.append(ImportEdge(
-            source_module=source_module, target_module=resolved,
-            import_type=itype, line_number=node.lineno,
-            import_name=alias.name,
-        ))
+        edges.append(
+            ImportEdge(
+                source_module=source_module,
+                target_module=resolved,
+                import_type=itype,
+                line_number=node.lineno,
+                import_name=alias.name,
+            )
+        )
 
 
 def _resolve_from_base(node: ast.ImportFrom, source_module: str) -> str:
@@ -226,7 +265,9 @@ def _resolve_from_base(node: ast.ImportFrom, source_module: str) -> str:
 
 
 def _merge_externals(
-    target: dict[str, set[str]], externals: set[str], source_module: str,
+    target: dict[str, set[str]],
+    externals: set[str],
+    source_module: str,
 ) -> None:
     """Merge discovered externals into the accumulator."""
     for pkg in externals:
@@ -244,10 +285,7 @@ def _is_project_module(name: str, project_modules: set[str]) -> bool:
     """Check if *name* is or is a child of any project module."""
     if name in project_modules:
         return True
-    return any(
-        name.startswith(m + ".") or m.startswith(name + ".")
-        for m in project_modules
-    )
+    return any(name.startswith(m + ".") or m.startswith(name + ".") for m in project_modules)
 
 
 def _resolve_target(target: str, project_modules: set[str]) -> str:

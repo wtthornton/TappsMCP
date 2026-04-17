@@ -56,8 +56,7 @@ def load_agents_template(engagement_level: str = "medium") -> str:
 
     if engagement_level not in ENGAGEMENT_LEVELS:
         msg = (
-            f"Invalid engagement_level {engagement_level!r}. "
-            f"Valid: {', '.join(ENGAGEMENT_LEVELS)}"
+            f"Invalid engagement_level {engagement_level!r}. Valid: {', '.join(ENGAGEMENT_LEVELS)}"
         )
         raise ValueError(msg)
     content = _read_resource(f"agents_template_{engagement_level}.md")
@@ -82,8 +81,7 @@ def load_platform_rules(platform: str, engagement_level: str = "medium") -> str:
         raise ValueError(msg)
     if engagement_level not in ENGAGEMENT_LEVELS:
         msg = (
-            f"Invalid engagement_level {engagement_level!r}. "
-            f"Valid: {', '.join(ENGAGEMENT_LEVELS)}"
+            f"Invalid engagement_level {engagement_level!r}. Valid: {', '.join(ENGAGEMENT_LEVELS)}"
         )
         raise ValueError(msg)
     return _read_resource(f"platform_{platform}_{engagement_level}.md")

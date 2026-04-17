@@ -74,7 +74,9 @@ class ReadmeGenerator:
         # Build template context
         project_name = metadata.name or project_root.name
         description = self._smart_description(
-            metadata, project_root, project_name,
+            metadata,
+            project_root,
+            project_name,
         )
         context: dict[str, str] = {
             "name": project_name,
@@ -190,9 +192,9 @@ class ReadmeGenerator:
 
         source = metadata.source_file.lower()
         name = metadata.name
-        has_uv = (
-            project_root is not None and (project_root / "uv.lock").exists()
-        ) or any("uv" in d for d in metadata.dev_dependencies)
+        has_uv = (project_root is not None and (project_root / "uv.lock").exists()) or any(
+            "uv" in d for d in metadata.dev_dependencies
+        )
 
         if source == "pyproject.toml" or not source:
             lines.append("```bash")
@@ -230,9 +232,7 @@ class ReadmeGenerator:
             version_text = metadata.python_requires.replace(">=", "").replace("<=", "")
             version_text = version_text.replace(">", "").replace("<", "").split(",")[0].strip()
             encoded = urllib.parse.quote(f">={version_text}", safe="")
-            badges.append(
-                f"![Python](https://img.shields.io/badge/python-{encoded}-blue)"
-            )
+            badges.append(f"![Python](https://img.shields.io/badge/python-{encoded}-blue)")
 
         if metadata.license:
             encoded_license = urllib.parse.quote(metadata.license, safe="")
@@ -248,13 +248,14 @@ class ReadmeGenerator:
 
         if tapps_score is not None:
             color = (
-                "brightgreen" if tapps_score >= _SCORE_THRESHOLD_HIGH
-                else "yellow" if tapps_score >= _SCORE_THRESHOLD_MEDIUM
+                "brightgreen"
+                if tapps_score >= _SCORE_THRESHOLD_HIGH
+                else "yellow"
+                if tapps_score >= _SCORE_THRESHOLD_MEDIUM
                 else "red"
             )
             badges.append(
-                f"![Quality](https://img.shields.io/badge/quality-"
-                f"{tapps_score:.0f}%25-{color})"
+                f"![Quality](https://img.shields.io/badge/quality-{tapps_score:.0f}%25-{color})"
             )
 
         return "  ".join(badges)
@@ -294,17 +295,12 @@ class ReadmeGenerator:
             analyzer = ModuleMapAnalyzer()
             result = analyzer.analyze(project_root, depth=2)
             if result.total_modules > 0:
-                api_label = (
-                    "public API" if result.public_api_count == 1 else "public APIs"
-                )
+                api_label = "public API" if result.public_api_count == 1 else "public APIs"
                 features.append(
-                    f"- {result.total_modules} modules with "
-                    f"{result.public_api_count} {api_label}"
+                    f"- {result.total_modules} modules with {result.public_api_count} {api_label}"
                 )
             if result.entry_points:
-                features.append(
-                    f"- CLI entry points: {', '.join(result.entry_points)}"
-                )
+                features.append(f"- CLI entry points: {', '.join(result.entry_points)}")
         except Exception:
             logger.debug("features_analysis_failed")
 
@@ -363,8 +359,7 @@ class ReadmeGenerator:
 
                 for module, _label in framework_markers.items():
                     if module not in detected and (
-                        f"import {module}" in content
-                        or f"from {module}" in content
+                        f"import {module}" in content or f"from {module}" in content
                     ):
                         detected.add(module)
 
@@ -415,7 +410,7 @@ class ReadmeGenerator:
             import subprocess
 
             try:
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(
                     ["git", "remote", "get-url", "origin"],
                     capture_output=True,
                     text=True,
@@ -427,9 +422,9 @@ class ReadmeGenerator:
             except Exception:
                 pass
 
-        has_uv = (
-            project_root is not None and (project_root / "uv.lock").exists()
-        ) or any("uv" in d for d in metadata.dev_dependencies)
+        has_uv = (project_root is not None and (project_root / "uv.lock").exists()) or any(
+            "uv" in d for d in metadata.dev_dependencies
+        )
 
         if source == "pyproject.toml" or not source:
             lines.append("```bash")
@@ -547,17 +542,10 @@ class ReadmeGenerator:
         try:
             from docs_mcp.generators.diagrams import DiagramGenerator
 
-            result = DiagramGenerator().generate(
-                project_root, diagram_type="pattern_card"
-            )
+            result = DiagramGenerator().generate(project_root, diagram_type="pattern_card")
             if not result.content or result.degraded:
                 return ""
-            return (
-                "### Architectural Pattern\n\n"
-                "```mermaid\n"
-                f"{result.content.rstrip()}\n"
-                "```"
-            )
+            return f"### Architectural Pattern\n\n```mermaid\n{result.content.rstrip()}\n```"
         except Exception:
             logger.debug("readme_pattern_card_failed")
             return ""

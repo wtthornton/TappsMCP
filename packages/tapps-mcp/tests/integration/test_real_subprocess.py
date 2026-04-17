@@ -3,6 +3,7 @@
 These tests exercise the actual subprocess pipeline (ruff, etc.)
 and are skipped if the tools are not installed.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -24,12 +25,9 @@ class TestRealRuffScoring:
     def test_score_clean_file_quick(self, tmp_path: Path) -> None:
         """A clean Python file should score well with real ruff (quick mode)."""
         from tapps_core.config.settings import load_settings
-
         from tapps_mcp.scoring.scorer import CodeScorer
 
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "test"\n', encoding="utf-8"
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n', encoding="utf-8")
 
         test_file = tmp_path / "clean.py"
         test_file.write_text(
@@ -51,12 +49,9 @@ class TestRealRuffScoring:
     def test_score_file_with_issues_quick(self, tmp_path: Path) -> None:
         """A file with lint issues should produce diagnostics."""
         from tapps_core.config.settings import load_settings
-
         from tapps_mcp.scoring.scorer import CodeScorer
 
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "test"\n', encoding="utf-8"
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n', encoding="utf-8")
 
         test_file = tmp_path / "messy.py"
         test_file.write_text(
@@ -75,12 +70,9 @@ class TestRealRuffScoring:
     def test_score_file_quick_enriched(self, tmp_path: Path) -> None:
         """Quick-enriched mode produces all 7 categories + linting."""
         from tapps_core.config.settings import load_settings
-
         from tapps_mcp.scoring.scorer import CodeScorer
 
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "test"\n', encoding="utf-8"
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n', encoding="utf-8")
 
         test_file = tmp_path / "sample.py"
         test_file.write_text(
@@ -110,12 +102,9 @@ class TestRealRuffScoring:
     async def test_score_file_full_mode(self, tmp_path: Path) -> None:
         """Full async scoring produces a complete ScoreResult."""
         from tapps_core.config.settings import load_settings
-
         from tapps_mcp.scoring.scorer import CodeScorer
 
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "test"\n', encoding="utf-8"
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n', encoding="utf-8")
 
         test_file = tmp_path / "full_score.py"
         test_file.write_text(
@@ -137,12 +126,9 @@ class TestRealRuffScoring:
     def test_score_empty_file(self, tmp_path: Path) -> None:
         """Scoring an empty Python file should not crash."""
         from tapps_core.config.settings import load_settings
-
         from tapps_mcp.scoring.scorer import CodeScorer
 
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "test"\n', encoding="utf-8"
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n', encoding="utf-8")
 
         test_file = tmp_path / "empty.py"
         test_file.write_text("", encoding="utf-8")

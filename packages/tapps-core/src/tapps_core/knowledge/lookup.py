@@ -43,13 +43,15 @@ logger = structlog.get_logger(__name__)
 
 # Libraries where expert knowledge is preferred over Context7 for operational topics.
 # These typically return generic API reference from Context7 instead of operational patterns.
-_OPS_FIRST_LIBRARIES: frozenset[str] = frozenset({
-    "docker",
-    "docker-compose",
-    "kubernetes",
-    "github-actions",
-    "ci",
-})
+_OPS_FIRST_LIBRARIES: frozenset[str] = frozenset(
+    {
+        "docker",
+        "docker-compose",
+        "kubernetes",
+        "github-actions",
+        "ci",
+    }
+)
 
 # Minimum prose characters to consider content substantive (not just a TOC).
 _TOC_PROSE_THRESHOLD = 500
@@ -136,7 +138,9 @@ class LookupEngine:
         self._breaker = circuit_breaker or get_context7_circuit_breaker()
         self._client = client or Context7Client(api_key=self._api_key)
         self._registry = registry or (
-            _build_provider_registry(settings=settings) if settings else _build_provider_registry(api_key=api_key)
+            _build_provider_registry(settings=settings)
+            if settings
+            else _build_provider_registry(api_key=api_key)
         )
         self._settings = settings
         self._background_tasks: set[asyncio.Task[None]] = set()
@@ -196,9 +200,7 @@ class LookupEngine:
                 return ops_result
 
         # 3. API resolve + fetch — try provider chain first, then legacy Context7
-        content, provider_source = await self._fetch_from_providers(
-            lib_clean, topic, mode, start
-        )
+        content, provider_source = await self._fetch_from_providers(lib_clean, topic, mode, start)
         if isinstance(content, LookupResult):
             # Provider step returned an error result (circuit breaker / API error)
             return content
@@ -311,9 +313,7 @@ class LookupEngine:
 
         # 3b. Legacy Context7 path (when no provider succeeded and API key set)
         if content is None and self._api_key is not None:
-            legacy_result = await self._fetch_legacy_context7(
-                lib_clean, topic, mode, start
-            )
+            legacy_result = await self._fetch_legacy_context7(lib_clean, topic, mode, start)
             if isinstance(legacy_result, LookupResult):
                 return legacy_result, None
             if legacy_result is not None:
@@ -508,9 +508,7 @@ class LookupEngine:
 
                 file_path = self._settings.project_root / Path(doc_config.file)
                 if file_path.exists() and file_path.is_file():
-                    content = await asyncio.to_thread(
-                        file_path.read_text, encoding="utf-8"
-                    )
+                    content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
                     source_label = "custom_file"
                     logger.debug(
                         "custom_doc_source_file",

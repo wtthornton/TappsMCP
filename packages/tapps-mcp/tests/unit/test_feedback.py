@@ -131,8 +131,12 @@ class TestFeedbackWeightAdjustment:
         _adjust_scoring_weights(helpful=True)
         settings = load_settings()
         w = settings.scoring_weights
-        total = w.complexity + w.security + w.maintainability + w.test_coverage + (
-            w.performance + w.structure + w.devex
+        total = (
+            w.complexity
+            + w.security
+            + w.maintainability
+            + w.test_coverage
+            + (w.performance + w.structure + w.devex)
         )
         assert abs(total - 1.0) < 0.01
 
@@ -153,8 +157,7 @@ class TestStatsRecommendations:
         recs = _generate_stats_recommendations(FakeSummary(), breakdowns)
         assert any("auto-security" in r for r in recs)
 
-    def _test_research_never_called_REMOVED(self):
-        """tapps_research removed (EPIC-94)."""
+    # _test_research_never_called: removed because tapps_research was deleted (EPIC-94).
 
     def test_high_gate_fail_rate(self):
         from tapps_mcp.server_metrics_tools import _generate_stats_recommendations
@@ -259,8 +262,7 @@ class TestDomainWeightAdjustment:
 
         _reset_settings_cache()
 
-    def _test_expert_tools_defined_REMOVED(self):
-        """Expert tools removed (EPIC-94)."""
+    # _test_expert_tools_defined: removed because expert tools were deleted (EPIC-94).
 
     def test_adjust_domain_weights_technical(self, tmp_path):
         """Technical domain feedback should update technical weights."""

@@ -1,4 +1,5 @@
 """Backward-compatible re-export."""
+
 from __future__ import annotations
 
 from tapps_core.knowledge.fuzzy_matcher import CONFIDENCE_HIGH as CONFIDENCE_HIGH

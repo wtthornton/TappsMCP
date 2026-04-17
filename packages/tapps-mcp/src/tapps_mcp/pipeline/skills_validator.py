@@ -38,13 +38,9 @@ def validate_skill_frontmatter(
         errors.append(f"{skill_name}: 'name' must be a string")
     else:
         if len(name) > NAME_MAX_LEN:
-            errors.append(
-                f"{skill_name}: 'name' exceeds {NAME_MAX_LEN} chars (got {len(name)})"
-            )
+            errors.append(f"{skill_name}: 'name' exceeds {NAME_MAX_LEN} chars (got {len(name)})")
         if not NAME_PATTERN.match(name):
-            errors.append(
-                f"{skill_name}: 'name' must be lowercase alphanumeric and hyphens only"
-            )
+            errors.append(f"{skill_name}: 'name' must be lowercase alphanumeric and hyphens only")
 
     desc = frontmatter.get("description")
     if desc is None:

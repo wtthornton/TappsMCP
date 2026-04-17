@@ -67,10 +67,7 @@ class TestProjectScanFullFlow:
         full = await docs_project_scan(project_root=str(docs_project))
 
         # Well-documented project should score higher
-        assert (
-            full["data"]["completeness_score"]
-            > minimal["data"]["completeness_score"]
-        )
+        assert full["data"]["completeness_score"] > minimal["data"]["completeness_score"]
 
 
 @pytest.mark.integration

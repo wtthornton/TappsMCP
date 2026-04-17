@@ -188,11 +188,14 @@ def init(
     context7_key: str | None = None
     if with_context7 is not None:
         if with_context7.lower() == "prompt":
-            context7_key = click.prompt(
-                "TAPPS_MCP_CONTEXT7_API_KEY",
-                hide_input=True,
-                default="",
-            ).strip() or None
+            context7_key = (
+                click.prompt(
+                    "TAPPS_MCP_CONTEXT7_API_KEY",
+                    hide_input=True,
+                    default="",
+                ).strip()
+                or None
+            )
         else:
             context7_key = with_context7.strip() or None
 
@@ -616,8 +619,7 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
             if len(e.value) > 40:
                 value_preview += "..."
             click.echo(
-                f"{e.key:<30} {e.tier:<15} {e.scope:<10} "
-                f"{e.confidence:<12.2f} {value_preview}"
+                f"{e.key:<30} {e.tier:<15} {e.scope:<10} {e.confidence:<12.2f} {value_preview}"
             )
     finally:
         store.close()
@@ -723,9 +725,7 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
         sys.exit(0)
 
     # Filter by min_score (entries' confidence) — bridge.search doesn't filter.
-    filtered = [
-        h for h in hits if float(h.get("confidence", h.get("score", 1.0))) >= min_score
-    ]
+    filtered = [h for h in hits if float(h.get("confidence", h.get("score", 1.0))) >= min_score]
     if not filtered:
         sys.exit(0)
 

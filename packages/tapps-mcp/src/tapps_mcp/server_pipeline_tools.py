@@ -50,8 +50,7 @@ def _current_docs_provider() -> dict[str, Any]:
     import os as _os
 
     has_key = bool(
-        _os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY")
-        or _os.environ.get("CONTEXT7_API_KEY")
+        _os.environ.get("TAPPS_MCP_CONTEXT7_API_KEY") or _os.environ.get("CONTEXT7_API_KEY")
     )
     info: dict[str, Any] = {
         "primary": "context7" if has_key else "llmstxt",
@@ -59,10 +58,10 @@ def _current_docs_provider() -> dict[str, Any]:
     }
     if not has_key:
         info["hint"] = (
-            "Set TAPPS_MCP_CONTEXT7_API_KEY for richer docs via Context7. "
-            "https://context7.com"
+            "Set TAPPS_MCP_CONTEXT7_API_KEY for richer docs via Context7. https://context7.com"
         )
     return info
+
 
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
 _VALIDATE_CONCURRENCY = 10
@@ -136,9 +135,7 @@ class _ProgressTracker:
     completed: int = 0
     last_file: str = ""
     _sidecar_path: Path | None = dataclasses.field(default=None, repr=False)
-    _results: list[dict[str, Any]] = dataclasses.field(
-        default_factory=list, repr=False
-    )
+    _results: list[dict[str, Any]] = dataclasses.field(default_factory=list, repr=False)
     _started_at: str = dataclasses.field(default="", repr=False)
 
     def init_sidecar(self, project_root: Path) -> None:
@@ -149,11 +146,13 @@ class _ProgressTracker:
 
     def record_file_result(self, file_path: str, result: dict[str, Any]) -> None:
         """Record a completed file result and update the sidecar."""
-        self._results.append({
-            "file": file_path,
-            "score": result.get("overall_score", 0.0),
-            "gate_passed": result.get("gate_passed", False),
-        })
+        self._results.append(
+            {
+                "file": file_path,
+                "score": result.get("overall_score", 0.0),
+                "gate_passed": result.get("gate_passed", False),
+            }
+        )
         self._write_sidecar({"status": "running"})
 
     def finalize(
@@ -163,12 +162,14 @@ class _ProgressTracker:
         elapsed_ms: int,
     ) -> None:
         """Write final sidecar state with completed status."""
-        self._write_sidecar({
-            "status": "completed",
-            "all_gates_passed": all_passed,
-            "summary": summary,
-            "elapsed_ms": elapsed_ms,
-        })
+        self._write_sidecar(
+            {
+                "status": "completed",
+                "all_gates_passed": all_passed,
+                "summary": summary,
+                "elapsed_ms": elapsed_ms,
+            }
+        )
 
     def finalize_error(self, error: str) -> None:
         """Write error status to sidecar."""
@@ -188,9 +189,7 @@ class _ProgressTracker:
                 **extra,
             }
             self._sidecar_path.parent.mkdir(parents=True, exist_ok=True)
-            self._sidecar_path.write_text(
-                _json.dumps(data, indent=2), encoding="utf-8"
-            )
+            self._sidecar_path.write_text(_json.dumps(data, indent=2), encoding="utf-8")
         except Exception:
             _logger.debug("sidecar_write_failed", exc_info=True)
 
@@ -506,9 +505,7 @@ def _build_structured_validation_output(
         _logger.debug("structured_output_failed: tapps_validate_changed", exc_info=True)
 
 
-def _resolve_security_depth(
-    security_depth: str, include_security: bool, quick: bool
-) -> bool:
+def _resolve_security_depth(security_depth: str, include_security: bool, quick: bool) -> bool:
     """Determine whether to run full security scanning."""
     return (security_depth == "full") or (include_security and not quick)
 
@@ -640,7 +637,10 @@ async def tapps_validate_changed(
 
     if not paths:
         return _handle_no_changed_files(
-            start, settings, _record_execution, _with_nudges,
+            start,
+            settings,
+            _record_execution,
+            _with_nudges,
             explicit_paths=bool(file_paths.strip()),
             base_ref=base_ref,
             correlation_id=correlation_id,
@@ -654,9 +654,7 @@ async def tapps_validate_changed(
     tracker = _ProgressTracker(total=total_files)
     tracker.init_sidecar(settings.project_root)
     stop_progress = asyncio.Event()
-    progress_task = _start_progress_reporting(
-        ctx, total_files, start, stop_progress, tracker
-    )
+    progress_task = _start_progress_reporting(ctx, total_files, start, stop_progress, tracker)
 
     auto_detect = not file_paths.strip()
     cached_results, uncached_paths = _partition_by_cache(paths)
@@ -673,9 +671,7 @@ async def tapps_validate_changed(
 
         tasks = [
             asyncio.create_task(
-                _validate_single_file(
-                    p, preset, quick, do_security_full, sem, tracker, ctx
-                )
+                _validate_single_file(p, preset, quick, do_security_full, sem, tracker, ctx)
             )
             for p in uncached_paths
         ]
@@ -702,9 +698,7 @@ async def tapps_validate_changed(
                     await asyncio.gather(*pending, return_exceptions=True)
             task_results = _collect_results(raw_results, completed_paths)
         elif tasks:
-            raw_results = list(
-                await asyncio.gather(*tasks, return_exceptions=True)
-            )
+            raw_results = list(await asyncio.gather(*tasks, return_exceptions=True))
             task_results = _collect_results(raw_results, uncached_paths)
         else:
             task_results = []
@@ -872,9 +866,7 @@ def _start_progress_reporting(
     if callable(report):
         with contextlib.suppress(Exception):
             # Fire initial progress via background task (store ref to prevent GC)
-            init_task = asyncio.create_task(
-                _report_initial_progress(report, total_files)
-            )
+            init_task = asyncio.create_task(_report_initial_progress(report, total_files))
             _background_tasks.add(init_task)
             init_task.add_done_callback(_background_tasks.discard)
     return asyncio.create_task(
@@ -1083,9 +1075,7 @@ def _enrich_memory_status_hints(
         project_root_str = str(settings.project_root)
         if any(p.project_root == project_root_str for p in config.projects):
             synced = sum(1 for e in entries if "federated" in (e.tags or []))
-            memory_status["federation_hint"] = (
-                f"hub_registered, {synced} synced entries"
-            )
+            memory_status["federation_hint"] = f"hub_registered, {synced} synced entries"
     except Exception:
         _logger.debug("memory_status_hints_failed", exc_info=True)
 
@@ -1134,9 +1124,7 @@ def _maybe_consolidation_scan(
         return None
 
     mem_settings = getattr(settings, "memory", None)
-    consolidation_settings = (
-        getattr(mem_settings, "consolidation", None) if mem_settings else None
-    )
+    consolidation_settings = getattr(mem_settings, "consolidation", None) if mem_settings else None
     scan_enabled = getattr(consolidation_settings, "scan_on_session_start", True)
     if not consolidation_settings or not scan_enabled:
         return None
@@ -1283,7 +1271,9 @@ async def _maybe_validate_memories(
             return {"ran": True, "validated": 0, "skipped": "no stale entries"}
 
         apply_result = await validator.apply_results(
-            report, store, dry_run=dry_run,
+            report,
+            store,
+            dry_run=dry_run,
         )
 
         _logger.info(
@@ -1364,7 +1354,10 @@ def _collect_memory_status(settings: Any) -> dict[str, Any]:
         contradicted_count = sum(1 for entry in snapshot.entries if entry.contradicted)
 
         by_tier: dict[str, int] = {
-            "architectural": 0, "pattern": 0, "procedural": 0, "context": 0,
+            "architectural": 0,
+            "pattern": 0,
+            "procedural": 0,
+            "context": 0,
         }
         confidences: list[float] = []
         for entry in snapshot.entries:
@@ -2128,11 +2121,17 @@ async def tapps_upgrade(
         for plat_result in components.get("platforms", []):
             host = plat_result.get("host", "unknown")
             for comp_name, comp_val in plat_result.get("components", {}).items():
-                if (isinstance(comp_val, str) and comp_val in ("created", "updated", "regenerated")) or (isinstance(comp_val, dict) and comp_val.get("action") in (
-                    "created",
-                    "updated",
-                    "regenerated",
-                )):
+                if (
+                    isinstance(comp_val, str) and comp_val in ("created", "updated", "regenerated")
+                ) or (
+                    isinstance(comp_val, dict)
+                    and comp_val.get("action")
+                    in (
+                        "created",
+                        "updated",
+                        "regenerated",
+                    )
+                ):
                     await emit_ctx_info(ctx, f"Updated {host}/{comp_name}")
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -2252,8 +2251,7 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
             ],
             agent_instructions=AgentInstructions(
                 persona=(
-                    "You are a configuration assistant. Write the config "
-                    "file exactly as provided."
+                    "You are a configuration assistant. Write the config file exactly as provided."
                 ),
                 tool_preference="Use the Write tool to overwrite .tapps-mcp.yaml.",
                 verification_steps=[
@@ -2367,34 +2365,43 @@ async def tapps_pipeline(
         stage_start = time.perf_counter_ns()
         try:
             await ensure_session_initialized()
-            stages.append({
-                "name": "session_start",
-                "success": True,
-                "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
-                "summary": "session initialized",
-            })
+            stages.append(
+                {
+                    "name": "session_start",
+                    "success": True,
+                    "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+                    "summary": "session initialized",
+                }
+            )
         except Exception as exc:
             pipeline_passed = False
-            stages.append({
-                "name": "session_start",
-                "success": False,
-                "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
-                "summary": f"session_start failed: {exc}",
-            })
+            stages.append(
+                {
+                    "name": "session_start",
+                    "success": False,
+                    "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+                    "summary": f"session_start failed: {exc}",
+                }
+            )
 
     # Stage 2 — quick_check (batch).
     stage_start = time.perf_counter_ns()
     qc_resp = await tapps_quick_check(
-        file_path="", preset=preset, fix=False, file_paths=file_paths,
+        file_path="",
+        preset=preset,
+        fix=False,
+        file_paths=file_paths,
     )
     qc_data = qc_resp.get("data", {}) if isinstance(qc_resp, dict) else {}
     qc_passed = bool(qc_resp.get("success")) and not qc_data.get("security_floor_failed")
-    stages.append({
-        "name": "quick_check",
-        "success": qc_passed,
-        "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
-        "summary": _summarize_quick_check(qc_data),
-    })
+    stages.append(
+        {
+            "name": "quick_check",
+            "success": qc_passed,
+            "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+            "summary": _summarize_quick_check(qc_data),
+        }
+    )
     if not qc_passed:
         pipeline_passed = False
     if qc_data.get("security_floor_failed"):
@@ -2406,24 +2413,28 @@ async def tapps_pipeline(
         vc_resp = await tapps_validate_changed(file_paths=file_paths, preset=preset)
         vc_data = vc_resp.get("data", {}) if isinstance(vc_resp, dict) else {}
         vc_passed = bool(vc_resp.get("success")) and bool(vc_data.get("all_passed", False))
-        stages.append({
-            "name": "validate_changed",
-            "success": vc_passed,
-            "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
-            "summary": (
-                f"{vc_data.get('passed_count', 0)} passed / "
-                f"{vc_data.get('failed_count', 0)} failed"
-            ),
-        })
+        stages.append(
+            {
+                "name": "validate_changed",
+                "success": vc_passed,
+                "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+                "summary": (
+                    f"{vc_data.get('passed_count', 0)} passed / "
+                    f"{vc_data.get('failed_count', 0)} failed"
+                ),
+            }
+        )
         if not vc_passed:
             pipeline_passed = False
     else:
-        stages.append({
-            "name": "validate_changed",
-            "success": False,
-            "elapsed_ms": 0,
-            "summary": f"skipped ({short_circuit})",
-        })
+        stages.append(
+            {
+                "name": "validate_changed",
+                "success": False,
+                "elapsed_ms": 0,
+                "summary": f"skipped ({short_circuit})",
+            }
+        )
         pipeline_passed = False
 
     # Stage 4 — checklist (always runs, even on failure, for the report).
@@ -2434,22 +2445,26 @@ async def tapps_pipeline(
         cl_resp = await tapps_checklist(task_type=task_type, output_format="compact")
         cl_data = cl_resp.get("data", {}) if isinstance(cl_resp, dict) else {}
         cl_passed = bool(cl_resp.get("success")) and not cl_data.get("missing")
-        stages.append({
-            "name": "checklist",
-            "success": cl_passed,
-            "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
-            "summary": cl_data.get("compact_summary") or str(cl_data.get("status", "")),
-        })
+        stages.append(
+            {
+                "name": "checklist",
+                "success": cl_passed,
+                "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+                "summary": cl_data.get("compact_summary") or str(cl_data.get("status", "")),
+            }
+        )
         if not cl_passed:
             pipeline_passed = False
     except Exception as exc:
         pipeline_passed = False
-        stages.append({
-            "name": "checklist",
-            "success": False,
-            "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
-            "summary": f"checklist failed: {exc}",
-        })
+        stages.append(
+            {
+                "name": "checklist",
+                "success": False,
+                "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
+                "summary": f"checklist failed: {exc}",
+            }
+        )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     data: dict[str, Any] = {
@@ -2466,10 +2481,7 @@ def _summarize_quick_check(qc_data: dict[str, Any]) -> str:
     """Compact one-line summary of a quick_check response."""
     if "batch" in qc_data:
         batch = qc_data["batch"]
-        return (
-            f"{batch.get('passed_count', 0)} passed / "
-            f"{batch.get('failed_count', 0)} failed"
-        )
+        return f"{batch.get('passed_count', 0)} passed / {batch.get('failed_count', 0)} failed"
     score = qc_data.get("score") or qc_data.get("overall_score")
     return f"score={score}" if score is not None else "ok"
 
@@ -2478,7 +2490,7 @@ def _summarize_quick_check(qc_data: dict[str, Any]) -> str:
 # tapps_decompose — task decomposition into 15-minute units (TAP-479)
 # ---------------------------------------------------------------------------
 
-from pydantic import BaseModel as _BaseModel  # noqa: E402 (local alias)
+from pydantic import BaseModel as _BaseModel
 
 # Model tier keyword sets (order matters — checked from highest to lowest tier)
 _OPUS_KEYWORDS = frozenset(
@@ -2493,8 +2505,19 @@ _HAIKU_KEYWORDS = frozenset(
 
 # Risk classification keywords
 _HIGH_RISK_KEYWORDS = frozenset(
-    {"security", "auth", "payment", "database", "migration", "deploy", "delete", "remove",
-     "architect", "design", "threat"}
+    {
+        "security",
+        "auth",
+        "payment",
+        "database",
+        "migration",
+        "deploy",
+        "delete",
+        "remove",
+        "architect",
+        "design",
+        "threat",
+    }
 )
 _LOW_RISK_KEYWORDS = frozenset(
     {"read", "search", "list", "format", "display", "show", "grep", "find"}
@@ -2598,8 +2621,8 @@ def _decompose_task(
         )
 
     # Risk-first ordering: high → medium → low
-    _RISK_ORDER = {"high": 0, "medium": 1, "low": 2}
-    units.sort(key=lambda u: _RISK_ORDER.get(u.dominant_risk, 1))
+    risk_order = {"high": 0, "medium": 1, "low": 2}
+    units.sort(key=lambda u: risk_order.get(u.dominant_risk, 1))
 
     # Re-assign IDs after sort, reset depends_on to sequential
     for pos, unit in enumerate(units, start=1):
@@ -2670,7 +2693,9 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "tapps_init" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_init)
     if "tapps_set_engagement_level" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_set_engagement_level)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
+            tapps_set_engagement_level
+        )
     if "tapps_upgrade" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_upgrade)
     if "tapps_doctor" in allowed_tools:

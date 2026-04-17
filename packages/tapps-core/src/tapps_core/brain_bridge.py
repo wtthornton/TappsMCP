@@ -45,7 +45,7 @@ _RETRY_MAX: float = 8.0
 _WRITE_QUEUE_CAP: int = 100
 
 
-class BrainBridgeUnavailable(Exception):
+class BrainBridgeUnavailable(Exception):  # noqa: N818  (public API name predates the lint rule; renaming would break consumers)
     """Raised when the circuit is open or the bridge is not configured."""
 
 
@@ -65,9 +65,7 @@ class BrainBridge:
         self._brain = brain
         self._failures: int = 0
         self._open_at: float | None = None
-        self._write_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
-            maxsize=_WRITE_QUEUE_CAP
-        )
+        self._write_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_WRITE_QUEUE_CAP)
         self._drain_task: asyncio.Task[None] | None = None
 
     # -------------------------------------------------------------------------
@@ -124,7 +122,7 @@ class BrainBridge:
                     break
                 if attempt < _RETRY_ATTEMPTS - 1:
                     delay = min(_RETRY_BASE * (2**attempt), _RETRY_MAX)
-                    delay += random.uniform(0, delay * 0.1)
+                    delay += random.uniform(0, delay * 0.1)  # noqa: S311  (jitter, not crypto)
                     await asyncio.sleep(delay)
 
         raise BrainBridgeUnavailable(f"all retries exhausted: {last_exc}") from last_exc
@@ -381,9 +379,7 @@ class BrainBridge:
                     skipped_private += 1
                 else:
                     propagated += 1
-                    details.append(
-                        {"key": entry.key, "namespace": saved.get("namespace", "")}
-                    )
+                    details.append({"key": entry.key, "namespace": saved.get("namespace", "")})
 
             return {
                 "enabled": True,
@@ -469,9 +465,7 @@ class BrainBridge:
             }
 
         def _fn() -> dict[str, Any]:
-            entry = self._brain.store.save(
-                key, value, tier=tier, scope=scope, tags=tags, **kwargs
-            )
+            entry = self._brain.store.save(key, value, tier=tier, scope=scope, tags=tags, **kwargs)
             return self._to_dict(entry)
 
         result: dict[str, Any] = await self._call(_fn)
@@ -758,9 +752,7 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
     if pg_pool_max_waiting:
         os.environ["TAPPS_BRAIN_PG_POOL_MAX_WAITING"] = str(pg_pool_max_waiting)
     if pg_pool_max_lifetime_seconds:
-        os.environ["TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS"] = str(
-            pg_pool_max_lifetime_seconds
-        )
+        os.environ["TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS"] = str(pg_pool_max_lifetime_seconds)
 
     # --- Construct & probe ---------------------------------------------------
     try:

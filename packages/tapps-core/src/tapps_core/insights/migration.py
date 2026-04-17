@@ -130,13 +130,15 @@ def migrate_memory_entry_to_insight(
             resolved_kind = entry.subject_kind
 
     data = entry.model_dump()
-    data.update({
-        "insight_type": resolved_type,
-        "server_origin": server_origin,
-        "schema_version": INSIGHT_SCHEMA_VERSION,
-        "subject_path": subject_path,
-        "subject_kind": resolved_kind,
-    })
+    data.update(
+        {
+            "insight_type": resolved_type,
+            "server_origin": server_origin,
+            "schema_version": INSIGHT_SCHEMA_VERSION,
+            "subject_path": subject_path,
+            "subject_kind": resolved_kind,
+        }
+    )
 
     insight = InsightEntry.model_validate(data)
     logger.debug(

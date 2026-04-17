@@ -67,9 +67,7 @@ def _aggregate_severity_counts(
     secret_findings: list[SecretFinding],
 ) -> tuple[int, int, int, int]:
     """Count (critical, high, medium, low) severities across all findings."""
-    all_severities = [i.severity for i in bandit_issues] + [
-        f.severity for f in secret_findings
-    ]
+    all_severities = [i.severity for i in bandit_issues] + [f.severity for f in secret_findings]
     return (
         sum(1 for s in all_severities if s == "critical"),
         sum(1 for s in all_severities if s == "high"),
@@ -100,13 +98,9 @@ def run_security_scan(
     Returns:
         Unified ``SecurityScanResult``.
     """
-    bandit_issues, bandit_available = _run_bandit_scan(
-        file_path, cwd=cwd, timeout=timeout
-    )
+    bandit_issues, bandit_available = _run_bandit_scan(file_path, cwd=cwd, timeout=timeout)
     secret_findings = _run_secret_scan(file_path, scan_secrets=scan_secrets)
-    critical, high, medium, low = _aggregate_severity_counts(
-        bandit_issues, secret_findings
-    )
+    critical, high, medium, low = _aggregate_severity_counts(bandit_issues, secret_findings)
 
     return SecurityScanResult(
         bandit_issues=bandit_issues,

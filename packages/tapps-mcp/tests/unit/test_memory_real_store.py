@@ -73,9 +73,7 @@ class TestSeedingRealStore:
         # so store count may differ from seeded_count
         assert store.count() > 0
 
-    def test_seed_creates_expected_keys(
-        self, store: MemoryStore, profile: ProjectProfile
-    ) -> None:
+    def test_seed_creates_expected_keys(self, store: MemoryStore, profile: ProjectProfile) -> None:
         seed_from_profile(store, profile)
         # Check specific expected keys
         project_type = store.get("project-type")
@@ -92,17 +90,13 @@ class TestSeedingRealStore:
         docker = store.get("has-docker")
         assert docker is not None
 
-    def test_seed_skips_nonempty_store(
-        self, store: MemoryStore, profile: ProjectProfile
-    ) -> None:
+    def test_seed_skips_nonempty_store(self, store: MemoryStore, profile: ProjectProfile) -> None:
         store.save(key="existing-entry", value="some value")
         result = seed_from_profile(store, profile)
         assert result["skipped"] is True
         assert result["seeded_count"] == 0
 
-    def test_seed_tags_and_source(
-        self, store: MemoryStore, profile: ProjectProfile
-    ) -> None:
+    def test_seed_tags_and_source(self, store: MemoryStore, profile: ProjectProfile) -> None:
         seed_from_profile(store, profile)
         entry = store.get("project-type")
         assert entry is not None
@@ -110,23 +104,17 @@ class TestSeedingRealStore:
         assert entry.source == MemorySource.system
         assert entry.source_agent == "tapps-brain"
 
-    def test_seed_seeded_from_field(
-        self, store: MemoryStore, profile: ProjectProfile
-    ) -> None:
+    def test_seed_seeded_from_field(self, store: MemoryStore, profile: ProjectProfile) -> None:
         seed_from_profile(store, profile)
         entry = store.get("project-type")
         assert entry is not None
         assert entry.seeded_from == "project_profile"
 
-    def test_reseed_updates_auto_seeded(
-        self, store: MemoryStore, profile: ProjectProfile
-    ) -> None:
+    def test_reseed_updates_auto_seeded(self, store: MemoryStore, profile: ProjectProfile) -> None:
         seed_from_profile(store, profile)
 
         # Reseed with updated profile
-        updated_profile = profile.model_copy(
-            update={"project_type": "web-app"}
-        )
+        updated_profile = profile.model_copy(update={"project_type": "web-app"})
         result = reseed_from_profile(store, updated_profile)
         assert result["seeded_count"] > 0
 
@@ -135,9 +123,7 @@ class TestSeedingRealStore:
         assert entry is not None
         assert "web-app" in entry.value
 
-    def test_reseed_preserves_non_seeded(
-        self, store: MemoryStore, profile: ProjectProfile
-    ) -> None:
+    def test_reseed_preserves_non_seeded(self, store: MemoryStore, profile: ProjectProfile) -> None:
         seed_from_profile(store, profile)
         # Add a non-seeded memory
         store.save(key="manual-note", value="Important decision")
@@ -197,16 +183,12 @@ class TestRetrievalRealStore:
         keys = [r.entry.key for r in results]
         assert "old-framework" not in keys
 
-    def test_search_includes_contradicted_when_requested(
-        self, store: MemoryStore
-    ) -> None:
+    def test_search_includes_contradicted_when_requested(self, store: MemoryStore) -> None:
         store.save(key="old-framework", value="Project uses Django framework")
         store.update_fields("old-framework", contradicted=True)
 
         retriever = MemoryRetriever()
-        results = retriever.search(
-            "Django framework", store, include_contradicted=True
-        )
+        results = retriever.search("Django framework", store, include_contradicted=True)
         keys = [r.entry.key for r in results]
         assert "old-framework" in keys
 
@@ -252,9 +234,7 @@ class TestInjectionRealStore:
         assert isinstance(result["memory_injected"], int)
         assert isinstance(result["memory_section"], str)
 
-    def test_inject_low_engagement_never_injects(
-        self, store: MemoryStore
-    ) -> None:
+    def test_inject_low_engagement_never_injects(self, store: MemoryStore) -> None:
         store.save(key="auth-jwt", value="Authentication uses JWT")
         result = inject_memories("authentication", store, engagement_level="low")
         assert result["memory_injected"] == 0
@@ -463,9 +443,7 @@ class TestImportExportRealStore:
         )
 
         output = tmp_path / "filtered.json"
-        result = export_memories(
-            store, output, validator, tier="architectural"
-        )
+        result = export_memories(store, output, validator, tier="architectural")
         assert result["exported_count"] == 1
 
         import json
@@ -498,9 +476,7 @@ class TestLifecycleRealStore:
         assert len(results) > 0
 
         # Inject
-        inject_result = inject_memories(
-            "What framework does this project use?", store
-        )
+        inject_result = inject_memories("What framework does this project use?", store)
         # The seeded entries contain "fastapi" so injection may find them
         assert isinstance(inject_result["memory_injected"], int)
 

@@ -18,7 +18,6 @@ from docs_mcp.validators.link_checker import (
     _is_external_link,
 )
 
-
 # ---------------------------------------------------------------------------
 # Model tests
 # ---------------------------------------------------------------------------
@@ -209,7 +208,7 @@ class TestLinkChecker:
     def test_non_markdown_files_skipped(self, tmp_path: Path) -> None:
         """Non-doc files should not be scanned."""
         (tmp_path / "app.py").write_text(
-            '# [link](missing.md)\n',
+            "# [link](missing.md)\n",
             encoding="utf-8",
         )
 
@@ -488,8 +487,7 @@ class TestLinkCheckerBacktickIntegration:
         (tmp_path / "guide.md").write_text("# Guide\n", encoding="utf-8")
         (tmp_path / "config.toml").write_text("[tool]\n", encoding="utf-8")
         (tmp_path / "README.md").write_text(
-            "# Project\n\n"
-            "See [guide](guide.md) and `config.toml`.\n",
+            "# Project\n\nSee [guide](guide.md) and `config.toml`.\n",
             encoding="utf-8",
         )
 

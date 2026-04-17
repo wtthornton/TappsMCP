@@ -107,11 +107,13 @@ def _extract_call_kwargs(tree: ast.Module) -> list[dict[str, Any]]:
         if not callee_name:
             continue
 
-        calls.append({
-            "callee_name": callee_name,
-            "kwargs": kwargs,
-            "line": node.lineno,
-        })
+        calls.append(
+            {
+                "callee_name": callee_name,
+                "kwargs": kwargs,
+                "line": node.lineno,
+            }
+        )
     return calls
 
 
@@ -163,7 +165,8 @@ def _resolve_module_file(module_path: str, search_root: Path) -> Path | None:
 
 
 def _extract_function_params(
-    tree: ast.Module, func_name: str,
+    tree: ast.Module,
+    func_name: str,
 ) -> list[str] | None:
     """Extract parameter names from a function/method definition.
 

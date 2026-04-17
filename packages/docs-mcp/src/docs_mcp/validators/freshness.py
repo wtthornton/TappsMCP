@@ -16,12 +16,25 @@ logger = structlog.get_logger(__name__)
 _DOC_EXTENSIONS: frozenset[str] = frozenset({".md", ".rst", ".txt"})
 
 # Directories to skip.
-_SKIP_DIRS: frozenset[str] = frozenset({
-    ".git", ".hg", ".svn", "__pycache__", "node_modules",
-    ".venv", "venv", ".env", ".tox", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", "dist", "build",
-    ".eggs",
-})
+_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".env",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".eggs",
+    }
+)
 
 # Freshness thresholds in days.
 _FRESH_THRESHOLD = 30
@@ -142,19 +155,22 @@ class FreshnessChecker:
             age_days = max(0, int(age_seconds / 86400))
 
             iso_date = time.strftime(
-                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(mtime),
+                "%Y-%m-%dT%H:%M:%SZ",
+                time.gmtime(mtime),
             )
             freshness_label = _classify_freshness(age_days)
             counts[freshness_label] += 1
 
             rel_path = str(doc_file.relative_to(rel_base)).replace("\\", "/")
 
-            items.append(FreshnessItem(
-                file_path=rel_path,
-                last_modified=iso_date,
-                age_days=age_days,
-                freshness=freshness_label,
-            ))
+            items.append(
+                FreshnessItem(
+                    file_path=rel_path,
+                    last_modified=iso_date,
+                    age_days=age_days,
+                    freshness=freshness_label,
+                )
+            )
 
             weight = _freshness_weight(age_days)
             weight_sum += weight

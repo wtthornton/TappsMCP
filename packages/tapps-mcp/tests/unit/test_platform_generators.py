@@ -9,8 +9,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from tapps_mcp.pipeline.platform_generators import (
     _CLAUDE_HOOK_SCRIPTS,
     _CLAUDE_HOOK_SCRIPTS_PS,
@@ -36,20 +34,23 @@ from tapps_mcp.pipeline.platform_generators import (
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     AGENT_TEAMS_CLAUDE_MD_SECTION,
-    AGENT_TEAMS_HOOKS_CONFIG,
     AGENT_TEAMS_HOOK_SCRIPTS,
-    CLAUDE_HOOK_SCRIPTS as HT_CLAUDE_HOOK_SCRIPTS,
-    CURSOR_HOOK_SCRIPTS as HT_CURSOR_HOOK_SCRIPTS,
+    AGENT_TEAMS_HOOKS_CONFIG,
 )
-from tapps_mcp.pipeline.platform_subagents import (
-    CLAUDE_AGENTS,
-    CURSOR_AGENTS,
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CLAUDE_HOOK_SCRIPTS as HT_CLAUDE_HOOK_SCRIPTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_HOOK_SCRIPTS as HT_CURSOR_HOOK_SCRIPTS,
 )
 from tapps_mcp.pipeline.platform_skills import (
     CLAUDE_SKILLS,
     CURSOR_SKILLS,
 )
-
+from tapps_mcp.pipeline.platform_subagents import (
+    CLAUDE_AGENTS,
+    CURSOR_AGENTS,
+)
 
 # ---------------------------------------------------------------------------
 # Facade re-export tests
@@ -363,6 +364,7 @@ class TestEpic36EngagementLevelBlocking:
         from tapps_mcp.pipeline.platform_hook_templates import (
             CLAUDE_HOOK_SCRIPTS_BLOCKING,
         )
+
         assert "tapps-task-completed.sh" in CLAUDE_HOOK_SCRIPTS_BLOCKING
         assert "tapps-stop.sh" in CLAUDE_HOOK_SCRIPTS_BLOCKING
 
@@ -370,6 +372,7 @@ class TestEpic36EngagementLevelBlocking:
         from tapps_mcp.pipeline.platform_hook_templates import (
             CLAUDE_HOOK_SCRIPTS_BLOCKING_PS,
         )
+
         assert "tapps-task-completed.ps1" in CLAUDE_HOOK_SCRIPTS_BLOCKING_PS
         assert "tapps-stop.ps1" in CLAUDE_HOOK_SCRIPTS_BLOCKING_PS
 
@@ -377,6 +380,7 @@ class TestEpic36EngagementLevelBlocking:
         from tapps_mcp.pipeline.platform_hook_templates import (
             CLAUDE_HOOK_SCRIPTS_BLOCKING,
         )
+
         content = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-task-completed.sh"]
         assert "exit 2" in content
         assert "BLOCKED" in content
@@ -385,6 +389,7 @@ class TestEpic36EngagementLevelBlocking:
         from tapps_mcp.pipeline.platform_hook_templates import (
             CLAUDE_HOOK_SCRIPTS_BLOCKING,
         )
+
         content = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-stop.sh"]
         assert "exit 2" in content
         assert "stop_hook_active" in content
@@ -393,6 +398,7 @@ class TestEpic36EngagementLevelBlocking:
         from tapps_mcp.pipeline.platform_hook_templates import (
             CLAUDE_HOOK_SCRIPTS_BLOCKING,
         )
+
         content = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-task-completed.sh"]
         assert ".validation-marker" in content
 
@@ -401,6 +407,7 @@ class TestEpic36EngagementLevelBlocking:
         from tapps_mcp.pipeline.platform_hook_templates import (
             CLAUDE_HOOK_SCRIPTS_BLOCKING,
         )
+
         content = CLAUDE_HOOK_SCRIPTS_BLOCKING["tapps-task-completed.sh"]
         assert "3600" in content
 
@@ -412,12 +419,14 @@ class TestEpic36PromptHook:
         from tapps_mcp.pipeline.platform_hook_templates import (
             PROMPT_HOOK_CONFIG,
         )
+
         assert "PostToolUse" in PROMPT_HOOK_CONFIG
 
     def test_prompt_hook_uses_haiku(self) -> None:
         from tapps_mcp.pipeline.platform_hook_templates import (
             PROMPT_HOOK_CONFIG,
         )
+
         entry = PROMPT_HOOK_CONFIG["PostToolUse"][0]
         assert entry["type"] == "prompt"
         assert entry["model"] == "haiku"
@@ -426,6 +435,7 @@ class TestEpic36PromptHook:
         from tapps_mcp.pipeline.platform_hook_templates import (
             PROMPT_HOOK_CONFIG,
         )
+
         entry = PROMPT_HOOK_CONFIG["PostToolUse"][0]
         assert entry["timeout"] == 15
 
@@ -433,6 +443,7 @@ class TestEpic36PromptHook:
         from tapps_mcp.pipeline.platform_hook_templates import (
             PROMPT_HOOK_CONFIG,
         )
+
         entry = PROMPT_HOOK_CONFIG["PostToolUse"][0]
         assert entry["matcher"] == "Edit|Write"
 
@@ -444,6 +455,7 @@ class TestEpic36EngagementHookEvents:
         from tapps_mcp.pipeline.platform_hook_templates import (
             ENGAGEMENT_HOOK_EVENTS,
         )
+
         high = ENGAGEMENT_HOOK_EVENTS["high"]
         assert "SubagentStop" in high
         assert "SessionEnd" in high
@@ -456,6 +468,7 @@ class TestEpic36EngagementHookEvents:
         from tapps_mcp.pipeline.platform_hook_templates import (
             ENGAGEMENT_HOOK_EVENTS,
         )
+
         medium = ENGAGEMENT_HOOK_EVENTS["medium"]
         assert "SessionStart" in medium
         assert "SubagentStop" in medium
@@ -467,6 +480,7 @@ class TestEpic36EngagementHookEvents:
         from tapps_mcp.pipeline.platform_hook_templates import (
             ENGAGEMENT_HOOK_EVENTS,
         )
+
         low = ENGAGEMENT_HOOK_EVENTS["low"]
         assert low == {"SessionStart"}
 
@@ -475,10 +489,13 @@ class TestEpic36GenerateHooksEngagement:
     """Tests for generate_claude_hooks with engagement levels."""
 
     def test_high_engagement_creates_blocking_scripts(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         result = generate_claude_hooks(
-            tmp_path, force_windows=False, engagement_level="high",
+            tmp_path,
+            force_windows=False,
+            engagement_level="high",
         )
         assert result["engagement_level"] == "high"
         # High engagement includes all 9 events
@@ -495,10 +512,13 @@ class TestEpic36GenerateHooksEngagement:
         assert "exit 2" in task_content
 
     def test_medium_engagement_advisory_only(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         result = generate_claude_hooks(
-            tmp_path, force_windows=False, engagement_level="medium",
+            tmp_path,
+            force_windows=False,
+            engagement_level="medium",
         )
         assert result["engagement_level"] == "medium"
         hooks_dir = tmp_path / ".claude" / "hooks"
@@ -512,10 +532,13 @@ class TestEpic36GenerateHooksEngagement:
         assert "BLOCKED" not in stop_content
 
     def test_low_engagement_minimal_hooks(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         result = generate_claude_hooks(
-            tmp_path, force_windows=False, engagement_level="low",
+            tmp_path,
+            force_windows=False,
+            engagement_level="low",
         )
         assert result["engagement_level"] == "low"
         hooks_dir = tmp_path / ".claude" / "hooks"
@@ -529,36 +552,39 @@ class TestEpic36GenerateHooksEngagement:
 
     def test_prompt_hooks_opt_in(self, tmp_path: Path) -> None:
         result = generate_claude_hooks(
-            tmp_path, force_windows=False, prompt_hooks=True,
+            tmp_path,
+            force_windows=False,
+            prompt_hooks=True,
         )
         assert result["prompt_hooks"] is True
         settings_file = tmp_path / ".claude" / "settings.json"
         config = json.loads(settings_file.read_text())
         # Should have a prompt-type entry in PostToolUse
         post_tool_use = config["hooks"]["PostToolUse"]
-        has_prompt = any(
-            e.get("type") == "prompt" for e in post_tool_use
-        )
+        has_prompt = any(e.get("type") == "prompt" for e in post_tool_use)
         assert has_prompt
 
     def test_prompt_hooks_default_off(self, tmp_path: Path) -> None:
         result = generate_claude_hooks(
-            tmp_path, force_windows=False, prompt_hooks=False,
+            tmp_path,
+            force_windows=False,
+            prompt_hooks=False,
         )
         assert result["prompt_hooks"] is False
         settings_file = tmp_path / ".claude" / "settings.json"
         config = json.loads(settings_file.read_text())
         post_tool_use = config["hooks"]["PostToolUse"]
-        has_prompt = any(
-            e.get("type") == "prompt" for e in post_tool_use
-        )
+        has_prompt = any(e.get("type") == "prompt" for e in post_tool_use)
         assert not has_prompt
 
     def test_settings_json_has_new_events_at_high(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         generate_claude_hooks(
-            tmp_path, force_windows=False, engagement_level="high",
+            tmp_path,
+            force_windows=False,
+            engagement_level="high",
         )
         settings_file = tmp_path / ".claude" / "settings.json"
         config = json.loads(settings_file.read_text())
@@ -568,10 +594,13 @@ class TestEpic36GenerateHooksEngagement:
         assert "PostToolUseFailure" in hooks
 
     def test_settings_json_no_new_events_at_low(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         generate_claude_hooks(
-            tmp_path, force_windows=False, engagement_level="low",
+            tmp_path,
+            force_windows=False,
+            engagement_level="low",
         )
         settings_file = tmp_path / ".claude" / "settings.json"
         config = json.loads(settings_file.read_text())
@@ -596,7 +625,8 @@ class TestEpic36ValidationMarker:
         assert new_marker.exists()
 
     def test_validation_marker_contains_timestamp(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         from tapps_mcp.server_pipeline_tools import _write_validate_ok_marker
 
@@ -604,5 +634,6 @@ class TestEpic36ValidationMarker:
         marker = tmp_path / ".tapps-mcp" / ".validation-marker"
         ts = float(marker.read_text())
         import time
+
         # Timestamp should be recent (within last 5 seconds)
         assert time.time() - ts < 5

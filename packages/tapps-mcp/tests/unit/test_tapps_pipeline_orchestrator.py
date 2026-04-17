@@ -47,14 +47,18 @@ async def test_pipeline_happy_path(py_file: Path) -> None:
         ),
         patch(
             "tapps_mcp.server_pipeline_tools.tapps_validate_changed",
-            AsyncMock(return_value=_ok(
-                {"all_passed": True, "passed_count": 1, "failed_count": 0},
-                tool="tapps_validate_changed",
-            )),
+            AsyncMock(
+                return_value=_ok(
+                    {"all_passed": True, "passed_count": 1, "failed_count": 0},
+                    tool="tapps_validate_changed",
+                )
+            ),
         ),
         patch(
             "tapps_mcp.server.tapps_checklist",
-            AsyncMock(return_value=_ok({"missing": [], "compact_summary": "ok"}, tool="tapps_checklist")),
+            AsyncMock(
+                return_value=_ok({"missing": [], "compact_summary": "ok"}, tool="tapps_checklist")
+            ),
         ),
     ):
         resp = await tapps_pipeline(file_paths=str(py_file), task_type="feature")
@@ -138,10 +142,12 @@ async def test_pipeline_fails_when_validate_fails(py_file: Path) -> None:
         ),
         patch(
             "tapps_mcp.server_pipeline_tools.tapps_validate_changed",
-            AsyncMock(return_value=_ok(
-                {"all_passed": False, "passed_count": 0, "failed_count": 1},
-                tool="tapps_validate_changed",
-            )),
+            AsyncMock(
+                return_value=_ok(
+                    {"all_passed": False, "passed_count": 0, "failed_count": 1},
+                    tool="tapps_validate_changed",
+                )
+            ),
         ),
         patch(
             "tapps_mcp.server.tapps_checklist",

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
 from tapps_brain.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
 
 from tapps_core.insights import (
@@ -17,10 +15,10 @@ from tapps_core.insights import (
 from tapps_core.insights.migration import _infer_insight_type, _infer_subject_kind
 from tapps_core.insights.models import InsightEntry
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_entry(key: str = "test.entry", tags: list[str] | None = None) -> MemoryEntry:
     return MemoryEntry(
@@ -36,6 +34,7 @@ def _make_entry(key: str = "test.entry", tags: list[str] | None = None) -> Memor
 # ---------------------------------------------------------------------------
 # _infer_insight_type
 # ---------------------------------------------------------------------------
+
 
 class TestInferInsightType:
     def test_architecture_tag(self):
@@ -96,6 +95,7 @@ class TestInferInsightType:
 # _infer_subject_kind
 # ---------------------------------------------------------------------------
 
+
 class TestInferSubjectKind:
     def test_empty_path_is_system(self):
         assert _infer_subject_kind("") == SubjectKind.system
@@ -116,6 +116,7 @@ class TestInferSubjectKind:
 # ---------------------------------------------------------------------------
 # migrate_memory_entry_to_insight
 # ---------------------------------------------------------------------------
+
 
 class TestMigrateMemoryEntryToInsight:
     def test_returns_insight_entry(self):
@@ -175,15 +176,11 @@ class TestMigrateMemoryEntryToInsight:
         assert result.insight_type == InsightType.pattern
 
     def test_subject_path_applied(self):
-        result = migrate_memory_entry_to_insight(
-            _make_entry(), subject_path="src/foo.py"
-        )
+        result = migrate_memory_entry_to_insight(_make_entry(), subject_path="src/foo.py")
         assert result.subject_path == "src/foo.py"
 
     def test_subject_kind_inferred_from_path(self):
-        result = migrate_memory_entry_to_insight(
-            _make_entry(), subject_path="src/foo.py"
-        )
+        result = migrate_memory_entry_to_insight(_make_entry(), subject_path="src/foo.py")
         assert result.subject_kind == SubjectKind.file
 
     def test_explicit_subject_kind_overrides_inference(self):
@@ -232,6 +229,7 @@ class TestMigrateMemoryEntryToInsight:
 # ---------------------------------------------------------------------------
 # bulk_migrate
 # ---------------------------------------------------------------------------
+
 
 class TestBulkMigrate:
     def test_returns_insight_migration_result(self):

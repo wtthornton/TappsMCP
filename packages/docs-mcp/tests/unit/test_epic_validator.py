@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from docs_mcp.validators.epic_validator import (
-    CrossFileSummary,
     EpicValidationReport,
     EpicValidator,
+    StoryInfo,
     _check_point_size_consistency,
     _check_story_file_structure,
     _detect_cycle,
@@ -17,7 +17,6 @@ from docs_mcp.validators.epic_validator import (
     _parse_story_heading,
     _parse_table_size_priority,
     _split_by_heading,
-    StoryInfo,
 )
 
 # ---------------------------------------------------------------------------
@@ -369,9 +368,7 @@ class TestEpicValidatorPointSizeConsistency:
         report = EpicValidator().validate(fp)
 
         warnings = [i for i in report.issues if i.severity == "warning"]
-        mismatch_warnings = [
-            w for w in warnings if "inconsistent" in w.message.lower()
-        ]
+        mismatch_warnings = [w for w in warnings if "inconsistent" in w.message.lower()]
         assert len(mismatch_warnings) == 1
         assert "13" in mismatch_warnings[0].message
         assert "S" in mismatch_warnings[0].message
@@ -392,18 +389,14 @@ class TestEpicValidatorImplOrder:
         fp = _write_epic(tmp_path, _EPIC_WITH_IMPL_ORDER)
         report = EpicValidator().validate(fp)
 
-        cycle_errors = [
-            i for i in report.issues if "cycle" in i.message.lower()
-        ]
+        cycle_errors = [i for i in report.issues if "cycle" in i.message.lower()]
         assert len(cycle_errors) == 0
 
     def test_cycle_detected(self, tmp_path: Path) -> None:
         fp = _write_epic(tmp_path, _EPIC_WITH_CYCLE)
         report = EpicValidator().validate(fp)
 
-        cycle_errors = [
-            i for i in report.issues if "cycle" in i.message.lower()
-        ]
+        cycle_errors = [i for i in report.issues if "cycle" in i.message.lower()]
         assert len(cycle_errors) == 1
         assert cycle_errors[0].severity == "error"
 
@@ -636,9 +629,7 @@ class TestDocsValidateEpicTool:
         from docs_mcp.server_val_tools import docs_validate_epic
 
         fp = _write_epic(tmp_path, _WELL_FORMED_EPIC)
-        result = await docs_validate_epic(
-            file_path=str(fp), project_root=str(tmp_path)
-        )
+        result = await docs_validate_epic(file_path=str(fp), project_root=str(tmp_path))
         assert result["success"] is True
         assert result["data"]["score"] == 100
         assert result["data"]["total_stories"] == 2
@@ -648,9 +639,7 @@ class TestDocsValidateEpicTool:
         from docs_mcp.server_val_tools import docs_validate_epic
 
         _write_epic(tmp_path, _WELL_FORMED_EPIC, name="EPIC.md")
-        result = await docs_validate_epic(
-            file_path="EPIC.md", project_root=str(tmp_path)
-        )
+        result = await docs_validate_epic(file_path="EPIC.md", project_root=str(tmp_path))
         assert result["success"] is True
         assert result["data"]["score"] == 100
 
@@ -1017,9 +1006,7 @@ class TestCheckStoryFileStructure:
     """Tests for _check_story_file_structure helper."""
 
     def test_full_structure(self) -> None:
-        has_ac, has_tasks, has_dod, points, size = _check_story_file_structure(
-            _FULL_STORY_FILE
-        )
+        has_ac, has_tasks, has_dod, points, size = _check_story_file_structure(_FULL_STORY_FILE)
         assert has_ac is True
         assert has_tasks is True
         assert has_dod is True
@@ -1027,9 +1014,7 @@ class TestCheckStoryFileStructure:
         assert size == "M"
 
     def test_partial_structure(self) -> None:
-        has_ac, has_tasks, has_dod, points, size = _check_story_file_structure(
-            _PARTIAL_STORY_FILE
-        )
+        has_ac, has_tasks, has_dod, points, size = _check_story_file_structure(_PARTIAL_STORY_FILE)
         assert has_ac is False
         assert has_tasks is True
         assert has_dod is False
@@ -1112,8 +1097,7 @@ Done when tests pass.
 
         # Check warning finding for missing file
         missing_findings = [
-            i for i in report.issues
-            if "not found" in i.message and "93.3" in i.message
+            i for i in report.issues if "not found" in i.message and "93.3" in i.message
         ]
         assert len(missing_findings) == 1
         assert missing_findings[0].severity == "warning"
@@ -1125,8 +1109,7 @@ Done when tests pass.
 
         # Story 93.2 has no AC section
         ac_findings = [
-            i for i in report.issues
-            if "Acceptance Criteria" in i.message and "93.2" in i.location
+            i for i in report.issues if "Acceptance Criteria" in i.message and "93.2" in i.location
         ]
         assert len(ac_findings) >= 1
 

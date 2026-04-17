@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from tapps_mcp.server_memory_tools import (
-    _Params,
     _handle_agent_register,
     _handle_hive_propagate,
     _handle_hive_search,
+    _Params,
     tapps_memory,
 )
 
@@ -112,9 +113,7 @@ async def test_handle_hive_search_degraded_when_hive_missing(
     monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
     bridge = _fake_bridge_with_hive(None)
 
-    with patch(
-        "tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge
-    ):
+    with patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge):
         out = await _handle_hive_search(
             mock_memory_store,
             _minimal_params(query="x"),
@@ -132,9 +131,7 @@ async def test_handle_hive_search_happy_path(
     hive.search.return_value = [{"key": "k1", "namespace": "universal"}]
     bridge = _fake_bridge_with_hive(hive)
 
-    with patch(
-        "tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge
-    ):
+    with patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge):
         out = await _handle_hive_search(
             mock_memory_store,
             _minimal_params(query="jwt", limit=5, tag_list=["universal"]),
@@ -172,9 +169,7 @@ async def test_handle_hive_propagate_skips_private(
     bridge = _fake_bridge_with_hive(hive)
 
     with (
-        patch(
-            "tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge
-        ),
+        patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge),
         patch("tapps_core.config.settings.load_settings") as ls,
         patch("tapps_brain.backends.PropagationEngine.propagate", return_value=None),
     ):

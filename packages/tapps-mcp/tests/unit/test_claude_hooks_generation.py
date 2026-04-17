@@ -421,9 +421,7 @@ class TestClaudeHooksPlatformMigration:
 
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         cmds = self._all_hook_commands(data)
-        assert all(c.endswith(".sh") for c in cmds), (
-            f"All should use .sh after migration: {cmds}"
-        )
+        assert all(c.endswith(".sh") for c in cmds), f"All should use .sh after migration: {cmds}"
         assert result["hooks_migrated"] > 0
 
     def test_wrong_platform_scripts_cleaned_up(self, tmp_path):
@@ -469,12 +467,12 @@ class TestClaudeHooksPlatformMigration:
             "permissions": {"allow": ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]},
             "hooks": {
                 "SessionStart": [],
-                "PostCompact": [{"matcher": "*", "hooks": [{"type": "command", "command": "echo x"}]}],
+                "PostCompact": [
+                    {"matcher": "*", "hooks": [{"type": "command", "command": "echo x"}]}
+                ],
             },
         }
-        (claude_dir / "settings.json").write_text(
-            json.dumps(config, indent=2), encoding="utf-8"
-        )
+        (claude_dir / "settings.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
         generate_claude_hooks(tmp_path, force_windows=False)
         data = json.loads((claude_dir / "settings.json").read_text())
         assert "PostCompact" not in data.get("hooks", {})

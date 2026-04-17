@@ -137,9 +137,7 @@ class TestParsePerflintJson:
 class TestRunPerflintCheck:
     @patch("tapps_mcp.tools.perflint.run_command")
     def test_success(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=4, stdout=SAMPLE_PERFLINT_JSON, stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=4, stdout=SAMPLE_PERFLINT_JSON, stderr="")
         findings = run_perflint_check("test.py")
         assert len(findings) == 2
 
@@ -151,9 +149,7 @@ class TestRunPerflintCheck:
 
     @patch("tapps_mcp.tools.perflint.run_command")
     def test_timeout_returns_empty(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=-1, stdout="", stderr="", timed_out=True
-        )
+        mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
         findings = run_perflint_check("test.py")
         assert findings == []
 
@@ -162,9 +158,7 @@ class TestRunPerflintCheckAsync:
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.perflint.run_command_async", new_callable=AsyncMock)
     async def test_success(self, mock_cmd):
-        mock_cmd.return_value = CommandResult(
-            returncode=4, stdout=SAMPLE_PERFLINT_JSON, stderr=""
-        )
+        mock_cmd.return_value = CommandResult(returncode=4, stdout=SAMPLE_PERFLINT_JSON, stderr="")
         findings = await run_perflint_check_async("test.py")
         assert len(findings) == 2
 

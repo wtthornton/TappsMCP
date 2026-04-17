@@ -89,7 +89,12 @@ class TypeScriptExtractor(TreeSitterExtractor):
 
             elif node_type == "export_statement":
                 self._handle_export(
-                    child, source, functions, classes, constants, imports,
+                    child,
+                    source,
+                    functions,
+                    classes,
+                    constants,
+                    imports,
                 )
 
             elif node_type == "class_declaration":
@@ -99,7 +104,10 @@ class TypeScriptExtractor(TreeSitterExtractor):
 
             elif node_type == "lexical_declaration":
                 self._handle_lexical_declaration(
-                    child, source, functions, constants,
+                    child,
+                    source,
+                    functions,
+                    constants,
                 )
 
             elif node_type in ("type_alias_declaration", "interface_declaration"):
@@ -187,9 +195,7 @@ class TypeScriptExtractor(TreeSitterExtractor):
         source: bytes,
     ) -> FunctionInfo | None:
         """Extract an arrow function assigned to a variable."""
-        is_async = any(
-            c.type == "async" for c in value_node.children
-        )
+        is_async = any(c.type == "async" for c in value_node.children)
         params = self._extract_parameters(value_node, source)
         ret = self._extract_return_type(value_node, source)
         doc = self._extract_jsdoc_before(decl_node, source)
@@ -345,7 +351,9 @@ class TypeScriptExtractor(TreeSitterExtractor):
         val_node = self._child_by_field(node, "value")
         value = self._node_text(val_node, source) if val_node else None
 
-        return ConstantInfo(name=name, line=self._node_line(node), value=value, annotation=annotation)
+        return ConstantInfo(
+            name=name, line=self._node_line(node), value=value, annotation=annotation
+        )
 
     # ------------------------------------------------------------------
     # Type aliases and interfaces
@@ -374,22 +382,26 @@ class TypeScriptExtractor(TreeSitterExtractor):
                     if child.type == "method_signature":
                         params = self._extract_parameters(child, source)
                         ret = self._extract_return_type(child, source)
-                        methods.append(self._build_function(
-                            name=prop_name,
-                            line=self._node_line(child),
-                            parameters=params,
-                            return_annotation=ret,
-                        ))
+                        methods.append(
+                            self._build_function(
+                                name=prop_name,
+                                line=self._node_line(child),
+                                parameters=params,
+                                return_annotation=ret,
+                            )
+                        )
                     else:
                         type_node = self._child_by_field(child, "type")
                         ann = None
                         if type_node:
                             ann = self._node_text(type_node, source).lstrip(":").strip()
-                        class_vars.append(ConstantInfo(
-                            name=prop_name,
-                            line=self._node_line(child),
-                            annotation=ann,
-                        ))
+                        class_vars.append(
+                            ConstantInfo(
+                                name=prop_name,
+                                line=self._node_line(child),
+                                annotation=ann,
+                            )
+                        )
 
         return self._build_class(
             name=name,
@@ -432,15 +444,15 @@ class TypeScriptExtractor(TreeSitterExtractor):
                 annotation: str | None = None
                 type_node = self._child_by_field(child, "type")
                 if type_node is not None:
-                    annotation = (
-                        self._node_text(type_node, source).lstrip(":").strip() or None
+                    annotation = self._node_text(type_node, source).lstrip(":").strip() or None
+                constants.append(
+                    ConstantInfo(
+                        name=name,
+                        line=self._node_line(node),
+                        value=self._node_text(value_node, source),
+                        annotation=annotation,
                     )
-                constants.append(ConstantInfo(
-                    name=name,
-                    line=self._node_line(node),
-                    value=self._node_text(value_node, source),
-                    annotation=annotation,
-                ))
+                )
 
     # ------------------------------------------------------------------
     # JSDoc
@@ -494,7 +506,5 @@ class TypeScriptExtractor(TreeSitterExtractor):
     def _clean_jsdoc(text: str) -> str | None:
         """Clean a raw JSDoc string to plain text."""
         body = text[3:-2]
-        cleaned = "\n".join(
-            line.strip().lstrip("*").strip() for line in body.split("\n")
-        ).strip()
+        cleaned = "\n".join(line.strip().lstrip("*").strip() for line in body.split("\n")).strip()
         return cleaned or None

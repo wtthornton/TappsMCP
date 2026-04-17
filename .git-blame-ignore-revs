@@ -1,0 +1,10 @@
+# Revisions to ignore for `git blame`.
+#
+# To honor this file by default, run once per clone:
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# chore: ruff cleanup — clear 334 lint errors masked by uv.lock fix.
+# Mostly mechanical: ruff --fix sweep + ruff format sweep + dead-test-class
+# deletions. The substantive changes (real bug fixes, config tweaks) are
+# small enough to inspect directly via `git show`.
+4989a98472a4cfb113849636f6e2473195248127

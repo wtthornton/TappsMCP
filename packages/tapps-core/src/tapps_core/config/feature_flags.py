@@ -68,9 +68,7 @@ class FeatureFlags:
     def radon(self) -> bool:
         """True when both ``radon.complexity`` and ``radon.metrics`` are importable."""
         if "radon" not in self._cache:
-            self._cache["radon"] = (
-                self._probe("radon.complexity") and self._probe("radon.metrics")
-            )
+            self._cache["radon"] = self._probe("radon.complexity") and self._probe("radon.metrics")
         return self._cache["radon"]
 
     @property
