@@ -209,6 +209,13 @@ consider designating one teammate as a **quality watchdog**. To enable Agent Tea
 TappsMCP can run in CI. Use `TAPPS_MCP_PROJECT_ROOT` and `tapps-mcp validate-changed --preset staging`, or Claude Code headless mode with `tapps_validate_changed`.
 
 <!-- BEGIN: karpathy-guidelines c9a44ae (MIT, forrestchang/andrej-karpathy-skills) -->
+<!--
+  Vendored from https://github.com/forrestchang/andrej-karpathy-skills
+  Pinned commit: c9a44ae835fa2f5765a697216692705761a53f40 (2026-04-15)
+  License: MIT (c) forrestchang
+  Do not edit by hand — update KARPATHY_GUIDELINES_SOURCE_SHA in prompt_loader.py
+  and re-run the vendor script, then bump tapps-mcp version.
+-->
 ## Karpathy Behavioral Guidelines
 
 > Source: https://github.com/forrestchang/andrej-karpathy-skills @ c9a44ae835fa2f5765a697216692705761a53f40 (MIT)
