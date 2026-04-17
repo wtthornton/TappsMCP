@@ -1388,6 +1388,19 @@ def _format_upgrade_result(result: dict[str, Any], *, dry_run: bool = False) -> 
     color = "green" if agents_action == "up-to-date" else "yellow"
     click.echo(click.style(f"  AGENTS.md: {agents_text}", fg=color))
 
+    # Karpathy guidelines block (AGENTS.md + CLAUDE.md)
+    kp = result.get("components", {}).get("karpathy_guidelines", {})
+    if kp:
+        click.echo("")
+        click.echo(click.style("--- Karpathy guidelines ---", bold=True))
+        sha = (kp.get("source_sha") or "")[:7]
+        ok_actions = {"unchanged", "added", "refreshed", "skipped_file_missing"}
+        for rel, action in (kp.get("files") or {}).items():
+            fg = "green" if action in ok_actions else "yellow"
+            click.echo(click.style(f"  {rel}: {action}", fg=fg))
+        if sha:
+            click.echo(f"  pinned to: {sha}")
+
     # Per-platform results
     platforms: list[dict[str, Any]] = result.get("components", {}).get("platforms", [])
     for platform in platforms:
