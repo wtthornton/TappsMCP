@@ -33,6 +33,7 @@ def _upgrade_agents_md(
 
     Returns a result dict with ``action`` and optional ``detail``.
     """
+    from tapps_mcp.pipeline import karpathy_block
     from tapps_mcp.pipeline.agents_md import AgentsValidation, update_agents_md
     from tapps_mcp.prompts.prompt_loader import load_agents_template
 
@@ -42,24 +43,35 @@ def _upgrade_agents_md(
     if not agents_path.exists():
         if not dry_run:
             agents_path.write_text(template_content, encoding="utf-8")
-        return {"action": "created"}
+        result: dict[str, Any] = {"action": "created"}
+    else:
+        validation = AgentsValidation(agents_path.read_text(encoding="utf-8"))
+        if validation.is_up_to_date:
+            result = {"action": "up-to-date"}
+        else:
+            issues: list[str] = []
+            if validation.sections_missing:
+                issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
+            if validation.tools_missing:
+                issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
+            detail = "; ".join(issues) or "version mismatch"
 
-    validation = AgentsValidation(agents_path.read_text(encoding="utf-8"))
-    if validation.is_up_to_date:
-        return {"action": "up-to-date"}
+            if dry_run:
+                result = {"action": "needs-update", "detail": detail}
+            else:
+                action, merge_detail = update_agents_md(agents_path, template_content)
+                result = {"action": action, "detail": merge_detail or detail}
 
-    issues: list[str] = []
-    if validation.sections_missing:
-        issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
-    if validation.tools_missing:
-        issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
-    detail = "; ".join(issues) or "version mismatch"
+    try:
+        kp_action = karpathy_block.install_or_refresh(agents_path, dry_run=dry_run)
+        result["karpathy_guidelines"] = {
+            "action": kp_action,
+            "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
+        }
+    except Exception as exc:
+        result["karpathy_guidelines"] = {"action": "error", "reason": str(exc)}
 
-    if dry_run:
-        return {"action": "needs-update", "detail": detail}
-
-    action, merge_detail = update_agents_md(agents_path, template_content)
-    return {"action": action, "detail": merge_detail or detail}
+    return result
 
 
 def _upgrade_platform(

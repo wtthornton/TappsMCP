@@ -74,6 +74,7 @@ class BootstrapConfig:
     llm_engagement_level: str = "medium"
     scaffold_experts: bool = False
     docs_automation: bool = True
+    include_karpathy: bool = True
 
     @classmethod
     def from_params(
@@ -243,6 +244,7 @@ def bootstrap_pipeline(
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
     scaffold_experts: bool = False,
+    include_karpathy: bool = True,
 ) -> dict[str, Any]:
     """Create pipeline template files in the project.
 
@@ -285,6 +287,7 @@ def bootstrap_pipeline(
             verify_only=verify_only,
             llm_engagement_level=llm_engagement_level,
             scaffold_experts=scaffold_experts,
+            include_karpathy=include_karpathy,
         )
     # Determine write mode: direct (local) or content-return (Docker/read-only)
     resolved_root = project_root.resolve()
@@ -619,6 +622,21 @@ def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     else:
         state.safe_write("AGENTS.md", template_content)
         state.result["agents_md"] = {"action": "created", "version": __version__}
+
+    if cfg.include_karpathy and not state.content_return and agents_path.exists():
+        from tapps_mcp.pipeline import karpathy_block
+
+        try:
+            action = karpathy_block.install_or_refresh(agents_path, dry_run=cfg.dry_run)
+            state.result["karpathy_guidelines"] = {
+                "action": action,
+                "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
+            }
+        except Exception as exc:
+            state.errors.append(f"Karpathy guidelines install failed: {exc}")
+            state.result["karpathy_guidelines"] = {"action": "error", "reason": str(exc)}
+    elif not cfg.include_karpathy:
+        state.result["karpathy_guidelines"] = {"action": "skipped", "reason": "disabled"}
 
 
 def _generate_platform_file_ops(cfg: BootstrapConfig, state: _BootstrapState) -> None:

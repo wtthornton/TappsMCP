@@ -444,6 +444,46 @@ def check_agents_md(project_root: Path) -> CheckResult:
     )
 
 
+def check_karpathy_guidelines(project_root: Path) -> CheckResult:
+    """Check that the Karpathy guidelines block in AGENTS.md matches the vendored SHA."""
+    from tapps_mcp.pipeline import karpathy_block
+
+    agents_md = project_root / "AGENTS.md"
+    report = karpathy_block.check(agents_md)
+    state = report["state"]
+    expected_sha = report["expected_sha"] or ""
+    expected_short = expected_sha[:7]
+
+    if state == "ok":
+        return CheckResult(
+            "Karpathy guidelines",
+            True,
+            f"Karpathy guidelines block present and pinned to {expected_short}",
+        )
+    if state == "file_absent":
+        return CheckResult(
+            "Karpathy guidelines",
+            False,
+            "AGENTS.md not found — block cannot be installed",
+            "Run: tapps_init",
+        )
+    if state == "missing":
+        return CheckResult(
+            "Karpathy guidelines",
+            False,
+            "Karpathy guidelines block not present in AGENTS.md",
+            "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
+        )
+    # stale
+    current = report["current_sha"] or "unknown"
+    return CheckResult(
+        "Karpathy guidelines",
+        False,
+        f"Karpathy guidelines block is pinned to {current} but vendored SHA is {expected_short}",
+        "Run: tapps_upgrade",
+    )
+
+
 def check_claude_settings(project_root: Path) -> CheckResult:
     """Check ``.claude/settings.json`` for permissions and hook schema validity.
 
@@ -1118,6 +1158,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_claude_md(root))
     checks.append(check_cursor_rules(root))
     checks.append(check_agents_md(root))
+    checks.append(check_karpathy_guidelines(root))
     checks.append(check_claude_settings(root))
     checks.append(check_claude_hook_scripts(root))
     checks.append(check_hooks(root))

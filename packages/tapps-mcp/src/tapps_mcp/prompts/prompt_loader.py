@@ -23,6 +23,21 @@ from tapps_core.prompts.prompt_loader import load_stage_prompt as load_stage_pro
 
 _PACKAGE = "tapps_mcp.prompts"
 
+KARPATHY_GUIDELINES_SOURCE_SHA = "c9a44ae835fa2f5765a697216692705761a53f40"
+"""Pinned commit SHA for the vendored Karpathy guidelines.
+
+Update together with ``karpathy_guidelines.md`` when re-vendoring from
+https://github.com/forrestchang/andrej-karpathy-skills — `tapps_doctor`
+compares this constant against the SHA recorded in the consuming project's
+AGENTS.md marker to decide whether the block is stale.
+"""
+
+KARPATHY_GUIDELINES_MARKER_BEGIN = (
+    f"<!-- BEGIN: karpathy-guidelines {KARPATHY_GUIDELINES_SOURCE_SHA[:7]} "
+    "(MIT, forrestchang/andrej-karpathy-skills) -->"
+)
+KARPATHY_GUIDELINES_MARKER_END = "<!-- END: karpathy-guidelines -->"
+
 
 def _read_resource(filename: str) -> str:
     """Read a text resource from the tapps_mcp prompts package.
@@ -61,6 +76,18 @@ def load_agents_template(engagement_level: str = "medium") -> str:
         raise ValueError(msg)
     content = _read_resource(f"agents_template_{engagement_level}.md")
     return f"<!-- tapps-agents-version: {__version__} -->\n{content}"
+
+
+def load_karpathy_guidelines() -> str:
+    """Load vendored Karpathy behavioral guidelines wrapped in idempotence markers.
+
+    Returns a block beginning with ``KARPATHY_GUIDELINES_MARKER_BEGIN`` and
+    ending with ``KARPATHY_GUIDELINES_MARKER_END``. Callers splice this block
+    into AGENTS.md / CLAUDE.md between those exact markers so subsequent
+    upgrades can rewrite the block without touching surrounding content.
+    """
+    body = _read_resource("karpathy_guidelines.md")
+    return f"{KARPATHY_GUIDELINES_MARKER_BEGIN}\n{body.rstrip()}\n{KARPATHY_GUIDELINES_MARKER_END}"
 
 
 def load_platform_rules(platform: str, engagement_level: str = "medium") -> str:

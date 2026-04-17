@@ -525,6 +525,7 @@ The MCP tool version has all CLI options plus additional parameters for fine-gra
 | `warm_expert_rag_from_tech_stack` | bool | `true` | Pre-build expert RAG indices for relevant domains. |
 | `install_missing_checkers` | bool | `false` | Auto-install missing ruff/mypy/bandit/radon. |
 | `scaffold_experts` | bool | `false` | Generate business expert scaffolding. |
+| `include_karpathy` | bool | `true` | Append the vendored [Karpathy behavioral guidelines](https://github.com/forrestchang/andrej-karpathy-skills) (MIT) to AGENTS.md between idempotent markers. Set to `false` to opt out. `tapps_upgrade` refreshes the block when the vendored SHA changes; `tapps_doctor` reports `ok`/`stale`/`missing`. |
 | `mcp_config` | bool | `false` | Write MCP config file only (no other files). |
 | `output_mode` | str | `"auto"` | `"auto"` (write or return), `"content_return"` (always return file content), `"direct_write"` (always write). |
 | `verify_only` | bool | `false` | Check which external checkers are installed. |
@@ -591,7 +592,7 @@ tapps-mcp doctor
 tapps-mcp doctor --project-root /path/to/project
 ```
 
-Checks: MCP config, AGENTS.md, `.claude/settings.json` permissions, hooks, installed checkers, tapps-brain, memory pipeline flags (informational), dual-memory-server warning.
+Checks: MCP config, AGENTS.md, Karpathy guidelines block freshness, `.claude/settings.json` permissions, hooks, installed checkers, tapps-brain, memory pipeline flags (informational), dual-memory-server warning.
 
 ---
 
