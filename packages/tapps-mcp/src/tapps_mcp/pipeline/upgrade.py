@@ -33,7 +33,6 @@ def _upgrade_agents_md(
 
     Returns a result dict with ``action`` and optional ``detail``.
     """
-    from tapps_mcp.pipeline import karpathy_block
     from tapps_mcp.pipeline.agents_md import AgentsValidation, update_agents_md
     from tapps_mcp.prompts.prompt_loader import load_agents_template
 
@@ -43,35 +42,53 @@ def _upgrade_agents_md(
     if not agents_path.exists():
         if not dry_run:
             agents_path.write_text(template_content, encoding="utf-8")
-        result: dict[str, Any] = {"action": "created"}
-    else:
-        validation = AgentsValidation(agents_path.read_text(encoding="utf-8"))
-        if validation.is_up_to_date:
-            result = {"action": "up-to-date"}
-        else:
-            issues: list[str] = []
-            if validation.sections_missing:
-                issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
-            if validation.tools_missing:
-                issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
-            detail = "; ".join(issues) or "version mismatch"
+        return {"action": "created"}
 
-            if dry_run:
-                result = {"action": "needs-update", "detail": detail}
-            else:
-                action, merge_detail = update_agents_md(agents_path, template_content)
-                result = {"action": action, "detail": merge_detail or detail}
+    validation = AgentsValidation(agents_path.read_text(encoding="utf-8"))
+    if validation.is_up_to_date:
+        return {"action": "up-to-date"}
 
-    try:
-        kp_action = karpathy_block.install_or_refresh(agents_path, dry_run=dry_run)
-        result["karpathy_guidelines"] = {
-            "action": kp_action,
-            "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
-        }
-    except Exception as exc:
-        result["karpathy_guidelines"] = {"action": "error", "reason": str(exc)}
+    issues: list[str] = []
+    if validation.sections_missing:
+        issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
+    if validation.tools_missing:
+        issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
+    detail = "; ".join(issues) or "version mismatch"
 
-    return result
+    if dry_run:
+        return {"action": "needs-update", "detail": detail}
+    action, merge_detail = update_agents_md(agents_path, template_content)
+    return {"action": action, "detail": merge_detail or detail}
+
+
+def _refresh_karpathy_blocks(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Install or refresh the Karpathy guidelines block in AGENTS.md and CLAUDE.md.
+
+    Appends between BEGIN/END markers, preserving content outside them.
+    Files that don't exist are skipped (they aren't owned by this upgrade
+    step; ``tapps_init`` creates them).
+    """
+    from tapps_mcp.pipeline import karpathy_block
+
+    per_file: dict[str, str] = {}
+    for rel in ("AGENTS.md", "CLAUDE.md"):
+        target = project_root / rel
+        if not target.exists():
+            per_file[rel] = "skipped_file_missing"
+            continue
+        try:
+            per_file[rel] = karpathy_block.install_or_refresh(target, dry_run=dry_run)
+        except Exception as exc:
+            per_file[rel] = f"error: {exc}"
+
+    return {
+        "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
+        "files": per_file,
+    }
 
 
 def _upgrade_platform(
@@ -619,6 +636,17 @@ def upgrade_pipeline(
             )
 
     result["components"]["platforms"] = platform_results
+
+    # Karpathy guidelines block — refresh in AGENTS.md and CLAUDE.md after
+    # per-host upgrades have potentially created/updated CLAUDE.md.
+    try:
+        result["components"]["karpathy_guidelines"] = _refresh_karpathy_blocks(
+            project_root,
+            dry_run=dry_run,
+        )
+    except Exception as exc:
+        result["errors"].append(f"Karpathy guidelines: {exc}")
+        result["components"]["karpathy_guidelines"] = {"action": "error", "detail": str(exc)}
 
     # GitHub templates, CI, Copilot, governance, and issue/PR templates (platform-agnostic)
     if not dry_run:

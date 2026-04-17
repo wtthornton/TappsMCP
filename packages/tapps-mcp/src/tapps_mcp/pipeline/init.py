@@ -335,6 +335,7 @@ def bootstrap_pipeline(
         }
     elif not cfg.dry_run:
         _setup_platform(cfg, state)
+        _install_karpathy_blocks(cfg, state)
         # Ensure Claude Code permissions even when platform != "claude",
         # if the .claude/ directory already exists (user is in Claude Code).
         if cfg.platform != "claude" and (state.project_root / ".claude").is_dir():
@@ -623,20 +624,41 @@ def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         state.safe_write("AGENTS.md", template_content)
         state.result["agents_md"] = {"action": "created", "version": __version__}
 
-    if cfg.include_karpathy and not state.content_return and agents_path.exists():
-        from tapps_mcp.pipeline import karpathy_block
 
-        try:
-            action = karpathy_block.install_or_refresh(agents_path, dry_run=cfg.dry_run)
-            state.result["karpathy_guidelines"] = {
-                "action": action,
-                "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
-            }
-        except Exception as exc:
-            state.errors.append(f"Karpathy guidelines install failed: {exc}")
-            state.result["karpathy_guidelines"] = {"action": "error", "reason": str(exc)}
-    elif not cfg.include_karpathy:
+def _install_karpathy_blocks(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Install or refresh the Karpathy guidelines block in AGENTS.md and CLAUDE.md.
+
+    Both files are only ever appended-to (between BEGIN/END markers); content
+    outside the markers is preserved. Skips files that don't exist — this
+    function runs after ``_create_templates`` (which may create AGENTS.md)
+    and ``_setup_platform`` (which may create CLAUDE.md), so whichever
+    file(s) the consumer's project has will be covered.
+    """
+    if not cfg.include_karpathy:
         state.result["karpathy_guidelines"] = {"action": "skipped", "reason": "disabled"}
+        return
+    if state.content_return:
+        state.result["karpathy_guidelines"] = {"action": "skipped", "reason": "content_return"}
+        return
+
+    from tapps_mcp.pipeline import karpathy_block
+
+    per_file: dict[str, str] = {}
+    for rel in ("AGENTS.md", "CLAUDE.md"):
+        target = state.project_root / rel
+        if not target.exists():
+            per_file[rel] = "skipped_file_missing"
+            continue
+        try:
+            per_file[rel] = karpathy_block.install_or_refresh(target, dry_run=cfg.dry_run)
+        except Exception as exc:
+            per_file[rel] = "error"
+            state.errors.append(f"Karpathy guidelines install failed for {rel}: {exc}")
+
+    state.result["karpathy_guidelines"] = {
+        "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
+        "files": per_file,
+    }
 
 
 def _generate_platform_file_ops(cfg: BootstrapConfig, state: _BootstrapState) -> None:

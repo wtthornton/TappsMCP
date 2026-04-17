@@ -1874,10 +1874,12 @@ async def tapps_init(
             scaffold missing knowledge directories for business experts
             (creates README.md and overview.md starter files).
         include_karpathy: When ``True`` (default), append the vendored
-            Karpathy behavioral guidelines block to AGENTS.md between
-            idempotent HTML-comment markers. ``tapps_upgrade`` refreshes
-            this block when the vendored SHA changes; ``tapps_doctor``
-            reports ``ok``/``stale``/``missing``. Set to ``False`` to
+            Karpathy behavioral guidelines block to AGENTS.md and
+            CLAUDE.md (whichever exist in the project) between idempotent
+            BEGIN/END HTML-comment markers — content outside the markers
+            is preserved. ``tapps_upgrade`` refreshes the block when the
+            vendored SHA changes; ``tapps_doctor`` reports
+            ``ok``/``stale``/``missing`` per file. Set to ``False`` to
             opt out.
         mcp_config: When ``True``, write project-scoped MCP server config after
             bootstrap completes. Always uses ``scope="project"`` (never user).

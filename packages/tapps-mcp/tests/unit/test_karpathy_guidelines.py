@@ -192,12 +192,6 @@ def test_doctor_check_passes_when_block_present(tmp_path: Path) -> None:
     assert KARPATHY_GUIDELINES_SOURCE_SHA[:7] in result.message
 
 
-def test_doctor_check_fails_when_agents_missing(tmp_path: Path) -> None:
-    result = check_karpathy_guidelines(tmp_path)
-    assert not result.ok
-    assert "tapps_init" in result.detail
-
-
 def test_doctor_check_fails_when_block_missing(tmp_path: Path) -> None:
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
     result = check_karpathy_guidelines(tmp_path)
@@ -247,13 +241,55 @@ def test_init_installs_block_into_new_agents_md(tmp_path: Path) -> None:
     assert agents.exists()
     content = agents.read_text(encoding="utf-8")
     assert KARPATHY_GUIDELINES_MARKER_BEGIN in content
-    assert result["karpathy_guidelines"]["action"] in {"added", "unchanged"}
-    assert result["karpathy_guidelines"]["source_sha"] == KARPATHY_GUIDELINES_SOURCE_SHA
+    kp = result["karpathy_guidelines"]
+    assert kp["source_sha"] == KARPATHY_GUIDELINES_SOURCE_SHA
+    assert kp["files"]["AGENTS.md"] in {"added", "unchanged"}
+    # No CLAUDE.md was created (platform=""), so it should be skipped
+    assert kp["files"]["CLAUDE.md"] == "skipped_file_missing"
+
+
+@pytest.mark.slow
+def test_init_installs_block_into_both_files_when_claude_md_present(tmp_path: Path) -> None:
+    from tapps_mcp.pipeline.init import BootstrapConfig, bootstrap_pipeline
+
+    # Pre-create a user-owned CLAUDE.md to simulate a project that uses Claude Code
+    (tmp_path / "CLAUDE.md").write_text(
+        "# CLAUDE.md\n\nuser-owned preamble that must survive.\n",
+        encoding="utf-8",
+    )
+
+    cfg = BootstrapConfig(
+        create_handoff=False,
+        create_runlog=False,
+        create_agents_md=True,
+        create_tech_stack_md=False,
+        platform="",  # don't run platform bootstrap; we just want the karpathy step
+        verify_server=False,
+        install_missing_checkers=False,
+        warm_cache_from_tech_stack=False,
+        warm_expert_rag_from_tech_stack=False,
+        include_karpathy=True,
+    )
+    result = bootstrap_pipeline(tmp_path, config=cfg)
+
+    claude = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "user-owned preamble that must survive." in claude  # user content preserved
+    assert KARPATHY_GUIDELINES_MARKER_BEGIN in claude
+
+    agents = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert KARPATHY_GUIDELINES_MARKER_BEGIN in agents
+
+    kp = result["karpathy_guidelines"]
+    assert kp["files"]["AGENTS.md"] in {"added", "unchanged"}
+    assert kp["files"]["CLAUDE.md"] == "added"
 
 
 @pytest.mark.slow
 def test_init_skips_block_when_include_karpathy_false(tmp_path: Path) -> None:
     from tapps_mcp.pipeline.init import BootstrapConfig, bootstrap_pipeline
+
+    # CLAUDE.md present too — must also be left alone
+    (tmp_path / "CLAUDE.md").write_text("# CLAUDE\n", encoding="utf-8")
 
     cfg = BootstrapConfig(
         create_handoff=False,
@@ -269,31 +305,96 @@ def test_init_skips_block_when_include_karpathy_false(tmp_path: Path) -> None:
     )
     result = bootstrap_pipeline(tmp_path, config=cfg)
 
-    agents = tmp_path / "AGENTS.md"
-    assert agents.exists()
-    content = agents.read_text(encoding="utf-8")
-    assert KARPATHY_GUIDELINES_MARKER_BEGIN not in content
+    assert KARPATHY_GUIDELINES_MARKER_BEGIN not in (tmp_path / "AGENTS.md").read_text(
+        encoding="utf-8"
+    )
+    assert KARPATHY_GUIDELINES_MARKER_BEGIN not in (tmp_path / "CLAUDE.md").read_text(
+        encoding="utf-8"
+    )
     assert result["karpathy_guidelines"]["action"] == "skipped"
 
 
-def test_upgrade_refreshes_stale_block(tmp_path: Path) -> None:
-    from tapps_mcp.pipeline.upgrade import _upgrade_agents_md
-    from tapps_mcp.prompts.prompt_loader import load_agents_template
+def test_upgrade_refreshes_stale_block_in_both_files(tmp_path: Path) -> None:
+    from tapps_mcp.pipeline.upgrade import _refresh_karpathy_blocks
 
-    agents = tmp_path / "AGENTS.md"
-    # Current template so smart-merge says "up-to-date", but stale karpathy block
-    agents.write_text(
-        load_agents_template() + "\n\n" + "<!-- BEGIN: karpathy-guidelines deadbee "
+    stale = (
+        "<!-- BEGIN: karpathy-guidelines deadbee "
         "(MIT, forrestchang/andrej-karpathy-skills) -->\n"
         "stale\n"
+        "<!-- END: karpathy-guidelines -->\n"
+    )
+    (tmp_path / "AGENTS.md").write_text(f"# AGENTS\n\n{stale}", encoding="utf-8")
+    (tmp_path / "CLAUDE.md").write_text(f"# CLAUDE\n\n{stale}", encoding="utf-8")
+
+    result = _refresh_karpathy_blocks(tmp_path, dry_run=False)
+    assert result["source_sha"] == KARPATHY_GUIDELINES_SOURCE_SHA
+    assert result["files"]["AGENTS.md"] == "refreshed"
+    assert result["files"]["CLAUDE.md"] == "refreshed"
+
+    for name in ("AGENTS.md", "CLAUDE.md"):
+        content = (tmp_path / name).read_text(encoding="utf-8")
+        assert "deadbee" not in content
+        assert KARPATHY_GUIDELINES_SOURCE_SHA[:7] in content
+
+
+def test_upgrade_skips_missing_files(tmp_path: Path) -> None:
+    from tapps_mcp.pipeline.upgrade import _refresh_karpathy_blocks
+
+    result = _refresh_karpathy_blocks(tmp_path, dry_run=False)
+    assert result["files"]["AGENTS.md"] == "skipped_file_missing"
+    assert result["files"]["CLAUDE.md"] == "skipped_file_missing"
+
+
+# ---------------------------------------------------------------------------
+# doctor: dual-file states
+# ---------------------------------------------------------------------------
+
+
+def test_doctor_check_fails_when_both_files_missing(tmp_path: Path) -> None:
+    result = check_karpathy_guidelines(tmp_path)
+    assert not result.ok
+    assert "Neither AGENTS.md nor CLAUDE.md" in result.message
+    assert "tapps_init" in result.detail
+
+
+def test_doctor_check_passes_when_both_files_have_block(tmp_path: Path) -> None:
+    for name in ("AGENTS.md", "CLAUDE.md"):
+        p = tmp_path / name
+        p.write_text(f"# {name}\n", encoding="utf-8")
+        karpathy_block.install_or_refresh(p)
+
+    result = check_karpathy_guidelines(tmp_path)
+    assert result.ok
+    assert "AGENTS.md" in result.message
+    assert "CLAUDE.md" in result.message
+
+
+def test_doctor_check_fails_when_one_file_missing_block(tmp_path: Path) -> None:
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# AGENTS\n", encoding="utf-8")
+    karpathy_block.install_or_refresh(agents)
+    (tmp_path / "CLAUDE.md").write_text("# CLAUDE\n", encoding="utf-8")
+
+    result = check_karpathy_guidelines(tmp_path)
+    assert not result.ok
+    assert "CLAUDE.md" in result.message
+    assert "missing" in result.message
+    assert "tapps_upgrade" in result.detail
+
+
+def test_doctor_check_fails_when_one_file_stale(tmp_path: Path) -> None:
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# AGENTS\n", encoding="utf-8")
+    karpathy_block.install_or_refresh(agents)
+    (tmp_path / "CLAUDE.md").write_text(
+        "# CLAUDE\n\n"
+        "<!-- BEGIN: karpathy-guidelines deadbee "
+        "(MIT, forrestchang/andrej-karpathy-skills) -->\nold\n"
         "<!-- END: karpathy-guidelines -->\n",
         encoding="utf-8",
     )
 
-    result = _upgrade_agents_md(tmp_path, dry_run=False)
-    assert result["karpathy_guidelines"]["action"] == "refreshed"
-    assert result["karpathy_guidelines"]["source_sha"] == KARPATHY_GUIDELINES_SOURCE_SHA
-
-    content = agents.read_text(encoding="utf-8")
-    assert "deadbee" not in content
-    assert KARPATHY_GUIDELINES_SOURCE_SHA[:7] in content
+    result = check_karpathy_guidelines(tmp_path)
+    assert not result.ok
+    assert "stale" in result.message
+    assert "CLAUDE.md@deadbee" in result.message

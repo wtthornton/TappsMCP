@@ -445,42 +445,61 @@ def check_agents_md(project_root: Path) -> CheckResult:
 
 
 def check_karpathy_guidelines(project_root: Path) -> CheckResult:
-    """Check that the Karpathy guidelines block in AGENTS.md matches the vendored SHA."""
+    """Check the Karpathy guidelines block across AGENTS.md and CLAUDE.md.
+
+    - Passes when every file that exists carries the block pinned to the
+      vendored SHA.
+    - Passes (informational) when neither file exists.
+    - Fails when any existing file is missing the block or is pinned to a
+      stale SHA.
+    """
     from tapps_mcp.pipeline import karpathy_block
 
-    agents_md = project_root / "AGENTS.md"
-    report = karpathy_block.check(agents_md)
-    state = report["state"]
-    expected_sha = report["expected_sha"] or ""
+    reports: dict[str, dict[str, str | None]] = {
+        rel: karpathy_block.check(project_root / rel) for rel in ("AGENTS.md", "CLAUDE.md")
+    }
+    expected_sha = karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA
     expected_short = expected_sha[:7]
 
-    if state == "ok":
+    existing = {rel: r for rel, r in reports.items() if r["state"] != "file_absent"}
+    if not existing:
+        return CheckResult(
+            "Karpathy guidelines",
+            False,
+            "Neither AGENTS.md nor CLAUDE.md found — block cannot be installed",
+            "Run: tapps_init",
+        )
+
+    stale: list[str] = []
+    missing: list[str] = []
+    ok: list[str] = []
+    for rel, rep in existing.items():
+        state = rep["state"]
+        if state == "ok":
+            ok.append(rel)
+        elif state == "missing":
+            missing.append(rel)
+        elif state == "stale":
+            current = rep["current_sha"] or "unknown"
+            stale.append(f"{rel}@{current}")
+
+    if not missing and not stale:
         return CheckResult(
             "Karpathy guidelines",
             True,
-            f"Karpathy guidelines block present and pinned to {expected_short}",
+            f"Karpathy guidelines block present in {', '.join(ok)}; pinned to {expected_short}",
         )
-    if state == "file_absent":
-        return CheckResult(
-            "Karpathy guidelines",
-            False,
-            "AGENTS.md not found — block cannot be installed",
-            "Run: tapps_init",
-        )
-    if state == "missing":
-        return CheckResult(
-            "Karpathy guidelines",
-            False,
-            "Karpathy guidelines block not present in AGENTS.md",
-            "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
-        )
-    # stale
-    current = report["current_sha"] or "unknown"
+
+    parts: list[str] = []
+    if missing:
+        parts.append(f"missing in: {', '.join(missing)}")
+    if stale:
+        parts.append(f"stale ({', '.join(stale)}; expected {expected_short})")
     return CheckResult(
         "Karpathy guidelines",
         False,
-        f"Karpathy guidelines block is pinned to {current} but vendored SHA is {expected_short}",
-        "Run: tapps_upgrade",
+        "; ".join(parts),
+        "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
     )
 
 
