@@ -10,6 +10,15 @@ from pathlib import Path
 
 import pytest
 
+# Preload ``docs_mcp.server`` so that tests which import submodules first
+# (e.g. ``from docs_mcp.server_gen_tools import ...``) don't trigger a
+# circular-import failure. ``server.py`` calls ``_register_tool_modules()``
+# during its own import, which re-imports each submodule; if a submodule
+# is mid-init it returns a partial module and ``.register`` is undefined.
+# Importing ``docs_mcp.server`` at conftest load time guarantees the full
+# registration completes before any test-order variation can wedge it.
+import docs_mcp.server  # noqa: F401
+
 
 @pytest.fixture(autouse=True)
 def _reset_caches() -> Generator[None, None, None]:

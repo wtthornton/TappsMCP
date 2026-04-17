@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-04-17
+
+### Added
+
+- **Karpathy behavioral guidelines** vendored into the package and installed into consuming projects by `tapps_init` / refreshed by `tapps_upgrade` / verified by `tapps_doctor`. Content pinned to [`forrestchang/andrej-karpathy-skills@c9a44ae`](https://github.com/forrestchang/andrej-karpathy-skills/commit/c9a44ae835fa2f5765a697216692705761a53f40) (MIT). Four principles — Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution — appended to both `AGENTS.md` and `CLAUDE.md` between idempotent BEGIN/END HTML-comment markers. Files that don't exist are skipped (never created by the block installer). Content outside the markers is preserved byte-for-byte; re-runs are no-ops once the SHA matches.
+- **`tapps_init(include_karpathy=True)`** (default-on). Set to `False` to opt out. After writing AGENTS.md and running platform bootstrap, `_install_karpathy_blocks` calls `karpathy_block.install_or_refresh` on both `AGENTS.md` and `CLAUDE.md`; reports per-file actions (`added` / `refreshed` / `unchanged` / `skipped_file_missing`) under `result["karpathy_guidelines"]["files"]`.
+- **`tapps_upgrade`** gains `_refresh_karpathy_blocks`, which runs after per-host platform upgrades so a platform-generated CLAUDE.md gets the refresh. Reuses the existing pre-upgrade backup. When the vendored SHA bumps, old blocks are replaced between their markers; surrounding user content is preserved.
+- **`tapps_doctor`** gains `check_karpathy_guidelines`, which inspects both `AGENTS.md` and `CLAUDE.md`. Passes when every existing file carries the block pinned to the current SHA; fails when any existing file is missing the block or pinned to a stale SHA (reporting which file and which SHA, e.g. `CLAUDE.md@deadbee`).
+- New module [`tapps_mcp.pipeline.karpathy_block`](packages/tapps-mcp/src/tapps_mcp/pipeline/karpathy_block.py) — `install_or_refresh(path)` (the sole write path) and `check(path)` (read-only doctor inspection). Marker-based identity; never creates files; never touches content outside markers.
+- Vendored source: [`packages/tapps-mcp/src/tapps_mcp/prompts/karpathy_guidelines.md`](packages/tapps-mcp/src/tapps_mcp/prompts/karpathy_guidelines.md). Pinned via `KARPATHY_GUIDELINES_SOURCE_SHA` in `prompt_loader.py`.
+
+### Changed
+
+- Version bump: tapps-core 2.8.0 → 2.9.0, tapps-mcp 2.8.0 → 2.9.0, docs-mcp 2.8.0 → 2.9.0.
+
 ## [2.8.0] - 2026-04-16
 
 ### Fixed

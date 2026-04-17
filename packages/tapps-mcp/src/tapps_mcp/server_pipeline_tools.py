@@ -1799,6 +1799,7 @@ async def tapps_init(
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
     scaffold_experts: bool = False,
+    include_karpathy: bool = True,
     mcp_config: bool = False,
     output_mode: str = "auto",
     ctx: Context[Any, Any, Any] | None = None,
@@ -1872,6 +1873,14 @@ async def tapps_init(
         scaffold_experts: When ``True`` and ``.tapps-mcp/experts.yaml`` exists,
             scaffold missing knowledge directories for business experts
             (creates README.md and overview.md starter files).
+        include_karpathy: When ``True`` (default), append the vendored
+            Karpathy behavioral guidelines block to AGENTS.md and
+            CLAUDE.md (whichever exist in the project) between idempotent
+            BEGIN/END HTML-comment markers — content outside the markers
+            is preserved. ``tapps_upgrade`` refreshes the block when the
+            vendored SHA changes; ``tapps_doctor`` reports
+            ``ok``/``stale``/``missing`` per file. Set to ``False`` to
+            opt out.
         mcp_config: When ``True``, write project-scoped MCP server config after
             bootstrap completes. Always uses ``scope="project"`` (never user).
         output_mode: Controls file writing behavior (Epic 87).
@@ -1954,6 +1963,7 @@ async def tapps_init(
         verify_only=verify_only,
         llm_engagement_level=llm_engagement_level or settings.llm_engagement_level,
         scaffold_experts=scaffold_experts,
+        include_karpathy=include_karpathy,
     )
 
     # Epic 87: Set TAPPS_WRITE_MODE for content-return override
