@@ -10,8 +10,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import Context
-    from tapps_brain import HiveBackend as _HiveStoreType
-    from tapps_brain.backends import AgentRegistry as _HiveAgentRegistryType
 
     from tapps_core.brain_bridge import BrainBridge as _BrainBridgeType
     from tapps_core.config.settings import TappsMCPSettings
@@ -277,13 +275,13 @@ def build_impact_memory_context(
 
 # ---------------------------------------------------------------------------
 # Hive (tapps_brain.hive) — optional; gated by Agent Teams env (Epic M3)
+#
+# TAP-572: tapps-mcp is a *client* of tapps-brain. Hive lives server-side,
+# behind the BrainBridge / brain MCP surface. We no longer instantiate a
+# local Postgres-backed Hive backend from this process; session-level Hive
+# status is obtained via ``BrainBridge.hive_status``. ``_reset_hive_store_cache``
+# is retained as a no-op compat shim for the test conftest autouse fixture.
 # ---------------------------------------------------------------------------
-
-_hive_store: Any | None = None
-_hive_registry: Any | None = None
-_hive_import_error: str | None = None
-_hive_init_error: str | None = None
-_hive_lock = threading.Lock()
 
 
 def _agent_teams_env_enabled() -> bool:
@@ -292,93 +290,13 @@ def _agent_teams_env_enabled() -> bool:
 
 
 def _reset_hive_store_cache() -> None:
-    """Reset Hive singletons and cached error state (for testing)."""
-    global _hive_store, _hive_registry, _hive_import_error, _hive_init_error
-    with _hive_lock:
-        if _hive_store is not None:
-            with contextlib.suppress(Exception):
-                _hive_store.close()
-        _hive_store = None
-        _hive_registry = None
-        _hive_import_error = None
-        _hive_init_error = None
+    """Compat no-op (TAP-572 removed client-side Hive singletons).
 
-
-def _ensure_hive_singletons() -> tuple[
-    _HiveStoreType | None,
-    _HiveAgentRegistryType | None,
-    str | None,
-]:
-    """Lazily construct Hive store and agent registry.
-
-    Returns ``(hive_store, agent_registry, error_message)``. *error_message*
-    is populated with an actionable reason when init cannot complete: missing
-    tapps-brain import, missing/invalid ``TAPPS_BRAIN_DATABASE_URL``, or a
-    ``create_hive_backend`` failure. Backend-init failures are cached so we
-    don't retry a known-broken DSN on every call; DSN-missing is *not* cached
-    (env may be set later by a fixture or sidecar).
+    Kept so ``packages/tapps-mcp/tests/conftest.py`` continues to import
+    and call it from the autouse cache-reset fixture without needing a
+    coordinated change.
     """
-    global _hive_store, _hive_registry, _hive_import_error, _hive_init_error
-    if not _agent_teams_env_enabled():
-        return None, None, None
-    if _hive_import_error is not None:
-        return None, None, _hive_import_error
-    with _hive_lock:
-        if _hive_import_error is not None:
-            return None, None, _hive_import_error
-        try:
-            # tapps-brain v3: AgentRegistry moved from hive to backends.
-            # File-backed HiveStore was removed (ADR-007); postgres hive is
-            # available via create_hive_backend() when DATABASE_URL is set.
-            from tapps_brain.backends import AgentRegistry
-        except ImportError as exc:
-            _hive_import_error = str(exc)
-            return None, None, _hive_import_error
-        if _hive_store is None:
-            dsn = os.environ.get("TAPPS_BRAIN_DATABASE_URL", "")
-            if not dsn:
-                return (
-                    None,
-                    None,
-                    (
-                        "TAPPS_BRAIN_DATABASE_URL not configured "
-                        "(Postgres DSN required for Hive; ADR-007)"
-                    ),
-                )
-            if not dsn.startswith(("postgres://", "postgresql://")):
-                scheme = dsn.split("://", 1)[0] if "://" in dsn else "<none>"
-                return (
-                    None,
-                    None,
-                    (
-                        f"TAPPS_BRAIN_DATABASE_URL scheme '{scheme}' not supported "
-                        "(Hive requires postgres:// or postgresql://)"
-                    ),
-                )
-            if _hive_init_error is not None:
-                return None, None, _hive_init_error
-            try:
-                from tapps_brain.backends import create_hive_backend
-
-                _hive_store = create_hive_backend(dsn)
-            except Exception as exc:
-                _hive_init_error = f"create_hive_backend failed: {exc}"
-                return None, None, _hive_init_error
-        if _hive_registry is None:
-            _hive_registry = AgentRegistry()
-    return _hive_store, _hive_registry, None
-
-
-def _get_hive_store() -> _HiveStoreType | None:
-    """Return :class:`HiveStore` singleton when Agent Teams env is set, else None."""
-    store, _, _err = _ensure_hive_singletons()
-    return store
-
-
-def _get_hive_registry() -> _HiveAgentRegistryType | None:
-    """Return :class:`AgentRegistry` singleton when Agent Teams env is set, else None."""
-    _, registry, _err = _ensure_hive_singletons()
-    return registry
+    return None
 
 
 def initial_session_hive_status() -> dict[str, Any]:
@@ -389,63 +307,78 @@ def initial_session_hive_status() -> dict[str, Any]:
     return {"enabled": False}
 
 
-def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, Any]:
+async def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, Any]:
     """Build ``hive_status`` payload for :func:`tapps_session_start`.
 
-    When ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` is unset, returns
-    ``{"enabled": False}``. When set, registers this process as a Hive agent
-    (best-effort) and returns namespace / agent counts. On failure, returns
-    ``degraded: true`` with an actionable message (non-fatal), matching other
-    optional tapps-brain integrations.
+    TAP-572: tapps-mcp is a **client** of tapps-brain — Hive lives server-side.
+    This helper no longer probes a Postgres DSN directly; it asks the
+    :class:`BrainBridge` for Hive status (``bridge.hive_status``) and reports
+    whatever the brain says. When the bridge is not available (brain not
+    configured / unreachable), we report ``enabled: "unknown"`` rather than
+    fabricating a client-side DSN error — per the memory rule *"no client-side
+    mirror of server-enforced rules"*.
+
+    Behavior:
+
+    * ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` unset -> ``{"enabled": False}``.
+    * Agent Teams on, bridge unavailable -> ``enabled: "unknown"``,
+      ``degraded: true``, message points at brain connectivity
+      (``TAPPS_BRAIN_BASE_URL`` / ``TAPPS_BRAIN_AUTH_TOKEN`` /
+      ``TAPPS_BRAIN_DATABASE_URL`` on the brain server) — not a local DSN.
+    * Agent Teams on, bridge available -> pass through
+      ``bridge.hive_status(...)`` result, with ``agent_id`` surfaced for the
+      session-start payload.
 
     Propagation tier rules (``auto_propagate_tiers`` / ``private_tiers``) are
     intentionally not mirrored here: tapps-brain's ``PropagationEngine``
     enforces them server-side on every ``hive_propagate`` / ``hive_push`` call.
-    Clients read the propagation outcome from the response, not the rules.
     """
     if not _agent_teams_env_enabled():
         return initial_session_hive_status()
 
-    try:
-        store, registry, init_err = _ensure_hive_singletons()
-        if init_err or store is None or registry is None:
-            reason = init_err or "Hive singletons unavailable"
-            return {
-                "enabled": True,
-                "degraded": True,
-                "message": f"Hive unavailable: {reason}",
-            }
+    from tapps_core.agent_identity import get_stable_agent_id
 
-        from tapps_brain.models import AgentRegistration
-
-        from tapps_core.agent_identity import get_stable_agent_id
-
-        active_profile = settings.memory.profile or "repo-brain"
-        agent_id = get_stable_agent_id(settings)
-        agent_name = os.environ.get("CLAUDE_AGENT_NAME", "unnamed")
-        registry.register(
-            AgentRegistration(
-                id=agent_id,
-                name=agent_name,
-                profile=active_profile,
-                project_root=str(settings.project_root),
-            )
-        )
-        namespaces = store.list_namespaces()
-        agents = registry.list_agents()
+    bridge = _get_brain_bridge()
+    agent_id = get_stable_agent_id(settings)
+    if bridge is None:
         return {
-            "enabled": True,
-            "degraded": False,
-            "agent_id": agent_id,
-            "namespaces": namespaces,
-            "registered_agents_count": len(agents),
+            "enabled": "unknown",
+            "degraded": True,
+            "message": (
+                "Hive status unknown: tapps-brain not reachable from this "
+                "MCP server. Configure TAPPS_BRAIN_BASE_URL / "
+                "TAPPS_BRAIN_AUTH_TOKEN (remote brain) or "
+                "TAPPS_BRAIN_DATABASE_URL (in-process brain) so the brain "
+                "can answer hive queries."
+            ),
         }
+
+    agent_name = os.environ.get("CLAUDE_AGENT_NAME", "unnamed")
+    active_profile = settings.memory.profile or "repo-brain"
+    try:
+        result = await bridge.hive_status(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            agent_profile=active_profile,
+            project_root=str(settings.project_root),
+            register=True,
+        )
     except Exception as exc:
         return {
             "enabled": True,
             "degraded": True,
             "message": f"Hive status failed: {exc}",
         }
+
+    # bridge.hive_status returns dict with enabled/degraded/namespaces/agents.
+    # Surface agent_id for the session-start payload (clients use it to
+    # correlate subsequent hive_push / hive_propagate calls).
+    if isinstance(result, dict):
+        result.setdefault("agent_id", agent_id)
+        agents = result.get("agents")
+        if isinstance(agents, list):
+            result.setdefault("registered_agents_count", len(agents))
+    return result
 
 
 # STORY-101.4 — actionable error envelope.

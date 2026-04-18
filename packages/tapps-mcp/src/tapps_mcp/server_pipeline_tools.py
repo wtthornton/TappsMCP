@@ -1558,7 +1558,7 @@ async def tapps_session_start(
     phase_start = time.perf_counter_ns()
     hive_status: dict[str, Any] = initial_session_hive_status()
     try:
-        hive_status = collect_session_hive_status(settings)
+        hive_status = await collect_session_hive_status(settings)
     except Exception:
         _logger.debug("hive_status_check_failed", exc_info=True)
     timings["hive_status_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
@@ -1700,7 +1700,7 @@ async def _session_start_quick(
 
     hive_status: dict[str, Any] = initial_session_hive_status()
     try:
-        hive_status = collect_session_hive_status(settings)
+        hive_status = await collect_session_hive_status(settings)
     except Exception:
         _logger.debug("hive_status_check_failed_quick", exc_info=True)
 
