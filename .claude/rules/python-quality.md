@@ -16,7 +16,7 @@ Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit path
 2. **Security** - Bandit + pattern heuristics
 3. **Maintainability** - Maintainability index (radon mi / AST fallback)
 4. **Test Coverage** - Heuristic from matching test file existence
-5. **Performance** - Halstead metrics (radon), perflint anti-patterns, nested loops, large functions, deep nesting
+5. **Performance** - Halstead metrics, perflint anti-patterns, nested loops, large functions, deep nesting
 6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
 7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
 

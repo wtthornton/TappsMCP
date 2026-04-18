@@ -1,7 +1,7 @@
-<!-- tapps-agents-version: 2.3.0 -->
+<!-- tapps-agents-version: 2.9.0 -->
 # TappsMCP - instructions for AI assistants
 
-When the **TappsMCP** MCP server is configured, you have access to **26 deterministic code quality tools** (including 2 deprecated stubs). Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
+When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
 
 **File paths:** Use paths relative to project root (e.g. `src/main.py`). Absolute host paths also work when `TAPPS_MCP_HOST_PROJECT_ROOT` is set.
 
@@ -55,7 +55,7 @@ When the **TappsMCP** MCP server is configured, you have access to **26 determin
 
 ## Recommended workflow
 
-1. **Session start:** Call `tapps_session_start` (server info, checkers, memory status).
+1. **Session start:** Call `tapps_session_start` (returns server info and project context).
 2. **Check project memory:** Consider calling `tapps_memory(action="search", query="...")` to recall past decisions and project context.
 3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
 3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
@@ -65,7 +65,7 @@ When the **TappsMCP** MCP server is configured, you have access to **26 determin
    - Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to score + gate changed files. Never call without `file_paths` in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **When in doubt:** Use `tapps_lookup_docs` for library questions; use `tapps_validate_config` for Docker/infra files.
+7. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
 
@@ -166,9 +166,9 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Diagnostics:** `health`
 
-**Hive / Agent Teams:** `hive_status`, `hive_search`, `hive_propagate`, `agent_register` (opt-in; see session `hive_status` when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is set)
+**Hive / Agent Teams:** `hive_status`, `hive_search`, `hive_propagate`, `agent_register` (opt-in; see `hive_status` when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is set)
 
-**Default pipeline behavior (POC-oriented):** `memory.auto_save_quality`, `track_recurring_quick_check`, `auto_supersede_architectural`, `enrich_impact_analysis`, and `memory_hooks` auto-recall/capture default **on** in shipped config — set `false` in `.tapps-mcp.yaml` if you want a quieter setup.
+**Default pipeline behavior (POC-oriented):** Shipped config turns on auto-save quality signals, recurring quick_check memory, architectural supersede, impact enrichment, and `memory_hooks` auto-recall/capture — set `false` in `.tapps-mcp.yaml` if you want a quieter setup. See `docs/MEMORY_REFERENCE.md`.
 
 ### Memory tiers and scopes
 
@@ -176,18 +176,7 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Scopes:** `project` (default, all sessions), `branch` (git branch), `session` (ephemeral), `shared` (federation-eligible)
 
-### Memory profiles
-
-Memory profiles control tier definitions, decay rates, scoring weights, and capacity limits. Profiles are provided by tapps-brain (>= v1.1.0).
-
-**Built-in profiles:** `repo-brain` (default -- optimized for code repos), `personal-assistant`, `customer-support`, `research-knowledge`, `project-management`, `home-automation`
-
-**Actions:**
-- `tapps_memory(action="profile_info")` — show active profile name, layers, decay config, scoring weights, and limits
-- `tapps_memory(action="profile_list")` — list all available built-in profiles with descriptions
-- `tapps_memory(action="profile_switch", value="<name>")` — switch to a different profile (applies new tier/decay/scoring settings)
-
-**Profile resolution order:** project override (`.tapps-brain/profile.yaml`) > user global (`~/.tapps-brain/profile.yaml`) > `memory.profile` setting in `.tapps-mcp.yaml` > auto-detect from project type > `repo-brain` default
+**Memory profiles:** Built-in profiles from tapps-brain (e.g. `repo-brain` default). Use `profile_info`, `profile_list`, `profile_switch` actions.
 
 **Configuration:** Override `memory.profile`, `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
 
@@ -247,9 +236,9 @@ Empty or missing = all 26 tools (default, backward compatible). Invalid tool nam
 | **Duration** | Fast (~1s, server info only) | Full run: 10-35+ seconds |
 | **Purpose** | Load server info (version, checkers, config) into context | Create files (AGENTS.md, TECH_STACK.md, platform rules), optionally warm cache/RAG |
 | **Side effects** | None (read-only) | Writes files, warms caches |
-| **Typical flow** | Call at session start, then work; call **tapps_project_profile** when you need project context | Call once to bootstrap, or `dry_run: true` to preview |
+| **Typical flow** | Call at session start, then work | Call once to bootstrap, or `dry_run: true` to preview |
 
-**Session start** -> `tapps_session_start`. Use this as the first call in every session. Call **tapps_project_profile** when you need project type, tech stack, or recommendations.
+**Session start** -> `tapps_session_start`. Use this as the first call in every session. Returns server info and project context.
 
 **Pipeline/bootstrap** -> `tapps_init`. Use when you need to set up TappsMCP in a project (AGENTS.md, TECH_STACK.md, platform rules) or upgrade existing files.
 
@@ -257,7 +246,7 @@ Empty or missing = all 26 tools (default, backward compatible). Invalid tool nam
 
 **Lighter tapps_init options** (for timeout-prone MCP clients): Use `dry_run: true` to preview (~2-5s); use `verify_only: true` for a quick server/checker check (~1-3s); or set `warm_cache_from_tech_stack: false` and `warm_expert_rag_from_tech_stack: false` for a faster init without cache warming.
 
-**Tool contract:** Session start returns server info only (no project profile—call tapps_project_profile when needed). tapps_validate_changed default = score + gate only; use `security_depth='full'` or `quick=false` for security. tapps_quick_check has no `quick` parameter (use tapps_score_file(quick=True) for that).
+**Tool contract:** Session start returns server info and project context. tapps_validate_changed default = score + gate only; use `security_depth='full'` or `quick=false` for security. tapps_quick_check has no `quick` parameter (use tapps_score_file(quick=True) for that).
 
 ---
 
@@ -356,6 +345,89 @@ The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard 
 2. Verify the TappsMCP server is running: `tapps-mcp doctor`
 3. Check that your permission mode is not `dontAsk` (which auto-denies unlisted tools)
 4. As a last resort, use `tapps_quick_check` on individual files instead of `tapps_validate_changed`
+
+---
+
+## Karpathy Behavioral Guidelines
+
+> Source: https://github.com/forrestchang/andrej-karpathy-skills @ c9a44ae835fa2f5765a697216692705761a53f40 (MIT)
+> Derived from [Andrej Karpathy's observations](https://x.com/karpathy/status/2015883857489522876) on LLM coding pitfalls.
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+### 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+<!-- END: karpathy-guidelines -->
+## Using tapps_lookup_docs for domain guidance
+
+`tapps_lookup_docs` is the primary tool for both library documentation and domain-specific guidance. Pass a `library` name for API docs, or use `topic` to query for patterns and best practices.
+
+| Context | Example call |
+|---------|--------------|
+| Using an external library | `tapps_lookup_docs(library="fastapi", topic="dependency injection")` |
+| Testing patterns | `tapps_lookup_docs(library="pytest", topic="fixtures and parametrize")` |
+| Security patterns | `tapps_lookup_docs(library="python-security", topic="input validation")` |
+| API design | `tapps_lookup_docs(library="fastapi", topic="routing best practices")` |
+| Database patterns | `tapps_lookup_docs(library="sqlalchemy", topic="session management")` |
 
 ---
 

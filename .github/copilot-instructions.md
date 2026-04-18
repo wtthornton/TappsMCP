@@ -1,4 +1,4 @@
-<!-- tapps-generated: v1.14.0 -->
+<!-- tapps-generated: v2.9.0 -->
 # Copilot Instructions
 
 This project uses **TappsMCP** (Code Quality MCP Server) for automated
@@ -8,12 +8,10 @@ the pipeline below.
 ## TappsMCP Quality Pipeline
 
 ### Stage 1: Discover
-- Run `tapps_session_start` at the beginning of each session
-- Use `tapps_project_profile` to understand the tech stack
+- Run `tapps_session_start` at the beginning of each session to initialize context
 
 ### Stage 2: Research
 - Use `tapps_lookup_docs` to verify library API signatures
-- Use `tapps_consult_expert` for architecture/security decisions
 - Use `tapps_impact_analysis` before refactoring
 
 ### Stage 3: Develop

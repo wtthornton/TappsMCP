@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # TappsMCP Stop hook
-# Checks if validation was run and warns about edited-but-unchecked Python files.
+# Reminds to run tapps_validate_changed but does NOT block.
+# Reads sidecar progress file for richer context when available.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 INPUT=$(cat)
 PY="import sys,json; d=json.load(sys.stdin); print(d.get('stop_hook_active','false'))"
@@ -9,13 +10,8 @@ ACTIVE=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
 if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
   exit 0
 fi
-
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-MARKER="$PROJECT_DIR/.tapps-mcp/.validation-marker"
 PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
-EDITED="$PROJECT_DIR/.tapps-mcp/.edited-py-files"
-
-# Report validation status
 if [ -f "$PROGRESS" ]; then
   SUMMARY=$("$PYBIN" -c "
 import json
@@ -30,9 +26,9 @@ except Exception:
 " 2>/dev/null)
   if [ -n "$SUMMARY" ]; then
     echo "$SUMMARY" >&2
+    exit 0
   fi
 fi
-
 # Check report sidecar
 REPORT_PROGRESS="$PROJECT_DIR/.tapps-mcp/.report-progress.json"
 if [ -f "$REPORT_PROGRESS" ]; then
@@ -48,16 +44,7 @@ try:
 except Exception:
     pass
 " 2>/dev/null)
-  [ -n "$REPORT_SUMMARY" ] && echo "$REPORT_SUMMARY" >&2
+  [ -n "$REPORT_SUMMARY" ] && echo "$REPORT_SUMMARY"
 fi
-
-# Warn if Python files were edited but validation never ran
-if [ -f "$EDITED" ] && [ ! -f "$MARKER" ]; then
-  COUNT=$(wc -l < "$EDITED" 2>/dev/null | tr -d ' ')
-  echo "WARNING: $COUNT Python file(s) were edited but tapps_validate_changed was never run." >&2
-  echo "Files: $(head -5 "$EDITED" | tr '\n' ', ')" >&2
-  echo "Run tapps_validate_changed(file_paths=\"...\") before committing." >&2
-elif [ ! -f "$MARKER" ]; then
-  echo "Reminder: Run tapps_validate_changed before ending the session." >&2
-fi
+echo "Reminder: Run tapps_validate_changed before ending the session." >&2
 exit 0

@@ -28,15 +28,14 @@ provide the full tool reference from this skill.
 | **tapps_score_file** | When editing/reviewing - use quick=True during edit loops |
 | **tapps_server_info** | At session start - discover version, tools, recommended workflow |
 
-## Documentation & research
+## Documentation & experts
 | Tool | When to use it |
 |------|----------------|
-| **tapps_lookup_docs** | Before writing code using an external library, or for domain guidance (security, testing, APIs, etc.) |
+| **tapps_lookup_docs** | Before writing code using an external library |
 
 ## Project & memory
 | Tool | When to use it |
 |------|----------------|
-| **tapps_project_profile** | When you need project context (tech stack, type) |
 | **tapps_memory** | Session start: search past decisions. Session end: save learnings |
 | **tapps_session_notes** | Key decisions during session - promote to memory for persistence |
 

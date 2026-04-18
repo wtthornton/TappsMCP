@@ -16,7 +16,8 @@
       "Bash(python *)",
       "Bash(gh *)",
       "mcp__tapps-mcp__*",
-      "mcp__docs-mcp__*"
+      "mcp__docs-mcp__*",
+      "mcp__tapps-mcp"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -217,18 +218,6 @@
           {
             "type": "command",
             "command": "bash .ralph/hooks/on-subagent-done.sh"
-          }
-        ]
-      }
-    ],
-    "StopFailure": [
-      {
-        "matcher": "rate_limit|server_error",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .ralph/hooks/on-stop-failure.sh",
-            "statusMessage": "Handling API error..."
           }
         ]
       }

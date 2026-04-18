@@ -2,17 +2,18 @@
 name: tapps-research
 user-invocable: true
 description: >-
-  Research a technical question using domain experts and library docs.
-  Combines expert consultation with docs lookup for comprehensive answers.
+  Look up library documentation and research best practices
+  for the technologies used in this project.
 allowed-tools: mcp__tapps-mcp__tapps_lookup_docs
-argument-hint: "[question]"
+argument-hint: "[library] [topic]"
 context: fork
 model: claude-sonnet-4-6
 ---
 
-Research a technical question using TappsMCP:
+Look up library documentation using TappsMCP:
 
-1. Call `mcp__tapps-mcp__tapps_lookup_docs` with the primary library or framework
-2. For multi-domain questions, call `tapps_lookup_docs` once per relevant domain
-3. Synthesize findings into a clear, actionable answer
-4. Include confidence notes and suggest follow-up lookups if needed
+1. Call `mcp__tapps-mcp__tapps_lookup_docs` with the library name and topic
+2. If coverage is incomplete, call `mcp__tapps-mcp__tapps_lookup_docs` with a more specific topic
+3. Synthesize findings into a clear, actionable answer with code examples
+4. Include API signatures and usage patterns from the documentation
+5. Suggest follow-up lookups if additional coverage is needed
