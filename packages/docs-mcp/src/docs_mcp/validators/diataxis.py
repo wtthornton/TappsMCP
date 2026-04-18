@@ -56,6 +56,7 @@ class DiataxisValidator:
         project_root: Path,
         *,
         doc_dirs: list[str] | None = None,
+        max_unclassified_samples: int = 20,
     ) -> DiataxisCoverage:
         """Scan and classify all markdown files, producing a coverage report.
 
@@ -63,6 +64,8 @@ class DiataxisValidator:
             project_root: Root directory of the project.
             doc_dirs: Optional list of documentation directories to scan.
                 Defaults to scanning root + docs/ + doc/.
+            max_unclassified_samples: Maximum number of unclassified file paths
+                to return in the report. Defaults to 20.
 
         Returns:
             DiataxisCoverage with per-file classifications and balance score.
@@ -70,31 +73,68 @@ class DiataxisValidator:
         project_root = project_root.resolve()
         md_files = self._find_markdown_files(project_root, doc_dirs)
 
+        total_scanned = len(md_files)
+
         if not md_files:
             return DiataxisCoverage(
                 balance_score=0.0,
+                adjusted_balance_score=0.0,
+                classification_coverage=0.0,
                 recommendations=["No markdown documentation files found."],
+                scoring_note=(
+                    "No files scanned; adjusted_balance_score is the trustworthy metric."
+                ),
             )
 
-        # Classify each file
+        # Classify each file. Track unclassified paths (read failures or capped by _MAX_FILES).
         results: list[DiataxisResult] = []
+        unclassified: list[str] = []
+
+        def _rel(p: Path) -> str:
+            try:
+                return str(p.relative_to(project_root)).replace("\\", "/")
+            except ValueError:
+                return str(p).replace("\\", "/")
+
         for md_file in md_files[:_MAX_FILES]:
             try:
                 content = md_file.read_text(encoding="utf-8", errors="replace")
-                rel_path = str(md_file.relative_to(project_root)).replace("\\", "/")
+                rel_path = _rel(md_file)
                 result = self._classifier.classify(content, file_path=rel_path)
                 results.append(result)
             except Exception:
                 logger.debug("diataxis_classify_failed", file=str(md_file))
+                unclassified.append(_rel(md_file))
+
+        # Files beyond the scan cap are also unclassified.
+        for md_file in md_files[_MAX_FILES:]:
+            unclassified.append(_rel(md_file))
+
+        classified_count = len(results)
+        unclassified_count = total_scanned - classified_count
+        classification_coverage = (
+            round(classified_count / total_scanned * 100, 1) if total_scanned > 0 else 0.0
+        )
+        unclassified_sample = unclassified[: max(0, max_unclassified_samples)]
 
         if not results:
             return DiataxisCoverage(
                 balance_score=0.0,
-                total_files=len(md_files),
+                adjusted_balance_score=0.0,
+                classification_coverage=classification_coverage,
+                total_files=total_scanned,
+                total_scanned=total_scanned,
+                classified_files=0,
+                classified_count=0,
+                unclassified_count=unclassified_count,
+                unclassified_files=unclassified_sample,
                 recommendations=["Failed to classify any documentation files."],
+                scoring_note=(
+                    "No files classified; adjusted_balance_score is the trustworthy metric."
+                ),
             )
 
-        # Calculate coverage percentages
+        # Calculate coverage percentages (of classified files)
         counts: dict[str, int] = {
             "tutorial": 0,
             "how-to": 0,
@@ -111,13 +151,28 @@ class DiataxisValidator:
             howto_pct=round(counts["how-to"] / total * 100, 1),
             reference_pct=round(counts["reference"] / total * 100, 1),
             explanation_pct=round(counts["explanation"] / total * 100, 1),
-            total_files=len(md_files),
+            total_files=total_scanned,
+            total_scanned=total_scanned,
             classified_files=total,
+            classified_count=total,
+            unclassified_count=unclassified_count,
+            unclassified_files=unclassified_sample,
+            classification_coverage=classification_coverage,
             per_file=results,
         )
 
-        # Calculate balance score
+        # Calculate balance score (existing, unchanged)
         coverage.balance_score = self._calculate_balance_score(coverage)
+
+        # Adjusted score penalises "perfect balance on a small sample".
+        coverage.adjusted_balance_score = round(
+            coverage.balance_score * classification_coverage / 100, 1
+        )
+
+        coverage.scoring_note = (
+            "Prefer adjusted_balance_score; it reflects both quadrant balance "
+            "and classification_coverage."
+        )
 
         # Generate recommendations
         coverage.recommendations = self._generate_recommendations(coverage, counts, total)

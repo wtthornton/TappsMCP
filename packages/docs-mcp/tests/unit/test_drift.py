@@ -13,6 +13,10 @@ from docs_mcp.validators.drift import (
     _find_doc_files,
     _find_python_files,
     _iso_from_mtime,
+    _matches_any_pattern,
+    _name_covered_by_prose,
+    _qualify,
+    _tokenize_name,
 )
 
 # ---------------------------------------------------------------------------
@@ -51,6 +55,7 @@ class TestDriftReportModel:
         assert report.total_items == 0
         assert report.items == []
         assert report.drift_score == 0.0
+        assert report.drift_fraction == 0.0
         assert report.checked_files == 0
 
 
@@ -110,6 +115,96 @@ class TestHelpers:
         assert "README.md" not in names
 
 
+class TestTokenizer:
+    """Test the fuzzy name tokenizer."""
+
+    def test_pascal_case_with_digits(self) -> None:
+        tokens = _tokenize_name("BM25Scorer")
+        # Full name + long-enough component words, case-insensitive variants
+        assert "BM25Scorer" in tokens
+        assert "bm25scorer" in tokens
+        assert "BM25" in tokens
+        assert "bm25" in tokens
+        assert "Scorer" in tokens
+        assert "scorer" in tokens
+
+    def test_snake_case(self) -> None:
+        tokens = _tokenize_name("get_user_id")
+        assert "get_user_id" in tokens
+        # "user" is 4 chars, kept; "get" and "id" are <4, dropped
+        assert "user" in tokens
+        assert "get" not in tokens
+        assert "id" not in tokens
+
+    def test_short_tokens_dropped(self) -> None:
+        """TypeVar's 'T' component must not be considered a fuzzy match."""
+        tokens = _tokenize_name("TypeVar")
+        # The letter "T" must never appear as a match candidate — it would match
+        # any stray capital T in prose.
+        assert "T" not in tokens
+        assert "Type" in tokens  # 4 chars, kept
+
+    def test_single_char_name_still_present_but_not_matchable(self) -> None:
+        # The full name is always included in the token set, but the downstream
+        # matcher filters on length >= 4, so a 1-char name still won't match prose.
+        tokens = _tokenize_name("X")
+        assert "X" in tokens
+
+    def test_flashrank_reranker(self) -> None:
+        tokens = _tokenize_name("FlashRankReranker")
+        assert "FlashRankReranker" in tokens
+        assert "Flash" in tokens
+        assert "Rank" in tokens
+        assert "Reranker" in tokens
+
+
+class TestNameCoveredByProse:
+    """Test the prose-coverage fuzzy matcher."""
+
+    def test_full_name_match(self) -> None:
+        assert _name_covered_by_prose("BM25Scorer", "uses bm25scorer for ranking") is True
+
+    def test_token_match(self) -> None:
+        # "scorer" is a long-enough token of BM25Scorer
+        assert _name_covered_by_prose("BM25Scorer", "our scorer is fast") is True
+
+    def test_case_insensitive(self) -> None:
+        assert _name_covered_by_prose("BM25Scorer", "the SCORER class") is True
+
+    def test_no_match(self) -> None:
+        assert _name_covered_by_prose("BM25Scorer", "unrelated prose") is False
+
+    def test_empty_prose(self) -> None:
+        assert _name_covered_by_prose("foo", "") is False
+
+    def test_short_token_not_matched(self) -> None:
+        # "id" is too short — the prose contains a stray "id" but we must not match.
+        assert _name_covered_by_prose("id", "we need id") is False
+
+
+class TestQualifyAndIgnorePatterns:
+    """Test qualified-name building and glob matching."""
+
+    def test_qualify_module(self) -> None:
+        assert _qualify("src/pkg/mod.py", "Foo") == "src.pkg.mod.Foo"
+
+    def test_qualify_init(self) -> None:
+        assert _qualify("src/pkg/__init__.py", "Foo") == "src.pkg.Foo"
+
+    def test_qualify_windows_slashes(self) -> None:
+        assert _qualify("src\\pkg\\mod.py", "Foo") == "src.pkg.mod.Foo"
+
+    def test_matches_qualified_glob(self) -> None:
+        assert _matches_any_pattern("mypkg.cli.main", ["mypkg.cli.*"]) is True
+
+    def test_matches_bare_tail_glob(self) -> None:
+        # Tail-based match so "_*" works even against fully-qualified names.
+        assert _matches_any_pattern("mypkg.cli._private", ["_*"]) is True
+
+    def test_no_match(self) -> None:
+        assert _matches_any_pattern("mypkg.api.public", ["mypkg.cli.*"]) is False
+
+
 # ---------------------------------------------------------------------------
 # DriftDetector tests
 # ---------------------------------------------------------------------------
@@ -124,6 +219,7 @@ class TestDriftDetector:
         assert report.total_items == 0
         assert report.checked_files == 0
         assert report.drift_score == 0.0
+        assert report.drift_fraction == 0.0
 
     def test_nonexistent_root(self) -> None:
         detector = DriftDetector()
@@ -136,17 +232,19 @@ class TestDriftDetector:
         src = tmp_path / "src"
         src.mkdir()
         (src / "app.py").write_text(
-            '"""App module."""\n\ndef run() -> None:\n    """Run the app."""\n    pass\n',
+            '"""App module."""\n\ndef execute_job() -> None:\n    """Run the app."""\n    pass\n',
             encoding="utf-8",
         )
         (tmp_path / "README.md").write_text(
-            "# Project\n\nThe `run` function starts the app.\n",
+            "# Project\n\nThe `execute_job` function starts the app.\n",
             encoding="utf-8",
         )
 
         detector = DriftDetector()
         report = detector.check(tmp_path)
         assert report.total_items == 0
+        # 0-100 scale — no drift means 0.
+        assert report.drift_score == 0.0
 
     def test_drift_detected_for_undocumented_api(self, tmp_path: Path) -> None:
         """When public names are not in docs, drift should be detected."""
@@ -171,7 +269,10 @@ class TestDriftDetector:
         detector = DriftDetector()
         report = detector.check(tmp_path)
         assert report.total_items > 0
+        # 0-100 scale: a drifted file in a single-file project scores 100.
         assert report.drift_score > 0.0
+        assert report.drift_score <= 100.0
+        assert 0.0 < report.drift_fraction <= 1.0
         assert report.checked_files > 0
 
     def test_drift_with_no_docs(self, tmp_path: Path) -> None:
@@ -196,8 +297,8 @@ class TestDriftDetector:
         report = detector.check(tmp_path)
         assert report.checked_files == 0
 
-    def test_drift_score_capped_at_one(self, tmp_path: Path) -> None:
-        """Drift score should never exceed 1.0."""
+    def test_drift_score_capped_at_100(self, tmp_path: Path) -> None:
+        """Drift score should never exceed 100 on the new 0-100 scale."""
         # Create multiple source files with undocumented APIs
         src = tmp_path / "src"
         src.mkdir()
@@ -209,7 +310,26 @@ class TestDriftDetector:
 
         detector = DriftDetector()
         report = detector.check(tmp_path)
-        assert report.drift_score <= 1.0
+        assert report.drift_score <= 100.0
+        assert report.drift_fraction <= 1.0
+
+    def test_drift_score_is_100_when_all_files_drift(self, tmp_path: Path) -> None:
+        """Every checked file flagged => drift_score == 100.0."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.py").write_text(
+            '"""A."""\n\ndef opaque_symbol_one() -> None:\n    pass\n',
+            encoding="utf-8",
+        )
+        (src / "b.py").write_text(
+            '"""B."""\n\ndef opaque_symbol_two() -> None:\n    pass\n',
+            encoding="utf-8",
+        )
+
+        detector = DriftDetector()
+        report = detector.check(tmp_path)
+        assert report.drift_score == 100.0
+        assert report.drift_fraction == 1.0
 
     def test_severity_error_when_code_newer(self, tmp_path: Path) -> None:
         """When code is newer than docs, severity should be 'error'."""
@@ -222,7 +342,7 @@ class TestDriftDetector:
 
         # Create code file (will have current mtime)
         (tmp_path / "app.py").write_text(
-            '"""Module."""\n\ndef new_feature() -> None:\n    pass\n',
+            '"""Module."""\n\ndef brand_new_capability() -> None:\n    pass\n',
             encoding="utf-8",
         )
 
@@ -238,13 +358,13 @@ class TestDriftDetector:
         src = tmp_path / "src"
         src.mkdir()
         (src / "app.py").write_text(
-            '"""Module."""\n\ndef special_func() -> None:\n    pass\n',
+            '"""Module."""\n\ndef special_capability() -> None:\n    pass\n',
             encoding="utf-8",
         )
 
         # Root README mentions the function
         (tmp_path / "README.md").write_text(
-            "# Project\n\nUse special_func to do things.\n",
+            "# Project\n\nUse special_capability to do things.\n",
             encoding="utf-8",
         )
 
@@ -260,8 +380,194 @@ class TestDriftDetector:
 
         # When searching all docs, no drift (README mentions it)
         report_all = detector.check(tmp_path)
-        drift_files_all = {item.file_path for item in report_all.items}
+        # Strict-mode check: docstring coverage is disabled so only prose counts.
+        report_all_strict = detector.check(tmp_path, docstring_coverage_counts=False)
+        assert report_all.total_items == 0
+        assert report_all_strict.total_items == 0
 
         # When restricting to docs/ only, drift detected
         report_docs = detector.check(tmp_path, doc_dirs=["docs"])
         assert report_docs.total_items > 0
+
+
+# ---------------------------------------------------------------------------
+# New behavior: fuzzy matching, docstring coverage, ignore patterns
+# ---------------------------------------------------------------------------
+
+
+class TestFuzzyMatching:
+    """Verify fuzzy / partial / case-insensitive matching on real source."""
+
+    def test_camel_case_token_covered(self, tmp_path: Path) -> None:
+        """Prose mentioning 'scorer' covers a ``BM25Scorer`` class."""
+        (tmp_path / "app.py").write_text(
+            "class BM25Scorer:\n    pass\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nOur scorer ranks results.\n",
+            encoding="utf-8",
+        )
+        report = DriftDetector().check(tmp_path)
+        assert report.total_items == 0
+
+    def test_snake_case_token_covered(self, tmp_path: Path) -> None:
+        """Prose mentioning 'user' covers ``get_user_id``."""
+        (tmp_path / "app.py").write_text(
+            "def get_user_id() -> int:\n    return 0\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nReturns the user identifier.\n",
+            encoding="utf-8",
+        )
+        report = DriftDetector().check(tmp_path)
+        assert report.total_items == 0
+
+    def test_case_insensitive_match(self, tmp_path: Path) -> None:
+        (tmp_path / "app.py").write_text(
+            "class Reranker:\n    pass\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nWe use a RERANKER to re-order hits.\n",
+            encoding="utf-8",
+        )
+        report = DriftDetector().check(tmp_path)
+        assert report.total_items == 0
+
+    def test_short_name_still_flagged_when_absent(self, tmp_path: Path) -> None:
+        """A 3-char public name with no matching prose should still drift."""
+        (tmp_path / "app.py").write_text(
+            "def foo() -> None:\n    pass\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path)
+        assert report.total_items == 1
+
+
+class TestDocstringCoverage:
+    """Verify that module / class / function docstrings can cover symbol names."""
+
+    def test_module_docstring_covers(self, tmp_path: Path) -> None:
+        (tmp_path / "app.py").write_text(
+            '"""Module providing flashrank_reranker utilities."""\n\n'
+            "class FlashRankReranker:\n    pass\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path)
+        assert report.total_items == 0
+
+    def test_class_docstring_covers(self, tmp_path: Path) -> None:
+        (tmp_path / "app.py").write_text(
+            '"""Mod."""\n\nclass PaymentProcessor:\n'
+            '    """PaymentProcessor handles payments."""\n    pass\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path)
+        assert report.total_items == 0
+
+    def test_function_docstring_covers(self, tmp_path: Path) -> None:
+        (tmp_path / "app.py").write_text(
+            '"""Mod."""\n\ndef calculate_invoice_total() -> float:\n'
+            '    """calculate_invoice_total returns the total."""\n    return 0.0\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path)
+        assert report.total_items == 0
+
+    def test_strict_mode_ignores_docstrings(self, tmp_path: Path) -> None:
+        """docstring_coverage_counts=False disables self-coverage."""
+        (tmp_path / "app.py").write_text(
+            '"""Mod."""\n\nclass PaymentProcessor:\n'
+            '    """PaymentProcessor handles payments."""\n    pass\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        assert report.total_items == 1
+
+
+class TestIgnorePatterns:
+    """Verify the ignore_patterns kwarg and the 'defaults' sentinel."""
+
+    def test_explicit_pattern_suppresses(self, tmp_path: Path) -> None:
+        """A symbol matched by an ignore pattern never drifts."""
+        pkg = tmp_path / "mypkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        (pkg / "cli.py").write_text(
+            "def subcommand_one() -> None:\n    pass\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+
+        # Without ignore: drift detected.
+        assert DriftDetector().check(tmp_path).total_items == 1
+        # With ignore: suppressed.
+        report = DriftDetector().check(
+            tmp_path,
+            ignore_patterns=["mypkg.cli.*"],
+        )
+        assert report.total_items == 0
+
+    def test_defaults_sentinel_suppresses_test_symbols(self, tmp_path: Path) -> None:
+        """``ignore_patterns='defaults'`` hides ``test_*``-style names."""
+        (tmp_path / "app.py").write_text(
+            "def test_helper() -> None:\n    pass\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+
+        # Off by default: drift detected.
+        assert DriftDetector().check(tmp_path).total_items == 1
+        # Opt in to defaults: suppressed.
+        report = DriftDetector().check(tmp_path, ignore_patterns="defaults")
+        assert report.total_items == 0
+
+    def test_defaults_not_applied_implicitly(self, tmp_path: Path) -> None:
+        """Backwards compat: ``ignore_patterns=None`` means no patterns applied."""
+        (tmp_path / "app.py").write_text(
+            "def test_helper() -> None:\n    pass\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path)
+        assert report.total_items == 1
+
+
+# ---------------------------------------------------------------------------
+# Score scale
+# ---------------------------------------------------------------------------
+
+
+class TestScoreScale:
+    """Verify drift_score is 0-100 and drift_fraction preserves the raw ratio."""
+
+    def test_partial_drift_score(self, tmp_path: Path) -> None:
+        """Half of files drift -> drift_score == 50.0."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "documented.py").write_text(
+            '"""Mod."""\n\ndef documented_feature() -> None:\n'
+            '    """documented_feature is available."""\n    pass\n',
+            encoding="utf-8",
+        )
+        (src / "undocumented.py").write_text(
+            '"""Mod."""\n\ndef hidden_capability() -> None:\n    pass\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nSee documented_feature.\n",
+            encoding="utf-8",
+        )
+
+        report = DriftDetector().check(tmp_path)
+        assert report.checked_files == 2
+        assert report.total_items == 1
+        assert report.drift_score == 50.0
+        assert report.drift_fraction == 0.5

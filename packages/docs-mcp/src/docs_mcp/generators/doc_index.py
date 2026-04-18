@@ -6,8 +6,9 @@ index/map with categories, descriptions, and freshness indicators.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import ClassVar
 
 import structlog
@@ -97,13 +98,24 @@ class DocIndexGenerator:
         "Release": ["changelog", "release", "migration", "upgrade"],
     }
 
-    def generate(self, project_root: Path, *, doc_dirs: list[str] | None = None) -> DocIndexResult:
+    def generate(
+        self,
+        project_root: Path,
+        *,
+        doc_dirs: list[str] | None = None,
+        output_path: str | None = None,
+    ) -> DocIndexResult:
         """Generate a documentation index.
 
         Args:
             project_root: Root directory of the project.
             doc_dirs: Optional list of directories to scan.
                 When empty, scans the entire project.
+            output_path: Project-root-relative path where the generated index
+                will be written. When set, link targets in the rendered markdown
+                are made relative to the index's parent directory so markdown
+                viewers resolve them correctly. When None, targets remain
+                project-root-relative (legacy behavior).
 
         Returns:
             DocIndexResult with the markdown index.
@@ -136,7 +148,12 @@ class DocIndexGenerator:
         for entry in entries:
             categories[entry.category] = categories.get(entry.category, 0) + 1
 
-        content = self._render_markdown(entries, categories, project_root.name)
+        content = self._render_markdown(
+            entries,
+            categories,
+            project_root.name,
+            output_path=output_path,
+        )
 
         return DocIndexResult(
             content=content,
@@ -241,8 +258,16 @@ class DocIndexGenerator:
         entries: list[DocEntry],
         categories: dict[str, int],
         project_name: str,
+        *,
+        output_path: str | None = None,
     ) -> str:
         """Render the index as markdown."""
+        # Base directory used to make link targets relative. When an output
+        # path is supplied (e.g. "docs/INDEX.md"), links are resolved relative
+        # to its parent ("docs/") so markdown viewers don't produce doubled
+        # paths like "docs/docs/guides/foo.md".
+        link_base = PurePath(output_path).parent.as_posix() if output_path else ""
+
         lines: list[str] = []
         lines.append(f"# {project_name} — Documentation Index")
         lines.append("")
@@ -267,9 +292,24 @@ class DocIndexGenerator:
                 lines.append(f"## {current_category}")
                 lines.append("")
 
+            link_target = _relativize_link(entry.path, link_base)
             desc = f" — {entry.description}" if entry.description else ""
             modified = f" *(updated {entry.last_modified})*" if entry.last_modified else ""
-            lines.append(f"- [{entry.title}]({entry.path}){desc}{modified}")
+            lines.append(f"- [{entry.title}]({link_target}){desc}{modified}")
 
         lines.append("")
         return "\n".join(lines)
+
+
+def _relativize_link(entry_path: str, link_base: str) -> str:
+    """Return entry_path rewritten relative to link_base (posix-style).
+
+    entry_path is always project-root-relative. link_base is either an empty
+    string (legacy: keep project-root-relative) or a project-root-relative
+    directory like "docs". The result uses forward slashes regardless of the
+    host OS so the emitted markdown is portable.
+    """
+    if not link_base or link_base == ".":
+        return entry_path
+    rel = os.path.relpath(entry_path, start=link_base)
+    return PurePath(rel).as_posix()

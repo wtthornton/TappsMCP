@@ -32,11 +32,16 @@ async def docs_check_drift(
     search_names: str = "",
     max_items: int = 0,
     project_root: str = "",
+    docstring_coverage_counts: bool = True,
+    ignore_patterns: str = "",
 ) -> dict[str, Any]:
     """Detect documentation drift -- code changes not reflected in docs.
 
     Compares public API names in Python source files against documentation
     content. Reports undocumented additions and stale references.
+
+    The returned ``drift_score`` is on a 0-100 scale (higher = less drift),
+    matching sibling validators such as ``freshness_score``.
 
     Args:
         since: Reserved for future use (git ref or date filter).
@@ -51,6 +56,13 @@ async def docs_check_drift(
         max_items: Maximum number of drift items to return. 0 means unlimited
             (default). Summary counts always reflect the unfiltered totals.
         project_root: Override project root path (default: configured root).
+        docstring_coverage_counts: When True (default), a symbol's own module
+            or class/function docstring can mark it as "covered" even if the
+            external prose doesn't mention it. Set False for a strict pass.
+        ignore_patterns: Comma-separated fnmatch globs on fully-qualified
+            symbol names (e.g. ``"mypkg.cli.*"``) that should never be flagged
+            as drifted. The literal string ``"defaults"`` opts into a built-in
+            list covering private/test names.
     """
     _record_call("docs_check_drift")
     start = time.perf_counter_ns()
@@ -77,10 +89,22 @@ async def docs_check_drift(
     if source_files.strip():
         source_filter = [f.strip() for f in source_files.split(",") if f.strip()]
 
+    # Parse ignore_patterns: "defaults" sentinel, empty, or comma-separated globs.
+    ignore_arg: list[str] | str | None
+    stripped_ignore = ignore_patterns.strip()
+    if not stripped_ignore:
+        ignore_arg = None
+    elif stripped_ignore == "defaults":
+        ignore_arg = "defaults"
+    else:
+        ignore_arg = [p.strip() for p in stripped_ignore.split(",") if p.strip()]
+
     report = detector.check(
         root,
         since=since if since.strip() else None,
         doc_dirs=dirs_list,
+        docstring_coverage_counts=docstring_coverage_counts,
+        ignore_patterns=ignore_arg,
     )
 
     # Apply post-filters on the report items
@@ -106,6 +130,7 @@ async def docs_check_drift(
         "showing": len(items),
         "items": [it.model_dump() for it in items],
         "drift_score": report.drift_score,
+        "drift_fraction": getattr(report, "drift_fraction", None),
         "checked_files": report.checked_files,
     }
 
@@ -138,6 +163,8 @@ async def docs_check_drift(
 
 async def docs_check_completeness(
     project_root: str = "",
+    exclude: str = "",
+    respect_gitignore: bool = True,
 ) -> dict[str, Any]:
     """Check documentation completeness across multiple categories.
 
@@ -147,6 +174,12 @@ async def docs_check_completeness(
 
     Args:
         project_root: Override project root path (default: configured root).
+        exclude: Comma-separated glob patterns to skip during scanning, on top
+            of the built-in baseline (``.git``, ``__pycache__``, ``node_modules``,
+            ``.venv*``, ``dist``, ``build``, etc.). Example:
+            ``"vendored/**/*,third_party/**/*"``.
+        respect_gitignore: When True (default), honor patterns in the project's
+            root ``.gitignore``. Pass False to restore pre-2.10 behavior.
     """
     _record_call("docs_check_completeness")
     start = time.perf_counter_ns()
@@ -163,8 +196,12 @@ async def docs_check_completeness(
 
     from docs_mcp.validators.completeness import CompletenessChecker
 
+    exclude_list: list[str] | None = None
+    if exclude.strip():
+        exclude_list = [e.strip() for e in exclude.split(",") if e.strip()]
+
     checker = CompletenessChecker()
-    report = checker.check(root)
+    report = checker.check(root, exclude=exclude_list, respect_gitignore=respect_gitignore)
 
     data: dict[str, Any] = report.model_dump()
 
@@ -175,16 +212,33 @@ async def docs_check_completeness(
 async def docs_check_links(
     files: str = "",
     project_root: str = "",
+    summary_only: bool = False,
+    max_items: int = 200,
+    broken_only: bool = False,
+    include_backtick_refs: bool = True,
 ) -> dict[str, Any]:
     """Validate internal links in documentation files.
 
     Scans markdown files for internal links and verifies that referenced
     files and anchors exist. Does NOT check external HTTP links.
 
+    Large projects can produce huge responses; use ``summary_only`` for
+    dashboards and ``max_items`` to cap the detail lists. ``broken_only``
+    drops OK/warning items, and ``include_backtick_refs=False`` removes the
+    "missing backtick ref" entries from the main lists (they remain counted
+    in ``missing_backtick_ref_count``).
+
     Args:
         files: Comma-separated list of specific files to check (relative or
             absolute paths). When empty, scans all documentation files.
         project_root: Override project root path (default: configured root).
+        summary_only: When True, return only counts + score; omit detail lists.
+        max_items: Cap on total detail items returned across all lists. When
+            the cap is hit, ``truncated=True`` and ``total_available_*``
+            fields report the pre-cap totals.
+        broken_only: When True, omit OK links and warnings from the detail lists.
+        include_backtick_refs: When False, exclude backtick-ref items from the
+            detail lists. The scalar count remains accurate.
     """
     _record_call("docs_check_links")
     start = time.perf_counter_ns()
@@ -206,7 +260,14 @@ async def docs_check_links(
     from docs_mcp.validators.link_checker import LinkChecker
 
     checker = LinkChecker()
-    report = checker.check(root, files=files_list)
+    report = checker.check(
+        root,
+        files=files_list,
+        summary_only=summary_only,
+        max_items=max_items,
+        broken_only=broken_only,
+        include_backtick_refs=include_backtick_refs,
+    )
 
     data: dict[str, Any] = report.model_dump()
 
@@ -224,6 +285,8 @@ async def docs_check_freshness(
     max_items: int = 0,
     summary_only: bool = False,
     freshness: str = "",
+    exclude: str = "",
+    respect_gitignore: bool = True,
 ) -> dict[str, Any]:
     """Score documentation freshness based on file modification times.
 
@@ -242,6 +305,10 @@ async def docs_check_freshness(
         freshness: Comma-separated freshness categories to filter by
             (e.g. ``"stale,ancient"``). Only items matching one of the
             listed categories are returned. Empty means all categories.
+        exclude: Comma-separated glob patterns to skip during scanning, on top
+            of the built-in baseline. Example: ``"vendored/**/*"``.
+        respect_gitignore: When True (default), honor the project's root
+            ``.gitignore``. Pass False to restore pre-2.10 behavior.
     """
     _record_call("docs_check_freshness")
     start = time.perf_counter_ns()
@@ -269,8 +336,17 @@ async def docs_check_freshness(
 
     from docs_mcp.validators.freshness import FreshnessChecker
 
+    exclude_list: list[str] | None = None
+    if exclude.strip():
+        exclude_list = [e.strip() for e in exclude.split(",") if e.strip()]
+
     checker = FreshnessChecker()
-    report = checker.check(scan_root, relative_to=root)
+    report = checker.check(
+        scan_root,
+        relative_to=root,
+        exclude=exclude_list,
+        respect_gitignore=respect_gitignore,
+    )
 
     # Items are already sorted stalest-first by the checker
     items = report.items
@@ -374,6 +450,7 @@ async def docs_validate_epic(
 
 async def docs_check_diataxis(
     project_root: str = "",
+    max_unclassified_samples: int = 20,
 ) -> dict[str, Any]:
     """Check Diataxis content balance across project documentation.
 
@@ -382,8 +459,14 @@ async def docs_check_diataxis(
     per-file classifications, coverage percentages, and recommendations for
     underrepresented quadrants.
 
+    Prefer ``adjusted_balance_score`` over ``balance_score`` when classification
+    coverage is low — the raw balance can look "perfect" on a small sample of
+    actually-classified files while most of the project went unscored.
+
     Args:
         project_root: Override project root path (default: configured root).
+        max_unclassified_samples: Cap on the number of unclassified file paths
+            returned as samples (default 20). Does not affect counts.
     """
     _record_call("docs_check_diataxis")
     start = time.perf_counter_ns()
@@ -402,7 +485,7 @@ async def docs_check_diataxis(
 
     try:
         validator = DiataxisValidator()
-        coverage = validator.validate(root)
+        coverage = validator.validate(root, max_unclassified_samples=max_unclassified_samples)
     except Exception as exc:
         return error_response(
             "docs_check_diataxis",
@@ -414,6 +497,9 @@ async def docs_check_diataxis(
 
     data: dict[str, Any] = {
         "balance_score": coverage.balance_score,
+        "adjusted_balance_score": coverage.adjusted_balance_score,
+        "classification_coverage": coverage.classification_coverage,
+        "scoring_note": coverage.scoring_note,
         "coverage": {
             "tutorial": coverage.tutorial_pct,
             "how_to": coverage.howto_pct,
@@ -421,7 +507,11 @@ async def docs_check_diataxis(
             "explanation": coverage.explanation_pct,
         },
         "total_files": coverage.total_files,
+        "total_scanned": coverage.total_scanned,
         "classified_files": coverage.classified_files,
+        "classified_count": coverage.classified_count,
+        "unclassified_count": coverage.unclassified_count,
+        "unclassified_files": coverage.unclassified_files,
         "per_file": [r.model_dump() for r in coverage.per_file[:50]],
         "recommendations": coverage.recommendations,
     }
@@ -447,6 +537,7 @@ async def docs_check_cross_refs(
     doc_dirs: str = "",
     check_backlinks: bool = True,
     project_root: str = "",
+    group_by_source: bool = False,
 ) -> dict[str, Any]:
     """Validate cross-references between documentation files.
 
@@ -454,12 +545,21 @@ async def docs_check_cross_refs(
     broken references (links to non-existent files), and missing
     backlinks (A links to B but B does not link back).
 
+    Scoring uses a per-file mean so a single autogenerated bad file does not
+    tank the whole project. ``legacy_score`` preserves the prior formula for
+    downstream tooling still calibrated against it. ``patterns`` surfaces
+    repeated broken-prefix patterns to help diagnose bulk misconfigurations.
+
     Args:
         doc_dirs: Comma-separated list of directories to scan.
             When empty, scans the entire project.
         check_backlinks: Whether to check for missing backlinks.
             Defaults to True.
         project_root: Path to the project root. Defaults to configured root.
+        group_by_source: When True, omit the flat ``issues`` list from the
+            response and return only grouped-by-source + patterns data. Big
+            response-size win on projects where broken refs cluster in a few
+            files.
     """
     _record_call("docs_check_cross_refs")
     start = time.perf_counter_ns()
@@ -482,7 +582,12 @@ async def docs_check_cross_refs(
 
     try:
         validator = CrossRefValidator()
-        report = validator.validate(root, doc_dirs=dirs_list, check_backlinks=check_backlinks)
+        report = validator.validate(
+            root,
+            doc_dirs=dirs_list,
+            check_backlinks=check_backlinks,
+            group_by_source=group_by_source,
+        )
     except Exception as exc:
         return error_response(
             "docs_check_cross_refs",
@@ -494,12 +599,16 @@ async def docs_check_cross_refs(
 
     data: dict[str, Any] = {
         "score": report.score,
+        "legacy_score": report.legacy_score,
+        "scoring_method": report.scoring_method,
         "total_files": report.total_files,
         "total_refs": report.total_refs,
         "orphan_count": report.orphan_count,
         "broken_count": report.broken_count,
         "missing_backlink_count": report.missing_backlink_count,
-        "issues": [i.model_dump() for i in report.issues[:50]],
+        "groups": [g.model_dump() for g in report.groups],
+        "patterns": [p.model_dump() for p in report.patterns],
+        "issues": [] if group_by_source else [i.model_dump() for i in report.issues[:50]],
     }
 
     return success_response(
@@ -634,12 +743,21 @@ async def docs_check_style(
     custom_terms: str = "",
     output_format: str = "",
     project_root: str = "",
+    summary_only: bool = False,
+    max_items: int = 300,
+    rule_filter: str = "",
+    file_filter: str = "",
 ) -> dict[str, Any]:
     """Check documentation style and tone for writing quality issues.
 
     Applies deterministic regex/pattern rules to detect passive voice,
     jargon, long sentences, heading inconsistency, and tense mixing.
     Returns per-file issues with severity, location, and fix suggestions.
+
+    Large projects can produce huge responses; use ``summary_only`` for
+    dashboards and ``max_items`` to cap detail items. ``rule_filter`` and
+    ``file_filter`` narrow what appears in the detail list; aggregate counts
+    always reflect the pre-filter universe so dashboards stay stable.
 
     Args:
         files: Comma-separated list of specific files to check (relative or
@@ -656,6 +774,13 @@ async def docs_check_style(
         output_format: Output format: ``""`` (default structured) or ``"vale"``
             for Vale-compatible output.
         project_root: Override project root path (default: configured root).
+        summary_only: When True, return only aggregate_score + issue counts;
+            detail list is emptied. Counts remain accurate.
+        max_items: Cap on total detail items returned across all files.
+        rule_filter: Comma-separated list of rule ids; detail items are
+            filtered to only these rules. Counts are not filtered.
+        file_filter: Comma-separated list of posix-relative file paths; detail
+            items are filtered to only these files. Counts are not filtered.
     """
     _record_call("docs_check_style")
     start = time.perf_counter_ns()
@@ -677,6 +802,13 @@ async def docs_check_style(
     )
     checker = StyleChecker(config)
 
+    rule_filter_list: list[str] | None = None
+    if rule_filter.strip():
+        rule_filter_list = [r.strip() for r in rule_filter.split(",") if r.strip()]
+    file_filter_list: list[str] | None = None
+    if file_filter.strip():
+        file_filter_list = [f.strip() for f in file_filter.split(",") if f.strip()]
+
     if files.strip():
         file_list = [f.strip() for f in files.split(",") if f.strip()]
         report, missing = _run_style_check_files(checker, file_list, root)
@@ -689,7 +821,13 @@ async def docs_check_style(
                 extra={"requested_files": missing, "project_root": str(root)},
             )
     else:
-        report = checker.check_project(root)
+        report = checker.check_project(
+            root,
+            summary_only=summary_only,
+            max_items=max_items,
+            rule_filter=rule_filter_list,
+            file_filter=file_filter_list,
+        )
         missing = []
 
     if output_format.strip().lower() == "vale":
@@ -733,6 +871,9 @@ def _style_report_structured(report: StyleReport) -> dict[str, Any]:
         "aggregate_score": report.aggregate_score,
         "issue_counts": report.issue_counts,
         "top_issues": report.top_issues,
+        "file_issue_counts": getattr(report, "file_issue_counts", {}),
+        "truncated": getattr(report, "truncated", False),
+        "total_available": getattr(report, "total_available", 0),
         "files": files_data,
     }
 

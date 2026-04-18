@@ -294,3 +294,99 @@ class TestFreshnessChecker:
             "stale": 0,
             "ancient": 0,
         }
+
+
+# ---------------------------------------------------------------------------
+# Scan-hygiene: gitignore + exclude + baseline
+# ---------------------------------------------------------------------------
+
+
+class TestFreshnessScanHygiene:
+    """Regression tests for scan-filter behavior.
+
+    Reproduces the bug where ``docs_check_freshness`` walked
+    ``.venv-release-smoke/`` and counted vendored READMEs as project
+    docs.
+    """
+
+    def test_gitignore_excludes_venv_smoke_dir(self, tmp_path: Path) -> None:
+        """.gitignore'd dirs must not be scanned by default."""
+        (tmp_path / "README.md").write_text("# Real\n", encoding="utf-8")
+        (tmp_path / ".gitignore").write_text(
+            ".venv-release-smoke/\n",
+            encoding="utf-8",
+        )
+
+        smoke = tmp_path / ".venv-release-smoke"
+        smoke.mkdir()
+        (smoke / "VENDOR.md").write_text("# Vendored\n", encoding="utf-8")
+        sub = smoke / "lib"
+        sub.mkdir()
+        (sub / "NESTED.md").write_text("# Nested\n", encoding="utf-8")
+
+        checker = FreshnessChecker()
+        report = checker.check(tmp_path)
+
+        paths = {item.file_path for item in report.items}
+        assert "README.md" in paths
+        assert not any("VENDOR.md" in p for p in paths)
+        assert not any("NESTED.md" in p for p in paths)
+
+    def test_exclude_kwarg_skips_glob(self, tmp_path: Path) -> None:
+        """exclude=['vendored/**/*'] skips matching paths."""
+        (tmp_path / "README.md").write_text("# Real\n", encoding="utf-8")
+        vendored = tmp_path / "vendored" / "pkg"
+        vendored.mkdir(parents=True)
+        (vendored / "VENDOR.md").write_text("# Vendored\n", encoding="utf-8")
+
+        checker = FreshnessChecker()
+        report = checker.check(tmp_path, exclude=["vendored/**/*"])
+
+        paths = {item.file_path for item in report.items}
+        assert "README.md" in paths
+        assert not any("VENDOR.md" in p for p in paths)
+
+    def test_respect_gitignore_false_restores_old_behavior(self, tmp_path: Path) -> None:
+        """respect_gitignore=False lets gitignored files through."""
+        (tmp_path / ".gitignore").write_text("custom_dir/\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text("# Real\n", encoding="utf-8")
+        custom = tmp_path / "custom_dir"
+        custom.mkdir()
+        (custom / "NOTES.md").write_text("# Notes\n", encoding="utf-8")
+
+        checker = FreshnessChecker()
+        report = checker.check(tmp_path, respect_gitignore=False)
+
+        paths = {item.file_path for item in report.items}
+        # custom_dir is not in baseline, so should be scanned when
+        # gitignore is disabled.
+        assert any("NOTES.md" in p for p in paths)
+
+    def test_baseline_venv_always_skipped(self, tmp_path: Path) -> None:
+        """Baseline dirs (.venv) are skipped even when gitignore is off."""
+        (tmp_path / "README.md").write_text("# Real\n", encoding="utf-8")
+        venv = tmp_path / ".venv"
+        venv.mkdir()
+        (venv / "VENDOR.md").write_text("# Vendored\n", encoding="utf-8")
+
+        checker = FreshnessChecker()
+        report = checker.check(tmp_path, respect_gitignore=False)
+
+        paths = {item.file_path for item in report.items}
+        assert "README.md" in paths
+        assert not any(".venv" in p for p in paths)
+
+    def test_baseline_venv_smoke_glob_always_skipped(self, tmp_path: Path) -> None:
+        """``.venv-*`` baseline pattern catches ``.venv-release-smoke/``
+        even with no .gitignore and respect_gitignore=False."""
+        (tmp_path / "README.md").write_text("# Real\n", encoding="utf-8")
+        smoke = tmp_path / ".venv-release-smoke"
+        smoke.mkdir()
+        (smoke / "VENDOR.md").write_text("# Vendored\n", encoding="utf-8")
+
+        checker = FreshnessChecker()
+        report = checker.check(tmp_path, respect_gitignore=False)
+
+        paths = {item.file_path for item in report.items}
+        assert "README.md" in paths
+        assert not any("VENDOR.md" in p for p in paths)

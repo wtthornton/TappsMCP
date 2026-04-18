@@ -192,6 +192,41 @@ class TestDocIndexGenerator:
 
         assert result.entries[0].title == "My Cool Doc"
 
+    def test_links_relative_to_output_path_in_subdir(self, tmp_path: Path) -> None:
+        _write(tmp_path / "README.md", "# Root\n\nRoot doc.")
+        _write(tmp_path / "docs" / "guides" / "foo.md", "# Foo\n\nGuide.")
+
+        gen = DocIndexGenerator()
+        result = gen.generate(tmp_path, output_path="docs/INDEX.md")
+
+        # Index lives at docs/INDEX.md; link to README.md should use "..".
+        assert "(../README.md)" in result.content
+        # Link to docs/guides/foo.md should be just guides/foo.md.
+        assert "(guides/foo.md)" in result.content
+        # The broken "doubled" form must NOT appear.
+        assert "(docs/guides/foo.md)" not in result.content
+        assert "(docs/README.md)" not in result.content
+
+    def test_links_unchanged_when_output_path_at_project_root(self, tmp_path: Path) -> None:
+        _write(tmp_path / "README.md", "# Root\n\nRoot doc.")
+        _write(tmp_path / "docs" / "guide.md", "# Guide\n\nGuide.")
+
+        gen = DocIndexGenerator()
+        result = gen.generate(tmp_path, output_path="INDEX.md")
+
+        # Project-root index: links stay project-root-relative.
+        assert "(README.md)" in result.content
+        assert "(docs/guide.md)" in result.content
+
+    def test_links_legacy_when_output_path_omitted(self, tmp_path: Path) -> None:
+        _write(tmp_path / "docs" / "guide.md", "# Guide\n\nGuide.")
+
+        gen = DocIndexGenerator()
+        result = gen.generate(tmp_path)
+
+        # Back-compat: no output_path => project-root-relative targets.
+        assert "(docs/guide.md)" in result.content
+
 
 # ---------------------------------------------------------------------------
 # CrossRefValidator (Epic 85.4)
@@ -294,6 +329,80 @@ class TestCrossRefValidator:
 
         broken = [i for i in report.issues if i.issue_type == "broken_ref"]
         assert not any("fake.md" in i.target for i in broken)
+
+    def test_per_file_mean_not_dominated_by_one_bad_file(self, tmp_path: Path) -> None:
+        # One file with 100 broken refs (all pointing at nonexistent targets).
+        broken_links = "\n".join(f"[x{i}](missing/file_{i}.md)" for i in range(100))
+        _write(tmp_path / "docs" / "bad.md", f"# Bad\n\n{broken_links}\n")
+        # One clean file that links back to bad.md so bad.md isn't an orphan.
+        _write(tmp_path / "docs" / "clean.md", "# Clean\n\nSee [bad](bad.md).")
+        # Entry point so we don't pile up orphan penalties.
+        _write(tmp_path / "README.md", "# README\n\nSee [clean](docs/clean.md).")
+
+        validator = CrossRefValidator()
+        report = validator.validate(tmp_path)
+
+        assert report.broken_count == 100
+        # Legacy score is tanked (-60 cap on broken refs + orphan/backlink).
+        assert report.legacy_score <= 40
+        # New score: one bad file out of ~3 files-with-refs, contributes
+        # ~1/N to mean broken ratio, so score should be well above legacy.
+        assert report.score > report.legacy_score + 20
+        assert report.scoring_method == "per_file_mean"
+
+    def test_group_by_source_omits_issues_list(self, tmp_path: Path) -> None:
+        broken_links = "\n".join(f"[x{i}](missing/file_{i}.md)" for i in range(10))
+        _write(tmp_path / "docs" / "index.md", f"# Index\n\n{broken_links}\n")
+        _write(tmp_path / "README.md", "# README\n\nSee [index](docs/index.md).")
+
+        validator = CrossRefValidator()
+        report = validator.validate(tmp_path, group_by_source=True)
+
+        assert report.issues == []
+        assert len(report.groups) >= 1
+        top = next(g for g in report.groups if g.source_file.endswith("index.md"))
+        assert top.broken_count == 10
+        assert len(top.sample_targets) <= 5
+        # Counts still correct even with flat issues suppressed.
+        assert report.broken_count == 10
+
+    def test_pattern_detection_surfaces_shared_prefix(self, tmp_path: Path) -> None:
+        # 6 broken refs all sharing the 'wrongbase/' prefix.
+        broken_links = "\n".join(f"[x{i}](wrongbase/page_{i}.md)" for i in range(6))
+        _write(tmp_path / "docs" / "index.md", f"# Index\n\n{broken_links}\n")
+        _write(tmp_path / "README.md", "# README\n\nSee [index](docs/index.md).")
+
+        validator = CrossRefValidator()
+        report = validator.validate(tmp_path)
+
+        assert len(report.patterns) >= 1
+        # Prefix is resolved relative to source file (docs/index.md), so the
+        # shared prefix should start with 'docs/wrongbase'.
+        top_prefix = report.patterns[0].prefix
+        assert "wrongbase" in top_prefix
+        assert report.patterns[0].count >= 5
+        assert len(report.patterns[0].example_targets) <= 5
+
+    def test_backward_compat_fields_present(self, tmp_path: Path) -> None:
+        _write(tmp_path / "README.md", "# README\n\nSee [missing](does_not_exist.md).")
+
+        validator = CrossRefValidator()
+        report = validator.validate(tmp_path)
+
+        assert hasattr(report, "broken_count")
+        assert hasattr(report, "score")
+        assert hasattr(report, "legacy_score")
+        assert report.scoring_method == "per_file_mean"
+
+    def test_single_file_all_broken_scores_zero(self, tmp_path: Path) -> None:
+        # One file, every ref broken. Score must be 0 (not misleadingly high).
+        broken_links = "\n".join(f"[x{i}](missing_{i}.md)" for i in range(5))
+        _write(tmp_path / "doc.md", f"# Doc\n\n{broken_links}\n")
+
+        validator = CrossRefValidator()
+        report = validator.validate(tmp_path)
+
+        assert report.score == 0
 
 
 # ---------------------------------------------------------------------------

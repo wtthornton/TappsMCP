@@ -10,31 +10,15 @@ from pathlib import Path
 import structlog
 from pydantic import BaseModel, Field
 
+from docs_mcp.validators._scan_filters import (
+    load_gitignore_patterns,
+    should_exclude,
+)
+
 logger = structlog.get_logger(__name__)
 
 # Documentation file extensions to scan.
 _DOC_EXTENSIONS: frozenset[str] = frozenset({".md", ".rst", ".txt"})
-
-# Directories to skip.
-_SKIP_DIRS: frozenset[str] = frozenset(
-    {
-        ".git",
-        ".hg",
-        ".svn",
-        "__pycache__",
-        "node_modules",
-        ".venv",
-        "venv",
-        ".env",
-        ".tox",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        "dist",
-        "build",
-        ".eggs",
-    }
-)
 
 # Freshness thresholds in days.
 _FRESH_THRESHOLD = 30
@@ -62,13 +46,6 @@ class FreshnessReport(BaseModel):
     )
 
 
-def _should_skip_dir(dirname: str) -> bool:
-    """Check if a directory should be skipped during scanning."""
-    if dirname in _SKIP_DIRS:
-        return True
-    return dirname.endswith(".egg-info")
-
-
 def _classify_freshness(age_days: int) -> str:
     """Classify a file's freshness based on its age in days."""
     if age_days < _FRESH_THRESHOLD:
@@ -91,19 +68,41 @@ def _freshness_weight(age_days: int) -> float:
     return math.exp(-0.693 * age_days / half_life)
 
 
-def _find_doc_files(project_root: Path) -> list[Path]:
-    """Find all documentation files under the project root."""
+def _find_doc_files(
+    project_root: Path,
+    *,
+    gitignore_patterns: list[str],
+    extra_exclude: list[str],
+) -> list[Path]:
+    """Find all documentation files under ``project_root``.
+
+    Paths whose relative form matches the baseline exclude list, any
+    gitignore pattern, or any extra exclude glob are skipped.
+    """
     doc_files: list[Path] = []
     if not project_root.is_dir():
         return doc_files
 
     for dirpath, dirnames, filenames in os.walk(project_root):
-        dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
         current = Path(dirpath)
+
+        # Prune directories in-place so os.walk doesn't descend into them.
+        kept: list[str] = []
+        for d in dirnames:
+            dir_rel = str((current / d).relative_to(project_root)).replace("\\", "/")
+            if should_exclude(dir_rel, gitignore_patterns, extra_exclude):
+                continue
+            kept.append(d)
+        dirnames[:] = kept
+
         for fname in filenames:
             fpath = current / fname
-            if fpath.suffix.lower() in _DOC_EXTENSIONS:
-                doc_files.append(fpath)
+            if fpath.suffix.lower() not in _DOC_EXTENSIONS:
+                continue
+            file_rel = str(fpath.relative_to(project_root)).replace("\\", "/")
+            if should_exclude(file_rel, gitignore_patterns, extra_exclude):
+                continue
+            doc_files.append(fpath)
 
     return doc_files
 
@@ -116,6 +115,8 @@ class FreshnessChecker:
         project_root: Path,
         *,
         relative_to: Path | None = None,
+        exclude: list[str] | None = None,
+        respect_gitignore: bool = True,
     ) -> FreshnessReport:
         """Run freshness check.
 
@@ -125,6 +126,15 @@ class FreshnessChecker:
                 When scanning a subdirectory, pass the true project root
                 here so paths remain project-relative. Defaults to
                 *project_root* when not provided.
+            exclude: Extra glob patterns to exclude, applied on top of
+                the baseline (always-excluded dirs like ``.venv``,
+                ``node_modules``, ``dist``, ...) and any gitignore
+                patterns. Use for ad-hoc exclusions like
+                ``["vendored/**/*"]``.
+            respect_gitignore: When True (default), read the project's
+                root-level ``.gitignore`` and exclude matching paths.
+                Pass False to restore the pre-fix behavior where only
+                the baseline directories were skipped.
 
         Returns:
             A FreshnessReport with per-file freshness and overall score.
@@ -134,7 +144,14 @@ class FreshnessChecker:
 
         rel_base = relative_to if relative_to is not None else project_root
 
-        doc_files = _find_doc_files(project_root)
+        gitignore_patterns = load_gitignore_patterns(project_root) if respect_gitignore else []
+        extras = list(exclude) if exclude else []
+
+        doc_files = _find_doc_files(
+            project_root,
+            gitignore_patterns=gitignore_patterns,
+            extra_exclude=extras,
+        )
 
         if not doc_files:
             return FreshnessReport()

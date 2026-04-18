@@ -81,7 +81,34 @@ class LinkReport(BaseModel):
     total_backtick_refs: int = 0
     valid_backtick_refs: int = 0
     missing_backtick_refs: int = 0
+    missing_backtick_ref_count: int = 0
     warnings: list[str] = []
+    score: int = 100
+    # Pagination / filtering metadata. These describe whether the detail lists
+    # in this report were truncated by the caller-supplied ``max_items`` cap.
+    truncated: bool = False
+    total_available_broken_links: int = 0
+    total_available_backtick_references: int = 0
+    total_available_warnings: int = 0
+
+
+def _compute_score(
+    total_links: int,
+    valid_links: int,
+    total_backtick_refs: int,
+    valid_backtick_refs: int,
+) -> int:
+    """Compute a 0-100 link-health score.
+
+    Treats markdown links and backtick refs as one combined pool. When there
+    are no signals at all (no links, no refs) we return a perfect 100 --
+    the caller already surfaces zero-link warnings separately.
+    """
+    denom = total_links + total_backtick_refs
+    if denom == 0:
+        return 100
+    numer = valid_links + valid_backtick_refs
+    return max(0, min(100, round((numer / denom) * 100)))
 
 
 def _should_skip_dir(dirname: str) -> bool:
@@ -370,15 +397,37 @@ class LinkChecker:
         project_root: Path,
         *,
         files: list[str] | None = None,
+        summary_only: bool = False,
+        max_items: int = 200,
+        broken_only: bool = False,
+        include_backtick_refs: bool = True,
     ) -> LinkReport:
         """Run link validation.
 
         Args:
             project_root: Root of the project to scan.
             files: Optional list of specific files to check.
+            summary_only: When True, omit all per-item detail lists and
+                return scalar counts / score only. Default ``False``
+                preserves the historical rich-list behavior.
+            max_items: Cap on the number of detailed items returned in each
+                list (``broken_links``, ``backtick_references``, ``warnings``).
+                When a list is truncated, ``truncated=True`` is set and the
+                corresponding ``total_available_*`` field reports the real
+                pre-truncation count. Default ``200``.
+            broken_only: When True, omit valid / OK entries from the detail
+                lists -- only broken links, missing backtick refs, and
+                warnings are returned. Scalar counts are unaffected.
+            include_backtick_refs: When True (default), the backtick-ref
+                items remain in ``backtick_references`` exactly as before
+                -- this preserves the pre-pagination contract for existing
+                dashboards. When False, ``backtick_references`` is emptied
+                (but ``missing_backtick_ref_count`` is still populated so
+                dashboards can track the signal).
 
         Returns:
-            A LinkReport with valid/broken link counts.
+            A LinkReport with valid/broken link counts and, by default,
+            detailed per-item findings.
         """
         if not project_root.is_dir():
             return LinkReport()
@@ -434,13 +483,62 @@ class LinkChecker:
                     " -- consider adding cross-references."
                 )
 
+        score = _compute_score(
+            total_links=total_links,
+            valid_links=valid_links,
+            total_backtick_refs=total_backtick,
+            valid_backtick_refs=valid_backtick,
+        )
+
+        # Apply ``broken_only`` filter on the full detail lists before any
+        # truncation so the ``total_available_*`` counters reflect the
+        # post-filter universe the caller asked for.
+        broken_for_output: list[BrokenLink] = all_broken
+        backtick_for_output: list[BacktickReference] = all_backtick_refs
+        warnings_for_output: list[str] = warnings
+        if broken_only:
+            # BrokenLink entries are all broken by construction; the filter
+            # only prunes backtick refs that are OK / skipped.
+            backtick_for_output = [
+                r for r in all_backtick_refs if not r.exists and r.reason != "skipped_code_block"
+            ]
+
+        if not include_backtick_refs:
+            backtick_for_output = []
+
+        total_avail_broken = len(broken_for_output)
+        total_avail_backtick = len(backtick_for_output)
+        total_avail_warnings = len(warnings_for_output)
+
+        truncated = False
+        if summary_only:
+            broken_for_output = []
+            backtick_for_output = []
+            warnings_for_output = []
+        else:
+            if len(broken_for_output) > max_items:
+                broken_for_output = broken_for_output[:max_items]
+                truncated = True
+            if len(backtick_for_output) > max_items:
+                backtick_for_output = backtick_for_output[:max_items]
+                truncated = True
+            if len(warnings_for_output) > max_items:
+                warnings_for_output = warnings_for_output[:max_items]
+                truncated = True
+
         return LinkReport(
             total_links=total_links,
             valid_links=valid_links,
-            broken_links=all_broken,
-            backtick_references=all_backtick_refs,
+            broken_links=broken_for_output,
+            backtick_references=backtick_for_output,
             total_backtick_refs=total_backtick,
             valid_backtick_refs=valid_backtick,
             missing_backtick_refs=missing_backtick,
-            warnings=warnings,
+            missing_backtick_ref_count=missing_backtick,
+            warnings=warnings_for_output,
+            score=score,
+            truncated=truncated,
+            total_available_broken_links=total_avail_broken,
+            total_available_backtick_references=total_avail_backtick,
+            total_available_warnings=total_avail_warnings,
         )

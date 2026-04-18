@@ -211,6 +211,124 @@ class TestDiataxisValidator:
 
 
 # ---------------------------------------------------------------------------
+# Classification coverage + adjusted score (scoring transparency)
+# ---------------------------------------------------------------------------
+
+
+class TestDiataxisCoverageTransparency:
+    def test_partial_coverage_lowers_adjusted_score(self, tmp_path: Path) -> None:
+        # 10 classifiable files (balanced across quadrants to keep balance_score high),
+        # plus 90 files that fail to read -> unclassified.
+        classifiable = {
+            "tut1.md": "# Getting Started Tutorial\n\nIn this tutorial you will learn.\n\n1. First\n2. Second\n3. Third\n",
+            "tut2.md": "# Your First App\n\nIn this tutorial you will learn step by step.\n\n1. First\n2. Second\n3. Third\n",
+            "howto1.md": "# How to Configure\n\nInstall and set up.\n\n```\npip install pkg\n```\n",
+            "howto2.md": "# How to Deploy\n\nExecute the deploy script.\n\n```\n./deploy.sh\n```\n",
+            "ref1.md": '# API Reference\n\n| Param | Type | Default |\n|---|---|---|\n| id | int | 0 |\n| name | str | "" |\n',
+            "ref2.md": "# API Endpoints\n\n| Method | Path | Default |\n|---|---|---|\n| GET | /users | - |\n| POST | /users | - |\n",
+            "ref3.md": "# Specification\n\nType: string\nDefault: null\nRequired: true\n\nArgs:\n  param1: First\n  param2: Second\n\nReturns: Result\n",
+            "exp1.md": "# Architecture Overview\n\nBackground on why we designed this. The motivation was scalability.\n",
+            "exp2.md": "# Why We Chose This\n\nThe reason is historical. This is because trade-offs favored this path.\n",
+            "exp3.md": "# Design Decision\n\nBackground on the concept. Compared to the alternative, this approach wins.\n",
+        }
+        for name, content in classifiable.items():
+            _write(tmp_path / name, content)
+
+        # Create 90 files but patch read_text on the validator so only classifiable
+        # ones succeed.  Simplest deterministic approach: create real files that will
+        # classify trivially, then simulate read failures via a patched classifier path.
+        # Instead, use unreadable content substitutes: create files with a binary-ish
+        # guard the classifier can't score + tweak by making them zero-signal so that
+        # they would still classify.  To force "unclassified", we monkey-patch
+        # read_text on Path objects whose names start with "bad_".
+        for i in range(90):
+            _write(tmp_path / f"bad_{i}.md", "placeholder\n")
+
+        import docs_mcp.validators.diataxis as diataxis_mod
+
+        orig_read_text = Path.read_text
+
+        def fake_read_text(self: Path, *args: object, **kwargs: object) -> str:
+            if self.name.startswith("bad_"):
+                raise OSError("simulated unreadable file")
+            return orig_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+        validator = diataxis_mod.DiataxisValidator()
+        with patch.object(Path, "read_text", fake_read_text):
+            result = validator.validate(tmp_path)
+
+        assert result.total_scanned == 100
+        assert result.classified_count == 10
+        assert result.unclassified_count == 90
+        assert result.classification_coverage == 10.0
+        assert len(result.unclassified_files) == 20  # default cap
+        assert result.adjusted_balance_score < result.balance_score
+        # 10% coverage must drop the adjusted score to at most 1/10 of the raw score.
+        assert result.adjusted_balance_score <= result.balance_score / 10 + 0.1
+        assert result.scoring_note
+
+    def test_full_coverage_adjusted_equals_balance(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path / "tutorial.md",
+            "# Getting Started Tutorial\n\nIn this tutorial, you will learn step by step.\n\n1. First\n2. Second\n3. Third\n",
+        )
+        _write(
+            tmp_path / "howto.md",
+            "# How to Configure\n\nInstall and set up the system.\n\n```\npip install pkg\n```\n",
+        )
+        _write(
+            tmp_path / "reference.md",
+            '# API Reference\n\n| Param | Type | Default |\n|---|---|---|\n| id | int | 0 |\n| name | str | "" |\n',
+        )
+        _write(
+            tmp_path / "architecture.md",
+            "# Architecture Overview\n\nBackground on why we designed the system this way. The motivation was scalability.\n",
+        )
+
+        validator = DiataxisValidator()
+        result = validator.validate(tmp_path)
+
+        assert result.total_scanned == 4
+        assert result.classified_count == 4
+        assert result.unclassified_count == 0
+        assert result.classification_coverage == 100.0
+        assert result.adjusted_balance_score == result.balance_score
+        assert result.unclassified_files == []
+
+    def test_empty_project_coverage_is_zero(self, tmp_path: Path) -> None:
+        validator = DiataxisValidator()
+        result = validator.validate(tmp_path)
+
+        # No division-by-zero, defined values.
+        assert result.total_scanned == 0
+        assert result.classified_count == 0
+        assert result.unclassified_count == 0
+        assert result.classification_coverage == 0.0
+        assert result.adjusted_balance_score == 0.0
+        assert result.balance_score == 0.0
+        assert result.unclassified_files == []
+
+    def test_max_unclassified_samples_caps_list(self, tmp_path: Path) -> None:
+        # Create 10 files that will all fail to read.
+        for i in range(10):
+            _write(tmp_path / f"bad_{i}.md", "placeholder\n")
+
+        orig_read_text = Path.read_text
+
+        def fake_read_text(self: Path, *args: object, **kwargs: object) -> str:
+            if self.name.startswith("bad_"):
+                raise OSError("simulated unreadable file")
+            return orig_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+        validator = DiataxisValidator()
+        with patch.object(Path, "read_text", fake_read_text):
+            result = validator.validate(tmp_path, max_unclassified_samples=3)
+
+        assert result.unclassified_count == 10
+        assert len(result.unclassified_files) == 3
+
+
+# ---------------------------------------------------------------------------
 # MCP tool handler tests
 # ---------------------------------------------------------------------------
 

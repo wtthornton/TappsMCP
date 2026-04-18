@@ -41,10 +41,17 @@ class DiataxisCoverage(BaseModel):
     reference_pct: float = 0.0
     explanation_pct: float = 0.0
     balance_score: float = 0.0  # 0-100, higher = better balance
+    adjusted_balance_score: float = 0.0  # balance_score * classification_coverage / 100
+    classification_coverage: float = 0.0  # 0-100, pct of scanned files that were classified
     total_files: int = 0
+    total_scanned: int = 0
     classified_files: int = 0
+    classified_count: int = 0
+    unclassified_count: int = 0
+    unclassified_files: list[str] = []
     per_file: list[DiataxisResult] = []
     recommendations: list[str] = []
+    scoring_note: str = ""
 
 
 class DiataxisClassifier:

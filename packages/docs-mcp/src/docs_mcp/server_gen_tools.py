@@ -2093,9 +2093,12 @@ async def docs_generate_doc_index(
     if doc_dirs:
         dirs_list = [d.strip() for d in doc_dirs.split(",") if d.strip()]
 
+    # Auto-compute output_path when not provided
+    target = output_path.strip() or "docs/INDEX.md"
+
     try:
         gen = DocIndexGenerator()
-        result = gen.generate(root, doc_dirs=dirs_list)
+        result = gen.generate(root, doc_dirs=dirs_list, output_path=target)
     except Exception as exc:
         return error_response(
             "docs_generate_doc_index",
@@ -2104,9 +2107,6 @@ async def docs_generate_doc_index(
         )
 
     content = result.content
-
-    # Auto-compute output_path when not provided
-    target = output_path.strip() or "docs/INDEX.md"
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(

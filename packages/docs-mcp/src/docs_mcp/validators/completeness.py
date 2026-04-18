@@ -8,12 +8,12 @@ from pathlib import Path
 import structlog
 from pydantic import BaseModel
 
+from docs_mcp.validators._scan_filters import (
+    load_gitignore_patterns,
+    should_exclude,
+)
+
 logger = structlog.get_logger(__name__)
-
-# Directories to skip when scanning (extends shared constants).
-from docs_mcp.constants import SKIP_DIRS as _BASE_SKIP_DIRS
-
-_SKIP_DIRS: frozenset[str] = _BASE_SKIP_DIRS | frozenset({".hg", ".svn", ".env"})
 
 
 class CompletenessCategory(BaseModel):
@@ -32,13 +32,6 @@ class CompletenessReport(BaseModel):
     overall_score: float = 0.0  # Weighted average 0-100
     categories: list[CompletenessCategory] = []
     recommendations: list[str] = []
-
-
-def _should_skip_dir(dirname: str) -> bool:
-    """Check if a directory should be skipped during scanning."""
-    if dirname in _SKIP_DIRS:
-        return True
-    return dirname.endswith(".egg-info")
 
 
 def _file_exists_case_insensitive(project_root: Path, filename: str) -> str | None:
@@ -64,39 +57,85 @@ def _file_exists_case_insensitive(project_root: Path, filename: str) -> str | No
     return None
 
 
-def _find_python_files(project_root: Path) -> list[Path]:
-    """Find all Python files under the project root."""
+def _find_python_files(
+    project_root: Path,
+    *,
+    gitignore_patterns: list[str] | None = None,
+    extra_exclude: list[str] | None = None,
+) -> list[Path]:
+    """Find all Python files under ``project_root``.
+
+    Applies baseline exclusions plus optional gitignore + caller-supplied
+    glob patterns so vendored / build / venv paths don't pollute the
+    coverage counts.
+    """
     py_files: list[Path] = []
     if not project_root.is_dir():
         return py_files
+    gi = list(gitignore_patterns) if gitignore_patterns else []
+    extras = list(extra_exclude) if extra_exclude else []
     for dirpath, dirnames, filenames in os.walk(project_root):
-        dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
         current = Path(dirpath)
+
+        kept: list[str] = []
+        for d in dirnames:
+            dir_rel = str((current / d).relative_to(project_root)).replace("\\", "/")
+            if should_exclude(dir_rel, gi, extras):
+                continue
+            kept.append(d)
+        dirnames[:] = kept
+
         for fname in filenames:
-            if fname.endswith(".py"):
-                py_files.append(current / fname)
+            if not fname.endswith(".py"):
+                continue
+            fpath = current / fname
+            file_rel = str(fpath.relative_to(project_root)).replace("\\", "/")
+            if should_exclude(file_rel, gi, extras):
+                continue
+            py_files.append(fpath)
     return py_files
 
 
-def _find_in_subdirs(project_root: Path, filename: str) -> str | None:
+def _find_in_subdirs(
+    project_root: Path,
+    filename: str,
+    *,
+    gitignore_patterns: list[str] | None = None,
+    extra_exclude: list[str] | None = None,
+) -> str | None:
     """Search for a file in immediate child directories (monorepo support).
 
     Returns the relative path (e.g. ``subdir/README.md``) if found.
+    Skips subdirectories that match the exclude filters so vendored
+    README files don't get counted as project essentials.
     """
     target_lower = filename.lower()
+    gi = list(gitignore_patterns) if gitignore_patterns else []
+    extras = list(extra_exclude) if extra_exclude else []
     try:
         for entry in project_root.iterdir():
             if not entry.is_dir() or entry.name.startswith("."):
                 continue
+            dir_rel = entry.name
+            if should_exclude(dir_rel, gi, extras):
+                continue
             for child in entry.iterdir():
                 if child.is_file() and child.name.lower() == target_lower:
-                    return str(child.relative_to(project_root)).replace("\\", "/")
+                    child_rel = str(child.relative_to(project_root)).replace("\\", "/")
+                    if should_exclude(child_rel, gi, extras):
+                        continue
+                    return child_rel
     except OSError:
         pass
     return None
 
 
-def _check_essential_docs(project_root: Path) -> CompletenessCategory:
+def _check_essential_docs(
+    project_root: Path,
+    *,
+    gitignore_patterns: list[str] | None = None,
+    extra_exclude: list[str] | None = None,
+) -> CompletenessCategory:
     """Check for essential documentation files (README.md, LICENSE).
 
     Also checks immediate subdirectories so that monorepo or
@@ -112,7 +151,12 @@ def _check_essential_docs(project_root: Path) -> CompletenessCategory:
             present.append(found)
         else:
             # Check subdirectories for monorepo layouts
-            subdir_found = _find_in_subdirs(project_root, doc)
+            subdir_found = _find_in_subdirs(
+                project_root,
+                doc,
+                gitignore_patterns=gitignore_patterns,
+                extra_exclude=extra_exclude,
+            )
             if subdir_found:
                 present.append(subdir_found)
             else:
@@ -153,11 +197,20 @@ def _check_development_docs(project_root: Path) -> CompletenessCategory:
     )
 
 
-def _check_api_documentation(project_root: Path) -> CompletenessCategory:
+def _check_api_documentation(
+    project_root: Path,
+    *,
+    gitignore_patterns: list[str] | None = None,
+    extra_exclude: list[str] | None = None,
+) -> CompletenessCategory:
     """Check % of public modules with docstrings using APISurfaceAnalyzer."""
     from docs_mcp.analyzers.api_surface import APISurfaceAnalyzer
 
-    py_files = _find_python_files(project_root)
+    py_files = _find_python_files(
+        project_root,
+        gitignore_patterns=gitignore_patterns,
+        extra_exclude=extra_exclude,
+    )
     if not py_files:
         return CompletenessCategory(
             name="api_documentation",
@@ -204,11 +257,20 @@ def _check_api_documentation(project_root: Path) -> CompletenessCategory:
     )
 
 
-def _check_inline_docs(project_root: Path) -> CompletenessCategory:
+def _check_inline_docs(
+    project_root: Path,
+    *,
+    gitignore_patterns: list[str] | None = None,
+    extra_exclude: list[str] | None = None,
+) -> CompletenessCategory:
     """Check % of public functions/classes with docstrings."""
     from docs_mcp.analyzers.api_surface import APISurfaceAnalyzer
 
-    py_files = _find_python_files(project_root)
+    py_files = _find_python_files(
+        project_root,
+        gitignore_patterns=gitignore_patterns,
+        extra_exclude=extra_exclude,
+    )
     if not py_files:
         return CompletenessCategory(
             name="inline_docs",
@@ -264,18 +326,36 @@ def _check_inline_docs(project_root: Path) -> CompletenessCategory:
     )
 
 
-def _check_project_docs(project_root: Path) -> CompletenessCategory:
-    """Check if a docs/ directory exists with content."""
+def _check_project_docs(
+    project_root: Path,
+    *,
+    gitignore_patterns: list[str] | None = None,
+    extra_exclude: list[str] | None = None,
+) -> CompletenessCategory:
+    """Check if a docs/ directory exists with content.
+
+    Files under ``docs/`` that match the exclude filters (for example,
+    a vendored ``docs/third-party/README.md`` covered by a gitignore or
+    ``exclude=["docs/third-party/**"]``) are not counted.
+    """
     docs_dir = project_root / "docs"
     present: list[str] = []
     missing: list[str] = []
+    gi = list(gitignore_patterns) if gitignore_patterns else []
+    extras = list(extra_exclude) if extra_exclude else []
 
     if docs_dir.is_dir():
         # Check if docs/ has any content files (including subdirectories)
         doc_extensions = {".md", ".rst", ".txt", ".html"}
         for entry in docs_dir.rglob("*"):
-            if entry.is_file() and entry.suffix.lower() in doc_extensions:
-                present.append(str(entry.relative_to(project_root)).replace("\\", "/"))
+            if not entry.is_file():
+                continue
+            if entry.suffix.lower() not in doc_extensions:
+                continue
+            entry_rel = str(entry.relative_to(project_root)).replace("\\", "/")
+            if should_exclude(entry_rel, gi, extras):
+                continue
+            present.append(entry_rel)
 
     if not present:
         missing.append("docs/")
@@ -294,11 +374,24 @@ def _check_project_docs(project_root: Path) -> CompletenessCategory:
 class CompletenessChecker:
     """Check documentation completeness across multiple categories."""
 
-    def check(self, project_root: Path) -> CompletenessReport:
+    def check(
+        self,
+        project_root: Path,
+        *,
+        exclude: list[str] | None = None,
+        respect_gitignore: bool = True,
+    ) -> CompletenessReport:
         """Run completeness check.
 
         Args:
             project_root: Root of the project to scan.
+            exclude: Extra glob patterns to exclude when scanning
+                Python files and ``docs/`` content. Applied on top of
+                the baseline and gitignore. Example:
+                ``["vendored/**/*", "third_party/**"]``.
+            respect_gitignore: When True (default), honor the project's
+                root-level ``.gitignore`` when walking. Pass False to
+                restore pre-fix behavior.
 
         Returns:
             A CompletenessReport with per-category scores and recommendations.
@@ -308,12 +401,31 @@ class CompletenessChecker:
                 recommendations=["Project root directory does not exist."],
             )
 
+        gitignore_patterns = load_gitignore_patterns(project_root) if respect_gitignore else []
+        extras = list(exclude) if exclude else []
+
         categories = [
-            _check_essential_docs(project_root),
+            _check_essential_docs(
+                project_root,
+                gitignore_patterns=gitignore_patterns,
+                extra_exclude=extras,
+            ),
             _check_development_docs(project_root),
-            _check_api_documentation(project_root),
-            _check_inline_docs(project_root),
-            _check_project_docs(project_root),
+            _check_api_documentation(
+                project_root,
+                gitignore_patterns=gitignore_patterns,
+                extra_exclude=extras,
+            ),
+            _check_inline_docs(
+                project_root,
+                gitignore_patterns=gitignore_patterns,
+                extra_exclude=extras,
+            ),
+            _check_project_docs(
+                project_root,
+                gitignore_patterns=gitignore_patterns,
+                extra_exclude=extras,
+            ),
         ]
 
         # Calculate weighted average

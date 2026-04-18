@@ -896,3 +896,112 @@ class TestStyleCheckPathResolution:
         assert result["success"] is True
         assert result["data"]["total_files"] == 1
         assert result["data"]["total_issues"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Pagination / filtering for StyleChecker.check_project
+# ---------------------------------------------------------------------------
+
+
+class TestCheckProjectPaginationAndFilters:
+    """Ensure check_project supports summary_only, max_items, and filters.
+
+    Counts (`issue_counts`, `file_issue_counts`, `aggregate_score`) must
+    describe the PRE-filter state so dashboards stay stable.
+    """
+
+    def _build_project(self, root: Path) -> StyleChecker:
+        # Seed two files with deterministic, multi-rule issues.
+        _write(
+            root / "README.md",
+            "# Readme\n\nWe leverage this. We utilize that. Let's circle back.",
+        )
+        _write(
+            root / "docs" / "guide.md",
+            "# Guide\n\nWe leverage the synergy here. We utilize holistic paradigms.",
+        )
+        return StyleChecker(StyleConfig(enabled_rules=["jargon"]))
+
+    def test_default_behavior_unchanged(self, tmp_path: Path) -> None:
+        checker = self._build_project(tmp_path)
+        report = checker.check_project(tmp_path)
+
+        # Baseline dashboard fields still populated.
+        assert report.total_files == 2
+        assert report.total_issues >= 4
+        assert "jargon" in report.issue_counts
+        assert report.aggregate_score < 100.0
+        # Detail list present by default.
+        total_detail = sum(len(f.issues) for f in report.files)
+        assert total_detail == report.total_issues
+        # Defaults do not trigger truncation.
+        assert report.truncated is False
+        assert report.total_available == 0
+        # New per-file counts are populated.
+        assert set(report.file_issue_counts) == {"README.md", "docs/guide.md"}
+        assert sum(report.file_issue_counts.values()) == report.total_issues
+
+    def test_summary_only_empties_detail(self, tmp_path: Path) -> None:
+        checker = self._build_project(tmp_path)
+        report = checker.check_project(tmp_path, summary_only=True)
+
+        # Counts remain populated.
+        assert report.total_issues >= 4
+        assert report.issue_counts.get("jargon", 0) >= 4
+        assert report.file_issue_counts  # non-empty
+        # But no detailed issues are returned.
+        for f in report.files:
+            assert f.issues == []
+        # Per-file scores are preserved so dashboards can keep rendering.
+        assert all(f.score <= 100.0 for f in report.files)
+        # summary_only does not set truncated -- there is no cap being hit.
+        assert report.truncated is False
+
+    def test_max_items_truncates(self, tmp_path: Path) -> None:
+        checker = self._build_project(tmp_path)
+        full = checker.check_project(tmp_path)
+        total = full.total_issues
+        assert total >= 4
+
+        cap = total - 1
+        report = checker.check_project(tmp_path, max_items=cap)
+
+        returned = sum(len(f.issues) for f in report.files)
+        assert returned == cap
+        assert report.truncated is True
+        assert report.total_available == total
+        # Pre-filter counts unaffected by the cap.
+        assert report.total_issues == total
+        assert sum(report.file_issue_counts.values()) == total
+
+    def test_rule_filter_restricts_details(self, tmp_path: Path) -> None:
+        _write(tmp_path / "README.md", "# Readme\n\nWe leverage this.")
+        _write(tmp_path / "docs" / "g.md", "# G\n\nThe file was created by the tool.")
+        # Enable two rules so we have mixed rule ids in details.
+        checker = StyleChecker(StyleConfig(enabled_rules=["jargon", "passive_voice"]))
+
+        report = checker.check_project(tmp_path, rule_filter=["jargon"])
+
+        # All detailed issues are jargon only.
+        seen_rules = {i.rule for f in report.files for i in f.issues}
+        assert seen_rules == {"jargon"}
+        # But pre-filter counts still show both rules.
+        assert "passive_voice" in report.issue_counts
+        assert "jargon" in report.issue_counts
+        # Filtering alone (no cap hit) does not mark the report truncated.
+        assert report.truncated is False
+        assert report.total_available == 0
+
+    def test_file_filter_restricts_details(self, tmp_path: Path) -> None:
+        checker = self._build_project(tmp_path)
+        report = checker.check_project(tmp_path, file_filter=["README.md"])
+
+        # Only README's issues appear in detail.
+        for f in report.files:
+            if f.file_path == "README.md":
+                assert len(f.issues) >= 1
+            else:
+                assert f.issues == []
+        # Pre-filter counts still include guide.md.
+        assert report.file_issue_counts.get("docs/guide.md", 0) >= 1
+        assert report.total_issues == sum(report.file_issue_counts.values())

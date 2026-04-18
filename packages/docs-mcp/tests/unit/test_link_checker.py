@@ -549,3 +549,149 @@ class TestLinkCheckerBacktickIntegration:
         # so the file has 0 effective refs
         assert len(report.warnings) == 1
         assert "No links or file references" in report.warnings[0]
+
+
+# ---------------------------------------------------------------------------
+# Pagination / filtering options
+# ---------------------------------------------------------------------------
+
+
+def _write_project_with_broken_links(tmp_path: Path, n_broken: int) -> None:
+    """Create a README with ``n_broken`` markdown links pointing at missing files."""
+    lines = ["# Project", ""]
+    for i in range(n_broken):
+        lines.append(f"[dead-{i}](missing-{i}.md)")
+    (tmp_path / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class TestLinkCheckerPaginationAndFiltering:
+    """Test summary_only, max_items, broken_only, include_backtick_refs."""
+
+    def test_default_behavior_unchanged_snapshot(self, tmp_path: Path) -> None:
+        """Baseline: defaults still return full lists and scalar counts."""
+        (tmp_path / "config.yaml").write_text("key: val\n", encoding="utf-8")
+        (tmp_path / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            "# Project\n\n"
+            "See [guide](guide.md) and [missing](nope.md).\n"
+            "Also `config.yaml` and `missing.yaml`.\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+
+        # Scalar counts match pre-change semantics.
+        assert report.total_links == 2
+        assert report.valid_links == 1
+        assert report.total_backtick_refs == 2
+        assert report.valid_backtick_refs == 1
+        assert report.missing_backtick_refs == 1
+        # New scalar must mirror missing_backtick_refs by default.
+        assert report.missing_backtick_ref_count == 1
+        # Detail lists are fully populated by default.
+        assert len(report.broken_links) == 1
+        assert len(report.backtick_references) == 2
+        assert report.truncated is False
+
+    def test_summary_only_zero_detail_items_correct_counts(self, tmp_path: Path) -> None:
+        """summary_only=True empties detail lists but preserves counts/score."""
+        _write_project_with_broken_links(tmp_path, n_broken=5)
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path, summary_only=True)
+
+        assert report.total_links == 5
+        assert report.valid_links == 0
+        # Detail lists are empty.
+        assert report.broken_links == []
+        assert report.backtick_references == []
+        assert report.warnings == []
+        # Scalar totals still reflect the true universe.
+        assert report.total_available_broken_links == 5
+        # Score is still populated.
+        assert report.score == 0
+
+    def test_max_items_truncates_and_sets_flag(self, tmp_path: Path) -> None:
+        """max_items caps detail lists and sets truncated=True."""
+        _write_project_with_broken_links(tmp_path, n_broken=10)
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path, max_items=3)
+
+        assert report.total_links == 10
+        assert len(report.broken_links) == 3
+        assert report.truncated is True
+        assert report.total_available_broken_links == 10
+
+    def test_max_items_no_truncation_when_under_cap(self, tmp_path: Path) -> None:
+        """No truncation flag when list is under the cap."""
+        _write_project_with_broken_links(tmp_path, n_broken=2)
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path, max_items=10)
+
+        assert len(report.broken_links) == 2
+        assert report.truncated is False
+        assert report.total_available_broken_links == 2
+
+    def test_broken_only_excludes_non_broken_backtick_refs(self, tmp_path: Path) -> None:
+        """broken_only=True drops valid / skipped backtick refs from the list."""
+        (tmp_path / "config.yaml").write_text("key: val\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nEdit `config.yaml` and also `missing.yaml`.\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path, broken_only=True)
+
+        # Scalar counts unaffected.
+        assert report.total_backtick_refs == 2
+        assert report.valid_backtick_refs == 1
+        assert report.missing_backtick_refs == 1
+        assert report.missing_backtick_ref_count == 1
+        # Detail list only has the missing one.
+        assert len(report.backtick_references) == 1
+        assert report.backtick_references[0].exists is False
+        assert report.backtick_references[0].reference == "missing.yaml"
+        assert report.total_available_backtick_references == 1
+
+    def test_include_backtick_refs_false_hides_items_but_keeps_count(self, tmp_path: Path) -> None:
+        """include_backtick_refs=False drops the list but the count stays accurate."""
+        (tmp_path / "config.yaml").write_text("key: val\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nEdit `config.yaml` and also `missing.yaml` and `also-missing.toml`.\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path, include_backtick_refs=False)
+
+        assert report.backtick_references == []
+        # But the dashboard signal is still present.
+        assert report.missing_backtick_ref_count == 2
+        assert report.missing_backtick_refs == 2
+        assert report.total_backtick_refs == 3
+        assert report.valid_backtick_refs == 1
+        assert report.total_available_backtick_references == 0
+
+    def test_score_perfect_when_all_valid(self, tmp_path: Path) -> None:
+        """Score is 100 when every link and ref resolves."""
+        (tmp_path / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nSee [guide](guide.md).\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert report.score == 100
+
+    def test_score_zero_when_all_broken(self, tmp_path: Path) -> None:
+        """Score is 0 when every link is broken."""
+        _write_project_with_broken_links(tmp_path, n_broken=4)
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert report.score == 0

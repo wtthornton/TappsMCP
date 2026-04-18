@@ -218,3 +218,94 @@ class TestCompletenessChecker:
         api_cat = next(c for c in report.categories if c.name == "api_documentation")
         # One module is well-documented, one isn't
         assert len(api_cat.present) + len(api_cat.missing) > 0
+
+
+# ---------------------------------------------------------------------------
+# Scan-hygiene: gitignore + exclude + baseline
+# ---------------------------------------------------------------------------
+
+
+class TestCompletenessScanHygiene:
+    """Regression tests for scan-filter behavior in CompletenessChecker."""
+
+    def _write_py(self, path: Path, documented: bool) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if documented:
+            path.write_text(
+                '"""Mod."""\n\ndef foo() -> None:\n    """Doc."""\n    pass\n',
+                encoding="utf-8",
+            )
+        else:
+            path.write_text(
+                "def foo() -> None:\n    pass\n",
+                encoding="utf-8",
+            )
+
+    def test_gitignore_excludes_venv_smoke_py_files(self, tmp_path: Path) -> None:
+        """Python files inside a gitignored venv dir are not scanned."""
+        (tmp_path / ".gitignore").write_text(
+            ".venv-release-smoke/\n",
+            encoding="utf-8",
+        )
+
+        self._write_py(tmp_path / "src" / "app.py", documented=True)
+        self._write_py(
+            tmp_path / ".venv-release-smoke" / "site-packages" / "vendor.py",
+            documented=False,
+        )
+
+        checker = CompletenessChecker()
+        report = checker.check(tmp_path)
+
+        api_cat = next(c for c in report.categories if c.name == "api_documentation")
+        all_mods = api_cat.present + api_cat.missing
+        assert not any(".venv-release-smoke" in m for m in all_mods)
+
+    def test_exclude_kwarg_skips_vendored_paths(self, tmp_path: Path) -> None:
+        """exclude=['vendored/**/*'] filters both docs and Python scans."""
+        self._write_py(tmp_path / "src" / "app.py", documented=True)
+        self._write_py(tmp_path / "vendored" / "third.py", documented=False)
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "guide.md").write_text("# Real\n", encoding="utf-8")
+        (tmp_path / "docs" / "vendored").mkdir()
+        (tmp_path / "docs" / "vendored" / "VENDOR.md").write_text("# Vendored\n", encoding="utf-8")
+
+        checker = CompletenessChecker()
+        report = checker.check(
+            tmp_path,
+            exclude=["vendored/**", "docs/vendored/**"],
+        )
+
+        api_cat = next(c for c in report.categories if c.name == "api_documentation")
+        all_mods = api_cat.present + api_cat.missing
+        assert not any(m.startswith("vendored/") for m in all_mods)
+
+        project_cat = next(c for c in report.categories if c.name == "project_docs")
+        assert not any("vendored" in p for p in project_cat.present)
+        assert "docs/guide.md" in project_cat.present
+
+    def test_respect_gitignore_false_restores_old_behavior(self, tmp_path: Path) -> None:
+        """respect_gitignore=False lets gitignored (non-baseline) files through."""
+        (tmp_path / ".gitignore").write_text("custom_dir/\n", encoding="utf-8")
+        self._write_py(tmp_path / "src" / "app.py", documented=True)
+        self._write_py(tmp_path / "custom_dir" / "mod.py", documented=False)
+
+        checker = CompletenessChecker()
+        report = checker.check(tmp_path, respect_gitignore=False)
+
+        api_cat = next(c for c in report.categories if c.name == "api_documentation")
+        all_mods = api_cat.present + api_cat.missing
+        # custom_dir is not in baseline, so it IS scanned now.
+        assert any("custom_dir" in m for m in all_mods)
+
+    def test_baseline_venv_always_skipped(self, tmp_path: Path) -> None:
+        """Baseline .venv is skipped even with respect_gitignore=False."""
+        self._write_py(tmp_path / "src" / "app.py", documented=True)
+        self._write_py(tmp_path / ".venv" / "site" / "vendor.py", documented=False)
+
+        checker = CompletenessChecker()
+        report = checker.check(tmp_path, respect_gitignore=False)
+
+        api_cat = next(c for c in report.categories if c.name == "api_documentation")
+        all_mods = api_cat.present + api_cat.missing
+        assert not any(".venv" in m for m in all_mods)

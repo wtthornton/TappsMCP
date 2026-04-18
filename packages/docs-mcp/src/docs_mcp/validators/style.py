@@ -55,14 +55,23 @@ class FileStyleResult(BaseModel):
 
 
 class StyleReport(BaseModel):
-    """Aggregated style check results across files."""
+    """Aggregated style check results across files.
+
+    `issue_counts` and `file_issue_counts` describe the pre-filter state so
+    dashboards remain stable even when the detailed `files[*].issues` list
+    is filtered or truncated. When `max_items` caps the detail list,
+    `truncated` is set and `total_available` reports the pre-cap count.
+    """
 
     total_files: int = 0
     total_issues: int = 0
     files: list[FileStyleResult] = Field(default_factory=list)
     aggregate_score: float = 100.0
     issue_counts: dict[str, int] = Field(default_factory=dict)
+    file_issue_counts: dict[str, int] = Field(default_factory=dict)
     top_issues: list[str] = Field(default_factory=list)
+    truncated: bool = False
+    total_available: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -830,8 +839,23 @@ class StyleChecker:
         project_root: Path,
         *,
         doc_dirs: list[str] | None = None,
+        summary_only: bool = False,
+        max_items: int = 300,
+        rule_filter: list[str] | None = None,
+        file_filter: list[str] | None = None,
     ) -> StyleReport:
-        """Check all markdown files in a project."""
+        """Check all markdown files in a project.
+
+        Keyword-only options:
+            summary_only: If True, return counts only (no detailed issues).
+            max_items: Cap on total detailed issues returned across all files.
+            rule_filter: Restrict detail list to these rule ids.
+            file_filter: Restrict detail list to these relative (posix) paths.
+
+        Per-file and per-rule counts always describe the pre-filter state so
+        dashboards remain stable. Only the detailed issue list is affected
+        by filters and truncation.
+        """
         project_root = project_root.resolve()
         md_files = self._find_markdown_files(project_root, doc_dirs)
 
@@ -850,9 +874,11 @@ class StyleChecker:
         total_issues = sum(len(r.issues) for r in results)
         aggregate_score = sum(r.score for r in results) / len(results) if results else 100.0
 
-        # Count issues by rule
+        # Pre-filter counts (stable for dashboards)
         issue_counts: dict[str, int] = {}
+        file_issue_counts: dict[str, int] = {}
         for r in results:
+            file_issue_counts[r.file_path] = len(r.issues)
             for issue in r.issues:
                 issue_counts[issue.rule] = issue_counts.get(issue.rule, 0) + 1
 
@@ -860,13 +886,25 @@ class StyleChecker:
         sorted_rules = sorted(issue_counts.items(), key=lambda x: x[1], reverse=True)
         top_issues = [f"{name}: {count}" for name, count in sorted_rules[:5]]
 
+        # Apply detail-list shaping: filters, truncation, summary_only
+        detail_files, truncated, total_available = _shape_detail_files(
+            results,
+            summary_only=summary_only,
+            max_items=max_items,
+            rule_filter=rule_filter,
+            file_filter=file_filter,
+        )
+
         return StyleReport(
             total_files=len(results),
             total_issues=total_issues,
-            files=results,
+            files=detail_files,
             aggregate_score=round(aggregate_score, 1),
             issue_counts=issue_counts,
+            file_issue_counts=file_issue_counts,
             top_issues=top_issues,
+            truncated=truncated,
+            total_available=total_available,
         )
 
     def _find_markdown_files(
@@ -1028,6 +1066,61 @@ def _is_title_case(text: str, custom_terms: list[str]) -> bool:
             return False
 
     return True
+
+
+def _shape_detail_files(
+    results: list[FileStyleResult],
+    *,
+    summary_only: bool,
+    max_items: int,
+    rule_filter: list[str] | None,
+    file_filter: list[str] | None,
+) -> tuple[list[FileStyleResult], bool, int]:
+    """Apply summary/filter/cap shaping to the per-file detail list.
+
+    Returns (shaped_files, truncated, total_available). Per-file scores
+    are preserved; only the `issues` list on each file is reshaped.
+    """
+    rule_set = set(rule_filter) if rule_filter else None
+    file_set = set(file_filter) if file_filter else None
+
+    if summary_only:
+        empty = [FileStyleResult(file_path=r.file_path, issues=[], score=r.score) for r in results]
+        return empty, False, 0
+
+    # Filter first, then cap across the flattened stream.
+    filtered: list[tuple[FileStyleResult, list[StyleIssue]]] = []
+    pre_cap_total = 0
+    for r in results:
+        if file_set is not None and r.file_path not in file_set:
+            filtered.append((r, []))
+            continue
+        if rule_set is None:
+            kept = list(r.issues)
+        else:
+            kept = [i for i in r.issues if i.rule in rule_set]
+        pre_cap_total += len(kept)
+        filtered.append((r, kept))
+
+    remaining = max_items
+    truncated = False
+    shaped: list[FileStyleResult] = []
+    for r, kept in filtered:
+        if remaining <= 0:
+            if kept:
+                truncated = True
+            shaped.append(FileStyleResult(file_path=r.file_path, issues=[], score=r.score))
+            continue
+        if len(kept) > remaining:
+            truncated = True
+            kept = kept[:remaining]
+        remaining -= len(kept)
+        shaped.append(FileStyleResult(file_path=r.file_path, issues=kept, score=r.score))
+
+    # Only surface total_available when truncation actually occurred,
+    # so the field is meaningful for the "cap hit" dashboard signal.
+    total_available = pre_cap_total if truncated else 0
+    return shaped, truncated, total_available
 
 
 def _calculate_file_score(issues: list[StyleIssue]) -> float:
