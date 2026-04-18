@@ -418,8 +418,10 @@ def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, Any]:
 
         from tapps_brain.models import AgentRegistration
 
+        from tapps_core.agent_identity import get_stable_agent_id
+
         active_profile = settings.memory.profile or "repo-brain"
-        agent_id = os.environ.get("CLAUDE_AGENT_ID", f"agent-{os.getpid()}")
+        agent_id = get_stable_agent_id(settings)
         agent_name = os.environ.get("CLAUDE_AGENT_NAME", "unnamed")
         registry.register(
             AgentRegistration(

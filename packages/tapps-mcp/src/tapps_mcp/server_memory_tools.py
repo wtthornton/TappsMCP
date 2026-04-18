@@ -1983,8 +1983,10 @@ async def _handle_hive_status(store: MemoryStore, _p: _Params) -> dict[str, Any]
             "store_metadata": _store_metadata(store),
         }
 
+    from tapps_core.agent_identity import get_stable_agent_id
+
     settings = load_settings()
-    agent_id = os.environ.get("CLAUDE_AGENT_ID", f"agent-{os.getpid()}")
+    agent_id = get_stable_agent_id(settings)
     agent_name = os.environ.get("CLAUDE_AGENT_NAME", "unnamed")
 
     status = await bridge.hive_status(
@@ -2091,9 +2093,11 @@ async def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, An
             "store_metadata": _store_metadata(store),
         }
 
+    from tapps_core.agent_identity import get_stable_agent_id
+
     settings = load_settings()
     active_profile = settings.memory.profile or "repo-brain"
-    agent_id = os.environ.get("CLAUDE_AGENT_ID", f"agent-{os.getpid()}")
+    agent_id = get_stable_agent_id(settings)
 
     cap = p.limit if p.limit > 0 else _HIVE_PROPAGATE_DEFAULT_LIMIT
     entries = store.snapshot().entries[:cap]
