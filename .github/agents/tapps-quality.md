@@ -1,4 +1,4 @@
-<!-- tapps-generated: v2.10.0 -->
+<!-- tapps-generated: v2.10.1 -->
 ---
 name: tapps-quality
 description: Code quality reviewer using TappsMCP scoring and security tools
