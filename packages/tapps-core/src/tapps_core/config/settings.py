@@ -555,6 +555,21 @@ class MemorySettings(BaseSettings):
         ),
     )
 
+    # TAP-519: remote brain version probe. When set, BrainBridge startup GETs
+    # {brain_http_url}/health and validates the returned ``version`` against the
+    # tapps-brain floor pinned in packages/tapps-core/pyproject.toml. In-process
+    # AgentBrain deployments leave this empty and skip the HTTP probe.
+    brain_http_url: str = Field(
+        default="",
+        description=(
+            "Optional base URL for the remote tapps-brain HTTP API (no trailing "
+            "slash). When set, BrainBridge startup probes {brain_http_url}/health "
+            "and fails loudly when the reported version is below the pinned floor "
+            "in packages/tapps-core/pyproject.toml. Leave empty for in-process "
+            "AgentBrain deployments. Env: TAPPS_MCP_MEMORY_BRAIN_HTTP_URL."
+        ),
+    )
+
     # EPIC-069 / ADR-010: multi-tenant project_id on the wire.
     project_id: str = Field(
         default="",

@@ -23,7 +23,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
+import httpx
 import structlog
+from packaging.version import InvalidVersion, Version
 
 if TYPE_CHECKING:
     from tapps_brain import AgentBrain
@@ -43,6 +45,14 @@ _RETRY_MAX: float = 8.0
 
 # --- Write queue -------------------------------------------------------------
 _WRITE_QUEUE_CAP: int = 100
+
+# --- Remote brain version probe (TAP-519) ------------------------------------
+# Keep in sync with the ``tapps-brain`` pin in
+# ``packages/tapps-core/pyproject.toml``. The floor is the minimum version
+# known to ship all fields tapps-mcp consumes; the ceiling is the next major.
+_BRAIN_VERSION_FLOOR: str = "3.7.2"
+_BRAIN_VERSION_CEILING: str = "4.0.0"
+_BRAIN_HEALTH_TIMEOUT_SECONDS: float = 5.0
 
 
 class BrainBridgeUnavailable(Exception):  # noqa: N818  (public API name predates the lint rule; renaming would break consumers)
@@ -67,6 +77,20 @@ class BrainBridge:
         self._open_at: float | None = None
         self._write_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_WRITE_QUEUE_CAP)
         self._drain_task: asyncio.Task[None] | None = None
+        # TAP-519: populated by ``create_brain_bridge`` when a remote brain
+        # HTTP URL is configured. Callers (e.g. tapps_session_start) can read
+        # ``bridge.version_check`` to surface the result in their health field.
+        self._version_check: dict[str, Any] = {
+            "ok": True,
+            "skipped": True,
+            "degraded": False,
+            "url": "",
+            "floor": _BRAIN_VERSION_FLOOR,
+            "ceiling": _BRAIN_VERSION_CEILING,
+            "version": None,
+            "errors": [],
+            "warnings": [],
+        }
 
     # -------------------------------------------------------------------------
     # Circuit breaker
@@ -87,6 +111,19 @@ class BrainBridge:
     def queue_depth(self) -> int:
         """Number of writes currently queued."""
         return self._write_queue.qsize()
+
+    @property
+    def version_check(self) -> dict[str, Any]:
+        """Result of the remote tapps-brain version probe (TAP-519).
+
+        When no ``brain_http_url`` was configured at factory time, this
+        returns a ``{"ok": True, "skipped": True, ...}`` sentinel.
+        """
+        return dict(self._version_check)
+
+    def _set_version_check(self, result: dict[str, Any]) -> None:
+        """Populate the version-check payload (factory-only helper)."""
+        self._version_check = result
 
     def _record_success(self) -> None:
         self._failures = 0
@@ -687,6 +724,129 @@ class BrainBridge:
 
 
 # -----------------------------------------------------------------------------
+# Remote brain version probe (TAP-519)
+# -----------------------------------------------------------------------------
+
+
+def check_brain_version(
+    brain_http_url: str,
+    *,
+    floor: str = _BRAIN_VERSION_FLOOR,
+    ceiling: str = _BRAIN_VERSION_CEILING,
+    timeout: float = _BRAIN_HEALTH_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Probe a remote tapps-brain's ``/health`` endpoint and validate its version.
+
+    Intended for startup use: GETs ``{brain_http_url}/health`` (no auth — the
+    endpoint is unauthenticated as of tapps-brain v3.8.0) and compares the
+    reported ``version`` against the pinned floor/ceiling range declared in
+    ``packages/tapps-core/pyproject.toml``.
+
+    Return shape matches the ``health_check()`` style used elsewhere in this
+    module so callers can fold the result into a larger health payload::
+
+        {
+            "ok": bool,
+            "skipped": bool,        # True when brain_http_url is empty
+            "degraded": bool,       # True on network / parse failure (non-fatal)
+            "url": str,
+            "floor": str,
+            "ceiling": str,
+            "version": str | None,  # reported by brain, may be None on failure
+            "errors": list[str],
+            "warnings": list[str],
+        }
+
+    When ``brain_http_url`` is empty (the default for in-process AgentBrain
+    deployments) the probe is skipped and ``ok`` is True — the caller has no
+    remote brain to validate.
+    """
+    result: dict[str, Any] = {
+        "ok": True,
+        "skipped": False,
+        "degraded": False,
+        "url": brain_http_url,
+        "floor": floor,
+        "ceiling": ceiling,
+        "version": None,
+        "errors": [],
+        "warnings": [],
+    }
+
+    if not brain_http_url:
+        result["skipped"] = True
+        return result
+
+    health_url = brain_http_url.rstrip("/") + "/health"
+
+    try:
+        response = httpx.get(health_url, timeout=timeout)
+        response.raise_for_status()
+        payload = response.json()
+    except httpx.HTTPError as exc:
+        # Network / HTTP failure — don't block bridge creation, but mark
+        # degraded so operators see the issue in any surfacing health field.
+        msg = f"tapps-brain health probe failed at {health_url}: {exc}"
+        logger.warning("brain_bridge.version_check.network_error", error=str(exc), url=health_url)
+        result["ok"] = False
+        result["degraded"] = True
+        result["warnings"].append(msg)
+        return result
+    except ValueError as exc:
+        # JSON decode failure
+        msg = f"tapps-brain health response at {health_url} was not valid JSON: {exc}"
+        logger.warning("brain_bridge.version_check.bad_json", error=str(exc), url=health_url)
+        result["ok"] = False
+        result["degraded"] = True
+        result["warnings"].append(msg)
+        return result
+
+    raw_version = payload.get("version") if isinstance(payload, dict) else None
+    if not isinstance(raw_version, str) or not raw_version:
+        msg = f"tapps-brain health response at {health_url} missing 'version' field"
+        logger.error("brain_bridge.version_check.missing_version", url=health_url, payload=payload)
+        result["ok"] = False
+        result["errors"].append(msg)
+        return result
+
+    result["version"] = raw_version
+
+    try:
+        actual = Version(raw_version)
+        floor_v = Version(floor)
+        ceiling_v = Version(ceiling)
+    except InvalidVersion as exc:
+        msg = f"tapps-brain reported unparseable version {raw_version!r}: {exc}"
+        logger.error("brain_bridge.version_check.invalid_version", version=raw_version)
+        result["ok"] = False
+        result["errors"].append(msg)
+        return result
+
+    if actual < floor_v or actual >= ceiling_v:
+        msg = (
+            f"tapps-brain version {raw_version} does not satisfy required range "
+            f">={floor},<{ceiling} (pinned in packages/tapps-core/pyproject.toml)"
+        )
+        logger.error(
+            "brain_bridge.version_check.mismatch",
+            actual=raw_version,
+            floor=floor,
+            ceiling=ceiling,
+        )
+        result["ok"] = False
+        result["errors"].append(msg)
+        return result
+
+    logger.info(
+        "brain_bridge.version_check.ok",
+        version=raw_version,
+        floor=floor,
+        ceiling=ceiling,
+    )
+    return result
+
+
+# -----------------------------------------------------------------------------
 # Factory
 # -----------------------------------------------------------------------------
 
@@ -725,6 +885,7 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
     project_id: str = ""
     pg_pool_max_waiting: int = 0
     pg_pool_max_lifetime_seconds: int = 0
+    brain_http_url: str = ""
 
     if settings is not None:
         project_root = str(getattr(settings, "project_root", None) or "")
@@ -738,6 +899,7 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
             pg_pool_max_lifetime_seconds = int(
                 getattr(memory, "pg_pool_max_lifetime_seconds", 0) or 0
             )
+            brain_http_url = str(getattr(memory, "brain_http_url", "") or "")
 
     # ADR-010 / EPIC-069: declare the registered project slug on the wire so
     # AgentBrain hits the project registry instead of deriving a per-directory
@@ -764,7 +926,26 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
         )
         # Probe the store to fail fast on bad DSN before returning
         brain.store.count()
-        return BrainBridge(brain)
     except Exception as exc:
         logger.warning("brain_bridge.init_failed", error=str(exc))
         return None
+
+    # TAP-519: validate remote brain version when a HTTP URL is configured.
+    # The probe is no-op for in-process AgentBrain deployments (url empty).
+    # A mismatch is logged loudly but does not block bridge creation — the
+    # structured result is exposed for callers (e.g. tapps_session_start)
+    # that want to surface it to operators.
+    version_check = check_brain_version(brain_http_url)
+    if not version_check["ok"] and not version_check["skipped"]:
+        logger.error(
+            "brain_bridge.version_check_failed",
+            errors=version_check["errors"],
+            warnings=version_check["warnings"],
+            version=version_check["version"],
+            floor=version_check["floor"],
+            ceiling=version_check["ceiling"],
+        )
+
+    bridge = BrainBridge(brain)
+    bridge._set_version_check(version_check)
+    return bridge
