@@ -1338,6 +1338,29 @@ def _schedule_background_maintenance(
     task.add_done_callback(_background_tasks.discard)
 
 
+def _collect_brain_bridge_health() -> dict[str, Any]:
+    """TAP-523: run BrainBridge.health_check() at session start.
+
+    Reports DSN reachability and pool config validity. Non-blocking: probes
+    the cached BrainBridge singleton if available, otherwise reports
+    ``{enabled: False}``. Failures inside ``health_check`` surface as
+    ``ok: false`` with an ``errors`` list.
+    """
+    try:
+        from tapps_mcp.server_helpers import _get_brain_bridge
+
+        bridge = _get_brain_bridge()
+    except Exception as exc:
+        return {"enabled": False, "error": f"bridge_resolve_failed: {exc}"}
+    if bridge is None:
+        return {"enabled": False}
+    try:
+        report = bridge.health_check()
+    except Exception as exc:
+        return {"enabled": True, "ok": False, "errors": [f"health_check_raised: {exc}"]}
+    return {"enabled": True, **report}
+
+
 def _collect_memory_status(settings: Any) -> dict[str, Any]:
     """Collect memory subsystem status for session start."""
     status: dict[str, Any] = {"enabled": False}
@@ -1563,6 +1586,13 @@ async def tapps_session_start(
         _logger.debug("hive_status_check_failed", exc_info=True)
     timings["hive_status_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
 
+    # TAP-523: surface BrainBridge health at startup so misconfiguration
+    # (bad DSN, invalid pool env vars) lands in session_start output instead
+    # of deep in the first memory tool call.
+    phase_start = time.perf_counter_ns()
+    brain_bridge_health = _collect_brain_bridge_health()
+    timings["brain_bridge_health_ms"] = (time.perf_counter_ns() - phase_start) // 1_000_000
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)
     timings["total_ms"] = elapsed_ms
@@ -1619,6 +1649,7 @@ async def tapps_session_start(
         "checklist_session_id": checklist_sid,
         "memory_status": memory_status,
         "hive_status": hive_status,
+        "brain_bridge_health": brain_bridge_health,
         "memory_gc": "background",
         "memory_consolidation": "background",
         "memory_doc_validation": "background",
