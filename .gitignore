@@ -77,3 +77,10 @@ architecture-report*.png
 
 # LOCK-1: Instance lock file (auto-released by flock)
 .ralph/.ralph.lock
+
+# Transient ralph per-loop state + local upgrade backups
+.ralph/.files_modified_this_loop
+.ralph/.upgrade-backups/
+
+# Agent worktrees spawned by the Agent tool (full git clones — never commit)
+.claude/worktrees/
