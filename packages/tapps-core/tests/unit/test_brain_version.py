@@ -17,7 +17,6 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -41,7 +40,7 @@ def _mock_http_response(
 ) -> Any:
     """Build a patchable replacement for ``httpx.get``."""
 
-    def _fake_get(url: str, timeout: float) -> httpx.Response:  # noqa: ARG001
+    def _fake_get(url: str, timeout: float) -> httpx.Response:
         if raise_exc is not None:
             raise raise_exc
         request = httpx.Request("GET", url)
@@ -173,7 +172,7 @@ class TestCheckBrainVersion:
 
         called_url: list[str] = []
 
-        def _capture(url: str, timeout: float) -> httpx.Response:  # noqa: ARG001
+        def _capture(url: str, timeout: float) -> httpx.Response:
             called_url.append(url)
             return httpx.Response(
                 status_code=200,
@@ -191,9 +190,7 @@ class TestCheckBrainVersion:
 
         fake_get = _mock_http_response(json_payload={"version": "5.1.0"})
         with patch("tapps_core.brain_bridge.httpx.get", side_effect=fake_get):
-            result = check_brain_version(
-                "http://brain.example", floor="5.0.0", ceiling="6.0.0"
-            )
+            result = check_brain_version("http://brain.example", floor="5.0.0", ceiling="6.0.0")
 
         assert result["ok"] is True
         assert result["floor"] == "5.0.0"
@@ -290,9 +287,7 @@ class TestFactoryWiring:
         assert bridge.version_check["ok"] is False
         assert "3.6.0" in bridge.version_check["errors"][0]
 
-    def test_bridge_still_returned_on_network_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_bridge_still_returned_on_network_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from tapps_core.brain_bridge import create_brain_bridge
 
         monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "postgresql://x/db")
