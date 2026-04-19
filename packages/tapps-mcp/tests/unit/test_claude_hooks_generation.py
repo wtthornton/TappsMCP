@@ -477,3 +477,39 @@ class TestClaudeHooksPlatformMigration:
         data = json.loads((claude_dir / "settings.json").read_text())
         assert "PostCompact" not in data.get("hooks", {})
         assert "SessionStart" in data.get("hooks", {})
+
+    def test_user_added_hook_keys_are_preserved(self, tmp_path):
+        """Regression: unknown hook keys the user added must not be silently dropped.
+
+        Before the 2.10.1 fix, the upgrade pipeline filtered .claude/settings.json
+        hooks by an allowlist, wiping any key TappsMCP hadn't yet catalogued
+        (e.g. ralph's StopFailure).  The filter is now an exclusion list
+        targeting only PostCompact.
+        """
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir(parents=True)
+        config = {
+            "permissions": {"allow": ["mcp__tapps-mcp"]},
+            "hooks": {
+                "StopFailure": [
+                    {
+                        "matcher": "rate_limit",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "bash .ralph/hooks/on-stop-failure.sh",
+                            }
+                        ],
+                    }
+                ],
+                "SomeFutureClaudeHookKey": [
+                    {"hooks": [{"type": "command", "command": "echo future"}]}
+                ],
+            },
+        }
+        (claude_dir / "settings.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+        generate_claude_hooks(tmp_path, force_windows=False)
+        data = json.loads((claude_dir / "settings.json").read_text())
+        assert "StopFailure" in data["hooks"]
+        assert data["hooks"]["StopFailure"][0]["matcher"] == "rate_limit"
+        assert "SomeFutureClaudeHookKey" in data["hooks"]

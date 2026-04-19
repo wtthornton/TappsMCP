@@ -40,6 +40,21 @@ EXPECTED_TOOLS: list[str] = [
 _VERSION_RE = re.compile(r"<!--\s*tapps-agents-version:\s*([\d.]+)\s*-->")
 _SECTION_RE = re.compile(r"^## (.+)$", re.MULTILINE)
 
+# Markers used by pipeline/karpathy_block.py to wrap the vendored block.
+# We detect them here (duplicated to avoid a circular import) so merge_agents_md
+# can excise the block before section-splitting.  The block contains a
+# `## Karpathy Behavioral Guidelines` heading, so left in place it confuses
+# _split_into_sections: the BEGIN marker ends up in the trailing body of the
+# previous EXPECTED section and is discarded when that section is replaced
+# with the template version, leaving install_or_refresh unable to find the
+# block and forcing it to append a duplicate.
+_KARPATHY_BEGIN_PREFIX = "<!-- BEGIN: karpathy-guidelines"
+_KARPATHY_END_MARKER = "<!-- END: karpathy-guidelines -->"
+_LEGACY_KARPATHY_HEADING_RE = re.compile(
+    r"\n*^## Karpathy Behavioral Guidelines\b.*?(?=\n## |\Z)",
+    re.DOTALL | re.MULTILINE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Validation
@@ -130,6 +145,56 @@ def _split_into_sections(content: str) -> list[tuple[str | None, str]]:
     return parts
 
 
+def _strip_karpathy_content(content: str) -> tuple[str, bool]:
+    """Remove Karpathy block spans and legacy unwrapped sections.
+
+    The Karpathy guideline block contains a ``## `` heading, which collides
+    with the section splitter used by :func:`merge_agents_md`.  We excise
+    the block (and any legacy unwrapped copies left by pre-marker versions)
+    here so the section merge is clean; :func:`install_or_refresh` then
+    re-installs one canonical copy after the merge has written out.
+
+    Returns ``(stripped_content, had_karpathy_content)``.
+    """
+    had_content = False
+
+    # Remove properly-wrapped BEGIN...END spans (can occur 0+ times).
+    while True:
+        begin = content.find(_KARPATHY_BEGIN_PREFIX)
+        if begin == -1:
+            break
+        end_idx = content.find(_KARPATHY_END_MARKER, begin)
+        if end_idx == -1:
+            break
+        had_content = True
+        end_exclusive = end_idx + len(_KARPATHY_END_MARKER)
+        # Consume trailing newlines after END so we don't leave a stranded blank run.
+        while end_exclusive < len(content) and content[end_exclusive] == "\n":
+            end_exclusive += 1
+        # Consume leading newlines before BEGIN for the same reason.
+        start = begin
+        while start > 0 and content[start - 1] == "\n":
+            start -= 1
+        content = content[:start] + content[end_exclusive:]
+
+    # Remove legacy unwrapped `## Karpathy Behavioral Guidelines` sections
+    # left by pre-marker versions (pre-2.10 projects re-upgrading).
+    new_content, count = _LEGACY_KARPATHY_HEADING_RE.subn("", content)
+    if count > 0:
+        had_content = True
+        content = new_content
+
+    # Remove any remaining stray END markers (from malformed prior state).
+    if _KARPATHY_END_MARKER in content:
+        had_content = True
+        content = content.replace(_KARPATHY_END_MARKER, "")
+
+    # Collapse runs of 3+ blank lines the excisions may have created.
+    content = re.sub(r"\n{3,}", "\n\n", content)
+
+    return content, had_content
+
+
 def merge_agents_md(
     existing_content: str,
     template_content: str,
@@ -140,6 +205,14 @@ def merge_agents_md(
     describes what was updated.
     """
     changes: list[str] = []
+
+    # Excise Karpathy content before section-split (see _strip_karpathy_content).
+    # install_or_refresh runs after merge_agents_md in the upgrade pipeline and
+    # will re-install one clean block at end-of-file.
+    existing_content, had_karpathy = _strip_karpathy_content(existing_content)
+    template_content, _ = _strip_karpathy_content(template_content)
+    if had_karpathy:
+        changes.append("excised_karpathy_block")
 
     existing_sections = _split_into_sections(existing_content)
     template_sections = _split_into_sections(template_content)

@@ -1632,10 +1632,15 @@ PROMPT_HOOK_CONFIG: dict[str, list[dict[str, Any]]] = {
 # ---------------------------------------------------------------------------
 # Supported Claude Code lifecycle hooks (schema: claude-code-settings.json)
 # ---------------------------------------------------------------------------
-# Only these keys are valid under "hooks" in .claude/settings.json.
-# PostCompact is NOT supported; invalid keys cause the entire settings file
-# to be skipped by Claude Code. Used by init/upgrade to avoid writing or
-# retaining unsupported keys.
+# Keys known to break Claude Code's settings.json schema.  Previously this
+# was an allowlist, but that silently dropped user-added hook entries for any
+# key TappsMCP hadn't yet catalogued (e.g. ralph's StopFailure).  Filtering
+# by exclusion preserves user intent while still stripping the one known-bad
+# key that causes Claude Code to reject the entire file.
+INVALID_CLAUDE_HOOK_KEYS: frozenset[str] = frozenset({"PostCompact"})
+
+# Retained for backward compatibility; callers should prefer the
+# ``INVALID_CLAUDE_HOOK_KEYS``-based exclusion pattern used below.
 SUPPORTED_CLAUDE_HOOK_KEYS: frozenset[str] = frozenset(
     {
         "PreToolUse",

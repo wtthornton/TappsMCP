@@ -262,3 +262,90 @@ class TestValidateAgentsMd:
         v = validate_agents_md(agents)
         assert v.is_up_to_date
         assert v.existing_version == __version__
+
+
+# ---------------------------------------------------------------------------
+# Karpathy-block excision (regression: duplicate section on upgrade)
+# ---------------------------------------------------------------------------
+
+
+class TestMergePreservesKarpathyBlock:
+    """Regression tests for the upgrade-time Karpathy duplication bug.
+
+    Before 2.10.1, merge_agents_md treated the block's inner `## Karpathy
+    Behavioral Guidelines` heading as a user section.  The BEGIN marker
+    lived inside the preceding EXPECTED section's body, so replacing that
+    section's body with the template version silently dropped the BEGIN
+    marker, leaving install_or_refresh to find no block and append a
+    duplicate.
+    """
+
+    @staticmethod
+    def _block() -> str:
+        from tapps_mcp.prompts.prompt_loader import load_karpathy_guidelines
+
+        return load_karpathy_guidelines()
+
+    def test_existing_karpathy_block_is_excised_from_merge_output(self) -> None:
+        """merge_agents_md must strip the block so install_or_refresh can re-add it."""
+        template = _template()
+        existing = _template_with_version("2.9.0") + "\n\n" + self._block() + "\n"
+
+        merged, changes = merge_agents_md(existing, template)
+
+        # Block is excised — install_or_refresh runs after merge to re-install.
+        assert "<!-- BEGIN: karpathy-guidelines" not in merged
+        assert "<!-- END: karpathy-guidelines -->" not in merged
+        assert "## Karpathy Behavioral Guidelines" not in merged
+        assert "excised_karpathy_block" in changes
+
+    def test_legacy_unwrapped_karpathy_section_is_removed(self) -> None:
+        """Pre-marker installs left a bare ## Karpathy section; merge must clean it."""
+        template = _template()
+        legacy = (
+            "## Karpathy Behavioral Guidelines\n\n"
+            "> Source: https://github.com/forrestchang/andrej-karpathy-skills\n\n"
+            "Some vendored body text.\n\n"
+            "<!-- END: karpathy-guidelines -->\n"
+        )
+        # Place the legacy section between two EXPECTED sections to mirror
+        # the real-world layout that triggered the bug in tapps-mcp itself.
+        existing = _template_with_version("2.9.0").replace(
+            "## Using tapps_lookup_docs for domain guidance",
+            legacy + "## Using tapps_lookup_docs for domain guidance",
+            1,
+        )
+
+        merged, changes = merge_agents_md(existing, template)
+
+        assert "## Karpathy Behavioral Guidelines" not in merged
+        assert "<!-- END: karpathy-guidelines -->" not in merged
+        assert "excised_karpathy_block" in changes
+
+    def test_idempotent_across_repeated_merges(self) -> None:
+        """Running the full merge + re-install cycle twice yields identical output."""
+        from tapps_mcp.pipeline.karpathy_block import install_or_refresh
+
+        # Simulate the upgrade pipeline: merge_agents_md runs first, then
+        # install_or_refresh appends the block.  Two cycles must produce
+        # the same file (no accumulating duplicates).
+        template = _template()
+        starting = _template_with_version("2.9.0") + "\n\n" + self._block() + "\n"
+
+        def cycle(content: str, path: Path) -> str:
+            merged, _ = merge_agents_md(content, template)
+            path.write_text(merged, encoding="utf-8")
+            install_or_refresh(path)
+            return path.read_text(encoding="utf-8")
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "AGENTS.md"
+            after_one = cycle(starting, p)
+            after_two = cycle(after_one, p)
+
+        assert after_one == after_two
+        assert after_one.count("<!-- BEGIN: karpathy-guidelines") == 1
+        assert after_one.count("<!-- END: karpathy-guidelines -->") == 1
+        assert after_one.count("## Karpathy Behavioral Guidelines") == 1

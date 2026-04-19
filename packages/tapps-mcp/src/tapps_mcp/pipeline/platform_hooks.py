@@ -51,6 +51,9 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     ENGAGEMENT_HOOK_EVENTS as _ENGAGEMENT_HOOK_EVENTS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    INVALID_CLAUDE_HOOK_KEYS as _INVALID_CLAUDE_HOOK_KEYS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_AUTO_CAPTURE_HOOKS_CONFIG as _MEMORY_AUTO_CAPTURE_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -72,7 +75,7 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     PROMPT_HOOK_CONFIG as _PROMPT_HOOK_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
-    SUPPORTED_CLAUDE_HOOK_KEYS as _SUPPORTED_CLAUDE_HOOK_KEYS,
+    SUPPORTED_CLAUDE_HOOK_KEYS as _SUPPORTED_CLAUDE_HOOK_KEYS,  # noqa: F401  (re-export)
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     SUPPORTED_CURSOR_HOOK_KEYS as _SUPPORTED_CURSOR_HOOK_KEYS,
@@ -371,7 +374,9 @@ def generate_claude_hooks(
     hooks_migrated = _migrate_claude_hook_commands(existing_hooks, hooks_config, win=win)
 
     # Only write hook keys supported by Claude Code schema
-    config["hooks"] = {k: v for k, v in config["hooks"].items() if k in _SUPPORTED_CLAUDE_HOOK_KEYS}
+    config["hooks"] = {
+        k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
+    }
 
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
@@ -550,7 +555,9 @@ def generate_memory_capture_hook(
                     existing_hooks[event].append(entry)
                     hooks_added += 1
 
-    config["hooks"] = {k: v for k, v in config["hooks"].items() if k in _SUPPORTED_CLAUDE_HOOK_KEYS}
+    config["hooks"] = {
+        k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
+    }
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
@@ -645,7 +652,9 @@ def generate_memory_auto_recall_hook(
                     existing_hooks[event].append(entry)
                     hooks_added += 1
 
-    config["hooks"] = {k: v for k, v in config["hooks"].items() if k in _SUPPORTED_CLAUDE_HOOK_KEYS}
+    config["hooks"] = {
+        k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
+    }
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
@@ -723,7 +732,9 @@ def generate_memory_auto_capture_hook(
                     existing_hooks[event].append(entry)
                     hooks_added += 1
 
-    config["hooks"] = {k: v for k, v in config["hooks"].items() if k in _SUPPORTED_CLAUDE_HOOK_KEYS}
+    config["hooks"] = {
+        k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
+    }
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 

@@ -21,7 +21,8 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOKS_CONFIG,
     CURSOR_HOOK_SCRIPTS,
     CURSOR_HOOKS_CONFIG,
-    SUPPORTED_CLAUDE_HOOK_KEYS,
+    INVALID_CLAUDE_HOOK_KEYS,
+    SUPPORTED_CLAUDE_HOOK_KEYS,  # noqa: F401  (re-export for external callers)
 )
 from tapps_mcp.pipeline.platform_rules import (
     CURSOR_RULE_TEMPLATES,
@@ -76,7 +77,9 @@ def generate_agent_teams_hooks(
             existing_hooks[event] = entries
             hooks_added += len(entries)
 
-    config["hooks"] = {k: v for k, v in config["hooks"].items() if k in SUPPORTED_CLAUDE_HOOK_KEYS}
+    config["hooks"] = {
+        k: v for k, v in config["hooks"].items() if k not in INVALID_CLAUDE_HOOK_KEYS
+    }
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
