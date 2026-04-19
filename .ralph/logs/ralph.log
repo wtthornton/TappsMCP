@@ -1251,3 +1251,27 @@
 [2026-03-22 17:05:16] [INFO]   - Total loops: 1
 [2026-03-22 17:05:16] [INFO]   - API calls used: 0
 [2026-03-22 17:05:16] [INFO]   - Exit reason: plan_complete
+[2026-04-18 17:51:57] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-18 17:51:57] [WARN] on-stop: No progress — consecutive_no_progress=1
+[2026-04-18 18:07:18] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-18 18:07:18] [WARN] on-stop: No progress — consecutive_no_progress=2
+[2026-04-19 13:08:56] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:08:56] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-19 13:17:06] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:17:06] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-19 13:18:26] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:18:26] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-19 13:20:13] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:20:13] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-19 13:24:51] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:24:51] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-19 13:27:00] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:27:00] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-19 13:28:01] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:28:01] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-19 13:42:43] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:42:43] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-19 13:44:08] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:44:08] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-19 13:44:43] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-19 13:44:43] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))

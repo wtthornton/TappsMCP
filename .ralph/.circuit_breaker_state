@@ -1,11 +1,12 @@
 {
-  "state": "CLOSED",
+  "state": "OPEN",
   "last_change": "2026-03-23T00:05:15Z",
-  "consecutive_no_progress": 0,
-  "total_opens": 0,
+  "consecutive_no_progress": 12,
+  "total_opens": 10,
   "reason": "Fresh start (clean restart)",
   "consecutive_same_error": 0,
   "consecutive_permission_denials": 0,
   "current_loop": 0,
-  "last_progress_loop": 0
+  "last_progress_loop": 0,
+  "opened_at": "2026-04-19T20:44:43Z"
 }
