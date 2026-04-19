@@ -24,9 +24,7 @@ def _make_settings(project_root: Path, *, project_id: str = "") -> TappsMCPSetti
     return settings
 
 
-def test_agent_id_created_on_first_call(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_agent_id_created_on_first_call(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """First call writes ``.tapps-mcp/agent.id`` with a UUID4 hex."""
     monkeypatch.delenv("CLAUDE_AGENT_ID", raising=False)
     project = tmp_path / "proj"
@@ -44,9 +42,7 @@ def test_agent_id_created_on_first_call(
     assert agent_id.endswith(persisted[:8])
 
 
-def test_agent_id_stable_across_calls(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_agent_id_stable_across_calls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Re-reading the persisted file yields the same agent_id across instances."""
     monkeypatch.delenv("CLAUDE_AGENT_ID", raising=False)
     project = tmp_path / "proj"
