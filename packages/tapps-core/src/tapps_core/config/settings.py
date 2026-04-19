@@ -570,6 +570,32 @@ class MemorySettings(BaseSettings):
         ),
     )
 
+    # TAP-521: auth-token scaffolding for the future tapps-brain HTTP migration.
+    # BrainBridge is in-process today (AgentBrain + asyncio.to_thread), so these
+    # values are not consumed at runtime yet — they configure the header builder
+    # in ``tapps_core.brain_auth`` so the HTTP migration is a drop-in swap.
+    brain_auth_token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Bearer token for authenticated tapps-brain HTTP calls. Injected as "
+            "``Authorization: Bearer <token>`` by ``tapps_core.brain_auth."
+            "build_brain_headers``. Same token is reused for ``/admin/*`` paths "
+            "per tapps-brain v3.8.0 — there is no separate admin/system token. "
+            "Wrapped in ``SecretStr`` so it does not leak into logs/repr. "
+            "Env: TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN."
+        ),
+    )
+    brain_project_id: str = Field(
+        default="",
+        description=(
+            "Registered tapps-brain project slug sent as the ``X-Project-Id`` "
+            "header on every data-plane and MCP request (ADR-010). Distinct "
+            "from ``memory.project_id``, which is exported to "
+            "``TAPPS_BRAIN_PROJECT`` for the in-process AgentBrain path. "
+            "Env: TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID."
+        ),
+    )
+
     # EPIC-069 / ADR-010: multi-tenant project_id on the wire.
     project_id: str = Field(
         default="",
