@@ -9,10 +9,10 @@ tools:
   - Glob
   - Grep
   - Bash
-model: sonnet
+model: haiku
 maxTurns: 15
 isolation: worktree
-effort: medium
+effort: low
 ---
 
 You are a test runner validating Ralph's changes. Your job:

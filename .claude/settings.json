@@ -96,6 +96,16 @@
             "statusMessage": "Checking file protection..."
           }
         ]
+      },
+      {
+        "matcher": "Edit\\",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "Write",
+            "statusMessage": "bash .ralph/hooks/protect-ralph-files.sh|Checking file protection..."
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -229,6 +239,18 @@
             "type": "command",
             "command": "bash .ralph/hooks/on-teammate-idle.sh",
             "statusMessage": "Checking teammate work queue..."
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "rate_limit\\",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "server_error",
+            "statusMessage": "bash .ralph/hooks/on-stop-failure.sh|Handling API error..."
           }
         ]
       }
