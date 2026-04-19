@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.1] - 2026-04-19
+
+### Fixed
+
+- **`tapps_upgrade` preserves user hooks** — per-host hook generators were filtering `.claude/settings.json` hooks against a hard-coded allowlist of keys TappsMCP knew about, silently wiping any user-added entry (e.g. ralph's `StopFailure`). Switched to an exclusion list targeting only `PostCompact` — the one key documented to break Claude Code's schema — so user intent is preserved across upgrades. ([packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py](packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py))
+- **`tapps_upgrade` no longer duplicates the Karpathy block** — `merge_agents_md` section-split before stripping the vendored block, so the inner `## Karpathy Behavioral Guidelines` heading was treated as a normal section and its body (which contained the `BEGIN` marker) was overwritten by the template's expected-section body. `install_or_refresh` then couldn't locate the block and appended a second copy. The pipeline now strips the block (and legacy unwrapped copies from pre-marker versions) before section-splitting so exactly one canonical block survives each upgrade cycle. ([packages/tapps-mcp/src/tapps_mcp/pipeline/agents_md.py](packages/tapps-mcp/src/tapps_mcp/pipeline/agents_md.py))
+
+### Changed
+
+- Version bump: tapps-core 2.10.0 → 2.10.1, tapps-mcp 2.10.0 → 2.10.1, docs-mcp 2.10.0 → 2.10.1.
+
+## [2.10.0] - 2026-04-19
+
+### Added
+
+- **Runtime tapps-brain version check at BrainBridge startup** (TAP-519, #113) — BrainBridge validates the installed `tapps-brain` version against its declared floor at initialization so stale installs fail fast with an actionable message instead of deep in a memory call.
+- **Stable agent identity** (TAP-518, #114) — persists a UUIDv4 to `.tapps-mcp/agent.id` and reuses it across process restarts, so every memory write, hive event, and log entry from this project carries a consistent `agent_id`.
+- **DSN + pool config validation at bridge startup** (TAP-523, #116) — `TAPPS_BRAIN_DATABASE_URL` scheme, `memory.pg_pool_max_waiting`, and `memory.pg_pool_max_lifetime_seconds` are validated before the first memory call; bad values surface as a structured startup error rather than a cryptic connection failure at first use.
+- **Offline write-queue drain on shutdown** (TAP-517, #119) — queued memory writes accumulated during a brain outage are flushed at process exit, and bridge state (`connected` / `degraded` / `offline`, queue depth) is surfaced through `tapps_server_info` for observability.
+- **Auth-token config + header-builder scaffolding** (TAP-521, #118) — `memory.auth_token` setting + header construction plumbed through BrainBridge in preparation for the forthcoming migration from in-process `AgentBrain` to the tapps-brain HTTP adapter. Not wired to the network path yet; infrastructure only.
+- **Dedicated CircuitBreaker test coverage** (TAP-520, #120) — extracted BrainBridge's circuit-breaker behavior into its own test file so half-open → closed transitions and failure-threshold math can evolve without entangling higher-level memory-handler tests.
+- **Graceful `BrainBridgeUnavailable` handling** (TAP-515 / TAP-522, #117) — every `tapps_memory` sub-action now catches `BrainBridgeUnavailable` and returns a structured degraded payload instead of raising, so agents can branch on `degraded: true` rather than parsing tracebacks.
+
+### Fixed
+
+- **Hive status no longer probes Postgres client-side** (TAP-572, #115) — `tapps_session_start`'s hive-status block used to open its own asyncpg connection to sniff the DSN, duplicating tapps-brain's health logic and masking bridge-level failures. Now routed through `BrainBridge.hive_status()` so one source of truth answers `enabled` / `degraded` / `message`.
+
+### Changed
+
+- Version bump: tapps-core 2.9.0 → 2.10.0, tapps-mcp 2.9.0 → 2.10.0, docs-mcp 2.9.0 → 2.10.0.
+
+### Follow-up
+
+- TAP-596 filed to migrate BrainBridge from in-process `AgentBrain` to the tapps-brain HTTP adapter now that the auth/validation/offline-queue scaffolding is in place.
+
 ## [2.9.0] - 2026-04-17
 
 ### Added
