@@ -157,6 +157,16 @@ def _reset_brain_bridge_cache() -> None:
         _brain_bridge = None
 
 
+def _peek_brain_bridge() -> _BrainBridgeType | None:
+    """Return the cached :class:`BrainBridge` without forcing init (TAP-517).
+
+    Used by read-only consumers like ``tapps_server_info`` that need to
+    report bridge state but must not incur a Postgres connection just to
+    answer a diagnostics query.
+    """
+    return _brain_bridge
+
+
 def _get_memory_store() -> _MemoryStoreType:
     """Return the Postgres-backed :class:`MemoryStore` from the BrainBridge.
 

@@ -15,9 +15,12 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import atexit
 import contextlib
 import os
 import random
+import signal
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -53,6 +56,11 @@ _WRITE_QUEUE_CAP: int = 100
 _BRAIN_VERSION_FLOOR: str = "3.7.2"
 _BRAIN_VERSION_CEILING: str = "4.0.0"
 _BRAIN_HEALTH_TIMEOUT_SECONDS: float = 5.0
+
+# --- Shutdown drain ---------------------------------------------------------
+# Bounded deadline (seconds) that ``close`` / ``drain_blocking`` waits for the
+# offline write queue to drain on shutdown before giving up (TAP-517).
+_DRAIN_DEADLINE_SECONDS: float = 5.0
 
 
 class BrainBridgeUnavailable(Exception):  # noqa: N818  (public API name predates the lint rule; renaming would break consumers)
@@ -125,6 +133,27 @@ class BrainBridge:
         """Populate the version-check payload (factory-only helper)."""
         self._version_check = result
 
+    @property
+    def circuit_state(self) -> str:
+        """Circuit state as a stable string — ``"open"`` or ``"closed"``.
+
+        Exposed via :meth:`status` for server_info consumers so they do not
+        need to consume the mutating :attr:`circuit_open` check.
+        """
+        return "open" if self.circuit_open else "closed"
+
+    def status(self) -> dict[str, Any]:
+        """Non-blocking diagnostic snapshot of bridge health (TAP-517).
+
+        Safe to call from read-only paths like ``tapps_server_info``.
+        """
+        return {
+            "queue_depth": self.queue_depth,
+            "queue_cap": _WRITE_QUEUE_CAP,
+            "circuit_state": self.circuit_state,
+            "failures": self._failures,
+        }
+
     def _record_success(self) -> None:
         self._failures = 0
 
@@ -169,11 +198,21 @@ class BrainBridge:
     # -------------------------------------------------------------------------
 
     def _enqueue_write(self, entry: dict[str, Any]) -> bool:
-        """Queue a write for later drain. Returns False when queue is full."""
+        """Queue a write for later drain. Returns False when queue is full.
+
+        Logs a ``brain_write_queue_full`` warning on overflow (TAP-517) so
+        operators can see when the offline buffer is dropping writes.
+        """
         try:
             self._write_queue.put_nowait(entry)
             return True
         except asyncio.QueueFull:
+            logger.warning(
+                "brain_write_queue_full",
+                queue_depth=self._write_queue.qsize(),
+                queue_cap=_WRITE_QUEUE_CAP,
+                dropped_key=entry.get("key"),
+            )
             return False
 
     async def _drain_write_queue(self) -> None:
@@ -803,8 +842,51 @@ class BrainBridge:
     # Lifecycle
     # -------------------------------------------------------------------------
 
-    def close(self) -> None:
-        """Close the underlying AgentBrain connection pool."""
+    def drain_blocking(self, timeout: float = _DRAIN_DEADLINE_SECONDS) -> dict[str, int]:
+        """Synchronously drain the offline write queue (TAP-517).
+
+        Bypasses ``_call`` / ``asyncio.to_thread`` because this path runs from
+        shutdown hooks (atexit / SIGTERM) where the event loop may already be
+        gone. Bounded by *timeout* seconds; remaining entries are left on the
+        queue and reported in the return dict.
+        """
+        deadline = time.monotonic() + max(0.0, timeout)
+        drained = 0
+        dropped = 0
+        while not self._write_queue.empty():
+            if time.monotonic() >= deadline:
+                break
+            try:
+                entry = self._write_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            try:
+                self._brain.store.save(**entry)
+                drained += 1
+            except Exception as exc:
+                logger.warning(
+                    "brain_bridge.drain_blocking_entry_failed",
+                    error=str(exc),
+                    key=entry.get("key"),
+                )
+                dropped += 1
+        remaining = self._write_queue.qsize()
+        if drained or dropped or remaining:
+            logger.info(
+                "brain_bridge.drain_blocking_complete",
+                drained=drained,
+                dropped=dropped,
+                remaining=remaining,
+                deadline_exceeded=time.monotonic() >= deadline,
+            )
+        return {"drained": drained, "dropped": dropped, "remaining": remaining}
+
+    def close(self, drain_timeout: float = _DRAIN_DEADLINE_SECONDS) -> None:
+        """Drain queued writes (bounded) then close the AgentBrain pool."""
+        try:
+            self.drain_blocking(drain_timeout)
+        except Exception as exc:
+            logger.warning("brain_bridge.drain_on_close_failed", error=str(exc))
         try:
             self._brain.close()
         except Exception as exc:
@@ -1052,4 +1134,38 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
             ceiling=version_check["ceiling"],
         )
     bridge._set_version_check(version_check)
+    # TAP-517: register shutdown hooks so the offline write queue is drained
+    # on interpreter shutdown / SIGTERM before the process exits.
+    _register_shutdown_hooks(bridge)
     return bridge
+
+
+_shutdown_hooks_registered: bool = False
+
+
+def _register_shutdown_hooks(bridge: BrainBridge) -> None:
+    """Wire atexit + SIGTERM drain hooks for *bridge* (TAP-517).
+
+    atexit covers normal interpreter shutdown and ``sys.exit``. SIGTERM by
+    default kills the process without running atexit, so we route it through
+    ``sys.exit(0)`` to get the bounded drain. Signal registration only works
+    on the main thread of the main interpreter, so we swallow failures from
+    worker threads / embedded contexts.
+    """
+    global _shutdown_hooks_registered
+    if _shutdown_hooks_registered:
+        return
+
+    atexit.register(bridge.close)
+
+    def _sigterm_drain_exit(_signum: int, _frame: Any) -> None:
+        sys.exit(0)
+
+    try:
+        signal.signal(signal.SIGTERM, _sigterm_drain_exit)
+    except (OSError, ValueError):
+        # Non-main-thread, embedded interpreter, or platform without
+        # SIGTERM — atexit still covers normal shutdown paths.
+        logger.debug("brain_bridge.sigterm_register_skipped")
+
+    _shutdown_hooks_registered = True

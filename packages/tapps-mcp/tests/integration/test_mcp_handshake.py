@@ -75,3 +75,15 @@ class TestMCPHandshake:
         except AttributeError:
             # If internal API changes, at least verify the tool function exists
             assert callable(tapps_server_info)
+
+    @pytest.mark.asyncio
+    async def test_server_info_includes_brain_bridge_snapshot(self):
+        """TAP-517: server_info must expose BrainBridge queue_depth + circuit_state."""
+        result = await tapps_server_info()
+        bb = result["data"].get("brain_bridge")
+        assert bb is not None
+        assert "initialized" in bb
+        if bb["initialized"]:
+            assert bb["circuit_state"] in {"open", "closed"}
+            assert isinstance(bb["queue_depth"], int)
+            assert isinstance(bb["queue_cap"], int)
