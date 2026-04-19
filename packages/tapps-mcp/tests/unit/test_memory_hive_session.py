@@ -66,16 +66,13 @@ def test_server_helpers_removed_client_side_dsn_probe() -> None:
     from tapps_mcp import server_helpers
 
     assert not hasattr(server_helpers, "_ensure_hive_singletons"), (
-        "_ensure_hive_singletons was a client-side DSN probe — "
-        "removed by TAP-572."
+        "_ensure_hive_singletons was a client-side DSN probe — removed by TAP-572."
     )
     assert not hasattr(server_helpers, "_get_hive_store"), (
-        "_get_hive_store backed a client-side Hive backend — "
-        "removed by TAP-572."
+        "_get_hive_store backed a client-side Hive backend — removed by TAP-572."
     )
     assert not hasattr(server_helpers, "_get_hive_registry"), (
-        "_get_hive_registry backed a client-side Hive backend — "
-        "removed by TAP-572."
+        "_get_hive_registry backed a client-side Hive backend — removed by TAP-572."
     )
 
 
