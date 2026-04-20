@@ -766,6 +766,35 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Upgrade opt-outs for publisher/non-greenfield consumers (Ralph feedback)
+    upgrade_create_agents_md: bool = Field(
+        default=True,
+        description=(
+            "When False, tapps_upgrade does not create AGENTS.md if it does not "
+            "already exist. Existing AGENTS.md files still get the section-aware "
+            "merge. Set False for repos where CLAUDE.md is the single source of "
+            "truth. Can also be triggered by placing the HTML comment "
+            "'<!-- tapps:agents-md-disabled -->' inside CLAUDE.md."
+        ),
+    )
+    include_karpathy_guidelines: bool = Field(
+        default=True,
+        description=(
+            "When False, tapps_upgrade does not install the Karpathy guidelines "
+            "block into AGENTS.md or CLAUDE.md. If the block is already present, "
+            "it is still refreshed idempotently — opting out does not silently "
+            "strip user content."
+        ),
+    )
+    force_python_quality_rule: bool = Field(
+        default=False,
+        description=(
+            "When True, generate .claude/rules/python-quality.md and "
+            ".claude/rules/tapps-pipeline.md even in projects with no detected "
+            "Python signals. Default False skips those rules in non-Python repos."
+        ),
+    )
+
     # Destructive command guard (opt-in PreToolUse hook)
     destructive_guard: bool = Field(
         default=False,

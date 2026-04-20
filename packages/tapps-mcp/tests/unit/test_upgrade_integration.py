@@ -37,8 +37,14 @@ def _create_old_style_agent(agents_dir: Path, name: str) -> None:
 
 
 def _setup_claude_project(tmp_path: Path) -> None:
-    """Create a minimal Claude Code project structure."""
+    """Create a minimal Claude Code project structure.
+
+    Writes an empty ``pyproject.toml`` so the upgrade's Python-signal gate
+    treats this as a Python project — these tests exercise the full rule
+    bundle including ``python-quality.md``.
+    """
     (tmp_path / ".claude").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
 
 
 def _setup_cursor_project(tmp_path: Path) -> None:
