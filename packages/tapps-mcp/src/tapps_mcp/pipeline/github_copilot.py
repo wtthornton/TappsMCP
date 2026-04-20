@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from tapps_mcp import __version__
+from tapps_mcp.pipeline.ci_install import render_install_step
 from tapps_mcp.pipeline.platform_generators import _add_version_marker, _check_version_marker
 
 if TYPE_CHECKING:
@@ -229,15 +230,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install tools
-        run: |
-          pip install tapps-mcp ruff mypy bandit radon vulture
-
+{INSTALL_STEP}
       - name: Run quality analysis on changed files
         env:
           TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
-        run: |
-          tapps-mcp validate-changed --preset strict
+        run: tapps-mcp validate-changed --full
 """
 
 # ---------------------------------------------------------------------------
@@ -359,7 +356,13 @@ def generate_agentic_workflow(project_root: Path) -> dict[str, Any]:
     wf_dir = project_root / ".github" / "workflows"
     wf_dir.mkdir(parents=True, exist_ok=True)
     target = wf_dir / "agentic-pr-review.yml"
-    target.write_text(_AGENTIC_PR_REVIEW, encoding="utf-8")
+    target.write_text(
+        _AGENTIC_PR_REVIEW.replace(
+            "{INSTALL_STEP}",
+            render_install_step(step_name="Install TappsMCP and checkers"),
+        ),
+        encoding="utf-8",
+    )
     return {"file": str(target.relative_to(project_root)), "action": "created"}
 
 

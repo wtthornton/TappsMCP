@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from tapps_mcp.pipeline.ci_install import render_install_step
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -63,17 +65,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install TappsMCP and checkers
-        run: |
-          pip install tapps-mcp
-          pip install ruff mypy bandit radon vulture
-
+{INSTALL_STEP}
       - name: Run TappsMCP quality gate
         env:
           TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
-        run: |
-          tapps-mcp validate-changed \\
-            --preset ${{ inputs.preset || 'staging' }}
+        run: tapps-mcp validate-changed --full
 
       - name: Upload quality report
         if: always()
@@ -277,17 +273,11 @@ jobs:
         with:
           python-version: ${{ inputs.python-version }}
 
-      - name: Install TappsMCP and checkers
-        run: |
-          pip install tapps-mcp
-          pip install ruff mypy bandit radon vulture
-
+{INSTALL_STEP}
       - name: Run quality gate
         env:
           TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
-        run: |
-          tapps-mcp validate-changed \\
-            --preset ${{ inputs.preset }}
+        run: tapps-mcp validate-changed --full
 """
 
 
@@ -308,7 +298,10 @@ def generate_enhanced_ci_workflow(project_root: Path) -> dict[str, Any]:
     wf_dir.mkdir(parents=True, exist_ok=True)
     target = wf_dir / "tapps-quality.yml"
     existed = target.exists()
-    target.write_text(_QUALITY_WORKFLOW, encoding="utf-8")
+    target.write_text(
+        _QUALITY_WORKFLOW.replace("{INSTALL_STEP}", render_install_step()),
+        encoding="utf-8",
+    )
     return {
         "file": str(target.relative_to(project_root)),
         "action": "updated" if existed else "created",
@@ -362,7 +355,10 @@ def generate_reusable_quality_workflow(project_root: Path) -> dict[str, Any]:
     wf_dir = project_root / ".github" / "workflows"
     wf_dir.mkdir(parents=True, exist_ok=True)
     target = wf_dir / "tapps-quality-reusable.yml"
-    target.write_text(_REUSABLE_QUALITY_WORKFLOW, encoding="utf-8")
+    target.write_text(
+        _REUSABLE_QUALITY_WORKFLOW.replace("{INSTALL_STEP}", render_install_step()),
+        encoding="utf-8",
+    )
     return {"file": str(target.relative_to(project_root)), "action": "created"}
 
 
