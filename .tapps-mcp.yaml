@@ -14,3 +14,7 @@ security:
 experts:
   auto_generate: true
 cache_max_mb: 100
+upgrade_skip_files:
+  - .github/workflows/tapps-quality.yml
+  - .github/workflows/tapps-quality-reusable.yml
+  - .github/workflows/agentic-pr-review.yml
