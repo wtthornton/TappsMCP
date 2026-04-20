@@ -11,7 +11,7 @@ tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "a3
 
 [tool.uv]
 dev-dependencies = [
-    "pytest>=9.0.2,<10",
+    "pytest>=9.0.3,<10",
     "pytest-asyncio>=1.3.0,<2",
     "pytest-cov>=7.0.0,<8",
     "pytest-timeout>=2.4.0,<3",
@@ -207,7 +207,7 @@ exclude_lines = [
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.2,<10",
+    "pytest>=9.0.3,<10",
     "pytest-asyncio>=1.3.0,<2",
     "pytest-cov>=7.0.0,<8",
     "mypy>=1.19.1,<2",
