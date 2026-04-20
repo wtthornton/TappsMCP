@@ -12,6 +12,7 @@ from docs_mcp.validators.completeness import (
     _check_essential_docs,
     _check_project_docs,
     _file_exists_case_insensitive,
+    _find_api_doc_file,
 )
 
 # ---------------------------------------------------------------------------
@@ -193,6 +194,57 @@ class TestCompletenessChecker:
         assert "api_documentation" in category_names
         assert "inline_docs" in category_names
         assert "project_docs" in category_names
+
+    def test_api_documentation_detects_docs_api_reference_md(self, tmp_path: Path) -> None:
+        """Regression for TAP-738: written API doc file counts as api_documentation=1."""
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "api-reference.md").write_text(
+            "# API Reference\n\n## Module foo\n", encoding="utf-8"
+        )
+        # A Python file with zero docstring coverage must not drag the score down.
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "undocumented.py").write_text(
+            "def foo() -> None:\n    pass\n\nclass Bar:\n    pass\n",
+            encoding="utf-8",
+        )
+
+        checker = CompletenessChecker()
+        report = checker.check(tmp_path)
+
+        api_cat = next(c for c in report.categories if c.name == "api_documentation")
+        assert api_cat.score == 1.0
+        assert api_cat.present == ["docs/api-reference.md"]
+        assert api_cat.missing == []
+
+    def test_find_api_doc_file_matches_common_names(self, tmp_path: Path) -> None:
+        """_find_api_doc_file recognizes api*/reference* in root, docs/, docs/*/.
+        """
+        # Root-level API.md
+        root_project = tmp_path / "root"
+        root_project.mkdir()
+        (root_project / "API.md").write_text("# API\n", encoding="utf-8")
+        assert _find_api_doc_file(root_project) == "API.md"
+
+        # docs/reference.md
+        docs_project = tmp_path / "docs_proj"
+        (docs_project / "docs").mkdir(parents=True)
+        (docs_project / "docs" / "reference.md").write_text("# Ref\n", encoding="utf-8")
+        assert _find_api_doc_file(docs_project) == "docs/reference.md"
+
+        # docs/api/reference.md (one level deep)
+        deep_project = tmp_path / "deep"
+        (deep_project / "docs" / "api").mkdir(parents=True)
+        (deep_project / "docs" / "api" / "reference.md").write_text("# Ref\n", encoding="utf-8")
+        assert _find_api_doc_file(deep_project) == "docs/api/reference.md"
+
+        # No API docs — returns None
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        (empty / "README.md").write_text("# Readme\n", encoding="utf-8")
+        (empty / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        assert _find_api_doc_file(empty) is None
 
     def test_api_docs_coverage(self, tmp_path: Path) -> None:
         """Modules with docstrings should be counted as documented."""

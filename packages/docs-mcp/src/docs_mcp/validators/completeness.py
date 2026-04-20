@@ -197,13 +197,95 @@ def _check_development_docs(project_root: Path) -> CompletenessCategory:
     )
 
 
+_API_DOC_EXTS = frozenset({".md", ".rst"})
+
+
+def _find_api_doc_file(
+    project_root: Path,
+    *,
+    gitignore_patterns: list[str] | None = None,
+    extra_exclude: list[str] | None = None,
+) -> str | None:
+    """Find a written API documentation file.
+
+    Matches common filenames (``api.md``, ``API.md``, ``api-reference.md``,
+    ``api_docs.md``, ``reference.md``) in the project root, ``docs/``, or one
+    level under ``docs/`` (e.g. ``docs/api/reference.md``). This keeps the
+    category in sync with ``docs_session_start`` which classifies any path
+    containing "api" as ``api_docs``.
+    """
+    gi = list(gitignore_patterns) if gitignore_patterns else []
+    extras = list(extra_exclude) if extra_exclude else []
+
+    def matches(entry: Path) -> bool:
+        if entry.suffix.lower() not in _API_DOC_EXTS:
+            return False
+        stem = entry.stem.lower()
+        return stem.startswith("api") or stem in {"reference", "references"}
+
+    def scan(directory: Path) -> str | None:
+        try:
+            for entry in directory.iterdir():
+                if not entry.is_file() or not matches(entry):
+                    continue
+                rel = str(entry.relative_to(project_root)).replace("\\", "/")
+                if should_exclude(rel, gi, extras):
+                    continue
+                return rel
+        except OSError:
+            pass
+        return None
+
+    if (found := scan(project_root)) is not None:
+        return found
+
+    docs_dir = project_root / "docs"
+    if not docs_dir.is_dir():
+        return None
+    if (found := scan(docs_dir)) is not None:
+        return found
+
+    try:
+        for sub in docs_dir.iterdir():
+            if not sub.is_dir():
+                continue
+            sub_rel = str(sub.relative_to(project_root)).replace("\\", "/")
+            if should_exclude(sub_rel, gi, extras):
+                continue
+            if (found := scan(sub)) is not None:
+                return found
+    except OSError:
+        pass
+    return None
+
+
 def _check_api_documentation(
     project_root: Path,
     *,
     gitignore_patterns: list[str] | None = None,
     extra_exclude: list[str] | None = None,
 ) -> CompletenessCategory:
-    """Check % of public modules with docstrings using APISurfaceAnalyzer."""
+    """Check API documentation coverage.
+
+    A written API reference file (e.g. ``docs/api-reference.md``) short-circuits
+    the category to ``score=1.0`` — if the project has curated API docs, it
+    should not be penalized for low Python docstring coverage. Otherwise,
+    fall back to per-module docstring coverage via APISurfaceAnalyzer.
+    """
+    api_doc = _find_api_doc_file(
+        project_root,
+        gitignore_patterns=gitignore_patterns,
+        extra_exclude=extra_exclude,
+    )
+    if api_doc is not None:
+        return CompletenessCategory(
+            name="api_documentation",
+            score=1.0,
+            present=[api_doc],
+            missing=[],
+            weight=2.0,
+        )
+
     from docs_mcp.analyzers.api_surface import APISurfaceAnalyzer
 
     py_files = _find_python_files(
