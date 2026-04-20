@@ -13,6 +13,7 @@ import json
 import stat
 from typing import TYPE_CHECKING, Any
 
+from tapps_mcp.pipeline.ci_install import render_install_step
 from tapps_mcp.pipeline.platform_hook_templates import (
     AGENT_TEAMS_CLAUDE_MD_SECTION,
     AGENT_TEAMS_HOOK_SCRIPTS,
@@ -395,15 +396,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install TappsMCP
-        run: pip install tapps-mcp
-
+{INSTALL_STEP}
       - name: Run TappsMCP quality gate
         env:
           TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
-        run: |
-          tapps-mcp validate-changed \\
-            --preset staging
+        run: tapps-mcp validate-changed --full
 """
 
 _CI_CLAUDE_MD_SECTION = """\
@@ -457,7 +454,10 @@ def generate_ci_workflow(project_root: Path) -> dict[str, Any]:
     wf_dir = project_root / ".github" / "workflows"
     wf_dir.mkdir(parents=True, exist_ok=True)
     target = wf_dir / "tapps-quality.yml"
-    target.write_text(_CI_WORKFLOW, encoding="utf-8")
+    target.write_text(
+        _CI_WORKFLOW.replace("{INSTALL_STEP}", render_install_step()),
+        encoding="utf-8",
+    )
     return {"file": str(target), "action": "created"}
 
 
