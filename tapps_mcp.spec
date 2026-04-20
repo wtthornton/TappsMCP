@@ -190,6 +190,7 @@ a = Analysis(
         "tapps_mcp.pipeline.agents_md",
         "tapps_mcp.pipeline.karpathy_block",
         "tapps_mcp.pipeline.github_templates",
+        "tapps_mcp.pipeline.ci_install",
         "tapps_mcp.pipeline.github_ci",
         "tapps_mcp.pipeline.github_copilot",
         "tapps_mcp.pipeline.github_governance",
