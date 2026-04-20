@@ -2084,6 +2084,7 @@ async def tapps_upgrade(
     force: bool = False,
     dry_run: bool = False,
     output_mode: str = "auto",
+    mcp_only: bool = False,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Upgrade all TappsMCP-generated files after a version update.
@@ -2115,6 +2116,12 @@ async def tapps_upgrade(
             output when read-only (e.g. Docker container).
             ``"content_return"``: always return file contents without writing.
             ``"direct_write"``: always write files directly (error if read-only).
+        mcp_only: If True, perform a narrow upgrade — only the ``.mcp.json``
+            merge (when already opted in) and ``.claude/settings.json``
+            permissions merge. CLAUDE.md, AGENTS.md, hooks, rules, agents,
+            skills, Karpathy block, and GitHub artifacts are skipped.
+            Intended for publisher/non-greenfield consumers that just want
+            the MCP server wired into existing sessions.
     """
     from tapps_mcp.pipeline.upgrade import upgrade_pipeline
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
@@ -2143,6 +2150,7 @@ async def tapps_upgrade(
             platform=platform,
             force=force,
             dry_run=dry_run,
+            mcp_only=mcp_only,
         )
     finally:
         # Restore env var

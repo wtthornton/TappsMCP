@@ -192,9 +192,10 @@ class TestUpgradeIntegration:
     """Verify tapps_upgrade regenerates the Python quality rule file."""
 
     def test_upgrade_regenerates_rule(self, tmp_path: Path) -> None:
-        # Simulate existing Claude Code project
+        # Simulate existing Claude Code project with Python signal
         (tmp_path / ".claude").mkdir()
         (tmp_path / "CLAUDE.md").write_text("# TAPPS Quality Pipeline\n")
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
 
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 
@@ -209,6 +210,7 @@ class TestUpgradeIntegration:
     def test_upgrade_dry_run_reports_rule(self, tmp_path: Path) -> None:
         (tmp_path / ".claude").mkdir()
         (tmp_path / "CLAUDE.md").write_text("# TAPPS Quality Pipeline\n")
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
 
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 
