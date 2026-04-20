@@ -38,5 +38,4 @@ jobs:
       - name: Run quality analysis on changed files
         env:
           TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
-        run: |
-          uv run tapps-mcp validate-changed --preset strict
+        run: uv run tapps-mcp validate-changed --full

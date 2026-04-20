@@ -52,9 +52,7 @@ jobs:
       - name: Run TappsMCP quality gate
         env:
           TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
-        run: |
-          uv run tapps-mcp validate-changed \
-            --preset ${{ inputs.preset || 'staging' }}
+        run: uv run tapps-mcp validate-changed --full
 
       - name: Upload quality report
         if: always()
