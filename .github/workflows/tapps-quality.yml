@@ -35,22 +35,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install TappsMCP and checkers
-        run: |
-          pip install tapps-mcp
-          pip install ruff mypy bandit radon vulture
+      - name: Install workspace (tapps-mcp + checkers)
+        run: uv sync --frozen --dev
 
       - name: Run TappsMCP quality gate
         env:
           TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
-        run: |
-          tapps-mcp validate-changed \
-            --preset ${{ inputs.preset || 'staging' }}
+        run: uv run tapps-mcp validate-changed --full
 
       - name: Upload quality report
         if: always()
