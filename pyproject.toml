@@ -20,7 +20,7 @@ dev-dependencies = [
     "mypy>=1.20.1,<2",
     "ruff>=0.15.11,<1",
     "pre-commit>=4.5.1,<5",
-    "types-PyYAML>=6.0.12",
+    "types-PyYAML>=6.0.12.20260408",
     "playwright>=1.58.0,<2",
     # tree-sitter for docs-mcp multi-language extraction tests
     "tree-sitter>=0.24.0,<1",
@@ -212,5 +212,5 @@ dev = [
     "pytest-cov>=7.1.0,<8",
     "mypy>=1.20.1,<2",
     "ruff>=0.15.11,<1",
-    "types-PyYAML>=6.0.12",
+    "types-PyYAML>=6.0.12.20260408",
 ]
