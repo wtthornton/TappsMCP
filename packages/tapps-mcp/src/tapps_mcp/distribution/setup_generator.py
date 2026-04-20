@@ -989,7 +989,6 @@ def _generate_rules(
     )
     from tapps_mcp.pipeline.platform_generators import (
         generate_bugbot_rules,
-        generate_ci_workflow,
         generate_claude_hooks,
         generate_copilot_instructions,
         generate_cursor_hooks,
@@ -1022,8 +1021,6 @@ def _generate_rules(
         _echo_gen_result("agents", agents_result)
         skills_result = generate_skills(project_root, "claude", engagement_level=engagement_level)
         _echo_gen_result("skills", skills_result)
-        generate_ci_workflow(project_root)
-        click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
         generate_copilot_instructions(project_root)
         click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
     elif host == "cursor":
@@ -1044,13 +1041,9 @@ def _generate_rules(
         _echo_gen_result("cursor rules", rules_result)
         generate_bugbot_rules(project_root)
         click.echo(click.style("  Generated .cursor/BUGBOT.md", fg="green"))
-        generate_ci_workflow(project_root)
-        click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
         generate_copilot_instructions(project_root)
         click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
     elif host == "vscode":
-        generate_ci_workflow(project_root)
-        click.echo(click.style("  Generated .github/workflows/tapps-quality.yml", fg="green"))
         generate_copilot_instructions(project_root)
         click.echo(click.style("  Generated .github/copilot-instructions.md", fg="green"))
 

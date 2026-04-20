@@ -772,7 +772,6 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         if not cfg.minimal:
             from tapps_mcp.pipeline.platform_generators import (
                 generate_agent_teams_hooks,
-                generate_ci_workflow,
                 generate_claude_agent_scope_rule,
                 generate_claude_hooks,
                 generate_claude_python_quality_rule,
@@ -838,7 +837,6 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                     )
             except Exception:
                 pass  # Non-critical; settings may not have memory_hooks yet
-            state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
             state.result["copilot_instructions"] = generate_copilot_instructions(
                 state.project_root,
             )
@@ -853,7 +851,6 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         if not cfg.minimal:
             from tapps_mcp.pipeline.platform_generators import (
                 generate_bugbot_rules,
-                generate_ci_workflow,
                 generate_copilot_instructions,
                 generate_cursor_hooks,
                 generate_cursor_rules,
@@ -879,7 +876,6 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 )
             state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
             state.result["bugbot_rules"] = generate_bugbot_rules(state.project_root)
-            state.result["ci_workflow"] = generate_ci_workflow(state.project_root)
             state.result["copilot_instructions"] = generate_copilot_instructions(
                 state.project_root,
             )

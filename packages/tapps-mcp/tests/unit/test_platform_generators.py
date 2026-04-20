@@ -20,7 +20,6 @@ from tapps_mcp.pipeline.platform_generators import (
     _CURSOR_HOOKS_CONFIG_PS,
     generate_agent_teams_hooks,
     generate_bugbot_rules,
-    generate_ci_workflow,
     generate_claude_hooks,
     generate_claude_plugin_bundle,
     generate_copilot_instructions,
@@ -247,18 +246,6 @@ class TestMiscGenerators:
     def test_bugbot_rules_creates_file(self, tmp_path: Path) -> None:
         result = generate_bugbot_rules(tmp_path)
         assert Path(result["file"]).exists()
-
-    def test_ci_workflow_creates_file(self, tmp_path: Path) -> None:
-        result = generate_ci_workflow(tmp_path)
-        assert Path(result["file"]).exists()
-
-    def test_ci_workflow_is_valid_yaml(self, tmp_path: Path) -> None:
-        import yaml
-
-        generate_ci_workflow(tmp_path)
-        target = tmp_path / ".github" / "workflows" / "tapps-quality.yml"
-        data = yaml.safe_load(target.read_text())
-        assert "jobs" in data
 
     def test_agent_teams_hooks_creates_scripts(self, tmp_path: Path) -> None:
         result = generate_agent_teams_hooks(tmp_path)

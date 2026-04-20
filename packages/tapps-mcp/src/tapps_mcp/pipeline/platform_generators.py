@@ -56,7 +56,6 @@ def _add_version_marker(content: str) -> str:
 # Re-export generators from submodules for backward compatibility
 from tapps_mcp.pipeline.platform_bundles import (
     generate_agent_teams_hooks,
-    generate_ci_workflow,
     generate_claude_agent_scope_rule,
     generate_claude_plugin_bundle,
     generate_claude_python_quality_rule,
@@ -148,7 +147,6 @@ __all__ = [
     "_check_version_marker",
     "generate_agent_teams_hooks",
     "generate_bugbot_rules",
-    "generate_ci_workflow",
     "generate_claude_agent_scope_rule",
     "generate_claude_hooks",
     "generate_claude_plugin_bundle",

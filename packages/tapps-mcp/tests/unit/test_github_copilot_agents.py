@@ -153,38 +153,19 @@ class TestEnhancedCopilotInstructions:
         assert result["action"] == "up-to-date"
 
 
-class TestAgenticWorkflow:
-    """Tests for generate_agentic_workflow (Story 21.4)."""
-
-    def test_creates_agentic_workflow(self, tmp_path):
-        from tapps_mcp.pipeline.github_copilot import generate_agentic_workflow
-
-        generate_agentic_workflow(tmp_path)
-        assert (tmp_path / ".github" / "workflows" / "agentic-pr-review.yml").exists()
-
-    def test_agentic_workflow_has_pr_trigger(self, tmp_path):
-        from tapps_mcp.pipeline.github_copilot import generate_agentic_workflow
-
-        generate_agentic_workflow(tmp_path)
-        content = (tmp_path / ".github" / "workflows" / "agentic-pr-review.yml").read_text()
-        assert "pull_request" in content
-
-    def test_result_dict(self, tmp_path):
-        from tapps_mcp.pipeline.github_copilot import generate_agentic_workflow
-
-        result = generate_agentic_workflow(tmp_path)
-        assert result["action"] == "created"
-
-
 class TestGenerateAllCopilotConfig:
-    """Tests for generate_all_copilot_config (Story 21.5)."""
+    """Tests for generate_all_copilot_config (Story 21.5).
+
+    The agentic PR review workflow was dropped — quality work runs locally
+    rather than in GitHub Actions.
+    """
 
     def test_generates_all_config(self, tmp_path):
         from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
 
         result = generate_all_copilot_config(tmp_path)
         assert result["success"] is True
-        assert result["total_files"] == 7  # 2 agents + 3 instructions + 1 copilot + 1 workflow
+        assert result["total_files"] == 6  # 2 agents + 3 instructions + 1 copilot
 
     def test_all_files_created(self, tmp_path):
         from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
@@ -196,6 +177,8 @@ class TestGenerateAllCopilotConfig:
         assert (tmp_path / ".github" / "instructions" / "security.instructions.md").exists()
         assert (tmp_path / ".github" / "instructions" / "testing.instructions.md").exists()
         assert (tmp_path / ".github" / "copilot-instructions.md").exists()
+        # Removed — agentic workflow no longer emitted.
+        assert not (tmp_path / ".github" / "workflows" / "agentic-pr-review.yml").exists()
 
     def test_result_has_sub_results(self, tmp_path):
         from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
@@ -204,4 +187,4 @@ class TestGenerateAllCopilotConfig:
         assert "agent_profiles" in result
         assert "path_instructions" in result
         assert "copilot_instructions" in result
-        assert "agentic_workflow" in result
+        assert "agentic_workflow" not in result
