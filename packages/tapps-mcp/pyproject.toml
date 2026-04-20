@@ -40,6 +40,13 @@ dependencies = [
     "pylint>=3.3",
     "perflint>=0.8",
     "pip-audit>=2.8",
+    # Security floors for transitive CVEs (TAP-608). Remove once the
+    # parents (mcp, pip-audit, bandit, pytest) bump their pins past these.
+    "cryptography>=46.0.7,<47",        # CVE-2026-26007, -34073, -39892 via mcp[cli]->pyjwt[crypto]
+    "pygments>=2.20.0,<3",             # CVE-2026-4539 via bandit->rich, pytest
+    "pyjwt>=2.12.0,<3",                # CVE-2026-32597 via mcp[cli]
+    "python-multipart>=0.0.26,<1",     # CVE-2026-40347 via mcp[cli]
+    "requests>=2.33.0,<3",             # CVE-2026-25645 via pip-audit->cachecontrol
 ]
 
 [project.optional-dependencies]
