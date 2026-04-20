@@ -1,11 +1,8 @@
-"""Header-builder scaffolding for authenticated tapps-brain HTTP calls (TAP-521).
+"""Header builder for authenticated tapps-brain HTTP calls (TAP-521 / TAP-596).
 
-``BrainBridge`` runs in-process today via :class:`tapps_brain.AgentBrain` +
-``asyncio.to_thread`` — no HTTP requests leave this process. This module is
-**scaffolding**: it configures the Bearer-token / ``X-Project-Id`` /
-``X-Agent-Id`` headers the bridge will need once it migrates to the tapps-brain
-HTTP adapter. Until that migration lands, ``build_brain_headers`` is importable
-but uncalled.
+:func:`build_brain_headers` is called by :func:`tapps_core.brain_bridge._create_http_bridge`
+to produce the ``Authorization``, ``X-Project-Id``, and ``X-Agent-Id`` headers
+passed to every outgoing :class:`~tapps_core.brain_bridge.HttpBrainBridge` request.
 
 Auth scheme (tapps-brain v3.8.0, ADR-010):
 
@@ -118,11 +115,6 @@ def build_brain_headers(
         )
 
     return headers
-
-
-# TODO(TAP-596): wire into HTTP client when BrainBridge migrates from in-process
-# AgentBrain to the tapps-brain HTTP adapter. Every outgoing request should call
-# ``build_brain_headers(settings)`` and pass the result to the httpx client.
 
 
 __all__ = ["BrainAuthConfigError", "build_brain_headers"]

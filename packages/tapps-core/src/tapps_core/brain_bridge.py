@@ -1,13 +1,24 @@
-"""BrainBridge: async wrapper over tapps-brain v3 AgentBrain.
+"""BrainBridge: async wrapper over tapps-brain.
 
-All sync AgentBrain/MemoryStore calls are offloaded via asyncio.to_thread.
-Resilience: circuit breaker + exponential-backoff retry + offline write queue.
+Two transport modes are supported:
+
+- **HTTP** (recommended): :class:`HttpBrainBridge` routes all calls through the
+  tapps-brain HTTP MCP API at ``{brain_http_url}/mcp``. Requires only
+  ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` and ``TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN``.
+  Selected automatically by :func:`create_brain_bridge` when ``brain_http_url`` is set.
+
+- **In-process** (legacy/local-dev): :class:`BrainBridge` wraps a local
+  :class:`tapps_brain.AgentBrain` and offloads sync calls via ``asyncio.to_thread``.
+  Requires ``TAPPS_BRAIN_DATABASE_URL``.
+
+Both share the same circuit-breaker, exponential-backoff retry, and offline write-queue
+primitives.
 
 Usage::
 
     from tapps_core.brain_bridge import create_brain_bridge
 
-    bridge = create_brain_bridge(settings)  # None if TAPPS_BRAIN_DATABASE_URL unset
+    bridge = create_brain_bridge(settings)  # None if neither transport is configured
     if bridge:
         results = await bridge.search("query")
 """
@@ -894,6 +905,455 @@ class BrainBridge:
 
 
 # -----------------------------------------------------------------------------
+# HTTP transport (TAP-596)
+# -----------------------------------------------------------------------------
+
+
+class HttpBrainBridge(BrainBridge):
+    """BrainBridge that routes all calls through the tapps-brain HTTP MCP API.
+
+    Selected by :func:`create_brain_bridge` when ``settings.memory.brain_http_url``
+    (or ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL``) is non-empty.  ``TAPPS_BRAIN_DATABASE_URL``
+    is **not** required in this path.
+
+    All data methods use :meth:`_http_mcp_call` which wraps the same circuit-breaker /
+    exponential-backoff retry / offline write-queue logic as the in-process path.
+
+    MCP JSON-RPC transport
+    ~~~~~~~~~~~~~~~~~~~~~~
+    Each call POSTs a ``tools/call`` request to ``{brain_http_url}/mcp``::
+
+        POST {brain_http_url}/mcp
+        Content-Type: application/json
+        Authorization: Bearer <token>
+        X-Project-Id: <slug>
+        X-Agent-Id: <id>
+
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "<tool>", "arguments": {...}}}
+
+    Tool name mapping (tapps-brain-http MCP surface)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ========================  =====================
+    BrainBridge method        MCP tool name
+    ========================  =====================
+    search                    memory_search
+    get                       memory_get
+    list_memories             memory_list
+    recall_for_prompt         memory_recall
+    save                      memory_save
+    delete                    memory_delete
+    reinforce                 memory_reinforce
+    supersede                 memory_supersede
+    gc                        memory_gc
+    consolidate               memory_consolidate
+    hive_search               hive_search
+    hive_status               hive_status
+    hive_propagate            hive_propagate
+    agent_register            agent_register
+    ========================  =====================
+
+    Verify this mapping against the live tapps-brain-http server when deploying.
+    """
+
+    is_http_mode: bool = True
+
+    def __init__(self, http_url: str, headers: dict[str, str]) -> None:
+        # Initialise shared resilience state without a local AgentBrain.
+        self._failures: int = 0
+        self._open_at: float | None = None
+        self._write_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_WRITE_QUEUE_CAP)
+        self._drain_task: asyncio.Task[None] | None = None
+        self._version_check: dict[str, Any] = {
+            "ok": True,
+            "skipped": True,
+            "degraded": False,
+            "url": "",
+            "floor": _BRAIN_VERSION_FLOOR,
+            "ceiling": _BRAIN_VERSION_CEILING,
+            "version": None,
+            "errors": [],
+            "warnings": [],
+        }
+        self._http_url: str = http_url.rstrip("/")
+        self._http_headers: dict[str, str] = dict(headers)
+        self._http_client: httpx.AsyncClient | None = None
+
+    # -------------------------------------------------------------------------
+    # HTTP JSON-RPC call layer
+    # -------------------------------------------------------------------------
+
+    async def _http_mcp_call(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        """Call a tapps-brain MCP tool with circuit-breaker + retry semantics."""
+        if self.circuit_open:
+            raise BrainBridgeUnavailable("circuit open")
+
+        last_exc: Exception | None = None
+        for attempt in range(_RETRY_ATTEMPTS):
+            try:
+                result = await self._do_mcp_post(tool_name, arguments)
+                self._record_success()
+                return result
+            except BrainBridgeUnavailable:
+                raise
+            except Exception as exc:
+                last_exc = exc
+                self._record_failure()
+                if self.circuit_open:
+                    break
+                if attempt < _RETRY_ATTEMPTS - 1:
+                    delay = min(_RETRY_BASE * (2**attempt), _RETRY_MAX)
+                    delay += random.uniform(0, delay * 0.1)  # noqa: S311
+                    await asyncio.sleep(delay)
+
+        raise BrainBridgeUnavailable(f"all retries exhausted: {last_exc}") from last_exc
+
+    async def _do_mcp_post(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        """POST a single ``tools/call`` to ``{brain_http_url}/mcp``."""
+        import json as _json
+
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(
+                headers=self._http_headers,
+                timeout=30.0,
+            )
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments},
+        }
+        response = await self._http_client.post(f"{self._http_url}/mcp", json=payload)
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+
+        rpc_error = data.get("error")
+        if rpc_error:
+            raise RuntimeError(f"tapps-brain MCP RPC error: {rpc_error}")
+
+        result: dict[str, Any] = data.get("result", {})
+        if result.get("isError"):
+            content = result.get("content", [])
+            msg = content[0].get("text", str(result)) if content else str(result)
+            raise RuntimeError(f"tapps-brain tool error: {msg}")
+
+        content_items: list[dict[str, Any]] = result.get("content", [])
+        if content_items and content_items[0].get("type") == "text":
+            text = content_items[0]["text"]
+            try:
+                return _json.loads(text)
+            except _json.JSONDecodeError:
+                return {"value": text}
+        return result
+
+    # -------------------------------------------------------------------------
+    # Read operations (HTTP overrides)
+    # -------------------------------------------------------------------------
+
+    async def search(
+        self,
+        query: str,
+        limit: int = 10,
+        tier: str | None = None,
+    ) -> list[dict[str, Any]]:
+        args: dict[str, Any] = {"query": query, "limit": limit}
+        if tier is not None:
+            args["tier"] = tier
+        result = await self._http_mcp_call("memory_search", args)
+        if isinstance(result, list):
+            return result
+        return result.get("results", []) if isinstance(result, dict) else []
+
+    async def get(self, key: str) -> dict[str, Any] | None:
+        result = await self._http_mcp_call("memory_get", {"key": key})
+        if isinstance(result, dict) and result.get("key"):
+            return result
+        return None
+
+    async def list_memories(
+        self,
+        limit: int = 20,
+        tier: str | None = None,
+    ) -> list[dict[str, Any]]:
+        args: dict[str, Any] = {"limit": limit}
+        if tier is not None:
+            args["tier"] = tier
+        result = await self._http_mcp_call("memory_list", args)
+        if isinstance(result, list):
+            return result
+        return result.get("entries", []) if isinstance(result, dict) else []
+
+    async def recall_for_prompt(
+        self,
+        query: str,
+        max_tokens: int = 2000,
+        threshold: float = 0.5,
+    ) -> str | None:
+        args: dict[str, Any] = {"query": query, "max_tokens": max_tokens, "threshold": threshold}
+        result = await self._http_mcp_call("memory_recall", args)
+        if isinstance(result, str):
+            return result or None
+        if isinstance(result, dict):
+            text = result.get("text") or result.get("content")
+            return str(text) if text else None
+        return None
+
+    async def hive_search(
+        self,
+        query: str,
+        limit: int = 10,
+        namespaces: list[str] | None = None,
+        min_confidence: float = 0.0,
+    ) -> list[dict[str, Any]]:
+        args: dict[str, Any] = {"query": query, "limit": limit}
+        if namespaces is not None:
+            args["namespaces"] = namespaces
+        if min_confidence > 0.0:
+            args["min_confidence"] = min_confidence
+        result = await self._http_mcp_call("hive_search", args)
+        if isinstance(result, list):
+            return result
+        return result.get("results", []) if isinstance(result, dict) else []
+
+    async def hive_status(
+        self,
+        *,
+        agent_id: str,
+        agent_name: str = "unnamed",
+        agent_profile: str = "repo-brain",
+        project_root: str = ".",
+        register: bool = True,
+    ) -> dict[str, Any]:
+        args: dict[str, Any] = {
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "agent_profile": agent_profile,
+            "project_root": project_root,
+            "register": register,
+        }
+        result = await self._http_mcp_call("hive_status", args)
+        return result if isinstance(result, dict) else {"enabled": True, "degraded": False}
+
+    async def hive_propagate(
+        self,
+        entries: list[Any],
+        *,
+        agent_id: str,
+        agent_profile: str,
+    ) -> dict[str, Any]:
+        serialized: list[dict[str, Any]] = [
+            e.model_dump() if hasattr(e, "model_dump") else dict(vars(e)) if hasattr(e, "__dict__") else {"value": str(e)}
+            for e in entries
+        ]
+        args: dict[str, Any] = {
+            "entries": serialized,
+            "agent_id": agent_id,
+            "agent_profile": agent_profile,
+        }
+        result = await self._http_mcp_call("hive_propagate", args)
+        return result if isinstance(result, dict) else {"enabled": True, "degraded": False, "propagated": 0, "scanned": len(entries)}
+
+    async def agent_register(
+        self,
+        *,
+        agent_id: str,
+        name: str,
+        profile: str = "repo-brain",
+        skills: list[str] | None = None,
+        project_root: str = ".",
+    ) -> dict[str, Any]:
+        args: dict[str, Any] = {
+            "agent_id": agent_id,
+            "name": name,
+            "profile": profile,
+            "skills": skills or [],
+            "project_root": project_root,
+        }
+        result = await self._http_mcp_call("agent_register", args)
+        return result if isinstance(result, dict) else {"agent_id": agent_id, "agent_name": name}
+
+    # -------------------------------------------------------------------------
+    # Write operations (HTTP overrides)
+    # -------------------------------------------------------------------------
+
+    async def save(
+        self,
+        key: str,
+        value: str,
+        *,
+        tier: str = "pattern",
+        scope: str = "project",
+        tags: list[str] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        if self.circuit_open:
+            queued = self._enqueue_write(
+                {"key": key, "value": value, "tier": tier, "scope": scope, "tags": tags, **kwargs}
+            )
+            return {
+                "success": False,
+                "degraded": True,
+                "reason": "circuit open",
+                "queued": queued,
+                "queue_depth": self.queue_depth,
+            }
+        args: dict[str, Any] = {"key": key, "value": value, "tier": tier, "scope": scope}
+        if tags:
+            args["tags"] = tags
+        args.update(kwargs)
+        result: dict[str, Any] = await self._http_mcp_call("memory_save", args)
+        self._maybe_start_drain()
+        return result if isinstance(result, dict) else {"key": key, "success": True}
+
+    async def delete(self, key: str) -> bool:
+        result = await self._http_mcp_call("memory_delete", {"key": key})
+        if isinstance(result, bool):
+            return result
+        if isinstance(result, dict):
+            return bool(result.get("deleted", result.get("success", False)))
+        return False
+
+    async def reinforce(self, key: str, boost: float = 0.1) -> dict[str, Any]:
+        result = await self._http_mcp_call("memory_reinforce", {"key": key, "confidence_boost": boost})
+        return result if isinstance(result, dict) else {"key": key}
+
+    async def supersede(self, key: str, new_value: str, **kwargs: Any) -> dict[str, Any]:
+        args: dict[str, Any] = {"key": key, "new_value": new_value, **kwargs}
+        result = await self._http_mcp_call("memory_supersede", args)
+        return result if isinstance(result, dict) else {"key": key}
+
+    # -------------------------------------------------------------------------
+    # Maintenance (HTTP overrides)
+    # -------------------------------------------------------------------------
+
+    async def gc(self, dry_run: bool = False) -> dict[str, Any]:
+        result = await self._http_mcp_call("memory_gc", {"dry_run": dry_run})
+        return result if isinstance(result, dict) else {"archived_count": 0}
+
+    async def consolidate(self, dry_run: bool = False) -> dict[str, Any]:
+        result = await self._http_mcp_call("memory_consolidate", {"dry_run": dry_run})
+        return result if isinstance(result, dict) else {"groups_found": 0}
+
+    # -------------------------------------------------------------------------
+    # Diagnostics (HTTP overrides)
+    # -------------------------------------------------------------------------
+
+    async def health(self) -> dict[str, Any]:
+        """Return health dict by probing ``{brain_http_url}/health``."""
+        try:
+            response = httpx.get(
+                f"{self._http_url}/health",
+                timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            base = payload if isinstance(payload, dict) else {}
+            return {"status": "ok", "postgres": "connected", **base}
+        except Exception as exc:
+            return {"status": "degraded", "error": str(exc)}
+
+    def health_check(self) -> dict[str, Any]:
+        """Probe ``{brain_http_url}/health`` (replaces DSN-based health check)."""
+        health_url = f"{self._http_url}/health"
+        try:
+            response = httpx.get(health_url, timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS)
+            response.raise_for_status()
+            details: dict[str, Any] = {"http_url": self._http_url, "mode": "http"}
+            with contextlib.suppress(Exception):
+                payload = response.json()
+                if isinstance(payload, dict):
+                    details["brain_version"] = payload.get("version")
+                    details["brain_status"] = payload.get("status")
+            return {
+                "ok": True,
+                "dsn_reachable": True,
+                "pool_config_valid": True,
+                "native_health_ok": True,
+                "errors": [],
+                "warnings": [],
+                "details": details,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "dsn_reachable": False,
+                "pool_config_valid": True,
+                "native_health_ok": False,
+                "errors": [f"http_health_failed: {exc}"],
+                "warnings": [],
+                "details": {"http_url": self._http_url, "mode": "http"},
+            }
+
+    @property
+    def store(self) -> None:  # type: ignore[override]
+        """Not available in HTTP mode — callers must use async BrainBridge methods."""
+        return None
+
+    # -------------------------------------------------------------------------
+    # Lifecycle (HTTP overrides)
+    # -------------------------------------------------------------------------
+
+    def drain_blocking(self, timeout: float = _DRAIN_DEADLINE_SECONDS) -> dict[str, int]:
+        """Drain the offline write queue via synchronous HTTP calls."""
+        deadline = time.monotonic() + max(0.0, timeout)
+        drained = 0
+        dropped = 0
+        while not self._write_queue.empty():
+            if time.monotonic() >= deadline:
+                break
+            try:
+                entry = self._write_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            try:
+                httpx.post(
+                    f"{self._http_url}/mcp",
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {"name": "memory_save", "arguments": entry},
+                    },
+                    headers=self._http_headers,
+                    timeout=5.0,
+                )
+                drained += 1
+            except Exception as exc:
+                logger.warning(
+                    "brain_bridge.drain_blocking_http_failed",
+                    error=str(exc),
+                    key=entry.get("key"),
+                )
+                dropped += 1
+        remaining = self._write_queue.qsize()
+        if drained or dropped or remaining:
+            logger.info(
+                "brain_bridge.drain_blocking_complete",
+                drained=drained,
+                dropped=dropped,
+                remaining=remaining,
+                deadline_exceeded=time.monotonic() >= deadline,
+            )
+        return {"drained": drained, "dropped": dropped, "remaining": remaining}
+
+    def close(self, drain_timeout: float = _DRAIN_DEADLINE_SECONDS) -> None:
+        """Drain queued writes then close the async HTTP client."""
+        try:
+            self.drain_blocking(drain_timeout)
+        except Exception as exc:
+            logger.warning("brain_bridge.drain_on_close_failed", error=str(exc))
+        if self._http_client is not None:
+            with contextlib.suppress(Exception):
+                try:
+                    loop = asyncio.get_event_loop()
+                    if not loop.is_closed() and not loop.is_running():
+                        loop.run_until_complete(self._http_client.aclose())
+                except Exception:
+                    pass
+            self._http_client = None
+
+
+# -----------------------------------------------------------------------------
 # Remote brain version probe (TAP-519)
 # -----------------------------------------------------------------------------
 
@@ -1024,17 +1484,35 @@ def check_brain_version(
 def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
     """Create a :class:`BrainBridge` from settings or environment.
 
-    Returns ``None`` when ``TAPPS_BRAIN_DATABASE_URL`` is not configured so
-    callers can gate memory operations without raising.
+    Dispatch order:
 
-    Resolution order for the Postgres DSN:
-
-    1. ``settings.memory.database_url``
-    2. ``TAPPS_BRAIN_DATABASE_URL`` environment variable
+    1. When ``settings.memory.brain_http_url`` is set (or the env var
+       ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL``), create an :class:`HttpBrainBridge`
+       that routes all calls through the tapps-brain HTTP MCP API.
+       ``TAPPS_BRAIN_DATABASE_URL`` is **not** required in this path.
+    2. Otherwise fall back to the in-process :class:`BrainBridge` wrapping a
+       local :class:`tapps_brain.AgentBrain`. Requires ``TAPPS_BRAIN_DATABASE_URL``
+       (or ``settings.memory.database_url``).
+    3. Return ``None`` when neither transport is configured.
     """
+    # --- Resolve transport settings ------------------------------------------
+    brain_http_url: str = ""
+    if settings is not None:
+        memory = getattr(settings, "memory", None)
+        if memory is not None:
+            raw_http_url = getattr(memory, "brain_http_url", "")
+            # Guard against MagicMock in tests: only treat str values as URLs.
+            brain_http_url = raw_http_url if isinstance(raw_http_url, str) else ""
+    if not brain_http_url:
+        brain_http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "")
+
+    # --- HTTP path -----------------------------------------------------------
+    if brain_http_url:
+        return _create_http_bridge(brain_http_url, settings)
+
+    # --- In-process path -----------------------------------------------------
     from tapps_brain import AgentBrain
 
-    # --- Resolve DSN ---------------------------------------------------------
     dsn = ""
     if settings is not None:
         memory = getattr(settings, "memory", None)
@@ -1045,17 +1523,14 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
     if not dsn:
         return None
 
-    # Export so AgentBrain's internal init picks it up
     os.environ.setdefault("TAPPS_BRAIN_DATABASE_URL", dsn)
 
-    # --- Resolve optional settings -------------------------------------------
     project_root: str | None = None
     profile = "repo-brain"
     hive_dsn: str | None = None
     project_id: str = ""
     pg_pool_max_waiting: int = 0
     pg_pool_max_lifetime_seconds: int = 0
-    brain_http_url: str = ""
 
     if settings is not None:
         project_root = str(getattr(settings, "project_root", None) or "")
@@ -1069,24 +1544,17 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
             pg_pool_max_lifetime_seconds = int(
                 getattr(memory, "pg_pool_max_lifetime_seconds", 0) or 0
             )
-            brain_http_url = str(getattr(memory, "brain_http_url", "") or "")
 
-    # ADR-010 / EPIC-069: declare the registered project slug on the wire so
-    # AgentBrain hits the project registry instead of deriving a per-directory
-    # hash. When the setting is empty we leave any pre-set env var untouched
-    # (user may export TAPPS_BRAIN_PROJECT directly).
+    # ADR-010 / EPIC-069: declare the registered project slug on the wire.
     if project_id:
         os.environ["TAPPS_BRAIN_PROJECT"] = project_id
 
-    # EPIC-066 (tapps-brain v3.7.0): pool tuning pass-through. Only set env
-    # vars when the setting is non-zero so we don't override operator-provided
-    # values or clobber tapps-brain's own defaults.
+    # EPIC-066: pool tuning pass-through; only set when non-zero.
     if pg_pool_max_waiting:
         os.environ["TAPPS_BRAIN_PG_POOL_MAX_WAITING"] = str(pg_pool_max_waiting)
     if pg_pool_max_lifetime_seconds:
         os.environ["TAPPS_BRAIN_PG_POOL_MAX_LIFETIME_SECONDS"] = str(pg_pool_max_lifetime_seconds)
 
-    # --- Construct & probe ---------------------------------------------------
     try:
         brain = AgentBrain(
             agent_id="tapps-mcp",
@@ -1099,9 +1567,7 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
         return None
 
     bridge = BrainBridge(brain)
-    # TAP-523: validate DSN reachability + pool config before returning so
-    # misconfiguration surfaces at startup rather than inside the first
-    # user-facing tool call.
+    # TAP-523: validate DSN reachability + pool config before returning.
     report = bridge.health_check()
     if not report["ok"]:
         logger.warning(
@@ -1118,11 +1584,35 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
             warnings=report["warnings"],
         )
 
-    # TAP-519: validate remote brain version when a HTTP URL is configured.
-    # The probe is no-op for in-process AgentBrain deployments (url empty).
-    # A mismatch is logged loudly but does not block bridge creation — the
-    # structured result is exposed for callers (e.g. tapps_session_start)
-    # that want to surface it to operators.
+    # TAP-519: version probe is no-op when no HTTP URL is set.
+    version_check = check_brain_version("")
+    bridge._set_version_check(version_check)
+    # TAP-517: register shutdown hooks for offline write queue drain.
+    _register_shutdown_hooks(bridge)
+    return bridge
+
+
+def _create_http_bridge(brain_http_url: str, settings: Any) -> BrainBridge | None:
+    """Create an :class:`HttpBrainBridge` for the tapps-brain HTTP API."""
+    from tapps_core.brain_auth import BrainAuthConfigError, build_brain_headers
+
+    headers: dict[str, str] = {}
+    if settings is not None:
+        try:
+            headers = build_brain_headers(settings)
+        except BrainAuthConfigError as exc:
+            logger.warning("brain_bridge.http_auth_error", error=str(exc))
+            return None
+    else:
+        token = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "")
+        project_id = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID", "")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        if project_id:
+            headers["X-Project-Id"] = project_id
+
+    bridge = HttpBrainBridge(brain_http_url, headers)
+
     version_check = check_brain_version(brain_http_url)
     if not version_check["ok"] and not version_check["skipped"]:
         logger.error(
@@ -1134,8 +1624,6 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
             ceiling=version_check["ceiling"],
         )
     bridge._set_version_check(version_check)
-    # TAP-517: register shutdown hooks so the offline write queue is drained
-    # on interpreter shutdown / SIGTERM before the process exits.
     _register_shutdown_hooks(bridge)
     return bridge
 

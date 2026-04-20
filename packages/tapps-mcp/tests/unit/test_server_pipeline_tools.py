@@ -156,6 +156,107 @@ class TestTappsSessionStart:
         assert data["memory_doc_validation"] == "background"
         assert data["session_capture"] == "background"
 
+    @pytest.mark.asyncio
+    async def test_memory_status_enabled_in_http_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Integration: session_start reports memory_status.enabled=True in HTTP mode.
+
+        Simulates a workstation with only TAPPS_MCP_MEMORY_BRAIN_HTTP_URL set —
+        no TAPPS_BRAIN_DATABASE_URL.  The bridge's /health probe is mocked to
+        return a 200 so no real network call is made.
+        """
+        import httpx
+
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "test-token")
+        monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
+
+        # Reset the singleton so it will be re-created with HTTP settings.
+        from tapps_mcp.server_helpers import _reset_brain_bridge_cache
+
+        _reset_brain_bridge_cache()
+
+        mock_health_response = MagicMock()
+        mock_health_response.raise_for_status = MagicMock()
+        mock_health_response.json.return_value = {"status": "ok", "version": "3.8.0"}
+
+        # Patch check_brain_version to skip the live /health probe in factory.
+        _skip_version_check = {
+            "ok": True,
+            "skipped": True,
+            "degraded": False,
+            "url": "",
+            "floor": "3.7.2",
+            "ceiling": "4.0.0",
+            "version": None,
+            "errors": [],
+            "warnings": [],
+        }
+
+        with (
+            patch(
+                "tapps_core.brain_bridge.check_brain_version",
+                return_value=_skip_version_check,
+            ),
+            patch("httpx.get", return_value=mock_health_response),
+        ):
+            result = await tapps_session_start()
+
+        _reset_brain_bridge_cache()  # clean up singleton after test
+
+        data = result["data"]
+        assert result["success"] is True
+        assert data["memory_status"]["enabled"] is True
+        assert data["memory_status"]["mode"] == "http"
+
+    @pytest.mark.asyncio
+    async def test_brain_bridge_health_enabled_in_http_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Integration: brain_bridge_health.enabled=True when HTTP bridge is active."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "test-token")
+        monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
+
+        from tapps_mcp.server_helpers import _reset_brain_bridge_cache
+
+        _reset_brain_bridge_cache()
+
+        mock_health_response = MagicMock()
+        mock_health_response.raise_for_status = MagicMock()
+        mock_health_response.json.return_value = {"status": "ok", "version": "3.8.0"}
+
+        _skip_version_check = {
+            "ok": True,
+            "skipped": True,
+            "degraded": False,
+            "url": "",
+            "floor": "3.7.2",
+            "ceiling": "4.0.0",
+            "version": None,
+            "errors": [],
+            "warnings": [],
+        }
+
+        with (
+            patch(
+                "tapps_core.brain_bridge.check_brain_version",
+                return_value=_skip_version_check,
+            ),
+            patch("httpx.get", return_value=mock_health_response),
+        ):
+            result = await tapps_session_start()
+
+        _reset_brain_bridge_cache()
+
+        data = result["data"]
+        assert data["brain_bridge_health"]["enabled"] is True
+
 
 # ---------------------------------------------------------------------------
 # tapps_set_engagement_level

@@ -132,10 +132,13 @@ _brain_bridge_lock = threading.Lock()
 
 
 def _get_brain_bridge() -> _BrainBridgeType | None:
-    """Return a lazily-initialized :class:`BrainBridge` singleton.
+    """Return a lazily-initialized brain bridge singleton.
 
-    Returns ``None`` when ``TAPPS_BRAIN_DATABASE_URL`` is not configured,
-    which allows callers to gate memory operations gracefully.
+    Returns an :class:`~tapps_core.brain_bridge.HttpBrainBridge` when
+    ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` is set, a plain
+    :class:`~tapps_core.brain_bridge.BrainBridge` when
+    ``TAPPS_BRAIN_DATABASE_URL`` is set, or ``None`` when neither is
+    configured.
     """
     global _brain_bridge
     if _brain_bridge is None:

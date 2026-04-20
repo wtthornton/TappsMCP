@@ -1367,6 +1367,21 @@ def _collect_memory_status(settings: Any) -> dict[str, Any]:
     try:
         if not settings.memory.enabled:
             return status
+
+        # HTTP bridge mode: no in-process MemoryStore snapshot is available.
+        # Return health-based status so session_start reports enabled=True.
+        from tapps_mcp.server_helpers import _get_brain_bridge
+
+        bridge = _get_brain_bridge()
+        if bridge is not None and getattr(bridge, "is_http_mode", False):
+            health = bridge.health_check()
+            return {
+                "enabled": health.get("ok", False),
+                "mode": "http",
+                "http_url": str(getattr(bridge, "_http_url", "")),
+                "degraded": not health.get("ok", False),
+            }
+
         from tapps_mcp.server_helpers import _get_memory_store
 
         mem_store = _get_memory_store()

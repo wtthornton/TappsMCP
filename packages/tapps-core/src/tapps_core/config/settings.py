@@ -570,10 +570,9 @@ class MemorySettings(BaseSettings):
         ),
     )
 
-    # TAP-521: auth-token scaffolding for the future tapps-brain HTTP migration.
-    # BrainBridge is in-process today (AgentBrain + asyncio.to_thread), so these
-    # values are not consumed at runtime yet — they configure the header builder
-    # in ``tapps_core.brain_auth`` so the HTTP migration is a drop-in swap.
+    # TAP-521 / TAP-596: bearer-token auth for the tapps-brain HTTP transport.
+    # Consumed at runtime by ``tapps_core.brain_bridge._create_http_bridge`` via
+    # ``tapps_core.brain_auth.build_brain_headers``.
     brain_auth_token: SecretStr | None = Field(
         default=None,
         description=(
