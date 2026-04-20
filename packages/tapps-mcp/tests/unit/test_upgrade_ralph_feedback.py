@@ -107,10 +107,7 @@ class TestHelpers:
         assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is False
 
     def test_agents_md_opt_out_disabled_flag(self, tmp_path: Path) -> None:
-        assert (
-            _agents_md_opt_out(tmp_path, create_flag=False)
-            == "upgrade_create_agents_md=false"
-        )
+        assert _agents_md_opt_out(tmp_path, create_flag=False) == "upgrade_create_agents_md=false"
 
     def test_agents_md_opt_out_sentinel(self, tmp_path: Path) -> None:
         (tmp_path / "CLAUDE.md").write_text(
@@ -217,12 +214,9 @@ class TestMcpConsentGate:
         # "ok" (validator accepted it) or "regenerated" (validator rejected it);
         # either is fine as long as we did NOT hit the consent-skip branch.
         assert claude["components"]["mcp_config"] != "skipped (upgrade_skip_files)"
-        assert (
-            claude["components"]["mcp_config"] in ("ok", "regenerated")
-            or (
-                isinstance(claude["components"]["mcp_config"], dict)
-                and "skipped" not in claude["components"]["mcp_config"]["action"]
-            )
+        assert claude["components"]["mcp_config"] in ("ok", "regenerated") or (
+            isinstance(claude["components"]["mcp_config"], dict)
+            and "skipped" not in claude["components"]["mcp_config"]["action"]
         )
 
     def test_force_overrides_consent_gate(self, tmp_path: Path) -> None:
@@ -315,9 +309,7 @@ class TestKarpathyOptOut:
             encoding="utf-8",
         )
         # Sanity: block is present
-        assert karpathy_block._find_block_span(
-            claude_md.read_text(encoding="utf-8")
-        ) is not None
+        assert karpathy_block._find_block_span(claude_md.read_text(encoding="utf-8")) is not None
 
         # Now opt out and run upgrade — the block must still refresh to current SHA
         monkeypatch.setenv("TAPPS_MCP_INCLUDE_KARPATHY_GUIDELINES", "false")
@@ -382,9 +374,11 @@ class TestMcpOnly:
         assert "settings" in claude["components"]
         settings_path = tmp_path / ".claude" / "settings.json"
         assert settings_path.exists()
-        allow = json.loads(settings_path.read_text(encoding="utf-8")).get(
-            "permissions", {}
-        ).get("allow", [])
+        allow = (
+            json.loads(settings_path.read_text(encoding="utf-8"))
+            .get("permissions", {})
+            .get("allow", [])
+        )
         assert "mcp__tapps-mcp" in allow
 
     def test_mcp_only_no_rule_files_written(self, tmp_path: Path) -> None:
