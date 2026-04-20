@@ -699,7 +699,7 @@ def _upgrade_content_return(
     if detected in ("cursor", "both"):
         hosts.append("cursor")
 
-    settings = load_settings()
+    settings = load_settings(project_root=project_root)
     engagement_level = settings.llm_engagement_level
 
     # Per-host platform files
@@ -872,10 +872,13 @@ def upgrade_pipeline(
             log.warning("backup_failed", error=str(exc))
             result["backup"] = f"failed: {exc}"
 
-    # Resolve engagement level and Docker config from settings
+    # Resolve engagement level and Docker config from settings. Pass the
+    # target project_root explicitly so the per-project ``.tapps-mcp.yaml``
+    # (not this process's CWD) is what drives upgrade knobs like
+    # ``upgrade_skip_files``.
     from tapps_core.config.settings import load_settings
 
-    settings = load_settings()
+    settings = load_settings(project_root=project_root)
 
     # Load skip list from settings (Issue #86)
     skip_files: set[str] = set(settings.upgrade_skip_files)
