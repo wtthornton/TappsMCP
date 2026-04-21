@@ -1132,15 +1132,15 @@ class HttpBrainBridge(BrainBridge):
         project_root: str = ".",
         register: bool = True,
     ) -> dict[str, Any]:
-        args: dict[str, Any] = {
-            "agent_id": agent_id,
-            "agent_name": agent_name,
-            "agent_profile": agent_profile,
-            "project_root": project_root,
-            "register": register,
-        }
-        result = await self._http_mcp_call("hive_status", args)
-        return result if isinstance(result, dict) else {"enabled": True, "degraded": False}
+        # brain 3.10+ hive_status takes no arguments and returns
+        # {namespaces, total_entries, agents} with no "enabled" key. Inject
+        # a synthetic "enabled": True so downstream callers (many) that
+        # read result["enabled"] don't KeyError (TAP-800 drift 3).
+        _ = agent_id, agent_name, agent_profile, project_root, register
+        result = await self._http_mcp_call("hive_status", {})
+        if not isinstance(result, dict):
+            return {"enabled": True, "degraded": False}
+        return result if "enabled" in result else {**result, "enabled": True}
 
     async def hive_propagate(
         self,
@@ -1149,17 +1149,53 @@ class HttpBrainBridge(BrainBridge):
         agent_id: str,
         agent_profile: str,
     ) -> dict[str, Any]:
-        serialized: list[dict[str, Any]] = [
-            e.model_dump() if hasattr(e, "model_dump") else dict(vars(e)) if hasattr(e, "__dict__") else {"value": str(e)}
-            for e in entries
-        ]
-        args: dict[str, Any] = {
-            "entries": serialized,
-            "agent_id": agent_id,
-            "agent_profile": agent_profile,
+        # brain 3.10+ hive_propagate propagates a single memory by key per
+        # call. Iterate over the batch the caller passed in and aggregate,
+        # preserving the Python API's list-of-entries shape
+        # (TAP-800 drift 4).
+        _ = agent_id
+        propagated = 0
+        skipped_private = 0
+        details: list[dict[str, Any]] = []
+        for entry in entries:
+            key: str | None
+            if hasattr(entry, "key"):
+                key = str(entry.key) if entry.key else None
+            elif isinstance(entry, dict):
+                raw = entry.get("key")
+                key = str(raw) if raw else None
+            else:
+                key = None
+            if not key:
+                continue
+            scope = getattr(entry, "agent_scope", None)
+            if scope == "private":
+                skipped_private += 1
+                details.append({"key": key, "skipped": "private"})
+                continue
+            try:
+                per = await self._http_mcp_call(
+                    "hive_propagate",
+                    {"key": key, "agent_scope": agent_profile or "hive"},
+                )
+            except Exception as exc:
+                details.append({"key": key, "error": str(exc)})
+                continue
+            if isinstance(per, dict):
+                details.append({"key": key, **per})
+                if per.get("propagated") or per.get("success"):
+                    propagated += 1
+            else:
+                details.append({"key": key})
+                propagated += 1
+        return {
+            "enabled": True,
+            "degraded": False,
+            "propagated": propagated,
+            "skipped_private": skipped_private,
+            "scanned": len(entries),
+            "details": details,
         }
-        result = await self._http_mcp_call("hive_propagate", args)
-        return result if isinstance(result, dict) else {"enabled": True, "degraded": False, "propagated": 0, "scanned": len(entries)}
 
     async def agent_register(
         self,
@@ -1170,15 +1206,21 @@ class HttpBrainBridge(BrainBridge):
         skills: list[str] | None = None,
         project_root: str = ".",
     ) -> dict[str, Any]:
+        # brain 3.10+ agent_register dropped ``name`` and ``project_root``
+        # and changed ``skills`` from list[str] to comma-joined str. The
+        # Python signature keeps the old params for caller back-compat;
+        # they're retained in the returned dict but not sent on the wire
+        # (TAP-800 drift 2).
+        _ = project_root
         args: dict[str, Any] = {
             "agent_id": agent_id,
-            "name": name,
             "profile": profile,
-            "skills": skills or [],
-            "project_root": project_root,
+            "skills": ",".join(skills or []),
         }
         result = await self._http_mcp_call("agent_register", args)
-        return result if isinstance(result, dict) else {"agent_id": agent_id, "agent_name": name}
+        if isinstance(result, dict):
+            return {"agent_name": name, **result}
+        return {"agent_id": agent_id, "agent_name": name}
 
     # -------------------------------------------------------------------------
     # Write operations (HTTP overrides)
@@ -1239,7 +1281,25 @@ class HttpBrainBridge(BrainBridge):
         return result if isinstance(result, dict) else {"archived_count": 0}
 
     async def consolidate(self, dry_run: bool = False) -> dict[str, Any]:
-        result = await self._http_mcp_call("memory_consolidate", {"dry_run": dry_run})
+        # brain 3.10+ removed ``memory_consolidate`` entirely with no drop-in
+        # replacement. Fall through to a graceful degraded stub when the tool
+        # is missing, so callers (hooks, background tasks) don't crash on
+        # newer brain versions. Older brains still work via the RPC path.
+        # Tracked in TAP-800 drift 1.
+        # Retry-exhausted tool-not-found surfaces as BrainBridgeUnavailable
+        # with the original RuntimeError as __cause__; check both.
+        try:
+            result = await self._http_mcp_call("memory_consolidate", {"dry_run": dry_run})
+        except (RuntimeError, BrainBridgeUnavailable) as exc:
+            chain = f"{exc} {exc.__cause__}"
+            if "Unknown tool" in chain and "memory_consolidate" in chain:
+                return {
+                    "groups_found": 0,
+                    "degraded": True,
+                    "reason": "memory_consolidate removed in tapps-brain 3.10+",
+                    "dry_run": dry_run,
+                }
+            raise
         return result if isinstance(result, dict) else {"groups_found": 0}
 
     # -------------------------------------------------------------------------

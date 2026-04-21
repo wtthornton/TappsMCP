@@ -217,9 +217,14 @@ class TestMaintenanceEndpoints:
 
     @pytest.mark.asyncio
     async def test_consolidate_dry_run_returns_shape(self, bridge: HttpBrainBridge) -> None:
-        # Brain 3.10.x removed the ``memory_consolidate`` MCP tool. See follow-up
-        # bridge-drift issue referenced in TAP-516 for the long-term fix.
-        pytest.skip("memory_consolidate tool removed on brain 3.10.x — bridge drift follow-up")
+        # TAP-800: bridge returns a graceful degraded stub when the brain
+        # no longer exposes ``memory_consolidate`` (brain 3.10+). Older
+        # brains should return a real result with ``groups_found``.
+        result = await bridge.consolidate(dry_run=True)
+        assert isinstance(result, dict)
+        assert "groups_found" in result
+        if result.get("degraded"):
+            assert "memory_consolidate" in result.get("reason", "")
 
     @pytest.mark.asyncio
     async def test_hive_status_returns_recognisable_shape(self, bridge: HttpBrainBridge) -> None:
@@ -240,17 +245,15 @@ class TestMaintenanceEndpoints:
     async def test_hive_propagate_accepts_empty_entries(
         self, bridge: HttpBrainBridge
     ) -> None:
-        # Federation smoke: propagating zero entries must be a well-formed
-        # no-op rather than a 4xx or an exception. Covers the "federation"
-        # bullet of the TAP-516 spec without mutating shared hive state.
-        try:
-            result = await bridge.hive_propagate(
-                entries=[], agent_id=AGENT_ID, agent_profile="repo-brain"
-            )
-        except Exception as exc:
-            pytest.skip(f"hive_propagate drift vs brain: {exc}")
+        # Federation smoke: propagating zero entries is a well-formed no-op
+        # that never hits the network. Covers the "federation" spec bullet
+        # without mutating shared hive state.
+        result = await bridge.hive_propagate(
+            entries=[], agent_id=AGENT_ID, agent_profile="repo-brain"
+        )
         assert isinstance(result, dict)
         assert result.get("propagated", 0) == 0
+        assert result.get("scanned", 0) == 0
 
 
 class TestAgentRegistration:
@@ -258,18 +261,14 @@ class TestAgentRegistration:
 
     @pytest.mark.asyncio
     async def test_agent_register_accepts_identity(self, bridge: HttpBrainBridge) -> None:
-        # Brain 3.10.x changed the ``skills`` field from ``list[str]`` to ``str``
-        # (and dropped ``name`` / ``project_root``). The bridge still sends the
-        # legacy shape; tracked in the bridge-drift follow-up referenced in
-        # TAP-516. For now, require only that the call returns a dict — the
-        # bridge falls back to a local dict when the RPC fails. Stop when the
-        # bridge is aligned and assert the echoed agent_id.
-        try:
-            result = await bridge.agent_register(
-                agent_id=AGENT_ID,
-                name="tapps-mcp-contract-tests",
-                profile="repo-brain",
-            )
-        except Exception as exc:
-            pytest.skip(f"agent_register drift vs brain: {exc}")
+        # TAP-800: bridge now sends brain 3.10+ schema — skills as CSV
+        # string, no name/project_root. name still echoes back via the
+        # Python API for caller back-compat.
+        result = await bridge.agent_register(
+            agent_id=AGENT_ID,
+            name="tapps-mcp-contract-tests",
+            profile="repo-brain",
+            skills=["python", "testing"],
+        )
         assert isinstance(result, dict)
+        assert result.get("agent_name") == "tapps-mcp-contract-tests"
