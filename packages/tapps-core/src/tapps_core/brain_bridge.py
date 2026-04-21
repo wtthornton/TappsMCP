@@ -985,6 +985,13 @@ class HttpBrainBridge(BrainBridge):
         self._http_url: str = http_url.rstrip("/")
         self._http_headers: dict[str, str] = dict(headers)
         self._http_client: httpx.AsyncClient | None = None
+        # TAP-836: brain 3.10.3+ enforces the MCP streamable-HTTP session
+        # lifecycle — an initialize handshake returns an Mcp-Session-Id
+        # that must accompany every subsequent tools/call. Cached lazily
+        # on first call; cleared via close() or when the server rejects
+        # the session ID and we need to re-handshake.
+        self._session_id: str | None = None
+        self._session_lock: asyncio.Lock = asyncio.Lock()
 
     # -------------------------------------------------------------------------
     # HTTP JSON-RPC call layer
@@ -1015,6 +1022,46 @@ class HttpBrainBridge(BrainBridge):
 
         raise BrainBridgeUnavailable(f"all retries exhausted: {last_exc}") from last_exc
 
+    async def _ensure_session(self) -> str:
+        """Return a valid MCP session id, establishing one via ``initialize``.
+
+        brain 3.10.3+ requires the MCP streamable-HTTP session handshake
+        (TAP-836). Older brains ignore the header so sending it is
+        back-compat safe.
+        """
+        if self._session_id:
+            return self._session_id
+        async with self._session_lock:
+            if self._session_id:
+                return self._session_id
+            if self._http_client is None:
+                self._http_client = httpx.AsyncClient(
+                    headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
+                    timeout=30.0,
+                    follow_redirects=True,
+                )
+            init_payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {"name": "tapps-mcp", "version": "http-bridge"},
+                },
+            }
+            response = await self._http_client.post(
+                f"{self._http_url}/mcp/", json=init_payload
+            )
+            response.raise_for_status()
+            session_id = response.headers.get("mcp-session-id")
+            if not session_id:
+                # Older brains that don't use the session model — use a
+                # sentinel so we don't re-handshake every call.
+                session_id = "__no_session__"
+            self._session_id = session_id
+            return session_id
+
     async def _do_mcp_post(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """POST a single ``tools/call`` to ``{brain_http_url}/mcp``."""
         import json as _json
@@ -1025,13 +1072,34 @@ class HttpBrainBridge(BrainBridge):
                 timeout=30.0,
                 follow_redirects=True,
             )
+        session_id = await self._ensure_session()
+        extra_headers: dict[str, str] = {}
+        if session_id and session_id != "__no_session__":
+            extra_headers["Mcp-Session-Id"] = session_id
         payload = {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
             "params": {"name": tool_name, "arguments": arguments},
         }
-        response = await self._http_client.post(f"{self._http_url}/mcp/", json=payload)
+        response = await self._http_client.post(
+            f"{self._http_url}/mcp/", json=payload, headers=extra_headers
+        )
+        # If the server rejects the session, drop it and retry once with a
+        # fresh handshake. 404 = session not found (common after brain
+        # restart); 400 with "Missing session ID" indicates we never got
+        # an Mcp-Session-Id header in the first place.
+        if response.status_code in (400, 404) and self._session_id:
+            self._session_id = None
+            session_id = await self._ensure_session()
+            extra_headers = (
+                {"Mcp-Session-Id": session_id}
+                if session_id != "__no_session__"
+                else {}
+            )
+            response = await self._http_client.post(
+                f"{self._http_url}/mcp/", json=payload, headers=extra_headers
+            )
         response.raise_for_status()
         data: dict[str, Any] = response.json()
 
@@ -1367,9 +1435,44 @@ class HttpBrainBridge(BrainBridge):
         - ``ok=False, http_status=401|403, detail=<body>`` — server rejected auth.
         - ``ok=False, error=<str>`` — transport failed (DNS, connection refused, etc.).
         """
-        payload = {
+        # TAP-836: run the full initialize handshake synchronously. Brain
+        # 3.10.3+ returns 400 "Missing session ID" on any tools/call that
+        # doesn't carry an Mcp-Session-Id; we fall back to no-session
+        # mode if the server doesn't return a session id (older brains).
+        init_payload = {
             "jsonrpc": "2.0",
             "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "tapps-mcp", "version": "http-bridge"},
+            },
+        }
+        try:
+            init_response = httpx.post(
+                f"{self._http_url}/mcp/",
+                json=init_payload,
+                headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
+                timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS,
+                follow_redirects=True,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": f"probe_failed: {exc}"}
+        if init_response.status_code in (401, 403):
+            return {
+                "ok": False,
+                "http_status": init_response.status_code,
+                "detail": init_response.text[:200] if init_response.text else "",
+            }
+        session_id = init_response.headers.get("mcp-session-id", "")
+
+        probe_headers = {**self._http_headers, **_MCP_ACCEPT_HEADERS}
+        if session_id:
+            probe_headers["Mcp-Session-Id"] = session_id
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 2,
             "method": "tools/call",
             "params": {"name": "memory_list", "arguments": {"limit": 1}},
         }
@@ -1377,7 +1480,7 @@ class HttpBrainBridge(BrainBridge):
             response = httpx.post(
                 f"{self._http_url}/mcp/",
                 json=payload,
-                headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
+                headers=probe_headers,
                 timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS,
                 follow_redirects=True,
             )
@@ -1460,6 +1563,7 @@ class HttpBrainBridge(BrainBridge):
                 except Exception:
                     pass
             self._http_client = None
+        self._session_id = None
 
 
 # -----------------------------------------------------------------------------

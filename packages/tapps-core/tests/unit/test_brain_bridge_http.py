@@ -458,8 +458,12 @@ class TestHttpRetry:
     @pytest.mark.asyncio
     async def test_retries_on_transient_error_then_succeeds(self) -> None:
         bridge = _make_http_bridge()
+        # Pre-populate the session so _ensure_session() short-circuits
+        # and the retry test only counts tools/call POSTs (TAP-836).
+        bridge._session_id = "__test__"
         response_data = _mcp_response({"results": []})
         ok_response = MagicMock()
+        ok_response.status_code = 200
         ok_response.raise_for_status = MagicMock()
         ok_response.json.return_value = response_data
 
@@ -536,6 +540,123 @@ class TestHttpWriteQueue:
 
         assert result["dropped"] == 1
         assert result["drained"] == 0
+
+
+# ---------------------------------------------------------------------------
+# MCP session lifecycle (TAP-836)
+# ---------------------------------------------------------------------------
+
+
+class TestHttpSessionLifecycle:
+    """Brain 3.10.3+ requires initialize → Mcp-Session-Id → tools/call."""
+
+    @pytest.mark.asyncio
+    async def test_initialize_called_on_first_tool_invocation(self) -> None:
+        bridge = _make_http_bridge()
+        init_response = MagicMock()
+        init_response.status_code = 200
+        init_response.headers = {"mcp-session-id": "sess-abc"}
+        init_response.raise_for_status = MagicMock()
+        init_response.json.return_value = {"jsonrpc": "2.0", "id": 1, "result": {}}
+
+        tool_response = MagicMock()
+        tool_response.status_code = 200
+        tool_response.raise_for_status = MagicMock()
+        tool_response.json.return_value = _mcp_response({"ok": True})
+
+        post_mock = AsyncMock(side_effect=[init_response, tool_response])
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = post_mock
+
+        await bridge._http_mcp_call("memory_list", {"limit": 1})
+
+        assert bridge._session_id == "sess-abc"
+        # Two POSTs: initialize + tools/call.
+        assert post_mock.await_count == 2
+        init_call = post_mock.await_args_list[0]
+        tool_call = post_mock.await_args_list[1]
+        assert init_call.kwargs["json"]["method"] == "initialize"
+        # Session id threaded into the subsequent tools/call.
+        assert tool_call.kwargs["headers"]["Mcp-Session-Id"] == "sess-abc"
+
+    @pytest.mark.asyncio
+    async def test_second_tool_call_reuses_cached_session(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "cached-sess"
+
+        tool_response = MagicMock()
+        tool_response.status_code = 200
+        tool_response.raise_for_status = MagicMock()
+        tool_response.json.return_value = _mcp_response({"ok": True})
+        post_mock = AsyncMock(return_value=tool_response)
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = post_mock
+
+        await bridge._http_mcp_call("memory_list", {"limit": 1})
+
+        # No initialize call; session was already cached.
+        assert post_mock.await_count == 1
+        assert post_mock.await_args.kwargs["headers"]["Mcp-Session-Id"] == "cached-sess"
+
+    @pytest.mark.asyncio
+    async def test_400_triggers_session_refresh(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "stale-sess"
+
+        stale_response = MagicMock()
+        stale_response.status_code = 400
+        init_response = MagicMock()
+        init_response.status_code = 200
+        init_response.headers = {"mcp-session-id": "fresh-sess"}
+        init_response.raise_for_status = MagicMock()
+        init_response.json.return_value = {"jsonrpc": "2.0", "id": 1, "result": {}}
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.raise_for_status = MagicMock()
+        ok_response.json.return_value = _mcp_response({"ok": True})
+
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = AsyncMock(
+            side_effect=[stale_response, init_response, ok_response]
+        )
+
+        await bridge._http_mcp_call("memory_list", {"limit": 1})
+
+        assert bridge._session_id == "fresh-sess"
+
+    @pytest.mark.asyncio
+    async def test_close_clears_session_id(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "to-clear"
+        bridge._http_client = AsyncMock()
+        # Simulate closed loop so close() doesn't try to aclose the client.
+        bridge._http_client.aclose = AsyncMock()
+
+        bridge.close(drain_timeout=0.1)
+
+        assert bridge._session_id is None
+
+    @pytest.mark.asyncio
+    async def test_no_session_header_becomes_sentinel(self) -> None:
+        """Older brains don't return Mcp-Session-Id. Sentinel avoids re-handshake."""
+        bridge = _make_http_bridge()
+        init_response = MagicMock()
+        init_response.status_code = 200
+        init_response.headers = {}
+        init_response.raise_for_status = MagicMock()
+        init_response.json.return_value = {"jsonrpc": "2.0", "id": 1, "result": {}}
+
+        tool_response = MagicMock()
+        tool_response.status_code = 200
+        tool_response.raise_for_status = MagicMock()
+        tool_response.json.return_value = _mcp_response({"ok": True})
+
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = AsyncMock(side_effect=[init_response, tool_response])
+
+        await bridge._http_mcp_call("memory_list", {"limit": 1})
+
+        assert bridge._session_id == "__no_session__"
 
 
 # ---------------------------------------------------------------------------
