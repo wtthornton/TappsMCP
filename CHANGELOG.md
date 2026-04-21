@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.4] - 2026-04-21
+
+### Changed
+- **TAP-609**: Split `server_pipeline_tools.py` (2,755 LOC, MI=0) into 9 focused modules under `tools/`: `validate_changed`, `validate_changed_output`, `validation_progress`, `session_start_helpers`, `session_start_core`, `decompose_helpers`, `pipeline_init_helpers`, `pipeline_orchestrator`, `engagement_level`. All re-exported from `server_pipeline_tools` for backward compatibility. Scores 90/100 (was failing at 41.8).
+- **TAP-611**: Refactored `upgrade.py` `_upgrade_platform` (CC=33 → ~10) by extracting `_upgrade_mcp_config`, `_upgrade_claude_code_dry_run`, `_upgrade_claude_code_live`, `_upgrade_cursor_live`, and `_run_github_artifacts`. File scores 100/100 (was 51.6).
+- Added 9 new `tools/` modules to PyInstaller `tapps_mcp.spec` hiddenimports.
+
 ## [2.10.3] - 2026-04-20
 
 ### Fixed

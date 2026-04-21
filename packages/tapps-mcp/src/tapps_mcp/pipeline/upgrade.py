@@ -286,6 +286,191 @@ def _refresh_karpathy_blocks(
     }
 
 
+def _upgrade_mcp_config(
+    host: str,
+    project_root: Path,
+    result: dict[str, Any],
+    *,
+    force: bool,
+    dry_run: bool,
+    skip: set[str],
+) -> None:
+    """Populate result["components"]["mcp_config"] for one host.
+
+    Consent gate: only regenerates ``.mcp.json`` when the user has previously
+    opted in (entry exists) or ``force=True``.  Missing entries are not
+    treated as broken — greenfield projects should go through ``tapps_init``.
+    """
+    from tapps_mcp.distribution.setup_generator import (
+        _generate_config,
+        _get_config_path,
+        _get_servers_key,
+        _validate_config_file,
+    )
+
+    config_path = _get_config_path(host, project_root)
+    servers_key = _get_servers_key(host)
+    error = _validate_config_file(config_path, servers_key)
+    already_opted_in = _mcp_json_has_tapps_entry(project_root, host)
+    if error is None:
+        result["components"]["mcp_config"] = "ok"
+    elif not already_opted_in and not force:
+        result["components"]["mcp_config"] = {
+            "action": "skipped (no existing tapps-mcp entry)",
+            "hint": (
+                "Run `tapps_init` or pass force=True to create "
+                f"{config_path.name} with the tapps-mcp server entry."
+            ),
+        }
+    elif not dry_run:
+        _generate_config(host, project_root, force=True, upgrade_mode=True)
+        result["components"]["mcp_config"] = "regenerated"
+    else:
+        result["components"]["mcp_config"] = f"needs-fix: {error}"
+
+
+def _upgrade_claude_code_dry_run(
+    result: dict[str, Any],
+    *,
+    force: bool,
+    python_ok: bool,
+    infra_ok: bool,
+) -> None:
+    """Populate dry-run component hints for the claude-code host."""
+    result["components"]["claude_md"] = "would-refresh" if force else "check-needed"
+    result["components"]["settings"] = "check-needed"
+    result["components"]["hooks"] = "would-regenerate"
+    result["components"]["agents"] = "would-regenerate"
+    result["components"]["skills"] = "would-regenerate"
+    result["components"]["python_quality_rule"] = (
+        "would-regenerate" if python_ok else "skipped (no python detected)"
+    )
+    result["components"]["agent_scope_rule"] = "would-regenerate"
+    result["components"]["pipeline_rule"] = (
+        "would-regenerate"
+        if (python_ok or infra_ok)
+        else "skipped (no python or infra detected)"
+    )
+
+
+def _upgrade_claude_code_live(
+    project_root: Path,
+    result: dict[str, Any],
+    *,
+    force: bool,
+    engagement_level: str,
+    skip: set[str],
+    python_ok: bool,
+    infra_ok: bool,
+) -> None:
+    """Run live (non-dry-run) artifact upgrades for the claude-code host."""
+    from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_claude_settings
+    from tapps_mcp.pipeline.platform_bundles import generate_claude_pipeline_rule
+    from tapps_mcp.pipeline.platform_generators import (
+        generate_claude_agent_scope_rule,
+        generate_claude_hooks,
+        generate_claude_python_quality_rule,
+        generate_skills,
+        generate_subagent_definitions,
+    )
+
+    # CLAUDE.md — merges into user content via _replace_tapps_section.
+    if _skipped("claude_md", skip):
+        result["components"]["claude_md"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["claude_md"] = _bootstrap_claude(project_root, overwrite=force)
+
+    if _skipped("claude_settings", skip):
+        result["components"]["settings"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["settings"] = _bootstrap_claude_settings(
+            project_root, engagement_level=engagement_level
+        )
+
+    if _skipped("claude_hooks", skip):
+        result["components"]["hooks"] = "skipped (upgrade_skip_files)"
+    else:
+        hooks_result = generate_claude_hooks(project_root)
+        result["components"]["hooks"] = {
+            "scripts_created": hooks_result.get("scripts_created", []),
+            "hooks_added": hooks_result.get("hooks_added", 0),
+        }
+
+    if _skipped("claude_agents", skip):
+        result["components"]["agents"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["agents"] = generate_subagent_definitions(
+            project_root, "claude", overwrite=True
+        )
+
+    if _skipped("claude_skills", skip):
+        result["components"]["skills"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["skills"] = generate_skills(project_root, "claude", overwrite=True)
+
+    if _skipped("python_quality_rule", skip):
+        result["components"]["python_quality_rule"] = "skipped (upgrade_skip_files)"
+    elif not python_ok:
+        result["components"]["python_quality_rule"] = {
+            "action": "skipped (no python detected)",
+            "hint": (
+                "Set force_python_quality_rule=true in .tapps-mcp.yaml "
+                "to install on non-Python repos."
+            ),
+        }
+    else:
+        result["components"]["python_quality_rule"] = generate_claude_python_quality_rule(
+            project_root, engagement_level=engagement_level
+        )
+
+    # agent-scope.md is universal — applies to any deployed agent regardless of language.
+    if _skipped("agent_scope_rule", skip):
+        result["components"]["agent_scope_rule"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["agent_scope_rule"] = generate_claude_agent_scope_rule(project_root)
+
+    if _skipped("pipeline_rule", skip):
+        result["components"]["pipeline_rule"] = "skipped (upgrade_skip_files)"
+    elif not (python_ok or infra_ok):
+        result["components"]["pipeline_rule"] = {
+            "action": "skipped (no python or infra detected)",
+            "hint": (
+                "Set force_python_quality_rule=true, or add a "
+                "Dockerfile/docker-compose file, to install."
+            ),
+        }
+    else:
+        result["components"]["pipeline_rule"] = generate_claude_pipeline_rule(project_root)
+
+
+def _upgrade_cursor_live(
+    project_root: Path,
+    result: dict[str, Any],
+    *,
+    force: bool,
+) -> None:
+    """Run live (non-dry-run) artifact upgrades for the cursor host."""
+    from tapps_mcp.pipeline.init import _bootstrap_cursor
+    from tapps_mcp.pipeline.platform_generators import (
+        generate_cursor_hooks,
+        generate_cursor_rules,
+        generate_skills,
+        generate_subagent_definitions,
+    )
+
+    result["components"]["cursor_rules"] = _bootstrap_cursor(project_root, overwrite=force)
+    hooks_result = generate_cursor_hooks(project_root)
+    result["components"]["hooks"] = {
+        "scripts_created": hooks_result.get("scripts_created", []),
+        "hooks_added": hooks_result.get("hooks_added", 0),
+    }
+    result["components"]["agents"] = generate_subagent_definitions(
+        project_root, "cursor", overwrite=True
+    )
+    result["components"]["skills"] = generate_skills(project_root, "cursor", overwrite=True)
+    result["components"]["cursor_rule_types"] = generate_cursor_rules(project_root)
+
+
 def _upgrade_platform(
     host: str,
     project_root: Path,
@@ -303,9 +488,7 @@ def _upgrade_platform(
     ----------
     mcp_only:
         When True, only the ``.mcp.json`` (when already opted in) and
-        ``.claude/settings.json`` permissions merge run. All rule files,
-        hooks, agents, skills, and ``CLAUDE.md`` updates are skipped with
-        ``"skipped (mcp_only)"``.
+        ``.claude/settings.json`` permissions merge run.
     force_python_rule:
         When True, skip the Python-language gate and always generate
         ``python-quality.md`` / ``tapps-pipeline.md``.
@@ -313,180 +496,44 @@ def _upgrade_platform(
     Per-artifact skip tokens (via ``skip_files``) are honored independently —
     skipping ``CLAUDE.md`` no longer gates hooks/agents/skills/rules.
     """
-    from tapps_mcp.distribution.setup_generator import (
-        _generate_config,
-        _get_config_path,
-        _get_servers_key,
-        _validate_config_file,
-    )
-    from tapps_mcp.pipeline.init import (
-        _bootstrap_claude,
-        _bootstrap_claude_settings,
-        _bootstrap_cursor,
-    )
-    from tapps_mcp.pipeline.platform_generators import (
-        generate_claude_agent_scope_rule,
-        generate_claude_hooks,
-        generate_claude_python_quality_rule,
-        generate_cursor_hooks,
-        generate_cursor_rules,
-        generate_skills,
-        generate_subagent_definitions,
-    )
+    from tapps_mcp.pipeline.init import _bootstrap_claude_settings
 
     result: dict[str, Any] = {"host": host, "components": {}}
     _skip = skip_files or set()
     python_ok = force_python_rule or _has_python_signals(project_root)
     infra_ok = _has_infra_signals(project_root)
 
-    # MCP config check (upgrade_mode preserves command paths).
-    #
-    # Consent gate: we only regenerate ``.mcp.json`` if the user has already
-    # opted in (a ``tapps-mcp`` server entry exists) or if ``force=True``.
-    # Missing-entry is no longer treated as "broken" — in greenfield projects
-    # that should go through ``tapps_init``, not implicit upgrade.
     if _skipped("mcp_config", _skip):
         result["components"]["mcp_config"] = "skipped (upgrade_skip_files)"
     else:
-        config_path = _get_config_path(host, project_root)
-        servers_key = _get_servers_key(host)
-        error = _validate_config_file(config_path, servers_key)
-        already_opted_in = _mcp_json_has_tapps_entry(project_root, host)
-        if error is None:
-            result["components"]["mcp_config"] = "ok"
-        elif not already_opted_in and not force:
-            result["components"]["mcp_config"] = {
-                "action": "skipped (no existing tapps-mcp entry)",
-                "hint": (
-                    "Run `tapps_init` or pass force=True to create "
-                    f"{config_path.name} with the tapps-mcp server entry."
-                ),
-            }
-        elif not dry_run:
-            _generate_config(host, project_root, force=True, upgrade_mode=True)
-            result["components"]["mcp_config"] = "regenerated"
-        else:
-            result["components"]["mcp_config"] = f"needs-fix: {error}"
+        _upgrade_mcp_config(host, project_root, result, force=force, dry_run=dry_run, skip=_skip)
 
     if mcp_only:
-        # Still run the settings permissions merge — it's the other half of
-        # the "just wire the MCP server in" install.
+        # Still run settings merge — it's the other half of the "just wire the MCP server in".
         if host == "claude-code" and not dry_run and not _skipped("claude_settings", _skip):
-            settings_action = _bootstrap_claude_settings(
+            result["components"]["settings"] = _bootstrap_claude_settings(
                 project_root, engagement_level=engagement_level
             )
-            result["components"]["settings"] = settings_action
         result["components"]["mcp_only_skipped"] = {
             "reason": "mcp_only=True",
             "skipped": [
-                "claude_md",
-                "hooks",
-                "agents",
-                "skills",
-                "python_quality_rule",
-                "agent_scope_rule",
-                "pipeline_rule",
-                "cursor_rules",
+                "claude_md", "hooks", "agents", "skills",
+                "python_quality_rule", "agent_scope_rule", "pipeline_rule", "cursor_rules",
             ],
         }
         return result
 
-    # Platform rules and artifacts
     if host == "claude-code":
         if dry_run:
-            result["components"]["claude_md"] = "would-refresh" if force else "check-needed"
-            result["components"]["settings"] = "check-needed"
-            result["components"]["hooks"] = "would-regenerate"
-            result["components"]["agents"] = "would-regenerate"
-            result["components"]["skills"] = "would-regenerate"
-            result["components"]["python_quality_rule"] = (
-                "would-regenerate" if python_ok else "skipped (no python detected)"
-            )
-            result["components"]["agent_scope_rule"] = "would-regenerate"
-            result["components"]["pipeline_rule"] = (
-                "would-regenerate"
-                if (python_ok or infra_ok)
-                else "skipped (no python or infra detected)"
+            _upgrade_claude_code_dry_run(
+                result, force=force, python_ok=python_ok, infra_ok=infra_ok
             )
         else:
-            # CLAUDE.md — merges into user content via _replace_tapps_section.
-            if _skipped("claude_md", _skip):
-                result["components"]["claude_md"] = "skipped (upgrade_skip_files)"
-            else:
-                claude_action = _bootstrap_claude(project_root, overwrite=force)
-                result["components"]["claude_md"] = claude_action
-
-            if _skipped("claude_settings", _skip):
-                result["components"]["settings"] = "skipped (upgrade_skip_files)"
-            else:
-                settings_action = _bootstrap_claude_settings(
-                    project_root, engagement_level=engagement_level
-                )
-                result["components"]["settings"] = settings_action
-
-            if _skipped("claude_hooks", _skip):
-                result["components"]["hooks"] = "skipped (upgrade_skip_files)"
-            else:
-                hooks_result = generate_claude_hooks(project_root)
-                result["components"]["hooks"] = {
-                    "scripts_created": hooks_result.get("scripts_created", []),
-                    "hooks_added": hooks_result.get("hooks_added", 0),
-                }
-
-            if _skipped("claude_agents", _skip):
-                result["components"]["agents"] = "skipped (upgrade_skip_files)"
-            else:
-                agents_result = generate_subagent_definitions(
-                    project_root, "claude", overwrite=True
-                )
-                result["components"]["agents"] = agents_result
-
-            if _skipped("claude_skills", _skip):
-                result["components"]["skills"] = "skipped (upgrade_skip_files)"
-            else:
-                skills_result = generate_skills(project_root, "claude", overwrite=True)
-                result["components"]["skills"] = skills_result
-
-            if _skipped("python_quality_rule", _skip):
-                result["components"]["python_quality_rule"] = "skipped (upgrade_skip_files)"
-            elif not python_ok:
-                result["components"]["python_quality_rule"] = {
-                    "action": "skipped (no python detected)",
-                    "hint": (
-                        "Set force_python_quality_rule=true in .tapps-mcp.yaml "
-                        "to install on non-Python repos."
-                    ),
-                }
-            else:
-                rule_result = generate_claude_python_quality_rule(
-                    project_root, engagement_level=engagement_level
-                )
-                result["components"]["python_quality_rule"] = rule_result
-
-            # agent-scope.md is universal — applies to any deployed agent
-            # regardless of language. Keep unconditional.
-            if _skipped("agent_scope_rule", _skip):
-                result["components"]["agent_scope_rule"] = "skipped (upgrade_skip_files)"
-            else:
-                scope_rule_result = generate_claude_agent_scope_rule(project_root)
-                result["components"]["agent_scope_rule"] = scope_rule_result
-
-            from tapps_mcp.pipeline.platform_bundles import generate_claude_pipeline_rule
-
-            if _skipped("pipeline_rule", _skip):
-                result["components"]["pipeline_rule"] = "skipped (upgrade_skip_files)"
-            elif not (python_ok or infra_ok):
-                result["components"]["pipeline_rule"] = {
-                    "action": "skipped (no python or infra detected)",
-                    "hint": (
-                        "Set force_python_quality_rule=true, or add a "
-                        "Dockerfile/docker-compose file, to install."
-                    ),
-                }
-            else:
-                pipeline_rule_result = generate_claude_pipeline_rule(project_root)
-                result["components"]["pipeline_rule"] = pipeline_rule_result
-
+            _upgrade_claude_code_live(
+                project_root, result,
+                force=force, engagement_level=engagement_level,
+                skip=_skip, python_ok=python_ok, infra_ok=infra_ok,
+            )
     elif host == "cursor":
         if dry_run:
             result["components"]["cursor_rules"] = "would-refresh" if force else "check-needed"
@@ -494,24 +541,7 @@ def _upgrade_platform(
             result["components"]["agents"] = "would-regenerate"
             result["components"]["skills"] = "would-regenerate"
         else:
-            cursor_action = _bootstrap_cursor(project_root, overwrite=force)
-            result["components"]["cursor_rules"] = cursor_action
-
-            hooks_result = generate_cursor_hooks(project_root)
-            result["components"]["hooks"] = {
-                "scripts_created": hooks_result.get("scripts_created", []),
-                "hooks_added": hooks_result.get("hooks_added", 0),
-            }
-
-            agents_result = generate_subagent_definitions(project_root, "cursor", overwrite=True)
-            result["components"]["agents"] = agents_result
-
-            skills_result = generate_skills(project_root, "cursor", overwrite=True)
-            result["components"]["skills"] = skills_result
-
-            rules_result = generate_cursor_rules(project_root)
-            result["components"]["cursor_rule_types"] = rules_result
-
+            _upgrade_cursor_live(project_root, result, force=force)
     elif host == "vscode":
         result["components"]["note"] = "no platform rules to upgrade"
 
@@ -767,6 +797,41 @@ def _detect_platform(project_root: Path) -> str:
     return ""
 
 
+def _run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
+    """Run GitHub-hosted artifact generators (CI, Copilot, templates, governance).
+
+    Each generator is called independently; failures are recorded in
+    ``result["errors"]`` rather than aborting the whole upgrade.
+    """
+    try:
+        from tapps_mcp.pipeline.github_ci import generate_all_ci_workflows
+
+        result["components"]["ci_workflows"] = generate_all_ci_workflows(project_root)
+    except Exception as exc:
+        result["errors"].append(f"CI workflows: {exc}")
+
+    try:
+        from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
+
+        result["components"]["github_copilot"] = generate_all_copilot_config(project_root)
+    except Exception as exc:
+        result["errors"].append(f"Copilot config: {exc}")
+
+    try:
+        from tapps_mcp.pipeline.github_templates import generate_all_github_templates
+
+        result["components"]["github_templates"] = generate_all_github_templates(project_root)
+    except Exception as exc:
+        result["errors"].append(f"GitHub templates: {exc}")
+
+    try:
+        from tapps_mcp.pipeline.github_governance import generate_all_governance
+
+        result["components"]["governance"] = generate_all_governance(project_root)
+    except Exception as exc:
+        result["errors"].append(f"Governance: {exc}")
+
+
 def _collect_upgrade_targets(project_root: Path) -> list[Path]:
     """Collect files that upgrade_pipeline will overwrite."""
     targets: list[Path] = []
@@ -989,37 +1054,7 @@ def upgrade_pipeline(
         for component in ("ci_workflows", "github_copilot", "github_templates", "governance"):
             result["components"][component] = {"action": "skipped (mcp_only)"}
     elif not dry_run:
-        try:
-            from tapps_mcp.pipeline.github_ci import generate_all_ci_workflows
-
-            ci_result = generate_all_ci_workflows(project_root)
-            result["components"]["ci_workflows"] = ci_result
-        except Exception as exc:
-            result["errors"].append(f"CI workflows: {exc}")
-
-        try:
-            from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
-
-            copilot_result = generate_all_copilot_config(project_root)
-            result["components"]["github_copilot"] = copilot_result
-        except Exception as exc:
-            result["errors"].append(f"Copilot config: {exc}")
-
-        try:
-            from tapps_mcp.pipeline.github_templates import generate_all_github_templates
-
-            templates_result = generate_all_github_templates(project_root)
-            result["components"]["github_templates"] = templates_result
-        except Exception as exc:
-            result["errors"].append(f"GitHub templates: {exc}")
-
-        try:
-            from tapps_mcp.pipeline.github_governance import generate_all_governance
-
-            governance_result = generate_all_governance(project_root)
-            result["components"]["governance"] = governance_result
-        except Exception as exc:
-            result["errors"].append(f"Governance: {exc}")
+        _run_github_artifacts(project_root, result)
     else:
         result["components"]["ci_workflows"] = {"action": "would-regenerate"}
         result["components"]["github_copilot"] = {"action": "would-regenerate"}
