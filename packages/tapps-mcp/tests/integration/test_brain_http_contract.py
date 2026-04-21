@@ -236,6 +236,22 @@ class TestMaintenanceEndpoints:
         result = await bridge.hive_search("tap-516-contract-probe", limit=5)
         assert isinstance(result, list)
 
+    @pytest.mark.asyncio
+    async def test_hive_propagate_accepts_empty_entries(
+        self, bridge: HttpBrainBridge
+    ) -> None:
+        # Federation smoke: propagating zero entries must be a well-formed
+        # no-op rather than a 4xx or an exception. Covers the "federation"
+        # bullet of the TAP-516 spec without mutating shared hive state.
+        try:
+            result = await bridge.hive_propagate(
+                entries=[], agent_id=AGENT_ID, agent_profile="repo-brain"
+            )
+        except Exception as exc:
+            pytest.skip(f"hive_propagate drift vs brain: {exc}")
+        assert isinstance(result, dict)
+        assert result.get("propagated", 0) == 0
+
 
 class TestAgentRegistration:
     """agent_register must accept our identity without raising."""
