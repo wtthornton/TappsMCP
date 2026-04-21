@@ -8,6 +8,7 @@ Precedence (highest to lowest):
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -641,13 +642,27 @@ class DocSourceConfig(BaseModel):
     format: str = Field(default="markdown", description="Content format: markdown or text.")
 
 
+def _extra_mode() -> Literal["ignore", "forbid"]:
+    """TAP-698: strict config gate.
+
+    When ``TAPPS_MCP_STRICT_CONFIG=true`` (or ``1``/``yes``), unknown
+    fields in .tapps-mcp.yaml raise ValidationError instead of being
+    silently dropped. Default stays ``ignore`` so existing consumers
+    with forward-compat settings don't break. CI and doctor flows can
+    opt in to catch typos like ``upgrade_create_agent_md`` (missing 's').
+    """
+    if os.environ.get("TAPPS_MCP_STRICT_CONFIG", "").lower() in ("1", "true", "yes"):
+        return "forbid"
+    return "ignore"
+
+
 class TappsMCPSettings(BaseSettings):
     """Root settings for TappsMCP server."""
 
     model_config = SettingsConfigDict(
         env_prefix="TAPPS_MCP_",
         env_nested_delimiter="__",
-        extra="ignore",
+        extra=_extra_mode(),
     )
 
     # Core

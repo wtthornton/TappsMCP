@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -552,9 +553,24 @@ def _normalise_dep(name: str) -> str:
     return name.lower().replace("-", "_").split("[")[0].strip()
 
 
+_VERSION_OP_RE = re.compile(r"[;@<>=!~\[]")
+
+
 def _strip_version_specifier(dep: str) -> str:
-    """Strip PEP 508 version specifiers from a dependency string."""
-    return dep.split(">")[0].split("<")[0].split("=")[0].split("!")[0].split("~")[0]
+    """Return the package name from a PEP 508 dependency string.
+
+    Handles extras (``pkg[extra]``), environment markers (``pkg; python>=X``),
+    URL specs (``pkg @ https://...``), and version ops (``>=``, ``~=``, etc.)
+    via :class:`packaging.requirements.Requirement`. Falls back to a regex
+    split on the first version/extras/marker delimiter when parsing raises
+    (TAP-615).
+    """
+    try:
+        from packaging.requirements import InvalidRequirement, Requirement
+
+        return Requirement(dep).name
+    except (InvalidRequirement, ImportError):
+        return _VERSION_OP_RE.split(dep, maxsplit=1)[0].strip()
 
 
 def _load_tomllib() -> Any:

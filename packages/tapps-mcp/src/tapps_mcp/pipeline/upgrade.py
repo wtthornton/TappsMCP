@@ -105,13 +105,41 @@ def _has_python_signals(project_root: Path) -> bool:
     except OSError:
         pass
 
-    skip_dirs = {".venv", "venv", "node_modules", ".git", "__pycache__", "dist", "build"}
+    # TAP-686: prune skip_dirs in-place (rglob doesn't — it walks everything
+    # and filters in Python, so monorepos with large vendor trees waste time
+    # even though the loop short-circuits). Also budget the scan so a
+    # pathologically-nested tree can't hang the session.
+    import os
+
+    skip_dirs = {
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        ".git",
+        "__pycache__",
+        "dist",
+        "build",
+        ".tox",
+        ".pytest_cache",
+        ".eggs",
+        "htmlcov",
+        ".mypy_cache",
+        "site-packages",
+        ".tapps-mcp-cache",
+    }
+    budget = 2000
     try:
-        for path in project_root.rglob("*.py"):
-            if any(part in skip_dirs for part in path.parts):
-                continue
-            return True
-    except OSError:
+        for _dirpath, dirs, files in os.walk(project_root):
+            dirs[:] = [d for d in dirs if d not in skip_dirs]
+            for name in files:
+                if name.endswith(".py"):
+                    return True
+                budget -= 1
+                if budget <= 0:
+                    return False
+    except OSError as exc:
+        log.warning("python_signals_walk_failed", project_root=str(project_root), error=str(exc))
         return False
     return False
 
@@ -710,11 +738,16 @@ def _upgrade_content_return(
     *,
     platform: str = "",
     force: bool = False,
+    mcp_only: bool = False,
 ) -> dict[str, Any]:
     """Run upgrade pipeline in content-return mode (Epic 87.3).
 
     Instead of writing files, accumulates :class:`FileOperation` objects
     and returns a :class:`FileManifest` the AI client can apply.
+
+    TAP-690: ``mcp_only=True`` mirrors the direct-write narrow install —
+    AGENTS.md, per-host platform files, and rule regeneration are all
+    skipped; only MCP config + settings operations land in the manifest.
     """
     from tapps_core.config.settings import load_settings
     from tapps_mcp import __version__
@@ -727,6 +760,28 @@ def _upgrade_content_return(
         "components": {},
         "errors": [],
     }
+
+    if mcp_only:
+        result["components"]["mcp_only_skipped"] = {
+            "reason": "mcp_only=True",
+            "skipped": [
+                "agents_md",
+                "claude_md",
+                "platforms",
+                "rules",
+                "ci_workflows",
+                "github_copilot",
+                "github_templates",
+                "governance",
+            ],
+        }
+        # Detect platform for diagnostic completeness.
+        detected = platform or _detect_platform(project_root)
+        result["detected_platform"] = detected
+        manifest = _build_upgrade_manifest(file_ops, __version__)
+        result["file_manifest"] = manifest.to_full_response_data()
+        result["success"] = True
+        return result
 
     # AGENTS.md
     try:
@@ -868,6 +923,14 @@ def _collect_upgrade_targets(project_root: Path) -> list[Path]:
         for f in agents_dir.iterdir():
             if f.name.startswith("tapps-"):
                 targets.append(f)
+    # TAP-689: rule files that the upgrade regenerates. Without backing
+    # these up, a consumer's hand-edits to python-quality.md / agent-scope.md
+    # / tapps-pipeline.md are lost with no rollback path.
+    for rules_subdir in (".claude/rules", ".cursor/rules"):
+        rules_dir = project_root / rules_subdir
+        if rules_dir.is_dir():
+            for f in rules_dir.glob("*.md"):
+                targets.append(f)
     for c in candidates:
         if c.exists():
             targets.append(c)
@@ -930,6 +993,7 @@ def upgrade_pipeline(
             project_root,
             platform=platform,
             force=force,
+            mcp_only=mcp_only,
         )
 
     result: dict[str, Any] = {

@@ -35,6 +35,12 @@ _DEFAULT_EXCLUDES: frozenset[str] = frozenset(
         ".mypy_cache",
         "migrations",
         "site-packages",
+        # TAP-613: agent worktrees spawned by Claude Code Agent tool are
+        # full git clones; scanning them duplicates every project module
+        # and dominates top_coupled / cycle output.
+        "worktrees",
+        ".tapps-mcp-cache",
+        ".tapps-agents",
     }
 )
 
