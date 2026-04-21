@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from tapps_mcp.project.models import ProjectProfile, TechStack
-from tapps_mcp.project.profiler import detect_project_profile
+from tapps_mcp.project.profiler import detect_project_profile, detect_project_signals
 from tapps_mcp.project.tech_stack import TechStackDetector, _should_skip
 from tapps_mcp.project.type_detector import detect_project_type
 
@@ -495,3 +495,53 @@ class TestDetectProjectProfile:
         assert profile.has_ci is True
         assert "github-actions" in profile.ci_systems
         assert "gitlab-ci" in profile.ci_systems
+
+
+# =========================================================================
+# detect_project_signals (TAP-614)
+# =========================================================================
+
+
+class TestDetectProjectSignals:
+    def test_empty_dir_returns_all_false(self, tmp_path: Path) -> None:
+        has_ci, has_docker, has_tests = detect_project_signals(tmp_path)
+        assert has_ci is False
+        assert has_docker is False
+        assert has_tests is False
+
+    def test_ci_detected_via_github_workflows(self, tmp_path: Path) -> None:
+        gh = tmp_path / ".github" / "workflows"
+        gh.mkdir(parents=True)
+        (gh / "ci.yml").write_text("name: CI\n", encoding="utf-8")
+        has_ci, _, _ = detect_project_signals(tmp_path)
+        assert has_ci is True
+
+    def test_docker_detected(self, tmp_path: Path) -> None:
+        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+        _, has_docker, _ = detect_project_signals(tmp_path)
+        assert has_docker is True
+
+    def test_tests_detected_via_root_tests_dir(self, tmp_path: Path) -> None:
+        (tmp_path / "tests").mkdir()
+        _, _, has_tests = detect_project_signals(tmp_path)
+        assert has_tests is True
+
+    def test_tests_detected_via_pyproject_toml(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+        _, _, has_tests = detect_project_signals(tmp_path)
+        assert has_tests is True
+
+    def test_tests_detected_uv_workspace_monorepo(self, tmp_path: Path) -> None:
+        # uv workspace: packages/tapps-mcp/tests/ — no root tests/ dir
+        pkg = tmp_path / "packages" / "tapps-mcp"
+        pkg.mkdir(parents=True)
+        (pkg / "tests").mkdir()
+        _, _, has_tests = detect_project_signals(tmp_path)
+        assert has_tests is True
+
+    def test_no_tests_when_package_has_no_tests_dir(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "packages" / "tapps-mcp"
+        pkg.mkdir(parents=True)
+        (pkg / "src").mkdir()
+        _, _, has_tests = detect_project_signals(tmp_path)
+        assert has_tests is False

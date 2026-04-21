@@ -73,33 +73,39 @@ _VALIDATE_CONCURRENCY = 10
 _AUTO_DETECT_BUDGET_S: float = 30.0
 
 # Track whether auto-GC and consolidation have already run this session.
-# Uses a mutable container to avoid PLW0603 ``global`` statements.
-_session_state: dict[str, bool] = {
-    "gc_done": False,
-    "consolidation_done": False,
-    "doc_validation_done": False,
-}
+@dataclasses.dataclass
+class _SessionFlags:
+    gc_done: bool = False
+    consolidation_done: bool = False
+    doc_validation_done: bool = False
+
+
+_session_state = _SessionFlags()
+# Guards the async check-and-set in _maybe_validate_memories to prevent
+# double-execution when concurrent session_start calls spawn background tasks.
+_state_lock = asyncio.Lock()
 
 
 def _reset_session_gc_flag() -> None:
     """Reset the auto-GC flag (for testing)."""
-    _session_state["gc_done"] = False
+    _session_state.gc_done = False
 
 
 def _reset_session_consolidation_flag() -> None:
     """Reset the consolidation scan flag (for testing)."""
-    _session_state["consolidation_done"] = False
+    _session_state.consolidation_done = False
 
 
 def _reset_session_doc_validation_flag() -> None:
     """Reset the doc validation flag (for testing)."""
-    _session_state["doc_validation_done"] = False
+    _session_state.doc_validation_done = False
 
 
 def _reset_session_state() -> None:
     """Reset all session state flags (for testing)."""
-    _session_state["gc_done"] = False
-    _session_state["consolidation_done"] = False
+    _session_state.gc_done = False
+    _session_state.consolidation_done = False
+    _session_state.doc_validation_done = False
 
 
 # Prevent garbage collection of fire-and-forget background tasks.
@@ -996,9 +1002,9 @@ def _maybe_auto_gc(
     """Run garbage collection if memory usage exceeds the configured threshold.
 
     Returns a summary dict when GC ran, or ``None`` if skipped.
-    Only runs once per session (guarded by ``_session_state["gc_done"]``).
+    Only runs once per session (guarded by ``_session_state.gc_done``).
     """
-    if _session_state["gc_done"]:
+    if _session_state.gc_done:
         return None
 
     mem_settings = getattr(settings, "memory", None)
@@ -1016,7 +1022,7 @@ def _maybe_auto_gc(
     if current_count <= trigger_count:
         return None
 
-    _session_state["gc_done"] = True
+    _session_state.gc_done = True
 
     try:
         from tapps_brain.decay import DecayConfig
@@ -1115,12 +1121,12 @@ def _maybe_consolidation_scan(
     """Run periodic memory consolidation scan if enabled and due.
 
     Returns a summary dict when scan ran, or ``None`` if skipped.
-    Only runs once per session (guarded by ``_session_state["consolidation_done"]``).
+    Only runs once per session (guarded by ``_session_state.consolidation_done``).
 
     Epic 58, Story 58.3: Periodic consolidation scan at session start.
     """
     # Early exit: already ran this session or settings not configured
-    if _session_state.get("consolidation_done", False):
+    if _session_state.consolidation_done:
         return None
 
     mem_settings = getattr(settings, "memory", None)
@@ -1129,7 +1135,7 @@ def _maybe_consolidation_scan(
     if not consolidation_settings or not scan_enabled:
         return None
 
-    _session_state["consolidation_done"] = True
+    _session_state.consolidation_done = True
 
     try:
         from tapps_brain.auto_consolidation import run_periodic_consolidation_scan
@@ -1229,13 +1235,10 @@ async def _maybe_validate_memories(
     """Validate stale memories against authoritative docs at session start.
 
     Returns a summary dict when validation ran, or ``None`` if skipped.
-    Only runs once per session (guarded by ``_session_state["doc_validation_done"]``).
+    Only runs once per session (guarded by ``_session_state.doc_validation_done``).
 
     Epic 62, Story 62.6: Session-start validation pass.
     """
-    if _session_state.get("doc_validation_done", False):
-        return None
-
     mem_settings = getattr(settings, "memory", None)
     doc_val = getattr(mem_settings, "doc_validation", None) if mem_settings else None
     if (
@@ -1245,7 +1248,10 @@ async def _maybe_validate_memories(
     ):
         return None
 
-    _session_state["doc_validation_done"] = True
+    async with _state_lock:
+        if _session_state.doc_validation_done:
+            return None
+        _session_state.doc_validation_done = True
 
     try:
         from tapps_core.knowledge.cache import KBCache
@@ -1687,20 +1693,23 @@ async def tapps_session_start(
     # Attach structured output
     try:
         from tapps_mcp.common.output_schemas import SessionStartOutput
+        from tapps_mcp.project.profiler import detect_project_signals
 
         checker_names = [
             c.get("name", "") if isinstance(c, dict) else getattr(c, "name", "")
             for c in info["data"].get("installed_checkers", [])
         ]
+        _proj_root = Path(info["data"]["configuration"].get("project_root", "."))
+        _has_ci, _has_docker, _has_tests = detect_project_signals(_proj_root)
         structured = SessionStartOutput(
             server_version=info["data"]["server"].get("version", ""),
-            project_root=info["data"]["configuration"].get("project_root", ""),
+            project_root=str(_proj_root),
             project_type=None,
             quality_preset=info["data"]["configuration"].get("quality_preset", "standard"),
             installed_checkers=[n for n in checker_names if n],
-            has_ci=False,
-            has_docker=False,
-            has_tests=False,
+            has_ci=_has_ci,
+            has_docker=_has_docker,
+            has_tests=_has_tests,
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:
@@ -1792,17 +1801,19 @@ async def _session_start_quick(
     # Attach structured output
     try:
         from tapps_mcp.common.output_schemas import SessionStartOutput
+        from tapps_mcp.project.profiler import detect_project_signals
 
         checker_names = [t.name for t in installed if t.available]
+        _has_ci, _has_docker, _has_tests = detect_project_signals(settings.project_root)
         structured = SessionStartOutput(
             server_version=__version__,
             project_root=str(settings.project_root),
             project_type=None,
             quality_preset=settings.quality_preset,
             installed_checkers=checker_names,
-            has_ci=False,
-            has_docker=False,
-            has_tests=False,
+            has_ci=_has_ci,
+            has_docker=_has_docker,
+            has_tests=_has_tests,
         )
         resp["structuredContent"] = structured.to_structured_content()
     except Exception:

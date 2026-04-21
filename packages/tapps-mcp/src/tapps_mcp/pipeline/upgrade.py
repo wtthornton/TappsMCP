@@ -130,9 +130,17 @@ def _has_infra_signals(project_root: Path) -> bool:
     return any(project_root.glob("docker-compose*.yaml"))
 
 
+_CONSENT_HOSTS = ("claude-code", "cursor")
+
+
 def _mcp_json_has_tapps_entry(project_root: Path, host: str) -> bool:
-    """True if an existing ``.mcp.json`` / ``.cursor/mcp.json`` already
-    declares a ``tapps-mcp`` server entry.
+    """True if the user has previously opted in to TappsMCP on *any* host.
+
+    Consent is about intent to use TappsMCP, not about a specific host.
+    A user who added tapps-mcp to Cursor and is now running a Claude Code
+    upgrade should be treated as opted in — checking only ``host`` would
+    refuse to regenerate the Claude Code config even though they clearly want
+    it.  We accept an entry on any configured host as proof of consent.
 
     Upgrade never implicitly opts a consumer *in* to TappsMCP. We only
     regenerate the config when the user has previously opted in (entry exists
@@ -142,15 +150,18 @@ def _mcp_json_has_tapps_entry(project_root: Path, host: str) -> bool:
 
     from tapps_mcp.distribution.setup_generator import _get_config_path, _get_servers_key
 
-    path = _get_config_path(host, project_root)
-    if not path.exists():
-        return False
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    servers = data.get(_get_servers_key(host)) or {}
-    return isinstance(servers, dict) and "tapps-mcp" in servers
+    def _has_entry(h: str) -> bool:
+        path = _get_config_path(h, project_root)
+        if not path.exists():
+            return False
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        servers = data.get(_get_servers_key(h)) or {}
+        return isinstance(servers, dict) and "tapps-mcp" in servers
+
+    return any(_has_entry(h) for h in _CONSENT_HOSTS)
 
 
 def _agents_md_opt_out(project_root: Path, *, create_flag: bool) -> str | None:
@@ -202,7 +213,13 @@ def _upgrade_agents_md(
         if reason is not None:
             return {"action": "skipped", "detail": reason}
         if not dry_run:
-            agents_path.write_text(template_content, encoding="utf-8")
+            _tmp = agents_path.with_name(agents_path.name + ".tmp")
+            try:
+                _tmp.write_text(template_content, encoding="utf-8")
+                _tmp.replace(agents_path)
+            except BaseException:
+                _tmp.unlink(missing_ok=True)
+                raise
         return {"action": "created"}
 
     validation = AgentsValidation(agents_path.read_text(encoding="utf-8"))
@@ -867,10 +884,16 @@ def upgrade_pipeline(
                 )
                 result["backup"] = str(backup_dir)
                 mgr.cleanup_old_backups(keep=5)
+            else:
+                result["backup"] = "skipped (no targets)"
         except Exception as exc:
-            # Backup failure should not block upgrade
-            log.warning("backup_failed", error=str(exc))
+            log.error("backup_failed", error=str(exc))
             result["backup"] = f"failed: {exc}"
+            result["errors"].append(
+                f"Upgrade aborted: backup failed ({exc}). "
+                "Fix the backup issue or run with dry_run=True to preview changes."
+            )
+            return result
 
     # Resolve engagement level and Docker config from settings. Pass the
     # target project_root explicitly so the per-project ``.tapps-mcp.yaml``

@@ -188,15 +188,18 @@ def _build_pip_audit_args(
     elif source == "pyproject":
         base_args.extend(["-r", "pyproject.toml"])
         resolved_source = "pyproject"
-    elif source == "auto":
-        # Auto-detect: prefer requirements.txt if present, else environment
+    elif source in ("auto", "environment"):
         import pathlib
 
         root = pathlib.Path(project_root) if project_root else pathlib.Path.cwd()
-        if (root / "requirements.txt").exists():
+        if source == "auto" and (root / "requirements.txt").exists():
             base_args.extend(["-r", "requirements.txt"])
             resolved_source = "requirements"
-        # Otherwise fall through to environment scan (default)
+        else:
+            # Environment scan: skip editable installs (workspace members, local
+            # packages) — they have no PyPI hash and cause pip-audit to error in
+            # uv workspaces.  CVE scanning is only meaningful for PyPI deps anyway.
+            base_args.append("--skip-editable")
 
     return base_args, resolved_source
 

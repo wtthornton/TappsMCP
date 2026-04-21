@@ -99,6 +99,39 @@ def _quality_recommendations(profile: ProjectProfile) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Fast signal detection (no tech-stack or type detection)
+# ---------------------------------------------------------------------------
+
+
+def detect_project_signals(project_root: Path) -> tuple[bool, bool, bool]:
+    """Return (has_ci, has_docker, has_tests) with no subprocess calls.
+
+    Lightweight check used by session start to populate structuredContent
+    without the cost of full profile detection.  Handles uv workspace
+    monorepos by also checking ``packages/*/tests/`` directories.
+    """
+    has_ci = bool(_detect_signals(project_root, _CI_SIGNALS))
+    has_docker = (project_root / "Dockerfile").exists() or (
+        project_root / "docker-compose.yml"
+    ).exists()
+
+    # Standard test locations
+    test_found = bool(_detect_signals(project_root, _TEST_SIGNALS))
+
+    # uv workspace monorepo: packages/*/tests/ (not at root)
+    if not test_found:
+        packages_dir = project_root / "packages"
+        if packages_dir.is_dir():
+            test_found = any(
+                (pkg / "tests").is_dir()
+                for pkg in packages_dir.iterdir()
+                if pkg.is_dir()
+            )
+
+    return has_ci, has_docker, test_found
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 

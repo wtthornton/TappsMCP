@@ -106,6 +106,30 @@ class TestHelpers:
         (tmp_path / ".mcp.json").write_text("{not json", encoding="utf-8")
         assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is False
 
+    def test_mcp_json_has_tapps_entry_cross_host_cursor_to_claude(self, tmp_path: Path) -> None:
+        # User opted in via Cursor; Claude Code upgrade should still be treated as opted in.
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        (cursor_dir / "mcp.json").write_text(
+            json.dumps({"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}),
+            encoding="utf-8",
+        )
+        assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is True
+
+    def test_mcp_json_has_tapps_entry_neither_host(self, tmp_path: Path) -> None:
+        # Neither host has tapps-mcp — consent not given.
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps({"mcpServers": {"other-tool": {}}}),
+            encoding="utf-8",
+        )
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        (cursor_dir / "mcp.json").write_text(
+            json.dumps({"mcpServers": {"other-tool": {}}}),
+            encoding="utf-8",
+        )
+        assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is False
+
     def test_agents_md_opt_out_disabled_flag(self, tmp_path: Path) -> None:
         assert _agents_md_opt_out(tmp_path, create_flag=False) == "upgrade_create_agents_md=false"
 

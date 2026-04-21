@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from tapps_mcp.tools.pip_audit import (
     DependencyAuditResult,
     VulnerabilityFinding,
+    _build_pip_audit_args,
     _parse_pip_audit_json,
     _severity_meets_threshold,
     run_pip_audit_async,
@@ -307,6 +309,38 @@ class TestVulnerabilityFindingDefaults:
         f2 = VulnerabilityFinding(package="b", installed_version="2.0")
         f1.aliases.append("CVE-1")
         assert f2.aliases == []
+
+
+class TestBuildPipAuditArgs:
+    """Tests for _build_pip_audit_args — covers monorepo/editable install handling."""
+
+    def test_auto_no_requirements_uses_skip_editable(self, tmp_path: Path) -> None:
+        args, source = _build_pip_audit_args("auto", str(tmp_path))
+        assert source == "environment"
+        assert "--skip-editable" in args
+
+    def test_environment_uses_skip_editable(self, tmp_path: Path) -> None:
+        args, source = _build_pip_audit_args("environment", str(tmp_path))
+        assert source == "environment"
+        assert "--skip-editable" in args
+
+    def test_auto_with_requirements_txt_no_skip_editable(self, tmp_path: Path) -> None:
+        (tmp_path / "requirements.txt").write_text("requests>=2.0\n", encoding="utf-8")
+        args, source = _build_pip_audit_args("auto", str(tmp_path))
+        assert source == "requirements"
+        assert "--skip-editable" not in args
+        assert "-r" in args
+        assert "requirements.txt" in args
+
+    def test_requirements_source_no_skip_editable(self, tmp_path: Path) -> None:
+        args, source = _build_pip_audit_args("requirements", str(tmp_path))
+        assert source == "requirements"
+        assert "--skip-editable" not in args
+
+    def test_pyproject_source_no_skip_editable(self, tmp_path: Path) -> None:
+        args, source = _build_pip_audit_args("pyproject", str(tmp_path))
+        assert source == "pyproject"
+        assert "--skip-editable" not in args
 
 
 class TestDependencyAuditResultDefaults:

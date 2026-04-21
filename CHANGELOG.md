@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.3] - 2026-04-20
+
+### Fixed
+
+- **`_session_state` race condition and magic-string keys** (TAP-682, TAP-701) — replaced `dict[str, bool]` with `@dataclass _SessionFlags` (mypy catches typos) and added `asyncio.Lock` guarding async check-and-set in `_maybe_validate_memories`; also fixed `_reset_session_state` silently skipping `doc_validation_done`. ([packages/tapps-mcp/src/tapps_mcp/server_pipeline_tools.py](packages/tapps-mcp/src/tapps_mcp/server_pipeline_tools.py))
+- **`_upgrade_agents_md` non-atomic write** (TAP-683) — replaced `agents_path.write_text()` with write-to-`.tmp`-then-`Path.replace()` so a SIGINT or crash mid-write cannot corrupt `AGENTS.md`. ([packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py](packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py))
+- **Upgrade aborts when pre-upgrade backup fails** (TAP-707) — upgrade now returns an error and exits early on backup failure instead of proceeding without a rollback point; `cleanup_old_backups` only runs after a successful backup. ([packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py](packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py))
+- **Cross-host consent gate miss in `_mcp_json_has_tapps_entry`** (TAP-706) — consent is now checked across all known hosts (claude-code + cursor) so a Cursor opt-in is recognised during a Claude Code upgrade. ([packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py](packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py))
+- **`tapps_dependency_scan` errors on uv workspace monorepos** (TAP-610) — environment/auto pip-audit scans now pass `--skip-editable` so workspace members with no hash are skipped rather than causing an error. ([packages/tapps-mcp/src/tapps_mcp/tools/pip_audit.py](packages/tapps-mcp/src/tapps_mcp/tools/pip_audit.py))
+- **`tapps_session_start` reports `has_tests=false` on repos with tests** (TAP-614) — `has_ci`, `has_docker`, and `has_tests` were hardcoded `False`; new `detect_project_signals()` handles standard and uv workspace monorepo layouts (`packages/*/tests/`). ([packages/tapps-mcp/src/tapps_mcp/project/profiler.py](packages/tapps-mcp/src/tapps_mcp/project/profiler.py))
+
+### Changed
+
+- Version bump: tapps-core 2.10.2 → 2.10.3, tapps-mcp 2.10.2 → 2.10.3, docs-mcp 2.10.2 → 2.10.3.
+
 ## [2.10.2] - 2026-04-20
 
 ### Fixed
