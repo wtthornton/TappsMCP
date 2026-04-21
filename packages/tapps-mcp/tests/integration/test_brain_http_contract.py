@@ -19,7 +19,10 @@ Environment contract
 - ``TAPPS_BRAIN_OPENAPI_PATH`` (optional) — path to the ``openapi.json`` used
   for schema assertions. Defaults to
   ``../tapps-brain/docs/contracts/openapi.json`` relative to this repo's
-  workspace root when that layout exists.
+  workspace root when that layout exists. When neither the env var nor the
+  sibling checkout are present, the test fetches the live spec from
+  ``{TAPPS_BRAIN_HTTP_URL}/openapi.json`` so CI against a deployed brain
+  works without cloning tapps-brain.
 """
 
 from __future__ import annotations
@@ -74,10 +77,18 @@ def _openapi_search_paths(brain_version: str | None) -> list[Path]:
     return candidates
 
 
-def _load_openapi_spec(brain_version: str | None) -> dict[str, Any] | None:
+def _load_openapi_spec(brain_version: str | None, brain_url: str) -> dict[str, Any] | None:
     for path in _openapi_search_paths(brain_version):
         if path.is_file():
             return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        response = httpx.get(f"{brain_url}/openapi.json", timeout=5.0)
+        response.raise_for_status()
+        payload = response.json()
+        if isinstance(payload, dict):
+            return payload
+    except (httpx.HTTPError, ValueError):
+        return None
     return None
 
 
@@ -96,13 +107,14 @@ def brain_health_payload(brain_url: str) -> dict[str, Any]:
 
 
 @pytest.fixture(scope="module")
-def openapi_spec(brain_health_payload: dict[str, Any]) -> dict[str, Any]:
+def openapi_spec(brain_url: str, brain_health_payload: dict[str, Any]) -> dict[str, Any]:
     version = brain_health_payload.get("version")
-    spec = _load_openapi_spec(version if isinstance(version, str) else None)
+    spec = _load_openapi_spec(version if isinstance(version, str) else None, brain_url)
     if spec is None:
         pytest.skip(
-            "OpenAPI spec not found on disk — set TAPPS_BRAIN_OPENAPI_PATH or "
-            "check out tapps-brain alongside tapps-mcp."
+            "OpenAPI spec not available — set TAPPS_BRAIN_OPENAPI_PATH, check "
+            "out tapps-brain alongside tapps-mcp, or ensure the deployed brain "
+            "exposes /openapi.json."
         )
     return spec
 

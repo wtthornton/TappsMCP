@@ -1,16 +1,25 @@
 # .github/workflows/brain-contract.yml
-# TAP-516: contract test for HttpBrainBridge against a running tapps-brain.
+# TAP-516: contract test for HttpBrainBridge against the already-deployed
+# tapps-brain HTTP adapter. This workflow does NOT deploy brain — it hits
+# the URL provided via TAPPS_BRAIN_HTTP_URL (repo secret or variable).
 #
 # Runs in two modes:
 #
 # 1. Path-filtered PR gate — fires only when the bridge, the contract test,
-#    or this workflow changes. Avoids blocking unrelated PRs when brain ships
-#    a breaking change (the bridge's correctness is decoupled from the PR
+#    or this workflow changes. Avoids blocking unrelated PRs when brain
+#    ships a breaking change (bridge correctness is decoupled from the PR
 #    under review).
 #
-# 2. Nightly scheduled run — catches drift against the latest published
-#    tapps-brain without blocking merges. See TAP-800 for the current drift
-#    backlog.
+# 2. Nightly scheduled run — catches drift against the live deployment
+#    without blocking merges. See TAP-800 for the current drift backlog.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#
+#   TAPPS_BRAIN_HTTP_URL   — URL of the deployed brain (e.g.
+#                            https://brain.example.internal). Can be set
+#                            as a repository Variable instead if the URL
+#                            isn't sensitive.
+#   TAPPS_BRAIN_AUTH_TOKEN — bearer token the deployed brain accepts.
 #
 # Mark the PR job as required via branch protection (Settings → Branches)
 # once this workflow is stable.
@@ -38,46 +47,23 @@ jobs:
   contract:
     name: HttpBrainBridge contract
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    services:
-      postgres:
-        image: pgvector/pgvector:pg17
-        env:
-          POSTGRES_USER: tapps
-          POSTGRES_PASSWORD: tapps
-          POSTGRES_DB: tapps_brain
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U tapps -d tapps_brain"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-    env:
-      TAPPS_BRAIN_CONTRACT_PROJECT_ID: tapps-mcp-ci
-      TAPPS_BRAIN_CONTRACT_AGENT_ID: tapps-mcp-ci
-      TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN: ${{ secrets.TAPPS_BRAIN_AUTH_TOKEN }}
-      TAPPS_BRAIN_AUTH_TOKEN: ${{ secrets.TAPPS_BRAIN_AUTH_TOKEN }}
-      TAPPS_BRAIN_DATABASE_URL: postgresql://tapps:tapps@localhost:5432/tapps_brain
+    timeout-minutes: 10
 
     steps:
       - name: Checkout tapps-mcp
         uses: actions/checkout@v6
 
-      - name: Checkout tapps-brain (sibling)
-        uses: actions/checkout@v6
-        with:
-          repository: wtthornton/tapps-brain
-          path: ../tapps-brain
-          fetch-depth: 1
-          token: ${{ secrets.TAPPS_BRAIN_REPO_TOKEN || github.token }}
-
-      - name: Assert auth token secret is set
+      - name: Assert deployment config is present
+        env:
+          BRAIN_URL: ${{ secrets.TAPPS_BRAIN_HTTP_URL || vars.TAPPS_BRAIN_HTTP_URL }}
+          BRAIN_TOKEN: ${{ secrets.TAPPS_BRAIN_AUTH_TOKEN }}
         run: |
-          if [ -z "${TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN}" ]; then
-            echo "::error::TAPPS_BRAIN_AUTH_TOKEN secret is not set. See TAP-516 for setup."
+          if [ -z "${BRAIN_URL}" ]; then
+            echo "::error::TAPPS_BRAIN_HTTP_URL is not configured (secret or variable)."
+            exit 1
+          fi
+          if [ -z "${BRAIN_TOKEN}" ]; then
+            echo "::error::TAPPS_BRAIN_AUTH_TOKEN secret is not configured."
             exit 1
           fi
 
@@ -89,67 +75,27 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Build tapps-brain wheel
-        working-directory: ../tapps-brain
-        run: |
-          uv build --wheel --out-dir dist
-          ls -la dist/
-
-      - name: Build brain-http docker image
-        working-directory: ../tapps-brain
-        run: |
-          VERSION=$(ls dist/tapps_brain-*.whl | sed -E 's/.*tapps_brain-([^-]+)-.*/\1/')
-          echo "brain_version=${VERSION}" >> "$GITHUB_ENV"
-          docker build \
-            --build-arg TAPPS_BRAIN_VERSION="${VERSION}" \
-            -f docker/Dockerfile.http \
-            -t tapps-brain-http:ci \
-            .
-
-      - name: Start brain-http container
-        run: |
-          docker run -d \
-            --name tapps-brain-http \
-            --network host \
-            -e TAPPS_BRAIN_DATABASE_URL="${TAPPS_BRAIN_DATABASE_URL}" \
-            -e TAPPS_BRAIN_AUTH_TOKEN="${TAPPS_BRAIN_AUTH_TOKEN}" \
-            -e TAPPS_BRAIN_AUTH_ENABLED=true \
-            tapps-brain-http:ci
-
-      - name: Wait for brain /health
-        run: |
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8080/health >/dev/null 2>&1; then
-              echo "brain is healthy after ${i}s"
-              curl -s http://localhost:8080/health
-              echo
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "::error::brain /health did not come up in 60s"
-          docker logs tapps-brain-http || true
-          exit 1
-
       - name: Install tapps-mcp dependencies
         run: uv sync --all-packages
 
+      - name: Probe brain /health (fail fast on outage)
+        env:
+          BRAIN_URL: ${{ secrets.TAPPS_BRAIN_HTTP_URL || vars.TAPPS_BRAIN_HTTP_URL }}
+        run: |
+          if ! curl -fsS --max-time 10 "${BRAIN_URL}/health"; then
+            echo
+            echo "::error::deployed brain at ${BRAIN_URL} is unreachable"
+            exit 1
+          fi
+          echo
+
       - name: Run contract test
         env:
-          TAPPS_BRAIN_HTTP_URL: http://localhost:8080
-          TAPPS_BRAIN_OPENAPI_PATH: ../tapps-brain/docs/contracts/openapi-${{ env.brain_version }}.json
+          TAPPS_BRAIN_HTTP_URL: ${{ secrets.TAPPS_BRAIN_HTTP_URL || vars.TAPPS_BRAIN_HTTP_URL }}
+          TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN: ${{ secrets.TAPPS_BRAIN_AUTH_TOKEN }}
+          TAPPS_BRAIN_CONTRACT_PROJECT_ID: tapps-mcp-ci
+          TAPPS_BRAIN_CONTRACT_AGENT_ID: tapps-mcp-ci
         run: |
           uv run pytest \
             packages/tapps-mcp/tests/integration/test_brain_http_contract.py \
-            -v --tb=short -o log_cli=true
-
-      - name: Dump brain logs on failure
-        if: failure()
-        run: |
-          docker logs tapps-brain-http || true
-
-      - name: Stop brain container
-        if: always()
-        run: |
-          docker stop tapps-brain-http || true
-          docker rm tapps-brain-http || true
+            -v --tb=short
