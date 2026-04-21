@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.2] - 2026-04-20
+
+### Fixed
+
+- **`docs_generate_changelog` no longer overwrites hand-crafted CHANGELOGs** (TAP-736) — the tool now refuses to write when the target file already exists unless `force=True` is passed, returning the generated content inline with a warning so users can review and merge manually. ([packages/docs-mcp/src/docs_mcp/server_gen_tools.py](packages/docs-mcp/src/docs_mcp/server_gen_tools.py))
+- **`docs_check_style` heading consistency defaults to auto-detect** (TAP-737) — `heading_style` now defaults to `"auto"` instead of `"sentence"`, inferring the dominant heading convention (title vs sentence) from the document before flagging violations. Eliminates 100+ false positives on projects that use standard GitHub title-case conventions. ([packages/docs-mcp/src/docs_mcp/validators/style.py](packages/docs-mcp/src/docs_mcp/validators/style.py))
+- **`docs_check_drift` no longer flags test-local variables as undocumented public API** (TAP-739) — test files are now excluded from drift analysis, consistent with `docs_check_completeness`. Variables scoped inside test functions (e.g. `cb`) are no longer reported as missing from docs. ([packages/docs-mcp/src/docs_mcp/validators/drift.py](packages/docs-mcp/src/docs_mcp/validators/drift.py))
+- **`docs_check_completeness` `inline_docs` scores 1.0 when no public symbols found** (TAP-740) — projects with no exported public API (or where the analyzer finds no functions/classes) now score as fully documented rather than 0, since there is nothing to document. ([packages/docs-mcp/src/docs_mcp/validators/completeness.py](packages/docs-mcp/src/docs_mcp/validators/completeness.py))
+- **`docs_check_completeness` `api_documentation` detects written API doc files** (TAP-738) — files categorised as `api_docs` by `docs_session_start` (e.g. `docs/api-reference.md`) are now recognised by the completeness checker, preventing the category from scoring 0 when a 100KB+ API reference exists.
+
+### Added
+
+- **tapps-brain local setup guide for VSCode / GUI-launch env-var gotcha** (TAP-751) — `docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md` now documents the `systemd environment.d` fix for Linux, macOS `launchctl setenv`, and Windows `[Environment]::SetEnvironmentVariable` workarounds when `memory_status.enabled` is false after configuring tapps-brain in a GUI-launched IDE.
+
+### Changed
+
+- Version bump: tapps-core 2.10.1 → 2.10.2, tapps-mcp 2.10.1 → 2.10.2, docs-mcp 2.10.1 → 2.10.2.
+
 ## [2.10.1] - 2026-04-19
 
 ### Fixed
