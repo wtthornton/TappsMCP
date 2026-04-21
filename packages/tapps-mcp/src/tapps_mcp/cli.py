@@ -925,6 +925,82 @@ def replace_exe_cmd(new_exe_path: str) -> None:
         raise SystemExit(1)
 
 
+@main.command("migrate-memory")
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root containing .tapps-mcp/memory/*.db",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Discover entries and print the summary without writing to brain.",
+)
+@click.option(
+    "--validate-only",
+    is_flag=True,
+    help="Alias of --dry-run that also reports per-db parse failures.",
+)
+@click.option(
+    "--rollback",
+    "rollback_run_id",
+    metavar="RUN_ID",
+    default=None,
+    help="Delete entries tagged with migration-run:<RUN_ID> from brain.",
+)
+def migrate_memory_cmd(
+    project_root: str,
+    dry_run: bool,
+    validate_only: bool,
+    rollback_run_id: str | None,
+) -> None:
+    """Migrate .tapps-mcp/memory/*.db entries into tapps-brain (TAP-415)."""
+    from pathlib import Path
+
+    from tapps_core.brain_bridge import create_brain_bridge
+    from tapps_core.config.settings import load_settings
+    from tapps_mcp.pipeline.migrate_memory import (
+        rollback_migration_sync,
+        run_migration_sync,
+    )
+
+    settings = load_settings()
+    bridge = create_brain_bridge(settings)
+    if bridge is None:
+        click.echo(
+            click.style(
+                "BrainBridge unavailable — configure TAPPS_BRAIN_DATABASE_URL "
+                "or TAPPS_MCP_MEMORY_BRAIN_HTTP_URL before running migrate-memory.",
+                fg="red",
+            )
+        )
+        raise SystemExit(2)
+
+    if rollback_run_id:
+        result = rollback_migration_sync(bridge, rollback_run_id)
+        click.echo(
+            f"rollback run_id={rollback_run_id} deleted={result['deleted']} "
+            f"ok={result['ok']}"
+        )
+        if result.get("errors"):
+            click.echo(click.style(f"errors: {result['errors']}", fg="yellow"))
+        if not result["ok"]:
+            raise SystemExit(1)
+        return
+
+    report = run_migration_sync(
+        Path(project_root).resolve(),
+        bridge,
+        dry_run=dry_run,
+        validate_only=validate_only,
+    )
+    click.echo(report.summary())
+    if report.failures:
+        click.echo(click.style(f"failures: {report.failures[:5]}", fg="yellow"))
+    if report.failed > 0 and not dry_run and not validate_only:
+        raise SystemExit(1)
+
+
 def _register_benchmark_group() -> None:
     """Lazily register the benchmark subcommand group."""
     from tapps_mcp.benchmark.cli_commands import benchmark_group
