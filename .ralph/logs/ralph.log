@@ -1350,3 +1350,23 @@
 [2026-04-21 02:04:11] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
 [2026-04-21 02:10:15] [WARN] on-stop: No RALPH_STATUS block found in response
 [2026-04-21 02:10:15] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-21 02:16:13] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-21 02:16:13] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-21 02:21:25] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-21 02:21:25] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-21 02:25:05] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-21 02:25:05] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-21 07:15:02] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-21 07:15:02] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-21 07:40:14] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-21 07:40:14] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-21 07:47:37] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-21 07:47:37] [INFO] on-stop: Detected 1 question pattern(s) in response (USYNC-1)
+[2026-04-21 07:47:37] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-21 08:09:33] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-21 08:09:33] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-21 08:29:35] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-21 08:29:35] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
+[2026-04-21 08:30:18] [WARN] on-stop: No RALPH_STATUS block found in response
+[2026-04-21 08:30:18] [INFO] on-stop: Detected 1 question pattern(s) in response (USYNC-1)
+[2026-04-21 08:30:18] [ERROR] on-stop: Circuit breaker OPEN (Fresh start (clean restart))
