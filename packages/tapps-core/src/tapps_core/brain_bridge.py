@@ -73,6 +73,13 @@ _BRAIN_HEALTH_TIMEOUT_SECONDS: float = 5.0
 # offline write queue to drain on shutdown before giving up (TAP-517).
 _DRAIN_DEADLINE_SECONDS: float = 5.0
 
+# --- MCP streamable-HTTP transport ------------------------------------------
+# FastMCP's streamable-HTTP transport (tapps-brain /mcp) is strict about both
+# the trailing slash and content negotiation: a POST to /mcp receives 307
+# Temporary Redirect → /mcp/, and a POST without these Accept values receives
+# 406 Not Acceptable (TAP-516 regression found against brain 3.10.x).
+_MCP_ACCEPT_HEADERS: dict[str, str] = {"Accept": "application/json, text/event-stream"}
+
 
 class BrainBridgeUnavailable(Exception):  # noqa: N818  (public API name predates the lint rule; renaming would break consumers)
     """Raised when the circuit is open or the bridge is not configured."""
@@ -1014,8 +1021,9 @@ class HttpBrainBridge(BrainBridge):
 
         if self._http_client is None:
             self._http_client = httpx.AsyncClient(
-                headers=self._http_headers,
+                headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
                 timeout=30.0,
+                follow_redirects=True,
             )
         payload = {
             "jsonrpc": "2.0",
@@ -1023,7 +1031,7 @@ class HttpBrainBridge(BrainBridge):
             "method": "tools/call",
             "params": {"name": tool_name, "arguments": arguments},
         }
-        response = await self._http_client.post(f"{self._http_url}/mcp", json=payload)
+        response = await self._http_client.post(f"{self._http_url}/mcp/", json=payload)
         response.raise_for_status()
         data: dict[str, Any] = response.json()
 
@@ -1066,7 +1074,7 @@ class HttpBrainBridge(BrainBridge):
 
     async def get(self, key: str) -> dict[str, Any] | None:
         result = await self._http_mcp_call("memory_get", {"key": key})
-        if isinstance(result, dict) and result.get("key"):
+        if isinstance(result, dict) and result.get("key") and not result.get("error"):
             return result
         return None
 
@@ -1307,10 +1315,11 @@ class HttpBrainBridge(BrainBridge):
         }
         try:
             response = httpx.post(
-                f"{self._http_url}/mcp",
+                f"{self._http_url}/mcp/",
                 json=payload,
-                headers=self._http_headers,
+                headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
                 timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS,
+                follow_redirects=True,
             )
         except Exception as exc:
             return {"ok": False, "error": f"probe_failed: {exc}"}
@@ -1346,15 +1355,16 @@ class HttpBrainBridge(BrainBridge):
                 break
             try:
                 httpx.post(
-                    f"{self._http_url}/mcp",
+                    f"{self._http_url}/mcp/",
                     json={
                         "jsonrpc": "2.0",
                         "id": 1,
                         "method": "tools/call",
                         "params": {"name": "memory_save", "arguments": entry},
                     },
-                    headers=self._http_headers,
+                    headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
                     timeout=5.0,
+                    follow_redirects=True,
                 )
                 drained += 1
             except Exception as exc:
