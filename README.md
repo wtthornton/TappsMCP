@@ -12,7 +12,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/tests-6%2C900%2B_passing-brightgreen.svg)](#development)
 [![Tools](https://img.shields.io/badge/MCP_tools-58-blue.svg)](#tools-reference)
-[![Version](https://img.shields.io/badge/version-2.10.4-informational.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.10.5-informational.svg)](#)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 

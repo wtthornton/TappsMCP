@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.5] - 2026-04-21
+
+### Changed
+
+- **Documentation update**: Fix version badge in README.md (was stuck at 2.4.0), update "What's new" section to v2.10+ highlights, correct tool count in `packages/tapps-mcp/README.md` (30 → 26), remove deprecated expert system bullet.
+- **ARCHITECTURE.md**: Expand memory subsystem section to document both HTTP mode (BrainBridge with offline queue, circuit breaker, agent identity) and in-process SQLite mode.
+- Version bump: tapps-core 2.10.4 → 2.10.5, tapps-mcp 2.10.4 → 2.10.5, docs-mcp 2.10.4 → 2.10.5.
+
 ## [2.10.4] - 2026-04-21
 
 ### Changed
