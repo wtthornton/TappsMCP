@@ -18,18 +18,8 @@ _REEXPORT_MODULES: list[tuple[str, list[str]]] = [
         "tapps_core.memory.bm25",
         ["BM25Scorer", "preprocess", "stem"],
     ),
-    (
-        "tapps_core.memory.consolidation",
-        ["consolidate", "should_consolidate", "merge_values"],
-    ),
-    (
-        "tapps_core.memory.auto_consolidation",
-        ["check_consolidation_on_save", "run_periodic_consolidation_scan"],
-    ),
-    (
-        "tapps_core.memory.contradictions",
-        ["Contradiction", "ContradictionDetector"],
-    ),
+    # TAP-496: consolidation, auto_consolidation, contradictions shims deleted
+    # (retired in TAP-412; callers updated to import from tapps_brain directly).
     (
         "tapps_core.memory.decay",
         [
@@ -59,10 +49,7 @@ _REEXPORT_MODULES: list[tuple[str, list[str]]] = [
         "tapps_core.memory.fusion",
         ["reciprocal_rank_fusion"],
     ),
-    (
-        "tapps_core.memory.gc",
-        ["MemoryGarbageCollector", "GCResult"],
-    ),
+    # TAP-496: gc shim deleted; callers import from tapps_brain.gc directly.
     (
         "tapps_core.memory.injection",
         [
@@ -96,10 +83,8 @@ _REEXPORT_MODULES: list[tuple[str, list[str]]] = [
             "_utc_now_iso",
         ],
     ),
-    (
-        "tapps_core.memory.persistence",
-        ["MemoryPersistence"],
-    ),
+    # TAP-496: persistence shim deleted (SQLite-specific, no v3 equivalent).
+    # tapps_mcp/memory/persistence.py now imports directly from tapps_brain.
     (
         "tapps_core.memory.reinforcement",
         ["reinforce"],
