@@ -797,6 +797,81 @@ def check_tapps_brain() -> CheckResult:
         )
 
 
+def check_brain_http_auth(root: Path) -> CheckResult:
+    """Verify that HTTP-bridge auth config is complete when HTTP mode is active.
+
+    When ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` is set, the client must also have
+    ``memory.brain_auth_token`` (env: ``TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN``) and
+    ``memory.brain_project_id``. Missing either silently sends unauthenticated
+    (or partially authenticated) requests and every memory/hive call returns
+    401 or 403 — but ``memory_status.degraded`` looked OK until we fixed it
+    because the old probe only hit ``/health`` (unauthenticated).
+
+    A common mistake is setting ``TAPPS_BRAIN_AUTH_TOKEN`` (tapps-brain's
+    server-side token env) instead of ``TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN``
+    (the client-side token tapps-mcp reads).
+    """
+    import os
+
+    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    if not http_url:
+        return CheckResult(
+            "tapps-brain HTTP auth",
+            True,
+            "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)",
+        )
+
+    try:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings(project_root=root)
+        token_present = settings.memory.brain_auth_token is not None
+        project_id_present = bool(settings.memory.brain_project_id)
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain HTTP auth",
+            False,
+            f"Could not load settings: {exc}",
+            "Fix .tapps-mcp.yaml or env vars and re-run doctor.",
+        )
+
+    if token_present and project_id_present:
+        return CheckResult(
+            "tapps-brain HTTP auth",
+            True,
+            f"HTTP mode configured with bearer token + project id ({http_url})",
+        )
+
+    missing: list[str] = []
+    hints: list[str] = []
+    if not token_present:
+        missing.append("brain_auth_token")
+        wrong = os.environ.get("TAPPS_BRAIN_AUTH_TOKEN", "")
+        if wrong:
+            hints.append(
+                "Detected TAPPS_BRAIN_AUTH_TOKEN in env — that is tapps-brain's "
+                "server-side token. The client reads TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN."
+            )
+        else:
+            hints.append(
+                "Set TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN (client bearer token for "
+                "authenticated tapps-brain HTTP calls)."
+            )
+    if not project_id_present:
+        missing.append("brain_project_id")
+        hints.append(
+            "Set TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID or memory.brain_project_id "
+            "in .tapps-mcp.yaml (registered tapps-brain project slug)."
+        )
+
+    return CheckResult(
+        "tapps-brain HTTP auth",
+        False,
+        f"HTTP mode active but missing: {', '.join(missing)}",
+        " ".join(hints),
+    )
+
+
 def check_memory_pipeline_config(root: Path) -> CheckResult:
     """Echo effective memory-related settings (informational; always passes).
 
@@ -1183,6 +1258,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_hooks(root))
     checks.append(check_stale_exe_backups())
     checks.append(check_tapps_brain())
+    checks.append(check_brain_http_auth(root))
     checks.append(check_memory_pipeline_config(root))
     checks.append(check_dual_memory_server(root))
     checks.append(check_plaintext_secrets(root))

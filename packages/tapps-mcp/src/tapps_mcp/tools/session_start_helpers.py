@@ -409,13 +409,34 @@ def _collect_brain_bridge_health() -> dict[str, Any]:
 
 
 def _memory_status_http_mode(bridge: Any) -> dict[str, Any]:
-    """Return status dict for HTTP bridge mode."""
+    """Return status dict for HTTP bridge mode.
+
+    Probes both ``/health`` (unauthenticated) AND a real authenticated MCP
+    tool call via :meth:`HttpBrainBridge.auth_probe`. ``degraded`` is true
+    if EITHER probe fails — a healthy endpoint with broken auth used to
+    report ``degraded=false`` and silently hide 401/403s until the first
+    runtime memory operation.
+    """
     health = bridge.health_check()
+    health_ok = bool(health.get("ok", False))
+
+    auth_probe: dict[str, Any]
+    if health_ok and hasattr(bridge, "auth_probe"):
+        try:
+            auth_probe = bridge.auth_probe()
+        except Exception as exc:
+            auth_probe = {"ok": False, "error": f"probe_raised: {exc}"}
+    else:
+        auth_probe = {"ok": False, "skipped": True, "reason": "health_unavailable"}
+    auth_ok = bool(auth_probe.get("ok", False))
+
     return {
-        "enabled": health.get("ok", False),
+        "enabled": health_ok and auth_ok,
         "mode": "http",
         "http_url": str(getattr(bridge, "_http_url", "")),
-        "degraded": not health.get("ok", False),
+        "degraded": not (health_ok and auth_ok),
+        "health_ok": health_ok,
+        "auth_probe": auth_probe,
     }
 
 

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.7] - 2026-04-21
+
+### Fixed
+
+- **`memory_status` falsely reported `degraded=false` when HTTP-bridge auth was broken** — the session-start probe only hit the unauthenticated `/health` endpoint, so a misconfigured bearer token (401/403 on every real `/mcp` call) was invisible until the first memory operation failed. `HttpBrainBridge.auth_probe()` now does a sync authenticated `memory_list(limit=1)` POST; `_memory_status_http_mode` reflects both probes and emits `auth_probe` diagnostics in the session payload. ([packages/tapps-core/src/tapps_core/brain_bridge.py](packages/tapps-core/src/tapps_core/brain_bridge.py), [packages/tapps-mcp/src/tapps_mcp/tools/session_start_helpers.py](packages/tapps-mcp/src/tapps_mcp/tools/session_start_helpers.py))
+
+### Added
+
+- **`tapps_doctor` check for HTTP-bridge auth config** (`check_brain_http_auth`) — when `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` is set, verifies `memory.brain_auth_token` and `memory.brain_project_id` are present. Detects the common mistake of setting `TAPPS_BRAIN_AUTH_TOKEN` (server-side) instead of `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (client-side) and surfaces an explicit hint.
+- **Startup warning for unauthenticated HTTP bridge** — `_create_http_bridge` logs `brain_bridge.http_auth_missing` when the assembled headers lack `Authorization`, rather than silently sending unauthenticated requests.
+
+### Changed
+
+- Version bump: tapps-core 2.10.6 → 2.10.7, tapps-mcp 2.10.6 → 2.10.7, docs-mcp 2.10.6 → 2.10.7.
+
 ## [2.10.6] - 2026-04-21
 
 ### Fixed

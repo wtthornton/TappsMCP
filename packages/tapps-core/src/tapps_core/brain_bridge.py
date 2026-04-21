@@ -1284,8 +1284,47 @@ class HttpBrainBridge(BrainBridge):
                 "details": {"http_url": self._http_url, "mode": "http"},
             }
 
+    def auth_probe(self) -> dict[str, Any]:
+        """Probe ``{brain_http_url}/mcp`` with a cheap authenticated call.
+
+        Complements :meth:`health_check` which only probes the unauthenticated
+        ``/health`` endpoint. This sends a real ``tools/call`` (``memory_list``
+        with ``limit=1``) carrying the configured Bearer token and
+        ``X-Project-Id`` / ``X-Agent-Id`` headers, so a failure here means the
+        same auth that runtime memory calls use is rejected by the server.
+
+        Returns a dict with ``ok`` (bool) and diagnostic fields:
+
+        - ``ok=True, http_status=200`` — auth works.
+        - ``ok=False, http_status=401|403, detail=<body>`` — server rejected auth.
+        - ``ok=False, error=<str>`` — transport failed (DNS, connection refused, etc.).
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "memory_list", "arguments": {"limit": 1}},
+        }
+        try:
+            response = httpx.post(
+                f"{self._http_url}/mcp",
+                json=payload,
+                headers=self._http_headers,
+                timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": f"probe_failed: {exc}"}
+        if response.status_code == 200:
+            return {"ok": True, "http_status": 200}
+        detail = response.text[:200] if response.text else ""
+        return {
+            "ok": False,
+            "http_status": response.status_code,
+            "detail": detail,
+        }
+
     @property
-    def store(self) -> None:  # type: ignore[override]
+    def store(self) -> None:
         """Not available in HTTP mode — callers must use async BrainBridge methods."""
         return None
 
@@ -1610,6 +1649,19 @@ def _create_http_bridge(brain_http_url: str, settings: Any) -> BrainBridge | Non
             headers["Authorization"] = f"Bearer {token}"
         if project_id:
             headers["X-Project-Id"] = project_id
+
+    if "Authorization" not in headers:
+        logger.warning(
+            "brain_bridge.http_auth_missing",
+            http_url=brain_http_url,
+            hint=(
+                "HTTP bridge has no Authorization header — every /mcp call will "
+                "return 401/403. Set TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN (client "
+                "bearer token) in the environment or memory.brain_auth_token in "
+                ".tapps-mcp.yaml. Note: TAPPS_BRAIN_AUTH_TOKEN is tapps-brain's "
+                "server-side token, not the client token."
+            ),
+        )
 
     bridge = HttpBrainBridge(brain_http_url, headers)
 
