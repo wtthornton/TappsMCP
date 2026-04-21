@@ -611,8 +611,12 @@ async def ensure_session_initialized() -> None:
             "has_docker": profile.has_docker,
             "has_ci": profile.has_ci,
         }
-    except Exception:
-        pass  # Best-effort; profiling failure should not block session init
+    except Exception as exc:
+        import structlog
+
+        structlog.get_logger(__name__).warning(
+            "project_profile_detection_failed", error=str(exc), exc_info=True
+        )
 
     mark_session_initialized(
         {

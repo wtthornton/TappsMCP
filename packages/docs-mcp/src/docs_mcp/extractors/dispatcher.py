@@ -49,8 +49,8 @@ def _get_treesitter_extractor(suffix: str) -> Extractor | None:
             ext = TypeScriptExtractor()
             if ext.can_handle(Path(f"file{suffix}")):
                 return ext
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("treesitter_extractor_unavailable", suffix=suffix, error=str(exc))
 
     elif suffix == ".go":
         try:
@@ -59,8 +59,8 @@ def _get_treesitter_extractor(suffix: str) -> Extractor | None:
             ext = GoExtractor()
             if ext.can_handle(Path(f"file{suffix}")):
                 return ext
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("treesitter_extractor_unavailable", suffix=suffix, error=str(exc))
 
     elif suffix == ".rs":
         try:
@@ -69,8 +69,8 @@ def _get_treesitter_extractor(suffix: str) -> Extractor | None:
             ext = RustExtractor()
             if ext.can_handle(Path(f"file{suffix}")):
                 return ext
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("treesitter_extractor_unavailable", suffix=suffix, error=str(exc))
 
     elif suffix == ".java":
         try:
@@ -79,7 +79,7 @@ def _get_treesitter_extractor(suffix: str) -> Extractor | None:
             ext = JavaExtractor()
             if ext.can_handle(Path(f"file{suffix}")):
                 return ext
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("treesitter_extractor_unavailable", suffix=suffix, error=str(exc))
 
     return None

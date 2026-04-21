@@ -276,7 +276,8 @@ def _refresh_karpathy_blocks(
                     per_file[rel] = "skipped (opt-out)"
                     continue
             per_file[rel] = karpathy_block.install_or_refresh(target, dry_run=dry_run)
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
+            log.exception("karpathy_block_failed", file=rel)
             per_file[rel] = f"error: {exc}"
 
     return {
@@ -807,28 +808,32 @@ def _run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
         from tapps_mcp.pipeline.github_ci import generate_all_ci_workflows
 
         result["components"]["ci_workflows"] = generate_all_ci_workflows(project_root)
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
+        log.exception("ci_workflows_failed")
         result["errors"].append(f"CI workflows: {exc}")
 
     try:
         from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
 
         result["components"]["github_copilot"] = generate_all_copilot_config(project_root)
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
+        log.exception("copilot_config_failed")
         result["errors"].append(f"Copilot config: {exc}")
 
     try:
         from tapps_mcp.pipeline.github_templates import generate_all_github_templates
 
         result["components"]["github_templates"] = generate_all_github_templates(project_root)
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
+        log.exception("github_templates_failed")
         result["errors"].append(f"GitHub templates: {exc}")
 
     try:
         from tapps_mcp.pipeline.github_governance import generate_all_governance
 
         result["components"]["governance"] = generate_all_governance(project_root)
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
+        log.exception("governance_failed")
         result["errors"].append(f"Governance: {exc}")
 
 

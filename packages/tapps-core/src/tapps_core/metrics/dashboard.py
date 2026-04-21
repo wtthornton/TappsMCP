@@ -754,8 +754,8 @@ class DashboardGenerator:
                 max_mem = mem_settings.memory.max_memories
                 if max_mem > 0:
                     metrics["memory_capacity_pct"] = mem_count / max_mem
-            except Exception:
-                pass
+            except (OSError, ValueError) as exc:
+                logger.warning("metrics_memory_capacity_failed", error=str(exc))
 
         return metrics
 

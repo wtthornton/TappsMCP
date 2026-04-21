@@ -901,8 +901,8 @@ def _handle_reinforce(store: MemoryStore, p: _Params) -> dict[str, Any]:
             promoted_to = engine.check_promotion(target_entry, profile)
             if promoted_to:
                 store.update_fields(p.key, tier=promoted_to)
-    except Exception:
-        pass  # Non-fatal -- promotion check is best-effort
+    except Exception as exc:
+        logger.warning("memory_promotion_check_failed", error=str(exc))
 
     result: dict[str, Any] = {
         "action": "reinforce",

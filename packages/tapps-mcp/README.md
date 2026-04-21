@@ -12,7 +12,6 @@ MCP server providing deterministic code quality tools for AI coding assistants (
 - **Security scanning** with Bandit and secret detection
 - **Dead code detection** with Vulture
 - **Dependency vulnerability scanning** with pip-audit
-- **Domain expert consultation** (17 built-in experts with RAG)
 - **Documentation lookup** via Context7 or LlmsTxt
 - **Shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) for cross-session knowledge persistence
 - **Platform integration** for Claude Code, Cursor, VS Code Copilot
@@ -45,7 +44,7 @@ tapps-mcp doctor
 
 ## MCP Tools
 
-TappsMCP provides 30 MCP tools for code quality automation. See the [main README](../../README.md) for the complete tool reference.
+TappsMCP provides 26 MCP tools for code quality automation. See the [main README](../../README.md) for the complete tool reference.
 
 ## Documentation
 

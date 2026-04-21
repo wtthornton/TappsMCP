@@ -240,8 +240,8 @@ class DiagramGenerator:
                         threshold=_POSTER_AUTO_THRESHOLD,
                     )
                     diagram_type = "pattern_card"
-            except Exception:
-                pass  # Fall through to the normal dependency diagram.
+            except Exception as exc:
+                logger.debug("diagram_auto_select_failed", error=str(exc))
 
         if diagram_type not in self.VALID_TYPES:
             logger.warning("invalid_diagram_type", diagram_type=diagram_type)

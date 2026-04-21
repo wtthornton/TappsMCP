@@ -11,10 +11,14 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
     from docs_mcp.validators.style import StyleReport
+
+_logger = structlog.get_logger(__name__)
 
 from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call
 from docs_mcp.server_helpers import (
@@ -154,8 +158,8 @@ async def docs_check_drift(
                         if s.overall_score < _SCORE_THRESHOLD_MEDIUM
                     ],
                 }
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.debug("tapps_enrichment_failed", error=str(exc))
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     return success_response("docs_check_drift", elapsed_ms, data)

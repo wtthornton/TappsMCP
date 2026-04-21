@@ -12,7 +12,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/tests-6%2C900%2B_passing-brightgreen.svg)](#development)
 [![Tools](https://img.shields.io/badge/MCP_tools-58-blue.svg)](#tools-reference)
-[![Version](https://img.shields.io/badge/version-2.4.0-informational.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.10.4-informational.svg)](#)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
@@ -26,11 +26,12 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 **Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **58 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
-### What's new in v2.7+
+### What's new in v2.10+
 
-- **Zero-friction quality pipeline** (EPIC-101) — new `tapps_pipeline` orchestrator collapses the recommended `session_start → quick_check → validate_changed → checklist` loop into a single call. Content-hash cache serves repeated checks instantly. Auto-detect budget (30s wall-clock) prevents hangs on large changesets.
-- **MCP server zombie cleanup** — `.claude/hooks/tapps-session-start.sh` now kills stale tapps-mcp/docsmcp processes (older than 2 hours) at session startup, solving resource leak from Claude Code spawning per-session servers without cleanup.
-- **Enhanced permission safety** — `.claude/settings.json` denyList now includes `Read(**/__pycache__/**)`, `Read(.venv/**)`, `Read(**/*.egg-info/**)` to prevent reads of cache/virtual-env artifacts. `BASH_MAX_OUTPUT_LENGTH=150000` caps verbose Bash output.
+- **Resilient BrainBridge** (v2.10.0) — runtime tapps-brain version validation, stable agent identity persisted across restarts, offline write-queue drain on shutdown, graceful `BrainBridgeUnavailable` degraded payloads in every `tapps_memory` action.
+- **DocsMCP quality fixes** (v2.10.2) — `docs_generate_changelog` refuses to overwrite hand-crafted files without `force=True`; `docs_check_style` auto-detects heading convention instead of defaulting to sentence-case; drift and completeness checkers no longer false-positive on test files.
+- **Session reliability** (v2.10.3) — `_SessionFlags` dataclass eliminates magic-string race conditions in session state; atomic write for `AGENTS.md` upgrades; upgrade aborts on backup failure; workspace monorepo `pip-audit` scans now pass `--skip-editable`.
+- **Karpathy behavioral guidelines** (v2.9.0) — vendored into the package and installed/refreshed by `tapps_init` / `tapps_upgrade` / verified by `tapps_doctor`.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 

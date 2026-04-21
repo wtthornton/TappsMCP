@@ -160,7 +160,13 @@ The RAG-based expert consultation system was removed in EPIC-94. `tapps_consult_
 
 ## Memory subsystem
 
-Implemented by the standalone **tapps-brain** library (`pip install tapps-brain`). tapps-core/memory/ modules are re-export shims; injection.py is a bridge adapter translating TappsMCP settings into brain's config. Persistent cross-session knowledge (cap: 1500/project). SQLite with WAL + FTS5. BM25 ranked retrieval, time-based confidence decay, contradiction detection, garbage collection. Federation via central hub at `~/.tapps-mcp/memory/federated.db`. TappsMCP passes `store_dir=".tapps-mcp"` for backward compat (brain defaults to `.tapps-brain`).
+Implemented by the standalone **tapps-brain** library (`pip install tapps-brain`). tapps-core/memory/ modules are re-export shims; injection.py is a bridge adapter translating TappsMCP settings into brain's config. Persistent cross-session knowledge (cap: 1500/project). BM25 ranked retrieval, time-based confidence decay, contradiction detection, garbage collection.
+
+Two deployment modes via `BrainBridge` (server_helpers.py):
+- **HTTP mode** (default): Connects to tapps-brain HTTP service at `TAPPS_BRAIN_HTTP_URL` (default `http://localhost:8080`). Supports offline write-queue drain, circuit breaker with half-open recovery, graceful `BrainBridgeUnavailable` degraded payloads. Runtime version check validates installed brain meets the floor version.
+- **In-process mode**: `AgentBrain` with SQLite + WAL + FTS5. Federation via central hub at `~/.tapps-mcp/memory/federated.db`. TappsMCP passes `store_dir=".tapps-mcp"` for backward compat (brain defaults to `.tapps-brain`).
+
+`BrainBridge` exposes a unified async API regardless of mode. Stable agent identity (UUIDv4) persisted to `.tapps-mcp/agent.id` is attached to every write for cross-session traceability.
 
 ## Platform generation
 

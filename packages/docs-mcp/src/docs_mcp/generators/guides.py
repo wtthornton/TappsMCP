@@ -200,8 +200,8 @@ class OnboardingGuideGenerator:
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     clone_url = result.stdout.strip()
-            except Exception:
-                pass
+            except (OSError, subprocess.SubprocessError) as exc:
+                logger.debug("git_remote_url_failed", error=str(exc))
 
         lines: list[str] = ["```bash"]
 
@@ -470,8 +470,8 @@ def _detect_tool_config(project_root: Path) -> set[str]:
         tool_section = data.get("tool", {})
         if isinstance(tool_section, dict):
             return set(tool_section.keys())
-    except Exception:
-        pass
+    except (OSError, ValueError) as exc:
+        logger.debug("pyproject_tools_parse_failed", error=str(exc))
     return set()
 
 
@@ -793,8 +793,8 @@ class ContributingGuideGenerator:
                             "CI runs automatically on pull requests "
                             f"(workflows: {', '.join(names)})."
                         )
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logger.debug("workflow_files_read_failed", error=str(exc))
 
         return lines
 

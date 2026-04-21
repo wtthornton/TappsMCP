@@ -611,8 +611,8 @@ def _add_style_summary(data: dict[str, Any], root: Any, settings: Any) -> None:
                 "aggregate_score": style_report.aggregate_score,
                 "top_issues": style_report.top_issues[:5],
             }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("style_enrichment_failed", error=str(exc))
 
 
 def _add_tapps_enrichment(data: dict[str, Any], root: Any) -> None:
@@ -632,8 +632,8 @@ def _add_tapps_enrichment(data: dict[str, Any], root: Any) -> None:
                     "test_frameworks": profile.test_frameworks,
                     "package_managers": profile.package_managers,
                 }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("tapps_enrichment_failed", error=str(exc))
 
 
 def _calculate_completeness(

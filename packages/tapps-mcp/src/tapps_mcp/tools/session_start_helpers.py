@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -574,8 +575,12 @@ def _collect_raw_deps(project_root: Path, tomllib_mod: Any) -> list[str]:
                     member_data = tomllib_mod.load(fh)
                 for dep in member_data.get("project", {}).get("dependencies", []):
                     raw_deps.append(_strip_version_specifier(dep))
-            except Exception:
-                pass
+            except (OSError, tomllib.TOMLDecodeError) as exc:
+                _logger.warning(
+                    "workspace_pyproject_unreadable",
+                    path=str(member_pyproject),
+                    error=str(exc),
+                )
 
     return raw_deps
 

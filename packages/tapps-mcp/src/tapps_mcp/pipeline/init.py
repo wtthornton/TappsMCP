@@ -835,8 +835,12 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                     state.result["memory_auto_capture"] = generate_memory_auto_capture_hook(
                         state.project_root
                     )
-            except Exception:
-                pass  # Non-critical; settings may not have memory_hooks yet
+            except (AttributeError, ImportError, OSError) as exc:
+                import structlog
+
+                structlog.get_logger(__name__).warning(
+                    "memory_hooks_probe_failed", error=str(exc)
+                )
             state.result["copilot_instructions"] = generate_copilot_instructions(
                 state.project_root,
             )

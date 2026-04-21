@@ -156,8 +156,8 @@ class ReadmeGenerator:
                                 para_lines.append(stripped)
                     if para_lines:
                         return " ".join(para_lines)
-                except Exception:
-                    pass
+                except (OSError, ValueError) as exc:
+                    logger.debug("readme_description_parse_failed", error=str(exc))
 
         # 3. Package __init__.py docstring
         for init_candidate in (
@@ -176,8 +176,8 @@ class ReadmeGenerator:
                             first_line = docstring.split("\n")[0].strip()
                             if first_line:
                                 return first_line
-                except Exception:
-                    pass
+                except (OSError, ValueError) as exc:
+                    logger.debug("init_docstring_read_failed", error=str(exc))
 
         # 4. Generic fallback
         return f"A {project_name} project."
@@ -354,7 +354,8 @@ class ReadmeGenerator:
 
                 try:
                     content = py_file.read_text(encoding="utf-8")
-                except Exception:
+                except OSError as exc:
+                    logger.debug("framework_file_read_failed", path=str(py_file), error=str(exc))
                     continue
 
                 for module, _label in framework_markers.items():
@@ -363,8 +364,8 @@ class ReadmeGenerator:
                     ):
                         detected.add(module)
 
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.warning("framework_detection_failed", error=str(exc))
 
         return [f"- {framework_markers[m]}" for m in sorted(detected)]
 
@@ -419,8 +420,8 @@ class ReadmeGenerator:
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     clone_url = result.stdout.strip()
-            except Exception:
-                pass
+            except (OSError, subprocess.SubprocessError) as exc:
+                logger.debug("git_remote_url_failed", error=str(exc))
 
         has_uv = (project_root is not None and (project_root / "uv.lock").exists()) or any(
             "uv" in d for d in metadata.dev_dependencies

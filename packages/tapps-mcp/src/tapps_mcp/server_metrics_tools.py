@@ -155,8 +155,10 @@ async def tapps_dashboard(
     memory_store = None
     try:
         memory_store = _get_memory_store()
-    except Exception:
-        pass
+    except Exception as exc:
+        import structlog as _structlog
+
+        _structlog.get_logger(__name__).debug("memory_store_init_failed", error=str(exc))
 
     dashboard = hub.get_dashboard_generator(memory_store=memory_store)
     since = DashboardGenerator._parse_time_range(time_range)
