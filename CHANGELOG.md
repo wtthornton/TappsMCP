@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.6] - 2026-04-21
+
+### Fixed
+
+- **`tapps_memory` NoneType crash in HTTP bridge mode** — sync memory action handlers (`search`, `list`, `save`, etc.) dispatched with `store=None` when `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` was set, since `HttpBrainBridge.store` returns `None` by design. Calls crashed with opaque `'NoneType' object has no attribute 'snapshot'` / `list_all` errors. Sync actions now return a structured `http_mode_not_supported` error with guidance; async hive handlers that only need `_store_metadata` at response time now succeed; `_handle_hive_propagate` returns a degraded response instead of crashing; `build_impact_memory_context` skips cleanly with `http_mode_unsupported`. ([packages/tapps-mcp/src/tapps_mcp/server_memory_tools.py](packages/tapps-mcp/src/tapps_mcp/server_memory_tools.py), [packages/tapps-mcp/src/tapps_mcp/server_helpers.py](packages/tapps-mcp/src/tapps_mcp/server_helpers.py))
+
+### Changed
+
+- `_get_memory_store()` return type narrowed to `MemoryStore | None` to match runtime behavior in HTTP mode. Callers now guard for `None` explicitly.
+- Version bump: tapps-core 2.10.5 → 2.10.6, tapps-mcp 2.10.5 → 2.10.6, docs-mcp 2.10.5 → 2.10.6.
+
 ## [2.10.5] - 2026-04-21
 
 ### Changed

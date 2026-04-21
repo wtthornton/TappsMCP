@@ -170,20 +170,24 @@ def _peek_brain_bridge() -> _BrainBridgeType | None:
     return _brain_bridge
 
 
-def _get_memory_store() -> _MemoryStoreType:
-    """Return the Postgres-backed :class:`MemoryStore` from the BrainBridge.
+def _get_memory_store() -> _MemoryStoreType | None:
+    """Return the :class:`MemoryStore` from the BrainBridge, or ``None`` in HTTP mode.
 
-    Raises ``RuntimeError`` when ``TAPPS_BRAIN_DATABASE_URL`` is not set.
-    Kept as a compat shim for sync callers; prefer ``_get_brain_bridge()``
-    and its async methods in new code.
+    Returns the in-process SQLite-backed store when the bridge is running in
+    native mode (``TAPPS_BRAIN_DATABASE_URL`` set). Returns ``None`` when the
+    bridge is in HTTP mode (``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` set) — callers
+    must guard for ``None`` and route through async bridge methods instead.
+
+    Raises ``RuntimeError`` when no bridge is configured at all.
     """
     bridge = _get_brain_bridge()
     if bridge is None:
         raise RuntimeError(
-            "Memory store unavailable: TAPPS_BRAIN_DATABASE_URL is not configured. "
-            "Set this environment variable to enable memory operations."
+            "Memory store unavailable: neither TAPPS_BRAIN_DATABASE_URL nor "
+            "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is configured. "
+            "Set one of these environment variables to enable memory operations."
         )
-    store: _MemoryStoreType = bridge.store
+    store: _MemoryStoreType | None = bridge.store
     return store
 
 
@@ -242,6 +246,13 @@ def build_impact_memory_context(
 
     try:
         store = _get_memory_store()
+        if store is None:
+            return {
+                "memory_context": [],
+                "memory_context_enrichment": "skipped",
+                "memory_context_skip": "http_mode_unsupported",
+                "memory_context_query": query,
+            }
         raw = store.search(query)
     except Exception as exc:
         import structlog

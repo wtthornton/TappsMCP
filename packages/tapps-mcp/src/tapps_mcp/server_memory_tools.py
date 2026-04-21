@@ -420,6 +420,19 @@ async def tapps_memory(
         if action in _ASYNC_ACTIONS:
             result_data = await _ASYNC_DISPATCH[action](store, params)
         else:
+            if store is None:
+                return error_response(
+                    "tapps_memory",
+                    "http_mode_not_supported",
+                    (
+                        f"Action '{action}' requires a local memory store, "
+                        f"but the BrainBridge is running in HTTP mode "
+                        f"(TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is set). This action "
+                        f"has not yet been ported to the async HTTP bridge. "
+                        f"Unset TAPPS_MCP_MEMORY_BRAIN_HTTP_URL to fall back to "
+                        f"in-process mode, or use an async/HTTP-capable action."
+                    ),
+                )
             result_data = _DISPATCH[action](store, params)
     except Exception as exc:
         return error_response(
@@ -2197,6 +2210,21 @@ async def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, An
     agent_id = get_stable_agent_id(settings)
 
     cap = p.limit if p.limit > 0 else _HIVE_PROPAGATE_DEFAULT_LIMIT
+    if store is None:
+        return {
+            "action": "hive_propagate",
+            "enabled": True,
+            "degraded": True,
+            "propagated": 0,
+            "skipped_private": 0,
+            "message": (
+                "hive_propagate requires a local memory snapshot; "
+                "the BrainBridge is running in HTTP mode where snapshot() is not "
+                "available. Unset TAPPS_MCP_MEMORY_BRAIN_HTTP_URL to use the "
+                "in-process store, or port this action to the async HTTP bridge."
+            ),
+            "store_metadata": _store_metadata(store),
+        }
     entries = store.snapshot().entries[:cap]
 
     try:
@@ -2621,8 +2649,15 @@ def _get_provenance(store: MemoryStore, entry: MemoryEntry) -> dict[str, Any] | 
     }
 
 
-def _store_metadata(store: MemoryStore) -> dict[str, Any]:
-    """Build store metadata for response."""
+def _store_metadata(store: MemoryStore | None) -> dict[str, Any]:
+    """Build store metadata for response.
+
+    Returns a placeholder payload when ``store`` is ``None``, which happens
+    when the BrainBridge is in HTTP mode (``HttpBrainBridge.store`` is
+    ``None`` — callers must go through async bridge methods for live data).
+    """
+    if store is None:
+        return {"mode": "http_bridge", "total_count": None, "tier_counts": {}}
     snap = store.snapshot()
     return {
         "total_count": snap.total_count,
