@@ -58,7 +58,7 @@ class TestModels:
         config = StyleConfig()
         assert len(config.enabled_rules) == 5
         assert config.max_sentence_words == 40
-        assert config.heading_style == "sentence"
+        assert config.heading_style == "auto"
 
 
 # ---------------------------------------------------------------------------

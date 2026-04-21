@@ -66,6 +66,65 @@ uv run tapps-mcp doctor
 
 ---
 
+## VSCode / GUI-launched IDE (the GUI-launch gotcha)
+
+**Symptom:** `tapps_session_start()` reports `memory_status.enabled: false` even though the token is set in your shell and `tapps-brain-http` is running.
+
+**Root cause:** VSCode launched from a desktop launcher (GNOME, macOS Dock, Windows Start Menu) inherits its environment from the **systemd user session** (Linux) or the **launchd/login session** (macOS/Windows) — not from `~/.bashrc` or `~/.profile`. Those files are only sourced by interactive or login shells. The `${TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN}` placeholder in `.mcp.json` expands to empty because the variable was never set in the GUI process tree.
+
+Quick check — run this in the VSCode integrated terminal:
+
+```bash
+env | grep TAPPS_MCP_MEMORY
+```
+
+If the output is blank, the vars aren't in the GUI session environment.
+
+### Fix (Linux — systemd user session)
+
+Create (or update) `~/.config/environment.d/tapps-brain.conf`:
+
+```ini
+# ~/.config/environment.d/tapps-brain.conf
+# Picked up by systemd --user at desktop login.
+# Static KEY=VALUE only — no shell expansion, no $(…) substitution.
+TAPPS_MCP_MEMORY_BRAIN_HTTP_URL=http://localhost:8080
+TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN=tb_your_token_here
+```
+
+Then **log out of your desktop session and log back in**. A VSCode restart alone is not enough — `environment.d` is read by systemd at session start, not at process launch.
+
+> **Static-only constraint:** `environment.d` does not support shell expansion or command substitution. If you currently generate the token dynamically (e.g. reading from a `.env` file at shell startup), you must write the literal token value here. The long-term solution — a single token source of truth — is tracked separately.
+
+### Fix (macOS)
+
+Use `launchctl setenv` to inject the vars into the user session:
+
+```bash
+launchctl setenv TAPPS_MCP_MEMORY_BRAIN_HTTP_URL http://localhost:8080
+launchctl setenv TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN tb_your_token_here
+```
+
+Then restart VSCode (a full logout/login is not required on macOS; `launchctl setenv` takes effect for new processes immediately after VSCode restarts).
+
+For persistence across reboots, add a `launchd` plist under `~/Library/LaunchAgents/`.
+
+### Verification after fix
+
+In a VSCode integrated terminal:
+
+```bash
+# Confirm the vars are present
+env | grep TAPPS_MCP_MEMORY
+
+# Confirm the MCP server sees them
+uv run tapps-mcp doctor
+```
+
+`tapps_session_start()` should now return `memory_status.enabled: true` and `brain_bridge_health.ok: true`.
+
+---
+
 ## In-process / legacy setup (local dev only)
 
 The in-process path is kept as a fallback for local development where running a
@@ -104,6 +163,48 @@ The `/health` endpoint on tapps-brain-http is unreachable. Check:
 1. The server is running and the URL is correct.
 2. No firewall blocks the port.
 3. The bearer token is valid (401 responses appear in bridge logs).
+
+### Token expands to empty (bearer header is blank)
+
+**Symptom:** `brain_bridge_health` shows a 401 or the bridge is disabled; `memory_status.enabled: false`.
+
+**Cause:** The `${TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN}` placeholder in `.mcp.json` expanded to an empty string. This is the [GUI-launch gotcha](#vscode--gui-launched-ide-the-gui-launch-gotcha).
+
+**Fix:** Follow the `environment.d` / `launchctl` steps above, then do a full desktop relogin (Linux) or VSCode restart (macOS).
+
+### Container is down
+
+**Symptom:** `brain_bridge_health.ok: false`; `dsn_reachable: false`.
+
+**Check:**
+
+```bash
+docker ps | grep tapps-brain
+curl -s http://localhost:8080/health
+```
+
+If the container isn't running, start it per the tapps-brain-http README. If it's running but the health check fails, check container logs with `docker logs <container-id>`.
+
+### Stale VSCode process (env change not picked up)
+
+**Symptom:** You set the env var and restarted the MCP servers inside VSCode, but the token is still not reaching Claude Code.
+
+**Cause:** The MCP server process is a child of the VSCode process. Restarting MCP servers inside VSCode does not re-read `environment.d` — the parent VSCode process still has the old (empty) environment.
+
+**Fix:** Close VSCode completely and reopen it (Linux: requires full desktop relogin; macOS: reopen the app after `launchctl setenv`).
+
+### Missing desktop relogin (Linux)
+
+`environment.d` files are sourced once by `systemd --user` at login. Changes to `~/.config/environment.d/*.conf` do not take effect until the next login. A VSCode reload, terminal restart, or `systemctl --user restart` for individual services is **not sufficient**. You must log out of the desktop session and log back in.
+
+To inject the vars into the *current* session without relogging (for testing only — not persistent):
+
+```bash
+systemctl --user set-environment TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN=tb_your_token_here
+systemctl --user set-environment TAPPS_MCP_MEMORY_BRAIN_HTTP_URL=http://localhost:8080
+```
+
+Then restart VSCode so it inherits the updated systemd user environment.
 
 ### Version mismatch warning
 

@@ -131,7 +131,7 @@ The platform exposes **58 MCP tools** (26 TappsMCP + 32 DocsMCP) plus workflow p
 |--------|-------------|
 | **Documentation lookup** | Up-to-date library docs via Context7 (when `TAPPS_MCP_CONTEXT7_API_KEY` is set) and LlmsTxt (always available as fallback). Fuzzy matching, local cache. |
 | **Project context** | Detect project type, tech stack, structure for context-aware analysis. |
-| **Shared memory** | Powered by [tapps-brain](https://github.com/wtthornton/tapps-brain) — BM25 retrieval, decay, contradiction detection, federation, Hive (Agent Teams). **33 actions** on `tapps_memory` (CRUD, search, federation, profiles, security, maintenance, Hive). Shipped defaults turn on pipeline integrations and hooks; see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). |
+| **Shared memory** | Powered by [tapps-brain](https://github.com/wtthornton/tapps-brain) — BM25 retrieval, decay, contradiction detection, federation, Hive (Agent Teams). **33 actions** on `tapps_memory` (CRUD, search, federation, profiles, security, maintenance, Hive). Shipped defaults turn on pipeline integrations and hooks; see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). For local wiring and the VSCode/GUI-launch env-var gotcha, see [Local setup guide](docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md). |
 | **Session notes** | In-memory decisions and constraints for a single session. Promotable to shared memory for persistence. |
 | **Impact analysis** | File dependencies and blast radius before refactoring or API changes. |
 | **Quality reports** | JSON, Markdown, or HTML summaries. |

@@ -397,7 +397,8 @@ def _check_inline_docs(
             else:
                 undocumented_names.append(f"{rel_path}:{cls.name}")
 
-    score = total_documented / total_public if total_public > 0 else 0.0
+    # No public symbols = nothing to document = trivially complete
+    score = total_documented / total_public if total_public > 0 else 1.0
 
     return CompletenessCategory(
         name="inline_docs",

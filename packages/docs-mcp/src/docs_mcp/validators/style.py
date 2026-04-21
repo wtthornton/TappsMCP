@@ -92,7 +92,7 @@ class StyleConfig(BaseModel):
         ],
     )
     max_sentence_words: int = 40
-    heading_style: Literal["sentence", "title"] = "sentence"
+    heading_style: Literal["sentence", "title", "auto"] = "auto"
     custom_terms: list[str] = Field(default_factory=list)
     jargon_terms: list[str] = Field(default_factory=list)
 
@@ -522,6 +522,27 @@ _TITLE_CASE_EXCEPTIONS: frozenset[str] = frozenset(
 )
 
 
+def _detect_heading_style(content: str, custom_terms: list[str]) -> Literal["sentence", "title"]:
+    """Infer dominant heading style (sentence vs title) from content headings."""
+    sentence_count = 0
+    title_count = 0
+    for line in _content_lines(content):
+        m = _HEADING_RE.match(line)
+        if not m:
+            continue
+        heading_text = m.group(2).strip()
+        if not heading_text or heading_text.isupper():
+            continue
+        cleaned = re.sub(r"[:.!?]+$", "", heading_text).strip()
+        if not cleaned:
+            continue
+        if _is_title_case(cleaned, custom_terms):
+            title_count += 1
+        else:
+            sentence_count += 1
+    return "title" if title_count > sentence_count else "sentence"
+
+
 class HeadingConsistencyRule(RuleBase):
     """Check heading case style consistency."""
 
@@ -531,7 +552,11 @@ class HeadingConsistencyRule(RuleBase):
 
     def check(self, content: str, config: StyleConfig) -> list[StyleIssue]:
         issues: list[StyleIssue] = []
-        style = config.heading_style
+        style: Literal["sentence", "title"] = (
+            _detect_heading_style(content, config.custom_terms)
+            if config.heading_style == "auto"
+            else config.heading_style
+        )
 
         for line_num, line in enumerate(_content_lines(content), start=1):
             m = _HEADING_RE.match(line)

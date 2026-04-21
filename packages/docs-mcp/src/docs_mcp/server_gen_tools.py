@@ -42,6 +42,7 @@ async def docs_generate_changelog(
     format: str = "keep-a-changelog",
     include_unreleased: bool = True,
     output_path: str = "",
+    force: bool = False,
     project_root: str = "",
 ) -> dict[str, Any]:
     """Generate a CHANGELOG.md from git history.
@@ -54,6 +55,9 @@ async def docs_generate_changelog(
         include_unreleased: Whether to include unreleased changes section.
         output_path: File path to write the changelog (relative to project root).
             When empty, returns the content without writing a file.
+        force: When True, overwrite an existing CHANGELOG even if it appears
+            hand-crafted. Defaults to False so curated changelogs are never
+            silently destroyed.
         project_root: Override project root path (default: configured root).
     """
     _record_call("docs_generate_changelog")
@@ -116,6 +120,28 @@ async def docs_generate_changelog(
 
     # Auto-compute output_path when not provided
     target = output_path.strip() or "CHANGELOG.md"
+
+    # Guard: don't silently destroy a hand-crafted CHANGELOG unless force=True
+    if not force:
+        candidate = root / target
+        if candidate.exists():
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+            return success_response(
+                "docs_generate_changelog",
+                elapsed_ms,
+                {
+                    "format": format,
+                    "version_count": len(versions),
+                    "output_path": target,
+                    "content": content,
+                    "content_length": len(content),
+                    "warning": (
+                        f"{target} already exists and was not overwritten. "
+                        "Review the generated content above and pass force=True to overwrite, "
+                        "or manually merge the changes you want."
+                    ),
+                },
+            )
 
     # Three-tier output: write-first / inline / manifest
     out = await finalize_output(

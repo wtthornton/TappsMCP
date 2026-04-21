@@ -355,6 +355,10 @@ class DriftDetector:
         analyzer = APISurfaceAnalyzer()
 
         for py_file in py_files:
+            rel_path = str(py_file.relative_to(project_root)).replace("\\", "/")
+            # Skip test files — test helpers/fixtures are not public API
+            if "test" in rel_path.lower():
+                continue
             # Skip __init__.py with no significant content
             try:
                 content = py_file.read_text(encoding="utf-8", errors="replace")
@@ -366,7 +370,6 @@ class DriftDetector:
                 continue
 
             checked += 1
-            rel_path = str(py_file.relative_to(project_root)).replace("\\", "/")
 
             try:
                 code_mtime = py_file.stat().st_mtime
