@@ -44,6 +44,12 @@ def _make_config(**kwargs: Any) -> StoryConfig:
         "technical_notes": ["Use Pydantic for validation"],
         "criteria_format": "checkbox",
         "style": "standard",
+        # STORY-104.1: existing tests were written against the human-shape
+        # output. The default flipped to "agent" but these tests still
+        # assert on the rich product-review sections — keep them pointed
+        # at the human renderer. New agent-audience tests live in
+        # TestAgentAudience below.
+        "audience": "human",
     }
     defaults.update(kwargs)
     return StoryConfig(**defaults)
@@ -86,6 +92,8 @@ class TestStoryConfig:
         assert config.tasks == []
         assert config.criteria_format == "checkbox"
         assert config.style == "standard"
+        # STORY-104.1: audience now defaults to "agent".
+        assert config.audience == "agent"
 
     def test_style_values(self) -> None:
         config = StoryConfig(title="X", style="comprehensive")
@@ -443,7 +451,8 @@ class TestStoryGeneratorEmptyInputs:
         self.gen = StoryGenerator()
 
     def test_minimal_config(self) -> None:
-        config = StoryConfig(title="Minimal Story")
+        # Human mode — agent mode rejects configs with no files or AC.
+        config = StoryConfig(title="Minimal Story", audience="human")
         content = self.gen.generate(config)
         assert "# Minimal Story" in content
         assert "## Tasks" in content
@@ -458,6 +467,7 @@ class TestStoryGeneratorEmptyInputs:
             description="",
             tasks=[],
             acceptance_criteria=[],
+            audience="human",
         )
         content = self.gen.generate(config)
         assert "# Empty" in content
@@ -688,6 +698,7 @@ class TestDocsGenerateStoryQuickStart:
                 epic_number=91,
                 quick_start=True,
                 project_root=str(root),
+                audience="human",
             )
 
         assert result["success"] is True
@@ -717,6 +728,7 @@ class TestDocsGenerateStoryQuickStart:
                 role="admin",
                 quick_start=True,
                 project_root=str(root),
+                audience="human",
             )
 
         assert result["success"] is True
@@ -734,7 +746,7 @@ class TestDocsGenerateStoryQuickStart:
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(root),
         ):
-            result = await self._call(title="X", project_root=str(root))
+            result = await self._call(title="X", project_root=str(root), audience="human")
 
         assert result["success"] is True
         assert result["data"]["quick_start"] is False
@@ -847,3 +859,229 @@ class TestGenerateTestName:
         assert "## Test Cases" in content
         assert "`test_ac1_validation_rejects_empty_fields`" in content
         assert "`test_ac2_error_messages_displayed`" in content
+
+
+# ---------------------------------------------------------------------------
+# STORY-104.1: agent audience is the default — 5-section Linear template
+# ---------------------------------------------------------------------------
+
+
+class TestAgentAudience:
+    """The default audience='agent' emits the locked Linear-issue template."""
+
+    def setup_method(self) -> None:
+        self.gen = StoryGenerator()
+
+    def _agent_config(self, **overrides: Any) -> StoryConfig:
+        """Build a valid agent-audience config."""
+        defaults: dict[str, Any] = {
+            "title": "upgrade.py: _has_python_signals rglob traverses node_modules",
+            "role": "maintainer",
+            "want": "prune vendor dirs before rglob",
+            "so_that": "upgrade scans don't traverse node_modules",
+            "files": [
+                "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py:92-116",
+            ],
+            "acceptance_criteria": [
+                "rglob is replaced with a pruning walk",
+                "`pytest packages/tapps-mcp/tests/unit/test_upgrade.py` passes",
+            ],
+            "dependencies": ["TAP-496"],
+        }
+        defaults.update(overrides)
+        return StoryConfig(**defaults)
+
+    def test_agent_is_default(self) -> None:
+        config = StoryConfig(
+            title="foo.py: bar",
+            files=["foo.py:1"],
+            acceptance_criteria=["done"],
+        )
+        assert config.audience == "agent"
+
+    def test_emits_five_section_template(self) -> None:
+        config = self._agent_config()
+        content = self.gen.generate(config)
+        assert "## What" in content
+        assert "## Where" in content
+        assert "## Why" in content
+        assert "## Acceptance" in content
+        assert "## Refs" in content
+
+    def test_omits_human_sections(self) -> None:
+        """Agent mode must NOT emit human-review vocabulary."""
+        config = self._agent_config()
+        content = self.gen.generate(config)
+        assert "## User Story Statement" not in content
+        assert "## Purpose & Intent" not in content
+        assert "## Sizing" not in content
+        assert "## Tasks" not in content
+        assert "## Definition of Done" not in content
+        assert "## INVEST" not in content
+
+    def test_round_trip_passes_validator(self) -> None:
+        """Agent-mode output must pass docs_validate_linear_issue."""
+        from docs_mcp.validators.linear_issue import validate_issue
+
+        config = self._agent_config()
+        content = self.gen.generate(config)
+
+        # Extract title + body for the validator (H1 line is the title).
+        lines = content.split("\n", 1)
+        h1_line = lines[0].lstrip("# ").strip()
+        body = lines[1] if len(lines) > 1 else ""
+
+        report = validate_issue(
+            title=h1_line,
+            description=body,
+            priority=2,
+            estimate=2.0,
+        )
+        assert report.agent_ready is True, f"Missing: {report.missing}"
+        assert report.score == 100
+
+    def test_refs_collects_TAP_ids_from_dependencies(self) -> None:
+        config = self._agent_config(dependencies=["TAP-496", "TAP-834"])
+        content = self.gen.generate(config)
+        assert "TAP-496" in content
+        assert "TAP-834" in content
+
+    def test_why_omitted_when_so_that_empty(self) -> None:
+        config = self._agent_config(so_that="")
+        content = self.gen.generate(config)
+        assert "## Why" not in content
+
+    def test_refs_omitted_when_no_refs(self) -> None:
+        config = self._agent_config(dependencies=[], description="")
+        content = self.gen.generate(config)
+        assert "## Refs" not in content
+
+
+class TestAgentAudienceEnforcement:
+    """audience='agent' raises ValueError on template violations."""
+
+    def setup_method(self) -> None:
+        self.gen = StoryGenerator()
+
+    def test_missing_file_anchor_raises(self) -> None:
+        config = StoryConfig(
+            title="foo.py: x",
+            files=["foo.py"],  # no :LINE suffix
+            acceptance_criteria=["done"],
+        )
+        try:
+            self.gen.generate(config)
+        except ValueError as exc:
+            assert "file.ext:LINE" in str(exc) or "anchor" in str(exc).lower()
+        else:
+            raise AssertionError("expected ValueError for missing file anchor")
+
+    def test_empty_acceptance_criteria_raises(self) -> None:
+        config = StoryConfig(
+            title="foo.py: x",
+            files=["foo.py:1"],
+            acceptance_criteria=[],
+        )
+        try:
+            self.gen.generate(config)
+        except ValueError as exc:
+            assert "acceptance_criteria" in str(exc)
+        else:
+            raise AssertionError("expected ValueError for empty acceptance_criteria")
+
+    def test_title_too_long_raises(self) -> None:
+        config = StoryConfig(
+            title="x" * 100,
+            files=["foo.py:1"],
+            acceptance_criteria=["done"],
+        )
+        try:
+            self.gen.generate(config)
+        except ValueError as exc:
+            assert "title" in str(exc).lower()
+            assert "80" in str(exc)
+        else:
+            raise AssertionError("expected ValueError for long title")
+
+    def test_empty_title_raises(self) -> None:
+        config = StoryConfig(
+            title="",
+            files=["foo.py:1"],
+            acceptance_criteria=["done"],
+        )
+        try:
+            self.gen.generate(config)
+        except ValueError as exc:
+            assert "title" in str(exc).lower()
+        else:
+            raise AssertionError("expected ValueError for empty title")
+
+
+class TestHumanAudience:
+    """audience='human' preserves the legacy product-review shape."""
+
+    def setup_method(self) -> None:
+        self.gen = StoryGenerator()
+
+    def test_human_audience_emits_rich_shape(self) -> None:
+        config = _make_config(audience="human")  # helper already sets this
+        content = self.gen.generate(config)
+        # Must emit the rich human-review sections.
+        assert "**As a**" in content  # blockquoted user-story statement
+        assert "## Purpose & Intent" in content
+        assert "## Tasks" in content
+        assert "## Acceptance Criteria" in content
+        assert "## Definition of Done" in content
+        # Must NOT emit the terse agent template as the primary shape.
+        # (## Acceptance is agent; ## Acceptance Criteria is human.)
+        assert "## What\n" not in content
+
+
+class TestAgentAudienceViaMCPHandler:
+    """The MCP handler surfaces ValueError as INPUT_INVALID."""
+
+    async def _call(self, **kwargs: Any) -> dict[str, Any]:
+        from docs_mcp.server_gen_tools import docs_generate_story
+
+        return await docs_generate_story(**kwargs)
+
+    async def test_agent_default_missing_files_returns_input_invalid(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        root = tmp_path / "proj"
+        root.mkdir()
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(root),
+        ):
+            result = await self._call(
+                title="foo.py: something",
+                acceptance_criteria="done",
+                project_root=str(root),
+            )
+        assert result["success"] is False
+        assert result["error"]["code"] == "INPUT_INVALID"
+        assert "anchor" in result["error"]["message"].lower()
+
+    async def test_agent_default_with_valid_inputs_succeeds(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        root = tmp_path / "proj"
+        root.mkdir()
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(root),
+        ):
+            result = await self._call(
+                title="foo.py: something",
+                files="foo.py:12-20",
+                acceptance_criteria="criterion one, criterion two",
+                project_root=str(root),
+            )
+        assert result["success"] is True
+        assert result["data"]["audience"] == "agent"
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        assert "## What" in content
+        assert "## Acceptance" in content

@@ -67,6 +67,10 @@ class StoryConfig(BaseModel):
     style: str = "standard"  # "standard" or "comprehensive"
     inherit_context: bool = True
     epic_path: str = ""
+    # STORY-104.1: default audience is "agent" — emits the 5-section Linear
+    # template from docs/linear/AGENT_ISSUES.md. Pass "human" for the
+    # full product-review shape.
+    audience: str = "agent"  # "agent" | "human"
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +99,13 @@ class StoryGenerator:
     VALID_STYLES: ClassVar[frozenset[str]] = frozenset({"standard", "comprehensive"})
     VALID_SIZES: ClassVar[frozenset[str]] = frozenset({"S", "M", "L", "XL", ""})
     VALID_CRITERIA_FORMATS: ClassVar[frozenset[str]] = frozenset({"checkbox", "gherkin"})
+    VALID_AUDIENCES: ClassVar[frozenset[str]] = frozenset({"agent", "human"})
+
+    _AGENT_TITLE_MAX: ClassVar[int] = 80
+    _AGENT_FILE_ANCHOR_RE: ClassVar[re.Pattern[str]] = re.compile(
+        r"[\w./\\-]+\.\w+:\d+(?:-\d+)?"
+    )
+    _TAP_REF_RE: ClassVar[re.Pattern[str]] = re.compile(r"\bTAP-\d+\b")
 
     # Minimum confidence threshold for including expert guidance.
     _EXPERT_CONFIDENCE_THRESHOLD: ClassVar[float] = 0.3
@@ -288,6 +299,19 @@ class StoryGenerator:
         if quick_start:
             config = self._infer_story_defaults(config)
 
+        audience = config.audience if config.audience in self.VALID_AUDIENCES else "agent"
+        if audience != config.audience:
+            logger.warning(
+                "invalid_audience_falling_back",
+                audience=config.audience,
+                fallback="agent",
+            )
+
+        # STORY-104.1: agent audience (default) emits the 5-section Linear
+        # template and bypasses the rich product-review shape entirely.
+        if audience == "agent":
+            return "\n".join(self._render_agent_template(config))
+
         style = config.style if config.style in self.VALID_STYLES else "standard"
 
         if style != config.style:
@@ -331,6 +355,104 @@ class StoryGenerator:
             lines.extend(self._render_invest_checklist(config))
 
         return "\n".join(lines)
+
+    # -- agent-template renderer (STORY-104.1) -----------------------------
+
+    def _render_agent_template(self, config: StoryConfig) -> list[str]:
+        """Render a 5-section Linear-issue template.
+
+        Emits the shape locked in ``docs/linear/AGENT_ISSUES.md`` and
+        enforces the HIGH-severity rules from ``docs_lint_linear_issue``:
+        title ≤80 chars, ≥1 ``file.ext:LINE`` anchor in files, ≥1
+        acceptance-criterion checkbox. Violations raise ``ValueError`` so
+        the MCP handler translates them to a structured error response.
+        """
+        self._validate_agent_config(config)
+
+        lines: list[str] = [f"# {config.title}", ""]
+        lines.extend(self._render_agent_what(config))
+        lines.extend(self._render_agent_where(config))
+        lines.extend(self._render_agent_why(config))
+        lines.extend(self._render_agent_acceptance(config))
+        lines.extend(self._render_agent_refs(config))
+        return lines
+
+    def _validate_agent_config(self, config: StoryConfig) -> None:
+        """Raise ``ValueError`` if inputs violate the locked agent template."""
+        errors: list[str] = []
+        if not config.title.strip():
+            errors.append("title is empty")
+        elif len(config.title) > self._AGENT_TITLE_MAX:
+            errors.append(
+                f"title is {len(config.title)} chars (limit {self._AGENT_TITLE_MAX})"
+            )
+        if not self._has_file_anchor(config.files):
+            errors.append(
+                "files[] must include at least one `path/to/file.ext:LINE-RANGE` anchor"
+            )
+        if not config.acceptance_criteria:
+            errors.append("acceptance_criteria[] must be non-empty")
+        if errors:
+            joined = "; ".join(errors)
+            raise ValueError(
+                "audience='agent' requires template-compliant inputs: "
+                f"{joined}. Pass audience='human' for the scaffold shape."
+            )
+
+    def _has_file_anchor(self, files: list[str]) -> bool:
+        return any(self._AGENT_FILE_ANCHOR_RE.search(f) for f in files)
+
+    def _render_agent_what(self, config: StoryConfig) -> list[str]:
+        what = self._derive_agent_what(config)
+        return ["## What", "", what, ""]
+
+    def _derive_agent_what(self, config: StoryConfig) -> str:
+        if config.role.strip() and config.want.strip():
+            return f"As a {config.role.strip()}, {config.want.strip()}."
+        if config.description.strip():
+            first = config.description.split(". ")[0].strip()
+            if not first.endswith("."):
+                first += "."
+            return first
+        return config.title
+
+    def _render_agent_where(self, config: StoryConfig) -> list[str]:
+        lines = ["## Where", ""]
+        for path in config.files:
+            lines.append(f"- `{path}`")
+        lines.append("")
+        return lines
+
+    def _render_agent_why(self, config: StoryConfig) -> list[str]:
+        if not config.so_that.strip():
+            return []
+        return ["## Why", "", config.so_that.strip(), ""]
+
+    def _render_agent_acceptance(self, config: StoryConfig) -> list[str]:
+        lines = ["## Acceptance", ""]
+        for criterion in config.acceptance_criteria:
+            lines.append(f"- [ ] {criterion}")
+        lines.append("")
+        return lines
+
+    def _render_agent_refs(self, config: StoryConfig) -> list[str]:
+        refs: list[str] = []
+        # First, extract TAP-### refs from dependencies and description.
+        sources: list[str] = [*config.dependencies, config.description]
+        for source in sources:
+            for ref in self._TAP_REF_RE.findall(source):
+                if ref not in refs:
+                    refs.append(ref)
+        # Then, include any dependency that isn't a TAP-### ref verbatim.
+        for dep in config.dependencies:
+            dep_stripped = dep.strip()
+            if dep_stripped and not self._TAP_REF_RE.search(dep_stripped) and dep_stripped not in refs:
+                refs.append(dep_stripped)
+        if config.epic_path.strip() and config.epic_path.strip() not in refs:
+            refs.append(config.epic_path.strip())
+        if not refs:
+            return []
+        return ["## Refs", "", ", ".join(refs), ""]
 
     # -- section renderers --------------------------------------------------
 

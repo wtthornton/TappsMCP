@@ -1323,21 +1323,26 @@ async def docs_generate_story(
     quick_start: bool = False,
     output_path: str = "",
     project_root: str = "",
+    audience: str = "agent",
 ) -> dict[str, Any]:
     """Generate a User Story document with acceptance criteria and task breakdown.
 
-    Creates a structured user story with "As a / I want / So that" statement,
-    sizing, task checklist, acceptance criteria, and definition of done.
+    **Default audience is ``"agent"``** (STORY-104.1): the output is the
+    5-section Linear-issue template from ``docs/linear/AGENT_ISSUES.md``
+    (``## What`` / ``## Where`` / ``## Why`` / ``## Acceptance`` / ``## Refs``)
+    and passes ``docs_validate_linear_issue`` with ``agent_ready=true`` by
+    construction. Required inputs: ``title`` (≤80 chars), ``files`` with at
+    least one ``path/to/file.ext:LINE-RANGE`` anchor, and non-empty
+    ``acceptance_criteria``. Missing inputs produce a structured error.
 
-    The ``comprehensive`` style adds test cases, technical notes, dependencies,
-    and an INVEST checklist.
+    Pass ``audience="human"`` for the legacy product-review shape: "As a /
+    I want / So that" statement, sizing, task checklist, standard /
+    comprehensive styles, INVEST checklist, etc. The ``style``,
+    ``criteria_format``, ``auto_populate``, and comprehensive-only params
+    apply only to ``audience="human"``.
 
-    Acceptance criteria support two formats:
-    - ``checkbox``: Checkbox list (default, best for technical stories)
-    - ``gherkin``: Given/When/Then Gherkin format (best for user-facing behavior)
-
-    When ``auto_populate=True``, enriches sections from project analyzers.
-    When ``quick_start=True``, infers defaults from the title alone.
+    When ``auto_populate=True`` (human mode), enriches sections from project analyzers.
+    When ``quick_start=True``, infers defaults from the title alone (both modes).
 
     Args:
         title: Story title (e.g. "Add login form validation").
@@ -1370,6 +1375,9 @@ async def docs_generate_story(
             When set with ``epic_path``, the epic link is rewritten relative to
             this file (e.g. ``../EPIC-99.md`` for stories in a subdirectory).
         project_root: Override project root path (default: configured root).
+        audience: Output target — ``"agent"`` (default) emits the 5-section
+            Linear-issue template with validation enforcement;
+            ``"human"`` emits the full product-review shape.
     """
     _record_call("docs_generate_story")
     start = time.perf_counter_ns()
@@ -1442,6 +1450,7 @@ async def docs_generate_story(
         style=style,
         inherit_context=inherit_context,
         epic_path=epic_path,
+        audience=audience,
     )
 
     generator = StoryGenerator()
@@ -1453,6 +1462,15 @@ async def docs_generate_story(
             auto_populate=auto_populate,
             quick_start=quick_start,
             output_path=output_path or "",
+        )
+    except ValueError as exc:
+        # STORY-104.1: agent audience raises ValueError on template violations.
+        # Surface these as a structured INPUT_INVALID error so the caller gets
+        # actionable guidance (which field failed and how to fix it).
+        return error_response(
+            "docs_generate_story",
+            "INPUT_INVALID",
+            str(exc),
         )
     except Exception as exc:
         return error_response(
@@ -1487,6 +1505,7 @@ async def docs_generate_story(
         "title": title,
         "epic_number": epic_number,
         "story_number": story_number,
+        "audience": audience,
         "style": style,
         "criteria_format": criteria_format,
         "task_count": len(task_list),
