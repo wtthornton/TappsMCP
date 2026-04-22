@@ -178,7 +178,7 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Memory profiles:** Built-in profiles from tapps-brain (e.g. `repo-brain` default). Use `profile_info`, `profile_list`, `profile_switch` actions.
 
-**Configuration:** Override `memory.profile`, `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
+**Configuration:** Override `memory.profile`, `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 5000 entries per project (`TAPPS_BRAIN_MAX_ENTRIES`). Auto-GC at 80% capacity.
 
 **Local setup / VSCode gotcha:** If `memory_status.enabled` is false after configuring tapps-brain, the bearer token may not be reaching the GUI-launched VSCode process. See [docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md](docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md).
 

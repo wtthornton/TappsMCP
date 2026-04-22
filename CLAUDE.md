@@ -159,7 +159,7 @@ You should call `tapps_validate_config(file_path)` when changing Dockerfile, doc
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
+`tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 5000 entries per project (`TAPPS_BRAIN_MAX_ENTRIES`; auto-evicts at cap, no warning — monitor via `brain_status()`). Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
 
 ## Quality Gate Behavior
 
