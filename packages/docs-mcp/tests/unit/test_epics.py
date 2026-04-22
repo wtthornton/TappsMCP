@@ -374,17 +374,69 @@ class TestEpicGeneratorStyles:
         """Explicit minimal style produces reduced output."""
         config = _make_config(style="minimal", stories=[])
         content = self.gen.generate(config)
-        # Minimal includes: title, metadata, purpose, goal, AC, stories, DoD
+        # Minimal includes: title, metadata, purpose, goal, motivation, AC, stories, DoD
         assert "## Goal" in content
         assert "## Acceptance Criteria" in content
         assert "## Definition of Done" in content
-        # Minimal omits: motivation, technical notes, non-goals
-        assert "## Motivation" not in content
+        # STORY-104.2: minimal now includes Motivation (validator requires it).
+        assert "## Motivation" in content
+        # Minimal omits: technical notes, non-goals
         assert "## Technical Notes" not in content
         assert "## Out of Scope" not in content
         # And never comprehensive sections
         assert "## Implementation Order" not in content
         assert "## Risk Assessment" not in content
+
+    def test_inepic_story_stub_with_ac_passes_validator(self, tmp_path: Path) -> None:
+        """STORY-104.3: in-epic story stubs with AC must pass validation.
+
+        Before the fix, stories emitted `(N acceptance criteria)` as
+        inline text, which the validator's AC-section parser ignored,
+        raising a 'Missing acceptance criteria' error on every stub.
+        """
+        from docs_mcp.validators.epic_validator import EpicValidator
+
+        config = _make_config(
+            style="minimal",
+            stories=[EpicStoryStub(title="Story with AC", points=3, ac_count=2)],
+        )
+        content = self.gen.generate(config)
+        epic_file = tmp_path / "EPIC-42-test.md"
+        epic_file.write_text(content, encoding="utf-8")
+
+        report = EpicValidator().validate(epic_file)
+        missing_ac = [
+            i for i in report.issues
+            if i.severity == "error" and "acceptance criteria" in i.message.lower()
+        ]
+        assert not missing_ac, (
+            f"In-epic story stub with ac_count=2 still flagged: {missing_ac}"
+        )
+        # The heading itself must be present.
+        assert "#### Acceptance Criteria" in content
+
+    def test_minimal_style_passes_validator(self, tmp_path: Path) -> None:
+        """STORY-104.2: minimal-style epics must pass docs_validate_epic.
+
+        Before the fix, minimal style omitted ## Motivation — a required
+        section per epic_validator — and every minimal epic raised an
+        error on validation.
+        """
+        from docs_mcp.validators.epic_validator import EpicValidator
+
+        config = _make_config(style="minimal", stories=[])
+        content = self.gen.generate(config)
+        epic_file = tmp_path / "EPIC-42-test.md"
+        epic_file.write_text(content, encoding="utf-8")
+
+        report = EpicValidator().validate(epic_file)
+        missing_motivation = [
+            i for i in report.issues
+            if i.severity == "error" and "motivation" in i.message.lower()
+        ]
+        assert not missing_motivation, (
+            f"Minimal-style epic still missing Motivation per validator: {missing_motivation}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +455,8 @@ class TestEpicAutoDetectStyle:
         config = _make_config(style="auto", stories=[], risks=[], files=[])
         content = self.gen.generate(config)
         assert "## Definition of Done" in content
-        assert "## Motivation" not in content
+        # STORY-104.2: minimal includes Motivation (validator requires it).
+        assert "## Motivation" in content
         assert "## Implementation Order" not in content
 
     def test_auto_detects_minimal_one_story(self) -> None:
@@ -416,7 +469,8 @@ class TestEpicAutoDetectStyle:
         )
         content = self.gen.generate(config)
         assert "## Definition of Done" in content
-        assert "## Motivation" not in content
+        # STORY-104.2: minimal includes Motivation (validator requires it).
+        assert "## Motivation" in content
 
     def test_auto_detects_standard_three_stories(self) -> None:
         """Auto with 3 stories -> standard."""

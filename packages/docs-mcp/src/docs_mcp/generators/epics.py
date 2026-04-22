@@ -355,6 +355,7 @@ class EpicGenerator:
             lines.extend(self._render_metadata(config))
             lines.extend(self._render_purpose_and_intent(config))
             lines.extend(self._render_goal(config, enrichment))
+            lines.extend(self._render_motivation(config))
             lines.extend(self._render_acceptance_criteria(config))
             lines.extend(self._render_stories(config))
             lines.extend(self._render_definition_of_done(config))
@@ -565,9 +566,15 @@ class EpicGenerator:
                     lines.append("Describe what this story delivers...")
                 lines.append("")
 
-                # Show AC count if available.
+                # Show AC heading + placeholder checkboxes (STORY-104.3).
+                # The validator's AC-section parser requires an explicit
+                # `#### Acceptance Criteria` heading + checkbox items; the
+                # older `(N acceptance criteria)` inline marker didn't count.
                 if story.ac_count:
-                    lines.append(f"({story.ac_count} acceptance criteria)")
+                    lines.append("#### Acceptance Criteria")
+                    lines.append("")
+                    for ac_idx in range(1, story.ac_count + 1):
+                        lines.append(f"- [ ] AC {ac_idx}: see linked story file")
                     lines.append("")
 
                 # Story link if enabled.

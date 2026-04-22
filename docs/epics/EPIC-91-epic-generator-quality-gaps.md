@@ -1,7 +1,7 @@
 # Epic 91: Epic Generator - Close LLM Quality Gaps
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Done (closed 2026-04-22; all 5 stories implemented — confirmed by the [EPIC-103 generator review](../reviews/EPIC-103-REVIEW-generators.md))
 **Priority:** P1 - High
 **Estimated LOE:** ~2-3 weeks (1 developer)
 **Dependencies:** None
