@@ -43,6 +43,23 @@ For an MCP-server-only install, call ``tapps_upgrade(mcp_only=True)``.
 ``.claude/hooks``, ``.claude/agents``, ``.claude/skills``, ``karpathy``).
 Each token now skips *only* its artifact; in particular ``CLAUDE.md`` no
 longer gates hooks/agents/skills/rules.
+
+Dry-run result shape
+====================
+
+``upgrade_pipeline(dry_run=True)`` returns structured per-component details
+so consumers can audit exactly which paths would change:
+
+- ``components.platforms[].components.agents`` / ``.skills`` / ``.hooks``
+  are dicts with ``action``, ``managed_files``/``managed_skills``, and
+  ``preserved_files``/``preserved_skills``. The ``managed_*`` lists are the
+  ``tapps-*`` files the upgrade would write; ``preserved_*`` lists the
+  existing consumer-custom files that stay untouched.
+- ``components.settings`` is a string describing the hook-merge behavior.
+- ``dry_run_summary`` at the top level rolls this up into a ``verdict``
+  (``"safe-to-run"`` or ``"review-recommended"``), counts, and the full
+  preserved-file list — enough for an agent to decide whether to proceed
+  without parsing per-component details.
 """
 
 from __future__ import annotations
@@ -358,27 +375,167 @@ def _upgrade_mcp_config(
         result["components"]["mcp_config"] = f"needs-fix: {error}"
 
 
+def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
+    """Build a human-readable verdict from per-component dry-run details.
+
+    Walks ``result["components"]["platforms"]`` and aggregates:
+    - ``managed_file_count``: tapps-* files the upgrade would write
+    - ``preserved_file_count``: consumer-custom files the upgrade would NOT touch
+    - ``skipped_components``: components opted out via ``upgrade_skip_files``
+    - ``verdict``: one of ``"safe-to-run"``, ``"review-recommended"``
+
+    ``review-recommended`` fires when an upgrade would touch a
+    user-editable file (``CLAUDE.md``, settings merge) so the consumer
+    should inspect diffs before running live. Pure ``tapps-*`` writes
+    plus preserved custom files → ``safe-to-run``.
+    """
+    managed = 0
+    preserved_items: list[str] = []
+    skipped: list[str] = []
+    review_flags: list[str] = []
+
+    platforms = result.get("components", {}).get("platforms", [])
+    for host_result in platforms:
+        host = host_result.get("host", "?")
+        for name, value in host_result.get("components", {}).items():
+            if isinstance(value, dict):
+                managed += len(value.get("managed_files", []))
+                managed += len(value.get("managed_skills", []))
+                for item in value.get("preserved_files", []):
+                    preserved_items.append(f"{host}:{name}/{item}")
+                for item in value.get("preserved_skills", []):
+                    preserved_items.append(f"{host}:{name}/{item}")
+            elif isinstance(value, str):
+                if value.startswith("skipped"):
+                    skipped.append(f"{host}:{name}")
+                elif value.startswith("would-refresh") or value.startswith("would-merge"):
+                    review_flags.append(f"{host}:{name}")
+
+    claude_md = result.get("components", {}).get("claude_md")
+    if isinstance(claude_md, str) and claude_md.startswith("would"):
+        review_flags.append("claude_md")
+    agents_md = result.get("components", {}).get("agents_md")
+    if isinstance(agents_md, dict) and agents_md.get("action", "").startswith("would"):
+        review_flags.append("agents_md")
+
+    verdict = "review-recommended" if review_flags else "safe-to-run"
+    if verdict == "safe-to-run":
+        message = (
+            f"Upgrade is additive: {managed} tapps-managed files would be "
+            f"written, {len(preserved_items)} custom files preserved."
+        )
+    else:
+        message = (
+            f"Upgrade touches user-editable files ({', '.join(review_flags)}); "
+            f"review diffs before running live. {len(preserved_items)} custom "
+            "files preserved."
+        )
+
+    return {
+        "verdict": verdict,
+        "message": message,
+        "managed_file_count": managed,
+        "preserved_file_count": len(preserved_items),
+        "preserved_files": sorted(preserved_items),
+        "skipped_components": sorted(skipped),
+        "review_recommended_for": sorted(review_flags),
+    }
+
+
+def _enumerate_preserved(
+    target_dir: Path,
+    managed_names: frozenset[str],
+    *,
+    is_dir_target: bool = False,
+) -> list[str]:
+    """Return existing entries in *target_dir* that upgrade would not touch.
+
+    ``managed_names`` lists the base names tapps-mcp actively manages. Anything
+    else in the directory is preserved by the upgrade. The names are returned
+    sorted so dry-run output is stable across platforms.
+    """
+    if not target_dir.is_dir():
+        return []
+    preserved: list[str] = []
+    for entry in target_dir.iterdir():
+        if entry.name in managed_names:
+            continue
+        if is_dir_target and not entry.is_dir():
+            continue
+        preserved.append(entry.name)
+    return sorted(preserved)
+
+
 def _upgrade_claude_code_dry_run(
+    project_root: Path,
     result: dict[str, Any],
     *,
     force: bool,
     python_ok: bool,
     infra_ok: bool,
+    skip: set[str],
 ) -> None:
-    """Populate dry-run component hints for the claude-code host."""
+    """Populate dry-run component hints for the claude-code host.
+
+    Enumerates the exact tapps-managed files that would be written and the
+    existing non-managed files that would be preserved, so consumers can see
+    that custom agents/skills/hooks are safe from the upgrade.
+    """
+    from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
+    from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS
+
     result["components"]["claude_md"] = "would-refresh" if force else "check-needed"
-    result["components"]["settings"] = "check-needed"
-    result["components"]["hooks"] = "would-regenerate"
-    result["components"]["agents"] = "would-regenerate"
-    result["components"]["skills"] = "would-regenerate"
+    result["components"]["settings"] = (
+        "skipped (upgrade_skip_files)"
+        if _skipped("claude_settings", skip)
+        else "would-merge (hooks merged by matcher; existing entries preserved)"
+    )
+
+    if _skipped("claude_hooks", skip):
+        result["components"]["hooks"] = "skipped (upgrade_skip_files)"
+    else:
+        hooks_dir = project_root / ".claude" / "hooks"
+        managed_hooks = (
+            frozenset(p.name for p in hooks_dir.glob("tapps-*"))
+            if hooks_dir.is_dir()
+            else frozenset()
+        )
+        result["components"]["hooks"] = {
+            "action": "would-write-managed-scripts",
+            "note": "settings.json hooks merged by matcher — existing entries preserved",
+            "preserved_files": _enumerate_preserved(hooks_dir, managed_hooks),
+        }
+
+    if _skipped("claude_agents", skip):
+        result["components"]["agents"] = "skipped (upgrade_skip_files)"
+    else:
+        agents_dir = project_root / ".claude" / "agents"
+        managed_agents = frozenset(CLAUDE_AGENTS.keys())
+        result["components"]["agents"] = {
+            "action": "would-write-managed-files",
+            "managed_files": sorted(managed_agents),
+            "preserved_files": _enumerate_preserved(agents_dir, managed_agents),
+        }
+
+    if _skipped("claude_skills", skip):
+        result["components"]["skills"] = "skipped (upgrade_skip_files)"
+    else:
+        skills_dir = project_root / ".claude" / "skills"
+        managed_skills = frozenset(CLAUDE_SKILLS.keys())
+        result["components"]["skills"] = {
+            "action": "would-write-managed-skills",
+            "managed_skills": sorted(managed_skills),
+            "preserved_skills": _enumerate_preserved(
+                skills_dir, managed_skills, is_dir_target=True
+            ),
+        }
+
     result["components"]["python_quality_rule"] = (
         "would-regenerate" if python_ok else "skipped (no python detected)"
     )
     result["components"]["agent_scope_rule"] = "would-regenerate"
     result["components"]["pipeline_rule"] = (
-        "would-regenerate"
-        if (python_ok or infra_ok)
-        else "skipped (no python or infra detected)"
+        "would-regenerate" if (python_ok or infra_ok) else "skipped (no python or infra detected)"
     )
 
 
@@ -472,6 +629,49 @@ def _upgrade_claude_code_live(
         result["components"]["pipeline_rule"] = generate_claude_pipeline_rule(project_root)
 
 
+def _upgrade_cursor_dry_run(
+    project_root: Path,
+    result: dict[str, Any],
+    *,
+    force: bool,
+) -> None:
+    """Populate dry-run component hints for the cursor host.
+
+    Mirrors :func:`_upgrade_claude_code_dry_run` — enumerates managed vs
+    preserved files so consumers can see which custom assets stay untouched.
+    """
+    from tapps_mcp.pipeline.platform_skills import CURSOR_SKILLS
+    from tapps_mcp.pipeline.platform_subagents import CURSOR_AGENTS
+
+    result["components"]["cursor_rules"] = "would-refresh" if force else "check-needed"
+
+    hooks_dir = project_root / ".cursor" / "hooks"
+    managed_hooks = (
+        frozenset(p.name for p in hooks_dir.glob("tapps-*")) if hooks_dir.is_dir() else frozenset()
+    )
+    result["components"]["hooks"] = {
+        "action": "would-write-managed-scripts",
+        "note": "hooks.json entries merged — existing entries preserved",
+        "preserved_files": _enumerate_preserved(hooks_dir, managed_hooks),
+    }
+
+    agents_dir = project_root / ".cursor" / "agents"
+    managed_agents = frozenset(CURSOR_AGENTS.keys())
+    result["components"]["agents"] = {
+        "action": "would-write-managed-files",
+        "managed_files": sorted(managed_agents),
+        "preserved_files": _enumerate_preserved(agents_dir, managed_agents),
+    }
+
+    skills_dir = project_root / ".cursor" / "skills"
+    managed_skills = frozenset(CURSOR_SKILLS.keys())
+    result["components"]["skills"] = {
+        "action": "would-write-managed-skills",
+        "managed_skills": sorted(managed_skills),
+        "preserved_skills": _enumerate_preserved(skills_dir, managed_skills, is_dir_target=True),
+    }
+
+
 def _upgrade_cursor_live(
     project_root: Path,
     result: dict[str, Any],
@@ -546,8 +746,14 @@ def _upgrade_platform(
         result["components"]["mcp_only_skipped"] = {
             "reason": "mcp_only=True",
             "skipped": [
-                "claude_md", "hooks", "agents", "skills",
-                "python_quality_rule", "agent_scope_rule", "pipeline_rule", "cursor_rules",
+                "claude_md",
+                "hooks",
+                "agents",
+                "skills",
+                "python_quality_rule",
+                "agent_scope_rule",
+                "pipeline_rule",
+                "cursor_rules",
             ],
         }
         return result
@@ -555,20 +761,26 @@ def _upgrade_platform(
     if host == "claude-code":
         if dry_run:
             _upgrade_claude_code_dry_run(
-                result, force=force, python_ok=python_ok, infra_ok=infra_ok
+                project_root,
+                result,
+                force=force,
+                python_ok=python_ok,
+                infra_ok=infra_ok,
+                skip=_skip,
             )
         else:
             _upgrade_claude_code_live(
-                project_root, result,
-                force=force, engagement_level=engagement_level,
-                skip=_skip, python_ok=python_ok, infra_ok=infra_ok,
+                project_root,
+                result,
+                force=force,
+                engagement_level=engagement_level,
+                skip=_skip,
+                python_ok=python_ok,
+                infra_ok=infra_ok,
             )
     elif host == "cursor":
         if dry_run:
-            result["components"]["cursor_rules"] = "would-refresh" if force else "check-needed"
-            result["components"]["hooks"] = "would-regenerate"
-            result["components"]["agents"] = "would-regenerate"
-            result["components"]["skills"] = "would-regenerate"
+            _upgrade_cursor_dry_run(project_root, result, force=force)
         else:
             _upgrade_cursor_live(project_root, result, force=force)
     elif host == "vscode":
@@ -1132,5 +1344,8 @@ def upgrade_pipeline(
 
     result["success"] = len(result["errors"]) == 0
     result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
+
+    if dry_run:
+        result["dry_run_summary"] = _build_dry_run_summary(result)
 
     return result

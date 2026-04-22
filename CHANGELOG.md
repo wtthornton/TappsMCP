@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-04-22
+
+### Changed
+
+- **`tapps_upgrade(dry_run=True)` now returns precise file-level details instead of vague `"would-regenerate"` strings.** The `agents`, `skills`, and `hooks` per-component entries are structured dicts with `managed_files` / `managed_skills` (tapps-* files the upgrade would write) and `preserved_files` / `preserved_skills` (consumer-custom files that stay untouched). A new top-level `dry_run_summary` rolls this into a `verdict` (`"safe-to-run"` or `"review-recommended"`), aggregate counts, `review_recommended_for`, and the full preserved-file list. Motivated by consumer projects (e.g. Ralph) misreading the old vague output as "would wholesale overwrite custom agents/skills". The actual behavior has always been scoped writes + merge-by-matcher for hooks; now the dry-run output proves that on the wire. Non-breaking — no consumer was parsing the prior advisory strings. Version bump: tapps-core / tapps-mcp / docs-mcp 3.1.0 → 3.2.0, npm wrappers synced.
+
+### Documentation
+
+- [README.md](README.md), [AGENTS.md](AGENTS.md), [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md), and the `tapps_upgrade` tool/module docstrings updated to describe the new dry-run response shape (verdict + managed vs preserved file lists). The consumer guide includes an annotated sample payload so agents can read the output without reverse-engineering it.
+
 ## [3.1.0] - 2026-04-22
 
 ### Added

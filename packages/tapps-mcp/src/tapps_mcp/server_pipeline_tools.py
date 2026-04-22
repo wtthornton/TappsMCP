@@ -552,11 +552,30 @@ async def tapps_upgrade(
     mcp_only: bool = False,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Upgrade all TappsMCP-generated files after a version update.
+    """Upgrade TappsMCP-generated files after a version update.
 
-    Side effects: Overwrites AGENTS.md, platform rules, hooks, agents, skills.
-    Creates a timestamped backup first (``.tapps-mcp/backups/``). Use
-    ``dry_run=True`` to preview without writing.
+    Writes are scoped to tapps-managed files: the four ``tapps-*`` subagents,
+    the ``tapps-*`` + ``linear-issue`` skills, and ``tapps-*`` hook scripts.
+    Consumer-authored agents/skills/hooks with other names are preserved.
+    ``AGENTS.md`` uses section-aware merge; ``.claude/settings.json`` hooks
+    are merged by matcher (no entries removed). Creates a timestamped
+    backup first under ``.tapps-mcp/backups/``.
+
+    With ``dry_run=True``, returns a per-component breakdown plus a
+    top-level ``dry_run_summary`` with:
+
+    - ``verdict``: ``"safe-to-run"`` (only tapps-managed writes) or
+      ``"review-recommended"`` (touches user-editable files like
+      ``CLAUDE.md`` or ``.claude/settings.json`` merge)
+    - ``managed_file_count`` / ``preserved_file_count``
+    - ``preserved_files``: exact custom files the upgrade would leave alone
+    - ``review_recommended_for``: components requiring diff review
+    - ``skipped_components``: artifacts opted out via ``upgrade_skip_files``
+
+    Per-component entries for ``agents``/``skills``/``hooks`` are dicts with
+    ``action``, ``managed_files``/``managed_skills``, and
+    ``preserved_files``/``preserved_skills`` so consumers can audit exactly
+    which paths would change.
     """
     from tapps_mcp.pipeline.upgrade import upgrade_pipeline
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges

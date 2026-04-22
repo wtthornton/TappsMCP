@@ -40,7 +40,7 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 | **tapps_stats** | Tool usage statistics and call counts |
 | **tapps_feedback** | Report tool effectiveness for adaptive learning |
 | **tapps_init** | Pipeline bootstrap (once per project) - creates AGENTS.md, rules, hooks |
-| **tapps_upgrade** | After TappsMCP version update - refreshes generated files |
+| **tapps_upgrade** | After TappsMCP version update - refreshes tapps-managed files (custom agents/skills/hooks preserved); use `dry_run=True` for a per-file verdict |
 | **tapps_doctor** | Diagnose configuration issues |
 | **tapps_set_engagement_level** | Change enforcement intensity (high/medium/low) |
 ## Supported languages

@@ -330,6 +330,130 @@ class TestUpgradeDryRun:
         skills_dir = tmp_path / ".claude" / "skills"
         assert not skills_dir.exists()
 
+    def test_dry_run_preserves_custom_agents(self, tmp_path: Path) -> None:
+        """Dry run lists non-tapps custom agents under ``preserved_files``.
+
+        Confirms Ralph-style custom agents (e.g. ``ralph.md``) are reported
+        as safe from the upgrade, not flagged for regeneration.
+        """
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        agents_dir = tmp_path / ".claude" / "agents"
+        agents_dir.mkdir(parents=True, exist_ok=True)
+        (agents_dir / "ralph.md").write_text("custom ralph agent\n", encoding="utf-8")
+        (agents_dir / "ralph-architect.md").write_text("custom\n", encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+        components = result["components"]["platforms"][0]["components"]
+
+        agents = components["agents"]
+        assert isinstance(agents, dict)
+        assert agents["action"] == "would-write-managed-files"
+        assert "ralph.md" in agents["preserved_files"]
+        assert "ralph-architect.md" in agents["preserved_files"]
+        assert all(name.startswith("tapps-") for name in agents["managed_files"])
+
+    def test_dry_run_preserves_custom_skills(self, tmp_path: Path) -> None:
+        """Dry run lists non-managed custom skills under ``preserved_skills``."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        skills_dir = tmp_path / ".claude" / "skills"
+        (skills_dir / "ralph-custom").mkdir(parents=True, exist_ok=True)
+        (skills_dir / "ralph-custom" / "SKILL.md").write_text("x\n", encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+        components = result["components"]["platforms"][0]["components"]
+
+        skills = components["skills"]
+        assert isinstance(skills, dict)
+        assert skills["action"] == "would-write-managed-skills"
+        assert "ralph-custom" in skills["preserved_skills"]
+        assert "tapps-score" in skills["managed_skills"]
+
+    def test_dry_run_hooks_signals_merge_not_overwrite(self, tmp_path: Path) -> None:
+        """Dry run hooks entry documents the additive merge behavior."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+        components = result["components"]["platforms"][0]["components"]
+
+        hooks = components["hooks"]
+        assert isinstance(hooks, dict)
+        assert hooks["action"] == "would-write-managed-scripts"
+        assert "merged by matcher" in hooks["note"]
+
+    def test_dry_run_summary_has_verdict_for_clean_project(self, tmp_path: Path) -> None:
+        """Clean project without custom files produces a ``review-recommended`` verdict.
+
+        Greenfield projects hit ``CLAUDE.md`` / ``settings.json`` merge paths,
+        so ``review-recommended`` is correct — there's content to inspect even
+        if no managed file conflicts exist.
+        """
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        assert "dry_run_summary" in result
+        summary = result["dry_run_summary"]
+        assert summary["verdict"] in {"safe-to-run", "review-recommended"}
+        assert summary["managed_file_count"] > 0
+        assert isinstance(summary["preserved_files"], list)
+        assert isinstance(summary["review_recommended_for"], list)
+
+    def test_dry_run_summary_lists_custom_preserved_files(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Summary aggregates preserved files across agents and skills."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        agents_dir = tmp_path / ".claude" / "agents"
+        agents_dir.mkdir(parents=True, exist_ok=True)
+        (agents_dir / "ralph.md").write_text("x", encoding="utf-8")
+        skills_dir = tmp_path / ".claude" / "skills"
+        (skills_dir / "ralph-quickfix").mkdir(parents=True, exist_ok=True)
+        (skills_dir / "ralph-quickfix" / "SKILL.md").write_text("x", encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        summary = result["dry_run_summary"]
+        preserved = summary["preserved_files"]
+        assert any("ralph.md" in p for p in preserved)
+        assert any("ralph-quickfix" in p for p in preserved)
+        assert summary["preserved_file_count"] >= 2
+
+    def test_dry_run_summary_absent_on_live_run(self, tmp_path: Path) -> None:
+        """Live (non-dry-run) invocations do not include ``dry_run_summary``."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=False)
+        assert "dry_run_summary" not in result
+
+    def test_dry_run_respects_skip_tokens(self, tmp_path: Path) -> None:
+        """Dry run reports ``skipped`` for artifacts in ``upgrade_skip_files``."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "upgrade_skip_files:\n  - .claude/agents\n  - .claude/skills\n",
+            encoding="utf-8",
+        )
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+        components = result["components"]["platforms"][0]["components"]
+
+        assert components["agents"] == "skipped (upgrade_skip_files)"
+        assert components["skills"] == "skipped (upgrade_skip_files)"
+
 
 # ---------------------------------------------------------------------------
 # Tests: Idempotency

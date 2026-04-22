@@ -547,7 +547,7 @@ tapps-mcp upgrade --force                   # overwrite even if up-to-date
 tapps-mcp upgrade --scope user              # upgrade user-level config (~/.claude.json)
 ```
 
-**What it updates:** AGENTS.md (via smart-merge), platform rules, hooks, agents, skills, and `.claude/settings.json` permissions. Custom command paths (e.g. PyInstaller exe) are never overwritten.
+**What it updates:** AGENTS.md (via smart-merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `.claude/settings.json` permissions. Custom agents, skills, and hooks with names outside that set are preserved. `settings.json` hooks are merged by matcher — existing entries stay. Custom command paths (e.g. PyInstaller exe) in `.mcp.json` are also preserved.
 
 A **backup** is automatically created before overwriting files (stored in `.tapps-mcp/backups/`). Use `tapps-mcp rollback` to restore from the latest backup if an upgrade causes issues.
 
@@ -558,6 +558,8 @@ tapps_upgrade(dry_run=true)                 # Preview what would change
 tapps_upgrade()                             # Apply updates
 tapps_upgrade(platform="claude", force=true) # Force-update Claude Code files
 ```
+
+The `dry_run=true` response includes a top-level `dry_run_summary` with a `verdict` (`"safe-to-run"` when only `tapps-*` files would be written, `"review-recommended"` when `CLAUDE.md` or `settings.json` merge needs inspection), counts, and the full list of custom files that would be preserved. Per-component `agents` / `skills` / `hooks` entries are dicts listing `managed_files` (to be written) and `preserved_files` (untouched) so you can audit exactly what would change before running live.
 
 ### `tapps-mcp build-plugin`
 
@@ -763,9 +765,11 @@ Quick index:
 
 ### tapps_upgrade
 
-**What it does:** Validates and refreshes all TappsMCP-generated files in a project after upgrading the server. Detects the platform (Claude Code, Cursor, or both) from existing config files and upgrades AGENTS.md (via smart-merge), platform rules, hooks, agents, skills, and settings. Uses `upgrade_mode` internally so custom command paths (e.g. PyInstaller exe) are never overwritten. Accepts optional `platform`, `force`, and `dry_run` parameters.
+**What it does:** Validates and refreshes TappsMCP-generated files in a project after upgrading the server. Detects the platform (Claude Code, Cursor, or both) from existing config files and upgrades AGENTS.md (via smart-merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `settings.json` permissions. Files outside that managed set — consumer-authored agents, skills, hooks, and custom command paths in `.mcp.json` — are preserved. `settings.json` hook entries are merged by matcher. Accepts optional `platform`, `force`, and `dry_run` parameters.
 
 **Why use it:** After upgrading TappsMCP (`pip install -U tapps-mcp`), generated files may be outdated — missing new tools, stale hook scripts, or old AGENTS.md sections. Call `tapps_upgrade(dry_run=true)` to preview what would change, then `tapps_upgrade()` to apply updates. A backup is automatically created before overwriting (stored in `.tapps-mcp/backups/`). This is the MCP-tool equivalent of the `tapps-mcp upgrade` CLI command, usable from within an AI session without dropping to a terminal.
+
+**Dry-run response shape:** Returns per-component dicts under `components.platforms[].components.{agents,skills,hooks}` with `action`, `managed_files` / `managed_skills` (tapps-* files that would be written), and `preserved_files` / `preserved_skills` (consumer-custom files that stay untouched). A top-level `dry_run_summary` provides a `verdict` (`"safe-to-run"` or `"review-recommended"`), aggregate counts, `preserved_files` across all hosts, and `review_recommended_for` listing components that merge into user-editable files (`CLAUDE.md`, `settings.json`). Agents can branch on the verdict without parsing per-component details.
 
 ---
 

@@ -23,7 +23,34 @@ tapps-mcp upgrade --host claude-code        # target a specific host
 tapps-mcp upgrade --dry-run                 # preview what would change
 ```
 
-This updates AGENTS.md, platform rules, hooks, agents, skills, and `.claude/settings.json` permissions in one step.
+This updates AGENTS.md (smart merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `.claude/settings.json` permissions. **Files outside that managed set are preserved** — consumer-authored agents, skills, or hooks with other names are never touched. `settings.json` hook entries are merged by matcher, so hand-wired hooks stay.
+
+### Reading the dry-run output
+
+`tapps-mcp upgrade --dry-run` (or `tapps_upgrade(dry_run=true)` from MCP) returns a top-level `dry_run_summary` you can read first to decide whether to proceed:
+
+```json
+{
+  "dry_run_summary": {
+    "verdict": "safe-to-run",
+    "message": "Upgrade is additive: 17 tapps-managed files would be written, 6 custom files preserved.",
+    "managed_file_count": 17,
+    "preserved_file_count": 6,
+    "preserved_files": [
+      "claude-code:agents/ralph.md",
+      "claude-code:agents/ralph-architect.md",
+      "claude-code:skills/ralph-quickfix"
+    ],
+    "skipped_components": [],
+    "review_recommended_for": []
+  }
+}
+```
+
+- `verdict: "safe-to-run"` → only tapps-managed files change; consumer-custom files appear in `preserved_files`. Run live with confidence.
+- `verdict: "review-recommended"` → the upgrade merges into a user-editable file (`CLAUDE.md` H1-section replace, or `settings.json` hook-matcher merge). Inspect diffs before running live. The specific components are listed in `review_recommended_for`.
+
+Per-component details live under `components.platforms[].components.{agents,skills,hooks}` as dicts with `managed_files`/`managed_skills` (what would be written) and `preserved_files`/`preserved_skills` (what stays). Use these for a full audit; the top-level summary for a quick decision.
 
 ---
 
