@@ -105,6 +105,8 @@ ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset(
         "docs_generate_doc_index",
         "docs_check_cross_refs",
         "docs_check_style",
+        "docs_lint_linear_issue",
+        "docs_validate_linear_issue",
     }
 )
 
@@ -1010,6 +1012,7 @@ def _register_tool_modules() -> None:
         server_analysis,
         server_gen_tools,
         server_git_tools,
+        server_linear_tools,
         server_val_tools,
     )
 
@@ -1017,6 +1020,7 @@ def _register_tool_modules() -> None:
     server_git_tools.register(mcp, allowed_tools)
     server_gen_tools.register(mcp, allowed_tools)
     server_val_tools.register(mcp, allowed_tools)
+    server_linear_tools.register(mcp, allowed_tools)
 
     # Resources and prompts (no tool filtering)
     import docs_mcp.server_resources as _  # noqa: F401  # register resources on mcp
