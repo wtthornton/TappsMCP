@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-04-22
+
+### Added
+
+- **`linear-issue` skill in the deployment registry** — added to `CLAUDE_SKILLS` and `CURSOR_SKILLS` in `packages/tapps-mcp/src/tapps_mcp/pipeline/platform_skills.py`. The skill routes four user intents (create / lint / validate / triage) to the docs-mcp Linear tools shipped in 3.0.0 plus the Linear MCP plugin. Consuming projects receive the skill on their next `tapps_upgrade`. Per-platform skill count: 12 → 13.
+
+### Changed
+
+- Version bump: tapps-core 3.0.0 → 3.1.0, tapps-mcp 3.0.0 → 3.1.0, docs-mcp 3.0.0 → 3.1.0. npm wrappers synced from 3.0.0 → 3.1.0. Minor bump — purely additive feature, no breaking changes.
+
 ## [3.0.0] - 2026-04-22
 
 Major bump: the default audience of `docs_generate_story` flipped from human-review shape to the agent-issue template locked in `docs/linear/AGENT_ISSUES.md`. Callers that relied on the legacy shape must pass `audience="human"`. See `### Changed` below for the migration note.
