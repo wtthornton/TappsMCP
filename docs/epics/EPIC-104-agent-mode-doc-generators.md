@@ -1,6 +1,6 @@
 # EPIC-104: Agent-mode for doc generators
 
-**Status**: In progress (104.1, 104.2, 104.3 shipped 2026-04-22 — with 104.1 reversed to agent-default per user call; 104.4 deferred)
+**Status**: Closed — 2026-04-22 (all 4 stories shipped; 104.1 reversed to agent-default, 104.4 slimmed to `## Refs` emitter per the "option 3" judgment call)
 **Owner**: Bill Thornton
 **Created**: 2026-04-22
 **Parent review**: [docs/reviews/EPIC-103-REVIEW-generators.md](../reviews/EPIC-103-REVIEW-generators.md)
@@ -20,7 +20,7 @@ so Linear issues can be produced directly from the generator — dogfooding
 | STORY-104.1 | `audience="agent"` as **default** on `docs_generate_story` + `## Refs` emitter (**reversed scope 2026-04-22** — agent is now default; `audience="human"` opts out) | tool | docs-mcp | 4-5 h | **Done 2026-04-22** |
 | STORY-104.2 | Bug fix: minimal-style epics emit `## Motivation` stub | bugfix | docs-mcp | 1 h | **Done 2026-04-22** |
 | STORY-104.3 | Bug fix: in-epic story stubs emit `#### Acceptance Criteria` heading | bugfix | docs-mcp | 1 h | **Done 2026-04-22** |
-| STORY-104.4 | (optional) `agent_template=True` on `docs_generate_epic` if Linear-epic support desired | tool | docs-mcp | 2-3 h | Gate on 104.1 landing |
+| STORY-104.4 | `## Refs` section emitter on `docs_generate_epic` — auto-extracts bare `TAP-###` refs from prose + list fields (slimmed from the original "agent_template=True" scope per the EPIC-103 review recommendation) | tool | docs-mcp | 30 min | **Done 2026-04-22** |
 
 Stories 104.2 and 104.3 are independent bug fixes — they can land any time and
 don't block 104.1.

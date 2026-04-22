@@ -1465,3 +1465,72 @@ class TestPerformanceTargets:
         output = "\n".join(lines)
         assert "Security Expert" not in output
         assert "Test coverage" in output
+
+
+# ---------------------------------------------------------------------------
+# STORY-104.4: ## Refs section (auto-extracted TAP-### cross-refs)
+# ---------------------------------------------------------------------------
+
+
+class TestEpicRefsSection:
+    """Auto-extracted TAP-### refs surface as a `## Refs` section."""
+
+    def setup_method(self) -> None:
+        self.gen = EpicGenerator()
+
+    def test_refs_extracted_from_dependencies(self) -> None:
+        config = _make_config(dependencies=["TAP-496", "Epic 4"])
+        content = self.gen.generate(config)
+        assert "## Refs" in content
+        assert "TAP-496" in content
+
+    def test_refs_extracted_from_motivation_prose(self) -> None:
+        config = _make_config(
+            motivation="Follow-up from TAP-834 (memory shim retirement).",
+        )
+        content = self.gen.generate(config)
+        assert "## Refs" in content
+        # Ref appears in both the motivation body and the Refs list.
+        assert content.count("TAP-834") >= 2
+
+    def test_refs_deduped(self) -> None:
+        config = _make_config(
+            dependencies=["TAP-496"],
+            motivation="See TAP-496 for context.",
+        )
+        content = self.gen.generate(config)
+        # Ref appears in Refs section exactly once.
+        refs_idx = content.index("## Refs")
+        refs_body = content[refs_idx:]
+        # Count inside the refs section only.
+        assert refs_body.count("TAP-496") == 1
+
+    def test_refs_omitted_when_no_tap_refs(self) -> None:
+        config = _make_config(
+            dependencies=["Epic 4", "some-external-service"],
+            motivation="No TAP references here.",
+            blocks=["Epic 43"],
+        )
+        content = self.gen.generate(config)
+        assert "## Refs" not in content
+
+    def test_refs_emitted_for_minimal_style(self) -> None:
+        config = _make_config(
+            style="minimal",
+            stories=[],
+            motivation="Prior: TAP-100.",
+        )
+        content = self.gen.generate(config)
+        assert "## Refs" in content
+        assert "TAP-100" in content
+
+    def test_refs_emitted_for_comprehensive_style(self) -> None:
+        config = _make_config(
+            style="comprehensive",
+            dependencies=["TAP-200"],
+            risks=["Regression in TAP-201 area"],
+        )
+        content = self.gen.generate(config)
+        assert "## Refs" in content
+        assert "TAP-200" in content
+        assert "TAP-201" in content

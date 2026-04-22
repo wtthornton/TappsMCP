@@ -142,6 +142,10 @@ class EpicGenerator:
         }
     )
 
+    # STORY-104.4: auto-extract bare TAP-### issue refs from prose and list
+    # fields so agents don't have to grep the whole epic body.
+    _TAP_REF_RE: ClassVar[re.Pattern[str]] = re.compile(r"\bTAP-\d+\b")
+
     # Keyword → suggested story titles (keyword-to-pattern mapping for suggestion engine).
     _STORY_PATTERNS: ClassVar[dict[str, list[str]]] = {
         "auth": ["Data Models", "Auth Endpoints", "Session Management", "Tests"],
@@ -385,6 +389,10 @@ class EpicGenerator:
                     # Only render generic files-affected when no file hints given
                     lines.extend(self._render_files_affected(config))
                 lines.extend(self._render_performance_targets(enrichment, config))
+
+        # STORY-104.4: agent-oriented `## Refs` section, emitted last for all
+        # styles when any bare TAP-### refs are detected in the epic body.
+        lines.extend(self._render_refs(config))
 
         timing["render_ms"] = int((time.perf_counter() - t_render) * 1000)
         timing["total_ms"] = int((time.perf_counter() - t_wall) * 1000)
@@ -816,6 +824,46 @@ class EpicGenerator:
 
         lines.extend(["", "<!-- docsmcp:end:references -->", ""])
         return lines
+
+    def _render_refs(self, config: EpicConfig) -> list[str]:
+        """Render the ``## Refs`` section (STORY-104.4).
+
+        Scans dependencies, blocks, and prose for bare ``TAP-###`` issue
+        refs and emits a deduped list so agents can jump to related
+        Linear issues without grepping the full epic body. Emitted for
+        all styles. Omitted entirely when no refs are found — this keeps
+        the section an agent-oriented enhancement that doesn't clutter
+        epics without Linear context.
+        """
+        refs: list[str] = []
+        prose_sources: list[str] = [
+            config.purpose_and_intent,
+            config.goal,
+            config.motivation,
+            *config.technical_notes,
+            *config.risks,
+            *config.non_goals,
+            *config.acceptance_criteria,
+            *config.dependencies,
+            *config.blocks,
+        ]
+        for source in prose_sources:
+            for ref in self._TAP_REF_RE.findall(source or ""):
+                if ref not in refs:
+                    refs.append(ref)
+
+        if not refs:
+            return []
+
+        return [
+            "<!-- docsmcp:start:refs -->",
+            "## Refs",
+            "",
+            ", ".join(refs),
+            "",
+            "<!-- docsmcp:end:refs -->",
+            "",
+        ]
 
     def _render_implementation_order(self, config: EpicConfig) -> list[str]:
         """Render the Implementation Order section (comprehensive only)."""
