@@ -10,7 +10,7 @@ Tools that enforce this policy:
 - `docs_lint_linear_issue` — read-only lint of an existing issue.
 - `docs_validate_linear_issue` — `{agent_ready, missing, score}`.
 - `docs_generate_linear_issue` (skill, possibly promoted to tool) — emits the template.
-- `tapps_linear_triage` — batch label/parent proposals across a project.
+- `docs_linear_triage` — batch label/parent proposals across a project.
 
 ## Template (locked)
 

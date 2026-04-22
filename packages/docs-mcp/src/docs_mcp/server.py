@@ -107,6 +107,7 @@ ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset(
         "docs_check_style",
         "docs_lint_linear_issue",
         "docs_validate_linear_issue",
+        "docs_linear_triage",
     }
 )
 

@@ -32,7 +32,7 @@ Policy lives in [docs/linear/AGENT_ISSUES.md](../linear/AGENT_ISSUES.md)
 | STORY-103.2 | Generator skill — expand template from structured inputs | skill | `.claude/skills/` | XS |
 | STORY-103.3 | `docs_lint_linear_issue` — read-only lint of one issue | tool | docs-mcp | M |
 | STORY-103.4 | `docs_validate_linear_issue` — `{agent_ready, missing, score}` | tool | docs-mcp | S |
-| STORY-103.5 | `tapps_linear_triage` — batch label + parent proposals | tool | tapps-mcp | L |
+| STORY-103.5 | `docs_linear_triage` — batch label + parent proposals | tool | docs-mcp | L |
 | STORY-103.6 | Deep review — `docs_generate_epic` / `docs_generate_story` | review | docs-mcp | M |
 
 Stories 103.5 and 103.6 may warrant sub-stories (`STORY-103.5.1`, etc.) when
@@ -50,7 +50,7 @@ Full path: add 103.4 → 103.5 → 103.6 in that order.
 | 2 | 103.2 | Zero-risk freebie after template locked — stops new bad issues today | 30 min |
 | 3 | 103.3 | Highest immediate value: audits existing 50 issues, read-only | 3–4 h |
 | 4 | 103.4 | Completes the lint → validate → generate triad; small; mostly reuses `docs_validate_epic` | 2–3 h |
-| 5 | 103.5 | Batch operation — wants stability from 103.3/103.4 first | 4–6 h |
+| 5 | 103.5 | Batch operation — wants stability from 103.3/103.4 first. Originally scoped for tapps-mcp; moved to docs-mcp during implementation to keep all Linear tools co-located and avoid a cross-package dep on the validator. | 4–6 h |
 | 6 | 103.6 | Last so we critique generators against real-world feedback from 103.3–5; folds in `EPIC-91` / `EPIC-92` findings | 2–3 h |
 
 Total to MVP (#1–#3): one working day.

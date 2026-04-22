@@ -10,6 +10,8 @@ Current tools:
       ``docs/linear/AGENT_ISSUES.md``.
     - ``docs_validate_linear_issue`` — pre-create gate returning
       ``{agent_ready, missing, score}``.
+    - ``docs_linear_triage`` — batch triage of N issues; proposes labels
+      and parent groupings.
 
 Policy reference: ``docs/linear/AGENT_ISSUES.md``.
 """
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
 from docs_mcp.linters.linear_issue import lint_issue
 from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call
 from docs_mcp.server_helpers import success_response
+from docs_mcp.triage.linear_issue import triage_issues
 from docs_mcp.validators.linear_issue import validate_issue
 
 _logger = structlog.get_logger(__name__)
@@ -212,9 +215,104 @@ def _validate_next_steps(data: dict[str, Any]) -> list[str]:
     return steps[:2]
 
 
+async def docs_linear_triage(
+    issues: list[dict[str, Any]],
+    enable_parent_grouping: bool = True,
+) -> dict[str, Any]:
+    """Batch-triage N Linear issues. Read-only proposals; no Linear writes.
+
+    The agent fetches issues via the Linear MCP plugin and passes the
+    payload list here. The tool runs each issue through the validator,
+    aggregates label proposals, clusters issues that share file paths
+    into parent-grouping candidates, and summarizes metadata gaps.
+
+    Typical workflow:
+        1. ``list_issues`` (Linear MCP) → collect open issues.
+        2. Reshape into this tool's input schema.
+        3. Call ``docs_linear_triage(issues=[...])``.
+        4. Review ``label_proposals`` / ``parent_groupings`` with the user.
+        5. Apply approved changes via Linear MCP ``save_issue``.
+
+    Input schema — each dict supports these keys (``id``, ``title``,
+    ``description`` are the only load-bearing ones):
+
+        {
+            "id": "TAP-686",
+            "title": "upgrade.py: rglob traverses node_modules",
+            "description": "## What\\n...",
+            "labels": ["Bug", "agent-ready"],
+            "priority": 2,
+            "estimate": 2.0,
+            "parent_id": "TAP-400",
+            "is_epic": false
+        }
+
+    Returns a ``TriageReport`` with:
+        - ``per_issue``: validator results per issue + extracted file paths.
+        - ``label_proposals``: ``{issue_id, from_label, to_label, reason}``
+          only for issues whose current agent-label differs from the
+          suggested one.
+        - ``parent_groupings``: ``{shared_path, issue_ids,
+          proposed_parent_title}`` for paths shared by ≥2 issues.
+        - ``metadata_gaps``: ``{no_priority, no_estimate}`` issue-id lists.
+        - ``summary``: aggregate counts + average score.
+
+    Args:
+        issues: List of issue payloads. Each dict needs at minimum
+            ``id``, ``title``, ``description``.
+        enable_parent_grouping: When False, skips file-path clustering
+            (cheaper for very large batches). Default True.
+    """
+    _record_call("docs_linear_triage")
+    start = time.perf_counter_ns()
+
+    report = triage_issues(issues)
+    data = report.model_dump()
+
+    if not enable_parent_grouping:
+        data["parent_groupings"] = []
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    next_steps = _triage_next_steps(data)
+
+    return success_response(
+        "docs_linear_triage",
+        elapsed_ms,
+        data,
+        next_steps=next_steps,
+    )
+
+
+def _triage_next_steps(data: dict[str, Any]) -> list[str]:
+    """Up to 3 imperative next steps summarizing the triage output."""
+    steps: list[str] = []
+    summary = data["summary"]
+    total = summary["total"]
+    ready = summary["agent_ready"]
+
+    if data["label_proposals"]:
+        steps.append(
+            f"Review {len(data['label_proposals'])} label change(s) and apply via Linear MCP."
+        )
+    if data["parent_groupings"]:
+        top = data["parent_groupings"][0]
+        steps.append(
+            f"Consider grouping {len(top['issue_ids'])} issues under a parent for "
+            f"`{top['shared_path']}` (+{len(data['parent_groupings']) - 1} more clusters)."
+        )
+    if summary["needs_clarification"] > 0 or summary["agent_blocked"] > 0:
+        non_ready = total - ready
+        steps.append(
+            f"{non_ready}/{total} issues are not agent-ready — see per_issue.missing for each."
+        )
+    return steps[:3]
+
+
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register Linear-issue tools on the shared mcp instance."""
     if "docs_lint_linear_issue" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_lint_linear_issue)
     if "docs_validate_linear_issue" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_validate_linear_issue)
+    if "docs_linear_triage" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_linear_triage)
