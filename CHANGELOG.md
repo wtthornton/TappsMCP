@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-04-22
+
+Major bump: the default audience of `docs_generate_story` flipped from human-review shape to the agent-issue template locked in `docs/linear/AGENT_ISSUES.md`. Callers that relied on the legacy shape must pass `audience="human"`. See `### Changed` below for the migration note.
+
+### Added
+
+- **Four Linear-issue quality tools in docs-mcp** — a new tool family that enforces the agent-facing Linear issue conventions locked in `docs/linear/AGENT_ISSUES.md` (EPIC-103).
+  - **`docs_lint_linear_issue`** — read-only lint with 9 rules (autolink mangle, UUID-wrapped refs, title length, missing file anchor / Acceptance, fenced-block anchoring, priority / estimate). Returns score, findings, suggested label, and reclaimable-noise byte count.
+  - **`docs_validate_linear_issue`** — pre-create gate returning `{agent_ready, score, missing, issues, suggested_label}`. Only HIGH-severity findings surface in `missing[]`; medium/low stay with the lint tool.
+  - **`docs_linear_triage`** — batch triage of N issue payloads. Aggregates label proposals, clusters issues sharing file paths into parent-grouping candidates, and summarizes metadata gaps. Read-only.
+  - Tool count: 32 → 35 in docs-mcp. All three tools take payloads in and never call Linear directly (the agent fetches via the Linear MCP plugin).
+- **`/linear-issue` skill** (`.claude/skills/linear-issue/SKILL.md`) — expands the 5-section template from a free-form ask. Haiku-backed.
+- **`## Refs` section on `docs_generate_epic`** — auto-extracts bare `TAP-###` refs from dependencies, blocks, motivation, goal, purpose_and_intent, technical_notes, risks, non_goals, and acceptance_criteria (STORY-104.4). Emitted for all styles when any refs are found; omitted otherwise.
+- **`docs/linear/AGENT_ISSUES.md`** — durable policy locking the 5-section template (What / Where / Why / Acceptance / Refs), agent-readiness label taxonomy (`agent-ready` / `needs-clarification` / `agent-blocked`), and the default 2-level epic→story hierarchy.
+
+### Changed
+
+- **BREAKING: `docs_generate_story` defaults to `audience="agent"`** (STORY-104.1). The new default emits the 5-section Linear-issue template with enforcement — title ≤ 80 chars, ≥ 1 `file.ext:LINE-RANGE` anchor in `files`, and ≥ 1 `acceptance_criteria` entry. Violations return a structured `INPUT_INVALID` error. Pass `audience="human"` to keep the legacy product-review shape (user story statement, sizing, tasks, definition of done, INVEST checklist, etc.). Round-trip guaranteed: any successful agent-mode output passes `docs_validate_linear_issue` with `agent_ready=true, score=100`.
+- Version bump: tapps-core 2.11.0 → 3.0.0, tapps-mcp 2.11.0 → 3.0.0, docs-mcp 2.11.0 → 3.0.0. npm wrappers synced from 2.10.4 → 3.0.0.
+
+### Fixed
+
+- **Minimal-style epics no longer fail validation** (STORY-104.2) — `docs_generate_epic(style="minimal")` now emits `## Motivation`, which `docs_validate_epic` requires. Prior behavior: every minimal epic raised a missing-section error.
+- **In-epic story stubs now emit a `#### Acceptance Criteria` heading** (STORY-104.3) — the validator's AC-section parser requires an H2 or H4 heading; the prior inline `(N acceptance criteria)` marker was ignored, flagging every story with `ac_count > 0` as missing AC. Stubs now emit the heading plus `ac_count` placeholder checkboxes.
+
+### Closed epics
+
+- **EPIC-91** (epic generator quality gaps) — all 5 stories confirmed implemented by the [EPIC-103 generator review](docs/reviews/EPIC-103-REVIEW-generators.md). Status flipped from "Proposed" to "Done".
+- **EPIC-92** (story generator quality gaps) — all 5 stories confirmed implemented. Status flipped from "Proposed" to "Done".
+- **EPIC-103** (Linear issue quality tooling) — policy + 3 tools + skill + review doc. 6 of 6 stories shipped in one day.
+- **EPIC-104** (agent-mode for doc generators) — 4 of 4 stories shipped; STORY-104.1 reversed to agent-default per user call; STORY-104.4 slimmed to the `## Refs` emitter per the review's "option 3" recommendation.
+
 ## [2.10.7] - 2026-04-21
 
 ### Fixed
