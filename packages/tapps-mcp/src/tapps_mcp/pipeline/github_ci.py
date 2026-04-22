@@ -14,6 +14,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+MANAGED_WORKFLOW_FILES: tuple[str, ...] = ("codeql-analysis.yml",)
+"""Workflow filenames TappsMCP writes into ``.github/workflows/``.
+
+Consumer projects can add their own workflows (e.g. ``ci.yml``, ``release.yml``)
+alongside these — the upgrade pipeline never touches files outside this list.
+"""
+
+
 # ---------------------------------------------------------------------------
 # CodeQL Scanning Workflow
 # ---------------------------------------------------------------------------

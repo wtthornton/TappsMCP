@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-04-22
+
+### Changed
+
+- **Extended dry-run precision to `ci_workflows` and `github_templates`.** Follow-up to 3.2.0 feedback: these two components now return structured `{action, managed_files, preserved_files}` dicts matching the agents/skills pattern. Consumer-authored workflows (e.g. `ci.yml`, `release.yml`) under `.github/workflows/` and custom issue forms under `.github/ISSUE_TEMPLATE/` now appear in `preserved_files`, and root `.github/` entries like `CODEOWNERS` are listed too. `dry_run_summary` rolls these up alongside platform components. `github_copilot` and `governance` stay on the simpler `would-regenerate` hint (their generators span version-markered files and don't benefit from enumeration).
+- Source of truth for managed filenames now lives in `MANAGED_WORKFLOW_FILES` (`github_ci.py`) and `MANAGED_ISSUE_TEMPLATE_FILES` / `MANAGED_GITHUB_ROOT_FILES` (`github_templates.py`) — so adding a new workflow or template template updates the dry-run output automatically.
+
 ## [3.2.0] - 2026-04-22
 
 ### Changed

@@ -488,12 +488,16 @@ class TestUpgradePipeline:
         assert "security_policy" in governance
         assert "codeowners" in governance
 
-    def test_dry_run_reports_would_regenerate_for_github_templates(self, tmp_path: Path) -> None:
-        """Dry run reports would-regenerate for github_templates."""
+    def test_dry_run_reports_managed_files_for_github_templates(self, tmp_path: Path) -> None:
+        """Dry run reports structured managed/preserved details for github_templates."""
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 
         result = upgrade_pipeline(tmp_path, dry_run=True)
-        assert result["components"]["github_templates"] == {"action": "would-regenerate"}
+        tpl = result["components"]["github_templates"]
+        assert isinstance(tpl, dict)
+        assert tpl["action"] == "would-write-managed-files"
+        assert "PULL_REQUEST_TEMPLATE.md" in tpl["managed_files"]
+        assert "dependabot.yml" in tpl["managed_files"]
 
     def test_dry_run_reports_would_regenerate_for_governance(self, tmp_path: Path) -> None:
         """Dry run reports would-regenerate for governance."""

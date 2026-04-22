@@ -429,6 +429,72 @@ class TestUpgradeDryRun:
         assert any("ralph-quickfix" in p for p in preserved)
         assert summary["preserved_file_count"] >= 2
 
+    def test_dry_run_preserves_custom_ci_workflows(self, tmp_path: Path) -> None:
+        """Dry run lists non-managed ``.github/workflows/`` files as preserved.
+
+        The upgrade only writes ``codeql-analysis.yml``; other workflows
+        (CI, release, etc.) stay untouched.
+        """
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        wf_dir = tmp_path / ".github" / "workflows"
+        wf_dir.mkdir(parents=True)
+        (wf_dir / "ci.yml").write_text("custom ci\n", encoding="utf-8")
+        (wf_dir / "release.yml").write_text("custom release\n", encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        ci = result["components"]["ci_workflows"]
+        assert isinstance(ci, dict)
+        assert ci["action"] == "would-write-managed-files"
+        assert "codeql-analysis.yml" in ci["managed_files"]
+        assert "ci.yml" in ci["preserved_files"]
+        assert "release.yml" in ci["preserved_files"]
+
+    def test_dry_run_preserves_custom_github_templates(self, tmp_path: Path) -> None:
+        """Dry run lists non-managed ``.github/`` entries as preserved.
+
+        Covers both custom issue forms in ``.github/ISSUE_TEMPLATE/`` and
+        root-level entries like ``CODEOWNERS`` / ``FUNDING.yml``.
+        """
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        github_dir = tmp_path / ".github"
+        github_dir.mkdir()
+        (github_dir / "CODEOWNERS").write_text("@team\n", encoding="utf-8")
+        it_dir = github_dir / "ISSUE_TEMPLATE"
+        it_dir.mkdir()
+        (it_dir / "security-vulnerability.yml").write_text("custom\n", encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        tpl = result["components"]["github_templates"]
+        assert isinstance(tpl, dict)
+        assert tpl["action"] == "would-write-managed-files"
+        assert "PULL_REQUEST_TEMPLATE.md" in tpl["managed_files"]
+        assert "dependabot.yml" in tpl["managed_files"]
+        assert any(m.startswith("ISSUE_TEMPLATE/") for m in tpl["managed_files"])
+        assert "CODEOWNERS" in tpl["preserved_files"]
+        assert "ISSUE_TEMPLATE/security-vulnerability.yml" in tpl["preserved_files"]
+
+    def test_dry_run_summary_aggregates_github_artifacts(self, tmp_path: Path) -> None:
+        """Summary rolls up repo-scope GitHub preserved files alongside platforms."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        wf_dir = tmp_path / ".github" / "workflows"
+        wf_dir.mkdir(parents=True)
+        (wf_dir / "ci.yml").write_text("x\n", encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        summary = result["dry_run_summary"]
+        assert any("ci_workflows/ci.yml" in p for p in summary["preserved_files"])
+        # Managed count should include the 6 github_templates + 1 ci_workflow
+        assert summary["managed_file_count"] >= 7
+
     def test_dry_run_summary_absent_on_live_run(self, tmp_path: Path) -> None:
         """Live (non-dry-run) invocations do not include ``dry_run_summary``."""
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline

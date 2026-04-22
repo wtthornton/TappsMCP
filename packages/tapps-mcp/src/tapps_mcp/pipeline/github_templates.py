@@ -20,6 +20,29 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+MANAGED_ISSUE_TEMPLATE_FILES: tuple[str, ...] = (
+    "bug-report.yml",
+    "feature-request.yml",
+    "task.yml",
+    "config.yml",
+)
+"""Filenames TappsMCP writes into ``.github/ISSUE_TEMPLATE/``.
+
+Consumer-authored issue forms (e.g. ``security-vulnerability.yml``) alongside
+these are preserved by the upgrade pipeline.
+"""
+
+MANAGED_GITHUB_ROOT_FILES: tuple[str, ...] = (
+    "PULL_REQUEST_TEMPLATE.md",
+    "dependabot.yml",
+)
+"""Filenames TappsMCP writes directly into ``.github/``.
+
+Other ``.github/`` entries (e.g. ``CODEOWNERS``, custom workflows under
+``.github/workflows/``) are preserved.
+"""
+
+
 # ---------------------------------------------------------------------------
 # Issue Form Templates (YAML-defined structured forms)
 # ---------------------------------------------------------------------------

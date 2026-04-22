@@ -394,22 +394,32 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
     skipped: list[str] = []
     review_flags: list[str] = []
 
+    def _absorb_component(scope: str, name: str, value: Any) -> None:
+        if isinstance(value, dict):
+            managed_files = value.get("managed_files", [])
+            managed_skills = value.get("managed_skills", [])
+            nonlocal managed
+            managed += len(managed_files) + len(managed_skills)
+            for item in value.get("preserved_files", []):
+                preserved_items.append(f"{scope}:{name}/{item}")
+            for item in value.get("preserved_skills", []):
+                preserved_items.append(f"{scope}:{name}/{item}")
+        elif isinstance(value, str):
+            if value.startswith("skipped"):
+                skipped.append(f"{scope}:{name}")
+            elif value.startswith("would-refresh") or value.startswith("would-merge"):
+                review_flags.append(f"{scope}:{name}")
+
     platforms = result.get("components", {}).get("platforms", [])
     for host_result in platforms:
         host = host_result.get("host", "?")
         for name, value in host_result.get("components", {}).items():
-            if isinstance(value, dict):
-                managed += len(value.get("managed_files", []))
-                managed += len(value.get("managed_skills", []))
-                for item in value.get("preserved_files", []):
-                    preserved_items.append(f"{host}:{name}/{item}")
-                for item in value.get("preserved_skills", []):
-                    preserved_items.append(f"{host}:{name}/{item}")
-            elif isinstance(value, str):
-                if value.startswith("skipped"):
-                    skipped.append(f"{host}:{name}")
-                elif value.startswith("would-refresh") or value.startswith("would-merge"):
-                    review_flags.append(f"{host}:{name}")
+            _absorb_component(host, name, value)
+
+    # Top-level (platform-agnostic) components: GitHub artifacts, Karpathy, etc.
+    for name in ("ci_workflows", "github_templates"):
+        value = result.get("components", {}).get(name)
+        _absorb_component("repo", name, value)
 
     claude_md = result.get("components", {}).get("claude_md")
     if isinstance(claude_md, str) and claude_md.startswith("would"):
@@ -1065,6 +1075,60 @@ def _detect_platform(project_root: Path) -> str:
     return ""
 
 
+def _dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
+    """Populate dry-run hints for GitHub-hosted artifact generators.
+
+    Mirrors the agents/skills precision pattern for ``ci_workflows`` and
+    ``github_templates`` — enumerates managed vs preserved files so consumers
+    can see custom workflows / issue forms are safe. ``github_copilot`` and
+    ``governance`` stay on the simpler ``would-regenerate`` hint for now;
+    their generators span multiple directories with version markers and
+    don't benefit from enumeration the way shared directories do.
+    """
+    from tapps_mcp.pipeline.github_ci import MANAGED_WORKFLOW_FILES
+    from tapps_mcp.pipeline.github_templates import (
+        MANAGED_GITHUB_ROOT_FILES,
+        MANAGED_ISSUE_TEMPLATE_FILES,
+    )
+
+    workflows_dir = project_root / ".github" / "workflows"
+    managed_workflows = frozenset(MANAGED_WORKFLOW_FILES)
+    result["components"]["ci_workflows"] = {
+        "action": "would-write-managed-files",
+        "managed_files": sorted(managed_workflows),
+        "preserved_files": _enumerate_preserved(workflows_dir, managed_workflows),
+    }
+
+    issue_template_dir = project_root / ".github" / "ISSUE_TEMPLATE"
+    managed_issue_templates = frozenset(MANAGED_ISSUE_TEMPLATE_FILES)
+    github_root_dir = project_root / ".github"
+    managed_github_root = frozenset(MANAGED_GITHUB_ROOT_FILES)
+    # Exclude the subdirectories the upgrade writes into from the "preserved"
+    # roll-up at ``.github/`` — they're enumerated separately.
+    github_root_managed_for_listing = managed_github_root | {
+        "ISSUE_TEMPLATE",
+        "workflows",
+    }
+    result["components"]["github_templates"] = {
+        "action": "would-write-managed-files",
+        "managed_files": sorted(
+            [*(f"ISSUE_TEMPLATE/{n}" for n in managed_issue_templates), *managed_github_root]
+        ),
+        "preserved_files": sorted(
+            [
+                *(
+                    f"ISSUE_TEMPLATE/{n}"
+                    for n in _enumerate_preserved(issue_template_dir, managed_issue_templates)
+                ),
+                *_enumerate_preserved(github_root_dir, github_root_managed_for_listing),
+            ]
+        ),
+    }
+
+    result["components"]["github_copilot"] = {"action": "would-regenerate"}
+    result["components"]["governance"] = {"action": "would-regenerate"}
+
+
 def _run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
     """Run GitHub-hosted artifact generators (CI, Copilot, templates, governance).
 
@@ -1337,10 +1401,7 @@ def upgrade_pipeline(
     elif not dry_run:
         _run_github_artifacts(project_root, result)
     else:
-        result["components"]["ci_workflows"] = {"action": "would-regenerate"}
-        result["components"]["github_copilot"] = {"action": "would-regenerate"}
-        result["components"]["github_templates"] = {"action": "would-regenerate"}
-        result["components"]["governance"] = {"action": "would-regenerate"}
+        _dry_run_github_artifacts(project_root, result)
 
     result["success"] = len(result["errors"]) == 0
     result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
