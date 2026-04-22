@@ -1,8 +1,10 @@
 # EPIC-103: Linear issue quality tooling
 
-**Status**: In progress
+**Status**: Closed — 2026-04-22 (all 6 stories shipped in one day)
 **Owner**: Bill Thornton
 **Started**: 2026-04-22
+**Closed**: 2026-04-22
+**Follow-on**: [docs/reviews/EPIC-103-REVIEW-generators.md](../reviews/EPIC-103-REVIEW-generators.md) proposes optional EPIC-104 for agent-mode generator flags + 2 drift-bug fixes.
 
 ## Outcome
 
@@ -33,7 +35,7 @@ Policy lives in [docs/linear/AGENT_ISSUES.md](../linear/AGENT_ISSUES.md)
 | STORY-103.3 | `docs_lint_linear_issue` — read-only lint of one issue | tool | docs-mcp | M |
 | STORY-103.4 | `docs_validate_linear_issue` — `{agent_ready, missing, score}` | tool | docs-mcp | S |
 | STORY-103.5 | `docs_linear_triage` — batch label + parent proposals | tool | docs-mcp | L |
-| STORY-103.6 | Deep review — `docs_generate_epic` / `docs_generate_story` | review | docs-mcp | M |
+| STORY-103.6 | Deep review — `docs_generate_epic` / `docs_generate_story` ([review](../reviews/EPIC-103-REVIEW-generators.md)) | review | docs-mcp | Done |
 
 Stories 103.5 and 103.6 may warrant sub-stories (`STORY-103.5.1`, etc.) when
 scoped in detail; decision deferred to story-start time per the 2-level
