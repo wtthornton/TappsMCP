@@ -1,5 +1,9 @@
 # Tech Stack
 
+> Companion to [README.md](README.md) (project overview), [CLAUDE.md](CLAUDE.md) (AI assistant guidance),
+> and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (module layout and data flow).
+> For install + consumer setup see [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md).
+
 ## Language & Runtime
 - **Python 3.12+** with `from __future__ import annotations`
 - **uv** package manager (workspace monorepo)
@@ -42,9 +46,11 @@
 - **SBOM** - Supply chain security
 
 ## Architecture
-- **3-package monorepo**: tapps-core (library), tapps-mcp (26 tools), docs-mcp (32 tools)
+- **3-package monorepo**: tapps-core (library), tapps-mcp (26 tools), docs-mcp (32 tools) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module map and data flow
 - **MCP Protocol**: 2025-11-25 (latest stable)
-- **7-category scoring**: complexity, security, maintainability, test coverage, performance, structure, devex
+- **7-category scoring**: complexity, security, maintainability, test coverage, performance, structure, devex — see [docs/CHECKLIST.md](docs/CHECKLIST.md) for category weights and [README.md](README.md) for scoring tool reference
 - **17 domain experts** with 174 curated knowledge files
-- **BM25 ranked retrieval** for memory search
+- **Memory subsystem**: see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) for the 33-action `tapps_memory` surface; [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for retrieval, decay, consolidation, and federation internals
 - **Adaptive learning** with domain weight persistence
+- **Config reference**: all Pydantic settings + env vars listed in [docs/CONFIG_REFERENCE.md](docs/CONFIG_REFERENCE.md)
+- **Troubleshooting**: common install / hook / Cursor issues covered in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)

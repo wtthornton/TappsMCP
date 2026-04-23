@@ -83,6 +83,14 @@ class MetadataGaps(BaseModel):
 
 
 class TriageSummary(BaseModel):
+    """Aggregate counts for a Linear issue triage batch.
+
+    Returned as part of :class:`TriageReport.summary`. Values reflect the
+    suggested agent-readiness label for each triaged issue (``agent-ready``,
+    ``needs-clarification``, ``agent-blocked``) per the policy in
+    ``docs/linear/AGENT_ISSUES.md``.
+    """
+
     total: int
     agent_ready: int
     needs_clarification: int
@@ -91,6 +99,15 @@ class TriageSummary(BaseModel):
 
 
 class TriageReport(BaseModel):
+    """Full output of :func:`triage_issues` for a batch of Linear issue payloads.
+
+    Combines per-issue lint results, label proposals, parent-grouping
+    candidates, metadata gap rollups, and an aggregate :class:`TriageSummary`.
+    Consumed by the ``docs_linear_triage`` MCP tool and by agent workflows
+    that want a single pass over a backlog before saving via the Linear
+    plugin. Read-only — the triage function never calls Linear directly.
+    """
+
     per_issue: list[IssueTriageResult]
     label_proposals: list[LabelProposal]
     parent_groupings: list[ParentGrouping]
