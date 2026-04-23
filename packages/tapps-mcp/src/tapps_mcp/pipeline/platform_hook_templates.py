@@ -1650,6 +1650,7 @@ SUPPORTED_CLAUDE_HOOK_KEYS: frozenset[str] = frozenset(
         "Notification",
         "UserPromptSubmit",
         "Stop",
+        "StopFailure",
         "SubagentStart",
         "SubagentStop",
         "PreCompact",

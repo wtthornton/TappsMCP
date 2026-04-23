@@ -1,6 +1,6 @@
 {
   "name": "tapps-mcp",
-  "version": "3.2.3",
+  "version": "3.2.4",
   "description": "MCP server providing code quality tools - npm wrapper for the Python tapps-mcp package",
   "bin": {
     "tapps-mcp": "./bin/tapps-mcp.js"

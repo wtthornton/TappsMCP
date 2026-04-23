@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.4] - 2026-04-23
+
+### Fixed
+
+- **`tapps-mcp doctor` no longer flags `StopFailure` as an unsupported hook key.** Added `StopFailure` to `SUPPORTED_CLAUDE_HOOK_KEYS` in [platform_hook_templates.py](packages/tapps-mcp/src/tapps_mcp/pipeline/platform_hook_templates.py) — it's a real Claude Code hook event that fires when a `Stop` hook returns non-zero, parallel to the existing `PostToolUseFailure`. Surfaced by a Ralph-repo audit where a legitimate error-handler hook was being reported as "Unsupported hook keys (Claude Code will skip file)" even though the hook works. No behavior change — just stops the false positive in the doctor output.
+
 ## [3.2.3] - 2026-04-23
 
 ### Documentation
