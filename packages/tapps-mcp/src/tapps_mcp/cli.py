@@ -920,9 +920,13 @@ def research_cmd(question: str) -> None:
 @main.command("consult-expert")
 @click.option("--question", required=True, help="Technical question to ask.")
 def consult_expert_cmd(question: str) -> None:
-    """DEPRECATED — Expert system removed (EPIC-94)."""
+    """DEPRECATED — Expert system removed (EPIC-94). Use tapps_lookup_docs."""
     click.echo(click.style("tapps-mcp consult-expert is deprecated (EPIC-94).", fg="yellow"))
-    click.echo("Expert system has been removed. Use AgentForge for expert consultation.")
+    click.echo(
+        "Expert system has been removed. For library API questions, use the "
+        "`tapps_lookup_docs` MCP tool (backed by Context7). For domain "
+        "consultation, use AgentForge."
+    )
 
 
 @main.command(name="replace-exe")

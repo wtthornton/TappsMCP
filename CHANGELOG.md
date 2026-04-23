@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.5] - 2026-04-23
+
+### Changed
+
+- **Agent-facing clarity pass: every surface an agent reads now tells it *when* to call a tool and *what the benefit* is.** Fixes found during a sweep of CLI help output and `.mcp.json` `instructions` strings across 7 projects (tapps-mcp itself + 6 consumers).
+  - **`.mcp.json` `instructions`** (this repo's tapps-mcp entry + the tapps-mcp / docs-mcp entries in AgentForge, Alpaca, tapps-brain, Workstation, everything-claude-code, ralph-claude-code): rewritten from feature lists to structured *trigger points* + *benefit* text so agents understand which user action each tool responds to. Previously read like a brochure; now reads like a decision table.
+  - **`docsmcp generate` CLI**: reworded the placeholder from *"not yet implemented"* to a clear pointer that generation runs via MCP tools (with the full list of 18 generators). Previous text misled users into thinking the feature didn't exist.
+  - **`tapps-mcp consult-expert` CLI** (deprecated): replacement hint now names `tapps_lookup_docs` explicitly (previously pointed generically at AgentForge).
+- **AGENTS.md cleanups** in both packages:
+  - `packages/docs-mcp/AGENTS.md` added the three Linear-issue tools shipped in 3.0.0 (`docs_lint_linear_issue`, `docs_validate_linear_issue`, `docs_linear_triage`) to both the tool inventory and the "When to use each tool" tables, and bumped the tool count from 32 → 35.
+  - Top-level `AGENTS.md` removed a stale reference to `tapps_project_profile` (not a registered MCP tool anymore — just a leftover output schema), replaced it with `tapps_session_start` + `docs_validate_linear_issue` pointers. Also fixed a duplicate step number in the Recommended workflow and bumped the `tapps-agents-version` marker to match the current release.
+
+No code-behaviour change.
+
 ## [3.2.4] - 2026-04-23
 
 ### Fixed

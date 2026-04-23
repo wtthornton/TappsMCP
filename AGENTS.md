@@ -1,4 +1,4 @@
-<!-- tapps-agents-version: 2.10.7 -->
+<!-- tapps-agents-version: 3.2.4 -->
 # TappsMCP - instructions for AI assistants
 
 When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
@@ -58,14 +58,14 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 1. **Session start:** Call `tapps_session_start` (returns server info and project context).
 2. **Check project memory:** Consider calling `tapps_memory(action="search", query="...")` to recall past decisions and project context.
 3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
-3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
-4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
-5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
-6. **Before declaring work complete:**
+4. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
+5. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
+6. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
+7. **Before declaring work complete:**
    - Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to score + gate changed files. Never call without `file_paths` in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
+8. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
 
@@ -86,10 +86,11 @@ When creating or updating **epic**, **story**, or **prompt** planning artifacts 
 
 **Recommended TappsMCP/DocsMCP calls:**
 
-- **tapps_project_profile** — project root, tech stack, constraints (for context/technical notes).
+- **tapps_session_start** — returns project root, installed checkers, docs provider, and pipeline stage info (use this for context/technical notes instead of the removed `tapps_project_profile`).
 - **docs_generate_epic** — primary epic generator (EpicConfig); use for parent epics.
 - **docs_generate_story** — primary story generator (StoryConfig); use for child stories.
 - **docs_generate_prompt** — prompt artifact generator (PromptConfig); use for LLM-facing prompt docs.
+- **docs_validate_linear_issue** — when the epic/story will become a Linear issue, run this before save so only agent-ready payloads go live.
 
 Provide **purpose_and_intent** for epic and story when calling the generators so the required "Purpose & Intent" section is populated.
 

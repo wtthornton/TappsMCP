@@ -6,12 +6,13 @@ When the **DocsMCP** MCP server is configured in your host (Claude Code, Cursor,
 
 ## What DocsMCP is
 
-DocsMCP is an MCP server that provides 32 tools for:
+DocsMCP is an MCP server that provides 35 tools for:
 
 - **Code analysis** -- module maps, API surface extraction, dependency analysis via AST parsing
 - **Git analysis** -- commit history with conventional commit parsing, version detection from tags
 - **Documentation generation** -- README, CHANGELOG, release notes, API reference, ADRs, onboarding guides, contributing guides, PRDs, epics, stories, prompt templates, diagrams (Mermaid/PlantUML/D2), interactive HTML diagrams, llms.txt, frontmatter, architecture templates, doc index
 - **Documentation validation** -- drift detection, completeness scoring, link checking, freshness classification, Diataxis coverage analysis, cross-reference validation, epic validation, deterministic style/tone checks
+- **Linear-issue quality tooling** (v3.0.0+) -- lint, validate, and batch-triage Linear issue payloads against the 5-section agent-issue template (What / Where / Why / Acceptance / Refs) defined in `docs/linear/AGENT_ISSUES.md`. Read-only; the agent fetches issue payloads via the Linear MCP plugin and passes them here for scoring.
 - **Configuration** -- view and update DocsMCP settings per-project
 - **TappsMCP integration** -- optional quality score enrichment when TappsMCP is also available
 
@@ -57,6 +58,9 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_check_diataxis** | Diataxis quadrant coverage analysis and balance scoring |
 | **docs_check_cross_refs** | Cross-reference validation (orphans, broken refs, backlinks) |
 | **docs_check_style** | Deterministic style/tone checks for markdown (passive voice, jargon, headings, sentence length, tense consistency) |
+| **docs_lint_linear_issue** | Lint a Linear issue payload against the agent-issue template (9 rules, agent-readiness label) |
+| **docs_validate_linear_issue** | Pre-create gate: HIGH-severity findings only, returns `{agent_ready, score, missing, issues}` |
+| **docs_linear_triage** | Batch triage of N issue payloads — label proposals, parent groupings, metadata gaps |
 
 ---
 
@@ -96,6 +100,9 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_check_diataxis** | When assessing **documentation balance** across Diataxis quadrants (tutorials, how-to, reference, explanation). |
 | **docs_check_cross_refs** | When validating **cross-references** between documentation files -- finds orphans and broken refs. |
 | **docs_check_style** | When reviewing **writing quality** in markdown -- flags jargon, passive voice, long sentences, heading case, and tense mixing. Use `output_format="vale"` for Vale-shaped output. |
+| **docs_lint_linear_issue** | When the user hands you a Linear issue to prep for agent work -- scores against 9 rules (autolink mangle, UUID refs, title length, missing file anchor / Acceptance, fenced-block anchoring, priority / estimate). Returns score, findings, suggested agent-readiness label, and reclaimable-noise byte count. |
+| **docs_validate_linear_issue** | **Pre-create gate** before saving an issue via the Linear plugin -- returns `{agent_ready, score, missing, issues, suggested_label}`. Only HIGH-severity findings surface in `missing[]`; medium/low stay with the lint tool. |
+| **docs_linear_triage** | When auditing a **backlog or batch** of Linear issues -- aggregates label proposals, clusters issues sharing file paths into parent-grouping candidates, summarizes metadata gaps. Read-only, takes N issue payloads as input. |
 
 ---
 

@@ -94,9 +94,28 @@ def doctor() -> None:
 
 @cli.command()
 def generate() -> None:
-    """Generate documentation (not yet implemented)."""
-    click.echo("Not yet implemented.")
-    click.echo("Use docs_generate_readme, docs_generate_changelog, etc. via MCP tools.")
+    """Pointer: documentation is generated via MCP tools, not this CLI subcommand.
+
+    DocsMCP ships 18+ generators (README, CHANGELOG, release notes, API docs,
+    ADRs, onboarding, contributing, PRDs, diagrams, architecture, epics,
+    stories, purpose, doc index, llms.txt, frontmatter, interactive diagrams).
+    They are invoked via MCP from your AI assistant — not as CLI commands.
+    """
+    click.echo(
+        "Documentation generation runs via MCP tools, not this CLI.\n"
+        "\n"
+        "From your AI assistant session, call any of:\n"
+        "  docs_generate_readme, docs_generate_changelog, docs_generate_release_notes,\n"
+        "  docs_generate_api, docs_generate_adr, docs_generate_onboarding,\n"
+        "  docs_generate_contributing, docs_generate_prd, docs_generate_diagram,\n"
+        "  docs_generate_architecture, docs_generate_epic, docs_generate_story,\n"
+        "  docs_generate_purpose, docs_generate_doc_index, docs_generate_llms_txt,\n"
+        "  docs_generate_frontmatter, docs_generate_interactive_diagrams,\n"
+        "  docs_generate_prompt.\n"
+        "\n"
+        "Start the server with:  docsmcp serve  (stdio)\n"
+        "                       docsmcp serve --transport http --port 8000\n"
+    )
 
 
 @cli.command()
