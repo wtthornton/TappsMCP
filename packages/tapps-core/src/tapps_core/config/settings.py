@@ -696,6 +696,24 @@ class TappsMCPSettings(BaseSettings):
         default=None,
         description="Context7 API key (optional).",
     )
+    linear_api_key: SecretStr | None = Field(
+        default=None,
+        description="Linear API key for tapps_linear_snapshot GraphQL calls (optional).",
+    )
+    linear_api_url: str = Field(
+        default="https://api.linear.app/graphql",
+        description="Linear GraphQL endpoint URL.",
+    )
+    linear_cache_ttl_open_seconds: int = Field(
+        default=300,
+        ge=0,
+        description="TTL for cached open/in-progress Linear issues (seconds). 0 disables caching.",
+    )
+    linear_cache_ttl_closed_seconds: int = Field(
+        default=3600,
+        ge=0,
+        description="TTL for cached closed/archived Linear issues (seconds). 0 disables caching.",
+    )
 
     # Scoring
     scoring_weights: ScoringWeights = Field(default_factory=ScoringWeights)

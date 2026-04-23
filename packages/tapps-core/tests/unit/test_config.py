@@ -15,6 +15,7 @@ class TestTappsMCPSettings:
     def test_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Isolate from runner env so default is None when key not set
         monkeypatch.delenv("TAPPS_MCP_CONTEXT7_API_KEY", raising=False)
+        monkeypatch.delenv("TAPPS_MCP_LINEAR_API_KEY", raising=False)
         settings = TappsMCPSettings()
         assert settings.quality_preset == "standard"
         assert settings.log_level == "INFO"
@@ -23,6 +24,28 @@ class TestTappsMCPSettings:
         assert settings.context7_api_key is None
         assert settings.expert_auto_fallback is True
         assert settings.expert_fallback_max_chars == 1200
+
+    def test_linear_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("TAPPS_MCP_LINEAR_API_KEY", raising=False)
+        monkeypatch.delenv("TAPPS_MCP_LINEAR_API_URL", raising=False)
+        settings = TappsMCPSettings()
+        assert settings.linear_api_key is None
+        assert settings.linear_api_url == "https://api.linear.app/graphql"
+        assert settings.linear_cache_ttl_open_seconds == 300
+        assert settings.linear_cache_ttl_closed_seconds == 3600
+
+    def test_linear_api_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TAPPS_MCP_LINEAR_API_KEY", "lin_api_test_secret")
+        settings = TappsMCPSettings()
+        assert settings.linear_api_key is not None
+        assert settings.linear_api_key.get_secret_value() == "lin_api_test_secret"
+
+    def test_linear_cache_ttl_rejects_negative(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("TAPPS_MCP_LINEAR_CACHE_TTL_OPEN_SECONDS", "-1")
+        with pytest.raises(ValueError):
+            TappsMCPSettings()
 
     def test_scoring_weights_default(self) -> None:
         settings = TappsMCPSettings()
