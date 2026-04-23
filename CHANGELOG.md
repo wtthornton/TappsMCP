@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.3] - 2026-04-23
+
+### Documentation
+
+- **Corrected stale tapps-brain descriptions across all top-level docs.** Multiple doc spots described tapps-brain as "SQLite + WAL + FTS5" when the deployed runtime is a Dockerized PostgreSQL service reached over HTTP at `localhost:8080` via `BrainBridge`. Updated [CLAUDE.md](CLAUDE.md), [README.md](README.md) (module table, feature list, `tapps_memory` reference, ecosystem section), [TECH_STACK.md](TECH_STACK.md), [docs/ONBOARDING.md](docs/ONBOARDING.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the `tapps_memory` docstring in [server_memory_tools.py](packages/tapps-mcp/src/tapps_mcp/server_memory_tools.py) to describe tapps-mcp's *role* (HTTP client of the brain service, `tapps_memory` surface) and point at the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) as the source of truth for storage, retrieval (BM25 + boosts), decay, consolidation, federation, and GC internals. Also moved per-project cap language from a literal "1500" to "see `TAPPS_BRAIN_MAX_ENTRIES` on the brain" so the doc doesn't drift when the cap changes.
+- Following the principle: *don't duplicate tapps-brain's own docs — link to them*. Describes what tapps-mcp does (HTTP client, 33-action `tapps_memory` surface); lets tapps-brain own its internals.
+
 ## [3.2.2] - 2026-04-23
 
 ### Added

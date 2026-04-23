@@ -43,7 +43,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 | Package | PyPI Name | Purpose | Tools |
 |---|---|---|---|
-| **tapps-brain** | `tapps-brain` | Standalone memory system (SQLite persistence, BM25 retrieval, decay, federation) | 0 (library) |
+| **tapps-brain** | `tapps-brain` | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). See [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for the canonical storage/retrieval/federation docs. | 0 (library; brain_* MCP tools ship in the service) |
 | **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, metrics, adaptive) | 0 (library) |
 | **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 26 |
 | **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 32 |
@@ -59,7 +59,7 @@ tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp
 - **58 deterministic MCP tools** (26 TappsMCP + 32 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Documentation lookup** via Context7 and LlmsTxt providers with local caching
-- **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) - project decisions survive across sessions (SQLite + BM25 retrieval, time-based decay, federation)
+- **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP and exposes it through `tapps_memory` (33 actions). Retrieval, decay, consolidation, and federation internals are documented in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain).
 - **Unified feature flags** - optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** - auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** - `tapps_init` sets up quality infrastructure in any project with one call
@@ -749,7 +749,7 @@ Quick index:
 
 ### tapps_memory
 
-**What it does:** Persistent, project-scoped shared memory (tapps-brain, SQLite WAL + FTS5 at `{project_root}/.tapps-mcp/memory/memory.db`). Tiers: **architectural**, **pattern**, **procedural**, **context** with configurable half-lives. **33 actions** (single tool, `action=` dispatch): CRUD (**save**, **save_bulk**, **get**, **list**, **delete**), **search**, **reinforce**, **gc**, **contradictions**, **reseed**, **consolidate** / **unconsolidate**, **import** / **export**, six **federate_***, **index_session**, **validate**, **maintain**, **safety_check**, **verify_integrity**, **profile_info** / **profile_list** / **profile_switch**, **health**, and Hive / Agent Teams (**hive_status**, **hive_search**, **hive_propagate**, **agent_register**). With default config, **architectural** **save** may **supersede** the active version chain (`store.supersede`) instead of overwriting in place. Shipped defaults also enable expert/research auto-save, recurring `tapps_quick_check` procedural memory, **tapps_impact_analysis** `memory_context`, and **memory_hooks** auto-recall/auto-capture — all overridable in `.tapps-mcp.yaml`. Cap: **1500** entries per project (auto-GC near capacity). Full list: [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md).
+**What it does:** Persistent, project-scoped shared memory. TappsMCP is a client of the [tapps-brain](https://github.com/wtthornton/tapps-brain) service (Docker + Postgres, HTTP at `localhost:8080`); `tapps_memory` exposes a stable 33-action surface on top of `BrainBridge`. Tiers: **architectural**, **pattern**, **procedural**, **context** with configurable half-lives. Actions (single tool, `action=` dispatch): CRUD (**save**, **save_bulk**, **get**, **list**, **delete**), **search**, **reinforce**, **gc**, **contradictions**, **reseed**, **consolidate** / **unconsolidate**, **import** / **export**, six **federate_***, **index_session**, **validate**, **maintain**, **safety_check**, **verify_integrity**, **profile_info** / **profile_list** / **profile_switch**, **health**, and Hive / Agent Teams (**hive_status**, **hive_search**, **hive_propagate**, **agent_register**). Shipped defaults also enable expert/research auto-save, recurring `tapps_quick_check` procedural memory, **tapps_impact_analysis** `memory_context`, and **memory_hooks** auto-recall/auto-capture — all overridable in `.tapps-mcp.yaml`. Per-project cap is set by tapps-brain's `TAPPS_BRAIN_MAX_ENTRIES` (auto-evicts at cap). Retrieval, decay, consolidation, supersede semantics, and federation internals are documented in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) — treat that as the source of truth. TappsMCP-side action list: [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md).
 
 **Why use it:** Agents start every session without project context unless you persist it. Shared memory holds decisions, patterns, and workflows across sessions, with decay and contradiction checks to reduce stale answers. Expert and research tools can pull in relevant memories automatically when enabled.
 
@@ -1092,7 +1092,7 @@ tapps-mcp      docs-mcp
 (26 tools)     (32 tools)
 ```
 
-**[tapps-brain](https://github.com/wtthornton/tapps-brain)** is a standalone memory system extracted from tapps-core. It provides SQLite-backed persistence, BM25 retrieval, time-based decay, contradiction detection, consolidation, federation, and garbage collection. It has its own release cycle and test suite (521+ tests).
+**[tapps-brain](https://github.com/wtthornton/tapps-brain)** is the standalone memory service extracted from tapps-core. It runs as a Dockerized Postgres-backed service that TappsMCP clients reach over HTTP at `localhost:8080`. Storage engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC internals all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) and its README/CHANGELOG — refer there for the authoritative description so this page doesn't drift. tapps-brain has its own release cycle and test suite.
 
 **tapps-core** provides shared infrastructure (config, security, logging, knowledge, metrics, adaptive). Its `memory/` package contains thin re-export shims that delegate to tapps-brain for backward compatibility (`from tapps_core.memory.store import MemoryStore` still works). The one exception is `injection.py`, which is a bridge adapter that translates TappsMCP settings into tapps-brain's `InjectionConfig`.
 

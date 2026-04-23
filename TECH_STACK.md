@@ -31,7 +31,7 @@
 - **sentence-transformers** - Semantic embeddings
 
 ## Storage
-- **SQLite** (WAL mode) - Memory persistence, FTS5 search
+- **tapps-brain** (PostgreSQL, Docker service at `localhost:8080`) — persistent cross-session memory, accessed from tapps-mcp via `BrainBridge`. Storage/retrieval details live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain).
 - **YAML** - Configuration files
 - **JSON/JSONL** - Metrics, audit logs, benchmark results
 

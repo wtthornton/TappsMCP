@@ -258,13 +258,15 @@ async def tapps_memory(
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
-    Side effects: save/delete/reinforce/gc/consolidate write to SQLite at
-    .tapps-mcp/memory/. get/list/search are read-only.
+    Side effects: save/delete/reinforce/gc/consolidate hit the tapps-brain
+    service (Postgres, default HTTP at localhost:8080) via BrainBridge.
+    get/list/search are read-only. In legacy in-process mode, writes go
+    to a local SQLite store under .tapps-mcp/memory/ instead.
 
     Memories are typed by tier (architectural, pattern, context), carry
-    confidence scores and metadata, and persist in SQLite. Use this tool
-    to save decisions, patterns, and context that should survive across
-    sessions and be available to all MCP-connected agents.
+    confidence scores and metadata, and persist across sessions. See the
+    tapps-brain repo (https://github.com/wtthornton/tapps-brain) for
+    storage, retrieval, decay, and consolidation internals.
 
     Args:
         action: One of "save", "save_bulk", "get", "list", "delete", "search",

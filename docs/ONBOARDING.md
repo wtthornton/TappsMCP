@@ -110,7 +110,7 @@ tapps-core (library)  <--  tapps-mcp (26 tools)
 | `gates/` | Quality gate evaluation |
 | `tools/` | External checker wrappers (ruff, mypy, bandit, radon, vulture) |
 | `experts/` | 17 domain experts with 174 knowledge files |
-| `memory/` | Persistent cross-session knowledge (SQLite + BM25) |
+| `memory/` | Persistent cross-session knowledge — HTTP client to the [tapps-brain](https://github.com/wtthornton/tapps-brain) service (Postgres) |
 | `knowledge/` | Documentation cache and Context7 integration |
 | `pipeline/` | Platform artifact generation (hooks, agents, skills) |
 | `security/` | Path validation, secret scanning, content safety |

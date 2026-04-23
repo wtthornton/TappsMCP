@@ -16,7 +16,7 @@ tapps-mcp      docs-mcp
 (26 tools)     (32 tools)
 ```
 
-**tapps-brain** (`pip install tapps-brain`) is a standalone memory library extracted from tapps-core. It provides SQLite persistence (WAL + FTS5), BM25 retrieval, time-based decay, contradiction detection, consolidation, federation, and garbage collection. It has its own repository ([github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain)), release cycle, and test suite (521+ tests).
+**tapps-brain** is the standalone memory service extracted from tapps-core. It runs as a Dockerized PostgreSQL-backed service that tapps-mcp reaches over HTTP (default `localhost:8080`) via `BrainBridge`. Persistence engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) — refer there for the authoritative description. tapps-brain has its own repository, release cycle, and test suite.
 
 Shared infrastructure (config, security, logging, knowledge, experts, metrics, adaptive) lives in `tapps-core`. Both MCP servers depend on it. Server files in tapps-mcp import from `tapps_core` directly for extracted packages.
 
@@ -160,7 +160,7 @@ The RAG-based expert consultation system was removed in EPIC-94. `tapps_consult_
 
 ## Memory subsystem
 
-Implemented by the standalone **tapps-brain** library (`pip install tapps-brain`). tapps-core/memory/ modules are re-export shims; injection.py is a bridge adapter translating TappsMCP settings into brain's config. Persistent cross-session knowledge (cap: 1500/project). BM25 ranked retrieval, time-based confidence decay, contradiction detection, garbage collection.
+Backed by **tapps-brain** — see the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for the canonical description of storage, retrieval (BM25 + boosts), time-based confidence decay, contradiction detection, and garbage collection. Per-project entry cap is controlled by tapps-brain's `TAPPS_BRAIN_MAX_ENTRIES`. tapps-core/memory/ modules are re-export shims; `injection.py` is a bridge adapter translating TappsMCP settings into brain's config.
 
 Two deployment modes via `BrainBridge` (server_helpers.py):
 - **HTTP mode** (default): Connects to tapps-brain HTTP service at `TAPPS_BRAIN_HTTP_URL` (default `http://localhost:8080`). Supports offline write-queue drain, circuit breaker with half-open recovery, graceful `BrainBridgeUnavailable` degraded payloads. Runtime version check validates installed brain meets the floor version.

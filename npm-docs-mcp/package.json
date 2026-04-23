@@ -1,6 +1,6 @@
 {
   "name": "docs-mcp",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "description": "MCP server for automated documentation generation, validation, and maintenance - npm wrapper for the Python docs-mcp package",
   "bin": {
     "docs-mcp": "./bin/docs-mcp.js"

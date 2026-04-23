@@ -12,7 +12,7 @@ This is a **uv workspace monorepo** with three packages plus an external depende
 
 | Package | Path | Purpose |
 |---|---|---|
-| **tapps-brain** | [github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain) | Standalone memory system (SQLite, BM25, decay, federation) |
+| **tapps-brain** | [github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain) | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). Accessed from tapps-mcp via `BrainBridge` and exposed through `tapps_memory`. See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for storage internals, retrieval, and operational docs — treat that as the source of truth. |
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, metrics, adaptive) |
 | **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (26 tools) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (32 tools) |
