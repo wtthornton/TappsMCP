@@ -248,7 +248,24 @@ def init(
     default="project",
     help="Config scope: 'project' (.mcp.json in project root, default) or 'user' (~/.claude.json).",
 )
-def upgrade(mcp_host: str, project_root: str, force: bool, dry_run: bool, scope: str) -> None:
+@click.option(
+    "--json",
+    "emit_json",
+    is_flag=True,
+    help=(
+        "Emit the structured upgrade result as JSON instead of the text summary. "
+        "With --dry-run, includes dry_run_summary.verdict plus per-component "
+        "managed_files / preserved_files lists."
+    ),
+)
+def upgrade(
+    mcp_host: str,
+    project_root: str,
+    force: bool,
+    dry_run: bool,
+    scope: str,
+    emit_json: bool,
+) -> None:
     """Refresh generated files after upgrading the `tapps-mcp` package.
 
     Re-merges AGENTS.md, platform rules, hooks, agents, skills, and Claude/Cursor settings.
@@ -264,6 +281,7 @@ def upgrade(mcp_host: str, project_root: str, force: bool, dry_run: bool, scope:
         force=force,
         dry_run=dry_run,
         scope=scope,
+        emit_json=emit_json,
     )
     if not success:
         raise SystemExit(1)

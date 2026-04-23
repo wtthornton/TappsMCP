@@ -959,6 +959,37 @@ class TestRunUpgrade:
         assert "AGENTS.md" in captured.out
         assert "created" in captured.out
 
+    def test_emit_json_outputs_parseable_json_with_summary(self, tmp_path, capsys):
+        """``emit_json=True`` writes valid JSON to stdout with the full dry-run dict.
+
+        Verifies the 3.2.2 CLI addition: the precision work from 3.2.0/3.2.1
+        is now accessible via ``tapps-mcp upgrade --json`` so CLI consumers
+        get the same ``dry_run_summary`` + ``managed_files`` / ``preserved_files``
+        lists that MCP tool callers already receive.
+        """
+        import json
+
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            result = run_upgrade(
+                mcp_host="claude-code",
+                project_root=str(tmp_path),
+                dry_run=True,
+                emit_json=True,
+            )
+        assert result is True
+        captured = capsys.readouterr()
+        # stdout must be pure JSON — no text-summary artefacts like "DRY-RUN"
+        assert "[DRY-RUN]" not in captured.out
+        parsed = json.loads(captured.out)
+        assert parsed["dry_run"] is True
+        assert "dry_run_summary" in parsed
+        assert parsed["dry_run_summary"]["verdict"] in {
+            "safe-to-run",
+            "review-recommended",
+        }
+        # AGENTS.md must not have been created under dry_run
+        assert not (tmp_path / "AGENTS.md").exists()
+
 
 class TestCliUpgrade:
     """Tests for the CLI upgrade command via Click's CliRunner."""

@@ -1443,6 +1443,7 @@ def run_upgrade(
     force: bool = False,
     dry_run: bool = False,
     scope: str = "project",
+    emit_json: bool = False,
 ) -> bool:
     """Validate and update all TappsMCP-generated files.
 
@@ -1456,8 +1457,27 @@ def run_upgrade(
         force: If ``True``, overwrite all generated files without prompting.
         dry_run: If ``True``, show what would be updated without making changes.
         scope: ``"project"`` (default) or ``"user"``. Only affects ``claude-code``.
+        emit_json: If ``True``, print the structured result dict as JSON to stdout
+            instead of the text summary. Surfaces ``dry_run_summary`` and per-
+            component ``managed_files`` / ``preserved_files`` so the CLI matches
+            the MCP tool's precision (3.2.0/3.2.1).
     """
+    import json
+
     from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+    if emit_json:
+        # Route all structlog output to stderr so stdout stays pure JSON for
+        # piping into jq/other tools. Without this, the default structlog
+        # config writes INFO lines to stdout and corrupts the payload.
+        import logging
+
+        from tapps_core.common.logging import setup_logging
+
+        setup_logging(level="WARNING")
+        # Belt-and-braces: drop stdlib loggers below WARNING as well in case
+        # code paths invoked by the pipeline use stdlib logging directly.
+        logging.getLogger().setLevel(logging.WARNING)
 
     root = Path(project_root).resolve()
     log.info(
@@ -1479,5 +1499,8 @@ def run_upgrade(
         platform = mcp_host
 
     result = upgrade_pipeline(root, platform=platform, force=force, dry_run=dry_run)
-    _format_upgrade_result(result, dry_run=dry_run)
+    if emit_json:
+        click.echo(json.dumps(result, indent=2, default=str))
+    else:
+        _format_upgrade_result(result, dry_run=dry_run)
     return bool(result.get("success", True))

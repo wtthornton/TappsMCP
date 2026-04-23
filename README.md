@@ -542,9 +542,17 @@ After upgrading TappsMCP (`pip install -U tapps-mcp`), refresh generated files:
 ```bash
 tapps-mcp upgrade                           # auto-detect host, update all files
 tapps-mcp upgrade --host claude-code        # target a specific host
-tapps-mcp upgrade --dry-run                 # preview changes without writing
+tapps-mcp upgrade --dry-run                 # preview changes without writing (text summary)
+tapps-mcp upgrade --dry-run --json          # preview as structured JSON (verdict + managed/preserved)
 tapps-mcp upgrade --force                   # overwrite even if up-to-date
 tapps-mcp upgrade --scope user              # upgrade user-level config (~/.claude.json)
+```
+
+Pipe `--json` into `jq` for scripting, CI gates, or agent decisions:
+
+```bash
+tapps-mcp upgrade --dry-run --json | jq '.dry_run_summary.verdict'  # "safe-to-run" or "review-recommended"
+tapps-mcp upgrade --dry-run --json | jq '.dry_run_summary.preserved_files'
 ```
 
 **What it updates:** AGENTS.md (via smart-merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `.claude/settings.json` permissions. Custom agents, skills, and hooks with names outside that set are preserved. `settings.json` hooks are merged by matcher — existing entries stay. Custom command paths (e.g. PyInstaller exe) in `.mcp.json` are also preserved.

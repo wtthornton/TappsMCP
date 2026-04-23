@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.2] - 2026-04-23
+
+### Added
+
+- **`tapps-mcp upgrade --json` flag.** The CLI now surfaces the structured upgrade result (including `dry_run_summary` with the `verdict`, `managed_file_count` / `preserved_file_count`, the full preserved-files list, and per-component `managed_files` / `preserved_files` dicts) instead of the text summary. Before this flag, the precision work from 3.2.0/3.2.1 was only reachable via the MCP tool call — CLI users like Ralph could only see a human-readable summary that elided the managed-vs-preserved distinction. Example: `tapps-mcp upgrade --dry-run --host claude-code --json | jq '.dry_run_summary.verdict'`.
+
+### Fixed
+
+- **Clean stdout under `--json`.** `run_upgrade` now routes structlog output to stderr at WARNING level when `emit_json=True`, so stdout contains only the JSON payload and is safe to pipe into `jq` or other tools. Previously the default structlog config wrote INFO lines to stdout, corrupting the payload.
+
 ## [3.2.1] - 2026-04-22
 
 ### Changed

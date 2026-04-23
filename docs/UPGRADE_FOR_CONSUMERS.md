@@ -20,7 +20,8 @@ The easiest way to refresh all generated files:
 ```bash
 tapps-mcp upgrade                           # auto-detect host, update everything
 tapps-mcp upgrade --host claude-code        # target a specific host
-tapps-mcp upgrade --dry-run                 # preview what would change
+tapps-mcp upgrade --dry-run                 # preview what would change (text summary)
+tapps-mcp upgrade --dry-run --json          # preview as JSON (pipe to jq for scripting)
 ```
 
 This updates AGENTS.md (smart merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `.claude/settings.json` permissions. **Files outside that managed set are preserved** — consumer-authored agents, skills, or hooks with other names are never touched. `settings.json` hook entries are merged by matcher, so hand-wired hooks stay.
