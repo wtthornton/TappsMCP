@@ -774,9 +774,17 @@ class TappsMCPSettings(BaseSettings):
     upgrade_skip_files: list[str] = Field(
         default_factory=list,
         description=(
-            "File paths (relative to project root) to skip during tapps_upgrade. "
-            "Use this to protect project-specific customizations from being overwritten. "
-            "Example: ['CLAUDE.md', '.claude/rules/tapps-pipeline.md']"
+            "Per-artifact tokens to skip during tapps_upgrade. Each token maps to "
+            "a fixed set of managed files — arbitrary paths outside these tokens "
+            "are NOT honored and will surface as 'unknown_skip_tokens' warnings. "
+            "Valid tokens: 'AGENTS.md', 'CLAUDE.md', '.claude/settings.json', "
+            "'.claude/hooks', '.claude/agents', '.claude/skills', "
+            "'.claude/rules/python-quality.md', '.claude/rules/agent-scope.md', "
+            "'.claude/rules/tapps-pipeline.md', '.mcp.json', 'karpathy'. "
+            "Example: ['CLAUDE.md', '.claude/rules/tapps-pipeline.md']. "
+            "To protect custom files outside this token set, rely on the "
+            "dry-run's 'preserved_files' list — upgrade only writes managed "
+            "(typically tapps-*) filenames by default."
         ),
     )
 
