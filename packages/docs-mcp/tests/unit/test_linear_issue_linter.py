@@ -6,8 +6,8 @@ import pytest
 
 from docs_mcp.linters.linear_issue import (
     LABEL_AGENT_BLOCKED,
-    LABEL_AGENT_READY,
-    LABEL_NEEDS_CLARIFICATION,
+    LABEL_NEEDS_SPEC,
+    LABEL_SPEC_READY,
     RULE_ACCEPTANCE_EMPTY,
     RULE_AUTOLINK_MANGLED,
     RULE_CODE_BLOCK_NO_ANCHOR,
@@ -60,7 +60,7 @@ class TestCleanIssue:
     def test_clean_issue_is_agent_ready(self, clean_issue: dict[str, object]) -> None:
         result = lint_issue(**clean_issue)  # type: ignore[arg-type]
         assert result.agent_ready is True
-        assert result.suggested_label == LABEL_AGENT_READY
+        assert result.suggested_label == LABEL_SPEC_READY
 
     def test_clean_issue_has_no_high_findings(self, clean_issue: dict[str, object]) -> None:
         result = lint_issue(**clean_issue)  # type: ignore[arg-type]
@@ -397,7 +397,7 @@ class TestLabelSuggestion:
             priority=3,
             estimate=1.0,
         )
-        assert result.suggested_label == LABEL_NEEDS_CLARIFICATION
+        assert result.suggested_label == LABEL_NEEDS_SPEC
 
     def test_blocked_markers_suggest_agent_blocked(self) -> None:
         result = lint_issue(

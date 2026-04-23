@@ -85,18 +85,18 @@ class TestPerIssueResults:
     def test_clean_issue_is_agent_ready(self) -> None:
         report = triage_issues([_clean_issue("TAP-1")])
         assert report.per_issue[0].agent_ready is True
-        assert report.per_issue[0].suggested_label == "agent-ready"
+        assert report.per_issue[0].suggested_label == "spec-ready"
 
     def test_bad_issue_not_agent_ready(self) -> None:
         report = triage_issues([_bad_issue("TAP-3")])
         assert report.per_issue[0].agent_ready is False
-        assert report.per_issue[0].suggested_label == "needs-clarification"
+        assert report.per_issue[0].suggested_label == "needs-spec"
 
     def test_current_agent_label_extracted(self) -> None:
         issue = _clean_issue("TAP-1")
-        issue["labels"] = ["Bug", "agent-ready"]
+        issue["labels"] = ["Bug", "spec-ready"]
         report = triage_issues([issue])
-        assert report.per_issue[0].current_agent_label == "agent-ready"
+        assert report.per_issue[0].current_agent_label == "spec-ready"
 
     def test_current_agent_label_empty_when_none_set(self) -> None:
         issue = _clean_issue("TAP-1")
@@ -113,18 +113,18 @@ class TestPerIssueResults:
 class TestLabelProposals:
     def test_no_proposal_when_current_matches_suggested(self) -> None:
         issue = _clean_issue("TAP-1")
-        issue["labels"] = ["agent-ready"]
+        issue["labels"] = ["spec-ready"]
         report = triage_issues([issue])
         assert report.label_proposals == []
 
     def test_proposal_when_current_differs(self) -> None:
         issue = _clean_issue("TAP-1")
-        issue["labels"] = ["needs-clarification"]  # Stale — should become agent-ready.
+        issue["labels"] = ["needs-spec"]  # Stale — should become spec-ready.
         report = triage_issues([issue])
         assert len(report.label_proposals) == 1
         p = report.label_proposals[0]
-        assert p.from_label == "needs-clarification"
-        assert p.to_label == "agent-ready"
+        assert p.from_label == "needs-spec"
+        assert p.to_label == "spec-ready"
 
     def test_proposal_when_no_current_agent_label(self) -> None:
         issue = _clean_issue("TAP-1")
@@ -132,13 +132,13 @@ class TestLabelProposals:
         report = triage_issues([issue])
         assert len(report.label_proposals) == 1
         assert report.label_proposals[0].from_label == ""
-        assert report.label_proposals[0].to_label == "agent-ready"
+        assert report.label_proposals[0].to_label == "spec-ready"
 
     def test_bad_issue_proposes_needs_clarification_with_reason(self) -> None:
         report = triage_issues([_bad_issue("TAP-3")])
         assert len(report.label_proposals) == 1
         p = report.label_proposals[0]
-        assert p.to_label == "needs-clarification"
+        assert p.to_label == "needs-spec"
         assert "Missing" in p.reason
 
 
@@ -246,7 +246,7 @@ class TestReturnTypes:
 
     def test_proposals_are_pydantic(self) -> None:
         issue = _clean_issue("TAP-1")
-        issue["labels"] = ["needs-clarification"]
+        issue["labels"] = ["needs-spec"]
         report = triage_issues([issue])
         for p in report.label_proposals:
             assert isinstance(p, LabelProposal)

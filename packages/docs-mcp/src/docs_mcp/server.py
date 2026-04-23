@@ -43,6 +43,14 @@ _ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT = ToolAnnotations(
     openWorldHint=False,
 )
 
+# TAP-962: per-tool result-size ceiling surfaced via MCP `_meta` so Claude Code
+# keeps large generator output in-context instead of persisting to disk as a
+# file reference. All ceilings stay below the 500K spec maximum; values scale
+# with typical output shape (HTML/SVG >> markdown >> JSON).
+_META_SIZE_100K: dict[str, Any] = {"anthropic/maxResultSizeChars": 100_000}
+_META_SIZE_200K: dict[str, Any] = {"anthropic/maxResultSizeChars": 200_000}
+_META_SIZE_400K: dict[str, Any] = {"anthropic/maxResultSizeChars": 400_000}
+
 # ---------------------------------------------------------------------------
 # FastMCP server instance
 # ---------------------------------------------------------------------------
@@ -159,7 +167,9 @@ def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -
     if "docs_session_start" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_session_start)
     if "docs_project_scan" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_project_scan)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_100K)(
+            docs_project_scan
+        )
     if "docs_config" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_config)
 

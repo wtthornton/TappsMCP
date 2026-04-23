@@ -35,6 +35,96 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
+# bin/ shim scripts (TAP-959)
+# ---------------------------------------------------------------------------
+#
+# Claude Code auto-adds an enabled plugin's bin/ directory to the Bash tool's
+# PATH, so shipping shims lets callers type `tapps-quick-lint foo.py` instead
+# of `uvx tapps-mcp validate-changed foo.py`. Each shim prefers a directly-
+# installed `tapps-mcp` (pip/uv/pipx) and falls back to `uvx tapps-mcp`.
+
+_BIN_SHIMS: dict[str, list[str]] = {
+    "tapps-quick-lint": ["validate-changed", "--quick"],
+    "tapps-doctor-cli": ["doctor"],
+}
+
+
+def _posix_shim(subcommand: list[str]) -> str:
+    """Emit a POSIX bash shim that prefers a direct `tapps-mcp` entrypoint."""
+    args = " ".join(subcommand)
+    return (
+        "#!/usr/bin/env bash\n"
+        "set -e\n"
+        f'if command -v tapps-mcp >/dev/null 2>&1; then\n'
+        f'  exec tapps-mcp {args} "$@"\n'
+        f'fi\n'
+        f'exec uvx tapps-mcp {args} "$@"\n'
+    )
+
+
+def _windows_shim(subcommand: list[str]) -> str:
+    """Emit a Windows .cmd shim matching the POSIX behavior."""
+    args = " ".join(subcommand)
+    return (
+        "@echo off\r\n"
+        "where tapps-mcp >nul 2>nul\r\n"
+        "if %ERRORLEVEL%==0 (\r\n"
+        f"  tapps-mcp {args} %*\r\n"
+        ") else (\r\n"
+        f"  uvx tapps-mcp {args} %*\r\n"
+        ")\r\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# monitors/ — background health streams (TAP-960)
+# ---------------------------------------------------------------------------
+#
+# Claude Code 2.1+ reads monitors/monitors.json and streams each monitor's
+# stdout lines as session notifications. Off by default — callers opt in via
+# `.tapps-mcp.yaml` (`monitors.enabled: true`). Three baseline monitors:
+#
+#   tapps-brain-health — poll tapps-brain /health every 30s for drift.
+#   quality-gate-watch — tail tapps-mcp validate-changed output aggregator.
+#   ralph-live-tail    — tail .ralph/live.log when ralph is running.
+
+_MONITORS_CONFIG: dict[str, Any] = {
+    "monitors": [
+        {
+            "name": "tapps-brain-health",
+            "when": "always",
+            "command": (
+                "${CLAUDE_PLUGIN_ROOT}/bin/tapps-doctor-cli --brain-only --watch"
+            ),
+            "description": (
+                "Polls tapps-brain /health every 30s and surfaces status drift."
+            ),
+        },
+        {
+            "name": "quality-gate-watch",
+            "when": "always",
+            "command": (
+                "${CLAUDE_PLUGIN_ROOT}/bin/tapps-quick-lint --watch --summary"
+            ),
+            "description": (
+                "Aggregates recent tapps_quality_gate failures and emits one-line "
+                "notifications when a new failure appears."
+            ),
+        },
+        {
+            "name": "ralph-live-tail",
+            "when": "always",
+            "command": 'tail -F .ralph/live.log 2>/dev/null || true',
+            "description": (
+                "Tails .ralph/live.log when the Ralph loop is running. Harmless "
+                "no-op when the file is absent."
+            ),
+        },
+    ],
+}
+
+
+# ---------------------------------------------------------------------------
 # Agent Teams hooks (Story 12.12)
 # ---------------------------------------------------------------------------
 
@@ -159,6 +249,8 @@ work complete.
 def generate_claude_plugin_bundle(
     output_dir: Path,
     version: str = "0.3.0",
+    *,
+    monitors_enabled: bool = False,
 ) -> dict[str, Any]:
     """Generate a Claude Code plugin bundle directory.
 
@@ -166,19 +258,62 @@ def generate_claude_plugin_bundle(
     including plugin.json, agents, skills, hooks, .mcp.json,
     and README.md.
 
+    When ``monitors_enabled`` is True (TAP-960), an opt-in
+    ``monitors/monitors.json`` is emitted to stream TappsMCP-relevant logs
+    (tapps-brain health, quality-gate failures, .ralph/live.log tail) into
+    the session as Claude Code notifications. Off by default; callers driving
+    this from ``.tapps-mcp.yaml`` (``monitors.enabled: true``) should pass
+    the resolved value.
+
     Returns a summary dict with ``files_created``.
     """
     files_created: list[str] = []
 
-    # .claude-plugin/plugin.json
+    # .claude-plugin/plugin.json — TAP-958: extended with userConfig, author,
+    # repository, license, homepage, and dependencies so Claude Code 2.1+ can
+    # prompt the user at enable time and resolve cross-plugin dependencies.
     meta_dir = output_dir / ".claude-plugin"
     meta_dir.mkdir(parents=True, exist_ok=True)
-    plugin_data = {
+    plugin_data: dict[str, Any] = {
         "name": "tapps-mcp",
         "version": version,
         "description": (
             "Code quality scoring, security scanning, and quality gates for Python projects"
         ),
+        "author": "TappsMCP Contributors",
+        "license": "MIT",
+        "homepage": "https://github.com/tapps-mcp/tapps-mcp",
+        "repository": "https://github.com/tapps-mcp/tapps-mcp",
+        "userConfig": {
+            "engagement_level": {
+                "type": "string",
+                "enum": ["high", "medium", "low"],
+                "default": "high",
+                "description": (
+                    "How assertively TappsMCP prompts quality checks. "
+                    "'high' runs validators on every edit; 'low' runs only on explicit request."
+                ),
+            },
+            "memory_http_url": {
+                "type": "string",
+                "default": "http://localhost:8080",
+                "description": (
+                    "tapps-brain HTTP endpoint for cross-session memory. "
+                    "Leave at default if running tapps-brain locally via Docker."
+                ),
+            },
+            "quality_preset": {
+                "type": "string",
+                "enum": ["standard", "strict", "framework"],
+                "default": "standard",
+                "description": "Quality gate preset applied by tapps_quality_gate.",
+            },
+        },
+        "dependencies": {
+            # Semver-compatible range. docs-mcp tracks tapps-mcp version; keep
+            # the floor at the matching release and allow same-major bumps.
+            "docs-mcp": f"^{version}",
+        },
     }
     (meta_dir / "plugin.json").write_text(
         json.dumps(plugin_data, indent=2) + "\n", encoding="utf-8"
@@ -203,12 +338,27 @@ def generate_claude_plugin_bundle(
     hooks_dir = output_dir / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
     hooks_json_data: dict[str, Any] = {}
+    # TAP-955: propagate `if:` matchers on tool-event entries so Claude Code
+    # can skip the hook when the tool call doesn't match. Non-tool events
+    # (SessionStart, Stop, SessionEnd, etc.) silently ignore `if:`, but we
+    # only copy it forward to keep the emitted manifest clean.
+    _TOOL_EVENTS = frozenset(
+        {
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "PermissionRequest",
+            "PermissionDenied",
+        }
+    )
     for event, entries in CLAUDE_HOOKS_CONFIG.items():
         plugin_entries = []
         for entry in entries:
             pe: dict[str, Any] = {}
             if "matcher" in entry:
                 pe["matcher"] = entry["matcher"]
+            if event in _TOOL_EVENTS and "if" in entry:
+                pe["if"] = entry["if"]
             pe["hooks"] = [
                 {
                     "type": h["type"],
@@ -230,7 +380,39 @@ def generate_claude_plugin_bundle(
         script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         files_created.append(f"hooks/{name}")
 
-    # .mcp.json
+    # bin/ — TAP-959: shim scripts auto-PATHed by Claude Code when the plugin
+    # is enabled. Each shim prefers a pip/uv-installed `tapps-mcp` if present,
+    # else falls back to `uvx tapps-mcp`. POSIX .sh stays at `/usr/bin/env bash`;
+    # .cmd variants ship alongside for Windows.
+    bin_dir = output_dir / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    for shim_name, subcommand in _BIN_SHIMS.items():
+        posix_path = bin_dir / shim_name
+        posix_path.write_text(_posix_shim(subcommand), encoding="utf-8")
+        posix_path.chmod(
+            posix_path.stat().st_mode
+            | stat.S_IXUSR
+            | stat.S_IXGRP
+            | stat.S_IXOTH
+        )
+        files_created.append(f"bin/{shim_name}")
+
+        cmd_path = bin_dir / f"{shim_name}.cmd"
+        cmd_path.write_text(_windows_shim(subcommand), encoding="utf-8")
+        files_created.append(f"bin/{shim_name}.cmd")
+
+    # monitors/ — TAP-960: opt-in background health streams. Only emitted
+    # when the caller passes monitors_enabled=True (driven by .tapps-mcp.yaml).
+    if monitors_enabled:
+        monitors_dir = output_dir / "monitors"
+        monitors_dir.mkdir(parents=True, exist_ok=True)
+        (monitors_dir / "monitors.json").write_text(
+            json.dumps(_MONITORS_CONFIG, indent=2) + "\n", encoding="utf-8"
+        )
+        files_created.append("monitors/monitors.json")
+
+    # .mcp.json — ${user_config.*} substitutions are resolved by Claude Code
+    # at enable time from the plugin.json userConfig values (TAP-958).
     mcp_config = {
         "mcpServers": {
             "tapps-mcp": {
@@ -238,6 +420,9 @@ def generate_claude_plugin_bundle(
                 "args": ["tapps-mcp", "serve"],
                 "env": {
                     "TAPPS_MCP_PROJECT_ROOT": ".",
+                    "TAPPS_BRAIN_HTTP_URL": "${user_config.memory_http_url}",
+                    "TAPPS_LLM_ENGAGEMENT_LEVEL": "${user_config.engagement_level}",
+                    "TAPPS_QUALITY_PRESET": "${user_config.quality_preset}",
                 },
             },
         },

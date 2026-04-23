@@ -86,8 +86,8 @@ class TriageSummary(BaseModel):
     """Aggregate counts for a Linear issue triage batch.
 
     Returned as part of :class:`TriageReport.summary`. Values reflect the
-    suggested agent-readiness label for each triaged issue (``agent-ready``,
-    ``needs-clarification``, ``agent-blocked``) per the policy in
+    suggested agent-readiness label for each triaged issue (``spec-ready``,
+    ``needs-spec``, ``agent-blocked``) per the policy in
     ``docs/linear/AGENT_ISSUES.md``.
     """
 
@@ -115,7 +115,7 @@ class TriageReport(BaseModel):
     summary: TriageSummary
 
 
-_AGENT_LABELS = frozenset({"agent-ready", "needs-clarification", "agent-blocked"})
+_AGENT_LABELS = frozenset({"spec-ready", "needs-spec", "agent-blocked"})
 
 
 def triage_issues(issues: list[dict[str, Any]]) -> TriageReport:
@@ -234,7 +234,7 @@ def _build_label_proposals(results: list[IssueTriageResult]) -> list[LabelPropos
 
 
 def _label_reason(res: IssueTriageResult) -> str:
-    if res.suggested_label == "agent-ready":
+    if res.suggested_label == "spec-ready":
         return f"Passes validator (score {res.score})."
     if res.missing:
         first = res.missing[0]
@@ -295,8 +295,8 @@ def _collect_metadata_gaps(
 
 def _summarize(results: list[IssueTriageResult]) -> TriageSummary:
     total = len(results)
-    agent_ready = sum(1 for r in results if r.suggested_label == "agent-ready")
-    needs_clar = sum(1 for r in results if r.suggested_label == "needs-clarification")
+    agent_ready = sum(1 for r in results if r.suggested_label == "spec-ready")
+    needs_clar = sum(1 for r in results if r.suggested_label == "needs-spec")
     blocked = sum(1 for r in results if r.suggested_label == "agent-blocked")
     avg = sum(r.score for r in results) / total if total else 0.0
     return TriageSummary(

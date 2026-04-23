@@ -38,7 +38,7 @@ class TestCleanIssuePasses:
 
     def test_suggested_label_agent_ready(self, clean_issue: dict[str, object]) -> None:
         report = validate_issue(**clean_issue)  # type: ignore[arg-type]
-        assert report.suggested_label == "agent-ready"
+        assert report.suggested_label == "spec-ready"
 
 
 class TestMissingAcceptance:

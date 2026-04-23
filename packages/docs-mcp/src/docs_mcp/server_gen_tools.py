@@ -18,6 +18,9 @@ import structlog
 from docs_mcp.server import (
     _ANNOTATIONS_READ_ONLY,
     _ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+    _META_SIZE_100K,
+    _META_SIZE_200K,
+    _META_SIZE_400K,
     _record_call,
 )
 from docs_mcp.server_helpers import (
@@ -2198,7 +2201,9 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "docs_generate_readme" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_readme)
     if "docs_generate_api" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_api)
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_SIZE_200K
+        )(docs_generate_api)
     if "docs_generate_adr" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_adr)
     if "docs_generate_onboarding" in allowed_tools:
@@ -2210,11 +2215,13 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "docs_generate_prd" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_prd)
     if "docs_generate_diagram" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_generate_diagram)
-    if "docs_generate_architecture" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
-            docs_generate_architecture
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_100K)(
+            docs_generate_diagram
         )
+    if "docs_generate_architecture" in allowed_tools:
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_SIZE_400K
+        )(docs_generate_architecture)
     if "docs_generate_epic" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_epic)
     if "docs_generate_story" in allowed_tools:
@@ -2228,9 +2235,9 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
             docs_generate_frontmatter
         )
     if "docs_generate_interactive_diagrams" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
-            docs_generate_interactive_diagrams
-        )
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_SIZE_400K
+        )(docs_generate_interactive_diagrams)
     if "docs_generate_purpose" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_purpose)
     if "docs_generate_doc_index" in allowed_tools:

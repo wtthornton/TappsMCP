@@ -172,3 +172,32 @@ class TestAnnotationCategories:
         assert len(idempotent) == 22, (
             f"Expected 22 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
+
+
+class TestLargeOutputMeta:
+    """TAP-961: large-output analysis tools declare _meta[anthropic/maxResultSizeChars]
+    so Claude Code keeps results in-context instead of persisting to disk."""
+
+    _EXPECTED_CEILINGS: dict[str, int] = {
+        "tapps_impact_analysis": 100_000,
+        "tapps_report": 100_000,
+        "tapps_dead_code": 100_000,
+        "tapps_dependency_graph": 200_000,
+    }
+
+    @pytest.mark.parametrize("tool_name", sorted(_EXPECTED_CEILINGS))
+    def test_meta_max_result_size_set(self, tool_name: str) -> None:
+        tools = mcp._tool_manager._tools
+        assert tool_name in tools, f"Tool {tool_name} not registered"
+        tool = tools[tool_name]
+        meta = tool.meta
+        assert meta is not None, f"{tool_name} has no _meta"
+        key = "anthropic/maxResultSizeChars"
+        assert key in meta, f"{tool_name}._meta missing {key!r}: {meta}"
+        assert meta[key] == self._EXPECTED_CEILINGS[tool_name], (
+            f"{tool_name}._meta[{key}]={meta[key]}, "
+            f"expected {self._EXPECTED_CEILINGS[tool_name]}"
+        )
+        assert meta[key] < 500_000, (
+            f"{tool_name} ceiling {meta[key]} exceeds MCP spec max 500000"
+        )

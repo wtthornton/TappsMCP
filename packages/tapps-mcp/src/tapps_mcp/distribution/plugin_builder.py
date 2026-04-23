@@ -43,6 +43,7 @@ class PluginBuilder:
         self._generate_mcp_config()
         self._generate_rules()
         self._generate_settings()
+        self._generate_bin()
 
         self._result["output_dir"] = str(self.output_dir)
         self._result["version"] = __version__
@@ -180,3 +181,35 @@ class PluginBuilder:
             json.dumps(settings, indent=2), encoding="utf-8"
         )
         self._result["components"]["settings"] = "created"
+
+    # ------------------------------------------------------------------
+    # bin/ shims (TAP-959)
+    # ------------------------------------------------------------------
+
+    def _generate_bin(self) -> None:
+        import stat
+
+        from tapps_mcp.pipeline.platform_bundles import (
+            _BIN_SHIMS,
+            _posix_shim,
+            _windows_shim,
+        )
+
+        bin_dir = self.output_dir / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        created: list[str] = []
+        for shim_name, subcommand in _BIN_SHIMS.items():
+            posix_path = bin_dir / shim_name
+            posix_path.write_text(_posix_shim(subcommand), encoding="utf-8")
+            posix_path.chmod(
+                posix_path.stat().st_mode
+                | stat.S_IXUSR
+                | stat.S_IXGRP
+                | stat.S_IXOTH
+            )
+            created.append(shim_name)
+
+            cmd_path = bin_dir / f"{shim_name}.cmd"
+            cmd_path.write_text(_windows_shim(subcommand), encoding="utf-8")
+            created.append(f"{shim_name}.cmd")
+        self._result["components"]["bin"] = {"count": len(created), "files": created}

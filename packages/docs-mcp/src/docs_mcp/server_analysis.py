@@ -10,7 +10,12 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call
+from docs_mcp.server import (
+    _ANNOTATIONS_READ_ONLY,
+    _META_SIZE_100K,
+    _META_SIZE_200K,
+    _record_call,
+)
 from docs_mcp.server_helpers import _get_settings, error_response, success_response
 
 if TYPE_CHECKING:
@@ -216,6 +221,10 @@ async def docs_api_surface(
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register analysis tools on the shared mcp instance (Epic 79.2: conditional)."""
     if "docs_module_map" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_module_map)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_200K)(
+            docs_module_map
+        )
     if "docs_api_surface" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_api_surface)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_100K)(
+            docs_api_surface
+        )

@@ -144,7 +144,185 @@ class TestClaudeHooksConfig:
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         entries = data["hooks"]["PostToolUse"]
         matchers = [e.get("matcher") for e in entries]
-        assert "Edit|Write" in matchers
+        # TAP-955: MultiEdit added to the matcher so the post-edit hook
+        # also fires on batched edits.
+        assert "Edit|Write|MultiEdit" in matchers
+
+    def test_shipped_hooks_carry_version_marker(self, tmp_path):
+        """TAP-957: every script written by the generator has the version marker."""
+        generate_claude_hooks(tmp_path, force_windows=False)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        for script in hooks_dir.glob("tapps-*.sh"):
+            head = script.read_text()[:512]
+            assert "# tapps-mcp-hook-version:" in head, (
+                f"{script.name} missing version marker: {head[:200]!r}"
+            )
+
+    def test_marker_on_second_line_when_shebang_present(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=False)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        script = next(hooks_dir.glob("tapps-session-start.sh"))
+        lines = script.read_text().splitlines()
+        assert lines[0].startswith("#!"), f"Expected shebang on line 1: {lines[0]!r}"
+        assert "# tapps-mcp-hook-version:" in lines[1], (
+            f"Expected version marker on line 2: {lines[1]!r}"
+        )
+
+    def test_user_edited_hook_is_backed_up_on_always_overwrite(self, tmp_path):
+        """TAP-957: when a shipped hook in always_overwrite has been user-edited
+        (marker absent), the upgrade writes a .pre-upgrade.<ts> backup first."""
+        # First generate so the file exists with the marker.
+        generate_claude_hooks(tmp_path, force_windows=False)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        stop_script = hooks_dir / "tapps-stop.sh"
+        assert stop_script.exists()
+
+        # Simulate user edits by stripping the marker.
+        user_edited = "#!/usr/bin/env bash\n# custom user logic\necho hello\n"
+        stop_script.write_text(user_edited)
+
+        # Second call — should back up the user-edited version.
+        generate_claude_hooks(tmp_path, force_windows=False)
+        backups = list(hooks_dir.glob("tapps-stop.sh.pre-upgrade.*"))
+        assert len(backups) == 1, f"Expected exactly one backup, got {backups}"
+        assert "custom user logic" in backups[0].read_text()
+
+    def test_shipped_hook_is_not_backed_up(self, tmp_path):
+        """TAP-957: files carrying the marker are treated as shipped content
+        and do NOT get a .pre-upgrade backup when rewritten."""
+        generate_claude_hooks(tmp_path, force_windows=False)
+        generate_claude_hooks(tmp_path, force_windows=False)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        backups = list(hooks_dir.glob("*.pre-upgrade.*"))
+        assert backups == [], f"Unexpected backups on no-op rewrite: {backups}"
+
+
+class TestReactiveHookTemplates:
+    """TAP-956: opt-in reactive-event hook templates (CwdChanged,
+    PermissionDenied, sessionTitle, Worktree*). Off by default for backward
+    compatibility; selectively enabled via the reactive_hooks dict."""
+
+    def test_no_reactive_hooks_by_default(self, tmp_path):
+        generate_claude_hooks(tmp_path, force_windows=False)
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        for name in (
+            "tapps-cwd-changed.sh",
+            "tapps-permission-denied.sh",
+            "tapps-session-title.sh",
+            "tapps-worktree-create.sh",
+            "tapps-worktree-remove.sh",
+        ):
+            assert not (hooks_dir / name).exists(), (
+                f"{name} should not ship by default"
+            )
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        for event in ("CwdChanged", "PermissionDenied", "UserPromptSubmit", "WorktreeCreate", "WorktreeRemove"):
+            assert event not in data["hooks"], (
+                f"{event} should not be registered by default"
+            )
+
+    def test_cwd_reload_flag_ships_script_and_config(self, tmp_path):
+        generate_claude_hooks(
+            tmp_path,
+            force_windows=False,
+            reactive_hooks={"cwd_reload": True},
+        )
+        assert (tmp_path / ".claude" / "hooks" / "tapps-cwd-changed.sh").exists()
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        assert "CwdChanged" in data["hooks"]
+        cmds = [
+            h["command"]
+            for entry in data["hooks"]["CwdChanged"]
+            for h in entry["hooks"]
+        ]
+        assert any("tapps-cwd-changed.sh" in c for c in cmds)
+
+    def test_session_title_emits_hook_specific_output(self, tmp_path):
+        """sessionTitle hook must call the JSON `hookSpecificOutput.sessionTitle`
+        contract expected by Claude Code 2.1+."""
+        generate_claude_hooks(
+            tmp_path,
+            force_windows=False,
+            reactive_hooks={"session_title": True},
+        )
+        script = (
+            tmp_path / ".claude" / "hooks" / "tapps-session-title.sh"
+        ).read_text()
+        assert "hookSpecificOutput" in script
+        assert "sessionTitle" in script
+
+    def test_permission_denied_retries_tapps_tools(self, tmp_path):
+        generate_claude_hooks(
+            tmp_path,
+            force_windows=False,
+            reactive_hooks={"permission_retry": True},
+        )
+        script = (
+            tmp_path / ".claude" / "hooks" / "tapps-permission-denied.sh"
+        ).read_text()
+        assert "mcp__tapps-mcp__" in script
+        assert "'retry': True" in script or '"retry": True' in script or "'retry':" in script
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        assert "PermissionDenied" in data["hooks"]
+
+    def test_worktree_track_ships_both_hooks(self, tmp_path):
+        generate_claude_hooks(
+            tmp_path,
+            force_windows=False,
+            reactive_hooks={"worktree_track": True},
+        )
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        assert (hooks_dir / "tapps-worktree-create.sh").exists()
+        assert (hooks_dir / "tapps-worktree-remove.sh").exists()
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        assert "WorktreeCreate" in data["hooks"]
+        assert "WorktreeRemove" in data["hooks"]
+
+    def test_windows_ps_variants_exist(self, tmp_path):
+        generate_claude_hooks(
+            tmp_path,
+            force_windows=True,
+            reactive_hooks={
+                "cwd_reload": True,
+                "permission_retry": True,
+                "session_title": True,
+                "worktree_track": True,
+            },
+        )
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        for name in (
+            "tapps-cwd-changed.ps1",
+            "tapps-permission-denied.ps1",
+            "tapps-session-title.ps1",
+            "tapps-worktree-create.ps1",
+            "tapps-worktree-remove.ps1",
+        ):
+            assert (hooks_dir / name).exists(), f"missing {name}"
+
+    def test_all_reactive_scripts_carry_version_marker(self, tmp_path):
+        """TAP-957 + TAP-956: new reactive scripts inherit the marker too."""
+        generate_claude_hooks(
+            tmp_path,
+            force_windows=False,
+            reactive_hooks={
+                "cwd_reload": True,
+                "permission_retry": True,
+                "session_title": True,
+                "worktree_track": True,
+            },
+        )
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        for name in (
+            "tapps-cwd-changed.sh",
+            "tapps-permission-denied.sh",
+            "tapps-session-title.sh",
+            "tapps-worktree-create.sh",
+            "tapps-worktree-remove.sh",
+        ):
+            content = (hooks_dir / name).read_text()[:512]
+            assert "# tapps-mcp-hook-version:" in content, (
+                f"{name} missing version marker"
+            )
 
     def test_task_completed_configured(self, tmp_path):
         generate_claude_hooks(tmp_path, force_windows=False)
@@ -210,7 +388,7 @@ class TestClaudeHooksMerge:
         post_tool = data["hooks"]["PostToolUse"]
         matchers = [e.get("matcher") for e in post_tool]
         assert "Bash" in matchers, "Pre-existing Bash matcher should be preserved"
-        assert "Edit|Write" in matchers, "TappsMCP matcher should be added"
+        assert "Edit|Write|MultiEdit" in matchers, "TappsMCP matcher should be added"
 
     def test_preserves_existing_permissions(self, tmp_path):
         """Existing permissions key is not removed."""

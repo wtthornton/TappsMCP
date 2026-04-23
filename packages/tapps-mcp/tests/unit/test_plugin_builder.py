@@ -195,3 +195,29 @@ class TestPluginDirectoryStructure:
         assert (plugin_dir / "rules" / "python-quality.md").exists()
         assert (plugin_dir / ".mcp.json").exists()
         assert (plugin_dir / "settings.json").exists()
+
+
+class TestPluginBinShims:
+    """TAP-959: PluginBuilder also emits bin/ shims (parity with
+    generate_claude_plugin_bundle)."""
+
+    def test_bin_dir_created(self, plugin_dir: Path) -> None:
+        PluginBuilder(output_dir=plugin_dir).build()
+        assert (plugin_dir / "bin").is_dir()
+
+    def test_bin_shims_emitted(self, plugin_dir: Path) -> None:
+        PluginBuilder(output_dir=plugin_dir).build()
+        bin_dir = plugin_dir / "bin"
+        for name in (
+            "tapps-quick-lint",
+            "tapps-doctor-cli",
+            "tapps-quick-lint.cmd",
+            "tapps-doctor-cli.cmd",
+        ):
+            assert (bin_dir / name).exists(), f"missing {name}"
+
+    def test_result_records_bin_component(self, plugin_dir: Path) -> None:
+        builder = PluginBuilder(output_dir=plugin_dir)
+        builder.build()
+        assert "bin" in builder.result["components"]
+        assert builder.result["components"]["bin"]["count"] == 4

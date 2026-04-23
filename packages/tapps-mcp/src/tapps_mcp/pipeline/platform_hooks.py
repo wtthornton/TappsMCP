@@ -7,9 +7,14 @@ settings files. Extracted from ``platform_generators.py`` to reduce file size.
 from __future__ import annotations
 
 import json
+import re
+import shutil
 import stat
 import sys
+import time
 from typing import TYPE_CHECKING, Any
+
+from tapps_mcp import __version__ as _TAPPS_VERSION
 
 from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOK_SCRIPTS as _CLAUDE_HOOK_SCRIPTS,
@@ -209,6 +214,12 @@ def _filter_scripts(
         "tapps-memory-capture": "Stop",
         "tapps-memory-auto-capture": "Stop",
         "tapps-pre-bash": "PreToolUse",
+        # TAP-956 reactive-event scripts
+        "tapps-cwd-changed": "CwdChanged",
+        "tapps-permission-denied": "PermissionDenied",
+        "tapps-session-title": "UserPromptSubmit",
+        "tapps-worktree-create": "WorktreeCreate",
+        "tapps-worktree-remove": "WorktreeRemove",
     }
 
     filtered: dict[str, str] = {}
@@ -221,13 +232,68 @@ def _filter_scripts(
     return filtered
 
 
+_HOOK_VERSION_MARKER_PREFIX = "# tapps-mcp-hook-version:"
+_HOOK_VERSION_MARKER_RE = re.compile(
+    r"^\s*#\s*tapps-mcp-hook-version:\s*([\w.+-]+)", re.MULTILINE
+)
+# Scan only the top of the file — the marker is always near the shebang.
+_HOOK_MARKER_SCAN_CHARS = 512
+
+
+def _inject_hook_version_marker(content: str, version: str) -> str:
+    """Prepend a version marker to a hook script if it doesn't already have one.
+
+    The marker is inserted on its own line immediately after the shebang (if
+    any) so bash/PowerShell continue to parse the file correctly.
+    TAP-957: lets ``_hook_has_user_edits`` tell a TappsMCP-shipped script from
+    a user-authored one and avoid clobbering on upgrade.
+    """
+    if _HOOK_VERSION_MARKER_RE.search(content[:_HOOK_MARKER_SCAN_CHARS]):
+        return content
+    marker_line = f"{_HOOK_VERSION_MARKER_PREFIX} {version}\n"
+    # Preserve shebang on line 1 if present; marker goes right after.
+    lines = content.splitlines(keepends=True)
+    if lines and lines[0].startswith("#!"):
+        return lines[0] + marker_line + "".join(lines[1:])
+    return marker_line + content
+
+
+def _hook_has_user_edits(path: Path) -> bool:
+    """Return True if *path* looks user-authored and should be preserved.
+
+    Heuristic: a TappsMCP-shipped hook always carries the version marker
+    in its header. Absence of the marker is the strongest signal that the
+    file was written or rewritten by the consuming project.
+    """
+    try:
+        head = path.read_text(encoding="utf-8")[:_HOOK_MARKER_SCAN_CHARS]
+    except (OSError, UnicodeDecodeError):
+        # Unreadable / binary file — err on the side of caution.
+        return True
+    return _HOOK_VERSION_MARKER_RE.search(head) is None
+
+
+def _backup_hook_file(path: Path) -> Path:
+    """Copy *path* to ``<path>.pre-upgrade.<unix-ts>`` and return the backup path."""
+    ts = int(time.time())
+    backup = path.with_name(f"{path.name}.pre-upgrade.{ts}")
+    shutil.copy2(path, backup)
+    return backup
+
+
 def _write_hook_scripts(
     hooks_dir: Path,
     script_templates: dict[str, str],
     engagement_level: str,
     win: bool,
 ) -> list[str]:
-    """Write hook scripts to disk, returning names of scripts created."""
+    """Write hook scripts to disk, returning names of scripts created.
+
+    TAP-957: every shipped script carries a version marker. When a hook file
+    already on disk is missing the marker (sign of user edits), it is copied
+    to ``<name>.pre-upgrade.<ts>`` before being rewritten so the user's work
+    is recoverable.
+    """
     always_overwrite = {
         "tapps-stop.ps1",
         "tapps-stop.sh",
@@ -237,12 +303,17 @@ def _write_hook_scripts(
     created: list[str] = []
     for name, content in script_templates.items():
         script_path = hooks_dir / name
-        if not script_path.exists() or name in always_overwrite:
-            text = _hook_content_for_engagement(content, engagement_level)
-            script_path.write_text(text, encoding="utf-8")
-            if not win:
-                script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
-            created.append(name)
+        if script_path.exists() and name not in always_overwrite:
+            continue
+        # If an existing file lacks the marker, preserve user edits first.
+        if script_path.exists() and _hook_has_user_edits(script_path):
+            _backup_hook_file(script_path)
+        text = _hook_content_for_engagement(content, engagement_level)
+        text = _inject_hook_version_marker(text, _TAPPS_VERSION)
+        script_path.write_text(text, encoding="utf-8")
+        if not win:
+            script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+        created.append(name)
     return created
 
 
@@ -299,6 +370,7 @@ def generate_claude_hooks(
     engagement_level: str = "medium",
     prompt_hooks: bool = False,
     destructive_guard: bool = False,
+    reactive_hooks: dict[str, bool] | None = None,
 ) -> dict[str, Any]:
     """Generate Claude Code hook scripts and settings.json hooks config.
 
@@ -339,6 +411,28 @@ def generate_claude_hooks(
         dg_config = _DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS if win else _DESTRUCTIVE_GUARD_HOOKS_CONFIG
         for event, entries in dg_config.items():
             hooks_config.setdefault(event, []).extend(entries)
+
+    # TAP-956: opt-in reactive-event hooks (CwdChanged, PermissionDenied,
+    # sessionTitle, Worktree*). Each flag independently ships its script +
+    # hooks.json entry; unrelated flags remain off.
+    reactive_flags = reactive_hooks or {}
+    if reactive_flags:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            reactive_hook_scripts as _reactive_hook_scripts,
+        )
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            reactive_hooks_config as _reactive_hooks_config,
+        )
+
+        base_scripts = {
+            **base_scripts,
+            **_reactive_hook_scripts(reactive_flags, win=win),
+        }
+        for event, entries in _reactive_hooks_config(
+            reactive_flags, win=win
+        ).items():
+            hooks_config.setdefault(event, []).extend(entries)
+            allowed_events.add(event)
 
     # At high engagement, overlay blocking variants for Stop/TaskCompleted
     script_templates = dict(base_scripts)

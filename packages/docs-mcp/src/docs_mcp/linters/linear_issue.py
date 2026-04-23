@@ -29,8 +29,8 @@ RULE_MISSING_PRIORITY = "missing-priority"
 TITLE_MAX_LEN = 80
 CHARS_PER_TOKEN = 4  # Rough approximation consistent across rule engines.
 
-LABEL_AGENT_READY = "agent-ready"
-LABEL_NEEDS_CLARIFICATION = "needs-clarification"
+LABEL_SPEC_READY = "spec-ready"
+LABEL_NEEDS_SPEC = "needs-spec"
 LABEL_AGENT_BLOCKED = "agent-blocked"
 
 _SEVERITY_PENALTY = {SEVERITY_HIGH: 25, SEVERITY_MEDIUM: 10, SEVERITY_LOW: 2}
@@ -331,8 +331,8 @@ def _suggest_label(ctx: _Context) -> str:
         return LABEL_AGENT_BLOCKED
     has_high = any(f.severity == SEVERITY_HIGH for f in ctx.findings)
     if has_high:
-        return LABEL_NEEDS_CLARIFICATION
-    return LABEL_AGENT_READY
+        return LABEL_NEEDS_SPEC
+    return LABEL_SPEC_READY
 
 
 def _estimate_tokens(ctx: _Context) -> dict[str, int]:

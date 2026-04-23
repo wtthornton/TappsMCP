@@ -59,6 +59,15 @@ _ANNOTATIONS_READ_ONLY_OPEN = ToolAnnotations(
     openWorldHint=True,
 )
 
+# TAP-961: large-output tools advertise a per-tool result-size ceiling via
+# the MCP `_meta` tool field. Claude Code reads `anthropic/maxResultSizeChars`
+# from `tools/list` and keeps the result in-context instead of persisting it
+# to disk as a file reference. Ceiling chosen conservatively under the 500K
+# spec maximum — dependency_graph can be large on big repos (see TAP-613),
+# so it gets a higher cap than the other three.
+_META_LARGE_OUTPUT_200K: dict[str, Any] = {"anthropic/maxResultSizeChars": 200_000}
+_META_LARGE_OUTPUT_100K: dict[str, Any] = {"anthropic/maxResultSizeChars": 100_000}
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers (imported lazily from server.py to avoid circular imports)
@@ -942,12 +951,20 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "tapps_session_notes" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_session_notes)
     if "tapps_impact_analysis" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_impact_analysis)
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K
+        )(tapps_impact_analysis)
     if "tapps_report" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_report)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K)(
+            tapps_report
+        )
     if "tapps_dead_code" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dead_code)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K)(
+            tapps_dead_code
+        )
     if "tapps_dependency_scan" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_dependency_scan)
     if "tapps_dependency_graph" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dependency_graph)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K)(
+            tapps_dependency_graph
+        )

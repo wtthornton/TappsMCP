@@ -52,7 +52,7 @@ async def docs_lint_linear_issue(
     - ``agent_ready``: bool — True iff no HIGH-severity violations.
     - ``score``: 0-100, starting at 100 with per-finding penalties.
     - ``findings``: list of ``{rule, severity, message, location, fix_hint}``.
-    - ``suggested_label``: one of ``agent-ready`` / ``needs-clarification`` /
+    - ``suggested_label``: one of ``spec-ready`` / ``needs-spec`` /
       ``agent-blocked``.
     - ``tokens``: ``{title_chars, description_chars, total_chars,
       estimated_tokens, noise_bytes_recoverable}``.
@@ -122,7 +122,7 @@ def _build_next_steps(result: dict[str, Any]) -> list[str]:
         )
     elif result["score"] < 100:
         steps.append(
-            f"Issue is agent-ready (score {result['score']}); clean up medium/low findings when touching."
+            f"Issue is spec-ready (score {result['score']}); clean up medium/low findings when touching."
         )
     return steps[:3]
 
@@ -150,8 +150,8 @@ async def docs_validate_linear_issue(
           (e.g., "a file anchor", "a `## Acceptance` section").
         - ``issues``: per-field structured detail
           (``{severity, field, rule, message}``).
-        - ``suggested_label``: one of ``agent-ready`` /
-          ``needs-clarification`` / ``agent-blocked``.
+        - ``suggested_label``: one of ``spec-ready`` /
+          ``needs-spec`` / ``agent-blocked``.
 
     Agents should call this BEFORE creating a Linear issue. If
     ``agent_ready`` is False, fix the ``missing`` items first. For a deeper
@@ -209,7 +209,7 @@ def _validate_next_steps(data: dict[str, Any]) -> list[str]:
         )
     else:
         steps.append(
-            f"Issue is agent-ready (score {data['score']}). "
+            f"Issue is spec-ready (score {data['score']}). "
             f"Apply label `{data['suggested_label']}` and create."
         )
     return steps[:2]
@@ -240,7 +240,7 @@ async def docs_linear_triage(
             "id": "TAP-686",
             "title": "upgrade.py: rglob traverses node_modules",
             "description": "## What\\n...",
-            "labels": ["Bug", "agent-ready"],
+            "labels": ["Bug", "spec-ready"],
             "priority": 2,
             "estimate": 2.0,
             "parent_id": "TAP-400",
@@ -303,7 +303,7 @@ def _triage_next_steps(data: dict[str, Any]) -> list[str]:
     if summary["needs_clarification"] > 0 or summary["agent_blocked"] > 0:
         non_ready = total - ready
         steps.append(
-            f"{non_ready}/{total} issues are not agent-ready — see per_issue.missing for each."
+            f"{non_ready}/{total} issues are not spec-ready — see per_issue.missing for each."
         )
     return steps[:3]
 

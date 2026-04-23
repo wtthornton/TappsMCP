@@ -760,7 +760,8 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     ],
     "PostToolUse": [
         {
-            "matcher": "Edit|Write",
+            "matcher": "Edit|Write|MultiEdit",
+            "if": "Edit(**/*.py) | Write(**/*.py) | MultiEdit(**/*.py)",
             "hooks": [
                 {
                     "type": "command",
@@ -773,6 +774,7 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
         },
         {
             "matcher": "mcp__tapps-mcp__tapps_validate_changed",
+            "if": "mcp__tapps-mcp__tapps_validate_changed",
             "hooks": [
                 {
                     "type": "command",
@@ -786,6 +788,7 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
         },
         {
             "matcher": "mcp__tapps-mcp__tapps_report",
+            "if": "mcp__tapps-mcp__tapps_report",
             "hooks": [
                 {
                     "type": "command",
@@ -879,6 +882,7 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PostToolUseFailure": [
         {
             "matcher": "mcp__tapps-mcp__.*",
+            "if": "mcp__tapps-mcp__*",
             "hooks": [
                 {
                     "type": "command",
@@ -909,13 +913,18 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     ],
     "PostToolUse": [
         {
-            "matcher": "Edit|Write",
+            "matcher": "Edit|Write|MultiEdit",
+            # TAP-955: `if:` narrows the hook to Python/infra edits only, so
+            # tapps-post-edit.sh no longer spawns on every Edit of a markdown
+            # or JSON file. Permission-rule syntax: ToolName(glob).
+            "if": "Edit(**/*.py) | Write(**/*.py) | MultiEdit(**/*.py)",
             "hooks": [
                 {"type": "command", "command": ".claude/hooks/tapps-post-edit.sh"},
             ],
         },
         {
             "matcher": "mcp__tapps-mcp__tapps_validate_changed",
+            "if": "mcp__tapps-mcp__tapps_validate_changed",
             "hooks": [
                 {
                     "type": "command",
@@ -926,6 +935,7 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
         },
         {
             "matcher": "mcp__tapps-mcp__tapps_report",
+            "if": "mcp__tapps-mcp__tapps_report",
             "hooks": [
                 {"type": "command", "command": ".claude/hooks/tapps-post-report.sh", "timeout": 10},
             ],
@@ -976,6 +986,7 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     "PostToolUseFailure": [
         {
             "matcher": "mcp__tapps-mcp__.*",
+            "if": "mcp__tapps-mcp__*",
             "hooks": [
                 {"type": "command", "command": ".claude/hooks/tapps-tool-failure.sh"},
             ],
@@ -1367,6 +1378,256 @@ DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
 }
 
 # ---------------------------------------------------------------------------
+# Reactive event templates (TAP-956) — opt-in via .tapps-mcp.yaml
+# ---------------------------------------------------------------------------
+#
+# Each entry in REACTIVE_HOOK_FLAGS maps an opt-in config key to the scripts
+# + event wiring it enables. All five are off by default for backward compat.
+
+REACTIVE_HOOK_FLAGS: tuple[str, ...] = (
+    "cwd_reload",        # CwdChanged → re-reads .tapps-mcp.yaml
+    "permission_retry",  # PermissionDenied → returns {retry: true} for safe tapps-* denials
+    "session_title",     # UserPromptSubmit → emits hookSpecificOutput.sessionTitle
+    "worktree_track",    # WorktreeCreate + WorktreeRemove
+)
+
+CLAUDE_REACTIVE_HOOK_SCRIPTS: dict[str, str] = {
+    "tapps-cwd-changed.sh": """\
+#!/usr/bin/env bash
+# TappsMCP CwdChanged hook — marks the config cache stale so the next
+# tapps-mcp tool call re-reads .tapps-mcp.yaml from the new cwd.
+INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+mkdir -p "$PROJECT_DIR/.tapps-mcp"
+touch "$PROJECT_DIR/.tapps-mcp/.cwd-reload-marker"
+echo "{}"
+""",
+    "tapps-permission-denied.sh": """\
+#!/usr/bin/env bash
+# TappsMCP PermissionDenied hook — retries safe auto-mode denials for
+# mcp__tapps-mcp__* read-only tools. Returns {retry: true} when recoverable.
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+echo "$INPUT" | "$PYBIN" -c "
+import json, sys
+d = json.load(sys.stdin)
+tool = (d.get('tool_name') or '').lower()
+if tool.startswith('mcp__tapps-mcp__'):
+    print(json.dumps({'retry': True}))
+else:
+    print('{}')
+"
+""",
+    "tapps-session-title.sh": """\
+#!/usr/bin/env bash
+# TappsMCP UserPromptSubmit hook — auto-names sessions from the first prompt.
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+echo "$INPUT" | "$PYBIN" -c "
+import json, sys
+d = json.load(sys.stdin)
+prompt = (d.get('prompt') or '').strip()
+first = next((line.strip() for line in prompt.splitlines() if line.strip()), 'TappsMCP session')
+print(json.dumps({'hookSpecificOutput': {'sessionTitle': first[:60]}}))
+"
+""",
+    "tapps-worktree-create.sh": """\
+#!/usr/bin/env bash
+# TappsMCP WorktreeCreate hook — logs worktree creation for review-fixer
+# orchestration. Activity log lives in .tapps-mcp/worktree-activity.log.
+INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+LOG_DIR="$PROJECT_DIR/.tapps-mcp"
+mkdir -p "$LOG_DIR"
+echo "$(date -Iseconds) WorktreeCreate: $INPUT" >> "$LOG_DIR/worktree-activity.log"
+echo "{}"
+""",
+    "tapps-worktree-remove.sh": """\
+#!/usr/bin/env bash
+# TappsMCP WorktreeRemove hook — records cleanup so the review-fixer agent
+# doesn't rely on the 2-hour zombie-process sweep to tidy up artifacts.
+INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+LOG_DIR="$PROJECT_DIR/.tapps-mcp"
+mkdir -p "$LOG_DIR"
+echo "$(date -Iseconds) WorktreeRemove: $INPUT" >> "$LOG_DIR/worktree-activity.log"
+echo "{}"
+""",
+}
+
+CLAUDE_REACTIVE_HOOK_SCRIPTS_PS: dict[str, str] = {
+    "tapps-cwd-changed.ps1": """\
+# TappsMCP CwdChanged hook
+$input | Out-Null
+$dir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }
+New-Item -ItemType Directory -Force -Path "$dir/.tapps-mcp" | Out-Null
+New-Item -ItemType File -Force -Path "$dir/.tapps-mcp/.cwd-reload-marker" | Out-Null
+Write-Output '{}'
+""",
+    "tapps-permission-denied.ps1": """\
+# TappsMCP PermissionDenied hook — retries safe tapps-* denials.
+$stdin = [Console]::In.ReadToEnd()
+$d = $stdin | ConvertFrom-Json
+$tool = ($d.tool_name | Out-String).Trim().ToLower()
+if ($tool.StartsWith('mcp__tapps-mcp__')) {
+    Write-Output (@{retry=$true} | ConvertTo-Json -Compress)
+} else {
+    Write-Output '{}'
+}
+""",
+    "tapps-session-title.ps1": """\
+# TappsMCP UserPromptSubmit hook — auto-names session from first prompt.
+$stdin = [Console]::In.ReadToEnd()
+$d = $stdin | ConvertFrom-Json
+$prompt = ($d.prompt | Out-String)
+$first = ($prompt -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1).Trim()
+if (-not $first) { $first = 'TappsMCP session' }
+$title = $first.Substring(0, [Math]::Min(60, $first.Length))
+Write-Output (@{hookSpecificOutput=@{sessionTitle=$title}} | ConvertTo-Json -Compress)
+""",
+    "tapps-worktree-create.ps1": """\
+# TappsMCP WorktreeCreate hook
+$stdin = [Console]::In.ReadToEnd()
+$dir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }
+$logDir = "$dir/.tapps-mcp"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$ts = (Get-Date).ToString('o')
+Add-Content -Path "$logDir/worktree-activity.log" -Value "$ts WorktreeCreate: $stdin"
+Write-Output '{}'
+""",
+    "tapps-worktree-remove.ps1": """\
+# TappsMCP WorktreeRemove hook
+$stdin = [Console]::In.ReadToEnd()
+$dir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }
+$logDir = "$dir/.tapps-mcp"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$ts = (Get-Date).ToString('o')
+Add-Content -Path "$logDir/worktree-activity.log" -Value "$ts WorktreeRemove: $stdin"
+Write-Output '{}'
+""",
+}
+
+
+def _reactive_config(flag: str, *, win: bool) -> dict[str, list[dict[str, Any]]]:
+    """Return the hooks.json fragment enabled by *flag*.
+
+    Keeps opt-in state colocated with the scripts so callers don't have to
+    duplicate the event-to-script wiring.
+    """
+    ext = "ps1" if win else "sh"
+    cmd_prefix = (
+        "powershell -NoProfile -ExecutionPolicy Bypass -File "
+        if win
+        else ""
+    )
+    if flag == "cwd_reload":
+        return {
+            "CwdChanged": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"{cmd_prefix}.claude/hooks/tapps-cwd-changed.{ext}",
+                        },
+                    ],
+                },
+            ],
+        }
+    if flag == "permission_retry":
+        return {
+            "PermissionDenied": [
+                {
+                    "matcher": "mcp__tapps-mcp__.*",
+                    "if": "mcp__tapps-mcp__*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": (
+                                f"{cmd_prefix}.claude/hooks/tapps-permission-denied.{ext}"
+                            ),
+                        },
+                    ],
+                },
+            ],
+        }
+    if flag == "session_title":
+        return {
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"{cmd_prefix}.claude/hooks/tapps-session-title.{ext}",
+                        },
+                    ],
+                },
+            ],
+        }
+    if flag == "worktree_track":
+        return {
+            "WorktreeCreate": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"{cmd_prefix}.claude/hooks/tapps-worktree-create.{ext}",
+                        },
+                    ],
+                },
+            ],
+            "WorktreeRemove": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"{cmd_prefix}.claude/hooks/tapps-worktree-remove.{ext}",
+                        },
+                    ],
+                },
+            ],
+        }
+    raise ValueError(f"Unknown reactive hook flag: {flag!r}")
+
+
+def reactive_hook_scripts(enabled: dict[str, bool], *, win: bool) -> dict[str, str]:
+    """Select reactive hook scripts to ship based on enabled opt-in flags."""
+    scripts = CLAUDE_REACTIVE_HOOK_SCRIPTS_PS if win else CLAUDE_REACTIVE_HOOK_SCRIPTS
+    out: dict[str, str] = {}
+    ext = "ps1" if win else "sh"
+    for flag, on in enabled.items():
+        if not on:
+            continue
+        if flag == "cwd_reload":
+            out[f"tapps-cwd-changed.{ext}"] = scripts[f"tapps-cwd-changed.{ext}"]
+        elif flag == "permission_retry":
+            out[f"tapps-permission-denied.{ext}"] = scripts[
+                f"tapps-permission-denied.{ext}"
+            ]
+        elif flag == "session_title":
+            out[f"tapps-session-title.{ext}"] = scripts[f"tapps-session-title.{ext}"]
+        elif flag == "worktree_track":
+            out[f"tapps-worktree-create.{ext}"] = scripts[
+                f"tapps-worktree-create.{ext}"
+            ]
+            out[f"tapps-worktree-remove.{ext}"] = scripts[
+                f"tapps-worktree-remove.{ext}"
+            ]
+    return out
+
+
+def reactive_hooks_config(
+    enabled: dict[str, bool], *, win: bool
+) -> dict[str, list[dict[str, Any]]]:
+    """Merged hooks.json fragment for all enabled reactive-event flags."""
+    merged: dict[str, list[dict[str, Any]]] = {}
+    for flag, on in enabled.items():
+        if not on:
+            continue
+        for event, entries in _reactive_config(flag, win=win).items():
+            merged.setdefault(event, []).extend(entries)
+    return merged
+
+# ---------------------------------------------------------------------------
 # Engagement-level blocking hook variants (Epic 36.5)
 # ---------------------------------------------------------------------------
 
@@ -1647,6 +1908,7 @@ SUPPORTED_CLAUDE_HOOK_KEYS: frozenset[str] = frozenset(
         "PostToolUse",
         "PostToolUseFailure",
         "PermissionRequest",
+        "PermissionDenied",
         "Notification",
         "UserPromptSubmit",
         "Stop",
@@ -1659,6 +1921,7 @@ SUPPORTED_CLAUDE_HOOK_KEYS: frozenset[str] = frozenset(
         "Setup",
         "InstructionsLoaded",
         "ConfigChange",
+        "CwdChanged",
         "WorktreeCreate",
         "WorktreeRemove",
         "SessionStart",
