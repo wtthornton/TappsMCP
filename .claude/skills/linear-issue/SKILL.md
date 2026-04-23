@@ -3,7 +3,7 @@ name: linear-issue
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Create, lint, validate, or triage Linear issues for agents. Routes to docs-mcp Linear tools and the Linear plugin by user intent.
-allowed-tools: mcp__docs-mcp__docs_generate_story mcp__docs-mcp__docs_lint_linear_issue mcp__docs-mcp__docs_validate_linear_issue mcp__docs-mcp__docs_linear_triage mcp__plugin_linear_linear__get_issue mcp__plugin_linear_linear__list_issues
+allowed-tools: mcp__docs-mcp__docs_generate_story mcp__docs-mcp__docs_lint_linear_issue mcp__docs-mcp__docs_validate_linear_issue mcp__docs-mcp__docs_linear_triage mcp__plugin_linear_linear__get_issue mcp__plugin_linear_linear__list_issues mcp__tapps-mcp__tapps_linear_snapshot mcp__tapps-mcp__tapps_linear_snapshot_invalidate
 argument-hint: "[create|lint TAP-###|validate|triage] [free-form detail]"
 ---
 
@@ -14,6 +14,7 @@ Work with Linear issues for AI-agent consumption. Infer intent from the user's p
 2. Default `audience="agent"` emits the 5-section Linear template (What/Where/Why/Acceptance/Refs) and round-trips through the validator.
 3. If the call returns `INPUT_INVALID`, refine the inputs per the error message and retry. Do NOT pass `audience="human"` unless the user asks for a product-review doc.
 4. Print the emitted markdown. Ask the user whether to create in Linear; only then call the Linear plugin's `save_issue`.
+5. After `save_issue` returns, call `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team=<team>, project=<project>)` to evict stale cached snapshots for that slice.
 
 **Lint** an existing issue (prompt like "lint TAP-686", "check TAP-###"):
 1. Fetch via `mcp__plugin_linear_linear__get_issue`.
@@ -25,10 +26,12 @@ Work with Linear issues for AI-agent consumption. Infer intent from the user's p
 2. Report `{agent_ready, score, missing[]}`. Missing items are blockers; propose a concrete fix per item.
 
 **Triage** a batch (prompt like "triage open issues", "find label gaps"):
-1. `mcp__plugin_linear_linear__list_issues` with **explicit narrowing filters** — always pass `team`, `project`, `state` (`"backlog"` or `"unstarted"`), and `includeArchived=false`. Add `label` when the user asks about a specific label. Never call without filters: broad fetches waste Linear quota and cache poorly.
-2. If the user names a specific issue (e.g. "triage TAP-686"), use `mcp__plugin_linear_linear__get_issue(id="TAP-686")` instead — skip `list_issues` entirely.
-3. Pass the list to `mcp__docs-mcp__docs_linear_triage`.
-4. Present label_proposals, parent_groupings, and metadata_gaps. Confirm with user before applying any changes via Linear plugin writes.
+1. **Prefer** `mcp__tapps-mcp__tapps_linear_snapshot(team=<team>, project=<project>, state="backlog" | "unstarted", label?)` — read-through cached; 5min TTL for open issues, 1h for closed. Cache hits return in <50ms and do not count against Linear API quota. Required args: `team`, `project`.
+2. Fall back to `mcp__plugin_linear_linear__list_issues` only when `tapps_linear_snapshot` returns `degraded: true` (e.g. `TAPPS_MCP_LINEAR_API_KEY` unset). In that case, pass the same narrowing filters — `team`, `project`, `state`, `includeArchived=false` — never call without filters.
+3. If the user names a specific issue (e.g. "triage TAP-686"), use `mcp__plugin_linear_linear__get_issue(id="TAP-686")` instead — skip list/snapshot entirely.
+4. Pass the list to `mcp__docs-mcp__docs_linear_triage`.
+5. Present label_proposals, parent_groupings, and metadata_gaps. Confirm with user before applying any changes via Linear plugin writes.
+6. After any write, call `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team=<team>, project=<project>)` to refresh the cache on next read.
 
 Rules (enforced by docs-mcp tools):
 - Title <=80 chars; no em-dash preambles.

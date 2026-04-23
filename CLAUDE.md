@@ -157,6 +157,12 @@ This maps the blast radius via import graph analysis.
 
 You should call `tapps_validate_config(file_path)` when changing Dockerfile, docker-compose, or infra config.
 
+### Linear Issue Reads
+
+You should prefer `tapps_linear_snapshot(team, project, state)` over `mcp__plugin_linear_linear__list_issues` for triage and bulk reads.
+This is a read-through cache (5min TTL for open issues, 1h for closed) that cuts Linear API quota and returns cache hits in <50ms. Requires `TAPPS_MCP_LINEAR_API_KEY`; returns `degraded: true` when unset and the caller should fall back to the Linear plugin with the same narrow filters.
+After writing to Linear (`save_issue`, `save_comment`), call `tapps_linear_snapshot_invalidate(team, project)` to evict stale cache entries so the next read is fresh.
+
 ## Memory System
 
 `tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 5000 entries per project (`TAPPS_BRAIN_MAX_ENTRIES`; auto-evicts at cap, no warning — monitor via `brain_status()`). Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
