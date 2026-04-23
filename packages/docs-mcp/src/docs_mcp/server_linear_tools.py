@@ -227,7 +227,10 @@ async def docs_linear_triage(
     into parent-grouping candidates, and summarizes metadata gaps.
 
     Typical workflow:
-        1. ``list_issues`` (Linear MCP) → collect open issues.
+        1. ``list_issues`` (Linear MCP) with explicit narrowing —
+           always pass ``team``, ``project``, ``state`` (``"backlog"``
+           or ``"unstarted"``), and ``includeArchived=False``. Broad
+           queries waste Linear quota; narrow ones cache well.
         2. Reshape into this tool's input schema.
         3. Call ``docs_linear_triage(issues=[...])``.
         4. Review ``label_proposals`` / ``parent_groupings`` with the user.

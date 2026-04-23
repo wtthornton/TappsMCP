@@ -25,9 +25,10 @@ Work with Linear issues for AI-agent consumption. Infer intent from the user's p
 2. Report `{agent_ready, score, missing[]}`. Missing items are blockers; propose a concrete fix per item.
 
 **Triage** a batch (prompt like "triage open issues", "find label gaps"):
-1. `mcp__plugin_linear_linear__list_issues` to fetch open issues in the current team/project.
-2. Pass the list to `mcp__docs-mcp__docs_linear_triage`.
-3. Present label_proposals, parent_groupings, and metadata_gaps. Confirm with user before applying any changes via Linear plugin writes.
+1. `mcp__plugin_linear_linear__list_issues` with **explicit narrowing filters** — always pass `team`, `project`, `state` (`"backlog"` or `"unstarted"`), and `includeArchived=false`. Add `label` when the user asks about a specific label. Never call without filters: broad fetches waste Linear quota and cache poorly.
+2. If the user names a specific issue (e.g. "triage TAP-686"), use `mcp__plugin_linear_linear__get_issue(id="TAP-686")` instead — skip `list_issues` entirely.
+3. Pass the list to `mcp__docs-mcp__docs_linear_triage`.
+4. Present label_proposals, parent_groupings, and metadata_gaps. Confirm with user before applying any changes via Linear plugin writes.
 
 Rules (enforced by docs-mcp tools):
 - Title <=80 chars; no em-dash preambles.
