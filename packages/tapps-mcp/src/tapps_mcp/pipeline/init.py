@@ -68,6 +68,7 @@ class BootstrapConfig:
     memory_auto_capture: bool = False
     overwrite_tech_stack_md: bool = False
     destructive_guard: bool = False
+    linear_enforce_gate: bool = False
     minimal: bool = False
     dry_run: bool = False
     verify_only: bool = False
@@ -239,6 +240,7 @@ def bootstrap_pipeline(
     memory_auto_capture: bool = False,
     memory_auto_recall: bool = False,
     destructive_guard: bool = False,
+    linear_enforce_gate: bool = False,
     minimal: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
@@ -282,6 +284,7 @@ def bootstrap_pipeline(
             memory_auto_recall=memory_auto_recall,
             memory_auto_capture=memory_auto_capture,
             destructive_guard=destructive_guard,
+            linear_enforce_gate=linear_enforce_gate,
             minimal=minimal,
             dry_run=dry_run,
             verify_only=verify_only,
@@ -785,6 +788,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 state.project_root,
                 engagement_level=engagement,
                 destructive_guard=cfg.destructive_guard,
+                linear_enforce_gate=cfg.linear_enforce_gate,
             )
             state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
             state.result["skills"] = generate_skills(

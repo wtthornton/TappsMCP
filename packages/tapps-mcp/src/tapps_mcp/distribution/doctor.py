@@ -501,6 +501,51 @@ def check_linear_issue_skill_current(project_root: Path) -> CheckResult:
     )
 
 
+def check_pretooluse_matchers(project_root: Path) -> CheckResult:
+    """Report each PreToolUse matcher present in .claude/settings.json (TAP-981).
+
+    Lists matcher names (e.g., "Bash", "mcp__plugin_linear_linear__save_issue")
+    so users can tell *what* is being blocked, not just whether any PreToolUse
+    hook is wired. Always returns ok=True — this is informational, not a gate;
+    absence of a matcher is often intentional (opt-in flags control deployment).
+    """
+    settings_path = project_root / ".claude" / "settings.json"
+    if not settings_path.exists():
+        return CheckResult(
+            "PreToolUse matchers",
+            True,
+            ".claude/settings.json not present (no matchers to list)",
+        )
+    try:
+        raw = settings_path.read_text(encoding="utf-8")
+        data = json.loads(raw) if raw.strip() else {}
+    except (OSError, json.JSONDecodeError) as exc:
+        return CheckResult(
+            "PreToolUse matchers",
+            False,
+            f"settings.json unreadable: {exc}",
+            "Fix or regenerate via tapps-mcp upgrade",
+        )
+    entries = (data.get("hooks") or {}).get("PreToolUse") or []
+    matchers: list[str] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            m = entry.get("matcher")
+            if isinstance(m, str) and m:
+                matchers.append(m)
+    if not matchers:
+        return CheckResult(
+            "PreToolUse matchers",
+            True,
+            "no PreToolUse matchers wired (no opt-in gates enabled)",
+        )
+    return CheckResult(
+        "PreToolUse matchers",
+        True,
+        f"wired: {', '.join(matchers)}",
+    )
+
+
 def check_finish_task_skill(project_root: Path) -> CheckResult:
     """Check the ``tapps-finish-task`` composite skill is deployed (TAP-977).
 
@@ -1368,6 +1413,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_linear_standards_rule(root))
     checks.append(check_linear_issue_skill_current(root))
     checks.append(check_finish_task_skill(root))
+    checks.append(check_pretooluse_matchers(root))
     checks.append(check_agents_md(root))
     checks.append(check_karpathy_guidelines(root))
     checks.append(check_claude_settings(root))

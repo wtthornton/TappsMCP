@@ -172,6 +172,12 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 - **PreCompact** - Backs up scoring context before context window compaction
 - **SubagentStart** - Injects TappsMCP awareness into spawned subagents
 
+Opt-in `PreToolUse` gates are independent flags in `.tapps-mcp.yaml` — enable each based on what you want blocked:
+- `destructive_guard: true` — blocks destructive Bash commands (`rm -rf`, `format c:`, etc.).
+- `linear_enforce_gate: true` — blocks `mcp__plugin_linear_linear__save_issue` unless the `linear-issue` skill flow (with `docs_validate_linear_issue`) was used recently. Bypass: `TAPPS_LINEAR_SKIP_VALIDATE=1`. Bash-only for now.
+
+Run `tapps-mcp doctor` to list wired matchers.
+
 **Cursor** (`.cursor/hooks/`): 3 hook scripts:
 - **beforeMCPExecution** - Logs MCP tool invocations for observability
 - **afterFileEdit** - Fire-and-forget reminder to run quality checks

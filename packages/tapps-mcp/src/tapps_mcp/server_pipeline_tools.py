@@ -439,6 +439,7 @@ async def tapps_init(
     memory_auto_capture: bool = False,
     memory_auto_recall: bool = False,
     destructive_guard: bool | None = None,
+    linear_enforce_gate: bool | None = None,
     minimal: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
@@ -485,6 +486,9 @@ async def tapps_init(
     dg = destructive_guard
     if dg is None:
         dg = getattr(settings, "destructive_guard", False)
+    leg = linear_enforce_gate
+    if leg is None:
+        leg = getattr(settings, "linear_enforce_gate", False)
 
     cfg = _pih.build_init_bootstrap_config(
         create_handoff=create_handoff,
@@ -504,6 +508,7 @@ async def tapps_init(
         memory_auto_capture=memory_auto_capture,
         memory_auto_recall=memory_auto_recall,
         destructive_guard=dg,
+        linear_enforce_gate=leg,
         minimal=minimal,
         dry_run=dry_run,
         verify_only=verify_only,

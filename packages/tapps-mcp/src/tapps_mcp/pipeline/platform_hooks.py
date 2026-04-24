@@ -56,6 +56,12 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     ENGAGEMENT_HOOK_EVENTS as _ENGAGEMENT_HOOK_EVENTS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    LINEAR_GATE_HOOKS_CONFIG as _LINEAR_GATE_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    LINEAR_GATE_SCRIPTS as _LINEAR_GATE_SCRIPTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     INVALID_CLAUDE_HOOK_KEYS as _INVALID_CLAUDE_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -214,6 +220,9 @@ def _filter_scripts(
         "tapps-memory-capture": "Stop",
         "tapps-memory-auto-capture": "Stop",
         "tapps-pre-bash": "PreToolUse",
+        # TAP-981 Linear routing gate
+        "tapps-pre-linear-write": "PreToolUse",
+        "tapps-post-docs-validate": "PostToolUse",
         # TAP-956 reactive-event scripts
         "tapps-cwd-changed": "CwdChanged",
         "tapps-permission-denied": "PermissionDenied",
@@ -370,6 +379,7 @@ def generate_claude_hooks(
     engagement_level: str = "medium",
     prompt_hooks: bool = False,
     destructive_guard: bool = False,
+    linear_enforce_gate: bool = False,
     reactive_hooks: dict[str, bool] | None = None,
 ) -> dict[str, Any]:
     """Generate Claude Code hook scripts and settings.json hooks config.
@@ -403,6 +413,14 @@ def generate_claude_hooks(
     )
     if destructive_guard:
         allowed_events.add("PreToolUse")
+    # TAP-981: Linear routing gate — independent of destructive_guard. Adds
+    # both PreToolUse (blocks raw save_issue) and PostToolUse (sentinel writer
+    # after docs_validate_linear_issue). Bash-only for now; Windows support is
+    # a follow-up (gate silently does not install on Windows).
+    linear_gate_active = linear_enforce_gate and not win
+    if linear_gate_active:
+        allowed_events.add("PreToolUse")
+        allowed_events.add("PostToolUse")
 
     # Select base scripts and config
     base_scripts = _CLAUDE_HOOK_SCRIPTS_PS if win else _CLAUDE_HOOK_SCRIPTS
@@ -410,6 +428,10 @@ def generate_claude_hooks(
     if destructive_guard:
         dg_config = _DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS if win else _DESTRUCTIVE_GUARD_HOOKS_CONFIG
         for event, entries in dg_config.items():
+            hooks_config.setdefault(event, []).extend(entries)
+    if linear_gate_active:
+        base_scripts = {**base_scripts, **_LINEAR_GATE_SCRIPTS}
+        for event, entries in _LINEAR_GATE_HOOKS_CONFIG.items():
             hooks_config.setdefault(event, []).extend(entries)
 
     # TAP-956: opt-in reactive-event hooks (CwdChanged, PermissionDenied,
@@ -485,6 +507,7 @@ def generate_claude_hooks(
         "engagement_level": engagement_level,
         "prompt_hooks": prompt_hooks,
         "destructive_guard": destructive_guard,
+        "linear_enforce_gate": linear_gate_active,
     }
 
 

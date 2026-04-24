@@ -198,6 +198,15 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 - **PreCompact** - Backs up scoring context before context window compaction
 - **SubagentStart** - Injects TappsMCP awareness into spawned subagents
 
+#### Opt-in PreToolUse gates (independent flags in `.tapps-mcp.yaml`)
+
+These add blocking `PreToolUse` matchers. They're independent — enable each based on what you want blocked.
+
+- **`destructive_guard: true`** — installs `tapps-pre-bash.sh`, blocks Bash commands containing `rm -rf`, `format c:`, fork-bomb patterns, etc. Exit 2 blocks the command.
+- **`linear_enforce_gate: true`** — installs `tapps-pre-linear-write.sh` + `tapps-post-docs-validate.sh` (TAP-981). Blocks `mcp__plugin_linear_linear__save_issue` unless a `mcp__docs-mcp__docs_validate_linear_issue` call happened in the last 30 minutes. Steers Linear writes through the `linear-issue` skill's generator/validator pipeline. Emergency bypass: `TAPPS_LINEAR_SKIP_VALIDATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`). Bash-only; Windows is a no-op until PS variants ship.
+
+Run `tapps-mcp doctor` to see which `PreToolUse` matchers are wired in your project.
+
 **Cursor** (`.cursor/hooks/`): 3 hook scripts:
 - **beforeMCPExecution** - Logs MCP tool invocations for observability
 - **afterFileEdit** - Fire-and-forget reminder to run quality checks

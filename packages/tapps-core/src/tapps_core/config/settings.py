@@ -844,6 +844,20 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Linear routing gate (TAP-981) — opt-in PreToolUse + PostToolUse pair
+    linear_enforce_gate: bool = Field(
+        default=False,
+        description=(
+            "When True, generate a pair of hooks that block "
+            "mcp__plugin_linear_linear__save_issue unless a recent "
+            "mcp__docs-mcp__docs_validate_linear_issue call exists in the "
+            "last 30 minutes. Steers Linear writes through the linear-issue "
+            "skill and docs-mcp template pipeline. Independent of "
+            "destructive_guard. Bypass with TAPPS_LINEAR_SKIP_VALIDATE=1 "
+            "(logged to .tapps-mcp/.bypass-log.jsonl)."
+        ),
+    )
+
     # Business experts (Epic 43)
     business_experts_enabled: bool = Field(
         default=True,

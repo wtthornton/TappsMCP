@@ -1360,6 +1360,136 @@ DESTRUCTIVE_GUARD_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     ],
 }
 
+# ---------------------------------------------------------------------------
+# Linear routing gate (TAP-981) — opt-in via linear_enforce_gate
+# ---------------------------------------------------------------------------
+#
+# Two cooperating hooks:
+#   1. PostToolUse on mcp__docs-mcp__docs_validate_linear_issue writes a
+#      sentinel file with a timestamp whenever an agent validates a Linear
+#      issue body against the template.
+#   2. PreToolUse on mcp__plugin_linear_linear__save_issue reads that
+#      sentinel and blocks the write if no validate call has happened in the
+#      last 30 minutes — steering the agent back through the linear-issue
+#      skill. Bypass with TAPPS_LINEAR_SKIP_VALIDATE=1 (logged).
+#
+# Kept independent of destructive_guard so projects can enable Linear routing
+# enforcement without also enabling the bash destructive-command guard.
+
+LINEAR_GATE_POST_VALIDATE_SCRIPT = """\
+#!/usr/bin/env bash
+# TappsMCP PostToolUse hook — Linear gate sentinel writer (TAP-981)
+# Writes .tapps-mcp/.linear-validate-sentinel with current epoch seconds
+# whenever an agent calls mcp__docs-mcp__docs_validate_linear_issue. Paired
+# with tapps-pre-linear-write.sh which reads the sentinel to decide whether
+# to allow a downstream save_issue.
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+TOOL=$(echo "$INPUT" | "$PYBIN" -c \
+  "import sys,json
+try:
+    d=json.load(sys.stdin); print(d.get('tool_name') or d.get('toolName') or '')
+except Exception:
+    print('')" 2>/dev/null)
+case "$TOOL" in
+  mcp__docs-mcp__docs_validate_linear_issue|docs_validate_linear_issue)
+    ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+    mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+    date +%s > "$ROOT/.tapps-mcp/.linear-validate-sentinel" 2>/dev/null
+    ;;
+esac
+exit 0
+"""
+
+LINEAR_GATE_PRE_SAVE_SCRIPT = """\
+#!/usr/bin/env bash
+# TappsMCP PreToolUse hook — Linear write gate (TAP-981)
+# Blocks mcp__plugin_linear_linear__save_issue if no recent
+# docs_validate_linear_issue sentinel (within 30 minutes). Bypass with
+# TAPPS_LINEAR_SKIP_VALIDATE=1 (logged to .tapps-mcp/.bypass-log.jsonl).
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+TOOL=$(echo "$INPUT" | "$PYBIN" -c \
+  "import sys,json
+try:
+    d=json.load(sys.stdin); print(d.get('tool_name') or d.get('toolName') or '')
+except Exception:
+    print('')" 2>/dev/null)
+case "$TOOL" in
+  mcp__plugin_linear_linear__save_issue|save_issue) ;;
+  *) exit 0 ;;
+esac
+if [ "${TAPPS_LINEAR_SKIP_VALIDATE:-0}" = "1" ]; then
+  ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+  mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+  echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"bypass\\":\\"TAPPS_LINEAR_SKIP_VALIDATE\\"}" \\
+    >> "$ROOT/.tapps-mcp/.bypass-log.jsonl" 2>/dev/null
+  exit 0
+fi
+ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+SENTINEL="$ROOT/.tapps-mcp/.linear-validate-sentinel"
+if [ ! -f "$SENTINEL" ]; then
+  cat >&2 <<'MSG'
+TappsMCP: Blocked mcp__plugin_linear_linear__save_issue — no recent docs_validate_linear_issue call.
+Route Linear writes through the `linear-issue` skill:
+  1. docs_generate_story (or docs_generate_epic)
+  2. docs_validate_linear_issue
+  3. plugin save_issue
+  4. tapps_linear_snapshot_invalidate
+Or set TAPPS_LINEAR_SKIP_VALIDATE=1 for emergency bypass (logged).
+See .claude/rules/linear-standards.md.
+MSG
+  exit 2
+fi
+NOW=$(date +%s)
+SENT=$(cat "$SENTINEL" 2>/dev/null)
+if ! echo "$SENT" | grep -Eq '^[0-9]+$'; then
+  SENT=0
+fi
+AGE=$((NOW - SENT))
+# Allow if validated within last 1800 seconds (30 minutes).
+if [ "$AGE" -le 1800 ]; then
+  exit 0
+fi
+cat >&2 <<MSG
+TappsMCP: Blocked mcp__plugin_linear_linear__save_issue — last docs_validate_linear_issue was ${AGE}s ago (> 1800s freshness window).
+Re-validate before push: docs_validate_linear_issue(title=..., description=..., ...)
+Or set TAPPS_LINEAR_SKIP_VALIDATE=1 for emergency bypass (logged).
+See .claude/rules/linear-standards.md.
+MSG
+exit 2
+"""
+
+LINEAR_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
+    "PreToolUse": [
+        {
+            "matcher": "mcp__plugin_linear_linear__save_issue",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-pre-linear-write.sh",
+                },
+            ],
+        },
+    ],
+    "PostToolUse": [
+        {
+            "matcher": "mcp__docs-mcp__docs_validate_linear_issue",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-post-docs-validate.sh",
+                },
+            ],
+        },
+    ],
+}
+
+LINEAR_GATE_SCRIPTS: dict[str, str] = {
+    "tapps-pre-linear-write.sh": LINEAR_GATE_PRE_SAVE_SCRIPT,
+    "tapps-post-docs-validate.sh": LINEAR_GATE_POST_VALIDATE_SCRIPT,
+}
+
 DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
         {
