@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-04-24
+
+### Added
+
+- **`tapps_linear_snapshot_get` / `tapps_linear_snapshot_put` / `tapps_linear_snapshot_invalidate`** — a three-tool read-through cache for Linear issue slices (TAP-964). The Linear MCP plugin owns OAuth via Claude Code; tapps-mcp is a pure cache. Flow: agent calls `_get`; on miss, agent fetches via `mcp__plugin_linear_linear__list_issues` and calls `_put`; after any write, agent calls `_invalidate`. State-bucketed TTL: 5min for open (backlog/unstarted/started/triage), 1h for closed (completed/canceled), configurable via `linear_cache_ttl_open_seconds` / `linear_cache_ttl_closed_seconds`. File-backed cache under `<project_root>/.tapps-mcp-cache/linear-snapshots/*.json` with `expires_at` enforcement on read. Motivating signal: 5118 `plugin_linear_linear.list_issues` calls in 7 days on 2026-04-23 (~30/hr); cache hits should drive that below 30%.
+- New `linear-issue` skill directives (shipped in both [.claude/skills/linear-issue/SKILL.md](.claude/skills/linear-issue/SKILL.md) and the Claude Code + Cursor templates in [platform_skills.py](packages/tapps-mcp/src/tapps_mcp/pipeline/platform_skills.py)): triage flow now routes through `tapps_linear_snapshot_get` first, falls through to the plugin only on miss, repopulates the cache via `_put`, and invalidates after writes (`save_issue`, `save_comment`).
+- New "Linear Issue Reads" section in [CLAUDE.md](CLAUDE.md) documenting the three-step agent flow.
+
+### Changed
+
+- **Linear triage prescriptions in the shipped skill now demand narrow filters (TAP-967).** The `linear-issue` skill, both platform templates, and the `docs_linear_triage` docstring previously told the agent to "fetch open issues in the current team/project" with no filter arguments — which produced default broad calls that included archived issues. Rewrote to require explicit `team`, `project`, `state` (`"backlog"` or `"unstarted"`), and `includeArchived=false`, plus `get_issue(id)` short-circuit when the user names a specific issue. Consumer projects pick this up via `tapps_upgrade`.
+
+### Infrastructure
+
+- Bumped stale skills-count assertion in [test_platform_generators.py](packages/tapps-mcp/tests/unit/test_platform_generators.py) from 12 → 13. The `linear-issue` skill shipped in 3.1.0 was never reflected in the count, producing four pre-existing test failures. Fixed alongside the TAP-967 template edits.
+
+### Internal architecture note
+
+- The initial TAP-964 implementation shipped `tapps_linear_snapshot` as a direct Linear GraphQL client gated on `TAPPS_MCP_LINEAR_API_KEY`. That was wrong: the Linear plugin already has OAuth and the key would have been a parallel credential the user had no reason to generate. Reworked to the cache-only get/put pair so tapps-mcp never calls Linear. The `linear_api_key` and `linear_api_url` config fields added earlier in this release were removed before the cut.
+
 ## [3.2.5] - 2026-04-23
 
 ### Changed
