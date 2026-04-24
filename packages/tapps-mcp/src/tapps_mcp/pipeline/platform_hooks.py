@@ -60,7 +60,13 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     LINEAR_GATE_HOOKS_CONFIG as _LINEAR_GATE_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    LINEAR_GATE_HOOKS_CONFIG_PS as _LINEAR_GATE_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     LINEAR_GATE_SCRIPTS as _LINEAR_GATE_SCRIPTS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    LINEAR_GATE_SCRIPTS_PS as _LINEAR_GATE_SCRIPTS_PS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     INVALID_CLAUDE_HOOK_KEYS as _INVALID_CLAUDE_HOOK_KEYS,
@@ -414,11 +420,11 @@ def generate_claude_hooks(
     )
     if destructive_guard:
         allowed_events.add("PreToolUse")
-    # TAP-981: Linear routing gate — independent of destructive_guard. Adds
-    # both PreToolUse (blocks raw save_issue) and PostToolUse (sentinel writer
-    # after docs_validate_linear_issue). Bash-only for now; Windows support is
-    # a follow-up (gate silently does not install on Windows).
-    linear_gate_active = linear_enforce_gate and not win
+    # TAP-981/TAP-986: Linear routing gate — independent of destructive_guard.
+    # Adds both PreToolUse (blocks raw save_issue) and PostToolUse (sentinel
+    # writer after docs_validate_linear_issue). Bash + PowerShell variants
+    # ship together; the branch below picks the right pair for the platform.
+    linear_gate_active = linear_enforce_gate
     if linear_gate_active:
         allowed_events.add("PreToolUse")
         allowed_events.add("PostToolUse")
@@ -434,8 +440,10 @@ def generate_claude_hooks(
         for event, entries in dg_config.items():
             hooks_config.setdefault(event, []).extend(entries)
     if linear_gate_active:
-        base_scripts = {**base_scripts, **_LINEAR_GATE_SCRIPTS}
-        for event, entries in _LINEAR_GATE_HOOKS_CONFIG.items():
+        lg_scripts = _LINEAR_GATE_SCRIPTS_PS if win else _LINEAR_GATE_SCRIPTS
+        lg_config = _LINEAR_GATE_HOOKS_CONFIG_PS if win else _LINEAR_GATE_HOOKS_CONFIG
+        base_scripts = {**base_scripts, **lg_scripts}
+        for event, entries in lg_config.items():
             hooks_config.setdefault(event, []).extend(entries)
 
     # TAP-956: opt-in reactive-event hooks (CwdChanged, PermissionDenied,

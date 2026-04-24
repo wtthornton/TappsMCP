@@ -17,9 +17,13 @@ import pytest
 
 from tapps_mcp.pipeline.platform_hook_templates import (
     LINEAR_GATE_HOOKS_CONFIG,
+    LINEAR_GATE_HOOKS_CONFIG_PS,
     LINEAR_GATE_POST_VALIDATE_SCRIPT,
+    LINEAR_GATE_POST_VALIDATE_SCRIPT_PS,
     LINEAR_GATE_PRE_SAVE_SCRIPT,
+    LINEAR_GATE_PRE_SAVE_SCRIPT_PS,
     LINEAR_GATE_SCRIPTS,
+    LINEAR_GATE_SCRIPTS_PS,
 )
 from tapps_mcp.pipeline.platform_hooks import generate_claude_hooks
 
@@ -84,15 +88,98 @@ class TestGateFlagWiring:
         pre_matchers = [e.get("matcher") for e in settings["hooks"].get("PreToolUse", [])]
         assert "Bash" not in pre_matchers
 
-    def test_windows_silently_disables(self, tmp_path: Path) -> None:
-        """Bash-only scripts — Windows gets no-op until PS variants ship."""
+    def test_windows_writes_ps1_scripts(self, tmp_path: Path) -> None:
+        """TAP-986: Windows opt-in now produces .ps1 gate scripts, not no-op."""
         result = generate_claude_hooks(
             tmp_path, force_windows=True, linear_enforce_gate=True
         )
-        assert result["linear_enforce_gate"] is False
+        assert result["linear_enforce_gate"] is True
+        assert (
+            tmp_path / ".claude" / "hooks" / "tapps-pre-linear-write.ps1"
+        ).exists()
+        assert (
+            tmp_path / ".claude" / "hooks" / "tapps-post-docs-validate.ps1"
+        ).exists()
+        # And the bash scripts must NOT land on Windows — wrong-platform files
+        # would be cleaned up by _cleanup_wrong_platform_scripts.
         assert not (
             tmp_path / ".claude" / "hooks" / "tapps-pre-linear-write.sh"
         ).exists()
+
+    def test_windows_settings_points_at_powershell(self, tmp_path: Path) -> None:
+        """Windows hooks config must invoke powershell -File ... .ps1."""
+        generate_claude_hooks(
+            tmp_path, force_windows=True, linear_enforce_gate=True
+        )
+        settings = json.loads(
+            (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
+        )
+
+        def _cmds(event: str) -> list[str]:
+            out: list[str] = []
+            for entry in settings["hooks"].get(event, []):
+                for hook in entry.get("hooks", []):
+                    out.append(hook.get("command", ""))
+            return out
+
+        pre_cmds = _cmds("PreToolUse")
+        post_cmds = _cmds("PostToolUse")
+        assert any(
+            "powershell -NoProfile" in c
+            and "tapps-pre-linear-write.ps1" in c
+            for c in pre_cmds
+        )
+        assert any(
+            "powershell -NoProfile" in c
+            and "tapps-post-docs-validate.ps1" in c
+            for c in post_cmds
+        )
+
+
+class TestGatePowerShellScripts:
+    """Static checks on the PS variants (TAP-986).
+
+    Behavioral tests run only on Windows — on Unix we assert content to keep
+    parity with the bash originals without invoking powershell.
+    """
+
+    def test_scripts_ps_map_has_both(self) -> None:
+        assert "tapps-pre-linear-write.ps1" in LINEAR_GATE_SCRIPTS_PS
+        assert "tapps-post-docs-validate.ps1" in LINEAR_GATE_SCRIPTS_PS
+
+    def test_ps_hooks_config_has_matchers(self) -> None:
+        pre_matchers = [e["matcher"] for e in LINEAR_GATE_HOOKS_CONFIG_PS["PreToolUse"]]
+        post_matchers = [e["matcher"] for e in LINEAR_GATE_HOOKS_CONFIG_PS["PostToolUse"]]
+        assert "mcp__plugin_linear_linear__save_issue" in pre_matchers
+        assert "mcp__docs-mcp__docs_validate_linear_issue" in post_matchers
+
+    def test_ps_pre_save_script_mentions_bypass_env_var(self) -> None:
+        assert "TAPPS_LINEAR_SKIP_VALIDATE" in LINEAR_GATE_PRE_SAVE_SCRIPT_PS
+
+    def test_ps_pre_save_script_references_linear_standards_rule(self) -> None:
+        assert "linear-standards.md" in LINEAR_GATE_PRE_SAVE_SCRIPT_PS
+
+    def test_ps_post_validate_script_writes_sentinel(self) -> None:
+        assert ".linear-validate-sentinel" in LINEAR_GATE_POST_VALIDATE_SCRIPT_PS
+
+    def test_ps_pre_save_enforces_1800s_window(self) -> None:
+        # Must match the bash freshness window so behavior is identical.
+        assert "1800" in LINEAR_GATE_PRE_SAVE_SCRIPT_PS
+
+    def test_ps_pre_save_logs_bypass(self) -> None:
+        assert ".bypass-log.jsonl" in LINEAR_GATE_PRE_SAVE_SCRIPT_PS
+
+    def test_ps_scripts_use_unix_epoch(self) -> None:
+        # PS equivalent of bash `date +%s` is DateTimeOffset.ToUnixTimeSeconds.
+        assert "ToUnixTimeSeconds" in LINEAR_GATE_POST_VALIDATE_SCRIPT_PS
+        assert "ToUnixTimeSeconds" in LINEAR_GATE_PRE_SAVE_SCRIPT_PS
+
+    def test_ps_hooks_config_ps_uses_powershell_prefix(self) -> None:
+        for entries in LINEAR_GATE_HOOKS_CONFIG_PS.values():
+            for entry in entries:
+                for hook in entry["hooks"]:
+                    assert "powershell -NoProfile" in hook["command"]
+                    assert hook["command"].endswith(".ps1")
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="bash-only gate scripts")

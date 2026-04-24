@@ -1490,6 +1490,134 @@ LINEAR_GATE_SCRIPTS: dict[str, str] = {
     "tapps-post-docs-validate.sh": LINEAR_GATE_POST_VALIDATE_SCRIPT,
 }
 
+# ---------------------------------------------------------------------------
+# Linear routing gate — PowerShell variants (TAP-986)
+# ---------------------------------------------------------------------------
+# Windows equivalents of the bash gate. Sentinel path + behavior must match
+# the bash originals so an agent switching platforms sees the same gate.
+# `[DateTimeOffset]::Now.ToUnixTimeSeconds()` is the PS match for bash
+# `date +%s`; `Test-Path` is the match for `[ -f ... ]`.
+
+LINEAR_GATE_POST_VALIDATE_SCRIPT_PS = """\
+# TappsMCP PostToolUse hook — Linear gate sentinel writer (TAP-981/TAP-986)
+# Writes .tapps-mcp/.linear-validate-sentinel with current Unix epoch seconds
+# whenever an agent calls mcp__docs-mcp__docs_validate_linear_issue. Paired
+# with tapps-pre-linear-write.ps1 which reads the sentinel to decide whether
+# to allow a downstream save_issue.
+$stdin = [Console]::In.ReadToEnd()
+$tool = ""
+try {
+    $d = $stdin | ConvertFrom-Json
+    if ($d.tool_name) { $tool = [string]$d.tool_name }
+    elseif ($d.toolName) { $tool = [string]$d.toolName }
+} catch {}
+if ($tool -eq 'mcp__docs-mcp__docs_validate_linear_issue' -or $tool -eq 'docs_validate_linear_issue') {
+    $root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+    $dir = Join-Path $root '.tapps-mcp'
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    }
+    $ts = [int64]([DateTimeOffset]::Now.ToUnixTimeSeconds())
+    Set-Content -Path (Join-Path $dir '.linear-validate-sentinel') -Value $ts -Encoding UTF8
+}
+exit 0
+"""
+
+LINEAR_GATE_PRE_SAVE_SCRIPT_PS = """\
+# TappsMCP PreToolUse hook — Linear write gate (TAP-981/TAP-986)
+# Blocks mcp__plugin_linear_linear__save_issue if no recent
+# docs_validate_linear_issue sentinel (within 30 minutes). Bypass with
+# TAPPS_LINEAR_SKIP_VALIDATE=1 (logged to .tapps-mcp/.bypass-log.jsonl).
+$stdin = [Console]::In.ReadToEnd()
+$tool = ""
+try {
+    $d = $stdin | ConvertFrom-Json
+    if ($d.tool_name) { $tool = [string]$d.tool_name }
+    elseif ($d.toolName) { $tool = [string]$d.toolName }
+} catch {}
+if ($tool -ne 'mcp__plugin_linear_linear__save_issue' -and $tool -ne 'save_issue') {
+    exit 0
+}
+$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+$dir = Join-Path $root '.tapps-mcp'
+if ($env:TAPPS_LINEAR_SKIP_VALIDATE -eq '1') {
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    }
+    $nowIso = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $entry = @{ ts = $nowIso; bypass = 'TAPPS_LINEAR_SKIP_VALIDATE' } | ConvertTo-Json -Compress
+    Add-Content -Path (Join-Path $dir '.bypass-log.jsonl') -Value $entry
+    exit 0
+}
+$sentinel = Join-Path $dir '.linear-validate-sentinel'
+if (-not (Test-Path $sentinel)) {
+    [Console]::Error.WriteLine("TappsMCP: Blocked mcp__plugin_linear_linear__save_issue - no recent docs_validate_linear_issue call.")
+    [Console]::Error.WriteLine("Route Linear writes through the linear-issue skill:")
+    [Console]::Error.WriteLine("  1. docs_generate_story (or docs_generate_epic)")
+    [Console]::Error.WriteLine("  2. docs_validate_linear_issue")
+    [Console]::Error.WriteLine("  3. plugin save_issue")
+    [Console]::Error.WriteLine("  4. tapps_linear_snapshot_invalidate")
+    [Console]::Error.WriteLine("Or set TAPPS_LINEAR_SKIP_VALIDATE=1 for emergency bypass (logged).")
+    [Console]::Error.WriteLine("See .claude/rules/linear-standards.md.")
+    exit 2
+}
+$now = [int64]([DateTimeOffset]::Now.ToUnixTimeSeconds())
+$raw = ""
+try {
+    $raw = (Get-Content -Path $sentinel -Raw -ErrorAction Stop).Trim()
+} catch {}
+if ($raw -notmatch '^[0-9]+$') {
+    $sent = [int64]0
+} else {
+    $sent = [int64]$raw
+}
+$age = $now - $sent
+if ($age -le 1800) {
+    exit 0
+}
+[Console]::Error.WriteLine("TappsMCP: Blocked mcp__plugin_linear_linear__save_issue - last docs_validate_linear_issue was ${age}s ago (> 1800s freshness window).")
+[Console]::Error.WriteLine("Re-validate before push: docs_validate_linear_issue(title=..., description=..., ...)")
+[Console]::Error.WriteLine("Or set TAPPS_LINEAR_SKIP_VALIDATE=1 for emergency bypass (logged).")
+[Console]::Error.WriteLine("See .claude/rules/linear-standards.md.")
+exit 2
+"""
+
+LINEAR_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
+    "PreToolUse": [
+        {
+            "matcher": "mcp__plugin_linear_linear__save_issue",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-pre-linear-write.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "PostToolUse": [
+        {
+            "matcher": "mcp__docs-mcp__docs_validate_linear_issue",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-post-docs-validate.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+}
+
+LINEAR_GATE_SCRIPTS_PS: dict[str, str] = {
+    "tapps-pre-linear-write.ps1": LINEAR_GATE_PRE_SAVE_SCRIPT_PS,
+    "tapps-post-docs-validate.ps1": LINEAR_GATE_POST_VALIDATE_SCRIPT_PS,
+}
+
 DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
         {
