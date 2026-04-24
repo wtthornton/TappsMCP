@@ -1,3 +1,6 @@
+---
+alwaysApply: true
+---
 # Linear Issue Standards (TappsMCP)
 
 All Linear writes in this project — epic creation, story creation, issue updates — MUST route through the `linear-issue` skill, which in turn routes through the docs-mcp generator and validator tools. Raw calls to `mcp__plugin_linear_linear__save_issue` are a rule violation.
@@ -28,7 +31,7 @@ All Linear writes in this project — epic creation, story creation, issue updat
 
 ## Formatting rules (enforced by docs-mcp validator)
 
-- Title ≤ 80 characters; no em-dash preambles.
+- Title <= 80 characters; no em-dash preambles.
 - `## Acceptance` must contain at least one `- [ ]` checkbox.
 - `## Where` must contain at least one `file.ext:LINE-RANGE` anchor.
 - Bare `TAP-###` references, never `<issue id="UUID">TAP-###</issue>` wrappers.

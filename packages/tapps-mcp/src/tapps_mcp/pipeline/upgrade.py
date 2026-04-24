@@ -545,6 +545,7 @@ def _upgrade_claude_code_dry_run(
         "would-regenerate" if python_ok else "skipped (no python detected)"
     )
     result["components"]["agent_scope_rule"] = "would-regenerate"
+    result["components"]["linear_standards_rule"] = "would-regenerate"
     result["components"]["pipeline_rule"] = (
         "would-regenerate" if (python_ok or infra_ok) else "skipped (no python or infra detected)"
     )
@@ -772,6 +773,7 @@ def _upgrade_platform(
                 "skills",
                 "python_quality_rule",
                 "agent_scope_rule",
+                "linear_standards_rule",
                 "pipeline_rule",
                 "cursor_rules",
             ],

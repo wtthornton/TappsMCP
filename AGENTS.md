@@ -1,4 +1,4 @@
-<!-- tapps-agents-version: 3.2.4 -->
+<!-- tapps-agents-version: 3.3.0 -->
 # TappsMCP - instructions for AI assistants
 
 When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
@@ -58,14 +58,14 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 1. **Session start:** Call `tapps_session_start` (returns server info and project context).
 2. **Check project memory:** Consider calling `tapps_memory(action="search", query="...")` to recall past decisions and project context.
 3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
-4. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
-5. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
-6. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
-7. **Before declaring work complete:**
+3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
+4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
+5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
+6. **Before declaring work complete:**
    - Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to score + gate changed files. Never call without `file_paths` in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-8. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
+7. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
 
@@ -179,9 +179,7 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Memory profiles:** Built-in profiles from tapps-brain (e.g. `repo-brain` default). Use `profile_info`, `profile_list`, `profile_switch` actions.
 
-**Configuration:** Override `memory.profile`, `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 5000 entries per project (`TAPPS_BRAIN_MAX_ENTRIES`). Auto-GC at 80% capacity.
-
-**Local setup / VSCode gotcha:** If `memory_status.enabled` is false after configuring tapps-brain, the bearer token may not be reaching the GUI-launched VSCode process. See [docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md](docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md).
+**Configuration:** Override `memory.profile`, `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
 
 ---
 
