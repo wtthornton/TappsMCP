@@ -159,9 +159,13 @@ You should call `tapps_validate_config(file_path)` when changing Dockerfile, doc
 
 ### Linear Issue Reads
 
-You should prefer `tapps_linear_snapshot(team, project, state)` over `mcp__plugin_linear_linear__list_issues` for triage and bulk reads.
-This is a read-through cache (5min TTL for open issues, 1h for closed) that cuts Linear API quota and returns cache hits in <50ms. Requires `TAPPS_MCP_LINEAR_API_KEY`; returns `degraded: true` when unset and the caller should fall back to the Linear plugin with the same narrow filters.
-After writing to Linear (`save_issue`, `save_comment`), call `tapps_linear_snapshot_invalidate(team, project)` to evict stale cache entries so the next read is fresh.
+Linear access in this workspace is OAuth via the `mcp__plugin_linear_linear__*` plugin — the session always has it. tapps-mcp does not call Linear; it only caches results the agent fetched. For triage and bulk reads:
+
+1. Call `tapps_linear_snapshot_get(team, project, state)` first. On `cached=true`, use `data.issues` — no Linear call happens.
+2. On `cached=false`, call `mcp__plugin_linear_linear__list_issues` with narrow filters (`team`, `project`, `state`, `includeArchived=false`), then call `tapps_linear_snapshot_put(team, project, issues_json=json.dumps(issues), state)` with the same team/project/state/label/limit so the cache key aligns.
+3. After any Linear write (`save_issue`, `save_comment`), call `tapps_linear_snapshot_invalidate(team, project)` so the next get returns fresh data.
+
+TTLs are state-bucketed: 5 min for open/in-progress (backlog/unstarted/started/triage), 1 h for closed (completed/canceled). No API key configuration required.
 
 ## Memory System
 

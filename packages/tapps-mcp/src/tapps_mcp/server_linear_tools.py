@@ -1,16 +1,29 @@
 """Linear tool handlers for TappsMCP (TAP-964).
 
-Provides ``tapps_linear_snapshot`` — a read-through cache over Linear's
-``list_issues`` GraphQL query. Backed by a file-based cache under
-``<project_root>/.tapps-mcp-cache/linear-snapshots/``.
+Provides a cache-only surface for Linear issue snapshots. The agent is
+the authoritative Linear caller — it fetches via the Linear MCP plugin
+(which already holds OAuth via Claude Code) and passes results here for
+storage. tapps-mcp never calls Linear itself; that would duplicate the
+plugin's auth and create a parallel credential surface.
 
-TTL is enforced by an ``expires_at`` timestamp stored in each cached
-value (state-dependent: open/in-progress issues use a short TTL, closed
-issues use a longer one). Cache misses fall through to Linear's GraphQL
-API; configure with ``TAPPS_MCP_LINEAR_API_KEY``.
+Tools:
+- ``tapps_linear_snapshot_get(team, project, state, label, limit)`` —
+  cache-only read. Returns ``cached=True`` with the stored issue list
+  when fresh, or ``cached=False`` with a hint to fetch via the plugin.
+- ``tapps_linear_snapshot_put(team, project, issues_json, state, label,
+  limit)`` — cache-set after the agent fetched via the plugin. TTL
+  depends on the requested ``state`` bucket.
+- ``tapps_linear_snapshot_invalidate(team, project)`` — prefix-match
+  delete, called after a Linear write (``save_issue``, ``save_comment``)
+  so the next ``_get`` sees fresh data.
 
-Companion tool ``tapps_linear_snapshot_invalidate`` drops cached entries
-for a specific ``(team, project)`` slice after a known write.
+Cache layout::
+
+    <project_root>/.tapps-mcp-cache/linear-snapshots/<cache_key>.json
+
+Each file stores ``{issues, cached_at, expires_at, team, project,
+state}``. ``expires_at`` is enforced on read; stale entries are treated
+as misses.
 """
 
 from __future__ import annotations
@@ -21,7 +34,6 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import httpx
 import structlog
 
 from tapps_core.config.settings import load_settings
@@ -38,7 +50,13 @@ _ANNOTATIONS_READ_ONLY = ToolAnnotations(
     readOnlyHint=True,
     destructiveHint=False,
     idempotentHint=True,
-    openWorldHint=True,
+    openWorldHint=False,
+)
+_ANNOTATIONS_WRITE = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
 )
 _ANNOTATIONS_INVALIDATE = ToolAnnotations(
     readOnlyHint=False,
@@ -55,39 +73,11 @@ _OPEN_STATE_BUCKETS: frozenset[str] = frozenset(
 _CLOSED_STATE_BUCKETS: frozenset[str] = frozenset({"completed", "canceled"})
 
 _CACHE_SUBDIR = "linear-snapshots"
-_GRAPHQL_QUERY = """
-query ListIssues(
-  $team: String
-  $project: String
-  $state: String
-  $label: String
-  $limit: Int
-) {
-  issues(
-    first: $limit
-    filter: {
-      team: { name: { eq: $team } }
-      project: { name: { eq: $project } }
-      state: { type: { eq: $state } }
-      labels: { name: { eq: $label } }
-    }
-  ) {
-    nodes {
-      id
-      identifier
-      title
-      priority
-      url
-      state { name type }
-      team { id name }
-      project { id name }
-      labels { nodes { name } }
-      updatedAt
-      createdAt
-    }
-  }
-}
-""".strip()
+_FETCH_HINT = (
+    "Cache miss. Call mcp__plugin_linear_linear__list_issues with the same "
+    "team/project/state filters, then pass the result to "
+    "tapps_linear_snapshot_put(issues_json=...) to populate the cache."
+)
 
 
 def _record_call(tool_name: str) -> None:
@@ -174,154 +164,155 @@ def _cache_invalidate_prefix(cache_dir: Path, prefix: str) -> int:
     return count
 
 
-async def _fetch_from_linear(
-    api_url: str,
-    api_key: str,
-    *,
-    team: str,
-    project: str,
-    state: str | None,
-    label: str | None,
-    limit: int,
-    timeout: float = 30.0,
-) -> list[dict[str, Any]]:
-    """Call Linear's GraphQL API and return a list of issue dicts."""
-    variables = {
-        "team": team or None,
-        "project": project or None,
-        "state": state or None,
-        "label": label or None,
-        "limit": limit,
-    }
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(
-            api_url,
-            headers={
-                "Authorization": api_key,
-                "Content-Type": "application/json",
-            },
-            json={"query": _GRAPHQL_QUERY, "variables": variables},
-        )
-        response.raise_for_status()
-        body = response.json()
-    if "errors" in body:
-        raise RuntimeError(f"Linear GraphQL error: {body['errors']}")
-    nodes = body.get("data", {}).get("issues", {}).get("nodes", [])
-    return list(nodes)
+def _resolve_cache_key(
+    team: str, project: str, state: str, label: str, limit: int
+) -> str:
+    """Build the canonical cache key used by both _get and _put."""
+    fhash = _filter_hash(state=state, label=label, limit=limit)
+    return _cache_key(team, project, state or None, fhash)
 
 
-async def tapps_linear_snapshot(
+async def tapps_linear_snapshot_get(
     team: str,
     project: str,
     state: str = "",
     label: str = "",
     limit: int = 50,
-    bypass_cache: bool = False,
 ) -> dict[str, Any]:
-    """Read-through cached snapshot of Linear issues for a team/project slice.
+    """Cache-only read of a Linear issue snapshot.
 
-    Cache-first: returns cached result when fresh (TTL configured via
-    ``linear_cache_ttl_open_seconds`` / ``linear_cache_ttl_closed_seconds``).
-    On miss or expiry, fetches from Linear's GraphQL API, caches, and
-    returns.
+    Returns the cached list of issues for the ``(team, project, state,
+    label, limit)`` slice if a fresh entry exists. Otherwise signals a
+    miss so the agent can fetch via
+    ``mcp__plugin_linear_linear__list_issues`` and then call
+    :func:`tapps_linear_snapshot_put` to populate the cache.
 
     Args:
-        team: Linear team name (required). Narrow the query.
-        project: Linear project name (required). Narrow the query.
+        team: Linear team name (required).
+        project: Linear project name (required).
         state: Optional Linear state type (``"backlog"``, ``"unstarted"``,
             ``"started"``, ``"completed"``, ``"canceled"``). Empty = any.
         label: Optional label name to filter by. Empty = any.
-        limit: Max issues to return (default 50, Linear max 250).
-        bypass_cache: When True, skip the cache read and force a fetch.
-            Used for invalidation testing and staleness debugging.
+        limit: Max issues the caller requested (part of the cache key).
 
     Returns:
-        Envelope dict with:
-          - ``data.issues``: list of Linear issue dicts
-          - ``data.from_cache``: bool, whether served from cache
-          - ``data.cache_key``: the cache-file stem (for invalidation)
-          - ``data.cached_at`` / ``data.expires_at``: unix timestamps
-          - ``degraded``: True when Linear API key missing or fetch failed
+        Envelope with:
+          - ``data.cached``: ``True`` on hit, ``False`` on miss/expired.
+          - ``data.issues``: stored list (only on hit).
+          - ``data.cache_key``: cache-file stem.
+          - ``data.cached_at`` / ``data.expires_at`` / ``data.age_seconds``
+            on hit; ``data.hint`` on miss.
     """
-    _record_call("tapps_linear_snapshot")
+    _record_call("tapps_linear_snapshot_get")
     start_ns = time.perf_counter_ns()
 
     if not team or not project:
         return error_response(
-            "tapps_linear_snapshot",
+            "tapps_linear_snapshot_get",
             "invalid_input",
             "team and project are required and must be non-empty",
         )
 
     settings = load_settings()
     cache_dir = _cache_dir(settings.project_root)
-    fhash = _filter_hash(state=state, label=label, limit=limit)
-    key = _cache_key(team, project, state or None, fhash)
+    key = _resolve_cache_key(team, project, state, label, limit)
 
-    # Cache read
-    if not bypass_cache:
-        cached = _cache_read(cache_dir, key)
-        if cached is not None:
-            elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
-            return success_response(
-                "tapps_linear_snapshot",
-                elapsed_ms,
-                {
-                    "issues": cached.get("issues", []),
-                    "from_cache": True,
-                    "cache_key": key,
-                    "cached_at": cached.get("cached_at"),
-                    "expires_at": cached.get("expires_at"),
-                    "state": state or None,
-                },
-            )
+    cached = _cache_read(cache_dir, key)
+    elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
 
-    # Cache miss → fetch from Linear
-    if settings.linear_api_key is None:
-        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+    if cached is None:
         return success_response(
-            "tapps_linear_snapshot",
+            "tapps_linear_snapshot_get",
             elapsed_ms,
             {
-                "issues": [],
-                "from_cache": False,
+                "cached": False,
                 "cache_key": key,
+                "team": team,
+                "project": project,
                 "state": state or None,
-                "hint": (
-                    "Set TAPPS_MCP_LINEAR_API_KEY to enable live Linear "
-                    "fetches. Without it, the tool returns an empty slice."
-                ),
+                "hint": _FETCH_HINT,
             },
-            degraded=True,
         )
 
-    api_key = settings.linear_api_key.get_secret_value()
+    now = time.time()
+    cached_at = float(cached.get("cached_at", 0))
+    return success_response(
+        "tapps_linear_snapshot_get",
+        elapsed_ms,
+        {
+            "cached": True,
+            "issues": cached.get("issues", []),
+            "cache_key": key,
+            "cached_at": cached_at,
+            "expires_at": cached.get("expires_at"),
+            "age_seconds": max(0.0, now - cached_at) if cached_at else None,
+            "team": team,
+            "project": project,
+            "state": state or None,
+        },
+    )
+
+
+async def tapps_linear_snapshot_put(
+    team: str,
+    project: str,
+    issues_json: str,
+    state: str = "",
+    label: str = "",
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Cache-set for a Linear issue snapshot.
+
+    Call after fetching via ``mcp__plugin_linear_linear__list_issues``.
+    The ``(team, project, state, label, limit)`` tuple must match the
+    earlier :func:`tapps_linear_snapshot_get` call so the cache key
+    aligns. TTL is chosen from the ``state`` bucket (see
+    ``linear_cache_ttl_open_seconds`` / ``linear_cache_ttl_closed_seconds``).
+
+    Args:
+        team: Linear team name (required).
+        project: Linear project name (required).
+        issues_json: JSON-encoded list of issue dicts from the Linear
+            plugin response (typically the ``issues`` field). Pass the
+            list verbatim; do not reshape.
+        state: Linear state type the fetch was scoped to. Empty = any.
+        label: Label filter the fetch used. Empty = any.
+        limit: Limit argument the fetch used.
+
+    Returns:
+        Envelope with ``data.stored``, ``data.cache_key``,
+        ``data.cached_at``, ``data.expires_at``, ``data.ttl_seconds``,
+        and ``data.issue_count``.
+    """
+    _record_call("tapps_linear_snapshot_put")
+    start_ns = time.perf_counter_ns()
+
+    if not team or not project:
+        return error_response(
+            "tapps_linear_snapshot_put",
+            "invalid_input",
+            "team and project are required and must be non-empty",
+        )
+
     try:
-        issues = await _fetch_from_linear(
-            settings.linear_api_url,
-            api_key,
-            team=team,
-            project=project,
-            state=state or None,
-            label=label or None,
-            limit=limit,
-            timeout=float(settings.tool_timeout),
+        issues = json.loads(issues_json) if issues_json else []
+    except json.JSONDecodeError as exc:
+        return error_response(
+            "tapps_linear_snapshot_put",
+            "invalid_input",
+            f"issues_json must be valid JSON: {exc}",
         )
-    except (httpx.HTTPError, RuntimeError) as exc:
-        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
-        logger.warning("linear_fetch_failed", exc=str(exc))
-        return success_response(
-            "tapps_linear_snapshot",
-            elapsed_ms,
-            {
-                "issues": [],
-                "from_cache": False,
-                "cache_key": key,
-                "state": state or None,
-                "fetch_error": str(exc),
-            },
-            degraded=True,
+
+    if not isinstance(issues, list):
+        return error_response(
+            "tapps_linear_snapshot_put",
+            "invalid_input",
+            "issues_json must decode to a list of issue dicts",
         )
+
+    settings = load_settings()
+    cache_dir = _cache_dir(settings.project_root)
+    key = _resolve_cache_key(team, project, state, label, limit)
 
     now = time.time()
     ttl = _ttl_for_state(
@@ -329,6 +320,21 @@ async def tapps_linear_snapshot(
         settings.linear_cache_ttl_open_seconds,
         settings.linear_cache_ttl_closed_seconds,
     )
+
+    if ttl <= 0:
+        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+        return success_response(
+            "tapps_linear_snapshot_put",
+            elapsed_ms,
+            {
+                "stored": False,
+                "cache_key": key,
+                "ttl_seconds": ttl,
+                "issue_count": len(issues),
+                "hint": "TTL is zero for this state bucket — cache disabled.",
+            },
+        )
+
     payload: dict[str, Any] = {
         "issues": issues,
         "cached_at": now,
@@ -337,19 +343,19 @@ async def tapps_linear_snapshot(
         "team": team,
         "project": project,
     }
-    if ttl > 0:
-        _cache_write(cache_dir, key, payload)
+    _cache_write(cache_dir, key, payload)
 
     elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
     return success_response(
-        "tapps_linear_snapshot",
+        "tapps_linear_snapshot_put",
         elapsed_ms,
         {
-            "issues": issues,
-            "from_cache": False,
+            "stored": True,
             "cache_key": key,
             "cached_at": now,
             "expires_at": now + ttl,
+            "ttl_seconds": ttl,
+            "issue_count": len(issues),
             "state": state or None,
         },
     )
@@ -361,8 +367,8 @@ async def tapps_linear_snapshot_invalidate(
 ) -> dict[str, Any]:
     """Invalidate cached Linear snapshots for a team/project slice.
 
-    Call this after writing to Linear (e.g. ``save_issue``, ``save_comment``)
-    to ensure the next ``tapps_linear_snapshot`` read reflects the write.
+    Call this after a Linear write (``save_issue``, ``save_comment``)
+    so the next :func:`tapps_linear_snapshot_get` reflects the write.
     When both *team* and *project* are empty, invalidates the entire
     Linear snapshot cache.
 
@@ -371,7 +377,7 @@ async def tapps_linear_snapshot_invalidate(
         project: Linear project name prefix. Empty matches all projects.
 
     Returns:
-        Envelope dict with ``data.removed`` (count of cache files deleted)
+        Envelope with ``data.removed`` (count of cache files deleted)
         and ``data.prefix`` (the key prefix used for matching).
     """
     _record_call("tapps_linear_snapshot_invalidate")
@@ -403,8 +409,12 @@ async def tapps_linear_snapshot_invalidate(
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register Linear tools on the shared *mcp_instance*."""
-    if "tapps_linear_snapshot" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_linear_snapshot)
+    if "tapps_linear_snapshot_get" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(
+            tapps_linear_snapshot_get
+        )
+    if "tapps_linear_snapshot_put" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_WRITE)(tapps_linear_snapshot_put)
     if "tapps_linear_snapshot_invalidate" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_INVALIDATE)(
             tapps_linear_snapshot_invalidate

@@ -188,7 +188,8 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_memory",
         "tapps_pipeline",
         "tapps_decompose",
-        "tapps_linear_snapshot",
+        "tapps_linear_snapshot_get",
+        "tapps_linear_snapshot_put",
         "tapps_linear_snapshot_invalidate",
     }
 )
