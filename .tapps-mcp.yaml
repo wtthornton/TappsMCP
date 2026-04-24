@@ -1,5 +1,7 @@
 llm_engagement_level: medium
 quality_preset: standard
+# TAP-981: Linear routing gate — blocks raw save_issue without recent docs_validate_linear_issue.
+linear_enforce_gate: true
 thresholds:
   overall: 70
   security_floor: 50

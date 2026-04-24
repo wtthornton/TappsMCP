@@ -106,6 +106,15 @@
             "statusMessage": "bash .ralph/hooks/protect-ralph-files.sh|Checking file protection..."
           }
         ]
+      },
+      {
+        "matcher": "mcp__plugin_linear_linear__save_issue",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/tapps-pre-linear-write.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -154,6 +163,15 @@
           {
             "type": "command",
             "command": ".claude/hooks/tapps-post-edit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__docs-mcp__docs_validate_linear_issue",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/tapps-post-docs-validate.sh"
           }
         ]
       }
