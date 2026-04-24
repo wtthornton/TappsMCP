@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from tapps_mcp.distribution.doctor import (
     check_binary_on_path,
     check_json_config,
@@ -574,6 +576,65 @@ class TestUpgradePipeline:
         # dry_run should succeed — it never tries to write
         assert result["dry_run"] is True
         assert "agents_md" in result["components"]
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="bash-only gate scripts")
+    def test_linear_enforce_gate_flag_writes_gate_scripts(self, tmp_path: Path) -> None:
+        """TAP-987: .tapps-mcp.yaml flags reach generate_claude_hooks on upgrade."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        # Mark the project as claude-hosted so the upgrade runs the claude
+        # code host branch (otherwise no platform is detected).
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "linear_enforce_gate: true\n",
+            encoding="utf-8",
+        )
+
+        result = upgrade_pipeline(tmp_path)
+
+        assert result["success"] is True
+        assert (tmp_path / ".claude" / "hooks" / "tapps-pre-linear-write.sh").exists()
+        assert (tmp_path / ".claude" / "hooks" / "tapps-post-docs-validate.sh").exists()
+
+        # Per-host result surfaces the flag state so consumers can verify.
+        platforms = result["components"]["platforms"]
+        claude_host = next(h for h in platforms if h.get("host") == "claude-code")
+        assert claude_host["components"]["hooks"]["linear_enforce_gate"] is True
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="bash-only gate scripts")
+    def test_linear_enforce_gate_off_skips_gate_scripts(self, tmp_path: Path) -> None:
+        """Default (flag absent) must not install the gate scripts."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir()
+
+        result = upgrade_pipeline(tmp_path)
+
+        assert result["success"] is True
+        assert not (tmp_path / ".claude" / "hooks" / "tapps-pre-linear-write.sh").exists()
+        assert not (
+            tmp_path / ".claude" / "hooks" / "tapps-post-docs-validate.sh"
+        ).exists()
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="bash-only gate scripts")
+    def test_dry_run_reflects_linear_enforce_gate_flag(self, tmp_path: Path) -> None:
+        """Dry-run surfaces the gate scripts when the flag is on."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "linear_enforce_gate: true\n",
+            encoding="utf-8",
+        )
+
+        result = upgrade_pipeline(tmp_path, dry_run=True)
+
+        platforms = result["components"]["platforms"]
+        claude_host = next(h for h in platforms if h.get("host") == "claude-code")
+        hooks = claude_host["components"]["hooks"]
+        assert hooks["linear_enforce_gate"] is True
+        assert "tapps-pre-linear-write.sh" in hooks["managed_files"]
+        assert "tapps-post-docs-validate.sh" in hooks["managed_files"]
 
 
 # ---------------------------------------------------------------------------

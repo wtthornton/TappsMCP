@@ -485,6 +485,8 @@ def _upgrade_claude_code_dry_run(
     python_ok: bool,
     infra_ok: bool,
     skip: set[str],
+    destructive_guard: bool = False,
+    linear_enforce_gate: bool = False,
 ) -> None:
     """Populate dry-run component hints for the claude-code host.
 
@@ -511,11 +513,26 @@ def _upgrade_claude_code_dry_run(
             if hooks_dir.is_dir()
             else frozenset()
         )
-        result["components"]["hooks"] = {
+        # Opt-in gate scripts that only ship when the corresponding flag is
+        # enabled in .tapps-mcp.yaml — surface them explicitly so consumers
+        # can see what the flags will write. Bash-only (no Windows variants).
+        conditional_managed: list[str] = []
+        if destructive_guard:
+            conditional_managed.append("tapps-pre-bash.sh")
+        if linear_enforce_gate:
+            conditional_managed.extend(
+                ["tapps-pre-linear-write.sh", "tapps-post-docs-validate.sh"]
+            )
+        hooks_component: dict[str, Any] = {
             "action": "would-write-managed-scripts",
             "note": "settings.json hooks merged by matcher — existing entries preserved",
             "preserved_files": _enumerate_preserved(hooks_dir, managed_hooks),
         }
+        if conditional_managed:
+            hooks_component["managed_files"] = sorted(conditional_managed)
+        hooks_component["destructive_guard"] = destructive_guard
+        hooks_component["linear_enforce_gate"] = linear_enforce_gate
+        result["components"]["hooks"] = hooks_component
 
     if _skipped("claude_agents", skip):
         result["components"]["agents"] = "skipped (upgrade_skip_files)"
@@ -560,6 +577,8 @@ def _upgrade_claude_code_live(
     skip: set[str],
     python_ok: bool,
     infra_ok: bool,
+    destructive_guard: bool = False,
+    linear_enforce_gate: bool = False,
 ) -> None:
     """Run live (non-dry-run) artifact upgrades for the claude-code host."""
     from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_claude_settings
@@ -589,10 +608,17 @@ def _upgrade_claude_code_live(
     if _skipped("claude_hooks", skip):
         result["components"]["hooks"] = "skipped (upgrade_skip_files)"
     else:
-        hooks_result = generate_claude_hooks(project_root)
+        hooks_result = generate_claude_hooks(
+            project_root,
+            engagement_level=engagement_level,
+            destructive_guard=destructive_guard,
+            linear_enforce_gate=linear_enforce_gate,
+        )
         result["components"]["hooks"] = {
             "scripts_created": hooks_result.get("scripts_created", []),
             "hooks_added": hooks_result.get("hooks_added", 0),
+            "destructive_guard": hooks_result.get("destructive_guard", False),
+            "linear_enforce_gate": hooks_result.get("linear_enforce_gate", False),
         }
 
     if _skipped("claude_agents", skip):
@@ -731,6 +757,8 @@ def _upgrade_platform(
     skip_files: set[str] | None = None,
     mcp_only: bool = False,
     force_python_rule: bool = False,
+    destructive_guard: bool = False,
+    linear_enforce_gate: bool = False,
 ) -> dict[str, Any]:
     """Upgrade platform-specific files for a single host.
 
@@ -742,6 +770,13 @@ def _upgrade_platform(
     force_python_rule:
         When True, skip the Python-language gate and always generate
         ``python-quality.md`` / ``tapps-pipeline.md``.
+    destructive_guard:
+        Forwarded to ``generate_claude_hooks`` so the destructive-command
+        PreToolUse hook is regenerated on upgrade (TAP-987).
+    linear_enforce_gate:
+        Forwarded to ``generate_claude_hooks`` so the Linear routing gate
+        scripts land (or get removed) based on the current flag value
+        (TAP-987).
 
     Per-artifact skip tokens (via ``skip_files``) are honored independently —
     skipping ``CLAUDE.md`` no longer gates hooks/agents/skills/rules.
@@ -789,6 +824,8 @@ def _upgrade_platform(
                 python_ok=python_ok,
                 infra_ok=infra_ok,
                 skip=_skip,
+                destructive_guard=destructive_guard,
+                linear_enforce_gate=linear_enforce_gate,
             )
         else:
             _upgrade_claude_code_live(
@@ -799,6 +836,8 @@ def _upgrade_platform(
                 skip=_skip,
                 python_ok=python_ok,
                 infra_ok=infra_ok,
+                destructive_guard=destructive_guard,
+                linear_enforce_gate=linear_enforce_gate,
             )
     elif host == "cursor":
         if dry_run:
@@ -1376,6 +1415,8 @@ def upgrade_pipeline(
                 skip_files=skip_files,
                 mcp_only=mcp_only,
                 force_python_rule=settings.force_python_quality_rule,
+                destructive_guard=settings.destructive_guard,
+                linear_enforce_gate=settings.linear_enforce_gate,
             )
             platform_results.append(host_result)
         except Exception as exc:

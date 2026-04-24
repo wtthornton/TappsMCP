@@ -6,6 +6,7 @@ settings files. Extracted from ``platform_generators.py`` to reduce file size.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 import shutil
@@ -422,9 +423,12 @@ def generate_claude_hooks(
         allowed_events.add("PreToolUse")
         allowed_events.add("PostToolUse")
 
-    # Select base scripts and config
+    # Select base scripts and config. Deep-copy the hooks config so the
+    # opt-in-gate extend()s below mutate our local copy, not the module-level
+    # template dict — otherwise the first caller that enables destructive_guard
+    # or linear_enforce_gate permanently pollutes subsequent calls (TAP-987).
     base_scripts = _CLAUDE_HOOK_SCRIPTS_PS if win else _CLAUDE_HOOK_SCRIPTS
-    hooks_config = dict(_CLAUDE_HOOKS_CONFIG_PS if win else _CLAUDE_HOOKS_CONFIG)
+    hooks_config = copy.deepcopy(_CLAUDE_HOOKS_CONFIG_PS if win else _CLAUDE_HOOKS_CONFIG)
     if destructive_guard:
         dg_config = _DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS if win else _DESTRUCTIVE_GUARD_HOOKS_CONFIG
         for event, entries in dg_config.items():
