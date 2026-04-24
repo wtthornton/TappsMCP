@@ -75,6 +75,26 @@ Validate changed files using TappsMCP:
 5. Confirm explicitly when all changed files pass before declaring work done
 6. If any files fail, do NOT mark the task as complete
 """,
+    "tapps-finish-task": """\
+---
+name: tapps-finish-task
+user-invocable: true
+model: claude-haiku-4-5-20251001
+description: Run the end-of-task TAPPS pipeline in one shot — validate_changed, then checklist, then an optional memory save for anything architectural or patterned learned this session. The recommended final step before declaring work complete.
+allowed-tools: mcp__tapps-mcp__tapps_validate_changed mcp__tapps-mcp__tapps_checklist mcp__tapps-mcp__tapps_memory
+argument-hint: "[task_type: feature|bugfix|refactor|security|review]"
+---
+
+Close out the current task end-to-end. Run each step; do NOT skip one that failed — surface the failure and stop.
+
+1. **Validate changed files.** Identify the files you edited this session (git status, your edit history). Call `mcp__tapps-mcp__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to those files. **Never call without `file_paths`.** Default is quick mode. If any file fails, list it with the top blocking issue and stop — the task is not complete. Do not proceed to step 2 until all changed files pass.
+
+2. **Verify the checklist.** Call `mcp__tapps-mcp__tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If the response has `complete: false`, the `missing_steps` list names required tools you skipped — address each (or explain why it does not apply) and re-run the checklist. Only proceed when `complete: true`.
+
+3. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — call `mcp__tapps-mcp__tapps_memory(action="save", tier=<"architectural"|"pattern">, ...)` with a concise body. Skip this step for routine fixes, refactors where the code itself documents the decision, or trivial bugfixes.
+
+4. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Memory saved: yes|no.` If any step failed or was skipped, say so explicitly.
+""",
     "tapps-report": """\
 ---
 name: tapps-report
@@ -362,18 +382,29 @@ the server could not write files (Docker / read-only filesystem).  Apply the fil
 name: linear-issue
 user-invocable: true
 model: claude-haiku-4-5-20251001
-description: Create, lint, validate, or triage Linear issues for agents. Routes to docs-mcp Linear tools and the Linear plugin by user intent.
-allowed-tools: mcp__docs-mcp__docs_generate_story mcp__docs-mcp__docs_lint_linear_issue mcp__docs-mcp__docs_validate_linear_issue mcp__docs-mcp__docs_linear_triage mcp__plugin_linear_linear__get_issue mcp__plugin_linear_linear__list_issues mcp__tapps-mcp__tapps_linear_snapshot_get mcp__tapps-mcp__tapps_linear_snapshot_put mcp__tapps-mcp__tapps_linear_snapshot_invalidate
-argument-hint: "[create|lint TAP-###|validate|triage] [free-form detail]"
+description: Create, lint, validate, or triage Linear issues and epics for agents. MANDATORY for all Linear writes — never call plugin save_issue directly. Routes to docs-mcp generator/validator/triage tools and the Linear plugin by user intent.
+allowed-tools: mcp__docs-mcp__docs_generate_epic mcp__docs-mcp__docs_generate_story mcp__docs-mcp__docs_lint_linear_issue mcp__docs-mcp__docs_validate_linear_issue mcp__docs-mcp__docs_linear_triage mcp__plugin_linear_linear__save_issue mcp__plugin_linear_linear__get_issue mcp__plugin_linear_linear__list_issues mcp__tapps-mcp__tapps_linear_snapshot_get mcp__tapps-mcp__tapps_linear_snapshot_put mcp__tapps-mcp__tapps_linear_snapshot_invalidate
+argument-hint: "[create-epic|create-story|lint TAP-###|validate|triage] [free-form detail]"
 ---
 
 Work with Linear issues for AI-agent consumption. Infer intent from the user's prompt; never write to Linear without explicit confirmation.
 
-**Create** a new issue (default when prompt describes a change/bug):
-1. Call `mcp__docs-mcp__docs_generate_story` with the user's ask. Required args: `title` (<=80 chars, pattern `file.py: symptom`), `files` (comma-separated, each with `:LINE-RANGE`), `acceptance_criteria` (verifiable items).
+**When to invoke this skill:** ANY request that will create, update, or validate a Linear issue or epic. This includes "file a ticket", "create an issue", "open an epic", "track this as a story", or "add a bug report to Linear". Raw `save_issue` calls are a rule violation — route through this skill.
+
+**Create an epic** (prompt names multiple stories, or "epic", or spans a cross-cutting initiative):
+1. Call `mcp__docs-mcp__docs_generate_epic` with the user's ask. Required: `title`, `purpose_and_intent` ("We are doing this so that ..."), `goal`, `motivation`, `acceptance_criteria`, `stories` (JSON array). Optional: `priority`, `estimated_loe`, `references`, `non_goals`.
+2. The tool writes `docs/epics/EPIC-<N>.md` to the project. Read it back.
+3. Build the Linear-body markdown following the 5-to-7 section epic shape: `## Purpose & Intent`, `## Goal`, `## Motivation`, `## Acceptance Criteria`, `## Stories`, `## Out of Scope`, `## Refs`.
+4. Validate via `mcp__docs-mcp__docs_validate_linear_issue(title, description, priority, is_epic=true)`. Target score 100 / `agent_ready=true`.
+5. Print the emitted markdown. Ask the user whether to create in Linear; only then call `mcp__plugin_linear_linear__save_issue(team, project, title, description, priority, ...)` without `id`.
+6. After the epic lands, create each child story via the create-story flow below, passing `parent_id=<epic TAP-id>`.
+7. After all writes, call `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
+
+**Create a story** (default when prompt describes a single change/bug):
+1. Call `mcp__docs-mcp__docs_generate_story` with the user's ask. Required: `title` (<=80 chars, pattern `file.py: symptom`), `files` (comma-separated, each with `:LINE-RANGE`), `acceptance_criteria` (verifiable items).
 2. Default `audience="agent"` emits the 5-section Linear template (What/Where/Why/Acceptance/Refs) and round-trips through the validator.
 3. If the call returns `INPUT_INVALID`, refine the inputs per the error message and retry. Do NOT pass `audience="human"` unless the user asks for a product-review doc.
-4. Print the emitted markdown. Ask the user whether to create in Linear; only then call the Linear plugin's `save_issue`.
+4. Print the emitted markdown. Ask the user whether to create in Linear; only then call the Linear plugin's `save_issue` (include `parent_id` if the story belongs to an epic).
 5. After `save_issue` returns, call `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team=<team>, project=<project>)` to evict stale cached snapshots for that slice.
 
 **Lint** an existing issue (prompt like "lint TAP-686", "check TAP-###"):
@@ -399,6 +430,12 @@ Rules (enforced by docs-mcp tools):
 - Bare `TAP-###` refs, never `<issue id="UUID">TAP-###</issue>` wrappers.
 - `## Acceptance` has at least one verifiable `- [ ]` item.
 - `## Where` includes at least one `path/to/file.ext:LINE-RANGE` anchor.
+
+Linear rendering workarounds (observed 2026-04-24):
+- **Use numbered lists, not bulleted lists, in `## Where` and `## Acceptance` when items reference file paths.** Linear's markdown engine silently drops multiple bulleted `* path/...` entries (appears to dedupe on auto-linked filenames, especially `.md` files), keeping only the first. Numbered lists (`1.`, `2.`, ...) survive.
+- **Wrap file paths in backticks** when they appear in list items: `` `path/to/file.py:1-100` `` rather than bare `path/to/file.py:1-100`. Prevents auto-linking that contributes to the dedupe bug.
+- **Avoid raw `.md` filenames in bulleted prose.** Refer to "the agents-md template" or "the claude-md file" when the plain word would trigger auto-linking in a context that loses data. Inline-code with backticks is safe.
+- **Tables with multiple columns** are fragile in Linear; prefer numbered lists with `—` separators for compact multi-field rows.
 """,
 }
 
@@ -452,6 +489,25 @@ Validate changed files using TappsMCP:
 4. If any file fails, list it with the top issue preventing it from passing
 5. Confirm explicitly when all changed files pass before declaring work done
 6. If any files fail, do NOT mark the task as complete
+""",
+    "tapps-finish-task": """\
+---
+name: tapps-finish-task
+description: >-
+  Run the end-of-task TAPPS pipeline in one shot: validate changed files,
+  verify the checklist, and optionally save learnings to memory.
+mcp_tools:
+  - tapps_validate_changed
+  - tapps_checklist
+  - tapps_memory
+---
+
+Close out the current task end-to-end. Run each step; do NOT skip one that failed — surface the failure and stop.
+
+1. **Validate changed files.** Identify files edited this session (git status, edit history). Call `tapps_validate_changed` with explicit `file_paths` (comma-separated). Never call without `file_paths`. If any file fails, list it with the top blocking issue and stop.
+2. **Verify the checklist.** Call `tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If `complete: false`, address each entry in `missing_steps` and re-run.
+3. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, call `tapps_memory(action="save", tier=<"architectural"|"pattern">)`. Skip for routine fixes.
+4. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Memory saved: yes|no.`
 """,
     "tapps-report": """\
 ---

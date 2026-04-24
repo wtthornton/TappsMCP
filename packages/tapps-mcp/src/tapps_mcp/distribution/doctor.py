@@ -408,6 +408,81 @@ def check_cursor_rules(project_root: Path) -> CheckResult:
     )
 
 
+def check_linear_standards_rule(project_root: Path) -> CheckResult:
+    """Check ``.claude/rules/linear-standards.md`` is present.
+
+    Shipped by ``generate_claude_linear_standards_rule`` (TAP-980). The rule
+    codifies the docs-mcp template pipeline for Linear epic/story creation
+    and documents the Linear markdown-rendering workarounds discovered in
+    the TAP-971 fleet audit.
+    """
+    rule_path = project_root / ".claude" / "rules" / "linear-standards.md"
+    if not rule_path.exists():
+        return CheckResult(
+            "Linear standards rule",
+            False,
+            ".claude/rules/linear-standards.md not found",
+            "Run: tapps-mcp upgrade",
+        )
+    return CheckResult(
+        "Linear standards rule",
+        True,
+        f"Present: {rule_path}",
+    )
+
+
+def check_linear_issue_skill_current(project_root: Path) -> CheckResult:
+    """Check the ``linear-issue`` skill is deployed and includes the save_issue tool.
+
+    The updated skill (TAP-980 Phase A) grants `mcp__plugin_linear_linear__save_issue`
+    so agents can invoke the full create-and-push flow through the skill rather
+    than calling save_issue directly. Old versions of the skill lacked this tool
+    in ``allowed-tools``, which forced agents to bypass the skill for writes.
+    """
+    skill_path = project_root / ".claude" / "skills" / "linear-issue" / "SKILL.md"
+    if not skill_path.exists():
+        return CheckResult(
+            "linear-issue skill",
+            False,
+            ".claude/skills/linear-issue/SKILL.md not found",
+            "Run: tapps-mcp upgrade",
+        )
+    content = skill_path.read_text(encoding="utf-8")
+    if "mcp__plugin_linear_linear__save_issue" not in content:
+        return CheckResult(
+            "linear-issue skill",
+            False,
+            "linear-issue skill missing save_issue in allowed-tools (stale version)",
+            "Run: tapps-mcp upgrade --force",
+        )
+    return CheckResult(
+        "linear-issue skill",
+        True,
+        "linear-issue skill includes docs-mcp generators + save_issue",
+    )
+
+
+def check_finish_task_skill(project_root: Path) -> CheckResult:
+    """Check the ``tapps-finish-task`` composite skill is deployed (TAP-977).
+
+    The skill bundles validate_changed -> checklist -> optional memory.save as
+    one invocation so agents don't drop steps of the closing sequence.
+    """
+    skill_path = project_root / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md"
+    if not skill_path.exists():
+        return CheckResult(
+            "tapps-finish-task skill",
+            False,
+            ".claude/skills/tapps-finish-task/SKILL.md not found",
+            "Run: tapps-mcp upgrade",
+        )
+    return CheckResult(
+        "tapps-finish-task skill",
+        True,
+        f"Present: {skill_path}",
+    )
+
+
 def check_agents_md(project_root: Path) -> CheckResult:
     """Check if AGENTS.md exists and its version matches the installed TappsMCP."""
     agents_md = project_root / "AGENTS.md"
@@ -1251,6 +1326,9 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_scope_recommendation(root))
     checks.append(check_claude_md(root))
     checks.append(check_cursor_rules(root))
+    checks.append(check_linear_standards_rule(root))
+    checks.append(check_linear_issue_skill_current(root))
+    checks.append(check_finish_task_skill(root))
     checks.append(check_agents_md(root))
     checks.append(check_karpathy_guidelines(root))
     checks.append(check_claude_settings(root))

@@ -92,6 +92,7 @@ _SKIP_TOKENS: dict[str, frozenset[str]] = {
     "claude_skills": frozenset({".claude/skills"}),
     "python_quality_rule": frozenset({".claude/rules/python-quality.md"}),
     "agent_scope_rule": frozenset({".claude/rules/agent-scope.md"}),
+    "linear_standards_rule": frozenset({".claude/rules/linear-standards.md"}),
     "pipeline_rule": frozenset({".claude/rules/tapps-pipeline.md"}),
     "mcp_config": frozenset({".mcp.json"}),
     "karpathy": frozenset({"karpathy"}),
@@ -565,6 +566,7 @@ def _upgrade_claude_code_live(
     from tapps_mcp.pipeline.platform_generators import (
         generate_claude_agent_scope_rule,
         generate_claude_hooks,
+        generate_claude_linear_standards_rule,
         generate_claude_python_quality_rule,
         generate_skills,
         generate_subagent_definitions,
@@ -624,6 +626,14 @@ def _upgrade_claude_code_live(
         result["components"]["agent_scope_rule"] = "skipped (upgrade_skip_files)"
     else:
         result["components"]["agent_scope_rule"] = generate_claude_agent_scope_rule(project_root)
+
+    # linear-standards.md is universal — enforces Linear write routing through docs-mcp templates.
+    if _skipped("linear_standards_rule", skip):
+        result["components"]["linear_standards_rule"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["linear_standards_rule"] = generate_claude_linear_standards_rule(
+            project_root,
+        )
 
     if _skipped("pipeline_rule", skip):
         result["components"]["pipeline_rule"] = "skipped (upgrade_skip_files)"

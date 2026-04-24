@@ -1121,3 +1121,90 @@ class TestCheckUvPathMismatch:
         assert result.ok is False
         assert "bare" in result.message
         assert ".mcp.json" in result.message
+
+
+# ---------------------------------------------------------------------------
+# TAP-980 Phase A + TAP-977: new checks for linear-standards + skills
+# ---------------------------------------------------------------------------
+
+
+class TestCheckLinearStandardsRule:
+    """check_linear_standards_rule covers .claude/rules/linear-standards.md."""
+
+    def test_present_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_linear_standards_rule
+
+        (tmp_path / ".claude" / "rules").mkdir(parents=True)
+        (tmp_path / ".claude" / "rules" / "linear-standards.md").write_text(
+            "# Linear Standards\n"
+        )
+        result = check_linear_standards_rule(tmp_path)
+        assert result.ok is True
+        assert "linear-standards.md" in result.message
+
+    def test_absent_fails_with_hint(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_linear_standards_rule
+
+        result = check_linear_standards_rule(tmp_path)
+        assert result.ok is False
+        assert "not found" in result.message
+        assert "upgrade" in result.detail
+
+
+class TestCheckLinearIssueSkillCurrent:
+    """check_linear_issue_skill_current gates on save_issue in allowed-tools."""
+
+    def test_current_skill_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_linear_issue_skill_current
+
+        skill_dir = tmp_path / ".claude" / "skills" / "linear-issue"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: linear-issue\nallowed-tools: "
+            "mcp__docs-mcp__docs_generate_story "
+            "mcp__plugin_linear_linear__save_issue\n---\n"
+        )
+        result = check_linear_issue_skill_current(tmp_path)
+        assert result.ok is True
+
+    def test_stale_skill_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_linear_issue_skill_current
+
+        skill_dir = tmp_path / ".claude" / "skills" / "linear-issue"
+        skill_dir.mkdir(parents=True)
+        # Old version without save_issue in allowed-tools
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: linear-issue\nallowed-tools: "
+            "mcp__docs-mcp__docs_generate_story\n---\n"
+        )
+        result = check_linear_issue_skill_current(tmp_path)
+        assert result.ok is False
+        assert "stale" in result.message.lower() or "missing" in result.message.lower()
+
+    def test_absent_skill_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_linear_issue_skill_current
+
+        result = check_linear_issue_skill_current(tmp_path)
+        assert result.ok is False
+        assert "not found" in result.message
+
+
+class TestCheckFinishTaskSkill:
+    """check_finish_task_skill covers the composite tapps-finish-task skill."""
+
+    def test_present_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_finish_task_skill
+
+        skill_dir = tmp_path / ".claude" / "skills" / "tapps-finish-task"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: tapps-finish-task\n---\n")
+        result = check_finish_task_skill(tmp_path)
+        assert result.ok is True
+
+    def test_absent_fails_with_hint(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_finish_task_skill
+
+        result = check_finish_task_skill(tmp_path)
+        assert result.ok is False
+        assert "not found" in result.message
+        assert "upgrade" in result.detail

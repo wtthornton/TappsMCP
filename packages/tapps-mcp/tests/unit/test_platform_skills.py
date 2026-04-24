@@ -293,3 +293,80 @@ class TestGenerateSkills:
         )
         assert "context: fork" in content
         assert "model: claude-sonnet-4-6" in content
+
+
+# ---------------------------------------------------------------------------
+# TAP-980 Phase A + TAP-977: linear-issue upgrade + tapps-finish-task
+# ---------------------------------------------------------------------------
+
+
+class TestLinearIssueSkillUpdated:
+    """The linear-issue skill must grant save_issue and docs_generate_epic."""
+
+    def test_linear_issue_has_save_issue(self) -> None:
+        assert "mcp__plugin_linear_linear__save_issue" in CLAUDE_SKILLS["linear-issue"]
+
+    def test_linear_issue_has_docs_generate_epic(self) -> None:
+        assert "mcp__docs-mcp__docs_generate_epic" in CLAUDE_SKILLS["linear-issue"]
+
+    def test_linear_issue_description_is_mandatory(self) -> None:
+        content = CLAUDE_SKILLS["linear-issue"]
+        assert "MANDATORY for all Linear writes" in content
+
+    def test_linear_issue_documents_markdown_workarounds(self) -> None:
+        content = CLAUDE_SKILLS["linear-issue"]
+        # Skill body has "Use numbered lists, not bulleted lists" — match case-insensitively.
+        assert "numbered lists, not bulleted" in content.lower()
+        assert "Wrap file paths in backticks" in content
+
+    def test_linear_issue_argument_hint_covers_epic(self) -> None:
+        content = CLAUDE_SKILLS["linear-issue"]
+        assert "create-epic" in content
+
+    def test_generated_linear_issue_has_save_issue(self, tmp_path: Path) -> None:
+        generate_skills(tmp_path, "claude")
+        content = (
+            tmp_path / ".claude" / "skills" / "linear-issue" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        assert "mcp__plugin_linear_linear__save_issue" in content
+
+
+class TestFinishTaskSkill:
+    """TAP-977: tapps-finish-task bundles validate -> checklist -> memory."""
+
+    def test_claude_skill_registered(self) -> None:
+        assert "tapps-finish-task" in CLAUDE_SKILLS
+
+    def test_cursor_skill_registered(self) -> None:
+        assert "tapps-finish-task" in CURSOR_SKILLS
+
+    def test_allowed_tools_includes_validate_changed(self) -> None:
+        content = CLAUDE_SKILLS["tapps-finish-task"]
+        assert "mcp__tapps-mcp__tapps_validate_changed" in content
+
+    def test_allowed_tools_includes_checklist(self) -> None:
+        content = CLAUDE_SKILLS["tapps-finish-task"]
+        assert "mcp__tapps-mcp__tapps_checklist" in content
+
+    def test_allowed_tools_includes_memory(self) -> None:
+        content = CLAUDE_SKILLS["tapps-finish-task"]
+        assert "mcp__tapps-mcp__tapps_memory" in content
+
+    def test_body_references_three_required_steps(self) -> None:
+        content = CLAUDE_SKILLS["tapps-finish-task"]
+        assert "Validate changed files" in content
+        assert "Verify the checklist" in content
+        assert "Save learnings" in content
+
+    def test_generated_claude_finish_task_skill(self, tmp_path: Path) -> None:
+        generate_skills(tmp_path, "claude")
+        target = tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md"
+        assert target.exists()
+        content = target.read_text(encoding="utf-8")
+        assert "tapps_validate_changed" in content
+        assert "tapps_checklist" in content
+
+    def test_generated_cursor_finish_task_skill(self, tmp_path: Path) -> None:
+        generate_skills(tmp_path, "cursor")
+        target = tmp_path / ".cursor" / "skills" / "tapps-finish-task" / "SKILL.md"
+        assert target.exists()
