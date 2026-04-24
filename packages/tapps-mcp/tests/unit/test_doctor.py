@@ -1128,6 +1128,49 @@ class TestCheckUvPathMismatch:
 # ---------------------------------------------------------------------------
 
 
+class TestCheckAgentsMdStampMatchesPackage:
+    """TAP-982: strict stamp check for release gating."""
+
+    def test_matching_stamp_passes(self, tmp_path):
+        from tapps_mcp import __version__
+        from tapps_mcp.distribution.doctor import check_agents_md_stamp_matches_package
+
+        (tmp_path / "AGENTS.md").write_text(
+            f"<!-- tapps-agents-version: {__version__} -->\n# AGENTS\n"
+        )
+        result = check_agents_md_stamp_matches_package(tmp_path)
+        assert result.ok is True
+        assert __version__ in result.message
+
+    def test_missing_file_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_agents_md_stamp_matches_package
+
+        result = check_agents_md_stamp_matches_package(tmp_path)
+        assert result.ok is False
+        assert "not found" in result.message
+
+    def test_wrong_stamp_fails_with_both_versions(self, tmp_path):
+        from tapps_mcp import __version__
+        from tapps_mcp.distribution.doctor import check_agents_md_stamp_matches_package
+
+        (tmp_path / "AGENTS.md").write_text(
+            "<!-- tapps-agents-version: 0.0.1 -->\n# AGENTS\n"
+        )
+        result = check_agents_md_stamp_matches_package(tmp_path)
+        assert result.ok is False
+        assert "0.0.1" in result.message
+        assert __version__ in result.message
+        assert "upgrade" in result.detail
+
+    def test_missing_stamp_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_agents_md_stamp_matches_package
+
+        (tmp_path / "AGENTS.md").write_text("# AGENTS (no stamp)\n")
+        result = check_agents_md_stamp_matches_package(tmp_path)
+        assert result.ok is False
+        assert "<none>" in result.message
+
+
 class TestCheckLinearStandardsRule:
     """check_linear_standards_rule covers .claude/rules/linear-standards.md."""
 

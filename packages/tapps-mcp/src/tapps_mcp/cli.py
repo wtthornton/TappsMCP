@@ -312,6 +312,32 @@ def doctor(project_root: str, quick: bool) -> None:
         raise SystemExit(1)
 
 
+@main.command("check-agents-md-stamp")
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root directory (defaults to current dir).",
+)
+def check_agents_md_stamp(project_root: str) -> None:
+    """Release gate — exit 1 if AGENTS.md version marker != pyproject version (TAP-982).
+
+    Minimal, single-purpose check suitable for release CI. Faster than a full
+    ``doctor`` run and reports only the stamp-vs-package comparison so the
+    failure message is unambiguous.
+    """
+    from pathlib import Path
+
+    from tapps_mcp.distribution.doctor import check_agents_md_stamp_matches_package
+
+    result = check_agents_md_stamp_matches_package(Path(project_root))
+    status = "OK" if result.ok else "FAIL"
+    click.echo(f"[{status}] {result.name}: {result.message}")
+    if result.detail:
+        click.echo(f"       {result.detail}")
+    if not result.ok:
+        raise SystemExit(1)
+
+
 @main.command("auto-capture")
 @click.option(
     "--project-root",

@@ -408,6 +408,45 @@ def check_cursor_rules(project_root: Path) -> CheckResult:
     )
 
 
+def check_agents_md_stamp_matches_package(project_root: Path) -> CheckResult:
+    """Strict stamp check for release gating (TAP-982).
+
+    Compares ``AGENTS.md`` ``<!-- tapps-agents-version: X.Y.Z -->`` against
+    the installed ``tapps_mcp.__version__``. Unlike ``check_agents_md`` this
+    check reports only the stamp mismatch (not missing sections / tools), so
+    it fits a release-gate step that wants a single yes/no signal.
+
+    Fails when AGENTS.md is absent, when the stamp is missing, or when the
+    stamp does not equal the package version.
+    """
+    agents_md = project_root / "AGENTS.md"
+    if not agents_md.exists():
+        return CheckResult(
+            "AGENTS.md stamp",
+            False,
+            "AGENTS.md not found in project root",
+            "Run: tapps-mcp upgrade (or tapps_init via MCP)",
+        )
+    from tapps_mcp import __version__
+    from tapps_mcp.pipeline.agents_md import AgentsValidation
+
+    content = agents_md.read_text(encoding="utf-8")
+    validation = AgentsValidation(content)
+    existing = validation.existing_version or "<none>"
+    if validation.existing_version == __version__:
+        return CheckResult(
+            "AGENTS.md stamp",
+            True,
+            f"stamp {existing} matches package {__version__}",
+        )
+    return CheckResult(
+        "AGENTS.md stamp",
+        False,
+        f"stamp {existing} != package {__version__}",
+        "Run `uv run tapps-mcp upgrade` then commit AGENTS.md",
+    )
+
+
 def check_linear_standards_rule(project_root: Path) -> CheckResult:
     """Check ``.claude/rules/linear-standards.md`` is present.
 
