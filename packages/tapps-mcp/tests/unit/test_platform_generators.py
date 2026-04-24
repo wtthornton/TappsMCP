@@ -320,6 +320,20 @@ class TestEpic36NewHookTemplates:
         content = _CLAUDE_HOOK_SCRIPTS["tapps-tool-failure.sh"]
         assert "mcp__tapps" in content
 
+    def test_tool_failure_mentions_tapps_doctor(self) -> None:
+        """TAP-976: stderr hint should point at tapps_doctor."""
+        bash = _CLAUDE_HOOK_SCRIPTS["tapps-tool-failure.sh"]
+        ps = _CLAUDE_HOOK_SCRIPTS_PS["tapps-tool-failure.ps1"]
+        assert "tapps_doctor" in bash
+        assert "tapps_doctor" in ps
+
+    def test_tool_failure_writes_jsonl_log(self) -> None:
+        """TAP-976: failures append to .tapps-mcp/.failure-log.jsonl."""
+        bash = _CLAUDE_HOOK_SCRIPTS["tapps-tool-failure.sh"]
+        ps = _CLAUDE_HOOK_SCRIPTS_PS["tapps-tool-failure.ps1"]
+        assert ".failure-log.jsonl" in bash
+        assert ".failure-log.jsonl" in ps
+
     def test_session_end_checks_marker(self) -> None:
         """SessionEnd hook checks for validation marker file."""
         content = _CLAUDE_HOOK_SCRIPTS["tapps-session-end.sh"]

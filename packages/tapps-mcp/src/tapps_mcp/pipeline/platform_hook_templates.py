@@ -284,7 +284,7 @@ exit 0
 """,
     "tapps-tool-failure.sh": """\
 #!/usr/bin/env bash
-# TappsMCP PostToolUseFailure hook (Epic 36.3)
+# TappsMCP PostToolUseFailure hook (Epic 36.3 / TAP-976)
 # Logs TappsMCP MCP tool failures for diagnostics.
 # IMPORTANT: PostToolUseFailure does NOT support exit code 2 (advisory only).
 INPUT=$(cat)
@@ -294,18 +294,32 @@ import sys,json
 d=json.load(sys.stdin)
 print(d.get('tool_name',''))
 " 2>/dev/null)
-# Only log failures from TappsMCP tools
+# Only log failures from TappsMCP tools — non-tapps failures stay silent.
 case "$TOOL" in
-  mcp__tapps-mcp__*|mcp__tapps_mcp__*)
-    ERROR=$(echo "$INPUT" | "$PYBIN" -c "
+  mcp__tapps-mcp__*|mcp__tapps_mcp__*) ;;
+  *) exit 0 ;;
+esac
+ERROR=$(echo "$INPUT" | "$PYBIN" -c "
 import sys,json
 d=json.load(sys.stdin)
-print(d.get('error','unknown error')[:200])
+print(str(d.get('error','unknown error'))[:200])
 " 2>/dev/null)
-    echo "TappsMCP tool $TOOL failed: $ERROR" >&2
-    echo "Check MCP server connectivity and configuration." >&2
-    ;;
-esac
+echo "TappsMCP tool $TOOL failed: $ERROR" >&2
+echo "Run tapps_doctor to diagnose, or check MCP server connectivity." >&2
+ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+TS=$(date -u +%FT%TZ)
+LINE=$(echo "$INPUT" | TS="$TS" TOOL="$TOOL" ERROR="$ERROR" "$PYBIN" -c "
+import json, os, sys
+print(json.dumps({
+    'ts': os.environ.get('TS', ''),
+    'tool': os.environ.get('TOOL', ''),
+    'error': os.environ.get('ERROR', ''),
+}, separators=(',', ':')))
+" 2>/dev/null)
+if [ -n "$LINE" ]; then
+  echo "$LINE" >> "$ROOT/.tapps-mcp/.failure-log.jsonl" 2>/dev/null
+fi
 exit 0
 """,
     "tapps-pre-bash.sh": """\
@@ -631,22 +645,32 @@ if (Test-Path $marker) {
 exit 0
 """,
     "tapps-tool-failure.ps1": """\
-# TappsMCP PostToolUseFailure hook (Epic 36.3)
+# TappsMCP PostToolUseFailure hook (Epic 36.3 / TAP-976)
 # Logs TappsMCP MCP tool failures for diagnostics.
 # IMPORTANT: PostToolUseFailure does NOT support exit code 2 (advisory only).
 $rawInput = @($input) -join "`n"
 try {
     $data = $rawInput | ConvertFrom-Json
-    $tool = if ($data.tool_name) { $data.tool_name } else { "" }
+    $tool = if ($data.tool_name) { [string]$data.tool_name } else { "" }
 } catch {
     $tool = ""
+    $data = $null
 }
-if ($tool -match '^mcp__tapps[-_]mcp__') {
-    $err = if ($data.error) { $data.error } else { "unknown error" }
-    $error_msg = $err.Substring(0, [Math]::Min(200, $err.Length))
-    Write-Host "TappsMCP tool $tool failed: $error_msg" -ForegroundColor Red
-    Write-Host "Check MCP server connectivity and configuration." -ForegroundColor Yellow
+if ($tool -notmatch '^mcp__tapps[-_]mcp__') {
+    exit 0
 }
+$err = if ($data -and $data.error) { [string]$data.error } else { "unknown error" }
+$errorMsg = $err.Substring(0, [Math]::Min(200, $err.Length))
+[Console]::Error.WriteLine("TappsMCP tool $tool failed: $errorMsg")
+[Console]::Error.WriteLine("Run tapps_doctor to diagnose, or check MCP server connectivity.")
+$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+$dir = Join-Path $root '.tapps-mcp'
+if (-not (Test-Path $dir)) {
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+}
+$ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+$entry = @{ ts = $ts; tool = $tool; error = $errorMsg } | ConvertTo-Json -Compress
+Add-Content -Path (Join-Path $dir '.failure-log.jsonl') -Value $entry
 exit 0
 """,
     "tapps-pre-bash.ps1": """\
