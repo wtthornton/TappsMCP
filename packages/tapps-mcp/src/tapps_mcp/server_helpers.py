@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import os
 import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -585,6 +586,55 @@ def get_session_context() -> dict[str, Any]:
     """Return a copy of the cached session context."""
     with _session_lock:
         return dict(_session_context)
+
+
+def write_session_start_marker(project_root: Path | str) -> None:
+    """TAP-975: Record the most recent ``tapps_session_start`` epoch on disk.
+
+    Read by the ``tapps-user-prompt-submit`` hook to decide whether to remind
+    the agent that pipeline state may be stale across topic shifts. Failures
+    are swallowed — the marker is advisory; missing it just means the next
+    user prompt yields a reminder.
+    """
+    try:
+        root = project_root if isinstance(project_root, Path) else Path(project_root)
+        sidecar_dir = root / ".tapps-mcp"
+        sidecar_dir.mkdir(parents=True, exist_ok=True)
+        (sidecar_dir / ".session-start-marker").write_text(
+            str(int(time.time())), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
+def write_checklist_state_marker(
+    project_root: Path | str,
+    *,
+    complete: bool,
+    missing_required: list[str] | None = None,
+) -> None:
+    """TAP-975: Record the most recent ``tapps_checklist`` outcome on disk.
+
+    Read by the ``tapps-user-prompt-submit`` hook to surface "open checklist"
+    reminders when the last run flagged missing required tools. Failures are
+    swallowed — same advisory contract as :func:`write_session_start_marker`.
+    """
+    try:
+        import json as _json
+
+        root = project_root if isinstance(project_root, Path) else Path(project_root)
+        sidecar_dir = root / ".tapps-mcp"
+        sidecar_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "ts": int(time.time()),
+            "complete": bool(complete),
+            "missing_required": list(missing_required or []),
+        }
+        (sidecar_dir / ".checklist-state.json").write_text(
+            _json.dumps(payload, separators=(",", ":")), encoding="utf-8"
+        )
+    except Exception:
+        pass
 
 
 def _reset_session_state() -> None:

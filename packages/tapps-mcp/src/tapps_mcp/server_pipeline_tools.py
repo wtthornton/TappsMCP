@@ -327,7 +327,10 @@ async def tapps_session_start(
     resp = success_response("tapps_session_start", elapsed_ms, data)
     _ssc.attach_session_start_structured_output(resp, info)
 
-    from tapps_mcp.server_helpers import mark_session_initialized
+    from tapps_mcp.server_helpers import (
+        mark_session_initialized,
+        write_session_start_marker,
+    )
 
     mark_session_initialized(
         {
@@ -336,6 +339,9 @@ async def tapps_session_start(
             "auto_initialized": False,
         }
     )
+    # TAP-975: refresh sidecar so the UserPromptSubmit hook stays silent for
+    # the next 30 minutes of prompts.
+    write_session_start_marker(settings.project_root)
 
     return _with_nudges("tapps_session_start", resp, {})
 
@@ -402,7 +408,10 @@ async def _session_start_quick(
     resp = success_response("tapps_session_start", elapsed_ms, data)
     _ssc.attach_quick_session_structured_output(resp, settings, installed)
 
-    from tapps_mcp.server_helpers import mark_session_initialized
+    from tapps_mcp.server_helpers import (
+        mark_session_initialized,
+        write_session_start_marker,
+    )
 
     mark_session_initialized(
         {
@@ -412,6 +421,8 @@ async def _session_start_quick(
             "project_profile": None,
         }
     )
+    # TAP-975: refresh sidecar in quick path too.
+    write_session_start_marker(settings.project_root)
 
     return with_nudges("tapps_session_start", resp, {})
 

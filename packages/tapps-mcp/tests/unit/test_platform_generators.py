@@ -84,12 +84,14 @@ class TestHookTemplates:
     """Verify hook template dicts have expected keys and content."""
 
     def test_claude_sh_scripts_count(self) -> None:
-        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) + 1 post-validate + 1 post-report
-        assert len(_CLAUDE_HOOK_SCRIPTS) == 15
+        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) +
+        # 1 post-validate + 1 post-report + 1 user-prompt-submit (TAP-975)
+        assert len(_CLAUDE_HOOK_SCRIPTS) == 16
 
     def test_claude_ps1_scripts_count(self) -> None:
-        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) + 1 post-validate + 1 post-report
-        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 15
+        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) +
+        # 1 post-validate + 1 post-report + 1 user-prompt-submit (TAP-975)
+        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 16
 
     def test_cursor_sh_scripts_count(self) -> None:
         assert len(_CURSOR_HOOK_SCRIPTS) == 2
@@ -260,10 +262,11 @@ class TestMiscGenerators:
         assert "CI Integration" in section
 
     def test_claude_hooks_creates_scripts(self, tmp_path: Path) -> None:
-        # Medium engagement (default): 7 events, 9 scripts
-        # (SessionStart has 2 scripts: start + compact, SubagentStop added)
+        # Medium engagement (default): SessionStart events (2 scripts),
+        # PostToolUse, Stop, TaskCompleted, PreCompact, SubagentStart,
+        # SubagentStop, plus TAP-975 UserPromptSubmit script.
         result = generate_claude_hooks(tmp_path, force_windows=False)
-        assert len(result["scripts_created"]) == 12
+        assert len(result["scripts_created"]) == 13
         assert result["engagement_level"] == "medium"
 
     def test_cursor_hooks_creates_scripts(self, tmp_path: Path) -> None:
@@ -463,7 +466,9 @@ class TestEpic36EngagementHookEvents:
         assert "PostToolUseFailure" in high
         assert "Stop" in high
         assert "TaskCompleted" in high
-        assert len(high) == 9
+        # TAP-975: UserPromptSubmit pipeline-state reminder added at high+medium.
+        assert "UserPromptSubmit" in high
+        assert len(high) == 10
 
     def test_medium_has_standard_events(self) -> None:
         from tapps_mcp.pipeline.platform_hook_templates import (
@@ -475,7 +480,8 @@ class TestEpic36EngagementHookEvents:
         assert "SubagentStop" in medium
         assert "SessionEnd" not in medium
         assert "PostToolUseFailure" not in medium
-        assert len(medium) == 7
+        assert "UserPromptSubmit" in medium  # TAP-975
+        assert len(medium) == 8
 
     def test_low_is_minimal(self) -> None:
         from tapps_mcp.pipeline.platform_hook_templates import (

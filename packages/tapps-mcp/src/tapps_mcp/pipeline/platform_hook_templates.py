@@ -103,6 +103,64 @@ fi
 echo "Reminder: Before declaring complete, run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually)." >&2
 exit 0
 """,
+    "tapps-user-prompt-submit.sh": """\
+#!/usr/bin/env bash
+# TappsMCP UserPromptSubmit hook (TAP-975)
+# Re-surfaces pipeline state per user turn so long sessions don't drift.
+# Reads two sidecars:
+#   .tapps-mcp/.session-start-marker   — Unix epoch of last tapps_session_start
+#   .tapps-mcp/.checklist-state.json   — last tapps_checklist outcome
+# Stays SILENT when session_start was within 30 min AND no open checklist.
+INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+SS_MARKER="$PROJECT_DIR/.tapps-mcp/.session-start-marker"
+CL_STATE="$PROJECT_DIR/.tapps-mcp/.checklist-state.json"
+NOW=$(date +%s)
+NEED_SS=0
+if [ ! -f "$SS_MARKER" ]; then
+  NEED_SS=1
+else
+  SS=$(cat "$SS_MARKER" 2>/dev/null)
+  if ! echo "$SS" | grep -Eq '^[0-9]+$'; then
+    SS=0
+  fi
+  AGE=$((NOW - SS))
+  # 1800s = 30 minute freshness window per TAP-975 AC.
+  if [ "$AGE" -gt 1800 ]; then
+    NEED_SS=1
+  fi
+fi
+OPEN_CHECKLIST=""
+if [ -f "$CL_STATE" ]; then
+  PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+  OPEN_CHECKLIST=$("$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$CL_STATE'))
+    if d.get('complete') is False:
+        m=d.get('missing_required',[])
+        if m:
+            print('open: ' + ', '.join(m[:3]))
+        else:
+            print('open')
+except Exception:
+    pass
+" 2>/dev/null)
+fi
+if [ "$NEED_SS" -eq 0 ] && [ -z "$OPEN_CHECKLIST" ]; then
+  exit 0
+fi
+{
+  echo "[TappsMCP] Pipeline-state reminder:"
+  if [ "$NEED_SS" -eq 1 ]; then
+    echo "  - tapps_session_start was not called within the last 30 min — call it before edits to refresh project context."
+  fi
+  if [ -n "$OPEN_CHECKLIST" ]; then
+    echo "  - tapps_checklist last reported incomplete ($OPEN_CHECKLIST) — run /tapps-finish-task or address the missing tools."
+  fi
+} >&2
+exit 0
+""",
     "tapps-task-completed.sh": """\
 #!/usr/bin/env bash
 # TappsMCP TaskCompleted hook
@@ -499,6 +557,59 @@ if (Test-Path $reportProgress) {
     } catch {}
 }
 Write-Host "Reminder: Before declaring complete, run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually)." -ForegroundColor Yellow
+exit 0
+""",
+    "tapps-user-prompt-submit.ps1": """\
+# TappsMCP UserPromptSubmit hook (TAP-975)
+# Re-surfaces pipeline state per user turn so long sessions don't drift.
+# Reads two sidecars:
+#   .tapps-mcp/.session-start-marker   — Unix epoch of last tapps_session_start
+#   .tapps-mcp/.checklist-state.json   — last tapps_checklist outcome
+# Stays SILENT when session_start was within 30 min AND no open checklist.
+$null = $input | Out-Null
+$projDir = $env:CLAUDE_PROJECT_DIR
+if (-not $projDir) { $projDir = "." }
+$ssMarker = Join-Path $projDir '.tapps-mcp/.session-start-marker'
+$clState = Join-Path $projDir '.tapps-mcp/.checklist-state.json'
+$now = [int64]([DateTimeOffset]::Now.ToUnixTimeSeconds())
+$needSs = $false
+if (-not (Test-Path $ssMarker)) {
+    $needSs = $true
+} else {
+    $raw = ''
+    try { $raw = (Get-Content -Path $ssMarker -Raw -ErrorAction Stop).Trim() } catch {}
+    if ($raw -notmatch '^[0-9]+$') {
+        $needSs = $true
+    } else {
+        $age = $now - [int64]$raw
+        if ($age -gt 1800) { $needSs = $true }
+    }
+}
+$openChecklist = ''
+if (Test-Path $clState) {
+    try {
+        $d = Get-Content -Path $clState -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ($d.complete -eq $false) {
+            $missing = @($d.missing_required)
+            if ($missing.Count -gt 0) {
+                $first = ($missing | Select-Object -First 3) -join ', '
+                $openChecklist = "open: $first"
+            } else {
+                $openChecklist = 'open'
+            }
+        }
+    } catch {}
+}
+if (-not $needSs -and -not $openChecklist) {
+    exit 0
+}
+[Console]::Error.WriteLine('[TappsMCP] Pipeline-state reminder:')
+if ($needSs) {
+    [Console]::Error.WriteLine('  - tapps_session_start was not called within the last 30 min - call it before edits to refresh project context.')
+}
+if ($openChecklist) {
+    [Console]::Error.WriteLine("  - tapps_checklist last reported incomplete ($openChecklist) - run /tapps-finish-task or address the missing tools.")
+}
 exit 0
 """,
     "tapps-task-completed.ps1": """\
@@ -918,6 +1029,19 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
             ],
         },
     ],
+    "UserPromptSubmit": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-user-prompt-submit.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
 }
 
 CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
@@ -1013,6 +1137,16 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
             "if": "mcp__tapps-mcp__*",
             "hooks": [
                 {"type": "command", "command": ".claude/hooks/tapps-tool-failure.sh"},
+            ],
+        },
+    ],
+    "UserPromptSubmit": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-user-prompt-submit.sh",
+                },
             ],
         },
     ],
@@ -2227,6 +2361,9 @@ ENGAGEMENT_HOOK_EVENTS: dict[str, set[str]] = {
         "SubagentStop",
         "SessionEnd",
         "PostToolUseFailure",
+        # TAP-975: per-prompt pipeline-state reminder (script self-silences
+        # when session_start was within 30 min and no checklist is open).
+        "UserPromptSubmit",
     },
     "medium": {
         "SessionStart",
@@ -2236,6 +2373,11 @@ ENGAGEMENT_HOOK_EVENTS: dict[str, set[str]] = {
         "PreCompact",
         "SubagentStart",
         "SubagentStop",
+        # TAP-975: same hook at medium — same self-silencing logic, so the
+        # noise floor is the same as high. The AC differentiates "fire
+        # always" vs "fire on stale" but the script handles both via the
+        # internal silence check, so the wiring is identical.
+        "UserPromptSubmit",
     },
     "low": {
         "SessionStart",

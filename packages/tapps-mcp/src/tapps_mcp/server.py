@@ -1374,6 +1374,20 @@ async def tapps_checklist(
             except Exception:
                 logger.debug("structured_output_failed: tapps_checklist", exc_info=True)
 
+        # TAP-975: persist checklist outcome so the UserPromptSubmit hook can
+        # surface "open checklist" reminders across topic shifts.
+        try:
+            from tapps_mcp.config import load_settings as _load_settings
+            from tapps_mcp.server_helpers import write_checklist_state_marker
+
+            write_checklist_state_marker(
+                _load_settings().project_root,
+                complete=result.complete,
+                missing_required=list(result.missing_required),
+            )
+        except Exception:
+            logger.debug("checklist_state_marker_write_failed", exc_info=True)
+
         return _with_nudges("tapps_checklist", resp, {"complete": result.complete})
     except ImportError:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

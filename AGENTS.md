@@ -257,13 +257,15 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 
 ### Hooks (auto-generated)
 
-**Claude Code** (`.claude/hooks/`): 7 hook scripts that enforce quality automatically:
+**Claude Code** (`.claude/hooks/`): hook scripts that enforce quality automatically:
 - **SessionStart** - Injects TappsMCP awareness on session start and after compaction
 - **PostToolUse (Edit/Write)** - Reminds you to run `tapps_quick_check` after Python edits
-- **Stop** - Reminds you to run `tapps_validate_changed` before session end (non-blocking)
+- **Stop** - Reminds you to run `/tapps-finish-task` (or `tapps_validate_changed` + `tapps_checklist`) before session end (non-blocking; blocking at engagement=high)
 - **TaskCompleted** - Reminds you to validate before marking task complete (non-blocking)
 - **PreCompact** - Backs up scoring context before context window compaction
 - **SubagentStart** - Injects TappsMCP awareness into spawned subagents
+- **PostToolUseFailure** (engagement=high) - Logs `mcp__tapps-mcp__*` failures to `.tapps-mcp/.failure-log.jsonl` and prints a `tapps_doctor` hint (TAP-976)
+- **UserPromptSubmit** (engagement=high or medium) - Per-prompt pipeline-state reminder (TAP-975). Stays silent when `tapps_session_start` was within 30 min and the last `tapps_checklist` returned `complete:true`. Fires when (a) the session-start sidecar `.tapps-mcp/.session-start-marker` is missing or older than 1800s, or (b) the checklist sidecar `.tapps-mcp/.checklist-state.json` shows `complete:false` with missing required tools. Closes the "agent forgot session_start after a topic shift" failure mode without being noisy on fresh state.
 
 **Cursor** (`.cursor/hooks/`): 3 hook scripts:
 - **beforeMCPExecution** - Logs MCP tool invocations for observability

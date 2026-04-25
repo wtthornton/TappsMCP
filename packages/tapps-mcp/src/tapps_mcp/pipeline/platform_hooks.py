@@ -227,6 +227,8 @@ def _filter_scripts(
         "tapps-memory-capture": "Stop",
         "tapps-memory-auto-capture": "Stop",
         "tapps-pre-bash": "PreToolUse",
+        # TAP-975 pipeline-state reminder
+        "tapps-user-prompt-submit": "UserPromptSubmit",
         # TAP-981 Linear routing gate
         "tapps-pre-linear-write": "PreToolUse",
         "tapps-post-docs-validate": "PostToolUse",
