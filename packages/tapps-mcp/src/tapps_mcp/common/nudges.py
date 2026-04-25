@@ -143,7 +143,9 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     "tapps_checklist": [
         (
             lambda _called, ctx: (ctx or {}).get("complete") is False,
-            "Checklist incomplete. Address the missing required tools listed above.",
+            "Checklist incomplete. Run /tapps-finish-task to bundle "
+            "validate + checklist + optional memory save in one call, "
+            "or address the missing required tools listed above manually.",
             _IMPACT_BLOCKING,
         ),
         # STORY-101.7: Detect when validate_changed was skipped entirely.
@@ -157,6 +159,16 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
             "WARNING: tapps_validate_changed was never called. "
             "Run tapps_validate_changed(file_paths=...) to batch-confirm all changes pass the quality gate.",
             _IMPACT_INFO,
+        ),
+        # TAP-983: Surface /tapps-finish-task as the next-time close-out path
+        # when the checklist passes. Lower impact than BLOCKING/INFO so the
+        # remediation messages above always win when something needs fixing.
+        (
+            lambda _called, ctx: (ctx or {}).get("complete") is True,
+            "TIP: Next time, invoke /tapps-finish-task — it runs "
+            "tapps_validate_changed + tapps_checklist + an optional memory "
+            "save in one shot.",
+            _IMPACT_LOW,
         ),
     ],
 }

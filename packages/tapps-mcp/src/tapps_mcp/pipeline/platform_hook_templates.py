@@ -100,7 +100,7 @@ except Exception:
 " 2>/dev/null)
   [ -n "$REPORT_SUMMARY" ] && echo "$REPORT_SUMMARY"
 fi
-echo "Reminder: Run tapps_validate_changed before ending the session." >&2
+echo "Reminder: Before declaring complete, run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually)." >&2
 exit 0
 """,
     "tapps-task-completed.sh": """\
@@ -498,7 +498,7 @@ if (Test-Path $reportProgress) {
         }
     } catch {}
 }
-Write-Host "Reminder: Run tapps_validate_changed before ending the session." -ForegroundColor Yellow
+Write-Host "Reminder: Before declaring complete, run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually)." -ForegroundColor Yellow
 exit 0
 """,
     "tapps-task-completed.ps1": """\
@@ -2028,7 +2028,7 @@ except Exception:
   exit 0
 fi
 echo "BLOCKED: No quality validation was run this session." >&2
-echo "Run tapps_validate_changed before ending." >&2
+echo "Before declaring complete, run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually)." >&2
 exit 2
 """,
 }
@@ -2145,7 +2145,7 @@ if (Test-Path $marker) {
     exit 0
 }
 Write-Host "BLOCKED: No quality validation was run this session." -ForegroundColor Red
-Write-Host "Run tapps_validate_changed before ending." -ForegroundColor Red
+Write-Host "Before declaring complete, run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually)." -ForegroundColor Red
 exit 2
 """,
 }

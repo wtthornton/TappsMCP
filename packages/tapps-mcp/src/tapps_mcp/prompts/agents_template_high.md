@@ -64,8 +64,8 @@ When the **TappsMCP** MCP server is configured, you **MUST** use its tools for c
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits (REQUIRED):** You MUST call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each Python file edit.
 6. **Before declaring work complete (BLOCKING):**
-   - You MUST call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. Never call without `file_paths` — auto-detect scans all git-changed files and can be very slow.
-   - You MUST call `tapps_checklist(task_type=...)` as the FINAL step. If `complete` is false, call the missing required tools. NEVER declare work complete without running the checklist.
+   - REQUIRED: Invoke the `/tapps-finish-task` skill — it bundles `tapps_validate_changed` + `tapps_checklist` + an optional memory save into one call. This is the recommended close-out path.
+   - If invoking the skill is not possible, run the steps manually: `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths (never call without `file_paths` — auto-detect scans all git-changed files and can be very slow), then `tapps_checklist(task_type=...)` as the FINAL step. If `complete` is false, call the missing required tools. NEVER declare work complete without running the checklist.
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
 7. **Domain decisions (REQUIRED):** You MUST call `tapps_lookup_docs` for domain-specific decisions and library guidance. Use `tapps_validate_config` for Docker/infra files.
 

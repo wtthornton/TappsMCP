@@ -53,7 +53,7 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 3. **Before using a library:** Consider calling `tapps_lookup_docs(library=...)` to avoid hallucinated APIs.
 4. **Before modifying a file's API:** Consider `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Consider `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after Python file edits.
-6. **Before declaring work complete:** Consider calling `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths and `tapps_checklist(task_type=...)` to verify quality. Default is quick mode; only use `quick=false` as a last resort. Use `tapps_report(format="markdown")` if the user wants a summary.
+6. **Before declaring work complete:** Consider invoking the `/tapps-finish-task` skill, which bundles validate + checklist + optional memory save in one call. If you prefer the manual path, call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths and then `tapps_checklist(task_type=...)`. Default is quick mode; only use `quick=false` as a last resort. Use `tapps_report(format="markdown")` if the user wants a summary.
 7. **When in doubt:** Consider `tapps_lookup_docs` for domain questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)

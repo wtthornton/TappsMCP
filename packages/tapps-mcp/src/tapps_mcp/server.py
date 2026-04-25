@@ -1052,6 +1052,21 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
     return _with_nudges("tapps_validate_config", resp)
 
 
+_FINISH_TASK_TIP_INCOMPLETE = (
+    "Run /tapps-finish-task to bundle validate + checklist + optional memory "
+    "save into one call instead of fixing the missing tools by hand."
+)
+_FINISH_TASK_TIP_COMPLETE = (
+    "TIP: Next time, invoke /tapps-finish-task to run validate + checklist + "
+    "optional memory save in one shot."
+)
+
+
+def _finish_task_tip(result: ChecklistResult) -> str:
+    """TAP-983: Surface /tapps-finish-task suggestion in non-markdown formats."""
+    return _FINISH_TASK_TIP_INCOMPLETE if not result.complete else _FINISH_TASK_TIP_COMPLETE
+
+
 def _checklist_json_format(
     result: ChecklistResult,
     auto_run_results: dict[str, Any],
@@ -1062,6 +1077,7 @@ def _checklist_json_format(
     """Build structured JSON output with computed counts and next_steps for checklist."""
     next_steps: list[str] = [h.reason for h in result.missing_required_hints]
     next_steps.extend(h.reason for h in result.missing_recommended_hints)
+    next_steps.append(_finish_task_tip(result))
 
     data: dict[str, Any] = {
         "task_type": result.task_type,
@@ -1135,6 +1151,7 @@ def _checklist_compact_format(
 
     next_steps: list[str] = [h.reason for h in result.missing_required_hints]
     next_steps.extend(h.reason for h in result.missing_recommended_hints)
+    next_steps.append(_finish_task_tip(result))
 
     data: dict[str, Any] = {
         "summary": summary,

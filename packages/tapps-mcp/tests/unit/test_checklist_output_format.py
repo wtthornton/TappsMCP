@@ -230,11 +230,14 @@ async def test_checklist_json_next_steps() -> None:
     assert resp["success"] is True
     data = resp["data"]
     assert "next_steps" in data
-    assert data["next_steps"] == [
+    # TAP-983: incomplete checklist surfaces the missing-tool hints first,
+    # then the /tapps-finish-task tip appended by _checklist_json_format.
+    assert data["next_steps"][:3] == [
         "Score the file for quality.",
         "Call before declaring done.",
         "Run security scan.",
     ]
+    assert "/tapps-finish-task" in data["next_steps"][-1]
 
 
 @pytest.mark.asyncio
@@ -286,7 +289,9 @@ async def test_checklist_compact_next_steps_and_full() -> None:
     assert resp["success"] is True
     data = resp["data"]
     assert "next_steps" in data
-    assert data["next_steps"] == ["Call quality gate before done."]
+    # TAP-983: compact format also appends the /tapps-finish-task tip.
+    assert data["next_steps"][0] == "Call quality gate before done."
+    assert "/tapps-finish-task" in data["next_steps"][-1]
     assert "full" in data
     assert data["full"]["task_type"] == "feature"
     assert data["full"]["missing_required"] == ["tapps_quality_gate"]
