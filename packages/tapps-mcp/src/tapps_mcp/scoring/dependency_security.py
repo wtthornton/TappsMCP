@@ -47,11 +47,14 @@ def calculate_dependency_penalty(findings: list[VulnerabilityFinding]) -> float:
 def suggest_dependency_fixes(findings: list[VulnerabilityFinding]) -> list[str]:
     """Generate actionable upgrade suggestions from vulnerability findings.
 
-    For findings with a known fix version, produces messages like:
-        "Upgrade cryptography from 39.0.0 to 42.0.0 to fix CVE-2024-XXXXX"
+    Examples (illustrative — vulnerability IDs in real output come from
+    pip-audit and refer to specific CVEs / GHSAs):
+
+    For findings with a known fix version:
+        "Upgrade cryptography from 39.0.0 to 42.0.0 to fix CVE-2023-38325"
 
     For findings without a fix version:
-        "cryptography v39.0.0 has vulnerability CVE-2024-XXXXX"
+        "cryptography v39.0.0 has vulnerability CVE-2023-38325"
 
     Args:
         findings: List of vulnerability findings from pip-audit.
