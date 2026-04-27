@@ -129,6 +129,20 @@ When TappsMCP's own MCP server is available, use it on this codebase:
 - **Windows testing**: Use `python -c "import time; time.sleep(N)"` for timeout tests.
 - **Patching lazy imports**: Some imports happen inside tool handlers from `tapps_core`. Patch at source modules, not re-export wrappers.
 
+## Releasing
+
+Every version bump in `packages/tapps-mcp/pyproject.toml` (and the workspace) must be followed by a self-stamp resync so `tapps_doctor` and `tapps_upgrade` introspection stay accurate. Drift between the shipped `__version__` and the `<!-- tapps-agents-version: X.Y.Z -->` marker in `AGENTS.md` makes consumers see false drift or skip real upgrades.
+
+Release checklist:
+
+1. Bump `version` in `packages/tapps-mcp/pyproject.toml` (and workspace if applicable).
+2. Run `uv run tapps-mcp upgrade --apply` against this repo to resync `AGENTS.md`'s `tapps-agents-version` marker. Alternatively, edit the marker by hand to match.
+3. Verify: `grep '^<!-- tapps-agents-version' AGENTS.md` matches the new `pyproject.toml` version.
+4. Update `CHANGELOG.md` with the version, date, and notable changes.
+5. Commit, tag, and push.
+
+A future CI gate (tracked in TAP-982) will fail releases when the marker and `pyproject.toml` disagree.
+
 ## Reporting Issues
 
 When reporting issues, please include:

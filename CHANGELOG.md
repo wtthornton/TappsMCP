@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-04-27
+
+### Added
+
+- **`feat(scoring): exclude uv workspace members from docs_hint` (TAP-618).** `tapps_score_file`'s `uncached_libraries` / `docs_hint` previously nudged agents to look up workspace-internal packages (`tapps_core`, `tapps_mcp`, `docs_mcp`) via Context7, which has no docs for them. New `_detect_workspace_packages` in [packages/tapps-core/src/tapps_core/knowledge/import_analyzer.py](packages/tapps-core/src/tapps_core/knowledge/import_analyzer.py) reads `[tool.uv.workspace].members`, glob-expands each pattern, reads each member's `[project].name`, and returns both the declared and underscore-normalised form so an `import tapps_mcp` matches a project named `tapps-mcp`. `extract_external_imports` filters against this set. Best-effort: empty set on missing/unreadable pyproject so non-workspace projects keep their existing behaviour.
+
+### Changed
+
+- **`refactor(diagnostics): drop dead vector_rag block from session_start` (TAP-617).** The expert system was removed under TAP-455 (EPIC-94 cleanup) but `tapps_session_start.diagnostics` continued to emit a stub `vector_rag` block with three `false` flags and `status: "removed"`. Removed the `VectorRagDiagnostic` model from [tapps_core.common.models](packages/tapps-core/src/tapps_core/common/models.py), dropped the re-export from `tapps_mcp.common.models`, and pruned `check_vector_rag` from [diagnostics.py](packages/tapps-mcp/src/tapps_mcp/diagnostics.py). Updated three test modules that asserted on the removed shape.
+
+### Fixed
+
+- **`fix(.ralph): allow git rm --cached and untrack runtime artifacts` (TAP-1020).** The PreToolUse `validate-command.sh` over-blocked any `git rm` invocation as destructive, even though `git rm --cached` only updates the index. Combined with the `protect-ralph-files.sh` guard on the validate hook itself, agents could not clean up the four `.ralph/*` runtime files that commit `90739d0` added to `.gitignore` -- every session opened with a dirty working tree. Carved out `git rm --cached` while keeping bare `git rm`, `git clean`, and `git reset --hard` blocked, then untracked the four index entries.
+- **`fix(vulture): ignore cls in classmethod and validator signatures` (TAP-616).** vulture flagged the conventional `cls` first parameter on Pydantic v2 `@field_validator` / `@model_validator` and plain `@classmethod` methods at 100% confidence. Added `--ignore-names=cls` to both `run_vulture_async` and `run_vulture_multi_async` in [tools/vulture.py](packages/tapps-mcp/src/tapps_mcp/tools/vulture.py), mirroring vulture's built-in handling of `self`. Verified zero findings on `settings.py` which previously surfaced two such false positives.
+- **`fix(tests): correct generator fixture annotation to Iterator[None]` (TAP-697).** `_fresh_settings` in `test_upgrade_ralph_feedback.py` is a yield-based fixture but was annotated `-> None` -- a type lie that `mypy --strict` would flag if the `@pytest.fixture` decorator were not untyped. Fixed to `-> Iterator[None]`. Scope check across all package tests confirmed this was the only such occurrence.
+
+### Documentation
+
+- **`docs(scoring): replace CVE-2024-XXXXX placeholder with real example` (TAP-699).** The `suggest_dependency_fixes` docstring in [dependency_security.py](packages/tapps-mcp/src/tapps_mcp/scoring/dependency_security.py) used `CVE-2024-XXXXX` in two example messages, which read like an unresolved TODO and could be falsely matched by source-tree CVE pattern grep. Replaced with the real historical `CVE-2023-38325` (cryptography, long-since patched) and a preamble noting the examples are illustrative.
+- **`docs(contributing): add release version-stamp resync checklist` (TAP-972).** [CONTRIBUTING.md](CONTRIBUTING.md) now has a Releasing section requiring `tapps_upgrade` (or a manual edit) to resync `AGENTS.md`'s `tapps-agents-version` marker on every version bump, so `tapps_doctor` and `tapps_upgrade` introspection stay accurate. The acceptance check (`grep '<!-- tapps-agents-version' AGENTS.md` matches `pyproject.toml`) now passes for 3.4.0; a future CI gate is tracked in TAP-982.
+
 ## [3.3.0] - 2026-04-24
 
 ### Added
