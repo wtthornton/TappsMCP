@@ -181,6 +181,7 @@ async def run_vulture_async(
         "vulture",
         file_path,
         f"--min-confidence={min_confidence}",
+        f"--ignore-names={_IGNORE_NAMES}",
     ]
 
     result = await run_command_async(cmd, cwd=cwd, timeout=timeout)
@@ -228,6 +229,13 @@ _EXCLUDED_DIRS: frozenset[str] = frozenset(
 )
 
 _GIT_DIFF_TIMEOUT = 5
+
+# Names vulture should never flag. ``cls`` is the conventional first parameter
+# of ``@classmethod`` and Pydantic ``@field_validator`` / ``@model_validator``
+# methods; vulture flags it at 100% confidence because it is technically unused
+# inside trivial validators, but the parameter is required by the decorator
+# contract. Vulture already ignores ``self`` by the same logic.
+_IGNORE_NAMES = "cls"
 
 
 @dataclass
@@ -328,6 +336,7 @@ async def run_vulture_multi_async(
         "vulture",
         *file_paths,
         f"--min-confidence={min_confidence}",
+        f"--ignore-names={_IGNORE_NAMES}",
     ]
 
     result = await run_command_async(cmd, cwd=cwd, timeout=timeout)
