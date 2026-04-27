@@ -15,4 +15,3 @@ from tapps_core.common.models import KnowledgeDomainInfo as KnowledgeDomainInfo
 from tapps_core.common.models import SecurityIssue as SecurityIssue
 from tapps_core.common.models import StartupDiagnostics as StartupDiagnostics
 from tapps_core.common.models import ToolResponse as ToolResponse
-from tapps_core.common.models import VectorRagDiagnostic as VectorRagDiagnostic

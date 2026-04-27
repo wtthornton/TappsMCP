@@ -84,7 +84,6 @@ _REEXPORT_PAIRS: list[tuple[str, str, list[str]]] = [
             "SecurityIssue",
             "StartupDiagnostics",
             "ToolResponse",
-            "VectorRagDiagnostic",
         ],
     ),
     (

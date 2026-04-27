@@ -15,7 +15,6 @@ from tapps_mcp.common.models import (
     InstalledTool,
     KnowledgeBaseDiagnostic,
     StartupDiagnostics,
-    VectorRagDiagnostic,
 )
 from tapps_mcp.tools.checklist import CallTracker
 
@@ -37,12 +36,6 @@ _MOCK_TOOLS = [
 _MOCK_DIAGNOSTICS = StartupDiagnostics(
     context7=Context7Diagnostic(api_key_set=False, status="no_key"),
     cache=CacheDiagnostic(cache_dir="/tmp/fake", exists=False, writable=False),
-    vector_rag=VectorRagDiagnostic(
-        faiss_available=False,
-        sentence_transformers_available=False,
-        numpy_available=False,
-        status="keyword_only",
-    ),
     knowledge_base=KnowledgeBaseDiagnostic(total_domains=0, total_files=0, expected_domains=16),
 )
 

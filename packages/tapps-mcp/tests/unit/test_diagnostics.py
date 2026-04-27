@@ -13,13 +13,11 @@ from tapps_mcp.common.models import (
     Context7Diagnostic,
     KnowledgeBaseDiagnostic,
     StartupDiagnostics,
-    VectorRagDiagnostic,
 )
 from tapps_mcp.diagnostics import (
     check_cache,
     check_context7,
     check_knowledge_base,
-    check_vector_rag,
     collect_diagnostics,
 )
 
@@ -95,19 +93,6 @@ class TestCheckCache:
         assert isinstance(result, CacheDiagnostic)
 
 
-class TestCheckVectorRag:
-    def test_keyword_only_status(self) -> None:
-        """Expert system removed — vector RAG always reports removed."""
-        result = check_vector_rag()
-        assert result.faiss_available is False
-        assert result.sentence_transformers_available is False
-        assert result.status == "removed"
-
-    def test_returns_vector_rag_diagnostic(self) -> None:
-        result = check_vector_rag()
-        assert isinstance(result, VectorRagDiagnostic)
-
-
 class TestCheckKnowledgeBase:
     def test_expert_system_removed(self) -> None:
         """Expert system removed (EPIC-94) — knowledge base returns zero counts."""
@@ -134,7 +119,6 @@ class TestCollectDiagnostics:
         assert isinstance(result, StartupDiagnostics)
         assert isinstance(result.context7, Context7Diagnostic)
         assert isinstance(result.cache, CacheDiagnostic)
-        assert isinstance(result.vector_rag, VectorRagDiagnostic)
         assert isinstance(result.knowledge_base, KnowledgeBaseDiagnostic)
 
     def test_model_dump_is_serializable(self, tmp_path: Path) -> None:
@@ -147,7 +131,6 @@ class TestCollectDiagnostics:
         parsed = json.loads(serialized)
         assert "context7" in parsed
         assert "cache" in parsed
-        assert "vector_rag" in parsed
         assert "knowledge_base" in parsed
 
     def test_with_api_key(self, tmp_path: Path) -> None:
@@ -179,7 +162,6 @@ class TestServerInfoDiagnostics:
         diag = result["data"]["diagnostics"]
         assert "context7" in diag
         assert "cache" in diag
-        assert "vector_rag" in diag
         assert "knowledge_base" in diag
 
     @pytest.mark.asyncio

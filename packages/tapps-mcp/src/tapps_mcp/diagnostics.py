@@ -12,7 +12,6 @@ from tapps_core.common.models import (
     Context7Diagnostic,
     KnowledgeBaseDiagnostic,
     StartupDiagnostics,
-    VectorRagDiagnostic,
 )
 
 if TYPE_CHECKING:
@@ -67,16 +66,6 @@ def check_cache(cache_dir: Path) -> CacheDiagnostic:
     )
 
 
-def check_vector_rag() -> VectorRagDiagnostic:
-    """Expert system removed (EPIC-94). Returns keyword-only status."""
-    return VectorRagDiagnostic(
-        faiss_available=False,
-        sentence_transformers_available=False,
-        numpy_available=False,
-        status="removed",
-    )
-
-
 def check_knowledge_base() -> KnowledgeBaseDiagnostic:
     """Expert system removed (EPIC-94). Returns empty diagnostic."""
     return KnowledgeBaseDiagnostic(
@@ -96,6 +85,5 @@ def collect_diagnostics(
     return StartupDiagnostics(
         context7=check_context7(api_key),
         cache=check_cache(cache_dir),
-        vector_rag=check_vector_rag(),
         knowledge_base=check_knowledge_base(),
     )

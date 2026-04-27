@@ -82,17 +82,6 @@ class CacheDiagnostic(BaseModel):
     stale_count: int = Field(default=0, description="Number of stale (past TTL) entries.")
 
 
-class VectorRagDiagnostic(BaseModel):
-    """Vector RAG optional dependency status."""
-
-    faiss_available: bool = Field(description="Whether faiss-cpu is importable.")
-    sentence_transformers_available: bool = Field(
-        description="Whether sentence-transformers is importable."
-    )
-    numpy_available: bool = Field(description="Whether numpy is importable.")
-    status: str = Field(description="'full_vector' if all deps present, 'keyword_only' otherwise.")
-
-
 class KnowledgeDomainInfo(BaseModel):
     """File count for a single knowledge domain."""
 
@@ -121,5 +110,4 @@ class StartupDiagnostics(BaseModel):
 
     context7: Context7Diagnostic = Field(description="Context7 API key status.")
     cache: CacheDiagnostic = Field(description="Cache directory health.")
-    vector_rag: VectorRagDiagnostic = Field(description="Vector RAG dependency status.")
     knowledge_base: KnowledgeBaseDiagnostic = Field(description="Knowledge base integrity.")
