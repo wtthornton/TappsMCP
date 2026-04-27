@@ -18,12 +18,18 @@ if echo "$COMMAND" | grep -qE 'git push (--force|--force-if-includes|-f)(\s|$|")
   echo "BLOCKED: Destructive git push not allowed: $COMMAND" >&2
   exit 2
 fi
-case "$COMMAND" in
-  *"git clean"*|*"git rm"*|*"git reset --hard"*)
-    echo "BLOCKED: Destructive git command not allowed: $COMMAND" >&2
-    exit 2
-    ;;
-esac
+# `git rm --cached` only updates the index (working-tree files stay), so it is
+# non-destructive and explicitly allowed -- agents can untrack files such as
+# .ralph/* runtime artifacts that .gitignore now covers. Bare `git rm`,
+# `git clean`, and `git reset --hard` remain blocked.
+if ! echo "$COMMAND" | grep -qE 'git\s+rm\s+--cached(\s|$)' 2>/dev/null; then
+  case "$COMMAND" in
+    *"git clean"*|*"git rm"*|*"git reset --hard"*)
+      echo "BLOCKED: Destructive git command not allowed: $COMMAND" >&2
+      exit 2
+      ;;
+  esac
+fi
 
 # Block --no-verify flag (prevents skipping git hooks)
 # Catches: git commit --no-verify, git push --no-verify, git --no-verify commit, etc.
