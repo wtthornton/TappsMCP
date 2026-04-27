@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import ast
 import sys
+import tomllib
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from tapps_core.knowledge.cache import KBCache
 
 logger = structlog.get_logger(__name__)
@@ -77,6 +77,7 @@ def extract_external_imports(
             top_modules.add(node.module.split(".")[0])
 
     project_package = _detect_project_package(project_root)
+    workspace_packages = _detect_workspace_packages(project_root)
 
     external: list[str] = []
     for mod in sorted(top_modules):
@@ -85,6 +86,8 @@ def extract_external_imports(
         if mod in _SKIP_MODULES:
             continue
         if project_package and mod == project_package:
+            continue
+        if mod in workspace_packages:
             continue
         if mod.startswith("_"):
             continue
@@ -111,6 +114,47 @@ def find_uncached_libraries(
         if not cache.has(lib):
             uncached.append(lib)
     return uncached
+
+
+def _detect_workspace_packages(project_root: Path) -> frozenset[str]:
+    """Return the set of package names declared as uv workspace members.
+
+    Reads ``<project_root>/pyproject.toml``'s ``[tool.uv.workspace].members``
+    list of glob patterns (e.g. ``["packages/*"]``), expands each, and reads
+    the member's own ``pyproject.toml`` for ``[project].name``. Both the
+    declared name and its underscore-normalised form are returned, so an
+    import like ``tapps_mcp`` matches a project named ``tapps-mcp``.
+
+    Returns an empty set when no workspace is declared or the pyproject is
+    unreadable/malformed -- callers should treat the result as best-effort.
+    """
+    pyproject = project_root / "pyproject.toml"
+    if not pyproject.is_file():
+        return frozenset()
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return frozenset()
+    members = data.get("tool", {}).get("uv", {}).get("workspace", {}).get("members", [])
+    if not isinstance(members, list):
+        return frozenset()
+    names: set[str] = set()
+    for pattern in members:
+        if not isinstance(pattern, str):
+            continue
+        for member_dir in project_root.glob(pattern):
+            member_pyproject = member_dir / "pyproject.toml"
+            if not member_pyproject.is_file():
+                continue
+            try:
+                member_data = tomllib.loads(member_pyproject.read_text(encoding="utf-8"))
+            except (OSError, tomllib.TOMLDecodeError):
+                continue
+            name = member_data.get("project", {}).get("name")
+            if isinstance(name, str) and name:
+                names.add(name)
+                names.add(name.replace("-", "_"))
+    return frozenset(names)
 
 
 def _detect_project_package(project_root: Path) -> str | None:
