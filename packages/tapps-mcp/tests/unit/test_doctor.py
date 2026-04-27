@@ -1194,6 +1194,101 @@ class TestCheckLinearStandardsRule:
         assert "upgrade" in result.detail
 
 
+class TestCheckScopedRulesPresence:
+    """TAP-978 scoped rules report presence + gating mechanism status."""
+
+    def _make_python_repo(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+
+    def _make_infra_repo(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+
+    def _write_rule(self, tmp_path, filename):
+        (tmp_path / ".claude" / "rules").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".claude" / "rules" / filename).write_text("# rule\n")
+
+    def test_security_present_python_repo_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_security_rule
+
+        self._make_python_repo(tmp_path)
+        self._write_rule(tmp_path, "security.md")
+        result = check_security_rule(tmp_path)
+        assert result.ok is True
+        assert "Present" in result.message
+        assert "python" in result.message.lower()
+
+    def test_security_absent_python_repo_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_security_rule
+
+        self._make_python_repo(tmp_path)
+        result = check_security_rule(tmp_path)
+        assert result.ok is False
+        assert "not found" in result.message
+        assert "upgrade" in result.detail
+
+    def test_security_absent_non_python_repo_passes_gate_label(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_security_rule
+
+        result = check_security_rule(tmp_path)
+        # Absent-but-gate-not-satisfied is OK — upgrade would skip anyway.
+        assert result.ok is True
+        assert "Absent" in result.message
+        assert "would skip" in result.message
+
+    def test_test_quality_present_python_repo_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_test_quality_rule
+
+        self._make_python_repo(tmp_path)
+        self._write_rule(tmp_path, "test-quality.md")
+        result = check_test_quality_rule(tmp_path)
+        assert result.ok is True
+        assert "Present" in result.message
+
+    def test_test_quality_absent_python_repo_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_test_quality_rule
+
+        self._make_python_repo(tmp_path)
+        result = check_test_quality_rule(tmp_path)
+        assert result.ok is False
+        assert "not found" in result.message
+
+    def test_config_files_present_infra_repo_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_config_files_rule
+
+        self._make_infra_repo(tmp_path)
+        self._write_rule(tmp_path, "config-files.md")
+        result = check_config_files_rule(tmp_path)
+        assert result.ok is True
+        assert "infra" in result.message
+
+    def test_config_files_absent_infra_repo_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_config_files_rule
+
+        self._make_infra_repo(tmp_path)
+        result = check_config_files_rule(tmp_path)
+        assert result.ok is False
+        assert "not found" in result.message
+
+    def test_config_files_absent_bare_repo_ok(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_config_files_rule
+
+        result = check_config_files_rule(tmp_path)
+        # No python or infra — gate fails, upgrade would skip, so absence is fine.
+        assert result.ok is True
+        assert "would skip" in result.message
+
+    def test_config_files_present_but_gate_failed_warns(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_config_files_rule
+
+        # No pyproject, no Dockerfile — gate fails — but rule is present.
+        self._write_rule(tmp_path, "config-files.md")
+        result = check_config_files_rule(tmp_path)
+        # ok=True (rule will still load) but the detail explains gate state.
+        assert result.ok is True
+        assert "gate not satisfied" in result.message
+        assert result.detail is not None
+
+
 class TestCheckLinearIssueSkillCurrent:
     """check_linear_issue_skill_current gates on save_issue in allowed-tools."""
 

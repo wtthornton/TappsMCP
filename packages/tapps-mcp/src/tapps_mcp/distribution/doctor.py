@@ -470,6 +470,127 @@ def check_linear_standards_rule(project_root: Path) -> CheckResult:
     )
 
 
+def _python_signal_present(project_root: Path) -> bool:
+    """True when the project shows any Python marker.
+
+    Mirrors the upgrade-time language gate without importing it (avoids
+    pulling the upgrade module into doctor's call graph). Cheap shallow
+    check — pyproject/setup files plus ``requirements*.txt``.
+    """
+    for marker in ("pyproject.toml", "setup.py", "setup.cfg"):
+        if (project_root / marker).exists():
+            return True
+    try:
+        return any(project_root.glob("requirements*.txt"))
+    except OSError:
+        return False
+
+
+def _infra_signal_present(project_root: Path) -> bool:
+    """True when the project has Dockerfile or docker-compose files."""
+    try:
+        if any(project_root.glob("Dockerfile*")):
+            return True
+        if any(project_root.glob("docker-compose*.yml")):
+            return True
+        return any(project_root.glob("docker-compose*.yaml"))
+    except OSError:
+        return False
+
+
+def _check_scoped_rule(
+    *,
+    name: str,
+    rule_filename: str,
+    project_root: Path,
+    gate_ok: bool,
+    gate_label: str,
+) -> CheckResult:
+    """Shared doctor check for a path-scoped rule (TAP-978).
+
+    Reports BOTH presence and whether the rule's language/infra gate is
+    satisfied. ok=True only when present AND gate matches; absent-but-gated
+    surfaces as a warning ("would not be installed by upgrade") so users
+    aren't told to run upgrade on a project where it would skip.
+    """
+    rule_path = project_root / ".claude" / "rules" / rule_filename
+    present = rule_path.exists()
+    if present and gate_ok:
+        return CheckResult(name, True, f"Present and gate satisfied ({gate_label})")
+    if present and not gate_ok:
+        return CheckResult(
+            name,
+            True,
+            f"Present (gate not satisfied: {gate_label})",
+            "Rule will continue to load. Remove via upgrade_skip_files if no longer wanted.",
+        )
+    if not present and gate_ok:
+        return CheckResult(
+            name,
+            False,
+            f".claude/rules/{rule_filename} not found (gate satisfied: {gate_label})",
+            "Run: tapps-mcp upgrade",
+        )
+    return CheckResult(
+        name,
+        True,
+        f"Absent (gate not satisfied: {gate_label}) — upgrade would skip this rule",
+    )
+
+
+def check_security_rule(project_root: Path) -> CheckResult:
+    """Check ``.claude/rules/security.md`` (TAP-978).
+
+    Python-gated rule shipped by ``generate_claude_security_rule``. Reports
+    presence and whether Python signals are detected (the upgrade-time gate).
+    """
+    return _check_scoped_rule(
+        name="Security rule",
+        rule_filename="security.md",
+        project_root=project_root,
+        gate_ok=_python_signal_present(project_root),
+        gate_label="python signals",
+    )
+
+
+def check_test_quality_rule(project_root: Path) -> CheckResult:
+    """Check ``.claude/rules/test-quality.md`` (TAP-978).
+
+    Python-gated rule shipped by ``generate_claude_test_quality_rule``.
+    """
+    return _check_scoped_rule(
+        name="Test quality rule",
+        rule_filename="test-quality.md",
+        project_root=project_root,
+        gate_ok=_python_signal_present(project_root),
+        gate_label="python signals",
+    )
+
+
+def check_config_files_rule(project_root: Path) -> CheckResult:
+    """Check ``.claude/rules/config-files.md`` (TAP-978).
+
+    Python-or-infra-gated rule shipped by ``generate_claude_config_files_rule``.
+    """
+    python_ok = _python_signal_present(project_root)
+    infra_ok = _infra_signal_present(project_root)
+    if python_ok and infra_ok:
+        gate_label = "python and infra signals"
+    elif python_ok:
+        gate_label = "python signals"
+    elif infra_ok:
+        gate_label = "infra signals"
+    else:
+        gate_label = "no python or infra signals"
+    return _check_scoped_rule(
+        name="Config files rule",
+        rule_filename="config-files.md",
+        project_root=project_root,
+        gate_ok=python_ok or infra_ok,
+        gate_label=gate_label,
+    )
+
+
 def check_linear_issue_skill_current(project_root: Path) -> CheckResult:
     """Check the ``linear-issue`` skill is deployed and includes the save_issue tool.
 
@@ -1411,6 +1532,10 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_claude_md(root))
     checks.append(check_cursor_rules(root))
     checks.append(check_linear_standards_rule(root))
+    # TAP-978: scoped quality rules — report presence + gate status.
+    checks.append(check_security_rule(root))
+    checks.append(check_test_quality_rule(root))
+    checks.append(check_config_files_rule(root))
     checks.append(check_linear_issue_skill_current(root))
     checks.append(check_finish_task_skill(root))
     checks.append(check_pretooluse_matchers(root))

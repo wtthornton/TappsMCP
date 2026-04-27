@@ -972,3 +972,190 @@ def generate_claude_linear_standards_rule(
     existed = target.exists()
     target.write_text(_CLAUDE_LINEAR_STANDARDS_RULE, encoding="utf-8")
     return {"file": str(target), "action": "updated" if existed else "created"}
+
+
+# ---------------------------------------------------------------------------
+# Scoped rules: security.md / test-quality.md / config-files.md (TAP-978)
+# ---------------------------------------------------------------------------
+#
+# These three rules existed in tapps-mcp's own .claude/rules/ from the
+# 2026 control-files audit but were never wired through the
+# init/upgrade pipeline, so consumer fleets (AgentForge, NLTlabsPE,
+# ralph-claude-code) were missing them. TAP-978 ships them through
+# dedicated generators with skip tokens and doctor checks, mirroring
+# the pattern used for python_quality_rule / pipeline_rule.
+#
+# Gating model (chosen over pure-universal because rule bodies are
+# language/infra-specific):
+#
+# - security_rule, test_quality_rule:
+#     Python-gated (mirrors python_quality_rule). The bodies discuss
+#     Bandit, path validators, pickle, pytest fixtures — Python-only
+#     concerns that would be misleading on JS/Go/Rust repos.
+# - config_files_rule:
+#     Python-OR-infra-gated (mirrors pipeline_rule). Body covers Docker
+#     / YAML / TOML / JSON, so it lands wherever those file types are
+#     actually present.
+
+
+_CLAUDE_SECURITY_RULE = """\
+---
+paths:
+  - "**/security/**/*.py"
+  - "**/auth/**/*.py"
+  - "**/validators/**/*.py"
+---
+# Security Rules (TappsMCP)
+
+Run `tapps_security_scan(file_path)` after editing any security-related file.
+
+Run `tapps_consult_expert(question, domain="security")` for security design decisions.
+
+## Mandatory Checks
+
+- All file I/O must go through `security/path_validator.py`
+- Never use `eval()`, `exec()`, or `pickle.loads()` on external input
+- Never use `subprocess.run(shell=True)` with user-controlled input
+- Use parameterized queries — no raw SQL string concatenation
+- No hardcoded secrets, API keys, tokens, or passwords
+- All retrieved content must pass through `security/content_safety.py`
+
+## Subprocess Safety
+
+- Only packages in `_ALLOWED_CHECKER_PACKAGES` may reach `subprocess.run`
+- Always use explicit argument lists, not shell strings
+- Set appropriate timeouts on all subprocess calls
+"""
+
+
+def generate_claude_security_rule(
+    project_root: Path,
+) -> dict[str, Any]:
+    """Generate ``.claude/rules/security.md``.
+
+    Path-scoped rule activated on edits to security/auth/validator files.
+    Idempotent — re-running overwrites with the same content. Caller is
+    expected to gate on Python signals.
+
+    Args:
+        project_root: Target project root directory.
+
+    Returns:
+        A summary dict with ``file`` and ``action``.
+    """
+    rules_dir = project_root / ".claude" / "rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    target = rules_dir / "security.md"
+    existed = target.exists()
+    target.write_text(_CLAUDE_SECURITY_RULE, encoding="utf-8")
+    return {"file": str(target), "action": "updated" if existed else "created"}
+
+
+_CLAUDE_TEST_QUALITY_RULE = """\
+---
+paths:
+  - "tests/**/*.py"
+  - "**/test_*.py"
+  - "**/*_test.py"
+---
+# Test Quality Rules (TappsMCP)
+
+Run `tapps_quick_check(file_path)` after editing test files.
+
+Use `tapps_lookup_docs(library, topic)` for test framework APIs and best practices.
+
+## Testing Standards
+
+- Use pytest fixtures for setup/teardown, not setUp/tearDown methods
+- Mock external services and I/O — never make real HTTP requests in tests
+- One logical assertion per test when practical
+- Use descriptive test names: `test_<what>_<condition>_<expected>`
+- Use `tmp_path` fixture for temporary files, not manual cleanup
+- Reset module-level caches in autouse fixtures (see conftest.py)
+- Tests that depend on environment variables must use explicit fixtures
+
+## Coverage
+
+- New public functions need a corresponding test
+- Aim for 80%+ coverage on new code
+- Use `--cov-report=term-missing` to identify gaps
+"""
+
+
+def generate_claude_test_quality_rule(
+    project_root: Path,
+) -> dict[str, Any]:
+    """Generate ``.claude/rules/test-quality.md``.
+
+    Path-scoped rule activated on edits to pytest test files. Idempotent.
+    Caller is expected to gate on Python signals.
+
+    Args:
+        project_root: Target project root directory.
+
+    Returns:
+        A summary dict with ``file`` and ``action``.
+    """
+    rules_dir = project_root / ".claude" / "rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    target = rules_dir / "test-quality.md"
+    existed = target.exists()
+    target.write_text(_CLAUDE_TEST_QUALITY_RULE, encoding="utf-8")
+    return {"file": str(target), "action": "updated" if existed else "created"}
+
+
+_CLAUDE_CONFIG_FILES_RULE = """\
+---
+paths:
+  - "**/*.yaml"
+  - "**/*.yml"
+  - "**/*.toml"
+  - "**/*.json"
+  - "**/Dockerfile*"
+  - "**/docker-compose*"
+---
+# Configuration File Rules (TappsMCP)
+
+Run `tapps_validate_config(file_path)` when editing Dockerfile, docker-compose, or infrastructure config.
+
+## YAML/TOML
+
+- Use consistent indentation (2 spaces for YAML)
+- Quote strings containing special characters
+- Validate against known schemas when available
+
+## Docker
+
+- Pin base image versions (no `latest` tag)
+- Use multi-stage builds for production images
+- Run as non-root user
+- Don't copy secrets into images
+
+## JSON Config
+
+- Use environment variable expansion (`${VAR}`) for secrets — never hardcode
+- Add `"type"` field to MCP server entries
+- Validate with `$schema` when available
+"""
+
+
+def generate_claude_config_files_rule(
+    project_root: Path,
+) -> dict[str, Any]:
+    """Generate ``.claude/rules/config-files.md``.
+
+    Path-scoped rule activated on YAML / TOML / JSON / Dockerfile edits.
+    Idempotent. Caller is expected to gate on Python OR infra signals.
+
+    Args:
+        project_root: Target project root directory.
+
+    Returns:
+        A summary dict with ``file`` and ``action``.
+    """
+    rules_dir = project_root / ".claude" / "rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    target = rules_dir / "config-files.md"
+    existed = target.exists()
+    target.write_text(_CLAUDE_CONFIG_FILES_RULE, encoding="utf-8")
+    return {"file": str(target), "action": "updated" if existed else "created"}

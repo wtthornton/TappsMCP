@@ -776,9 +776,12 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             from tapps_mcp.pipeline.platform_generators import (
                 generate_agent_teams_hooks,
                 generate_claude_agent_scope_rule,
+                generate_claude_config_files_rule,
                 generate_claude_hooks,
                 generate_claude_linear_standards_rule,
                 generate_claude_python_quality_rule,
+                generate_claude_security_rule,
+                generate_claude_test_quality_rule,
                 generate_copilot_instructions,
                 generate_skills,
                 generate_subagent_definitions,
@@ -801,6 +804,19 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 state.project_root,
             )
             state.result["linear_standards_rule"] = generate_claude_linear_standards_rule(
+                state.project_root,
+            )
+            # TAP-978: scoped quality rules. Init runs only when user
+            # signals intent, so generate unconditionally — matches the
+            # python_quality_rule pattern. Upgrade.py applies language
+            # gating.
+            state.result["security_rule"] = generate_claude_security_rule(
+                state.project_root,
+            )
+            state.result["test_quality_rule"] = generate_claude_test_quality_rule(
+                state.project_root,
+            )
+            state.result["config_files_rule"] = generate_claude_config_files_rule(
                 state.project_root,
             )
             # Epic 86: Doc automation when DocsMCP is detected

@@ -94,6 +94,10 @@ _SKIP_TOKENS: dict[str, frozenset[str]] = {
     "agent_scope_rule": frozenset({".claude/rules/agent-scope.md"}),
     "linear_standards_rule": frozenset({".claude/rules/linear-standards.md"}),
     "pipeline_rule": frozenset({".claude/rules/tapps-pipeline.md"}),
+    # TAP-978: scoped quality rules with same skip-token pattern.
+    "security_rule": frozenset({".claude/rules/security.md"}),
+    "test_quality_rule": frozenset({".claude/rules/test-quality.md"}),
+    "config_files_rule": frozenset({".claude/rules/config-files.md"}),
     "mcp_config": frozenset({".mcp.json"}),
     "karpathy": frozenset({"karpathy"}),
 }
@@ -566,6 +570,26 @@ def _upgrade_claude_code_dry_run(
     result["components"]["pipeline_rule"] = (
         "would-regenerate" if (python_ok or infra_ok) else "skipped (no python or infra detected)"
     )
+    # TAP-978: scoped quality rules.
+    result["components"]["security_rule"] = (
+        "skipped (upgrade_skip_files)"
+        if _skipped("security_rule", skip)
+        else ("would-regenerate" if python_ok else "skipped (no python detected)")
+    )
+    result["components"]["test_quality_rule"] = (
+        "skipped (upgrade_skip_files)"
+        if _skipped("test_quality_rule", skip)
+        else ("would-regenerate" if python_ok else "skipped (no python detected)")
+    )
+    result["components"]["config_files_rule"] = (
+        "skipped (upgrade_skip_files)"
+        if _skipped("config_files_rule", skip)
+        else (
+            "would-regenerate"
+            if (python_ok or infra_ok)
+            else "skipped (no python or infra detected)"
+        )
+    )
 
 
 def _upgrade_claude_code_live(
@@ -585,9 +609,12 @@ def _upgrade_claude_code_live(
     from tapps_mcp.pipeline.platform_bundles import generate_claude_pipeline_rule
     from tapps_mcp.pipeline.platform_generators import (
         generate_claude_agent_scope_rule,
+        generate_claude_config_files_rule,
         generate_claude_hooks,
         generate_claude_linear_standards_rule,
         generate_claude_python_quality_rule,
+        generate_claude_security_rule,
+        generate_claude_test_quality_rule,
         generate_skills,
         generate_subagent_definitions,
     )
@@ -674,6 +701,56 @@ def _upgrade_claude_code_live(
         }
     else:
         result["components"]["pipeline_rule"] = generate_claude_pipeline_rule(project_root)
+
+    # TAP-978: security.md ships scoped to security/auth/validator paths and
+    # references Bandit + Python-specific guard rails. Python-gated, mirroring
+    # python_quality_rule.
+    if _skipped("security_rule", skip):
+        result["components"]["security_rule"] = "skipped (upgrade_skip_files)"
+    elif not python_ok:
+        result["components"]["security_rule"] = {
+            "action": "skipped (no python detected)",
+            "hint": (
+                "Set force_python_quality_rule=true in .tapps-mcp.yaml "
+                "to install on non-Python repos."
+            ),
+        }
+    else:
+        result["components"]["security_rule"] = generate_claude_security_rule(project_root)
+
+    # TAP-978: test-quality.md scoped to pytest test files. Python-gated.
+    if _skipped("test_quality_rule", skip):
+        result["components"]["test_quality_rule"] = "skipped (upgrade_skip_files)"
+    elif not python_ok:
+        result["components"]["test_quality_rule"] = {
+            "action": "skipped (no python detected)",
+            "hint": (
+                "Set force_python_quality_rule=true in .tapps-mcp.yaml "
+                "to install on non-Python repos."
+            ),
+        }
+    else:
+        result["components"]["test_quality_rule"] = generate_claude_test_quality_rule(
+            project_root,
+        )
+
+    # TAP-978: config-files.md scoped to YAML/TOML/JSON/Dockerfile. Python or
+    # infra-gated, mirroring pipeline_rule (Docker + pyproject.toml are both
+    # plausible triggers).
+    if _skipped("config_files_rule", skip):
+        result["components"]["config_files_rule"] = "skipped (upgrade_skip_files)"
+    elif not (python_ok or infra_ok):
+        result["components"]["config_files_rule"] = {
+            "action": "skipped (no python or infra detected)",
+            "hint": (
+                "Set force_python_quality_rule=true, or add a "
+                "Dockerfile/docker-compose file, to install."
+            ),
+        }
+    else:
+        result["components"]["config_files_rule"] = generate_claude_config_files_rule(
+            project_root,
+        )
 
 
 def _upgrade_cursor_dry_run(
@@ -810,6 +887,9 @@ def _upgrade_platform(
                 "agent_scope_rule",
                 "linear_standards_rule",
                 "pipeline_rule",
+                "security_rule",
+                "test_quality_rule",
+                "config_files_rule",
                 "cursor_rules",
             ],
         }
