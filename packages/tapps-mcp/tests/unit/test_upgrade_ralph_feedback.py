@@ -14,6 +14,7 @@ publisher-style consumer:
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,7 @@ from tapps_mcp.pipeline.upgrade import (
 
 
 @pytest.fixture(autouse=True)
-def _fresh_settings() -> None:
+def _fresh_settings() -> Iterator[None]:
     """Drop any cached Settings so test-level env tweaks take effect."""
     _reset_settings_cache()
     yield
