@@ -1,6 +1,6 @@
 """Tests for MCP tool annotations (Story 12.1).
 
-Verifies that all 21 registered tools have correct ToolAnnotations set,
+Verifies that all 29 registered tools have correct ToolAnnotations set,
 ensuring MCP clients can auto-approve read-only tools and skip destructive
 action warnings.
 """
@@ -44,8 +44,19 @@ _SIDE_EFFECT = ToolAnnotations(
     openWorldHint=False,
 )
 
+# Cache invalidation legitimately marks destructiveHint=True — see
+# server_linear_tools._ANNOTATIONS_INVALIDATE. The data is recomputable
+# (re-fetch from Linear), but the operation deletes cache state, which is
+# the literal MCP definition of a destructive update.
+_DESTRUCTIVE_IDEMPOTENT = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=True,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
 EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
-    # Read-only, idempotent, closed-world (17 tools)
+    # Read-only, idempotent, closed-world (19 tools)
     "tapps_server_info": _READ_ONLY,
     "tapps_security_scan": _READ_ONLY,
     "tapps_score_file": _READ_ONLY,
@@ -64,40 +75,57 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "tapps_doctor": _READ_ONLY,
     "tapps_pipeline": _READ_ONLY,
     "tapps_decompose": _READ_ONLY,
+    "tapps_linear_snapshot_get": _READ_ONLY,
     # Read-only, open-world (2 tools)
     "tapps_lookup_docs": _READ_ONLY_OPEN,
     "tapps_dependency_scan": _READ_ONLY_OPEN,
-    # Side-effect, idempotent (4 tools)
+    # Side-effect, idempotent (5 tools)
     "tapps_session_start": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_init": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_upgrade": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_set_engagement_level": _SIDE_EFFECT_IDEMPOTENT,
+    "tapps_linear_snapshot_put": _SIDE_EFFECT_IDEMPOTENT,
     # Side-effect, non-idempotent (2 tools)
     "tapps_feedback": _SIDE_EFFECT,
     "tapps_memory": _SIDE_EFFECT,
+    # Destructive, idempotent (1 tool — cache eviction)
+    "tapps_linear_snapshot_invalidate": _DESTRUCTIVE_IDEMPOTENT,
 }
+
+# Tools allowed to set destructiveHint=True. Cache eviction is the only one
+# today; expand explicitly when adding new destructive tools so it is a
+# deliberate decision rather than a silent regression.
+_ALLOWED_DESTRUCTIVE: frozenset[str] = frozenset({"tapps_linear_snapshot_invalidate"})
 
 
 class TestToolAnnotationsPresent:
     """Every registered tool must have annotations set (not None)."""
 
-    def test_all_26_tools_registered(self) -> None:
+    def test_all_tools_registered(self) -> None:
+        from tapps_mcp.server import ALL_TOOL_NAMES
+
         tools = mcp._tool_manager._tools
-        assert len(tools) == 26, f"Expected 26 tools, got {len(tools)}: {sorted(tools)}"
+        assert len(tools) == len(ALL_TOOL_NAMES), (
+            f"Expected {len(ALL_TOOL_NAMES)} tools, got {len(tools)}: {sorted(tools)}"
+        )
 
     def test_all_tools_have_annotations(self) -> None:
         tools = mcp._tool_manager._tools
         missing = [name for name, tool in tools.items() if tool.annotations is None]
         assert not missing, f"Tools missing annotations: {missing}"
 
-    def test_no_tools_marked_destructive(self) -> None:
+    def test_destructive_tools_only_in_allowlist(self) -> None:
         tools = mcp._tool_manager._tools
-        destructive = [
+        destructive = {
             name
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.destructiveHint
-        ]
-        assert not destructive, f"Tools incorrectly marked destructive: {destructive}"
+        }
+        unexpected = destructive - _ALLOWED_DESTRUCTIVE
+        assert not unexpected, (
+            f"Tools marked destructive without being on the allowlist: {sorted(unexpected)}. "
+            f"Add to _ALLOWED_DESTRUCTIVE in this file if intentional."
+        )
 
 
 class TestToolAnnotationValues:
@@ -136,9 +164,10 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.readOnlyHint
         ]
-        assert len(read_only) == 20, (
-            f"Expected 20 read-only tools, got {len(read_only)}"
-        )  # TAP-483: -2
+        # 18 closed-world + 2 open-world + 1 linear-snapshot-get = 21
+        assert len(read_only) == 21, (
+            f"Expected 21 read-only tools, got {len(read_only)}"
+        )
 
     def test_side_effect_count(self) -> None:
         tools = mcp._tool_manager._tools
@@ -147,9 +176,10 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and not tool.annotations.readOnlyHint
         ]
-        assert len(side_effect) == 6, (
-            f"Expected 6 side-effect tools, got {len(side_effect)}"
-        )  # unchanged
+        # 4 idempotent + 2 non-idempotent + linear-snapshot-put + linear-snapshot-invalidate = 8
+        assert len(side_effect) == 8, (
+            f"Expected 8 side-effect tools, got {len(side_effect)}"
+        )
 
     def test_open_world_count(self) -> None:
         tools = mcp._tool_manager._tools
@@ -169,8 +199,9 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.idempotentHint
         ]
-        assert len(idempotent) == 22, (
-            f"Expected 22 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # 22 prior + 3 linear-snapshot tools (all idempotent) = 25
+        assert len(idempotent) == 25, (
+            f"Expected 25 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 

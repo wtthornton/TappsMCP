@@ -266,7 +266,7 @@ class TestRunVultureAsync:
         )
         await run_vulture_async("myfile.py", min_confidence=70, cwd="/tmp", timeout=15)
         mock_cmd.assert_called_once_with(  # type: ignore[union-attr]
-            ["vulture", "myfile.py", "--min-confidence=70"],
+            ["vulture", "myfile.py", "--min-confidence=70", "--ignore-names=cls"],
             cwd="/tmp",
             timeout=15,
         )
@@ -466,7 +466,7 @@ class TestRunVultureMultiAsync:
         )
         await run_vulture_multi_async(["a.py", "b.py", "c.py"], min_confidence=70, cwd="/proj")
         mock_cmd.assert_called_once_with(  # type: ignore[union-attr]
-            ["vulture", "a.py", "b.py", "c.py", "--min-confidence=70"],
+            ["vulture", "a.py", "b.py", "c.py", "--min-confidence=70", "--ignore-names=cls"],
             cwd="/proj",
             timeout=60,
         )

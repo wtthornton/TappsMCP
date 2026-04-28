@@ -166,8 +166,6 @@ class TestTappsSessionStart:
         no TAPPS_BRAIN_DATABASE_URL.  The bridge's /health probe is mocked to
         return a 200 so no real network call is made.
         """
-        import httpx
-
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
@@ -196,12 +194,22 @@ class TestTappsSessionStart:
             "warnings": [],
         }
 
+        # auth_probe (added 2026-04 to detect 401/403s) makes its own
+        # httpx.post call to /mcp/. Mock it at the bridge boundary so this
+        # test stays a pure config integration test, not a wire-protocol
+        # test of the brain MCP handshake.
+        _ok_auth_probe = {"ok": True, "http_status": 200}
+
         with (
             patch(
                 "tapps_core.brain_bridge.check_brain_version",
                 return_value=_skip_version_check,
             ),
             patch("httpx.get", return_value=mock_health_response),
+            patch(
+                "tapps_core.brain_bridge.HttpBrainBridge.auth_probe",
+                return_value=_ok_auth_probe,
+            ),
         ):
             result = await tapps_session_start()
 

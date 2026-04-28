@@ -1,0 +1,38 @@
+# .github/workflows/non-slow-tests.yml
+# TAP-1093: run the tapps-mcp non-slow test suite on every push/PR so
+# silent regressions (like the 16 stale assertions discovered during the
+# 3.5.0 → 3.6.0 release prep) are caught at PR time rather than at
+# release time. Slow integration tests are excluded — they have their own
+# job (or run locally) and would push runtime past the 10-min budget.
+name: tapps-mcp non-slow tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: non-slow-tests-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest -m "not slow"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      - name: Run tapps-mcp non-slow tests
+        run: uv run pytest packages/tapps-mcp/tests/ -m "not slow" -q --timeout=60

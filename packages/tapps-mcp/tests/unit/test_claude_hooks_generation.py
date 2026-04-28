@@ -216,7 +216,7 @@ class TestReactiveHookTemplates:
                 f"{name} should not ship by default"
             )
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
-        for event in ("CwdChanged", "PermissionDenied", "UserPromptSubmit", "WorktreeCreate", "WorktreeRemove"):
+        for event in ("CwdChanged", "PermissionDenied", "WorktreeCreate", "WorktreeRemove"):
             assert event not in data["hooks"], (
                 f"{event} should not be registered by default"
             )
@@ -353,6 +353,7 @@ class TestReactiveHookTemplates:
             "PreCompact",
             "SubagentStart",
             "SubagentStop",
+            "UserPromptSubmit",
         }
         assert expected_events == set(data["hooks"].keys())
 
@@ -416,7 +417,8 @@ class TestClaudeHooksMerge:
         """Returns a summary dict with scripts_created and hooks_action."""
         result = generate_claude_hooks(tmp_path, force_windows=False)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 12  # medium + post-validate/report + memory hooks
+        # medium + post-validate/report + memory + user-prompt-submit hooks
+        assert len(result["scripts_created"]) == 13
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0
 
@@ -491,7 +493,8 @@ class TestClaudeHooksScriptsWindows:
     def test_result_dict(self, tmp_path):
         result = generate_claude_hooks(tmp_path, force_windows=True)
         assert "scripts_created" in result
-        assert len(result["scripts_created"]) == 12  # medium + post-validate/report + memory hooks
+        # medium + post-validate/report + memory + user-prompt-submit hooks
+        assert len(result["scripts_created"]) == 13
         assert all(n.endswith(".ps1") for n in result["scripts_created"])
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0
@@ -516,6 +519,7 @@ class TestClaudeHooksConfigWindows:
             "PreCompact",
             "SubagentStart",
             "SubagentStop",
+            "UserPromptSubmit",
         }
         assert expected_events == set(data["hooks"].keys())
 

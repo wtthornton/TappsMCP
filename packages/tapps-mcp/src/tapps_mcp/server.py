@@ -158,7 +158,7 @@ def _validate_file_path(file_path: str) -> Path:
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
-# Canonical list of all TappsMCP tools (26).
+# Canonical list of all TappsMCP tools (29).
 # Used for filtering and fallback.
 ALL_TOOL_NAMES: frozenset[str] = frozenset(
     {
