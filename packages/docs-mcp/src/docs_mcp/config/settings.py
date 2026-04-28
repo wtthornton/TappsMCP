@@ -8,6 +8,7 @@ Precedence (highest to lowest):
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
@@ -17,6 +18,39 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = structlog.get_logger(__name__)
+
+
+def _resolve_workspace_root(start: Path) -> Path:
+    """Walk up from *start* to the nearest uv-workspace root.
+
+    Returns the directory whose ``pyproject.toml`` declares
+    ``[tool.uv.workspace]``. Falls back to *start* when no workspace marker
+    is found, so non-workspace projects keep their existing behaviour.
+
+    Without this walk-up, ``Path.cwd()`` defaults can leave ``project_root``
+    pointing at a workspace member (e.g. ``packages/docs-mcp/``) instead of
+    the workspace root, which makes generators write outputs under
+    ``packages/docs-mcp/docs/...`` and -- when an explicit relative
+    ``project_root`` is then resolved against that CWD -- can produce a
+    doubled prefix like ``packages/docs-mcp/packages/docs-mcp/docs/...``
+    (TAP-1033).
+    """
+    try:
+        current = start.resolve()
+    except OSError:
+        return start
+    while True:
+        pyproject = current / "pyproject.toml"
+        if pyproject.is_file():
+            try:
+                data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+            except (OSError, tomllib.TOMLDecodeError):
+                data = {}
+            if data.get("tool", {}).get("uv", {}).get("workspace"):
+                return current
+        if current.parent == current:
+            return start
+        current = current.parent
 
 
 class DocsMCPSettings(BaseSettings):
@@ -283,14 +317,19 @@ def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
     if project_root is None and _cached_settings is not None:
         return _cached_settings
 
-    # Determine root: explicit arg > env var > CWD
+    # Determine root: explicit arg > env var > CWD walked up to workspace root.
+    # The walk-up only applies to the CWD-default path so explicit overrides
+    # are still trusted verbatim.
     if project_root:
         root = _expand_path(str(project_root))
     else:
         import os
 
         env_root = os.environ.get("DOCS_MCP_PROJECT_ROOT")
-        root = _expand_path(env_root) if env_root else Path.cwd()
+        if env_root:
+            root = _expand_path(env_root)
+        else:
+            root = _resolve_workspace_root(Path.cwd())
 
     yaml_data = _load_yaml_config(root)
 

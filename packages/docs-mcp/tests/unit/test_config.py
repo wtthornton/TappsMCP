@@ -13,6 +13,7 @@ from docs_mcp.config.settings import (
     DocsMCPSettings,
     _expand_path,
     _reset_docs_settings_cache,
+    _resolve_workspace_root,
     load_docs_settings,
 )
 
@@ -212,6 +213,66 @@ class TestEnvVarResolution:
         with patch.dict(os.environ, {"MY_ROOT": str(tmp_path)}):
             result = load_docs_settings(project_root=Path("${MY_ROOT}/real"))
         assert result.project_root == project_dir
+
+
+class TestResolveWorkspaceRoot:
+    """TAP-1033: walk-up to uv-workspace root from CWD."""
+
+    @staticmethod
+    def _make_workspace(tmp_path: Path) -> tuple[Path, Path]:
+        """Create a minimal uv-workspace tree under tmp_path/ws.
+
+        Returns (workspace_root, member_dir).
+        """
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        (workspace / "pyproject.toml").write_text(
+            "[tool.uv.workspace]\nmembers = [\"packages/*\"]\n",
+            encoding="utf-8",
+        )
+        member = workspace / "packages" / "docs-mcp"
+        member.mkdir(parents=True)
+        (member / "pyproject.toml").write_text(
+            "[project]\nname = \"docs-mcp\"\nversion = \"0.0.0\"\n",
+            encoding="utf-8",
+        )
+        return workspace, member
+
+    def test_walks_up_from_workspace_member(self, tmp_path: Path) -> None:
+        workspace, member = self._make_workspace(tmp_path)
+        assert _resolve_workspace_root(member) == workspace
+
+    def test_returns_workspace_when_started_at_root(self, tmp_path: Path) -> None:
+        workspace, _ = self._make_workspace(tmp_path)
+        assert _resolve_workspace_root(workspace) == workspace
+
+    def test_falls_back_to_start_outside_workspace(self, tmp_path: Path) -> None:
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        (plain / "pyproject.toml").write_text(
+            "[project]\nname = \"plain\"\nversion = \"0.0.0\"\n",
+            encoding="utf-8",
+        )
+        assert _resolve_workspace_root(plain) == plain
+
+    def test_load_docs_settings_walks_up_from_cwd_default(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No explicit project_root, no env var: should resolve to workspace root."""
+        workspace, member = self._make_workspace(tmp_path)
+        monkeypatch.chdir(member)
+        # Strip any DOCS_MCP_PROJECT_ROOT env var so we exercise the CWD path.
+        monkeypatch.delenv("DOCS_MCP_PROJECT_ROOT", raising=False)
+        _reset_docs_settings_cache()
+        result = load_docs_settings()
+        # Resolve both sides because tmp_path may have symlink components on macOS.
+        assert result.project_root.resolve() == workspace.resolve()
+
+    def test_explicit_override_skips_walk_up(self, tmp_path: Path) -> None:
+        """Explicit project_root is trusted verbatim; no walk-up applied."""
+        workspace, member = self._make_workspace(tmp_path)
+        result = load_docs_settings(project_root=member)
+        assert result.project_root == member
 
 
 class TestToolCurationSettings:
