@@ -10,17 +10,15 @@ All Linear writes in this project — epic creation, story creation, issue updat
 ### For a new epic
 1. `mcp__docs-mcp__docs_generate_epic(title, purpose_and_intent, goal, motivation, acceptance_criteria, stories, ...)` — produces `docs/epics/EPIC-<N>.md` in the template shape.
 2. `mcp__docs-mcp__docs_validate_linear_issue(title, description, is_epic=true)` — must return `agent_ready: true` with score 100.
-3. Confirm with user.
-4. `mcp__plugin_linear_linear__save_issue(...)` to push.
-5. Create each child story via the story flow with `parent_id=<epic TAP-id>`.
-6. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
+3. `mcp__plugin_linear_linear__save_issue(..., assignee_id=<agent_user_id>)` to push. Default assignee = the agent identity, never the OAuth human (see `autonomy.md`). Do NOT pause to confirm with the user — the original request is the authorization.
+4. Create each child story via the story flow with `parent_id=<epic TAP-id>` (each child also assigned to the agent).
+5. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
 
 ### For a new story
 1. `mcp__docs-mcp__docs_generate_story(title, files, acceptance_criteria, ...)` — emits the 5-section template (`## What` / `## Where` / `## Why` / `## Acceptance` / `## Refs`).
 2. `mcp__docs-mcp__docs_validate_linear_issue(title, description)` — must return `agent_ready: true`.
-3. Confirm with user.
-4. `mcp__plugin_linear_linear__save_issue(..., parent_id=<epic>)`.
-5. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
+3. `mcp__plugin_linear_linear__save_issue(..., parent_id=<epic>, assignee_id=<agent_user_id>)`. Default assignee = the agent identity (see `autonomy.md`); proceed without a confirmation prompt.
+4. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
 
 ### Before updating an existing issue
 1. `mcp__plugin_linear_linear__get_issue(id)` — fetch current state.
@@ -28,6 +26,15 @@ All Linear writes in this project — epic creation, story creation, issue updat
 3. Regenerate via `docs_generate_story` or manual edit only if the existing body is broken.
 4. Validate before push.
 5. `save_issue(id=..., description=...)`; invalidate cache.
+
+## Assignee defaults
+
+All Linear writes from this project — epics, stories, subtasks, triage updates — default to the **agent** as assignee, never a human (see `autonomy.md`):
+
+1. Resolve once per session: `mcp__plugin_linear_linear__list_users` → pick the user whose `name` / `displayName` / `email` matches `agent`, `bot`, `tapps`, `claude`, or `agent_user` in `.tapps-mcp.yaml`. Cache the id.
+2. Pass `assignee_id=<agent_user_id>` to every `save_issue` call.
+3. If no agent user exists, leave `assignee_id` unset. **Do NOT fall back to the OAuth user.**
+4. Override only when the user explicitly names a different assignee in the request.
 
 ## Formatting rules (enforced by docs-mcp validator)
 

@@ -470,6 +470,37 @@ def check_linear_standards_rule(project_root: Path) -> CheckResult:
     )
 
 
+def check_autonomy_rule(project_root: Path) -> CheckResult:
+    """Check ``.claude/rules/autonomy.md`` is present and current.
+
+    Shipped by ``generate_claude_autonomy_rule``. The rule flips the agent's
+    default from "ask before acting" to "act within scope" and pins Linear
+    issue assignees to the agent identity, never the OAuth human. Stale
+    copies that still say "Confirm with user" reintroduce HITL pauses.
+    """
+    rule_path = project_root / ".claude" / "rules" / "autonomy.md"
+    if not rule_path.exists():
+        return CheckResult(
+            "Agent autonomy rule",
+            False,
+            ".claude/rules/autonomy.md not found",
+            "Run: tapps-mcp upgrade",
+        )
+    content = rule_path.read_text(encoding="utf-8")
+    if "NO human-in-the-loop" not in content or "assignee_id" not in content:
+        return CheckResult(
+            "Agent autonomy rule",
+            False,
+            "autonomy.md missing no-HITL default or Linear assignee guidance (stale)",
+            "Run: tapps-mcp upgrade --force",
+        )
+    return CheckResult(
+        "Agent autonomy rule",
+        True,
+        f"Present: {rule_path}",
+    )
+
+
 def _python_signal_present(project_root: Path) -> bool:
     """True when the project shows any Python marker.
 
@@ -1532,6 +1563,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_claude_md(root))
     checks.append(check_cursor_rules(root))
     checks.append(check_linear_standards_rule(root))
+    checks.append(check_autonomy_rule(root))
     # TAP-978: scoped quality rules — report presence + gate status.
     checks.append(check_security_rule(root))
     checks.append(check_test_quality_rule(root))

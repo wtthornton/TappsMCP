@@ -776,6 +776,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             from tapps_mcp.pipeline.platform_generators import (
                 generate_agent_teams_hooks,
                 generate_claude_agent_scope_rule,
+                generate_claude_autonomy_rule,
                 generate_claude_config_files_rule,
                 generate_claude_hooks,
                 generate_claude_linear_standards_rule,
@@ -801,6 +802,9 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 state.project_root, engagement_level=engagement
             )
             state.result["agent_scope_rule"] = generate_claude_agent_scope_rule(
+                state.project_root,
+            )
+            state.result["autonomy_rule"] = generate_claude_autonomy_rule(
                 state.project_root,
             )
             state.result["linear_standards_rule"] = generate_claude_linear_standards_rule(

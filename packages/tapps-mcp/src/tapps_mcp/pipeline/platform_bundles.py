@@ -808,6 +808,79 @@ def generate_claude_agent_scope_rule(
     return {"file": str(target), "action": "updated" if existed else "created"}
 
 
+_CLAUDE_AUTONOMY_RULE = """\
+---
+alwaysApply: true
+---
+# Agent Autonomy Defaults (TappsMCP)
+
+**Default: NO human-in-the-loop for routine in-scope work.** Decide and act. Do not insert "Ask the user" / "Confirm with user" pauses into flows the user already requested.
+
+This rule overrides the generic Claude Code default of "ask before acting." The user installed TappsMCP precisely so the agent runs autonomously inside the bounded scope defined by `agent-scope.md`.
+
+## What this means
+
+- When the user asks for X (e.g. "create a Linear epic for Y", "open a story for Z", "ship this PR"), do X. Do not echo the plan back and wait for a second confirmation.
+- Skip "should I proceed?" prompts on routine in-scope writes: Linear epic/story/issue creation for THIS team+project, file edits in this repo, branch creation in this repo, scoped commits.
+- Treat the user's original request as standing authorization for every step in a generator → validator → save_issue chain. Don't pause between the validator and the save.
+- Print the final result; don't print mid-flow checkpoints that exist only to elicit a thumbs-up.
+
+## Linear: assignee MUST be the agent, not a human
+
+When creating or updating a Linear epic, story, or issue:
+
+1. Resolve the agent user once per session: call `mcp__plugin_linear_linear__list_users` and select the account whose `name`, `displayName`, or `email` matches `agent`, `bot`, `tapps`, `claude`, or the `agent_user` value in `.tapps-mcp.yaml`. Cache the id for subsequent writes in the same session.
+2. Pass `assignee_id=<agent_user_id>` to `mcp__plugin_linear_linear__save_issue` for every create or update.
+3. If no agent user exists in the team, leave `assignee_id` unset. **NEVER fall back to the OAuth user** — that is the human who installed the credential, not the agent doing the work.
+4. The same rule applies to subtasks, child stories under an epic, and bulk triage writes. Default = agent. Human assignees only when the user explicitly names a person.
+
+The OAuth-credential human is not the agent. Auto-assigning to them creates false ownership signals and dumps the agent's work onto a human queue.
+
+## Still ask first (the no-HITL default does NOT cover these)
+
+- **Destructive or hard-to-reverse ops**: force-push, deleting branches, dropping tables, `rm -rf`, overwriting uncommitted changes, amending published commits, removing dependencies.
+- **Cross-project writes**: see `agent-scope.md`. Writes outside this repo's team/project still require confirmation.
+- **External communications**: Slack/email/social posts, GitHub Discussions outside the issue tracker.
+- **First-of-its-kind structural decisions** the user did not direct (picking a brand-new architecture, renaming a public API, changing a public contract).
+- **Anything explicitly flagged "ask first"** by another rule, the user, or the issue body.
+
+## How to apply
+
+Before writing "Ask the user whether to..." or "Confirm with user before..." in a plan or skill flow, check:
+
+1. Is the action in scope (this repo's team/project)?
+2. Is it reversible (or routine enough that "undo" is a normal next step)?
+3. Did the user ask for it (or for the broader task it falls under)?
+
+If yes to all three, just do it. If any answer is no, then ask.
+"""
+
+
+def generate_claude_autonomy_rule(
+    project_root: Path,
+) -> dict[str, Any]:
+    """Generate ``.claude/rules/autonomy.md``.
+
+    Always-apply rule that flips the agent's default from "ask before acting"
+    to "act within scope." Carves out destructive/cross-project/external
+    actions where confirmation is still required, and codifies that Linear
+    issue assignees default to the agent identity, never the OAuth human.
+    Idempotent — re-running overwrites with the same content.
+
+    Args:
+        project_root: Target project root directory.
+
+    Returns:
+        A summary dict with ``file`` and ``action``.
+    """
+    rules_dir = project_root / ".claude" / "rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    target = rules_dir / "autonomy.md"
+    existed = target.exists()
+    target.write_text(_CLAUDE_AUTONOMY_RULE, encoding="utf-8")
+    return {"file": str(target), "action": "updated" if existed else "created"}
+
+
 def generate_claude_pipeline_rule(
     project_root: Path,
 ) -> dict[str, Any]:
@@ -901,17 +974,15 @@ All Linear writes in this project — epic creation, story creation, issue updat
 ### For a new epic
 1. `mcp__docs-mcp__docs_generate_epic(title, purpose_and_intent, goal, motivation, acceptance_criteria, stories, ...)` — produces `docs/epics/EPIC-<N>.md` in the template shape.
 2. `mcp__docs-mcp__docs_validate_linear_issue(title, description, is_epic=true)` — must return `agent_ready: true` with score 100.
-3. Confirm with user.
-4. `mcp__plugin_linear_linear__save_issue(...)` to push.
-5. Create each child story via the story flow with `parent_id=<epic TAP-id>`.
-6. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
+3. `mcp__plugin_linear_linear__save_issue(..., assignee_id=<agent_user_id>)` to push. Default assignee = the agent identity, never the OAuth human (see `autonomy.md`). Do NOT pause to confirm with the user — the original request is the authorization.
+4. Create each child story via the story flow with `parent_id=<epic TAP-id>` (each child also assigned to the agent).
+5. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
 
 ### For a new story
 1. `mcp__docs-mcp__docs_generate_story(title, files, acceptance_criteria, ...)` — emits the 5-section template (`## What` / `## Where` / `## Why` / `## Acceptance` / `## Refs`).
 2. `mcp__docs-mcp__docs_validate_linear_issue(title, description)` — must return `agent_ready: true`.
-3. Confirm with user.
-4. `mcp__plugin_linear_linear__save_issue(..., parent_id=<epic>)`.
-5. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
+3. `mcp__plugin_linear_linear__save_issue(..., parent_id=<epic>, assignee_id=<agent_user_id>)`. Default assignee = the agent identity (see `autonomy.md`); proceed without a confirmation prompt.
+4. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
 
 ### Before updating an existing issue
 1. `mcp__plugin_linear_linear__get_issue(id)` — fetch current state.
@@ -919,6 +990,15 @@ All Linear writes in this project — epic creation, story creation, issue updat
 3. Regenerate via `docs_generate_story` or manual edit only if the existing body is broken.
 4. Validate before push.
 5. `save_issue(id=..., description=...)`; invalidate cache.
+
+## Assignee defaults
+
+All Linear writes from this project — epics, stories, subtasks, triage updates — default to the **agent** as assignee, never a human (see `autonomy.md`):
+
+1. Resolve once per session: `mcp__plugin_linear_linear__list_users` → pick the user whose `name` / `displayName` / `email` matches `agent`, `bot`, `tapps`, `claude`, or `agent_user` in `.tapps-mcp.yaml`. Cache the id.
+2. Pass `assignee_id=<agent_user_id>` to every `save_issue` call.
+3. If no agent user exists, leave `assignee_id` unset. **Do NOT fall back to the OAuth user.**
+4. Override only when the user explicitly names a different assignee in the request.
 
 ## Formatting rules (enforced by docs-mcp validator)
 

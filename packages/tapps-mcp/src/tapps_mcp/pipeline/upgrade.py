@@ -92,6 +92,7 @@ _SKIP_TOKENS: dict[str, frozenset[str]] = {
     "claude_skills": frozenset({".claude/skills"}),
     "python_quality_rule": frozenset({".claude/rules/python-quality.md"}),
     "agent_scope_rule": frozenset({".claude/rules/agent-scope.md"}),
+    "autonomy_rule": frozenset({".claude/rules/autonomy.md"}),
     "linear_standards_rule": frozenset({".claude/rules/linear-standards.md"}),
     "pipeline_rule": frozenset({".claude/rules/tapps-pipeline.md"}),
     # TAP-978: scoped quality rules with same skip-token pattern.
@@ -566,6 +567,11 @@ def _upgrade_claude_code_dry_run(
         "would-regenerate" if python_ok else "skipped (no python detected)"
     )
     result["components"]["agent_scope_rule"] = "would-regenerate"
+    result["components"]["autonomy_rule"] = (
+        "skipped (upgrade_skip_files)"
+        if _skipped("autonomy_rule", skip)
+        else "would-regenerate"
+    )
     result["components"]["linear_standards_rule"] = "would-regenerate"
     result["components"]["pipeline_rule"] = (
         "would-regenerate" if (python_ok or infra_ok) else "skipped (no python or infra detected)"
@@ -609,6 +615,7 @@ def _upgrade_claude_code_live(
     from tapps_mcp.pipeline.platform_bundles import generate_claude_pipeline_rule
     from tapps_mcp.pipeline.platform_generators import (
         generate_claude_agent_scope_rule,
+        generate_claude_autonomy_rule,
         generate_claude_config_files_rule,
         generate_claude_hooks,
         generate_claude_linear_standards_rule,
@@ -680,6 +687,13 @@ def _upgrade_claude_code_live(
         result["components"]["agent_scope_rule"] = "skipped (upgrade_skip_files)"
     else:
         result["components"]["agent_scope_rule"] = generate_claude_agent_scope_rule(project_root)
+
+    # autonomy.md is universal — flips the agent default to "act within scope, no HITL"
+    # and pins Linear assignee to the agent identity (never the OAuth human).
+    if _skipped("autonomy_rule", skip):
+        result["components"]["autonomy_rule"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["autonomy_rule"] = generate_claude_autonomy_rule(project_root)
 
     # linear-standards.md is universal — enforces Linear write routing through docs-mcp templates.
     if _skipped("linear_standards_rule", skip):
@@ -885,6 +899,7 @@ def _upgrade_platform(
                 "skills",
                 "python_quality_rule",
                 "agent_scope_rule",
+                "autonomy_rule",
                 "linear_standards_rule",
                 "pipeline_rule",
                 "security_rule",
