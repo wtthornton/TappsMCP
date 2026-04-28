@@ -830,8 +830,8 @@ This rule overrides the generic Claude Code default of "ask before acting." The 
 When creating or updating a Linear epic, story, or issue:
 
 1. Resolve the agent user once per session: call `mcp__plugin_linear_linear__list_users` and select the account whose `name`, `displayName`, or `email` matches `agent`, `bot`, `tapps`, `claude`, or the `agent_user` value in `.tapps-mcp.yaml`. Cache the id for subsequent writes in the same session.
-2. Pass `assignee_id=<agent_user_id>` to `mcp__plugin_linear_linear__save_issue` for every create or update.
-3. If no agent user exists in the team, leave `assignee_id` unset. **NEVER fall back to the OAuth user** — that is the human who installed the credential, not the agent doing the work.
+2. Pass `assignee="<agent-user-id-or-name>"` to `mcp__plugin_linear_linear__save_issue` for every create or update.
+3. If no agent user exists in the team, leave `assignee` unset. **NEVER fall back to the OAuth user** — that is the human who installed the credential, not the agent doing the work.
 4. The same rule applies to subtasks, child stories under an epic, and bulk triage writes. Default = agent. Human assignees only when the user explicitly names a person.
 
 The OAuth-credential human is not the agent. Auto-assigning to them creates false ownership signals and dumps the agent's work onto a human queue.
@@ -974,14 +974,14 @@ All Linear writes in this project — epic creation, story creation, issue updat
 ### For a new epic
 1. `mcp__docs-mcp__docs_generate_epic(title, purpose_and_intent, goal, motivation, acceptance_criteria, stories, ...)` — produces `docs/epics/EPIC-<N>.md` in the template shape.
 2. `mcp__docs-mcp__docs_validate_linear_issue(title, description, is_epic=true)` — must return `agent_ready: true` with score 100.
-3. `mcp__plugin_linear_linear__save_issue(..., assignee_id=<agent_user_id>)` to push. Default assignee = the agent identity, never the OAuth human (see `autonomy.md`). Do NOT pause to confirm with the user — the original request is the authorization.
+3. `mcp__plugin_linear_linear__save_issue(..., assignee="<agent-user-id-or-name>")` to push. Default assignee = the agent identity, never the OAuth human (see `autonomy.md`). Do NOT pause to confirm with the user — the original request is the authorization.
 4. Create each child story via the story flow with `parent_id=<epic TAP-id>` (each child also assigned to the agent).
 5. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
 
 ### For a new story
 1. `mcp__docs-mcp__docs_generate_story(title, files, acceptance_criteria, ...)` — emits the 5-section template (`## What` / `## Where` / `## Why` / `## Acceptance` / `## Refs`).
 2. `mcp__docs-mcp__docs_validate_linear_issue(title, description)` — must return `agent_ready: true`.
-3. `mcp__plugin_linear_linear__save_issue(..., parent_id=<epic>, assignee_id=<agent_user_id>)`. Default assignee = the agent identity (see `autonomy.md`); proceed without a confirmation prompt.
+3. `mcp__plugin_linear_linear__save_issue(..., parent_id=<epic>, assignee="<agent-user-id-or-name>")`. Default assignee = the agent identity (see `autonomy.md`); proceed without a confirmation prompt.
 4. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
 
 ### Before updating an existing issue
@@ -996,8 +996,8 @@ All Linear writes in this project — epic creation, story creation, issue updat
 All Linear writes from this project — epics, stories, subtasks, triage updates — default to the **agent** as assignee, never a human (see `autonomy.md`):
 
 1. Resolve once per session: `mcp__plugin_linear_linear__list_users` → pick the user whose `name` / `displayName` / `email` matches `agent`, `bot`, `tapps`, `claude`, or `agent_user` in `.tapps-mcp.yaml`. Cache the id.
-2. Pass `assignee_id=<agent_user_id>` to every `save_issue` call.
-3. If no agent user exists, leave `assignee_id` unset. **Do NOT fall back to the OAuth user.**
+2. Pass `assignee="<agent-user-id-or-name>"` to every `save_issue` call.
+3. If no agent user exists, leave `assignee` unset. **Do NOT fall back to the OAuth user.**
 4. Override only when the user explicitly names a different assignee in the request.
 
 ## Formatting rules (enforced by docs-mcp validator)

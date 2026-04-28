@@ -11,14 +11,14 @@ Work with Linear issues for AI-agent consumption. Infer intent from the user's p
 
 **When to invoke this skill:** ANY request that will create, update, or validate a Linear issue or epic. This includes "file a ticket", "create an issue", "open an epic", "track this as a story", or "add a bug report to Linear". Raw `save_issue` calls are a rule violation — route through this skill.
 
-**Assignee — agent, not human (applies to every write below).** Resolve the agent user once per session via `mcp__plugin_linear_linear__list_users`, picking the user whose `name`/`displayName`/`email` matches `agent`, `bot`, `tapps`, `claude`, or `agent_user` in `.tapps-mcp.yaml`. Cache the id. Pass `assignee_id=<agent_user_id>` on every `save_issue`. If no agent user exists, leave `assignee_id` unset — never fall back to the OAuth user (the human running the session). Only override when the user explicitly names a person.
+**Assignee — agent, not human (applies to every write below).** Resolve the agent user once per session via `mcp__plugin_linear_linear__list_users`, picking the user whose `name`/`displayName`/`email` matches `agent`, `bot`, `tapps`, `claude`, or `agent_user` in `.tapps-mcp.yaml`. Cache the id. Pass `assignee="<agent-user-id-or-name>"` on every `save_issue`. If no agent user exists, leave `assignee` unset — never fall back to the OAuth user (the human running the session). Only override when the user explicitly names a person.
 
 **Create an epic** (prompt names multiple stories, or "epic", or spans a cross-cutting initiative):
 1. Call `mcp__docs-mcp__docs_generate_epic` with the user's ask. Required: `title`, `purpose_and_intent` ("We are doing this so that ..."), `goal`, `motivation`, `acceptance_criteria`, `stories` (JSON array). Optional: `priority`, `estimated_loe`, `references`, `non_goals`.
 2. The tool writes `docs/epics/EPIC-<N>.md` to the project. Read it back.
 3. Build the Linear-body markdown following the 5-to-7 section epic shape: `## Purpose & Intent`, `## Goal`, `## Motivation`, `## Acceptance Criteria`, `## Stories`, `## Out of Scope`, `## Refs`.
 4. Validate via `mcp__docs-mcp__docs_validate_linear_issue(title, description, priority, is_epic=true)`. Target score 100 / `agent_ready=true`.
-5. Call `mcp__plugin_linear_linear__save_issue(team, project, title, description, priority, assignee_id=<agent_user_id>, ...)` without `id`. Proceed without prompting the user.
+5. Call `mcp__plugin_linear_linear__save_issue(team, project, title, description, priority, assignee="<agent-user-id-or-name>", ...)` without `id`. Proceed without prompting the user.
 6. Create each child story via the create-story flow below, passing `parent_id=<epic TAP-id>` (each child is also assigned to the agent).
 7. After all writes, call `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
 
@@ -26,7 +26,7 @@ Work with Linear issues for AI-agent consumption. Infer intent from the user's p
 1. Call `mcp__docs-mcp__docs_generate_story` with the user's ask. Required: `title` (<=80 chars, pattern `file.py: symptom`), `files` (comma-separated, each with `:LINE-RANGE`), `acceptance_criteria` (verifiable items).
 2. Default `audience="agent"` emits the 5-section Linear template (What/Where/Why/Acceptance/Refs) and round-trips through the validator.
 3. If the call returns `INPUT_INVALID`, refine the inputs per the error message and retry. Do NOT pass `audience="human"` unless the user asks for a product-review doc.
-4. Call the Linear plugin's `save_issue(..., assignee_id=<agent_user_id>, parent_id=<epic-id-if-any>)`. Proceed without prompting the user.
+4. Call the Linear plugin's `save_issue(..., assignee="<agent-user-id-or-name>", parent_id=<epic-id-if-any>)`. Proceed without prompting the user.
 5. After `save_issue` returns, call `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team=<team>, project=<project>)` to evict stale cached snapshots for that slice.
 
 **Lint** an existing issue (prompt like "lint TAP-686", "check TAP-###"):
@@ -43,7 +43,7 @@ Work with Linear issues for AI-agent consumption. Infer intent from the user's p
 2. **Cache-first read:** call `mcp__tapps-mcp__tapps_linear_snapshot_get(team=<team>, project=<project>, state="backlog" | "unstarted", label?)`. If `data.cached` is `true`, use `data.issues` directly — Linear was not called.
 3. **On cache miss** (`data.cached` is `false`): call `mcp__plugin_linear_linear__list_issues` with narrow filters — `team`, `project`, `state`, `includeArchived=false` (never call without filters). Then populate the cache by calling `mcp__tapps-mcp__tapps_linear_snapshot_put(team, project, issues_json=json.dumps(response.issues), state, label?)` using the **same** team/project/state/label/limit as the get call so the keys align.
 4. Pass the list to `mcp__docs-mcp__docs_linear_triage`.
-5. Apply label_proposals, parent_groupings, and metadata_gaps via Linear plugin writes (each `save_issue` carries `assignee_id=<agent_user_id>` for any newly-owned items). No mid-flow user confirmation; the triage request is the authorization.
+5. Apply label_proposals, parent_groupings, and metadata_gaps via Linear plugin writes (each `save_issue` carries `assignee="<agent-user-id-or-name>"` for any newly-owned items). No mid-flow user confirmation; the triage request is the authorization.
 6. After any write, call `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team=<team>, project=<project>)` to refresh the cache on next read.
 
 Rules (enforced by docs-mcp tools):

@@ -19,8 +19,8 @@ This rule overrides the generic Claude Code default of "ask before acting." The 
 When creating or updating a Linear epic, story, or issue:
 
 1. Resolve the agent user once per session: call `mcp__plugin_linear_linear__list_users` and select the account whose `name`, `displayName`, or `email` matches `agent`, `bot`, `tapps`, `claude`, or the `agent_user` value in `.tapps-mcp.yaml`. Cache the id for subsequent writes in the same session.
-2. Pass `assignee_id=<agent_user_id>` to `mcp__plugin_linear_linear__save_issue` for every create or update.
-3. If no agent user exists in the team, leave `assignee_id` unset. **NEVER fall back to the OAuth user** — that is the human who installed the credential, not the agent doing the work.
+2. Pass `assignee="<agent-user-id-or-name>"` to `mcp__plugin_linear_linear__save_issue` for every create or update.
+3. If no agent user exists in the team, leave `assignee` unset. **NEVER fall back to the OAuth user** — that is the human who installed the credential, not the agent doing the work.
 4. The same rule applies to subtasks, child stories under an epic, and bulk triage writes. Default = agent. Human assignees only when the user explicitly names a person.
 
 The OAuth-credential human is not the agent. Auto-assigning to them creates false ownership signals and dumps the agent's work onto a human queue.

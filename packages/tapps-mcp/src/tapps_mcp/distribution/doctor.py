@@ -487,7 +487,7 @@ def check_autonomy_rule(project_root: Path) -> CheckResult:
             "Run: tapps-mcp upgrade",
         )
     content = rule_path.read_text(encoding="utf-8")
-    if "NO human-in-the-loop" not in content or "assignee_id" not in content:
+    if "NO human-in-the-loop" not in content or "assignee=" not in content:
         return CheckResult(
             "Agent autonomy rule",
             False,
