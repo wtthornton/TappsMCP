@@ -408,6 +408,16 @@ class MemorySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="TAPPS_MCP_MEMORY_")
 
     enabled: bool = Field(default=True, description="Enable the memory subsystem.")
+    tolerate_brain_auth_failure: bool = Field(
+        default=False,
+        description=(
+            "When False (default), tapps_session_start returns a hard error "
+            "(success=false, error.code='brain_auth_failed') if the tapps-brain "
+            "auth probe returns HTTP 401 or 403. When True, the failure is "
+            "kept as a degraded soft state (success=true, degraded=true) so "
+            "offline / no-brain workflows still succeed. TAP-1082."
+        ),
+    )
     profile: str = Field(
         default="",
         description=(

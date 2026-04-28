@@ -261,6 +261,57 @@ _ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT = ToolAnnotations(
 # Implementation helpers live in ``tapps_mcp.tools.session_start_core``.
 
 
+def _detect_brain_auth_failure(
+    settings: Any,
+    memory_status: dict[str, Any] | None,
+    elapsed_ms: int,
+) -> dict[str, Any] | None:
+    """TAP-1082: Detect tapps-brain auth-probe 401/403 and return a hard error.
+
+    Returns ``None`` when memory is disabled, when the agent has opted in to
+    tolerating auth failures (``memory.tolerate_brain_auth_failure``), or
+    when the auth probe did not return 401/403. Otherwise returns a fully-
+    formed error envelope with ``code='brain_auth_failed'`` and actionable
+    ``next_steps`` so the agent fixes the auth instead of retrying blindly.
+    """
+    if not getattr(settings.memory, "enabled", True):
+        return None
+    if getattr(settings.memory, "tolerate_brain_auth_failure", False):
+        return None
+    if not isinstance(memory_status, dict):
+        return None
+    auth_probe = memory_status.get("auth_probe")
+    if not isinstance(auth_probe, dict):
+        return None
+    http_status = auth_probe.get("http_status")
+    if http_status not in (401, 403):
+        return None
+
+    detail = auth_probe.get("detail") or auth_probe.get("error") or "unauthorized"
+    message = (
+        f"tapps-brain auth probe returned HTTP {http_status}: {detail}. "
+        "Memory operations cannot proceed."
+    )
+    return error_response(
+        "tapps_session_start",
+        "brain_auth_failed",
+        message,
+        extra={
+            "http_status": http_status,
+            "memory_status": memory_status,
+            "elapsed_ms": elapsed_ms,
+            "next_steps": [
+                "Set TAPPS_BRAIN_AUTH_TOKEN in your environment or .mcp.json env block",
+                (
+                    "If running offline / without tapps-brain, set "
+                    "memory.tolerate_brain_auth_failure: true in .tapps-mcp.yaml "
+                    "to keep the degraded behavior"
+                ),
+            ],
+        },
+    )
+
+
 async def tapps_session_start(
     project_root: str = "",
     quick: bool = False,
@@ -323,6 +374,16 @@ async def tapps_session_start(
     search_first = _build_search_first(settings.project_root)
     if search_first is not None:
         data["search_first"] = search_first
+
+    # TAP-1082: Hard-fail on tapps-brain auth probe 401/403 unless explicitly
+    # tolerated. Audit (38 sessions, worst case 18 retries) shows agents do
+    # not act on degraded:true buried inside memory_status — they retry, or
+    # proceed without memory. Promoting the failure to a top-level error
+    # with TAPPS_BRAIN_AUTH_TOKEN in next_steps gives the agent something
+    # actionable.
+    auth_failure_response = _detect_brain_auth_failure(settings, memory_status, elapsed_ms)
+    if auth_failure_response is not None:
+        return auth_failure_response
 
     resp = success_response("tapps_session_start", elapsed_ms, data)
     _ssc.attach_session_start_structured_output(resp, info)
