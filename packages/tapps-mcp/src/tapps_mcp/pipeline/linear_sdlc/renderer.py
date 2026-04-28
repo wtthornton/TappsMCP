@@ -46,34 +46,32 @@ end of a session.
 ## Full Issue Lifecycle
 
 ```
-Issue in Backlog (+ needs-spec label if not agent-ready)
+Issue in Triage (intake — needs spec or human review)
         |
-        |  Spec written -> remove needs-spec, add spec-ready
+        |  Spec complete (Goal / AC / Boundaries / DoD all present)
         v
-Issue is spec-ready (Goal / AC / Boundaries / DoD all present)
+Issue moves to Backlog (queued, agent-ready)
         |
         |  Agent picks up issue
         v
 [ 1. Move to In Progress         ] <- FIRST action, before any code
-[ 2. Remove spec-ready label     ]
-[ 3. Post Template A (Kickoff)   ]
+[ 2. Post Template A (Kickoff)   ]
         |
         |  Implementation work
         v
-[ 4. Post Template B (Checkpoint) ] <- At each major step / sub-issue
+[ 3. Post Template B (Checkpoint) ] <- At each major step / sub-issue
         |
         |  PR opened
         v
-[ 5. Add in-review label         ]
-[ 6. GitHub integration moves    ]
-[    status (stays In Progress)  ]
+[ 4. Move to In Review           ]
+[ 5. GitHub integration mirrors  ]
+[    status (stays In Review)    ]
         |
         |  Tests pass, PR ready
         v
-[ 7. Run full test suite         ]
-[ 8. Post Template C (Summary)   ] <- REQUIRED before Done
-[ 9. Remove in-review label      ]
-[10. Move to Done                ]
+[ 6. Run full test suite         ]
+[ 7. Post Template C (Summary)   ] <- REQUIRED before Done
+[ 8. Move to Done                ]
         |
         |  PR merged (GitHub auto-closes if wired)
         v
@@ -86,8 +84,10 @@ Issue Done - comment trail complete
 
 | From | To | Trigger | Who |
 |------|----|---------|-----|
+| Triage | Backlog | Spec complete (template sections filled in) | Agent or human (manual) |
 | Backlog | In Progress | Agent starts work | Agent (manual) |
-| In Progress | Done | Tests pass + Template C posted | Agent (manual) |
+| In Progress | In Review | PR opened | Agent (manual) or GitHub integration (auto) |
+| In Review | Done | Tests pass + Template C posted + PR merged | Agent (manual) |
 | Any | In Progress | Branch created with {{PREFIX_LOWER}}-XXX | GitHub integration (auto) |
 | Any | Done | PR merged with closes {{PREFIX}}-XXX | GitHub integration (auto) |
 
@@ -97,16 +97,26 @@ requirement.
 
 ---
 
-## Sub-Phase Label Rules
+## Status Semantics
+
+Status is the primary gating signal — it tells agents what an issue is
+ready for. Labels are orthogonal (type, area, blocker source).
+
+| Status | What it means | When to move out |
+|--------|---------------|------------------|
+| Triage | Intake; needs spec/review or blocked on a human decision | Spec complete → Backlog |
+| Backlog | Spec-ready, queued for agent pickup | Agent picks up → In Progress |
+| In Progress | Agent actively working, no PR yet | PR opened → In Review |
+| In Review | PR open, awaiting merge | PR merged + Template C posted → Done |
+| Done | Shipped (terminal) | — |
+| Canceled | Won't do (terminal) | — |
+
+**Rule**: An issue in **Triage** is not agent-ready. Do not start work on it.
 
 | Label | Add When | Remove When |
 |-------|----------|-------------|
-| `needs-spec` | Issue created without full template | Agent writes spec / retrofits sections |
-| `spec-ready` | All 6 template sections complete | Agent picks up issue (starts work) |
-| `in-review` | PR opened | PR merged or closed |
+| `spec-ready` | Backlog issue is verified template-compliant and agent-ready | (terminal label; stays for the issue's life) |
 | `needs-tests` | Implementation done but coverage incomplete | Tests written and passing |
-
-**Rule**: An issue with `needs-spec` is not agent-ready. Do not start work on it.
 
 ---
 
@@ -179,8 +189,9 @@ Use for every new story/task. All six sections are required.
 - [ ] Issue status set to Done
 ```
 
-**Triage rule**: Issues missing any of these sections get the `needs-spec`
-label and are not agent-ready.
+**Triage rule**: Issues missing any of these sections sit in **Triage**
+status and are not agent-ready. Promote to Backlog only after the missing
+sections are filled in.
 
 ---
 
@@ -341,7 +352,7 @@ at each major step; (4) a summary comment with test results before Done;
 ## Steps
 
 1. Read the issue description - it is the work contract. Do not start if
-   `needs-spec` label is set.
+   the issue is in Triage status.
 2. Create a branch named `{{PREFIX_LOWER}}-NNN-short-title` (hyphens only,
    lowercase, no username prefix). This triggers the GitHub -> Linear
    auto-transition to In Progress.
@@ -371,7 +382,7 @@ at each major step; (4) a summary comment with test results before Done;
 - mark Done without a summary comment
 - skip tests before marking Done
 - create issues without Goal/AC/Boundaries/DoD sections
-- use statuses other than Backlog/In Progress/Done
+- use statuses other than Triage/Backlog/In Progress/In Review/Done/Canceled
 - name branches with slashes, usernames, or uppercase (breaks auto-transitions)
 """
 

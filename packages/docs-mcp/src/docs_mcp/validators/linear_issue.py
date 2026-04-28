@@ -45,13 +45,19 @@ class ValidationIssue(BaseModel):
 
 
 class ValidationReport(BaseModel):
-    """Pre-create gate result for one Linear issue."""
+    """Pre-create gate result for one Linear issue.
+
+    ``suggested_label`` is ``"spec-ready"`` for agent-ready issues, ``""``
+    otherwise. ``suggested_status`` is the corresponding workflow status
+    (``"Backlog"`` or ``"Triage"``).
+    """
 
     agent_ready: bool
     score: int
     missing: list[str]
     issues: list[ValidationIssue]
     suggested_label: str
+    suggested_status: str
 
 
 def validate_issue(
@@ -106,6 +112,7 @@ def validate_issue(
         missing=missing,
         issues=issues,
         suggested_label=lint_result.suggested_label,
+        suggested_status=lint_result.suggested_status,
     )
 
 

@@ -86,11 +86,13 @@ class TestPerIssueResults:
         report = triage_issues([_clean_issue("TAP-1")])
         assert report.per_issue[0].agent_ready is True
         assert report.per_issue[0].suggested_label == "spec-ready"
+        assert report.per_issue[0].suggested_status == "Backlog"
 
     def test_bad_issue_not_agent_ready(self) -> None:
         report = triage_issues([_bad_issue("TAP-3")])
         assert report.per_issue[0].agent_ready is False
-        assert report.per_issue[0].suggested_label == "needs-spec"
+        assert report.per_issue[0].suggested_label == ""
+        assert report.per_issue[0].suggested_status == "Triage"
 
     def test_current_agent_label_extracted(self) -> None:
         issue = _clean_issue("TAP-1")
@@ -117,13 +119,16 @@ class TestLabelProposals:
         report = triage_issues([issue])
         assert report.label_proposals == []
 
-    def test_proposal_when_current_differs(self) -> None:
+    def test_proposal_when_stale_legacy_label_present(self) -> None:
+        # Legacy ``needs-spec`` label is no longer in _AGENT_LABELS, so it's
+        # treated as "no current agent label". The agent-ready issue gets a
+        # proposal to add ``spec-ready``.
         issue = _clean_issue("TAP-1")
-        issue["labels"] = ["needs-spec"]  # Stale — should become spec-ready.
+        issue["labels"] = ["needs-spec"]
         report = triage_issues([issue])
         assert len(report.label_proposals) == 1
         p = report.label_proposals[0]
-        assert p.from_label == "needs-spec"
+        assert p.from_label == ""
         assert p.to_label == "spec-ready"
 
     def test_proposal_when_no_current_agent_label(self) -> None:
@@ -134,12 +139,13 @@ class TestLabelProposals:
         assert report.label_proposals[0].from_label == ""
         assert report.label_proposals[0].to_label == "spec-ready"
 
-    def test_bad_issue_proposes_needs_clarification_with_reason(self) -> None:
+    def test_bad_issue_does_not_propose_label_change(self) -> None:
+        # Not-agent-ready issues are routed via suggested_status (Triage),
+        # not a label change. The triage tool no longer proposes a label
+        # for these — the agent reads suggested_status instead.
         report = triage_issues([_bad_issue("TAP-3")])
-        assert len(report.label_proposals) == 1
-        p = report.label_proposals[0]
-        assert p.to_label == "needs-spec"
-        assert "Missing" in p.reason
+        assert report.label_proposals == []
+        assert report.per_issue[0].suggested_status == "Triage"
 
 
 # ---------------------------------------------------------------------------

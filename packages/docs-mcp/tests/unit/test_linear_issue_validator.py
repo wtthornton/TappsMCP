@@ -39,6 +39,7 @@ class TestCleanIssuePasses:
     def test_suggested_label_agent_ready(self, clean_issue: dict[str, object]) -> None:
         report = validate_issue(**clean_issue)  # type: ignore[arg-type]
         assert report.suggested_label == "spec-ready"
+        assert report.suggested_status == "Backlog"
 
 
 class TestMissingAcceptance:
@@ -155,4 +156,33 @@ class TestReturnTypes:
             "missing",
             "issues",
             "suggested_label",
+            "suggested_status",
         }
+
+
+class TestSuggestedStatusForBadIssue:
+    """Issues that fail HIGH-severity rules should be routed to Triage."""
+
+    def test_missing_acceptance_routes_to_triage(self) -> None:
+        report = validate_issue(
+            title="foo.py: x",
+            description="## What\nd\n## Where\n`foo.py:1`\n",
+            priority=3,
+            estimate=1.0,
+        )
+        assert report.suggested_label == ""
+        assert report.suggested_status == "Triage"
+
+    def test_blocked_marker_routes_to_triage(self) -> None:
+        report = validate_issue(
+            title="foo.py: x",
+            description=(
+                "## What\nblocked by an upstream design call\n\n"
+                "## Where\n`foo.py:1`\n\n"
+                "## Acceptance\n- [ ] done\n"
+            ),
+            priority=3,
+            estimate=1.0,
+        )
+        assert report.suggested_label == ""
+        assert report.suggested_status == "Triage"

@@ -39,22 +39,35 @@ TAP-### (prior work), commit <sha>
 - **No fenced code blocks** unless the bug IS the exact text (regex, specific error string). A `file.py:LINE` anchor beats a reprinted snippet.
 - **Inline-code filenames**: `` `AGENTS.md` `` — never `[AGENTS.md](AGENTS.md)`. Linear's autolinker mangles bare filenames into `<http://AGENTS.md>` garbage.
 - **Bare issue refs**: `TAP-###`. Never wrap in `<issue id="UUID">…</issue>` — the UUID is pure noise.
-- **Acceptance is mandatory.** Every issue needs ≥1 verifiable checkbox. If you can't write one, the issue isn't spec-ready — label `needs-spec`.
+- **Acceptance is mandatory.** Every issue needs ≥1 verifiable checkbox. If you can't write one, the issue isn't spec-ready — keep it in **Triage** status until it can be specified.
 - **Estimates required** on all stories. Agents use estimate as a "fits-one-session" budget signal.
 
-## Labels (locked)
+## Status and labels
 
-Exactly one readiness label per issue. Names match the `TappsCodingAgents` Linear workspace.
+The `TappsCodingAgents` workspace uses **status as the primary readiness signal**. Labels carry orthogonal information (type, area, blocker source).
+
+### Status
+
+| Status | Meaning |
+|---|---|
+| `Triage` | Intake — issue needs spec/review or is blocked on a human decision. Not agent-ready. |
+| `Backlog` | Spec-ready and queued for agent pickup. |
+| `In Progress` | Agent actively working, no PR yet. |
+| `In Review` | PR open, awaiting merge. |
+| `Done` | Shipped. |
+| `Canceled` | Won't do. |
+
+The legacy labels `needs-spec` (replaced by Triage status), `in-review` (replaced by In Review status), and `agent-blocked` (folded into Triage) have been retired.
+
+### Labels
 
 | Label | Meaning | Criteria |
 |---|---|---|
-| `spec-ready` | An agent can start without human input | Template-compliant + file anchor + ≥1 verifiable AC + title ≤80 + no autolink/UUID noise |
-| `needs-spec` | Valid ask, template elements missing | Missing AC, vague scope, or refs external context an agent can't fetch |
-| `agent-blocked` | Human/policy decision required — workspace label not yet created; Linear state `Backlog` is the current fallback | Waiting on design call, approval, or another issue |
+| `spec-ready` | A Backlog issue is verified template-compliant and an agent can start without human input | Template-compliant + file anchor + ≥1 verifiable AC + title ≤80 + no autolink/UUID noise |
 
 Hierarchy: there are no `epic` / `story` / `task` labels in the workspace, and none are planned. Parent/child relationships are carried entirely by Linear's `parentId` field — a missing `parentId` means the issue is an epic-scope root. Don't propose hierarchy labels; they would add cost without signal.
 
-Existing functional labels (`Bug`, `backend`, `brain-api`, `Feature`, `Improvement`, etc.) stay and are orthogonal.
+Existing functional labels (`Bug`, `backend`, `brain-api`, `Feature`, `Improvement`, `duplicate`, `blocked:agentforge`, etc.) stay and are orthogonal.
 
 ## Hierarchy
 
@@ -72,7 +85,7 @@ Concrete things the linter flags:
 2. `<issue id="<UUID>">TAP-###</issue>` — replace with bare `TAP-###`.
 3. Titles >80 chars — restate the symptom as the title, not a preamble.
 4. Fenced code block with no `file.py:LINE` anchor — add the anchor; drop the snippet unless it's load-bearing.
-5. No `## Acceptance` section — either write one or apply `needs-spec`.
+5. No `## Acceptance` section — either write one or move the issue to **Triage** status.
 6. Mixed templates (`Goal/Context` + `Summary/Problem/Evidence` + `File-first`) — migrate to the template above.
 
 ## References

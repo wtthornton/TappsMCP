@@ -30,8 +30,12 @@ TITLE_MAX_LEN = 80
 CHARS_PER_TOKEN = 4  # Rough approximation consistent across rule engines.
 
 LABEL_SPEC_READY = "spec-ready"
-LABEL_NEEDS_SPEC = "needs-spec"
-LABEL_AGENT_BLOCKED = "agent-blocked"
+
+# Status names for the new status-based workflow. ``needs-spec`` and
+# ``agent-blocked`` were retired as labels — Triage status now expresses both
+# "issue needs spec/review" and "issue is blocked on a human decision".
+STATUS_TRIAGE = "Triage"
+STATUS_BACKLOG = "Backlog"
 
 _SEVERITY_PENALTY = {SEVERITY_HIGH: 25, SEVERITY_MEDIUM: 10, SEVERITY_LOW: 2}
 
@@ -51,7 +55,7 @@ _FILE_ANCHOR_RE = re.compile(
 # Regex: fenced code block opening fence (capturing position only).
 _FENCE_RE = re.compile(r"^```", re.MULTILINE)
 
-# Markers that suggest human/policy dependency — pushes label toward `agent-blocked`.
+# Markers that suggest human/policy dependency — pushes the issue to Triage.
 _BLOCKED_MARKERS_RE = re.compile(
     r"\b(?:blocked by|waiting on|waiting for|needs approval|pending decision|design call)\b",
     re.IGNORECASE,
@@ -71,12 +75,19 @@ class Finding:
 
 @dataclass
 class LintResult:
-    """Structured lint result for one Linear issue."""
+    """Structured lint result for one Linear issue.
+
+    ``suggested_label`` is ``"spec-ready"`` for agent-ready issues and the
+    empty string otherwise. ``suggested_status`` is the corresponding
+    workflow status: ``"Backlog"`` (agent-ready, queued for pickup) or
+    ``"Triage"`` (needs spec/review or is blocked on a human decision).
+    """
 
     agent_ready: bool
     score: int
     findings: list[Finding]
     suggested_label: str
+    suggested_status: str
     tokens: dict[str, int]
 
     def to_dict(self) -> dict[str, Any]:
@@ -94,6 +105,7 @@ class LintResult:
                 for f in self.findings
             ],
             "suggested_label": self.suggested_label,
+            "suggested_status": self.suggested_status,
             "tokens": self.tokens,
         }
 
@@ -159,6 +171,7 @@ def lint_issue(
     score = _score(ctx.findings)
     agent_ready = _is_agent_ready(ctx.findings)
     suggested_label = _suggest_label(ctx)
+    suggested_status = _suggest_status(ctx)
     tokens = _estimate_tokens(ctx)
 
     return LintResult(
@@ -166,6 +179,7 @@ def lint_issue(
         score=score,
         findings=ctx.findings,
         suggested_label=suggested_label,
+        suggested_status=suggested_status,
         tokens=tokens,
     )
 
@@ -327,12 +341,29 @@ def _is_agent_ready(findings: list[Finding]) -> bool:
 
 
 def _suggest_label(ctx: _Context) -> str:
-    if _BLOCKED_MARKERS_RE.search(ctx.description):
-        return LABEL_AGENT_BLOCKED
+    """Return ``spec-ready`` for agent-ready issues, ``""`` otherwise.
+
+    Agents in workspaces using status-based gating should read
+    ``suggested_status`` instead — an empty label means "no label to apply;
+    move the issue to the suggested status."
+    """
     has_high = any(f.severity == SEVERITY_HIGH for f in ctx.findings)
-    if has_high:
-        return LABEL_NEEDS_SPEC
+    if has_high or _BLOCKED_MARKERS_RE.search(ctx.description):
+        return ""
     return LABEL_SPEC_READY
+
+
+def _suggest_status(ctx: _Context) -> str:
+    """Return ``Backlog`` for agent-ready issues, ``Triage`` otherwise.
+
+    Triage covers two cases the old workflow split into separate labels:
+    issues missing template sections (was ``needs-spec``) and issues that
+    explicitly call out a human/policy dependency (was ``agent-blocked``).
+    """
+    has_high = any(f.severity == SEVERITY_HIGH for f in ctx.findings)
+    if has_high or _BLOCKED_MARKERS_RE.search(ctx.description):
+        return STATUS_TRIAGE
+    return STATUS_BACKLOG
 
 
 def _estimate_tokens(ctx: _Context) -> dict[str, int]:

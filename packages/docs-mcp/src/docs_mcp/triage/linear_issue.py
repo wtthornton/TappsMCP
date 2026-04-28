@@ -45,7 +45,13 @@ MIN_CLUSTER_SIZE = 2  # Paths shared by fewer issues aren't worth grouping.
 
 
 class IssueTriageResult(BaseModel):
-    """Per-issue triage output."""
+    """Per-issue triage output.
+
+    ``suggested_label`` is ``"spec-ready"`` (agent-ready) or ``""`` (not
+    agent-ready). ``suggested_status`` is the corresponding workflow state
+    (``"Backlog"`` or ``"Triage"``); agents using status-based gating should
+    read this field rather than ``suggested_label``.
+    """
 
     id: str
     title: str
@@ -54,6 +60,7 @@ class IssueTriageResult(BaseModel):
     current_labels: list[str] = Field(default_factory=list)
     current_agent_label: str = ""  # Extracted from current_labels.
     suggested_label: str
+    suggested_status: str
     missing: list[str] = Field(default_factory=list)
     file_paths: list[str] = Field(default_factory=list)
 
@@ -85,10 +92,12 @@ class MetadataGaps(BaseModel):
 class TriageSummary(BaseModel):
     """Aggregate counts for a Linear issue triage batch.
 
-    Returned as part of :class:`TriageReport.summary`. Values reflect the
-    suggested agent-readiness label for each triaged issue (``spec-ready``,
-    ``needs-spec``, ``agent-blocked``) per the policy in
-    ``docs/linear/AGENT_ISSUES.md``.
+    Returned as part of :class:`TriageReport.summary`. ``agent_ready`` counts
+    issues whose suggested status is ``Backlog``; ``needs_clarification``
+    counts issues whose suggested status is ``Triage`` (combines what the
+    old workflow split into ``needs-spec`` and ``agent-blocked`` labels).
+    ``agent_blocked`` is retained as a field for backward compatibility but
+    always reports 0 — the dimension was folded into Triage.
     """
 
     total: int
@@ -115,7 +124,7 @@ class TriageReport(BaseModel):
     summary: TriageSummary
 
 
-_AGENT_LABELS = frozenset({"spec-ready", "needs-spec", "agent-blocked"})
+_AGENT_LABELS = frozenset({"spec-ready"})
 
 
 def triage_issues(issues: list[dict[str, Any]]) -> TriageReport:
@@ -176,6 +185,7 @@ def _triage_one(raw: dict[str, Any]) -> IssueTriageResult:
         current_labels=labels,
         current_agent_label=current_agent_label,
         suggested_label=report.suggested_label,
+        suggested_status=report.suggested_status,
         missing=report.missing,
         file_paths=file_paths,
     )
@@ -216,9 +226,22 @@ def _is_noise_path(path: str) -> bool:
 
 
 def _build_label_proposals(results: list[IssueTriageResult]) -> list[LabelProposal]:
-    """Propose label changes where suggested != current agent-label."""
+    """Propose label changes where suggested != current agent-label.
+
+    Generates a proposal in two cases:
+    - Issue is agent-ready and lacks the ``spec-ready`` label → propose adding it.
+    - Issue carries a stale agent label (e.g., legacy ``needs-spec``) but is
+      now agent-ready → propose moving to ``spec-ready``.
+
+    Issues that are NOT agent-ready do not generate a label proposal —
+    callers should instead consult ``suggested_status`` and move the issue
+    to the Triage workflow status.
+    """
     proposals: list[LabelProposal] = []
     for res in results:
+        if not res.suggested_label:
+            # Not agent-ready — handled via suggested_status, not a label.
+            continue
         if res.current_agent_label == res.suggested_label:
             continue
         reason = _label_reason(res)
@@ -239,8 +262,8 @@ def _label_reason(res: IssueTriageResult) -> str:
     if res.missing:
         first = res.missing[0]
         extra = f" (+{len(res.missing) - 1} more)" if len(res.missing) > 1 else ""
-        return f"Missing: {first}{extra}."
-    return f"Validator suggests {res.suggested_label} (score {res.score})."
+        return f"Missing: {first}{extra}. Move to Triage status."
+    return f"Score {res.score} — move to Triage status."
 
 
 def _build_parent_groupings(results: list[IssueTriageResult]) -> list[ParentGrouping]:
@@ -295,14 +318,13 @@ def _collect_metadata_gaps(
 
 def _summarize(results: list[IssueTriageResult]) -> TriageSummary:
     total = len(results)
-    agent_ready = sum(1 for r in results if r.suggested_label == "spec-ready")
-    needs_clar = sum(1 for r in results if r.suggested_label == "needs-spec")
-    blocked = sum(1 for r in results if r.suggested_label == "agent-blocked")
+    agent_ready = sum(1 for r in results if r.suggested_status == "Backlog")
+    needs_clar = sum(1 for r in results if r.suggested_status == "Triage")
     avg = sum(r.score for r in results) / total if total else 0.0
     return TriageSummary(
         total=total,
         agent_ready=agent_ready,
         needs_clarification=needs_clar,
-        agent_blocked=blocked,
+        agent_blocked=0,
         avg_score=round(avg, 1),
     )

@@ -52,8 +52,12 @@ async def docs_lint_linear_issue(
     - ``agent_ready``: bool — True iff no HIGH-severity violations.
     - ``score``: 0-100, starting at 100 with per-finding penalties.
     - ``findings``: list of ``{rule, severity, message, location, fix_hint}``.
-    - ``suggested_label``: one of ``spec-ready`` / ``needs-spec`` /
-      ``agent-blocked``.
+    - ``suggested_label``: ``"spec-ready"`` for agent-ready issues, ``""``
+      otherwise.
+    - ``suggested_status``: ``"Backlog"`` (agent-ready, queued for pickup)
+      or ``"Triage"`` (needs spec/review or is blocked on a human decision).
+      Agents using status-based gating should read this rather than
+      ``suggested_label``.
     - ``tokens``: ``{title_chars, description_chars, total_chars,
       estimated_tokens, noise_bytes_recoverable}``.
 
@@ -118,7 +122,7 @@ def _build_next_steps(result: dict[str, Any]) -> list[str]:
         )
     if not result["agent_ready"]:
         steps.append(
-            f"Apply label `{result['suggested_label']}` until HIGH findings are resolved."
+            f"Move issue to `{result['suggested_status']}` status until HIGH findings are resolved."
         )
     elif result["score"] < 100:
         steps.append(
@@ -150,8 +154,11 @@ async def docs_validate_linear_issue(
           (e.g., "a file anchor", "a `## Acceptance` section").
         - ``issues``: per-field structured detail
           (``{severity, field, rule, message}``).
-        - ``suggested_label``: one of ``spec-ready`` /
-          ``needs-spec`` / ``agent-blocked``.
+        - ``suggested_label``: ``"spec-ready"`` for agent-ready issues,
+          ``""`` otherwise.
+        - ``suggested_status``: ``"Backlog"`` (agent-ready) or ``"Triage"``
+          (needs spec/review or human decision). Read this rather than
+          ``suggested_label`` when using status-based workflow gating.
 
     Agents should call this BEFORE creating a Linear issue. If
     ``agent_ready`` is False, fix the ``missing`` items first. For a deeper
@@ -204,13 +211,14 @@ def _validate_next_steps(data: dict[str, Any]) -> list[str]:
         items = ", ".join(data["missing"][:2])
         steps.append(f"Add before creating: {items}.")
         steps.append(
-            f"Once resolved, label `{data['suggested_label']}`. "
+            f"Until resolved, the issue belongs in `{data['suggested_status']}` status. "
             "For deeper cleanup, call docs_lint_linear_issue."
         )
     else:
         steps.append(
             f"Issue is spec-ready (score {data['score']}). "
-            f"Apply label `{data['suggested_label']}` and create."
+            f"Apply label `{data['suggested_label']}` and create in "
+            f"`{data['suggested_status']}` status."
         )
     return steps[:2]
 

@@ -5,8 +5,6 @@ from __future__ import annotations
 import pytest
 
 from docs_mcp.linters.linear_issue import (
-    LABEL_AGENT_BLOCKED,
-    LABEL_NEEDS_SPEC,
     LABEL_SPEC_READY,
     RULE_ACCEPTANCE_EMPTY,
     RULE_AUTOLINK_MANGLED,
@@ -19,7 +17,8 @@ from docs_mcp.linters.linear_issue import (
     RULE_UUID_WRAPPED_REF,
     SEVERITY_HIGH,
     SEVERITY_LOW,
-    SEVERITY_MEDIUM,
+    STATUS_BACKLOG,
+    STATUS_TRIAGE,
     lint_issue,
 )
 
@@ -389,17 +388,23 @@ class TestScoring:
 # ---------------------------------------------------------------------------
 
 
-class TestLabelSuggestion:
-    def test_high_findings_suggest_needs_clarification(self) -> None:
+class TestLabelAndStatusSuggestion:
+    def test_clean_issue_suggests_spec_ready_and_backlog(self, clean_issue: dict[str, object]) -> None:
+        result = lint_issue(**clean_issue)  # type: ignore[arg-type]
+        assert result.suggested_label == LABEL_SPEC_READY
+        assert result.suggested_status == STATUS_BACKLOG
+
+    def test_high_findings_route_to_triage(self) -> None:
         result = lint_issue(
             title="foo: x",
             description="no acceptance",
             priority=3,
             estimate=1.0,
         )
-        assert result.suggested_label == LABEL_NEEDS_SPEC
+        assert result.suggested_label == ""
+        assert result.suggested_status == STATUS_TRIAGE
 
-    def test_blocked_markers_suggest_agent_blocked(self) -> None:
+    def test_blocked_markers_route_to_triage(self) -> None:
         result = lint_issue(
             title="foo.py: change",
             description=(
@@ -410,4 +415,5 @@ class TestLabelSuggestion:
             priority=3,
             estimate=1.0,
         )
-        assert result.suggested_label == LABEL_AGENT_BLOCKED
+        assert result.suggested_label == ""
+        assert result.suggested_status == STATUS_TRIAGE
