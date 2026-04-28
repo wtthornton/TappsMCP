@@ -344,9 +344,13 @@ async def tapps_session_start(
         return await _session_start_quick(start, _record_execution, _with_nudges)
 
     settings = load_settings()
-    info, memory_status, hive_status, brain_bridge_health, timings = (
-        await _ssc.collect_session_start_phases(settings)
-    )
+    (
+        info,
+        memory_status,
+        hive_status,
+        brain_bridge_health,
+        timings,
+    ) = await _ssc.collect_session_start_phases(settings)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_start", start)
@@ -560,7 +564,9 @@ async def tapps_init(
         dg = getattr(settings, "destructive_guard", False)
     leg = linear_enforce_gate
     if leg is None:
-        leg = getattr(settings, "linear_enforce_gate", False)
+        # TAP-981: engagement-aware default — true at high/medium, false at low.
+        # Honors explicit overrides from .tapps-mcp.yaml or env.
+        leg = settings.linear_enforce_gate_resolved()
 
     cfg = _pih.build_init_bootstrap_config(
         create_handoff=create_handoff,
@@ -742,9 +748,7 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
         err = _el.write_engagement_yaml(config_path, yaml_content)
         if err is not None:
             _record_execution("tapps_set_engagement_level", start, status="failed")
-            return error_response(
-                "tapps_set_engagement_level", "config_write_error", err
-            )
+            return error_response("tapps_set_engagement_level", "config_write_error", err)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_set_engagement_level", start)
@@ -830,16 +834,12 @@ async def tapps_pipeline(
         if not session_stage["success"]:
             pipeline_passed = False
 
-    qc_stage, qc_passed, short_circuit = await _po.pipeline_quick_check_stage(
-        file_paths, preset
-    )
+    qc_stage, qc_passed, short_circuit = await _po.pipeline_quick_check_stage(file_paths, preset)
     stages.append(qc_stage)
     if not qc_passed:
         pipeline_passed = False
 
-    vc_stage, vc_passed = await _po.pipeline_validate_stage(
-        file_paths, preset, short_circuit
-    )
+    vc_stage, vc_passed = await _po.pipeline_validate_stage(file_paths, preset, short_circuit)
     stages.append(vc_stage)
     if not vc_passed:
         pipeline_passed = False
@@ -885,5 +885,3 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_pipeline)
     if "tapps_decompose" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_decompose)
-
-

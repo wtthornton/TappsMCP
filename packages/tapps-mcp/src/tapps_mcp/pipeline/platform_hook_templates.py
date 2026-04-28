@@ -1570,16 +1570,33 @@ LINEAR_GATE_PRE_SAVE_SCRIPT = """\
 # TAPPS_LINEAR_SKIP_VALIDATE=1 (logged to .tapps-mcp/.bypass-log.jsonl).
 INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-TOOL=$(echo "$INPUT" | "$PYBIN" -c \
+PARSED=$(echo "$INPUT" | "$PYBIN" -c \
   "import sys,json
 try:
-    d=json.load(sys.stdin); print(d.get('tool_name') or d.get('toolName') or '')
+    d=json.load(sys.stdin)
+    name=d.get('tool_name') or d.get('toolName') or ''
+    inp=d.get('tool_input') or d.get('toolInput') or {}
+    has_id=bool(inp.get('id'))
+    has_template=bool(inp.get('title')) or bool(inp.get('description'))
+    update_only='1' if (has_id and not has_template) else '0'
+    print(name)
+    print(update_only)
 except Exception:
-    print('')" 2>/dev/null)
+    print('')
+    print('0')" 2>/dev/null)
+TOOL=$(echo "$PARSED" | sed -n '1p')
+UPDATE_ONLY=$(echo "$PARSED" | sed -n '2p')
 case "$TOOL" in
   mcp__plugin_linear_linear__save_issue|save_issue) ;;
   *) exit 0 ;;
 esac
+# Update-only allow-list (TAP-981 FP reduction): save_issue calls that target
+# an existing issue (id present) and do NOT modify title/description skip the
+# sentinel — status, priority, label, assignee, parent updates don't need a
+# fresh template validation.
+if [ "$UPDATE_ONLY" = "1" ]; then
+  exit 0
+fi
 if [ "${TAPPS_LINEAR_SKIP_VALIDATE:-0}" = "1" ]; then
   ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
@@ -1691,12 +1708,28 @@ LINEAR_GATE_PRE_SAVE_SCRIPT_PS = """\
 # TAPPS_LINEAR_SKIP_VALIDATE=1 (logged to .tapps-mcp/.bypass-log.jsonl).
 $stdin = [Console]::In.ReadToEnd()
 $tool = ""
+$updateOnly = $false
 try {
     $d = $stdin | ConvertFrom-Json
     if ($d.tool_name) { $tool = [string]$d.tool_name }
     elseif ($d.toolName) { $tool = [string]$d.toolName }
+    $inp = $null
+    if ($d.PSObject.Properties.Name -contains 'tool_input') { $inp = $d.tool_input }
+    elseif ($d.PSObject.Properties.Name -contains 'toolInput') { $inp = $d.toolInput }
+    if ($inp) {
+        $hasId = [bool]($inp.PSObject.Properties.Name -contains 'id' -and $inp.id)
+        $hasTemplate = [bool](
+            ($inp.PSObject.Properties.Name -contains 'title' -and $inp.title) -or
+            ($inp.PSObject.Properties.Name -contains 'description' -and $inp.description)
+        )
+        if ($hasId -and -not $hasTemplate) { $updateOnly = $true }
+    }
 } catch {}
 if ($tool -ne 'mcp__plugin_linear_linear__save_issue' -and $tool -ne 'save_issue') {
+    exit 0
+}
+# Update-only allow-list (TAP-981 FP reduction): metadata-only updates skip the sentinel.
+if ($updateOnly) {
     exit 0
 }
 $root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
@@ -1804,10 +1837,10 @@ DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
 # + event wiring it enables. All five are off by default for backward compat.
 
 REACTIVE_HOOK_FLAGS: tuple[str, ...] = (
-    "cwd_reload",        # CwdChanged → re-reads .tapps-mcp.yaml
+    "cwd_reload",  # CwdChanged → re-reads .tapps-mcp.yaml
     "permission_retry",  # PermissionDenied → returns {retry: true} for safe tapps-* denials
-    "session_title",     # UserPromptSubmit → emits hookSpecificOutput.sessionTitle
-    "worktree_track",    # WorktreeCreate + WorktreeRemove
+    "session_title",  # UserPromptSubmit → emits hookSpecificOutput.sessionTitle
+    "worktree_track",  # WorktreeCreate + WorktreeRemove
 )
 
 CLAUDE_REACTIVE_HOOK_SCRIPTS: dict[str, str] = {
@@ -1934,11 +1967,7 @@ def _reactive_config(flag: str, *, win: bool) -> dict[str, list[dict[str, Any]]]
     duplicate the event-to-script wiring.
     """
     ext = "ps1" if win else "sh"
-    cmd_prefix = (
-        "powershell -NoProfile -ExecutionPolicy Bypass -File "
-        if win
-        else ""
-    )
+    cmd_prefix = "powershell -NoProfile -ExecutionPolicy Bypass -File " if win else ""
     if flag == "cwd_reload":
         return {
             "CwdChanged": [
@@ -1961,9 +1990,7 @@ def _reactive_config(flag: str, *, win: bool) -> dict[str, list[dict[str, Any]]]
                     "hooks": [
                         {
                             "type": "command",
-                            "command": (
-                                f"{cmd_prefix}.claude/hooks/tapps-permission-denied.{ext}"
-                            ),
+                            "command": (f"{cmd_prefix}.claude/hooks/tapps-permission-denied.{ext}"),
                         },
                     ],
                 },
@@ -2019,18 +2046,12 @@ def reactive_hook_scripts(enabled: dict[str, bool], *, win: bool) -> dict[str, s
         if flag == "cwd_reload":
             out[f"tapps-cwd-changed.{ext}"] = scripts[f"tapps-cwd-changed.{ext}"]
         elif flag == "permission_retry":
-            out[f"tapps-permission-denied.{ext}"] = scripts[
-                f"tapps-permission-denied.{ext}"
-            ]
+            out[f"tapps-permission-denied.{ext}"] = scripts[f"tapps-permission-denied.{ext}"]
         elif flag == "session_title":
             out[f"tapps-session-title.{ext}"] = scripts[f"tapps-session-title.{ext}"]
         elif flag == "worktree_track":
-            out[f"tapps-worktree-create.{ext}"] = scripts[
-                f"tapps-worktree-create.{ext}"
-            ]
-            out[f"tapps-worktree-remove.{ext}"] = scripts[
-                f"tapps-worktree-remove.{ext}"
-            ]
+            out[f"tapps-worktree-create.{ext}"] = scripts[f"tapps-worktree-create.{ext}"]
+            out[f"tapps-worktree-remove.{ext}"] = scripts[f"tapps-worktree-remove.{ext}"]
     return out
 
 
@@ -2045,6 +2066,7 @@ def reactive_hooks_config(
         for event, entries in _reactive_config(flag, win=win).items():
             merged.setdefault(event, []).extend(entries)
     return merged
+
 
 # ---------------------------------------------------------------------------
 # Engagement-level blocking hook variants (Epic 36.5)

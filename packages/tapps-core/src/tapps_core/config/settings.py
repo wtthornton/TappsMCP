@@ -989,6 +989,19 @@ class TappsMCPSettings(BaseSettings):
             return list(v)
         return []
 
+    def linear_enforce_gate_resolved(self) -> bool:
+        """Resolve linear_enforce_gate with engagement-aware defaulting (TAP-981).
+
+        When the user explicitly sets ``linear_enforce_gate`` in
+        ``.tapps-mcp.yaml`` or via env, that value wins. Otherwise the default
+        is ``True`` for ``high``/``medium`` engagement and ``False`` for
+        ``low`` — matching the TAP-981 acceptance criterion that the gate
+        ships on by default everywhere except low-engagement consumers.
+        """
+        if "linear_enforce_gate" in self.model_fields_set:
+            return self.linear_enforce_gate
+        return self.llm_engagement_level in ("high", "medium")
+
 
 # Settings cache - only the no-arg (default) case is cached.
 _cached_settings: TappsMCPSettings | None = None

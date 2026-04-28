@@ -658,8 +658,12 @@ def check_pretooluse_matchers(project_root: Path) -> CheckResult:
 
     Lists matcher names (e.g., "Bash", "mcp__plugin_linear_linear__save_issue")
     so users can tell *what* is being blocked, not just whether any PreToolUse
-    hook is wired. Always returns ok=True — this is informational, not a gate;
-    absence of a matcher is often intentional (opt-in flags control deployment).
+    hook is wired. Calls out the Linear routing gate explicitly when it is
+    absent — that's the highest-impact gate for fleet quality and silent
+    omission was a deployment-gap finding (TAP-974).
+
+    Always returns ok=True — this is informational, not a gate; absence of a
+    matcher is often intentional (opt-in flags control deployment).
     """
     settings_path = project_root / ".claude" / "settings.json"
     if not settings_path.exists():
@@ -685,16 +689,25 @@ def check_pretooluse_matchers(project_root: Path) -> CheckResult:
             m = entry.get("matcher")
             if isinstance(m, str) and m:
                 matchers.append(m)
+
+    linear_matcher = "mcp__plugin_linear_linear__save_issue"
+    linear_active = linear_matcher in matchers
+    linear_status = (
+        "Linear routing gate: active"
+        if linear_active
+        else "Linear routing gate: NOT enabled (set linear_enforce_gate: true in .tapps-mcp.yaml)"
+    )
+
     if not matchers:
         return CheckResult(
             "PreToolUse matchers",
             True,
-            "no PreToolUse matchers wired (no opt-in gates enabled)",
+            f"no PreToolUse matchers wired (no opt-in gates enabled). {linear_status}",
         )
     return CheckResult(
         "PreToolUse matchers",
         True,
-        f"wired: {', '.join(matchers)}",
+        f"wired: {', '.join(matchers)}. {linear_status}",
     )
 
 

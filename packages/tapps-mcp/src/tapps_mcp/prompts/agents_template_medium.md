@@ -174,7 +174,7 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 
 Opt-in `PreToolUse` gates are independent flags in `.tapps-mcp.yaml` — enable each based on what you want blocked:
 - `destructive_guard: true` — blocks destructive Bash commands (`rm -rf`, `format c:`, etc.).
-- `linear_enforce_gate: true` — blocks `mcp__plugin_linear_linear__save_issue` unless the `linear-issue` skill flow (with `docs_validate_linear_issue`) was used recently. Bypass: `TAPPS_LINEAR_SKIP_VALIDATE=1`. Bash-only for now.
+- `linear_enforce_gate: true` — blocks `mcp__plugin_linear_linear__save_issue` unless the `linear-issue` skill flow (with `docs_validate_linear_issue`) was used recently. Bypass: `TAPPS_LINEAR_SKIP_VALIDATE=1`. Bash + PowerShell. Default: on at medium/high engagement, off at low.
 
 Run `tapps-mcp doctor` to list wired matchers.
 

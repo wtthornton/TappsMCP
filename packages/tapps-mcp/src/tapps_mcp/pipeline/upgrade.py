@@ -525,9 +525,7 @@ def _upgrade_claude_code_dry_run(
         if destructive_guard:
             conditional_managed.append("tapps-pre-bash.sh")
         if linear_enforce_gate:
-            conditional_managed.extend(
-                ["tapps-pre-linear-write.sh", "tapps-post-docs-validate.sh"]
-            )
+            conditional_managed.extend(["tapps-pre-linear-write.sh", "tapps-post-docs-validate.sh"])
         hooks_component: dict[str, Any] = {
             "action": "would-write-managed-scripts",
             "note": "settings.json hooks merged by matcher — existing entries preserved",
@@ -568,9 +566,7 @@ def _upgrade_claude_code_dry_run(
     )
     result["components"]["agent_scope_rule"] = "would-regenerate"
     result["components"]["autonomy_rule"] = (
-        "skipped (upgrade_skip_files)"
-        if _skipped("autonomy_rule", skip)
-        else "would-regenerate"
+        "skipped (upgrade_skip_files)" if _skipped("autonomy_rule", skip) else "would-regenerate"
     )
     result["components"]["linear_standards_rule"] = "would-regenerate"
     result["components"]["pipeline_rule"] = (
@@ -1515,7 +1511,7 @@ def upgrade_pipeline(
                 mcp_only=mcp_only,
                 force_python_rule=settings.force_python_quality_rule,
                 destructive_guard=settings.destructive_guard,
-                linear_enforce_gate=settings.linear_enforce_gate,
+                linear_enforce_gate=settings.linear_enforce_gate_resolved(),
             )
             platform_results.append(host_result)
         except Exception as exc:

@@ -603,18 +603,61 @@ class TestUpgradePipeline:
 
     @pytest.mark.skipif(sys.platform == "win32", reason="bash-only gate scripts")
     def test_linear_enforce_gate_off_skips_gate_scripts(self, tmp_path: Path) -> None:
-        """Default (flag absent) must not install the gate scripts."""
+        """Explicit false in .tapps-mcp.yaml must skip the gate scripts.
+
+        TAP-981 changed the default to true at high/medium engagement, so the
+        absence of the flag no longer disables the gate. To opt out, the user
+        must either set ``linear_enforce_gate: false`` explicitly or drop to
+        low engagement — both forms of disablement are covered here.
+        """
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 
         (tmp_path / ".claude").mkdir()
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "linear_enforce_gate: false\n",
+            encoding="utf-8",
+        )
 
         result = upgrade_pipeline(tmp_path)
 
         assert result["success"] is True
         assert not (tmp_path / ".claude" / "hooks" / "tapps-pre-linear-write.sh").exists()
-        assert not (
-            tmp_path / ".claude" / "hooks" / "tapps-post-docs-validate.sh"
-        ).exists()
+        assert not (tmp_path / ".claude" / "hooks" / "tapps-post-docs-validate.sh").exists()
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="bash-only gate scripts")
+    def test_linear_enforce_gate_low_engagement_skips_gate_scripts(
+        self, tmp_path: Path
+    ) -> None:
+        """Engagement=low with no explicit flag must skip the gate scripts (TAP-981)."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "llm_engagement_level: low\n",
+            encoding="utf-8",
+        )
+
+        result = upgrade_pipeline(tmp_path)
+
+        assert result["success"] is True
+        assert not (tmp_path / ".claude" / "hooks" / "tapps-pre-linear-write.sh").exists()
+        assert not (tmp_path / ".claude" / "hooks" / "tapps-post-docs-validate.sh").exists()
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="bash-only gate scripts")
+    def test_linear_enforce_gate_default_on_at_medium_engagement(
+        self, tmp_path: Path
+    ) -> None:
+        """No explicit flag at medium engagement must install the gate (TAP-981)."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir()
+        # No .tapps-mcp.yaml — relies on engagement-aware default.
+
+        result = upgrade_pipeline(tmp_path)
+
+        assert result["success"] is True
+        assert (tmp_path / ".claude" / "hooks" / "tapps-pre-linear-write.sh").exists()
+        assert (tmp_path / ".claude" / "hooks" / "tapps-post-docs-validate.sh").exists()
 
     @pytest.mark.skipif(sys.platform == "win32", reason="bash-only gate scripts")
     def test_dry_run_reflects_linear_enforce_gate_flag(self, tmp_path: Path) -> None:
