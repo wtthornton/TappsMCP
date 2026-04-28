@@ -106,6 +106,49 @@ _ASYNC_ACTIONS = {
     "agent_register",
 }
 
+# TAP-1080: async actions that work when the in-process store is None
+# (HTTP-bridge mode). All other async actions need a local store; calling
+# them with store=None previously null-derefed at e.g. store.list_all() in
+# _handle_consolidate (audit: 2 hits).
+_ASYNC_HTTP_OK_ACTIONS = {
+    "gc",
+    "contradictions",
+    "verify_integrity",
+    "maintain",
+    "health",
+    "hive_status",
+    "hive_search",
+    "hive_propagate",
+    "agent_register",
+}
+
+
+def _classify_store_init_error(exc: BaseException) -> str:
+    """TAP-1080: classify an exception from _get_memory_store into a sub-code.
+
+    Returns one of: ``import_error``, ``dsn_missing``, ``auth_failed``,
+    ``connection_failed``, ``unknown``. Agents read this to pick the right
+    remediation instead of parsing the human message.
+    """
+    if isinstance(exc, ImportError):
+        return "import_error"
+    msg = str(exc).lower()
+    if "cannot import name" in msg or "no module named" in msg:
+        return "import_error"
+    if "not configured" in msg or "tapps_brain_database_url" in msg:
+        return "dsn_missing"
+    if "403" in msg or "forbidden" in msg or "invalid token" in msg or "unauthorized" in msg:
+        return "auth_failed"
+    if (
+        "connection" in msg
+        or "timeout" in msg
+        or "refused" in msg
+        or "unreachable" in msg
+        or "could not connect" in msg
+    ):
+        return "connection_failed"
+    return "unknown"
+
 
 def _bridge_unavailable_response(action: str) -> dict[str, Any]:
     """Standard response when BrainBridge is unconfigured (TAP-412 / EPIC-95.7 shape)."""
@@ -373,10 +416,15 @@ async def tapps_memory(
     try:
         store = _get_memory_store()
     except Exception as exc:
+        sub_code = _classify_store_init_error(exc)
         return error_response(
             "tapps_memory",
             "store_init_failed",
             f"Failed to initialize memory store: {exc}",
+            extra={
+                "sub_code": sub_code,
+                "exception_type": type(exc).__name__,
+            },
         )
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
@@ -420,6 +468,24 @@ async def tapps_memory(
 
     try:
         if action in _ASYNC_ACTIONS:
+            # TAP-1080: guard async dispatch against null-deref. Actions in
+            # _ASYNC_HTTP_OK_ACTIONS handle store=None internally; all other
+            # async handlers (e.g. consolidate, validate) use the store
+            # directly and would crash with "'NoneType' object has no
+            # attribute ..." if we let store=None through.
+            if store is None and action not in _ASYNC_HTTP_OK_ACTIONS:
+                return error_response(
+                    "tapps_memory",
+                    "http_mode_not_supported",
+                    (
+                        f"Action '{action}' requires a local memory store, "
+                        f"but the BrainBridge is running in HTTP mode "
+                        f"(TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is set). This action "
+                        f"has not yet been ported to the async HTTP bridge. "
+                        f"Unset TAPPS_MCP_MEMORY_BRAIN_HTTP_URL to fall back to "
+                        f"in-process mode, or use an async/HTTP-capable action."
+                    ),
+                )
             result_data = await _ASYNC_DISPATCH[action](store, params)
         else:
             if store is None:
