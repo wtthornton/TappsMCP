@@ -1896,6 +1896,7 @@ async def docs_generate_interactive_diagrams(
     title: str = "",
     output_path: str = "",
     project_root: str = "",
+    motion: str = "subtle",
 ) -> dict[str, Any]:
     """Generate an interactive HTML page with Mermaid.js diagrams.
 
@@ -1911,6 +1912,13 @@ async def docs_generate_interactive_diagrams(
         output_path: File path to write HTML (relative to project root).
             When empty, returns content only.
         project_root: Override project root path (default: configured root).
+        motion: Motion intensity for edge animations. ``"off"`` disables
+            all motion CSS. ``"subtle"`` (default) emits CSS marching-ants
+            on Mermaid edge paths, gated by ``prefers-reduced-motion``.
+            ``"particles"`` falls back to ``"subtle"`` until the JS particle
+            layer ships in a follow-up. Motion is suppressed automatically
+            when every requested ``diagram_types`` value is relationship-only
+            (``class_hierarchy``, ``er_diagram``, ``c4_context``).
     """
     _record_call("docs_generate_interactive_diagrams")
     start = time.perf_counter_ns()
@@ -1971,7 +1979,11 @@ async def docs_generate_interactive_diagrams(
     page_title = title or f"{root.name} Architecture"
     html_gen = InteractiveHtmlGenerator()
     html_result = html_gen.generate(
-        diagrams, title=page_title, subtitle=f"Generated from {root.name}"
+        diagrams,
+        title=page_title,
+        subtitle=f"Generated from {root.name}",
+        motion=motion,
+        diagram_types=types_list,
     )
     content = html_result.content
 
