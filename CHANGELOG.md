@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.2] - 2026-04-27
+
+### Fixed
+
+- **`fix(upgrade): broaden _run_github_artifacts except clauses` (TAP-1034).** The four generator wrappers in [`_run_github_artifacts`](packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py) caught only `(OSError, ValueError)`, so any other exception type (e.g. `RuntimeError`, `KeyError`, `TypeError`) escaped and aborted the entire upgrade — contrary to the documented "Each generator is called independently; failures are recorded in `result['errors']` rather than aborting the whole upgrade." Replaced with `except Exception`. Unblocks two pre-existing tests that had been red for an unknown duration on master: `test_github_templates_error_does_not_block_upgrade` and `test_governance_error_does_not_block_upgrade`.
+- **`fix(docs-mcp): walk up to uv-workspace root in default project_root` (TAP-1033).** `load_docs_settings()` defaulted `project_root` to `Path.cwd()` with no walk-up. When the docs-mcp MCP server started inside a workspace member (e.g. `packages/docs-mcp/`), the cached `project_root` settled there, so any `docs_generate_*` call without an explicit override wrote outputs under `packages/docs-mcp/docs/...` instead of the workspace root's `docs/...`; an explicit relative `project_root="packages/docs-mcp"` would compound the prefix into `packages/docs-mcp/packages/docs-mcp/...` (the symptom observed during 3.4.0 release prep). New `_resolve_workspace_root(start)` walks up looking for a `pyproject.toml` containing `[tool.uv.workspace]`; applied only on the CWD-default path, so explicit `project_root` and `DOCS_MCP_PROJECT_ROOT` are still trusted verbatim, and non-workspace projects fall back to the start dir unchanged. The defensive `.gitignore` entry `packages/*/packages/` shipped in 3.4.1 stays as belt-and-suspenders.
+
 ## [3.4.1] - 2026-04-27
 
 ### Fixed
