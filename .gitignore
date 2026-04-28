@@ -88,3 +88,7 @@ architecture-report*.png
 
 # Agent worktrees spawned by the Agent tool (full git clones — never commit)
 .claude/worktrees/
+
+# Defensive: catch generator project-root bugs that write a workspace member
+# inside itself (e.g. packages/docs-mcp/packages/docs-mcp/...).
+packages/*/packages/

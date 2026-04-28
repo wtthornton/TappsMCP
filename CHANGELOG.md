@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.1] - 2026-04-27
+
+### Fixed
+
+- **`feat(upgrade): honor user-deleted managed config files` (TAP-1021).** `tapps_upgrade` now respects user deletions of managed GitHub config files. Previously, `generate_all_ci_workflows` and `generate_all_copilot_config` were called unconditionally — a consumer who deleted `codeql-analysis.yml`, a Copilot agent profile, or an instruction file saw it reappear on every upgrade, making `gh workflow disable` the only durable opt-out. New `upgrade_mode: bool = False` parameter on all six writer functions in [github_ci.py](packages/tapps-mcp/src/tapps_mcp/pipeline/github_ci.py) and [github_copilot.py](packages/tapps-mcp/src/tapps_mcp/pipeline/github_copilot.py): when True and the target is missing, the writer logs a warning and returns `action="skipped (deleted by user)"` instead of recreating. Init keeps the default. Multi-file generators report `skipped_deleted: list[str]` in their result alongside the existing `files`/`action`/`count` shape so dry-run output stays parseable. Cherry-picked from a stale `fix/upgrade-honor-deleted-workflows` worktree (80 commits behind master) and rewritten against the current Apr 22 surface (`ada6c18` cleanup reduced workflows to just `codeql-analysis.yml`).
+
+### Internal
+
+- `.gitignore`: added `packages/*/packages/` to defensively catch generator project-root resolution bugs that write a workspace member inside itself (e.g. `packages/docs-mcp/packages/docs-mcp/...`).
+
 ## [3.4.0] - 2026-04-27
 
 ### Added
