@@ -1,10 +1,11 @@
-"""Tests for the interactive HTML viewer's motion layer (TAP-1037).
+"""Tests for the interactive HTML viewer's motion layer (TAP-1037 + TAP-1039).
 
 Covers the four ``motion`` values (``off``/``subtle``/``particles``/invalid)
 crossed with the two diagram-type sets: flow-direction (dependency,
 module_map, sequence, c4_container) and relationship-only (class_hierarchy,
 er_diagram, c4_context). Also asserts that the ``@media print`` block
-disables animations and that ``prefers-reduced-motion`` gates motion CSS.
+disables animations, ``prefers-reduced-motion`` gates motion CSS, and (for
+TAP-1039) the JS particle layer is present only for ``motion="particles"``.
 """
 
 from __future__ import annotations
@@ -12,6 +13,8 @@ from __future__ import annotations
 from docs_mcp.generators.interactive_html import (
     _MOTION_DASHARRAY,
     _MOTION_DURATION_S,
+    _PARTICLE_SPEED_UNITS_PER_S,
+    _PARTICLES_PER_EDGE,
     InteractiveHtmlGenerator,
 )
 
@@ -19,10 +22,21 @@ _FLOW_TYPES = ["dependency", "module_map", "sequence", "c4_container"]
 _RELATIONSHIP_ONLY_TYPES = ["class_hierarchy", "er_diagram", "c4_context"]
 _SAMPLE_DIAGRAM = [("Test Diagram", "graph TD\n  A --> B")]
 _KEYFRAMES_NAME = "tapps-marching-ants"
+_PARTICLE_SENTINEL = "tapps-particle"
 
 
 def _animation_present(html: str) -> bool:
     return _KEYFRAMES_NAME in html
+
+
+def _particle_js_present(html: str) -> bool:
+    """Particle JS block is uniquely identified by its module-level constants
+    being inlined into the script body."""
+    return (
+        _PARTICLE_SENTINEL in html
+        and "getPointAtLength" in html
+        and "requestAnimationFrame" in html
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +225,138 @@ class TestMotionDeterminism:
         b = gen.generate(
             _SAMPLE_DIAGRAM,
             motion="subtle",
+            diagram_types=_FLOW_TYPES,
+        )
+        assert a.content == b.content
+
+
+# ---------------------------------------------------------------------------
+# Particle JS layer (TAP-1039) — opt-in for motion="particles"
+# ---------------------------------------------------------------------------
+
+
+class TestParticleJsLayer:
+    """Particle JS is present only for ``motion="particles"``."""
+
+    def test_particles_emits_particle_js_for_flow_types(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="particles",
+            diagram_types=_FLOW_TYPES,
+        )
+        assert _particle_js_present(result.content)
+        # CSS marching-ants is also still emitted (particles is additive).
+        assert _animation_present(result.content)
+
+    def test_subtle_emits_no_particle_js(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="subtle",
+            diagram_types=_FLOW_TYPES,
+        )
+        assert not _particle_js_present(result.content)
+
+    def test_off_emits_no_particle_js(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="off",
+            diagram_types=_FLOW_TYPES,
+        )
+        assert not _particle_js_present(result.content)
+
+    def test_invalid_motion_emits_no_particle_js(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="bogus",
+            diagram_types=_FLOW_TYPES,
+        )
+        assert not _particle_js_present(result.content)
+
+    def test_particles_suppressed_for_relationship_only_types(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="particles",
+            diagram_types=_RELATIONSHIP_ONLY_TYPES,
+        )
+        # No CSS animation AND no particle JS for relationship-only diagrams.
+        assert not _animation_present(result.content)
+        assert not _particle_js_present(result.content)
+
+    def test_particles_per_edge_constant_inlined(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="particles",
+            diagram_types=_FLOW_TYPES,
+        )
+        assert _PARTICLES_PER_EDGE == 3
+        assert f"const PARTICLES_PER_EDGE = {_PARTICLES_PER_EDGE};" in result.content
+
+    def test_particle_speed_constant_inlined(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="particles",
+            diagram_types=_FLOW_TYPES,
+        )
+        assert f"const PARTICLE_SPEED = {_PARTICLE_SPEED_UNITS_PER_S};" in result.content
+
+    def test_particle_js_skips_under_reduced_motion(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="particles",
+            diagram_types=_FLOW_TYPES,
+        )
+        # The IIFE early-returns if matchMedia('(prefers-reduced-motion: reduce)') matches.
+        assert "prefers-reduced-motion: reduce" in result.content
+        assert "matchMedia" in result.content
+
+    def test_particle_js_uses_mutation_observer(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="particles",
+            diagram_types=_FLOW_TYPES,
+        )
+        # Mermaid re-render hook: MutationObserver on each .diagram-wrapper.
+        assert "MutationObserver" in result.content
+        assert ".diagram-wrapper" in result.content
+
+    def test_particle_js_no_random_or_clock_seeds(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        result = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="particles",
+            diagram_types=_FLOW_TYPES,
+        )
+        # Determinism guard: no Math.random / Date.now / performance.now()
+        # used as a seed in the particle JS body. (They may legitimately
+        # appear elsewhere in the page; we look only inside the IIFE.)
+        idx = result.content.find("(function() {")
+        assert idx != -1
+        end = result.content.find("})();", idx)
+        assert end != -1
+        body = result.content[idx:end]
+        assert "Math.random" not in body
+        assert "Date.now" not in body
+        assert "performance.now" not in body
+
+    def test_particles_two_runs_produce_identical_html(self) -> None:
+        gen = InteractiveHtmlGenerator()
+        a = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="particles",
+            diagram_types=_FLOW_TYPES,
+        )
+        b = gen.generate(
+            _SAMPLE_DIAGRAM,
+            motion="particles",
             diagram_types=_FLOW_TYPES,
         )
         assert a.content == b.content
