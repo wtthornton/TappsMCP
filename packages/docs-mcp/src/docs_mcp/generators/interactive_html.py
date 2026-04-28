@@ -25,6 +25,36 @@ class InteractiveHtmlResult(BaseModel):
 # Mermaid.js CDN URL (pinned version for stability)
 _MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
 
+# Motion configuration (deterministic — never derived from time/random/env).
+_VALID_MOTION_VALUES: frozenset[str] = frozenset({"off", "subtle", "particles"})
+_MOTION_DURATION_S: float = 1.2
+_MOTION_DASHARRAY: str = "4 8"
+_MOTION_DASHOFFSET_END: int = -12
+
+# Diagram-type gating: motion is only meaningful for flow-direction diagrams.
+_FLOW_DIAGRAM_TYPES: frozenset[str] = frozenset(
+    {"dependency", "module_map", "sequence", "c4_container"}
+)
+_RELATIONSHIP_ONLY_TYPES: frozenset[str] = frozenset(
+    {"class_hierarchy", "er_diagram", "c4_context"}
+)
+
+# Marching-ants CSS injected when motion is enabled. The animation is wrapped
+# in `@media (prefers-reduced-motion: no-preference)` so users with reduced-
+# motion preferences see a static diagram. Module-level constants keep the
+# CSS deterministic — never derive duration/dasharray from time or env.
+_MOTION_CSS = f"""\
+@media (prefers-reduced-motion: no-preference) {{
+    .edgePath path, .flowchart-link {{
+        stroke-dasharray: {_MOTION_DASHARRAY};
+        animation: tapps-marching-ants {_MOTION_DURATION_S}s linear infinite;
+    }}
+}}
+@keyframes tapps-marching-ants {{
+    to {{ stroke-dashoffset: {_MOTION_DASHOFFSET_END}; }}
+}}
+"""
+
 # Inline CSS for the interactive viewer
 _VIEWER_CSS = """\
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -76,6 +106,10 @@ body {
 @media print {
     .controls, .toc { display: none; }
     .diagram-section { break-inside: avoid; box-shadow: none; }
+    .edgePath path, .flowchart-link {
+        animation: none !important;
+        stroke-dasharray: none !important;
+    }
 }
 """
 
@@ -152,6 +186,8 @@ class InteractiveHtmlGenerator:
         title: str = "Architecture Diagrams",
         subtitle: str = "",
         theme: str = "default",
+        motion: str = "subtle",
+        diagram_types: list[str] | None = None,
     ) -> InteractiveHtmlResult:
         """Generate interactive HTML from Mermaid diagrams.
 
@@ -160,6 +196,17 @@ class InteractiveHtmlGenerator:
             title: Page title.
             subtitle: Page subtitle.
             theme: Mermaid theme (default, dark, forest, neutral).
+            motion: Motion intensity for edge animations.
+                ``"off"`` emits no animation CSS. ``"subtle"`` (default) adds
+                a CSS marching-ants effect on Mermaid edge paths via
+                ``stroke-dashoffset``. ``"particles"`` falls back to ``"subtle"``
+                in this generator (Phase 3 will add a JS particle layer).
+                All motion is gated by ``prefers-reduced-motion``.
+            diagram_types: Optional list of canonical diagram-type identifiers
+                (e.g. ``"dependency"``, ``"class_hierarchy"``) used to gate
+                motion. When every requested type is relationship-only
+                (``class_hierarchy``, ``er_diagram``, ``c4_context``), motion
+                CSS is suppressed entirely. ``None`` disables the gate.
 
         Returns:
             InteractiveHtmlResult with the self-contained HTML.
@@ -174,6 +221,8 @@ class InteractiveHtmlGenerator:
                 title=title,
             )
 
+        motion_css = _resolve_motion_css(motion, diagram_types)
+
         parts: list[str] = []
 
         # HTML head
@@ -183,7 +232,7 @@ class InteractiveHtmlGenerator:
         parts.append(f"<title>{_escape(title)}</title>")
         parts.append('<meta charset="utf-8">')
         parts.append('<meta name="viewport" content="width=device-width, initial-scale=1">')
-        parts.append(f"<style>{_VIEWER_CSS}</style>")
+        parts.append(f"<style>{_VIEWER_CSS}{motion_css}</style>")
         parts.append("</head>")
         parts.append("<body>")
 
@@ -246,3 +295,20 @@ def _escape(text: str) -> str:
     return (
         text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
+
+
+def _resolve_motion_css(motion: str, diagram_types: list[str] | None) -> str:
+    """Resolve which motion CSS block (if any) to inject into the page.
+
+    Returns the marching-ants CSS block when motion is enabled and at least
+    one requested diagram type carries direction-of-flow. Returns ``""``
+    when motion is off, the value is unrecognized, or every requested type
+    is relationship-only.
+    """
+    if motion not in _VALID_MOTION_VALUES or motion == "off":
+        return ""
+    if diagram_types is not None:
+        requested = {dt.strip() for dt in diagram_types if dt.strip()}
+        if requested and not (requested & _FLOW_DIAGRAM_TYPES):
+            return ""
+    return _MOTION_CSS
