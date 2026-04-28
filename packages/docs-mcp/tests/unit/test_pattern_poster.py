@@ -228,6 +228,130 @@ class TestPanelSvgTopologies:
 
 
 # ---------------------------------------------------------------------------
+# Motion (TAP-1038) — animateMotion on flow panels
+# ---------------------------------------------------------------------------
+
+
+class TestPanelMotion:
+    """``motion="subtle"`` adds path ids + ``<animateMotion>`` on flow panels.
+
+    Default ``motion="off"`` must emit no animateMotion. Relationship-
+    structural archetypes (``hexagonal``, ``monolith``, ``event_driven``,
+    ``microservice``) must never emit animateMotion regardless of motion.
+    """
+
+    def _svg(self, arch: str, *, motion: str = "off") -> str:
+        return ArchPatternPosterGenerator()._panel_svg(
+            arch, [], w=280, h=200, motion=motion
+        )
+
+    def test_layered_motion_subtle_emits_path_id_and_animatemotion(self) -> None:
+        svg = self._svg("layered", motion="subtle")
+        assert 'id="lyr-edge-0"' in svg
+        assert "<animateMotion" in svg
+        assert 'href="#lyr-edge-0"' in svg
+        # All three inter-band edges get particles.
+        assert svg.count("<animateMotion") == 3
+
+    def test_layered_motion_subtle_emits_no_line_edges(self) -> None:
+        svg = self._svg("layered", motion="subtle")
+        # The inter-band edges previously emitted as <line>; assert they
+        # are now <path id="lyr-edge-...">.
+        assert "<line" not in svg
+
+    def test_layered_motion_off_emits_no_animatemotion(self) -> None:
+        svg = self._svg("layered", motion="off")
+        assert "<animateMotion" not in svg
+        # But the path id is still there — only the particle is gated.
+        assert 'id="lyr-edge-0"' in svg
+
+    def test_pipeline_motion_subtle_emits_path_id_and_animatemotion(self) -> None:
+        svg = self._svg("pipeline", motion="subtle")
+        assert 'id="pipe-edge-0"' in svg
+        assert "<animateMotion" in svg
+        # Four inter-stage edges get particles.
+        assert svg.count("<animateMotion") == 4
+
+    def test_pipeline_motion_off_emits_no_animatemotion(self) -> None:
+        svg = self._svg("pipeline", motion="off")
+        assert "<animateMotion" not in svg
+        assert 'id="pipe-edge-0"' in svg
+
+    def test_pipeline_dur_is_module_constant(self) -> None:
+        from docs_mcp.generators.pattern_poster import _ANIMATE_MOTION_DUR_S
+
+        svg = self._svg("pipeline", motion="subtle")
+        assert f'dur="{_ANIMATE_MOTION_DUR_S}s"' in svg
+
+    def test_hexagonal_never_emits_animatemotion(self) -> None:
+        svg = self._svg("hexagonal", motion="subtle")
+        assert "<animateMotion" not in svg
+
+    def test_monolith_never_emits_animatemotion(self) -> None:
+        svg = self._svg("monolith", motion="subtle")
+        assert "<animateMotion" not in svg
+
+    def test_event_driven_never_emits_animatemotion(self) -> None:
+        svg = self._svg("event_driven", motion="subtle")
+        assert "<animateMotion" not in svg
+
+    def test_microservice_never_emits_animatemotion(self) -> None:
+        svg = self._svg("microservice", motion="subtle")
+        assert "<animateMotion" not in svg
+
+    def test_particles_treated_as_subtle_for_layered(self) -> None:
+        svg = self._svg("layered", motion="particles")
+        assert "<animateMotion" in svg
+
+    def test_invalid_motion_emits_no_animatemotion(self) -> None:
+        svg = self._svg("layered", motion="bogus")
+        assert "<animateMotion" not in svg
+
+    def test_generate_single_default_off_emits_no_animatemotion(self) -> None:
+        gen = ArchPatternPosterGenerator()
+        html = gen.generate_single([], _mock_result("layered", 0.9))
+        assert "<animateMotion" not in html
+
+    def test_generate_single_motion_subtle_emits_animatemotion(self) -> None:
+        gen = ArchPatternPosterGenerator()
+        html = gen.generate_single(
+            [], _mock_result("layered", 0.9), motion="subtle"
+        )
+        assert "<animateMotion" in html
+
+    def test_reduced_motion_css_contains_smil_pause_hook(self) -> None:
+        gen = ArchPatternPosterGenerator()
+        html = gen.generate_single(
+            [], _mock_result("layered", 0.9), motion="subtle"
+        )
+        # Find the @media (prefers-reduced-motion: reduce) block. The body
+        # must mention the SMIL host class so reduced-motion users see no
+        # particle.
+        idx = html.find("prefers-reduced-motion: reduce")
+        assert idx != -1
+        block_start = html.find("{", idx)
+        depth = 0
+        end = -1
+        for i in range(block_start, len(html)):
+            ch = html[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        assert end > block_start
+        block = html[block_start:end]
+        assert "anim-particle" in block
+
+    def test_motion_subtle_two_runs_produce_identical_svg(self) -> None:
+        a = self._svg("layered", motion="subtle")
+        b = self._svg("layered", motion="subtle")
+        assert a == b
+
+
+# ---------------------------------------------------------------------------
 # DiagramGenerator integration
 # ---------------------------------------------------------------------------
 

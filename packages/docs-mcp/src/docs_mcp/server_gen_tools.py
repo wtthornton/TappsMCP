@@ -974,6 +974,7 @@ async def docs_generate_architecture(
     subtitle: str = "",
     output_path: str = "",
     project_root: str = "",
+    motion: str = "off",
 ) -> dict[str, Any]:
     """Generate a comprehensive, self-contained HTML architecture report.
 
@@ -995,6 +996,12 @@ async def docs_generate_architecture(
         output_path: File path to write the HTML report to. If empty, content
             is returned in the response without writing to disk.
         project_root: Override project root path (default: configured root).
+        motion: Motion intensity for SVG flow diagrams. ``"off"`` (default)
+            keeps the printable report static — important for PDF export.
+            ``"subtle"`` / ``"particles"`` add SVG-native ``<animateMotion>``
+            particles tracing each dependency-flow edge and each pipeline /
+            layered pattern-panel edge. All motion is gated by
+            ``prefers-reduced-motion``.
     """
     _record_call("docs_generate_architecture")
     start = time.perf_counter_ns()
@@ -1017,6 +1024,7 @@ async def docs_generate_architecture(
             root,
             title=title,
             subtitle=subtitle,
+            motion=motion,
         )
     except Exception as exc:
         return error_response(
