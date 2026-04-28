@@ -31,6 +31,15 @@ _MOTION_DURATION_S: float = 1.2
 _MOTION_DASHARRAY: str = "4 8"
 _MOTION_DASHOFFSET_END: int = -12
 
+# Particle-layer constants for motion="particles". All values are deterministic
+# module-level constants — never derive from `Date.now()`, `Math.random()`,
+# or any wall-clock value. Particle phase is staggered by index, not random.
+_PARTICLES_PER_EDGE: int = 3
+_PARTICLE_SPEED_UNITS_PER_S: float = 60.0
+_PARTICLE_RADIUS: int = 2
+_PARTICLE_FILL: str = "#fafafa"
+_PARTICLE_CLASS: str = "tapps-particle"
+
 # Diagram-type gating: motion is only meaningful for flow-direction diagrams.
 _FLOW_DIAGRAM_TYPES: frozenset[str] = frozenset(
     {"dependency", "module_map", "sequence", "c4_container"}
@@ -161,6 +170,73 @@ document.getElementById('zoom-reset')?.addEventListener('click', () => {
 });
 """
 
+# Opt-in JS particle layer for motion="particles". Walks every Mermaid
+# `.edgePath path` element after render, calls `getTotalLength()`, then
+# spawns N=`_PARTICLES_PER_EDGE` particles per edge that advance via
+# `requestAnimationFrame`. Skipped entirely when the user prefers reduced
+# motion. A `MutationObserver` on each diagram wrapper re-spawns particles
+# when Mermaid re-renders the SVG. All speed/count values are constants.
+_PARTICLE_JS = (
+    "(function() {\n"
+    "    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {\n"
+    "        return;\n"
+    "    }\n"
+    f"    const PARTICLES_PER_EDGE = {_PARTICLES_PER_EDGE};\n"
+    f"    const PARTICLE_SPEED = {_PARTICLE_SPEED_UNITS_PER_S};\n"
+    f"    const PARTICLE_RADIUS = {_PARTICLE_RADIUS};\n"
+    f"    const PARTICLE_FILL = '{_PARTICLE_FILL}';\n"
+    f"    const PARTICLE_CLASS = '{_PARTICLE_CLASS}';\n"
+    "    const SVG_NS = 'http://www.w3.org/2000/svg';\n"
+    "    function spawnParticles(svg) {\n"
+    "        svg.querySelectorAll('.' + PARTICLE_CLASS).forEach(p => p.remove());\n"
+    "        const edges = svg.querySelectorAll('.edgePath path, .flowchart-link');\n"
+    "        const states = [];\n"
+    "        edges.forEach(path => {\n"
+    "            let length;\n"
+    "            try { length = path.getTotalLength(); } catch (e) { return; }\n"
+    "            if (!length) return;\n"
+    "            for (let i = 0; i < PARTICLES_PER_EDGE; i++) {\n"
+    "                const c = document.createElementNS(SVG_NS, 'circle');\n"
+    "                c.setAttribute('r', PARTICLE_RADIUS);\n"
+    "                c.setAttribute('fill', PARTICLE_FILL);\n"
+    "                c.classList.add(PARTICLE_CLASS);\n"
+    "                path.parentNode.appendChild(c);\n"
+    "                states.push({\n"
+    "                    circle: c,\n"
+    "                    path: path,\n"
+    "                    length: length,\n"
+    "                    phase: i / PARTICLES_PER_EDGE,\n"
+    "                });\n"
+    "            }\n"
+    "        });\n"
+    "        if (states.length === 0) return;\n"
+    "        let last = null;\n"
+    "        function step(now) {\n"
+    "            if (last === null) { last = now; }\n"
+    "            const dt = (now - last) / 1000;\n"
+    "            last = now;\n"
+    "            states.forEach(s => {\n"
+    "                s.phase = (s.phase + dt * PARTICLE_SPEED / s.length) % 1;\n"
+    "                const pt = s.path.getPointAtLength(s.phase * s.length);\n"
+    "                s.circle.setAttribute('cx', pt.x);\n"
+    "                s.circle.setAttribute('cy', pt.y);\n"
+    "            });\n"
+    "            requestAnimationFrame(step);\n"
+    "        }\n"
+    "        requestAnimationFrame(step);\n"
+    "    }\n"
+    "    document.querySelectorAll('.diagram-wrapper').forEach(wrapper => {\n"
+    "        const svg = wrapper.querySelector('svg');\n"
+    "        if (svg) { spawnParticles(svg); }\n"
+    "        const observer = new MutationObserver(() => {\n"
+    "            const newSvg = wrapper.querySelector('svg');\n"
+    "            if (newSvg) { spawnParticles(newSvg); }\n"
+    "        });\n"
+    "        observer.observe(wrapper, { childList: true, subtree: true });\n"
+    "    });\n"
+    "})();\n"
+)
+
 
 class InteractiveHtmlGenerator:
     """Generates self-contained interactive HTML with Mermaid.js diagrams.
@@ -197,11 +273,15 @@ class InteractiveHtmlGenerator:
             subtitle: Page subtitle.
             theme: Mermaid theme (default, dark, forest, neutral).
             motion: Motion intensity for edge animations.
-                ``"off"`` emits no animation CSS. ``"subtle"`` (default) adds
-                a CSS marching-ants effect on Mermaid edge paths via
-                ``stroke-dashoffset``. ``"particles"`` falls back to ``"subtle"``
-                in this generator (Phase 3 will add a JS particle layer).
-                All motion is gated by ``prefers-reduced-motion``.
+                ``"off"`` emits no animation CSS or JS. ``"subtle"`` (default)
+                adds a CSS marching-ants effect on Mermaid edge paths via
+                ``stroke-dashoffset``. ``"particles"`` keeps the marching-ants
+                CSS and additionally injects a JS particle layer that walks
+                each ``.edgePath path``, calls ``getTotalLength()``, and
+                advances ``_PARTICLES_PER_EDGE`` particles per edge via
+                ``requestAnimationFrame``. The particle setup is skipped
+                entirely when the browser reports
+                ``prefers-reduced-motion: reduce``.
             diagram_types: Optional list of canonical diagram-type identifiers
                 (e.g. ``"dependency"``, ``"class_hierarchy"``) used to gate
                 motion. When every requested type is relationship-only
@@ -222,6 +302,7 @@ class InteractiveHtmlGenerator:
             )
 
         motion_css = _resolve_motion_css(motion, diagram_types)
+        particle_js = _resolve_particle_js(motion, diagram_types)
 
         parts: list[str] = []
 
@@ -278,6 +359,12 @@ class InteractiveHtmlGenerator:
         js = _VIEWER_JS % {"mermaid_cdn": _MERMAID_CDN}
         parts.append(f'<script type="module">{js}</script>')
 
+        # Opt-in particle layer for motion="particles". Plain script (no
+        # imports) so it runs in any browser; the IIFE handles its own
+        # reduced-motion gate.
+        if particle_js:
+            parts.append(f"<script>{particle_js}</script>")
+
         parts.append("</body>")
         parts.append("</html>")
 
@@ -312,3 +399,19 @@ def _resolve_motion_css(motion: str, diagram_types: list[str] | None) -> str:
         if requested and not (requested & _FLOW_DIAGRAM_TYPES):
             return ""
     return _MOTION_CSS
+
+
+def _resolve_particle_js(motion: str, diagram_types: list[str] | None) -> str:
+    """Return the particle-layer JS when ``motion == "particles"``.
+
+    Returns ``""`` for any other motion value, or when every requested
+    diagram type is relationship-only (gating mirrors ``_resolve_motion_css``
+    so the JS never runs on a page that has no flow edges to trace).
+    """
+    if motion != "particles":
+        return ""
+    if diagram_types is not None:
+        requested = {dt.strip() for dt in diagram_types if dt.strip()}
+        if requested and not (requested & _FLOW_DIAGRAM_TYPES):
+            return ""
+    return _PARTICLE_JS
