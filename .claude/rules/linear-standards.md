@@ -27,6 +27,16 @@ All Linear writes in this project — epic creation, story creation, issue updat
 4. Validate before push.
 5. `save_issue(id=..., description=...)`; invalidate cache.
 
+### Reads — always cache-first (TAP-967)
+
+Before any `mcp__plugin_linear_linear__list_issues` call:
+
+1. **Single-issue lookup:** if you have an ID, `mcp__plugin_linear_linear__get_issue(id=...)` — do NOT list-and-filter.
+2. **Multi-issue read:** call `mcp__tapps-mcp__tapps_linear_snapshot_get(team, project, state)` first. On `cached=true`, use `data.issues` — Linear is not called.
+3. **On cache miss:** call `list_issues` with NARROW filters (`team`, `project`, `state`, `includeArchived=false`). Never call `list_issues({})` or with only a `team` and `limit:250` — those broad scrolls are the highest-cost antipattern (see CLAUDE.md "Linear Issue Reads — Anti-patterns").
+4. **Always populate the cache** after a miss: `tapps_linear_snapshot_put(team, project, issues_json=..., state, ...)` with the same key dimensions.
+5. **No status-bucket fan-out.** A 6-call kickoff (`Backlog/p1` … `Backlog/p4` + `In Progress` + `Todo`) collapses into one `snapshot_get(state="open")` plus an in-memory filter. The 5 min open-state TTL means subsequent kickoffs land as cache hits.
+
 ## Assignee defaults
 
 All Linear writes from this project — epics, stories, subtasks, triage updates — default to the **agent** as assignee, never a human (see `autonomy.md`):

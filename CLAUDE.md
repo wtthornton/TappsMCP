@@ -168,6 +168,15 @@ Linear access in this workspace is OAuth via the `mcp__plugin_linear_linear__*` 
 
 TTLs are state-bucketed: 5 min for open/in-progress (backlog/unstarted/started/triage), 1 h for closed (completed/canceled). No API key configuration required.
 
+#### Anti-patterns to avoid (TAP-967 audit, 30-day window)
+
+A 30-day session-log audit found 5,368 `list_issues` calls with only 0.26% cache adoption — most callers ignore the rule above. Specific patterns to never write:
+
+- **The 6-poll kickoff (~70% of all traffic):** `list_issues × 6` per session, one call per `state × priority` bucket (`Backlog/p1`, `Backlog/p2`, …, `In Progress`, `Todo`). Replace with **one** `tapps_linear_snapshot_get(team, project, state="open")` + in-memory filter on `state.type` and `priority`. The open-state TTL is 5 min, so the next session warms instantly.
+- **The status-bucket sweep:** three sequential calls for `state="backlog"` / `"unstarted"` / `"started"`. Same fix — one snapshot_get on `state="open"`, filter in memory.
+- **The unfiltered scroll (`list_issues({})` or `{team:"TAP", limit:250}`):** never write. If you need every story under an epic, use `parentId=<TAP-ID>`. If you need recent activity, use `updatedAt=-P7D` plus a state filter. The plugin's flat parameters (`parentId`, `state`, `assignee`, `label`, `priority`) cover almost every real query — there is no need to drop into raw GraphQL filter shapes like `{filter:{parent:{id:{eq:...}}}}`.
+- **The re-fetch loop:** firing the same narrow query 5–12 times in one assistant turn with no intervening writes. The cache is the answer here too — second call lands as a hit.
+
 ## Memory System
 
 `tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 5000 entries per project (`TAPPS_BRAIN_MAX_ENTRIES`; auto-evicts at cap, no warning — monitor via `brain_status()`). Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
