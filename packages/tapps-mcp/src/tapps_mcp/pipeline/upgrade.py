@@ -1269,7 +1269,9 @@ def _run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
     try:
         from tapps_mcp.pipeline.github_ci import generate_all_ci_workflows
 
-        result["components"]["ci_workflows"] = generate_all_ci_workflows(project_root)
+        result["components"]["ci_workflows"] = generate_all_ci_workflows(
+            project_root, upgrade_mode=True
+        )
     except (OSError, ValueError) as exc:
         log.exception("ci_workflows_failed")
         result["errors"].append(f"CI workflows: {exc}")
@@ -1277,7 +1279,9 @@ def _run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
     try:
         from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
 
-        result["components"]["github_copilot"] = generate_all_copilot_config(project_root)
+        result["components"]["github_copilot"] = generate_all_copilot_config(
+            project_root, upgrade_mode=True
+        )
     except (OSError, ValueError) as exc:
         log.exception("copilot_config_failed")
         result["errors"].append(f"Copilot config: {exc}")

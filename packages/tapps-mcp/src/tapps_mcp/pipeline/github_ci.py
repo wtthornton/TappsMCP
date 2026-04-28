@@ -10,8 +10,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 if TYPE_CHECKING:
     from pathlib import Path
+
+logger = structlog.get_logger(__name__)
 
 
 MANAGED_WORKFLOW_FILES: tuple[str, ...] = ("codeql-analysis.yml",)
@@ -81,26 +85,66 @@ jobs:
 # ---------------------------------------------------------------------------
 
 
-def generate_codeql_workflow(project_root: Path) -> dict[str, Any]:
-    """Generate ``.github/workflows/codeql-analysis.yml``.
+def _write_workflow(
+    project_root: Path,
+    filename: str,
+    content: str,
+    *,
+    upgrade_mode: bool,
+) -> dict[str, Any]:
+    """Write a workflow file under ``.github/workflows/``.
 
-    Returns a summary dict with ``file`` and ``action``.
+    In ``upgrade_mode``, a target that is missing from disk is treated as a
+    deliberate user deletion: the file is not recreated and a warning is
+    logged. In init mode (``upgrade_mode=False``, the default), the file is
+    always written.
     """
     wf_dir = project_root / ".github" / "workflows"
+    target = wf_dir / filename
+    rel = str(target.relative_to(project_root))
+    if upgrade_mode and not target.exists():
+        logger.warning("workflow_deleted_by_user", file=rel)
+        return {"file": rel, "action": "skipped (deleted by user)"}
     wf_dir.mkdir(parents=True, exist_ok=True)
-    target = wf_dir / "codeql-analysis.yml"
-    target.write_text(_CODEQL_WORKFLOW, encoding="utf-8")
-    return {"file": str(target.relative_to(project_root)), "action": "created"}
+    existed = target.exists()
+    target.write_text(content, encoding="utf-8")
+    return {"file": rel, "action": "updated" if existed else "created"}
 
 
-def generate_all_ci_workflows(project_root: Path) -> dict[str, Any]:
+def generate_codeql_workflow(
+    project_root: Path,
+    *,
+    upgrade_mode: bool = False,
+) -> dict[str, Any]:
+    """Generate ``.github/workflows/codeql-analysis.yml``.
+
+    Returns a summary dict with ``file`` and ``action``. When
+    ``upgrade_mode`` is True and the target file is missing, the user is
+    assumed to have deleted it deliberately -- the file is not recreated.
+    """
+    return _write_workflow(
+        project_root,
+        "codeql-analysis.yml",
+        _CODEQL_WORKFLOW,
+        upgrade_mode=upgrade_mode,
+    )
+
+
+def generate_all_ci_workflows(
+    project_root: Path,
+    *,
+    upgrade_mode: bool = False,
+) -> dict[str, Any]:
     """Generate all GitHub Actions CI workflows.
 
     Emits only ``codeql-analysis.yml``. All other quality work runs locally
-    via the TappsMCP pipeline rather than in GitHub Actions.
+    via the TappsMCP pipeline rather than in GitHub Actions. ``upgrade_mode``
+    is forwarded so a user-deleted workflow is not silently re-added.
     """
     results: dict[str, Any] = {}
-    results["codeql_workflow"] = generate_codeql_workflow(project_root)
+    results["codeql_workflow"] = generate_codeql_workflow(
+        project_root, upgrade_mode=upgrade_mode
+    )
     results["total_workflows"] = 1
     results["success"] = True
     return results

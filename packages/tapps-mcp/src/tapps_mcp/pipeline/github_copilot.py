@@ -9,11 +9,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 from tapps_mcp import __version__
 from tapps_mcp.pipeline.platform_generators import _add_version_marker, _check_version_marker
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -201,125 +205,182 @@ the pipeline below.
 # ---------------------------------------------------------------------------
 
 
-def generate_agent_profiles(project_root: Path) -> dict[str, Any]:
+def generate_agent_profiles(
+    project_root: Path,
+    *,
+    upgrade_mode: bool = False,
+) -> dict[str, Any]:
     """Generate custom Copilot agent profiles in ``.github/agents/``.
 
     Creates ``tapps-quality.md`` and ``tapps-researcher.md`` with
-    YAML frontmatter specifying tools and MCP server config.
+    YAML frontmatter specifying tools and MCP server config. When
+    ``upgrade_mode`` is True, profiles missing from disk are treated as
+    user deletions and are not recreated.
 
     Returns a summary dict with ``files`` and ``action``.
     """
     agents_dir = project_root / ".github" / "agents"
-    agents_dir.mkdir(parents=True, exist_ok=True)
 
     files_written: list[str] = []
     skipped = 0
+    skipped_deleted: list[str] = []
     profiles = {
         "tapps-quality.md": _QUALITY_AGENT_PROFILE,
         "tapps-researcher.md": _RESEARCHER_AGENT_PROFILE,
     }
 
+    if any((agents_dir / f).exists() for f in profiles) or not upgrade_mode:
+        agents_dir.mkdir(parents=True, exist_ok=True)
+
     for filename, content in profiles.items():
         target = agents_dir / filename
+        if upgrade_mode and not target.exists():
+            rel = str(target.relative_to(project_root))
+            logger.warning("agent_profile_deleted_by_user", file=rel)
+            skipped_deleted.append(rel)
+            continue
         if _check_version_marker(target) == __version__:
             skipped += 1
             continue
         target.write_text(_add_version_marker(content), encoding="utf-8")
         files_written.append(str(target.relative_to(project_root)))
 
-    if skipped == len(profiles) and not files_written:
+    if skipped == len(profiles) and not files_written and not skipped_deleted:
         return {
             "files": [],
             "action": "up-to-date",
             "count": 0,
         }
 
-    action = "created" if skipped == 0 else "updated"
-    return {"files": files_written, "action": action, "count": len(files_written)}
+    action = "created" if skipped == 0 and not skipped_deleted else "updated"
+    result: dict[str, Any] = {
+        "files": files_written,
+        "action": action,
+        "count": len(files_written),
+    }
+    if skipped_deleted:
+        result["skipped_deleted"] = skipped_deleted
+    return result
 
 
-def generate_path_scoped_instructions(project_root: Path) -> dict[str, Any]:
+def generate_path_scoped_instructions(
+    project_root: Path,
+    *,
+    upgrade_mode: bool = False,
+) -> dict[str, Any]:
     """Generate path-scoped instruction files in ``.github/instructions/``.
 
     Creates ``quality.instructions.md``, ``security.instructions.md``,
     and ``testing.instructions.md`` with YAML frontmatter specifying
-    ``applyTo`` glob patterns.
+    ``applyTo`` glob patterns. When ``upgrade_mode`` is True, instruction
+    files missing from disk are treated as user deletions and are not
+    recreated.
 
     Returns a summary dict with ``files`` and ``action``.
     """
     instructions_dir = project_root / ".github" / "instructions"
-    instructions_dir.mkdir(parents=True, exist_ok=True)
 
     files_written: list[str] = []
     skipped = 0
+    skipped_deleted: list[str] = []
     instructions = {
         "quality.instructions.md": _QUALITY_INSTRUCTIONS,
         "security.instructions.md": _SECURITY_INSTRUCTIONS,
         "testing.instructions.md": _TESTING_INSTRUCTIONS,
     }
 
+    if any((instructions_dir / f).exists() for f in instructions) or not upgrade_mode:
+        instructions_dir.mkdir(parents=True, exist_ok=True)
+
     for filename, content in instructions.items():
         target = instructions_dir / filename
+        if upgrade_mode and not target.exists():
+            rel = str(target.relative_to(project_root))
+            logger.warning("instructions_file_deleted_by_user", file=rel)
+            skipped_deleted.append(rel)
+            continue
         if _check_version_marker(target) == __version__:
             skipped += 1
             continue
         target.write_text(_add_version_marker(content), encoding="utf-8")
         files_written.append(str(target.relative_to(project_root)))
 
-    if skipped == len(instructions) and not files_written:
+    if skipped == len(instructions) and not files_written and not skipped_deleted:
         return {
             "files": [],
             "action": "up-to-date",
             "count": 0,
         }
 
-    action = "created" if skipped == 0 else "updated"
-    return {"files": files_written, "action": action, "count": len(files_written)}
+    action = "created" if skipped == 0 and not skipped_deleted else "updated"
+    result: dict[str, Any] = {
+        "files": files_written,
+        "action": action,
+        "count": len(files_written),
+    }
+    if skipped_deleted:
+        result["skipped_deleted"] = skipped_deleted
+    return result
 
 
-def generate_enhanced_copilot_instructions(project_root: Path) -> dict[str, Any]:
+def generate_enhanced_copilot_instructions(
+    project_root: Path,
+    *,
+    upgrade_mode: bool = False,
+) -> dict[str, Any]:
     """Generate enhanced ``.github/copilot-instructions.md``.
 
     Replaces the basic instructions with ones that include the full
-    TappsMCP pipeline stages and concrete tool call sequences.
+    TappsMCP pipeline stages and concrete tool call sequences. When
+    ``upgrade_mode`` is True and the target is missing, the user is
+    assumed to have deleted it deliberately -- the file is not recreated.
 
     Returns a summary dict with ``file`` and ``action``.
     """
     github_dir = project_root / ".github"
-    github_dir.mkdir(parents=True, exist_ok=True)
     target = github_dir / "copilot-instructions.md"
+    rel = str(target.relative_to(project_root))
 
+    if upgrade_mode and not target.exists():
+        logger.warning("copilot_instructions_deleted_by_user", file=rel)
+        return {"file": rel, "action": "skipped (deleted by user)"}
+
+    github_dir.mkdir(parents=True, exist_ok=True)
     existing_version = _check_version_marker(target)
     if existing_version == __version__:
-        return {
-            "file": str(target.relative_to(project_root)),
-            "action": "up-to-date",
-        }
+        return {"file": rel, "action": "up-to-date"}
 
     action = "updated" if target.exists() else "created"
     target.write_text(_add_version_marker(_ENHANCED_COPILOT_INSTRUCTIONS), encoding="utf-8")
-    return {
-        "file": str(target.relative_to(project_root)),
-        "action": action,
-    }
+    return {"file": rel, "action": action}
 
 
-def generate_all_copilot_config(project_root: Path) -> dict[str, Any]:
+def generate_all_copilot_config(
+    project_root: Path,
+    *,
+    upgrade_mode: bool = False,
+) -> dict[str, Any]:
     """Generate all Copilot agent configuration files.
 
     Convenience function that calls all individual generators. The agentic
     PR-review workflow was removed — quality work runs locally rather than
-    in GitHub Actions.
+    in GitHub Actions. ``upgrade_mode`` is forwarded so user-deleted config
+    files are not silently re-added.
     """
     results: dict[str, Any] = {}
-    results["agent_profiles"] = generate_agent_profiles(project_root)
-    results["path_instructions"] = generate_path_scoped_instructions(project_root)
-    results["copilot_instructions"] = generate_enhanced_copilot_instructions(project_root)
+    results["agent_profiles"] = generate_agent_profiles(project_root, upgrade_mode=upgrade_mode)
+    results["path_instructions"] = generate_path_scoped_instructions(
+        project_root, upgrade_mode=upgrade_mode
+    )
+    results["copilot_instructions"] = generate_enhanced_copilot_instructions(
+        project_root, upgrade_mode=upgrade_mode
+    )
 
+    copilot_action = results["copilot_instructions"]["action"]
     total_files = (
         results["agent_profiles"]["count"]
         + results["path_instructions"]["count"]
-        + 1  # copilot-instructions.md
+        + (0 if copilot_action == "skipped (deleted by user)" else 1)
     )
     results["total_files"] = total_files
     results["success"] = True
