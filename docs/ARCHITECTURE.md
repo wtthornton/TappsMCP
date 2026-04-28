@@ -35,6 +35,22 @@ The MCP server is split across eight files (server.py + 7 modules) sharing the s
 - **`server_resources.py`** -- MCP resources (knowledge, config) and prompts (pipeline, workflow)
 - **`server_helpers.py`** -- Shared utilities: `emit_ctx_info()`, response builders, singleton caches
 
+## Mode-scoped server registration (TAP-1084)
+
+`tapps-mcp` exposes its 26 tools through a single binary registered three times in `.mcp.json` under different names, each scoped to a tool preset. The MCP client sees these as three "servers"; under the hood it's one `FastMCP("TappsMCP")` instance whose `_register_tool_modules()` filters by the `TAPPS_MCP_TOOL_PRESET` env var that the CLI sets from `--mode`.
+
+| `.mcp.json` name | CLI invocation | Preset | Tool count | Purpose |
+|---|---|---|---|---|
+| `tapps-mcp` | `serve` (default `--mode all`) | full | 26 | Canonical entry — backward-compatible, all tools registered |
+| `tapps-quality` | `serve --mode quality` | `TAPPS_TOOL_PRESET_QUALITY` | 14 | Coding-session tools only (scoring, gate, security, validate, memory, lookup_docs); reduces tool-list overhead during edit-loop work |
+| `tapps-admin` | `serve --mode admin` | `TAPPS_TOOL_PRESET_ADMIN` | 12 | Setup/troubleshooting tools (init, upgrade, doctor, dashboard, stats, decompose) |
+
+**Key contract**: identical tool names across servers refer to identical implementations — there is no semantic split between `mcp__tapps-mcp__tapps_lookup_docs` and `mcp__tapps-quality__tapps_lookup_docs`. The mode pattern is purely about which tools the client sees in its tool list, not what those tools do. Calling either name routes to the same handler.
+
+**For agent prompts**: prefer the canonical `mcp__tapps-mcp__*` prefix in hardcoded prompts to maximize portability — projects that register only `tapps-mcp` (and not the scoped aliases) will still resolve those calls. Hooks and skills installed by `tapps_init` follow this convention.
+
+The same pattern applies to `docs-mcp` (`--mode check` / `--mode gen`) registered under `docs-mcp-check` / `docs-mcp-gen` aliases.
+
 ## Module map (tapps-mcp)
 
 ```
