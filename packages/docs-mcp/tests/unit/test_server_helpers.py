@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from docs_mcp.server_helpers import error_response, success_response
+from pathlib import Path
+
+import pytest
+
+from docs_mcp.server_helpers import error_response, finalize_output, success_response
 
 
 class TestSuccessResponse:
@@ -102,3 +106,44 @@ class TestErrorResponseExtra:
 
         result = error_response("test_tool", "CODE", "msg")
         assert set(result["error"].keys()) == {"code", "message"}
+
+
+class TestFinalizeOutputRelativeRoot:
+    """TAP-1079: finalize_output must not crash when root is a relative Path.
+
+    Pathlib's ``Path.relative_to()`` raises ``ValueError: '/abs' is not in
+    the subpath of '.'`` when one path is absolute and the other is
+    relative. Before the fix, server_helpers.finalize_output passed the raw
+    (possibly relative) ``root`` to ``relative_to()``, breaking every
+    docs_generate_* tool whose project_root resolved to a relative Path.
+    """
+
+    @pytest.mark.asyncio
+    async def test_relative_root_writes_successfully(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        result = await finalize_output(
+            "test_tool",
+            "# Test content\n",
+            "subdir/test.md",
+            Path("."),
+        )
+
+        assert result.get("success") is not False, result
+        assert "written_to" in result
+        assert (tmp_path / "subdir" / "test.md").exists()
+
+    @pytest.mark.asyncio
+    async def test_absolute_root_still_writes(self, tmp_path: Path) -> None:
+        result = await finalize_output(
+            "test_tool",
+            "# Test content\n",
+            "subdir/test.md",
+            tmp_path,
+        )
+
+        assert result.get("success") is not False, result
+        assert "written_to" in result
+        assert (tmp_path / "subdir" / "test.md").exists()

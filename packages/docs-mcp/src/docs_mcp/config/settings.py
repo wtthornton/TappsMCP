@@ -339,8 +339,12 @@ def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
 
     result = DocsMCPSettings(**yaml_data)
 
-    # Expand env vars / ~ in project_root and output_dir after construction
-    result.project_root = _expand_path(str(result.project_root))
+    # Expand env vars / ~ in project_root and output_dir after construction.
+    # Resolve project_root to absolute (TAP-1079): a relative root like
+    # Path('.') breaks downstream Path.relative_to() calls with
+    # "is not in the subpath of '.'" when the writer's resolved path is
+    # absolute.
+    result.project_root = _expand_path(str(result.project_root)).resolve()
 
     expanded_output = _expand_path(result.output_dir)
     result.output_dir = str(expanded_output)

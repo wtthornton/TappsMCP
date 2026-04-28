@@ -214,6 +214,23 @@ class TestEnvVarResolution:
             result = load_docs_settings(project_root=Path("${MY_ROOT}/real"))
         assert result.project_root == project_dir
 
+    def test_relative_project_root_resolves_to_absolute(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TAP-1079: relative project_root (e.g. '.') must be resolved.
+
+        Before the fix, a relative project_root flowed through to callers
+        that called ``write_path.relative_to(root)``, raising
+        ``ValueError: '/abs' is not in the subpath of '.'``.
+        """
+        monkeypatch.chdir(tmp_path)
+        _reset_docs_settings_cache()
+
+        result = load_docs_settings(project_root=Path("."))
+
+        assert result.project_root.is_absolute()
+        assert result.project_root == tmp_path.resolve()
+
 
 class TestResolveWorkspaceRoot:
     """TAP-1033: walk-up to uv-workspace root from CWD."""

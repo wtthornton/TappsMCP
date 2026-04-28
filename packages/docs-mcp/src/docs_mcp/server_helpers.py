@@ -253,7 +253,13 @@ async def finalize_output(
             write_path = validator.validate_write_path(output_path)
             write_path.parent.mkdir(parents=True, exist_ok=True)
             await asyncio.to_thread(write_path.write_text, content, encoding="utf-8")
-            fragment["written_to"] = str(write_path.relative_to(root)).replace("\\", "/")
+            # Use validator.project_root (always resolved) rather than the
+            # raw root parameter (which may be a relative Path). TAP-1079:
+            # passing a relative root crashes Path.relative_to() with
+            # "is not in the subpath of '.'".
+            fragment["written_to"] = str(
+                write_path.relative_to(validator.project_root)
+            ).replace("\\", "/")
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(tool_name, "WRITE_ERROR", f"Failed to write: {exc}")
     elif len(content) < _INLINE_THRESHOLD:
