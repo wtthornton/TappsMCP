@@ -106,6 +106,19 @@ _BADGE_FG: dict[str, str] = {
 _W = 280  # panel width (SVG units)
 _H = 200  # panel height (SVG units)
 
+# ---------------------------------------------------------------------------
+# Motion configuration (deterministic — never derived from time/random/env).
+# Used by the _svg_layered and _svg_pipeline flow panels when motion is
+# enabled by the caller. Relationship-structural panels (hexagonal,
+# monolith, event_driven, microservice) never emit animateMotion.
+# ---------------------------------------------------------------------------
+
+_VALID_MOTION_VALUES: frozenset[str] = frozenset({"off", "subtle", "particles"})
+_ANIMATE_MOTION_DUR_S: float = 2.4
+_ANIMATE_MOTION_RADIUS: int = 3
+_ANIMATE_MOTION_FILL: str = "#fafafa"
+_FLOW_ARCHETYPES: frozenset[str] = frozenset({"layered", "pipeline"})
+
 
 class ArchPatternPosterGenerator:
     """Generates animated SVG topology diagrams for architectural archetypes.
@@ -128,12 +141,24 @@ class ArchPatternPosterGenerator:
         packages: list[tuple[str, str]],
         archetype_result: ArchetypeResult,
         adr_link: str | None = None,
+        *,
+        motion: str = "off",
     ) -> str:
-        """Return a self-contained HTML page for *archetype_result*."""
+        """Return a self-contained HTML page for *archetype_result*.
+
+        Args:
+            packages: Project packages with their inferred role.
+            archetype_result: Classification output (archetype + confidence).
+            adr_link: Optional path to a related ADR.
+            motion: Motion intensity. ``"off"`` (default) emits no
+                ``<animateMotion>`` elements. ``"subtle"`` / ``"particles"``
+                add an SVG-native moving particle along each flow edge for
+                ``layered`` and ``pipeline`` panels only.
+        """
         arch = str(archetype_result.archetype)
         label = _ARCHETYPE_LABELS.get(arch, arch.upper())
         pct = f"{archetype_result.confidence * 100:.0f}%"
-        svg = self._panel_svg(arch, packages, w=600, h=430)
+        svg = self._panel_svg(arch, packages, w=600, h=430, motion=motion)
         badge_bg = _BADGE_BG.get(arch, "#374151")
         badge_fg = _BADGE_FG.get(arch, "#fff")
         adr_html = (
@@ -153,13 +178,19 @@ class ArchPatternPosterGenerator:
 </div>"""
         return self._html_page(title=f"{label} Architecture", body=body, detected=arch)
 
-    def generate_comparison(self, detected_archetype: str = "") -> str:
-        """Return a self-contained HTML page with all six archetypes in a 2×3 grid."""
+    def generate_comparison(
+        self, detected_archetype: str = "", *, motion: str = "off"
+    ) -> str:
+        """Return a self-contained HTML page with all six archetypes in a 2×3 grid.
+
+        ``motion`` is forwarded to per-panel SVG renderers; only the
+        ``layered`` and ``pipeline`` panels honor it.
+        """
         panels: list[str] = []
         for arch in _GRID_ORDER:
             label = _ARCHETYPE_LABELS.get(arch, arch.upper())
             cls = "panel highlighted" if arch == detected_archetype else "panel"
-            svg = self._panel_svg(arch, [], w=_W, h=_H)
+            svg = self._panel_svg(arch, [], w=_W, h=_H, motion=motion)
             panels.append(
                 f'<div class="{cls}" data-arch="{arch}">'
                 f'<div class="panel-title">{label}</div>'
@@ -193,18 +224,29 @@ class ArchPatternPosterGenerator:
         *,
         w: int = _W,
         h: int = _H,
+        motion: str = "off",
     ) -> str:
-        """Return an inline ``<svg>`` element for one archetype panel."""
-        dispatch = {
-            "layered": self._svg_layered,
-            "event_driven": self._svg_event_driven,
-            "hexagonal": self._svg_hexagonal,
-            "microservice": self._svg_microservice,
-            "monolith": self._svg_monolith,
-            "pipeline": self._svg_pipeline,
-        }
-        renderer = dispatch.get(archetype, self._svg_layered)
-        inner = renderer(packages)
+        """Return an inline ``<svg>`` element for one archetype panel.
+
+        ``motion`` is forwarded to the per-archetype renderer. Only the
+        flow-direction archetypes (``layered``, ``pipeline``) honor it;
+        the rest ignore it and emit no ``<animateMotion>``.
+        """
+        flow_motion = motion if archetype in _FLOW_ARCHETYPES else "off"
+        if archetype == "layered":
+            inner = self._svg_layered(packages, motion=flow_motion)
+        elif archetype == "pipeline":
+            inner = self._svg_pipeline(packages, motion=flow_motion)
+        elif archetype == "event_driven":
+            inner = self._svg_event_driven(packages)
+        elif archetype == "hexagonal":
+            inner = self._svg_hexagonal(packages)
+        elif archetype == "microservice":
+            inner = self._svg_microservice(packages)
+        elif archetype == "monolith":
+            inner = self._svg_monolith(packages)
+        else:
+            inner = self._svg_layered(packages, motion=flow_motion)
         label = _ARCHETYPE_LABELS.get(archetype, archetype)
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg"'
@@ -221,8 +263,15 @@ class ArchPatternPosterGenerator:
     # SVG topology renderers
     # ------------------------------------------------------------------
 
-    def _svg_layered(self, packages: list[tuple[str, str]]) -> str:
-        """Four horizontal bands stacked top-to-bottom."""
+    def _svg_layered(
+        self, packages: list[tuple[str, str]], *, motion: str = "off"
+    ) -> str:
+        """Four horizontal bands stacked top-to-bottom.
+
+        When ``motion`` is enabled (``"subtle"`` / ``"particles"``), each
+        inter-band edge is rendered as a ``<path id="lyr-edge-N">`` and a
+        ``<circle><animateMotion>`` is appended that traces it.
+        """
         bands = [
             ("presentation", "Presentation", "#F5A9D0", "#111"),
             ("business", "Business / Application", "#14B8A6", "#fff"),
@@ -236,6 +285,8 @@ class ArchPatternPosterGenerator:
         band_h, gap, x0, bw = 38, 6, 12, 256
         y0 = 12
         lines: list[str] = [f'<rect width="{_W}" height="{_H}" rx="10" fill="#0a0a0f"/>']
+        motion_on = motion in _VALID_MOTION_VALUES and motion != "off"
+        edge_animations: list[str] = []
 
         for i, (role, label, color, tc) in enumerate(bands):
             y = y0 + i * (band_h + gap)
@@ -264,13 +315,20 @@ class ArchPatternPosterGenerator:
             if i < len(bands) - 1:
                 ax = x0 + bw // 2
                 ay = y + band_h
+                edge_id = f"lyr-edge-{i}"
                 lines.append(
-                    f'<line x1="{ax}" y1="{ay}" x2="{ax}" y2="{ay + gap}"'
-                    f' stroke="#a1a1aa" stroke-width="1.5" marker-end="url(#pp-arr)"/>'
+                    f'<path id="{edge_id}" d="M {ax} {ay} L {ax} {ay + gap}"'
+                    f' fill="none" stroke="#a1a1aa" stroke-width="1.5"'
+                    f' marker-end="url(#pp-arr)"/>'
                 )
+                if motion_on:
+                    edge_animations.append(_animate_motion_circle(edge_id))
 
-        # Animated dot (positioned at origin; CSS moves it)
+        # Animated dot (positioned at origin; CSS moves it). Kept for
+        # back-compat with existing snapshot tests; the SMIL particle is
+        # additive on top of the existing CSS keyframe pulse.
         lines.append('<circle class="flow-dot dot-lyr" r="4" fill="#fff"/>')
+        lines.extend(edge_animations)
         return "\n".join(lines)
 
     def _svg_event_driven(self, packages: list[tuple[str, str]]) -> str:
@@ -610,8 +668,15 @@ class ArchPatternPosterGenerator:
         )
         return "\n".join(lines)
 
-    def _svg_pipeline(self, packages: list[tuple[str, str]]) -> str:
-        """Left-to-right sequential stages."""
+    def _svg_pipeline(
+        self, packages: list[tuple[str, str]], *, motion: str = "off"
+    ) -> str:
+        """Left-to-right sequential stages.
+
+        When ``motion`` is enabled, each stage-to-stage edge is rendered as
+        a ``<path id="pipe-edge-N">`` and a ``<circle><animateMotion>``
+        is appended per edge.
+        """
         lines: list[str] = [f'<rect width="{_W}" height="{_H}" rx="10" fill="#0a0a0f"/>']
 
         default_stages = [
@@ -635,6 +700,8 @@ class ArchPatternPosterGenerator:
         total_w = len(stage_names) * stg_w + (len(stage_names) - 1) * inter
         x0 = (_W - total_w) // 2
         y0 = 75
+        motion_on = motion in _VALID_MOTION_VALUES and motion != "off"
+        edge_animations: list[str] = []
 
         stage_xs: list[int] = []
         for i, (name, color) in enumerate(zip(stage_names, stage_colors, strict=True)):
@@ -655,10 +722,14 @@ class ArchPatternPosterGenerator:
             if i < len(stage_names) - 1:
                 ax = sx + stg_w
                 ay = sy + stg_h // 2
+                edge_id = f"pipe-edge-{i}"
                 lines.append(
-                    f'<line x1="{ax}" y1="{ay}" x2="{ax + inter}" y2="{ay}"'
-                    f' stroke="#a1a1aa" stroke-width="1.5" marker-end="url(#pp-arr)"/>'
+                    f'<path id="{edge_id}" d="M {ax} {ay} L {ax + inter} {ay}"'
+                    f' fill="none" stroke="#a1a1aa" stroke-width="1.5"'
+                    f' marker-end="url(#pp-arr)"/>'
                 )
+                if motion_on:
+                    edge_animations.append(_animate_motion_circle(edge_id))
 
         # Header label
         mid_x = x0 + total_w // 2
@@ -669,6 +740,7 @@ class ArchPatternPosterGenerator:
         )
 
         lines.append('<circle class="flow-dot dot-pipe" r="4" fill="#fff"/>')
+        lines.extend(edge_animations)
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
@@ -697,6 +769,29 @@ class ArchPatternPosterGenerator:
             f"<body>\n{body}\n</body>\n"
             "</html>"
         )
+
+
+# ---------------------------------------------------------------------------
+# Motion helpers
+# ---------------------------------------------------------------------------
+
+
+def _animate_motion_circle(edge_id: str) -> str:
+    """Return a ``<circle>`` with ``<animateMotion>`` tracing ``edge_id``.
+
+    The circle carries class ``anim-particle`` so the page-level reduced-
+    motion CSS rule can hide it when the user prefers no motion (CSS
+    ``animation-play-state: paused`` is not honored uniformly for SMIL,
+    so we hide the host element instead — equivalent visual effect).
+    """
+    return (
+        f'<circle class="anim-particle" r="{_ANIMATE_MOTION_RADIUS}"'
+        f' fill="{_ANIMATE_MOTION_FILL}">'
+        f'<animateMotion dur="{_ANIMATE_MOTION_DUR_S}s" repeatCount="indefinite">'
+        f'<mpath href="#{edge_id}"/>'
+        f"</animateMotion>"
+        f"</circle>"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -890,6 +985,10 @@ body {
   .mono-ring {
     animation: none !important;
     opacity: 0 !important;
+  }
+  .anim-particle {
+    visibility: hidden !important;
+    animation-play-state: paused !important;
   }
 }
 """

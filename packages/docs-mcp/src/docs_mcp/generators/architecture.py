@@ -50,6 +50,32 @@ _COUPLING_LOW = 8
 _COUPLING_HIGH = 20
 _DEP_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+")
 
+# ---------------------------------------------------------------------------
+# Motion configuration (deterministic — never derived from time/random/env).
+# Used by _build_circular_dep_svg / _build_grid_dep_svg when motion is enabled.
+# ---------------------------------------------------------------------------
+
+_VALID_MOTION_VALUES: frozenset[str] = frozenset({"off", "subtle", "particles"})
+_ANIMATE_MOTION_DUR_S: float = 2.4
+_ANIMATE_MOTION_RADIUS: int = 3
+_ANIMATE_MOTION_FILL: str = "#fafafa"
+
+
+def _animate_motion_circle(edge_id: str) -> str:
+    """Return a ``<circle>`` with ``<animateMotion>`` tracing ``edge_id``.
+
+    The circle carries class ``anim-particle`` so the page-level reduced-
+    motion CSS rule can hide it when the user prefers no motion.
+    """
+    return (
+        f'<circle class="anim-particle" r="{_ANIMATE_MOTION_RADIUS}"'
+        f' fill="{_ANIMATE_MOTION_FILL}">'
+        f'<animateMotion dur="{_ANIMATE_MOTION_DUR_S}s" repeatCount="indefinite">'
+        f'<mpath href="#{edge_id}"/>'
+        f"</animateMotion>"
+        f"</circle>"
+    )
+
 # Directories to exclude from architecture analysis beyond SKIP_DIRS.
 _ARCH_SKIP_DIRS: frozenset[str] = frozenset(
     {
@@ -145,6 +171,7 @@ class ArchitectureGenerator:
         output_format: str = "html",
         title: str = "",
         subtitle: str = "",
+        motion: str = "off",
     ) -> ArchitectureResult:
         """Generate the architecture document.
 
@@ -153,6 +180,11 @@ class ArchitectureGenerator:
             output_format: Output format (currently only ``html``).
             title: Custom title override. Defaults to project name.
             subtitle: Custom subtitle / tagline.
+            motion: Motion intensity for SVG flow diagrams. ``"off"``
+                (default) keeps the printable report static — important
+                for PDF export. ``"subtle"`` / ``"particles"`` add SVG
+                ``<animateMotion>`` particles tracing each dependency-flow
+                edge and each pipeline / layered pattern-panel edge.
 
         Returns:
             An :class:`ArchitectureResult` with the rendered content.
@@ -193,7 +225,9 @@ class ArchitectureGenerator:
 
         # 5c. Classify architectural archetype — reuses already-built module_map
         # and dep_graph so no extra analysis cost (STORY-100.11).
-        archetype_html = self._build_archetype_hero_html(project_root, module_map, dep_graph)
+        archetype_html = self._build_archetype_hero_html(
+            project_root, module_map, dep_graph, motion=motion
+        )
 
         # 6. Render HTML (pass pre-collected packages to avoid re-collection)
         content = self._render_html(
@@ -206,6 +240,7 @@ class ArchitectureGenerator:
             api_info=api_info,
             packages=packages,
             archetype_html=archetype_html,
+            motion=motion,
         )
 
         edge_count = dep_graph.total_internal_imports if dep_graph else 0
@@ -507,6 +542,7 @@ class ArchitectureGenerator:
         api_info: list[dict[str, Any]],
         packages: list[dict[str, Any]] | None = None,
         archetype_html: str = "",
+        motion: str = "off",
     ) -> str:
         """Render the complete HTML architecture document."""
         safe_name = html.escape(proj_name)
@@ -564,7 +600,7 @@ class ArchitectureGenerator:
         sections.append(self._render_package_details(packages, module_map))
 
         # Dependency flow SVG
-        sections.append(self._render_dependency_flow(packages, dep_edges))
+        sections.append(self._render_dependency_flow(packages, dep_edges, motion=motion))
 
         # API surface (filtered + capped)
         if api_info:
@@ -680,6 +716,8 @@ class ArchitectureGenerator:
         project_root: Path,
         module_map: ModuleMap | None,
         dep_graph: ImportGraph | None,
+        *,
+        motion: str = "off",
     ) -> str:
         """Classify the project archetype and build hero badge + animated SVG panel.
 
@@ -722,7 +760,7 @@ class ArchitectureGenerator:
             )
 
             poster = ArchPatternPosterGenerator()
-            svg = poster._panel_svg(arch, [], w=360, h=257)
+            svg = poster._panel_svg(arch, [], w=360, h=257, motion=motion)
             return f"{badge}{svg}"
 
         except Exception:
@@ -908,6 +946,8 @@ class ArchitectureGenerator:
         self,
         packages: list[dict[str, Any]],
         edges: list[tuple[int, int]],
+        *,
+        motion: str = "off",
     ) -> str:
         """Render the dependency flow SVG diagram (or empty-state message)."""
         if not packages:
@@ -925,7 +965,7 @@ class ArchitectureGenerator:
         )
 
         if edges:
-            svg = self._build_dependency_svg(packages, edges)
+            svg = self._build_dependency_svg(packages, edges, motion=motion)
             parts.append('<figure role="figure" aria-labelledby="dep-flow-figcaption">')
             parts.append(f'<div class="diagram-container">{svg}</div>')
             parts.append(
@@ -1664,6 +1704,8 @@ class ArchitectureGenerator:
         self,
         packages: list[dict[str, Any]],
         edges: list[tuple[int, int]],
+        *,
+        motion: str = "off",
     ) -> str:
         """Build a dependency flow SVG with curved arrows."""
         count = len(packages)
@@ -1672,13 +1714,15 @@ class ArchitectureGenerator:
 
         # Layout: circular for <=10, grid for more
         if count <= _CIRCULAR_LAYOUT_THRESHOLD:
-            return self._build_circular_dep_svg(packages, edges)
-        return self._build_grid_dep_svg(packages, edges)
+            return self._build_circular_dep_svg(packages, edges, motion=motion)
+        return self._build_grid_dep_svg(packages, edges, motion=motion)
 
     def _build_circular_dep_svg(
         self,
         packages: list[dict[str, Any]],
         edges: list[tuple[int, int]],
+        *,
+        motion: str = "off",
     ) -> str:
         """Render dependencies in a circular layout."""
         count = len(packages)
@@ -1732,8 +1776,11 @@ class ArchitectureGenerator:
             py = cy + radius * math.sin(angle)
             positions.append((px, py))
 
-        # Draw edges (curved)
-        for src_idx, tgt_idx in edges:
+        # Draw edges (curved). Each edge gets a stable id so optional
+        # <animateMotion> particles can trace it.
+        motion_on = motion in _VALID_MOTION_VALUES and motion != "off"
+        edge_animations: list[str] = []
+        for edge_index, (src_idx, tgt_idx) in enumerate(edges):
             if src_idx >= count or tgt_idx >= count:
                 continue
             sx, sy = positions[src_idx]
@@ -1743,11 +1790,15 @@ class ArchitectureGenerator:
             ctrl_x = cx + (sx + tx - 2 * cx) * 0.3
             ctrl_y = cy + (sy + ty - 2 * cy) * 0.3
 
+            edge_id = f"dep-edge-{edge_index}"
             lines.append(
-                f'  <path d="M {sx:.0f} {sy:.0f} Q {ctrl_x:.0f} {ctrl_y:.0f} {tx:.0f} {ty:.0f}" '
+                f'  <path id="{edge_id}" '
+                f'd="M {sx:.0f} {sy:.0f} Q {ctrl_x:.0f} {ctrl_y:.0f} {tx:.0f} {ty:.0f}" '
                 f'fill="none" stroke="rgba(63,63,90,0.5)" stroke-width="2" '
                 f'stroke-dasharray="6,4" marker-end="url(#arrowhead)" opacity="0.7"/>'
             )
+            if motion_on:
+                edge_animations.append(_animate_motion_circle(edge_id))
 
         # Draw nodes
         for i, (px, py) in enumerate(positions):
@@ -1769,6 +1820,8 @@ class ArchitectureGenerator:
                 f'font-family="Outfit, Inter, system-ui, sans-serif">{display_name}</text>'
             )
 
+        # Particles ride on top of everything else.
+        lines.extend(edge_animations)
         lines.append("</svg>")
         return "\n".join(lines)
 
@@ -1776,6 +1829,8 @@ class ArchitectureGenerator:
         self,
         packages: list[dict[str, Any]],
         edges: list[tuple[int, int]],
+        *,
+        motion: str = "off",
     ) -> str:
         """Render dependencies in a grid layout for larger projects."""
         count = len(packages)
@@ -1828,18 +1883,24 @@ class ArchitectureGenerator:
             positions.append((x, y))
 
         # Edges
-        for src_idx, tgt_idx in edges:
+        motion_on = motion in _VALID_MOTION_VALUES and motion != "off"
+        edge_animations: list[str] = []
+        for edge_index, (src_idx, tgt_idx) in enumerate(edges):
             if src_idx >= count or tgt_idx >= count:
                 continue
             sx, sy = positions[src_idx]
             tx, ty = positions[tgt_idx]
             mid_x = (sx + tx) / 2
             mid_y = (sy + ty) / 2 - 20
+            edge_id = f"dep-edge-{edge_index}"
             lines.append(
-                f'  <path d="M {sx:.0f} {sy:.0f} Q {mid_x:.0f} {mid_y:.0f} {tx:.0f} {ty:.0f}" '
+                f'  <path id="{edge_id}" '
+                f'd="M {sx:.0f} {sy:.0f} Q {mid_x:.0f} {mid_y:.0f} {tx:.0f} {ty:.0f}" '
                 f'fill="none" stroke="rgba(63,63,90,0.5)" stroke-width="1.5" '
                 f'stroke-dasharray="5,3" marker-end="url(#garrow)" opacity="0.6"/>'
             )
+            if motion_on:
+                edge_animations.append(_animate_motion_circle(edge_id))
 
         # Nodes
         for i in range(count):
@@ -1863,6 +1924,8 @@ class ArchitectureGenerator:
                 f"{display}</text>"
             )
 
+        # Particles ride on top of everything else.
+        lines.extend(edge_animations)
         lines.append("</svg>")
         return "\n".join(lines)
 
@@ -2455,6 +2518,10 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  .anim-particle {
+    visibility: hidden !important;
+    animation-play-state: paused !important;
   }
 }
 

@@ -321,6 +321,131 @@ class TestCollectEdges:
 
 
 # ---------------------------------------------------------------------------
+# Motion (TAP-1038) — animateMotion on dependency-flow SVG
+# ---------------------------------------------------------------------------
+
+
+class TestDependencyFlowMotion:
+    """``motion="subtle"`` adds path ids and animateMotion particles.
+
+    Default ``motion="off"`` must emit no animateMotion. The SMIL
+    pause-hook CSS rule must always be present.
+    """
+
+    def _packages(self, n: int) -> list[dict]:
+        return [{"name": f"pkg{i}", "module_count": 1} for i in range(n)]
+
+    def _edges(self, n: int) -> list[tuple[int, int]]:
+        return [(i, (i + 1) % n) for i in range(n)]
+
+    def test_circular_motion_subtle_emits_animatemotion(self) -> None:
+        gen = ArchitectureGenerator()
+        packages = self._packages(4)
+        edges = self._edges(4)
+        svg = gen._build_circular_dep_svg(packages, edges, motion="subtle")
+        assert 'id="dep-edge-0"' in svg
+        assert "<animateMotion" in svg
+        assert 'href="#dep-edge-0"' in svg
+        assert svg.count("<animateMotion") == 4
+
+    def test_circular_motion_off_emits_no_animatemotion(self) -> None:
+        gen = ArchitectureGenerator()
+        svg = gen._build_circular_dep_svg(
+            self._packages(4), self._edges(4), motion="off"
+        )
+        assert "<animateMotion" not in svg
+        # Path IDs are still present — gating only suppresses the particle.
+        assert 'id="dep-edge-0"' in svg
+
+    def test_grid_motion_subtle_emits_animatemotion(self) -> None:
+        gen = ArchitectureGenerator()
+        # >10 packages -> grid layout
+        packages = self._packages(12)
+        edges = self._edges(12)
+        svg = gen._build_grid_dep_svg(packages, edges, motion="subtle")
+        assert 'id="dep-edge-0"' in svg
+        assert "<animateMotion" in svg
+        assert svg.count("<animateMotion") == 12
+
+    def test_grid_motion_off_emits_no_animatemotion(self) -> None:
+        gen = ArchitectureGenerator()
+        svg = gen._build_grid_dep_svg(
+            self._packages(12), self._edges(12), motion="off"
+        )
+        assert "<animateMotion" not in svg
+
+    def test_dur_is_module_constant(self) -> None:
+        from docs_mcp.generators.architecture import _ANIMATE_MOTION_DUR_S
+
+        gen = ArchitectureGenerator()
+        svg = gen._build_circular_dep_svg(
+            self._packages(3), self._edges(3), motion="subtle"
+        )
+        assert f'dur="{_ANIMATE_MOTION_DUR_S}s"' in svg
+
+    def test_invalid_motion_emits_no_animatemotion(self) -> None:
+        gen = ArchitectureGenerator()
+        svg = gen._build_circular_dep_svg(
+            self._packages(3), self._edges(3), motion="bogus"
+        )
+        assert "<animateMotion" not in svg
+
+    def test_particles_value_treated_as_subtle(self) -> None:
+        gen = ArchitectureGenerator()
+        svg = gen._build_circular_dep_svg(
+            self._packages(3), self._edges(3), motion="particles"
+        )
+        assert "<animateMotion" in svg
+
+    def test_two_runs_produce_identical_svg(self) -> None:
+        gen = ArchitectureGenerator()
+        a = gen._build_circular_dep_svg(
+            self._packages(3), self._edges(3), motion="subtle"
+        )
+        b = gen._build_circular_dep_svg(
+            self._packages(3), self._edges(3), motion="subtle"
+        )
+        assert a == b
+
+
+class TestArchitectureGenerateMotionDefault:
+    """Top-level ``generate(motion=...)`` defaults to ``"off"``."""
+
+    def test_generate_default_motion_off_emits_no_animatemotion(
+        self, arch_project: Path
+    ) -> None:
+        gen = ArchitectureGenerator()
+        result = gen.generate(arch_project)
+        assert "<animateMotion" not in result.content
+
+    def test_reduced_motion_css_block_contains_smil_pause_hook(
+        self, arch_project: Path
+    ) -> None:
+        gen = ArchitectureGenerator()
+        result = gen.generate(arch_project)
+        # Find the @media (prefers-reduced-motion: reduce) block. The body
+        # must mention the SMIL host class so reduced-motion users see no
+        # particle even when motion is enabled.
+        idx = result.content.find("prefers-reduced-motion: reduce")
+        assert idx != -1
+        block_start = result.content.find("{", idx)
+        depth = 0
+        end = -1
+        for i in range(block_start, len(result.content)):
+            ch = result.content[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        assert end > block_start
+        block = result.content[block_start:end]
+        assert "anim-particle" in block
+
+
+# ---------------------------------------------------------------------------
 # MCP tool tests
 # ---------------------------------------------------------------------------
 
