@@ -7,6 +7,7 @@ These tools register on the shared ``mcp`` FastMCP instance from
 
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -107,7 +108,9 @@ async def docs_check_drift(
     else:
         ignore_arg = [p.strip() for p in stripped_ignore.split(",") if p.strip()]
 
-    report = detector.check(
+    # Run blocking I/O off the event loop so the MCP server stays responsive.
+    report = await asyncio.to_thread(
+        detector.check,
         root,
         since=since if since.strip() else None,
         doc_dirs=dirs_list,
