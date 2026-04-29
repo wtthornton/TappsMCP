@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from docs_mcp.linters.linear_issue import (
-    LABEL_SPEC_READY,
     RULE_ACCEPTANCE_EMPTY,
     RULE_AUTOLINK_MANGLED,
     RULE_CODE_BLOCK_NO_ANCHOR,
@@ -59,7 +58,7 @@ class TestCleanIssue:
     def test_clean_issue_is_agent_ready(self, clean_issue: dict[str, object]) -> None:
         result = lint_issue(**clean_issue)  # type: ignore[arg-type]
         assert result.agent_ready is True
-        assert result.suggested_label == LABEL_SPEC_READY
+        assert result.suggested_label == ""
 
     def test_clean_issue_has_no_high_findings(self, clean_issue: dict[str, object]) -> None:
         result = lint_issue(**clean_issue)  # type: ignore[arg-type]
@@ -389,9 +388,9 @@ class TestScoring:
 
 
 class TestLabelAndStatusSuggestion:
-    def test_clean_issue_suggests_spec_ready_and_backlog(self, clean_issue: dict[str, object]) -> None:
+    def test_clean_issue_suggests_empty_label_and_backlog(self, clean_issue: dict[str, object]) -> None:
         result = lint_issue(**clean_issue)  # type: ignore[arg-type]
-        assert result.suggested_label == LABEL_SPEC_READY
+        assert result.suggested_label == ""
         assert result.suggested_status == STATUS_BACKLOG
 
     def test_high_findings_route_to_triage(self) -> None:

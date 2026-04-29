@@ -47,9 +47,10 @@ class ValidationIssue(BaseModel):
 class ValidationReport(BaseModel):
     """Pre-create gate result for one Linear issue.
 
-    ``suggested_label`` is ``"spec-ready"`` for agent-ready issues, ``""``
-    otherwise. ``suggested_status`` is the corresponding workflow status
-    (``"Backlog"`` or ``"Triage"``).
+    ``suggested_label`` is always ``""`` — the ``spec-ready`` label has been
+    retired (TAP-1086). Readiness is expressed solely through
+    ``suggested_status``: ``"Backlog"`` (agent-ready) or ``"Triage"``
+    (needs spec/human decision).
     """
 
     agent_ready: bool

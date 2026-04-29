@@ -39,7 +39,7 @@ TAP-### (prior work), commit <sha>
 - **No fenced code blocks** unless the bug IS the exact text (regex, specific error string). A `file.py:LINE` anchor beats a reprinted snippet.
 - **Inline-code filenames**: `` `AGENTS.md` `` — never `[AGENTS.md](AGENTS.md)`. Linear's autolinker mangles bare filenames into `<http://AGENTS.md>` garbage.
 - **Bare issue refs**: `TAP-###`. Never wrap in `<issue id="UUID">…</issue>` — the UUID is pure noise.
-- **Acceptance is mandatory.** Every issue needs ≥1 verifiable checkbox. If you can't write one, the issue isn't spec-ready — keep it in **Triage** status until it can be specified.
+- **Acceptance is mandatory.** Every issue needs ≥1 verifiable checkbox. If you can't write one, keep it in **Triage** status until it can be specified.
 - **Estimates required** on all stories. Agents use estimate as a "fits-one-session" budget signal.
 
 ## Status and labels
@@ -57,13 +57,11 @@ The `TappsCodingAgents` workspace uses **status as the primary readiness signal*
 | `Done` | Shipped. |
 | `Canceled` | Won't do. |
 
-The legacy labels `needs-spec` (replaced by Triage status), `in-review` (replaced by In Review status), and `agent-blocked` (folded into Triage) have been retired.
+The legacy labels `needs-spec` (replaced by Triage status), `in-review` (replaced by In Review status), `agent-blocked` (folded into Triage), and `spec-ready` (retired — Backlog status is the sole readiness signal) have all been retired.
 
 ### Labels
 
-| Label | Meaning | Criteria |
-|---|---|---|
-| `spec-ready` | A Backlog issue is verified template-compliant and an agent can start without human input | Template-compliant + file anchor + ≥1 verifiable AC + title ≤80 + no autolink/UUID noise |
+Status is the sole readiness signal. An issue in **Backlog** is by definition agent-ready; no additional label is needed or produced. Functional labels (`Bug`, `backend`, `Feature`, `Improvement`, etc.) remain orthogonal and unchanged.
 
 Hierarchy: there are no `epic` / `story` / `task` labels in the workspace, and none are planned. Parent/child relationships are carried entirely by Linear's `parentId` field — a missing `parentId` means the issue is an epic-scope root. Don't propose hierarchy labels; they would add cost without signal.
 

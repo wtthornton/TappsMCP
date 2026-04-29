@@ -36,9 +36,9 @@ class TestCleanIssuePasses:
         report = validate_issue(**clean_issue)  # type: ignore[arg-type]
         assert report.score == 100
 
-    def test_suggested_label_agent_ready(self, clean_issue: dict[str, object]) -> None:
+    def test_suggested_label_always_empty(self, clean_issue: dict[str, object]) -> None:
         report = validate_issue(**clean_issue)  # type: ignore[arg-type]
-        assert report.suggested_label == "spec-ready"
+        assert report.suggested_label == ""
         assert report.suggested_status == "Backlog"
 
 

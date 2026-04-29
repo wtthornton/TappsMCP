@@ -47,10 +47,9 @@ MIN_CLUSTER_SIZE = 2  # Paths shared by fewer issues aren't worth grouping.
 class IssueTriageResult(BaseModel):
     """Per-issue triage output.
 
-    ``suggested_label`` is ``"spec-ready"`` (agent-ready) or ``""`` (not
-    agent-ready). ``suggested_status`` is the corresponding workflow state
-    (``"Backlog"`` or ``"Triage"``); agents using status-based gating should
-    read this field rather than ``suggested_label``.
+    ``suggested_label`` is always ``""`` — the ``spec-ready`` label has been
+    retired (TAP-1086). Readiness is expressed solely through
+    ``suggested_status`` (``"Backlog"`` = agent-ready, ``"Triage"`` = blocked).
     """
 
     id: str
@@ -124,7 +123,7 @@ class TriageReport(BaseModel):
     summary: TriageSummary
 
 
-_AGENT_LABELS = frozenset({"spec-ready"})
+_AGENT_LABELS: frozenset[str] = frozenset()
 
 
 def triage_issues(issues: list[dict[str, Any]]) -> TriageReport:
@@ -226,30 +225,24 @@ def _is_noise_path(path: str) -> bool:
 
 
 def _build_label_proposals(results: list[IssueTriageResult]) -> list[LabelProposal]:
-    """Propose label changes where suggested != current agent-label.
+    """Propose removal of stale readiness labels (TAP-1086: spec-ready retired).
 
-    Generates a proposal in two cases:
-    - Issue is agent-ready and lacks the ``spec-ready`` label → propose adding it.
-    - Issue carries a stale agent label (e.g., legacy ``needs-spec``) but is
-      now agent-ready → propose moving to ``spec-ready``.
-
-    Issues that are NOT agent-ready do not generate a label proposal —
-    callers should instead consult ``suggested_status`` and move the issue
-    to the Triage workflow status.
+    With ``spec-ready`` retired, ``suggested_label`` is always ``""``.
+    Proposals are generated only when an issue still carries a stale
+    readiness label (e.g. ``spec-ready`` left over from before the retirement)
+    and is no longer agent-ready, so callers can strip it and move the issue
+    to Triage status.
     """
     proposals: list[LabelProposal] = []
     for res in results:
-        if not res.suggested_label:
-            # Not agent-ready — handled via suggested_status, not a label.
-            continue
-        if res.current_agent_label == res.suggested_label:
+        if not res.current_agent_label:
             continue
         reason = _label_reason(res)
         proposals.append(
             LabelProposal(
                 issue_id=res.id,
                 from_label=res.current_agent_label,
-                to_label=res.suggested_label,
+                to_label="",
                 reason=reason,
             )
         )
@@ -257,13 +250,11 @@ def _build_label_proposals(results: list[IssueTriageResult]) -> list[LabelPropos
 
 
 def _label_reason(res: IssueTriageResult) -> str:
-    if res.suggested_label == "spec-ready":
-        return f"Passes validator (score {res.score})."
     if res.missing:
         first = res.missing[0]
         extra = f" (+{len(res.missing) - 1} more)" if len(res.missing) > 1 else ""
-        return f"Missing: {first}{extra}. Move to Triage status."
-    return f"Score {res.score} — move to Triage status."
+        return f"Missing: {first}{extra}. Remove stale label and move to Triage status."
+    return f"Score {res.score} — remove stale label and move to Triage status."
 
 
 def _build_parent_groupings(results: list[IssueTriageResult]) -> list[ParentGrouping]:

@@ -115,7 +115,6 @@ ready for. Labels are orthogonal (type, area, blocker source).
 
 | Label | Add When | Remove When |
 |-------|----------|-------------|
-| `spec-ready` | Backlog issue is verified template-compliant and agent-ready | (terminal label; stays for the issue's life) |
 | `needs-tests` | Implementation done but coverage incomplete | Tests written and passing |
 
 ---

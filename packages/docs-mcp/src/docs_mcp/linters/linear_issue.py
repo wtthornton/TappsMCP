@@ -29,8 +29,6 @@ RULE_MISSING_PRIORITY = "missing-priority"
 TITLE_MAX_LEN = 80
 CHARS_PER_TOKEN = 4  # Rough approximation consistent across rule engines.
 
-LABEL_SPEC_READY = "spec-ready"
-
 # Status names for the new status-based workflow. ``needs-spec`` and
 # ``agent-blocked`` were retired as labels — Triage status now expresses both
 # "issue needs spec/review" and "issue is blocked on a human decision".
@@ -77,10 +75,11 @@ class Finding:
 class LintResult:
     """Structured lint result for one Linear issue.
 
-    ``suggested_label`` is ``"spec-ready"`` for agent-ready issues and the
-    empty string otherwise. ``suggested_status`` is the corresponding
-    workflow status: ``"Backlog"`` (agent-ready, queued for pickup) or
-    ``"Triage"`` (needs spec/review or is blocked on a human decision).
+    ``suggested_label`` is always the empty string — issue readiness is
+    expressed solely through ``suggested_status`` (``"Backlog"`` for
+    agent-ready, ``"Triage"`` for needs-spec/human-blocked). The
+    ``spec-ready`` label has been retired; agents read ``suggested_status``
+    only.
     """
 
     agent_ready: bool
@@ -340,17 +339,14 @@ def _is_agent_ready(findings: list[Finding]) -> bool:
     return not any(f.severity == SEVERITY_HIGH for f in findings)
 
 
-def _suggest_label(ctx: _Context) -> str:
-    """Return ``spec-ready`` for agent-ready issues, ``""`` otherwise.
+def _suggest_label(_ctx: _Context) -> str:
+    """Always returns ``""`` — readiness is expressed by ``suggested_status`` only.
 
-    Agents in workspaces using status-based gating should read
-    ``suggested_status`` instead — an empty label means "no label to apply;
-    move the issue to the suggested status."
+    The ``spec-ready`` label has been retired (TAP-1086). Agents should read
+    ``suggested_status``: ``"Backlog"`` means agent-ready, ``"Triage"`` means
+    the issue needs spec review or is blocked on a human decision.
     """
-    has_high = any(f.severity == SEVERITY_HIGH for f in ctx.findings)
-    if has_high or _BLOCKED_MARKERS_RE.search(ctx.description):
-        return ""
-    return LABEL_SPEC_READY
+    return ""
 
 
 def _suggest_status(ctx: _Context) -> str:
