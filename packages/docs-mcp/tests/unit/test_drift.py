@@ -389,6 +389,45 @@ class TestDriftDetector:
         severities = {item.severity for item in report.items}
         assert "error" in severities
 
+    def test_source_files_pre_filter_limits_scan(self, tmp_path: Path) -> None:
+        """source_files pre-filter should scope analysis to matching files only."""
+        (tmp_path / "included.py").write_text(
+            '"""Mod."""\n\ndef included_func() -> None:\n    pass\n', encoding="utf-8"
+        )
+        (tmp_path / "excluded.py").write_text(
+            '"""Mod."""\n\ndef excluded_func() -> None:\n    pass\n', encoding="utf-8"
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+
+        report = DriftDetector().check(
+            tmp_path,
+            source_files=["included.py"],
+            docstring_coverage_counts=False,
+        )
+        assert report.checked_files == 1
+        assert report.total_items == 1
+        assert report.items[0].file_path == "included.py"
+
+    def test_source_files_pre_filter_tail_match(self, tmp_path: Path) -> None:
+        """Partial path suffix like 'mod.py' should match 'src/pkg/mod.py'."""
+        src = tmp_path / "src" / "pkg"
+        src.mkdir(parents=True)
+        (src / "mod.py").write_text(
+            '"""Mod."""\n\ndef deep_func() -> None:\n    pass\n', encoding="utf-8"
+        )
+        (src / "other.py").write_text(
+            '"""Other."""\n\ndef other_func() -> None:\n    pass\n', encoding="utf-8"
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+
+        report = DriftDetector().check(
+            tmp_path,
+            source_files=["mod.py"],
+            docstring_coverage_counts=False,
+        )
+        assert report.checked_files == 1
+        assert report.items[0].file_path.endswith("mod.py")
+
     def test_symbols_populated_on_drift_item(self, tmp_path: Path) -> None:
         """DriftItem.symbols must contain the full undocumented name list."""
         (tmp_path / "app.py").write_text(

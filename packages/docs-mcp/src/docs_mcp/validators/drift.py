@@ -303,6 +303,7 @@ class DriftDetector:
         *,
         since: str | None = None,
         doc_dirs: list[str] | None = None,
+        source_files: list[str] | None = None,
         docstring_coverage_counts: bool = True,
         ignore_patterns: list[str] | str | None = None,
     ) -> DriftReport:
@@ -312,6 +313,10 @@ class DriftDetector:
             project_root: Root of the project to scan.
             since: Unused for MVP (reserved for git ref/date filtering).
             doc_dirs: Optional list of directories containing docs.
+            source_files: Optional list of relative path suffixes (e.g.
+                ``["server.py", "tools/init.py"]``) to scope the scan to. Files
+                are matched by ``endswith`` against their relative path so partial
+                path tails work. When None (default), all Python files are scanned.
             docstring_coverage_counts: When True (default), a symbol's own module /
                 class / function docstring can "cover" it even if external prose
                 doesn't mention the name. Set to False for strict mode that only
@@ -332,6 +337,17 @@ class DriftDetector:
 
         py_files = _find_python_files(project_root)
         doc_files = _find_doc_files(project_root, doc_dirs)
+
+        # Pre-filter by source_files to skip unneeded files before analysis.
+        if source_files:
+            normalised_sf = {sf.replace("\\", "/").lower() for sf in source_files}
+            py_files = [
+                f for f in py_files
+                if any(
+                    str(f.relative_to(project_root)).replace("\\", "/").lower().endswith(sf)
+                    for sf in normalised_sf
+                )
+            ]
 
         if not py_files:
             return DriftReport()

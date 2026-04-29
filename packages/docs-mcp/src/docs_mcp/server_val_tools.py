@@ -107,6 +107,7 @@ async def docs_check_drift(
         root,
         since=since if since.strip() else None,
         doc_dirs=dirs_list,
+        source_files=source_filter,
         docstring_coverage_counts=docstring_coverage_counts,
         ignore_patterns=ignore_arg,
     )
@@ -114,10 +115,6 @@ async def docs_check_drift(
     # Apply post-filters on the report items
     items = report.items
     total_unfiltered = len(items)
-
-    if source_filter:
-        normalised = {sf.replace("\\", "/").lower() for sf in source_filter}
-        items = [it for it in items if any(it.file_path.lower().endswith(sf) for sf in normalised)]
 
     if search_names.strip():
         names_lower = {n.strip().lower() for n in search_names.split(",") if n.strip()}
