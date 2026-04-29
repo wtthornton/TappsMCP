@@ -360,15 +360,34 @@ class TestBootstrapClaudeOverwrite:
         content = claude_md.read_text(encoding="utf-8")
         assert "# TAPPS Quality Pipeline" in content
 
-    def test_claude_overwrite_false_skips_when_tapps_present(self, tmp_path):
-        """When overwrite=False and TAPPS is already present, skip."""
+    def test_claude_overwrite_false_migrates_legacy_unmarked_section(self, tmp_path):
+        """TAP-970: a legacy unmarked TAPPS section is auto-wrapped in markers
+        on the first overwrite=False run instead of being skipped (which
+        previously left consumers stuck on stale obligations after upgrade)."""
         claude_md = tmp_path / "CLAUDE.md"
         old_tapps = load_platform_rules("claude")
         claude_md.write_text("# Project\n\n" + old_tapps, encoding="utf-8")
 
         action = _bootstrap_claude(tmp_path, overwrite=False)
 
-        assert action == "skipped"
+        assert action == "updated"
+        content = claude_md.read_text(encoding="utf-8")
+        assert "<!-- BEGIN: tapps-obligations" in content
+        assert "<!-- END: tapps-obligations -->" in content
+        assert "# Project" in content
+
+    def test_claude_overwrite_false_unchanged_when_markers_match(self, tmp_path):
+        """TAP-970: a CLAUDE.md whose marker block already matches the current
+        obligations is left untouched (returns 'unchanged')."""
+        from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+
+        claude_md = tmp_path / "CLAUDE.md"
+        markered = wrap_with_markers(load_platform_rules("claude"))
+        claude_md.write_text(f"# Project\n\n{markered}\n", encoding="utf-8")
+
+        action = _bootstrap_claude(tmp_path, overwrite=False)
+
+        assert action == "unchanged"
 
     def test_claude_creates_when_file_missing(self, tmp_path):
         """When CLAUDE.md does not exist, create it."""

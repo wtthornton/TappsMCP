@@ -1260,32 +1260,35 @@ def _bootstrap_claude(
     overwrite: bool = False,
     engagement_level: str = "medium",
 ) -> str:
-    """Create or update CLAUDE.md with TAPPS pipeline reference.
+    """Create or refresh the marker-wrapped TAPPS obligations in CLAUDE.md.
 
-    Returns ``'created'``, ``'updated'``, or ``'skipped'``.
+    Returns ``'created'``, ``'updated'``, ``'unchanged'``, or ``'skipped'``.
+
+    TAP-970: refreshes a ``<!-- BEGIN: tapps-obligations vX.Y.Z -->`` /
+    ``<!-- END: tapps-obligations -->`` region surgically. On a legacy
+    consumer with an unmarked ``# TAPPS Quality Pipeline`` section, the
+    section is wrapped in markers as a one-time migration. Custom lines
+    outside the markers always survive. ``overwrite=True`` keeps the legacy
+    full-section replace via :func:`_replace_tapps_section`.
     """
+    from tapps_mcp.pipeline.tapps_obligations_block import install_or_refresh
+
     claude_md = project_root / "CLAUDE.md"
     content = load_platform_rules("claude", engagement_level=engagement_level)
 
-    if claude_md.exists():
+    if overwrite and claude_md.exists():
         existing = claude_md.read_text(encoding="utf-8")
-        if "TAPPS" in existing and not overwrite:
-            # Already has TAPPS reference
-            return "skipped"
-        if overwrite and "# TAPPS Quality Pipeline" in existing:
-            # Replace existing TAPPS section with updated content
+        if "# TAPPS Quality Pipeline" in existing:
             new_content = _replace_tapps_section(existing, content)
-        elif "TAPPS" not in existing:
-            # No TAPPS content yet - append
-            new_content = existing.rstrip() + "\n\n" + content
-        else:
-            # overwrite=True but no heading marker found - replace whole TAPPS block
-            new_content = _replace_tapps_section(existing, content)
-        claude_md.write_text(new_content, encoding="utf-8")
-        return "updated"
+            claude_md.write_text(new_content, encoding="utf-8")
+            return "updated"
 
-    claude_md.write_text(content, encoding="utf-8")
-    return "created"
+    action = install_or_refresh(claude_md, content)
+    if action == "created":
+        return "created"
+    if action == "unchanged":
+        return "unchanged"
+    return "updated"
 
 
 def _split_by_h1_headings(content: str) -> list[tuple[str, str]]:
