@@ -1551,6 +1551,21 @@ def upgrade_pipeline(
     else:
         _dry_run_github_artifacts(project_root, result)
 
+    # Refresh Linear SDLC templates when previously installed (TAP-417).
+    # Detection is file-system based: check if the primary template file exists.
+    try:
+        from tapps_mcp.pipeline.linear_sdlc.installer import refresh_linear_sdlc
+        from tapps_mcp.pipeline.linear_sdlc.renderer import TEMPLATE_PATHS as _SDLC_PATHS
+
+        if (project_root / _SDLC_PATHS[0]).exists():
+            result["components"]["linear_sdlc_refresh"] = refresh_linear_sdlc(
+                project_root,
+                dry_run=dry_run,
+            )
+    except Exception as exc:
+        result["errors"].append(f"linear_sdlc_refresh: {exc}")
+        result["components"]["linear_sdlc_refresh"] = {"action": "error", "detail": str(exc)}
+
     result["success"] = len(result["errors"]) == 0
     result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
 

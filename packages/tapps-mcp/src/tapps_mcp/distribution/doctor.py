@@ -1557,6 +1557,49 @@ def check_plaintext_secrets(project_root: Path) -> CheckResult:
     )
 
 
+def check_linear_sdlc(project_root: Path) -> CheckResult:
+    """Report whether Linear SDLC templates are absent, current, or stale."""
+    from tapps_mcp.pipeline.linear_sdlc.renderer import TEMPLATE_PATHS
+
+    primary = project_root / TEMPLATE_PATHS[0]
+    if not primary.exists():
+        return CheckResult(
+            "linear_sdlc",
+            True,
+            "Not installed (run tapps_init with linear_sdlc=True to enable)",
+        )
+    try:
+        from tapps_mcp.pipeline.linear_sdlc.installer import refresh_linear_sdlc
+
+        probe = refresh_linear_sdlc(project_root, dry_run=True)
+        if probe.get("errors"):
+            return CheckResult(
+                "linear_sdlc",
+                False,
+                f"Check error: {probe['errors'][0]}",
+            )
+        stale = probe.get("refreshed", [])
+        if stale:
+            preview = ", ".join(stale[:3])
+            return CheckResult(
+                "linear_sdlc",
+                False,
+                f"Stale ({len(stale)} file(s)): {preview}",
+                "Run tapps_upgrade to refresh to the latest templates.",
+            )
+        return CheckResult(
+            "linear_sdlc",
+            True,
+            "All Linear SDLC templates are current",
+        )
+    except Exception as exc:
+        return CheckResult(
+            "linear_sdlc",
+            False,
+            f"Check failed: {exc}",
+        )
+
+
 def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     """Collect all diagnostic checks for the given project root.
 
@@ -1596,6 +1639,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_dual_memory_server(root))
     checks.append(check_plaintext_secrets(root))
     checks.append(check_uv_path_mismatch(root))
+    checks.append(check_linear_sdlc(root))
     if quick:
         checks.append(
             CheckResult(

@@ -11,7 +11,9 @@ from tapps_mcp.pipeline.linear_sdlc import LinearSDLCConfig
 from tapps_mcp.pipeline.linear_sdlc.installer import (
     SKILL_INSTALL_PATH,
     UPSTREAM_SKILL_REPO,
+    _detect_prefix_from_installed,
     install_linear_sdlc,
+    refresh_linear_sdlc,
 )
 from tapps_mcp.pipeline.linear_sdlc.renderer import TEMPLATE_PATHS
 
@@ -152,3 +154,108 @@ class TestDryRunAndContentReturn:
         assert result["skill_cloned"] is False
         for relative in TEMPLATE_PATHS:
             assert not (tmp_path / relative).exists()
+
+
+class TestPrefixDetection:
+    """Verify _detect_prefix_from_installed."""
+
+    def test_detects_prefix_from_workflow(
+        self,
+        tmp_path: Path,
+        config: LinearSDLCConfig,
+    ) -> None:
+        with patch(
+            "tapps_mcp.pipeline.linear_sdlc.installer.shutil.which",
+            return_value=None,
+        ):
+            install_linear_sdlc(tmp_path, config)
+        assert _detect_prefix_from_installed(tmp_path) == "TAP"
+
+    def test_returns_tap_when_file_absent(self, tmp_path: Path) -> None:
+        assert _detect_prefix_from_installed(tmp_path) == "TAP"
+
+
+class TestRefreshLinearSDLC:
+    """Verify refresh_linear_sdlc round-trip behaviour (TAP-417)."""
+
+    def _install(self, tmp_path: Path, config: LinearSDLCConfig) -> None:
+        with patch(
+            "tapps_mcp.pipeline.linear_sdlc.installer.shutil.which",
+            return_value=None,
+        ):
+            install_linear_sdlc(tmp_path, config)
+
+    def test_unchanged_when_content_matches(
+        self,
+        tmp_path: Path,
+        config: LinearSDLCConfig,
+    ) -> None:
+        self._install(tmp_path, config)
+        result = refresh_linear_sdlc(tmp_path, config)
+        assert result["refreshed"] == []
+        assert sorted(result["unchanged"]) == sorted(TEMPLATE_PATHS)
+        assert result["errors"] == []
+        assert result["backup_dir"] == ""
+
+    def test_refreshed_when_file_is_stale(
+        self,
+        tmp_path: Path,
+        config: LinearSDLCConfig,
+    ) -> None:
+        self._install(tmp_path, config)
+        stale_path = tmp_path / TEMPLATE_PATHS[0]
+        stale_path.write_text("# old content\n", encoding="utf-8")
+        result = refresh_linear_sdlc(tmp_path, config)
+        assert TEMPLATE_PATHS[0] in result["refreshed"]
+        assert TEMPLATE_PATHS[0] not in result["unchanged"]
+        assert result["errors"] == []
+
+    def test_backup_written_before_overwrite(
+        self,
+        tmp_path: Path,
+        config: LinearSDLCConfig,
+    ) -> None:
+        self._install(tmp_path, config)
+        stale_path = tmp_path / TEMPLATE_PATHS[0]
+        old_body = "# backup me\n"
+        stale_path.write_text(old_body, encoding="utf-8")
+        result = refresh_linear_sdlc(tmp_path, config)
+        backup_dir = tmp_path / result["backup_dir"]
+        assert backup_dir.is_dir()
+        backed_up = list(backup_dir.iterdir())
+        assert len(backed_up) == 1
+        assert backed_up[0].read_text(encoding="utf-8") == old_body
+
+    def test_dry_run_reports_stale_without_writing(
+        self,
+        tmp_path: Path,
+        config: LinearSDLCConfig,
+    ) -> None:
+        self._install(tmp_path, config)
+        stale_path = tmp_path / TEMPLATE_PATHS[0]
+        stale_path.write_text("# old\n", encoding="utf-8")
+        result = refresh_linear_sdlc(tmp_path, config, dry_run=True)
+        assert TEMPLATE_PATHS[0] in result["refreshed"]
+        assert result["backup_dir"] == ""
+        assert stale_path.read_text(encoding="utf-8") == "# old\n"
+
+    def test_refresh_missing_file_creates_it(
+        self,
+        tmp_path: Path,
+        config: LinearSDLCConfig,
+    ) -> None:
+        self._install(tmp_path, config)
+        missing = tmp_path / TEMPLATE_PATHS[-1]
+        missing.unlink()
+        result = refresh_linear_sdlc(tmp_path, config)
+        assert TEMPLATE_PATHS[-1] in result["refreshed"]
+        assert missing.exists()
+
+    def test_config_none_uses_detected_prefix(
+        self,
+        tmp_path: Path,
+        config: LinearSDLCConfig,
+    ) -> None:
+        self._install(tmp_path, config)
+        result = refresh_linear_sdlc(tmp_path, config=None)
+        assert result["refreshed"] == []
