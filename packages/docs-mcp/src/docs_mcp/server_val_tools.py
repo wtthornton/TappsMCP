@@ -69,7 +69,8 @@ async def docs_check_drift(
         ignore_patterns: Comma-separated fnmatch globs on fully-qualified
             symbol names (e.g. ``"mypkg.cli.*"``) that should never be flagged
             as drifted. The literal string ``"defaults"`` opts into a built-in
-            list covering private/test names.
+            list covering private/test names (``_*``, ``test_*``, ``TEST_*``,
+            ``*_TEST``, ``*_FIXTURE``, ``tests.*``, ``*._*``).
     """
     _record_call("docs_check_drift")
     start = time.perf_counter_ns()

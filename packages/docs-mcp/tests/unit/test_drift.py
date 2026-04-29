@@ -829,6 +829,81 @@ class TestIgnorePatterns:
 
 
 # ---------------------------------------------------------------------------
+# Public constants
+# ---------------------------------------------------------------------------
+
+
+class TestPublicConstants:
+    """Verify that public module-level constants are included in drift detection."""
+
+    def test_public_constant_detected_as_drifted(self, tmp_path: Path) -> None:
+        """An all-caps constant not mentioned in docs should be flagged."""
+        (tmp_path / "app.py").write_text(
+            '"""Module."""\n\nMAX_RETRIES: int = 3\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        assert report.total_items == 1
+        assert "MAX_RETRIES" in report.items[0].symbols
+
+    def test_public_constant_covered_in_docs(self, tmp_path: Path) -> None:
+        """A constant whose name appears in docs should not drift."""
+        (tmp_path / "app.py").write_text(
+            '"""Module."""\n\nDEFAULT_TIMEOUT: int = 30\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nSet DEFAULT_TIMEOUT to control the timeout.\n",
+            encoding="utf-8",
+        )
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        assert report.total_items == 0
+
+    def test_test_constant_suppressed_by_defaults(self, tmp_path: Path) -> None:
+        """TEST_* constants are suppressed when ignore_patterns='defaults'."""
+        (tmp_path / "app.py").write_text(
+            '"""Module."""\n\nTEST_TIMEOUT: int = 5\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        # Without defaults: still flagged
+        assert DriftDetector().check(tmp_path, docstring_coverage_counts=False).total_items == 1
+        # With defaults: suppressed by TEST_* pattern
+        report = DriftDetector().check(
+            tmp_path,
+            docstring_coverage_counts=False,
+            ignore_patterns="defaults",
+        )
+        assert report.total_items == 0
+
+    def test_fixture_constant_suppressed_by_defaults(self, tmp_path: Path) -> None:
+        """*_FIXTURE constants are suppressed when ignore_patterns='defaults'."""
+        (tmp_path / "app.py").write_text(
+            '"""Module."""\n\nUSER_FIXTURE: dict = {}\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        assert DriftDetector().check(tmp_path, docstring_coverage_counts=False).total_items == 1
+        report = DriftDetector().check(
+            tmp_path,
+            docstring_coverage_counts=False,
+            ignore_patterns="defaults",
+        )
+        assert report.total_items == 0
+
+    def test_private_constant_not_detected(self, tmp_path: Path) -> None:
+        """Constants starting with _ are private and should not drift."""
+        (tmp_path / "app.py").write_text(
+            '"""Module."""\n\n_INTERNAL_LIMIT: int = 100\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        assert report.total_items == 0
+
+
+# ---------------------------------------------------------------------------
 # Score scale
 # ---------------------------------------------------------------------------
 

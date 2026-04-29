@@ -35,8 +35,11 @@ _MIN_FUZZY_TOKEN_LEN: int = 4
 _DEFAULT_IGNORE_PATTERNS: list[str] = [
     "_*",
     "test_*",
+    "TEST_*",
     "tests.*",
     "*._*",
+    "*_TEST",
+    "*_FIXTURE",
 ]
 
 # Camel/Pascal case splitter. Emits each "word" piece, keeping contiguous digits
@@ -234,10 +237,11 @@ def _name_covered_by_word_set(name: str, word_set: frozenset[str]) -> bool:
 
 
 def _get_public_names(surface: APISurface) -> list[str]:
-    """Extract public API names from an APISurface."""
+    """Extract public API names from an APISurface (functions, classes, and constants)."""
     names: list[str] = []
     names.extend(f.name for f in surface.functions)
     names.extend(c.name for c in surface.classes)
+    names.extend(c.name for c in surface.constants)
     return names
 
 
