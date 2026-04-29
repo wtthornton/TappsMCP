@@ -639,6 +639,7 @@ Quick index:
 | **tapps_set_engagement_level** | Set LLM engagement level (high/medium/low) in `.tapps-mcp.yaml`; then run init with overwrite to apply. |
 | **tapps_upgrade** | Validate and refresh all generated files (AGENTS.md, rules, hooks) after upgrading TappsMCP. Creates backup first. |
 | **tapps_doctor** | Diagnose configuration, rules, hooks, connectivity, tapps-brain, and **memory pipeline effective config**; reports `llm_engagement_level` when set. |
+| **tapps_release_update** | Source release body from CHANGELOG/git, generate + validate, return ready for the `linear-release-update` skill to post as a Linear project document. |
 | **tapps_workflow** | *(MCP prompt, not a tool)* Recommended tool call order for a specific task type. |
 
 ---

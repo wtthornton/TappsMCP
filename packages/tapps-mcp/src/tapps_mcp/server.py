@@ -191,6 +191,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_linear_snapshot_get",
         "tapps_linear_snapshot_put",
         "tapps_linear_snapshot_invalidate",
+        "tapps_release_update",
     }
 )
 
@@ -1449,6 +1450,7 @@ def _register_tool_modules() -> None:
         server_memory_tools,
         server_metrics_tools,
         server_pipeline_tools,
+        server_release_tools,
         server_resources,
         server_scoring_tools,
     )
@@ -1459,6 +1461,7 @@ def _register_tool_modules() -> None:
     server_memory_tools.register(mcp, allowed_tools)
     server_analysis_tools.register(mcp, allowed_tools)
     server_linear_tools.register(mcp, allowed_tools)
+    server_release_tools.register(mcp, allowed_tools)
     server_resources.register(mcp)
 
 

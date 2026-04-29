@@ -908,6 +908,43 @@ def _style_report_vale(report: StyleReport) -> dict[str, Any]:
     }
 
 
+async def docs_validate_release_update(
+    body: str = "",
+) -> dict[str, Any]:
+    """Validate a release update document body before posting to Linear.
+
+    Returns ``agent_ready=true`` when the body passes all HIGH-severity rules.
+    Use before calling ``save_document`` to confirm template compliance.
+
+    Args:
+        body: The markdown body produced by ``docs_generate_release_update``.
+    """
+    _record_call("docs_validate_release_update")
+    start = time.perf_counter_ns()
+
+    from docs_mcp.validators.release_update import validate_release_update
+
+    if not body.strip():
+        return error_response(
+            "docs_validate_release_update",
+            "MISSING_BODY",
+            "Parameter 'body' is required.",
+        )
+
+    report = validate_release_update(body)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    return success_response(
+        "docs_validate_release_update",
+        elapsed_ms,
+        {
+            "agent_ready": report.agent_ready,
+            "score": report.score,
+            "findings": [f.model_dump() for f in report.findings],
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Registration (Epic 79.2: conditional)
 # ---------------------------------------------------------------------------
@@ -931,3 +968,5 @@ def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:  #
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_cross_refs)
     if "docs_check_style" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_style)
+    if "docs_validate_release_update" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_validate_release_update)

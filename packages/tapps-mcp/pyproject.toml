@@ -25,6 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "tapps-core>=1.0.0",
+    "docs-mcp>=0.1.0",
     "mcp[cli]>=1.26.0,<2",
     "pydantic>=2.12.5,<3",
     "pydantic-settings>=2.13.1,<3",
@@ -97,6 +98,7 @@ Changelog = "https://github.com/tapps-mcp/tapps-mcp/blob/master/CHANGELOG.md"
 
 [tool.uv.sources]
 tapps-core = { workspace = true }
+docs-mcp = { workspace = true }
 
 [tool.hatch.build.targets.sdist]
 include = ["src/tapps_mcp/"]

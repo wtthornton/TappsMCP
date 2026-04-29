@@ -43,6 +43,7 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 | **tapps_upgrade** | After TappsMCP version update - refreshes tapps-managed files (custom agents/skills/hooks preserved); use `dry_run=True` for a per-file verdict |
 | **tapps_doctor** | Diagnose configuration issues |
 | **tapps_set_engagement_level** | Change enforcement intensity (high/medium/low) |
+| **tapps_release_update** | Source release body from CHANGELOG/git, generate + validate via docs-mcp, return for Linear post via `linear-release-update` skill |
 ## Supported languages
 
 | Language | Extensions | Notes |

@@ -68,6 +68,18 @@ When the user says "create a Linear issue", "file an epic", "open a ticket for X
 
 When updating an existing issue, the same routing applies: fetch, lint/validate, regenerate or edit, re-validate, save, invalidate.
 
+## Release Updates
+
+When the user says "post a release update", "announce vX.Y.Z", "ship release-update", or "log this release to Linear" — invoke the `linear-release-update` skill. Do not call `save_document` directly.
+
+**Flow:** `tapps_release_update(version, prev_version)` → check `agent_ready=true` →
+`save_document(project=data.project, title=data.document_title, content=data.body)` →
+`tapps_linear_snapshot_invalidate(team=data.team, project=data.project)`.
+
+Never call `save_document` without a prior `agent_ready=true` from `tapps_release_update`.
+The `document_title` field from the tool response must be used verbatim (em-dash format).
+With `dry_run=True`, the tool returns the body without gating on `agent_ready`.
+
 ## Enforcement
 
 Hard-enforced via hooks in `.claude/settings.json` (shipped by `tapps_upgrade` as of TAP-981):

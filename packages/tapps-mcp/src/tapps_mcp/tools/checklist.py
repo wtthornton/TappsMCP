@@ -131,6 +131,10 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_decompose": (
         "Decompose a task into ~15-minute units with model tier hints before starting work."
     ),
+    "tapps_release_update": (
+        "Generate and validate a release update document body from CHANGELOG or git log."
+        " Call before posting a version release to Linear via the linear-release-update skill."
+    ),
 }
 
 
@@ -168,6 +172,11 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
         "required": ["tapps_checklist"],
         "recommended": ["tapps_score_file", "tapps_quality_gate"],
         "optional": ["tapps_security_scan", "tapps_validate_changed"],
+    },
+    "release": {
+        "required": ["tapps_release_update"],
+        "recommended": ["tapps_dependency_scan"],
+        "optional": ["tapps_checklist"],
     },
 }
 

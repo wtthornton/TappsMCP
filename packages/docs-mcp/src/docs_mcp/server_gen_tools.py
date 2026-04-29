@@ -2212,6 +2212,93 @@ async def docs_generate_doc_index(
 # ---------------------------------------------------------------------------
 
 
+async def docs_generate_release_update(
+    version: str,
+    prev_version: str,
+    bump_type: str = "",
+    highlights: str = "",
+    issues_closed: str = "",
+    breaking_changes: str = "",
+    links: str = "",
+    health: str = "On Track",
+    release_date: str = "",
+) -> dict[str, Any]:
+    """Generate a Linear project update document for a version release.
+
+    Template sections: version header, health, highlights, issues closed,
+    breaking changes (minor/major only), links.
+
+    Args:
+        version: New release version, e.g. "1.5.0".
+        prev_version: Previous version, e.g. "1.4.2".
+        bump_type: "patch", "minor", or "major". Inferred from semver delta if blank.
+        highlights: Comma-separated highlight bullets.
+        issues_closed: Comma-separated "TAP-123: title" entries.
+        breaking_changes: Comma-separated breaking change descriptions (minor/major only).
+        links: Comma-separated "Label=URL" pairs, e.g. "Changelog=https://...".
+        health: "On Track", "At Risk", or "Off Track".
+        release_date: ISO date override (YYYY-MM-DD). Defaults to today.
+    """
+    _record_call("docs_generate_release_update")
+    start = time.perf_counter_ns()
+
+    from docs_mcp.generators.release_update import (
+        ReleaseUpdateConfig,
+        ReleaseUpdateGenerator,
+        infer_bump_type,
+    )
+
+    if not version.strip():
+        return error_response(
+            "docs_generate_release_update",
+            "MISSING_VERSION",
+            "Parameter 'version' is required.",
+        )
+    if not prev_version.strip():
+        return error_response(
+            "docs_generate_release_update",
+            "MISSING_PREV_VERSION",
+            "Parameter 'prev_version' is required.",
+        )
+
+    effective_bump = bump_type.strip() or infer_bump_type(version, prev_version)
+
+    def _parse_links(raw: str) -> dict[str, str]:
+        result: dict[str, str] = {}
+        for item in _split_csv(raw):
+            if "=" in item:
+                label, _, url = item.partition("=")
+                result[label.strip()] = url.strip()
+        return result
+
+    config = ReleaseUpdateConfig(
+        version=version.strip(),
+        prev_version=prev_version.strip(),
+        bump_type=effective_bump,
+        highlights=_split_csv(highlights),
+        issues_closed=_split_csv(issues_closed),
+        breaking_changes=_split_csv(breaking_changes),
+        links=_parse_links(links),
+        health=health,
+        release_date=release_date.strip(),
+    )
+
+    body = ReleaseUpdateGenerator().generate(config)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    return success_response(
+        "docs_generate_release_update",
+        elapsed_ms,
+        {
+            "body": body,
+            "version": config.version,
+            "prev_version": config.prev_version,
+            "bump_type": effective_bump,
+            "content_length": len(body),
+        },
+    )
+
+
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register generation tools on the shared mcp instance (Epic 79.2: conditional)."""
     if "docs_generate_changelog" in allowed_tools:
@@ -2262,3 +2349,5 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_purpose)
     if "docs_generate_doc_index" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_doc_index)
+    if "docs_generate_release_update" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_generate_release_update)

@@ -1049,6 +1049,40 @@ def migrate_memory_cmd(
         raise SystemExit(1)
 
 
+@main.command("release-update")
+@click.option("--version", required=True, help="New release version, e.g. 1.5.0")
+@click.option("--prev-version", required=True, help="Previous version, e.g. 1.4.2")
+@click.option("--bump-type", default="", help="patch | minor | major (inferred if blank)")
+@click.option("--team", default="", help="Linear team name/ID")
+@click.option("--project", default="", help="Linear project name/slug")
+@click.option("--dry-run", is_flag=True, default=False, help="Return body without requiring validation pass")
+def release_update_cmd(
+    version: str,
+    prev_version: str,
+    bump_type: str,
+    team: str,
+    project: str,
+    dry_run: bool,
+) -> None:
+    """Generate and validate a Linear release update document body (TAP-1112)."""
+    import asyncio
+    import json
+
+    from tapps_mcp.server_release_tools import tapps_release_update
+
+    result = asyncio.run(
+        tapps_release_update(
+            version=version,
+            prev_version=prev_version,
+            bump_type=bump_type,
+            team=team,
+            project=project,
+            dry_run=dry_run,
+        )
+    )
+    click.echo(json.dumps(result, indent=2))
+
+
 def _register_benchmark_group() -> None:
     """Lazily register the benchmark subcommand group."""
     from tapps_mcp.benchmark.cli_commands import benchmark_group
