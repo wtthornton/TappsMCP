@@ -10,9 +10,11 @@ from docs_mcp.validators.drift import (
     DriftDetector,
     DriftItem,
     DriftReport,
+    _build_doc_token_mtime_map,
     _build_doc_word_set,
     _find_doc_files,
     _find_python_files,
+    _get_relevant_doc_mtime,
     _iso_from_mtime,
     _matches_any_pattern,
     _name_covered_by_prose,
@@ -286,6 +288,66 @@ class TestDocWordSet:
     def test_short_token_not_matched(self) -> None:
         ws = frozenset({"id", "go"})
         assert _name_covered_by_word_set("id", ws) is False
+
+
+class TestDocTokenMtimeMap:
+    """Test the per-file token mtime map and relevant-mtime helper."""
+
+    def test_build_empty(self) -> None:
+        result = _build_doc_token_mtime_map([])
+        assert result == {}
+
+    def test_build_records_mtime(self, tmp_path: Path) -> None:
+        fp = tmp_path / "doc.md"
+        fp.write_text("scorer processor", encoding="utf-8")
+        result = _build_doc_token_mtime_map([fp])
+        assert "scorer" in result
+        assert result["scorer"] == fp.stat().st_mtime
+
+    def test_build_uses_max_mtime_for_shared_word(self, tmp_path: Path) -> None:
+        a = tmp_path / "a.md"
+        b = tmp_path / "b.md"
+        a.write_text("scorer", encoding="utf-8")
+        b.write_text("scorer reranker", encoding="utf-8")
+        import os
+        os.utime(a, (1_000_000, 1_000_000))
+        os.utime(b, (2_000_000, 2_000_000))
+        result = _build_doc_token_mtime_map([a, b])
+        assert result["scorer"] == 2_000_000.0
+        assert result["reranker"] == 2_000_000.0
+
+    def test_get_relevant_doc_mtime_finds_best(self) -> None:
+        tmap = {"scorer": 1_500_000.0, "processor": 1_200_000.0}
+        mtime = _get_relevant_doc_mtime(["BM25Scorer", "PaymentProcessor"], tmap)
+        assert mtime == 1_500_000.0
+
+    def test_get_relevant_doc_mtime_zero_when_no_match(self) -> None:
+        tmap = {"unrelated": 9_999_999.0}
+        assert _get_relevant_doc_mtime(["BM25Scorer"], tmap) == 0.0
+
+    def test_per_file_mtime_reduces_false_positive_errors(
+        self, tmp_path: Path
+    ) -> None:
+        """Touching an unrelated doc should not escalate severity for code with
+        unrelated public names."""
+        import os
+        # Code file with an unrelated public name.
+        (tmp_path / "app.py").write_text(
+            '"""Mod."""\n\ndef zzzz_unrelated_func() -> None:\n    pass\n',
+            encoding="utf-8",
+        )
+        # An unrelated doc touched very recently.
+        readme = tmp_path / "README.md"
+        readme.write_text("# Project\n\nsome other content here.\n", encoding="utf-8")
+        os.utime(readme, (2_000_000, 2_000_000))  # "future" doc
+        # Make code file older than the doc.
+        os.utime(tmp_path / "app.py", (1_000_000, 1_000_000))
+
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        assert report.total_items == 1
+        # "zzzz_unrelated_func" is not mentioned in README, so no relevant doc mtime
+        # → falls back to global doc_mtime → code (1M) < doc (2M) → severity=warning, not error
+        assert report.items[0].severity == "warning"
 
 
 # ---------------------------------------------------------------------------

@@ -175,6 +175,46 @@ def _build_doc_word_set(doc_files: list[Path]) -> frozenset[str]:
     return frozenset(words)
 
 
+def _build_doc_token_mtime_map(doc_files: list[Path]) -> dict[str, float]:
+    """Build a word → max_mtime map from all documentation files.
+
+    For each word in the documentation, records the maximum mtime across all doc files
+    that contain it. Combines the word-set lookup (TAP-1121) with per-file mtime
+    precision (TAP-1123): the map keys serve as the word index for O(1) coverage
+    checks, and the values enable per-code-file severity assessment.
+    """
+    token_mtime: dict[str, float] = {}
+    for fp in doc_files:
+        try:
+            mtime = fp.stat().st_mtime
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for word in re.findall(r"\w+", text.lower()):
+            existing = token_mtime.get(word, 0.0)
+            if mtime > existing:
+                token_mtime[word] = mtime
+    return token_mtime
+
+
+def _get_relevant_doc_mtime(names: list[str], token_mtime_map: dict[str, float]) -> float:
+    """Return the max mtime of doc files mentioning any token of any name.
+
+    For a code file's public API names, finds the most-recently-updated doc file
+    that contains any component token. Returns 0.0 if no doc file covers any token,
+    which causes the caller to fall back to the global doc mtime.
+    """
+    best: float = 0.0
+    for name in names:
+        for token in _tokenize_name(name):
+            if len(token) < _MIN_FUZZY_TOKEN_LEN:
+                continue
+            mtime = token_mtime_map.get(token.lower(), 0.0)
+            if mtime > best:
+                best = mtime
+    return best
+
+
 def _name_covered_by_word_set(name: str, word_set: frozenset[str]) -> bool:
     """Return True if ``name`` or any long-enough token appears in *word_set*.
 
@@ -390,16 +430,12 @@ class DriftDetector:
         else:
             resolved_ignore = []
 
-        # Build inverted word-set once for O(1) name lookups (replaces flat-string scan).
-        doc_word_set = _build_doc_word_set(doc_files)
+        # Build token→mtime map: O(1) word lookups + per-file mtime precision.
+        doc_token_mtime = _build_doc_token_mtime_map(doc_files)
+        doc_word_set = frozenset(doc_token_mtime)
 
-        # Get the most recent doc modification time (or 0 if no docs)
-        doc_mtime: float = 0.0
-        for df in doc_files:
-            try:
-                doc_mtime = max(doc_mtime, df.stat().st_mtime)
-            except OSError:
-                continue
+        # Global fallback mtime (used when no doc file mentions any token of a code file).
+        doc_mtime: float = max(doc_token_mtime.values(), default=0.0)
 
         items: list[DriftItem] = []
         checked = 0
@@ -432,7 +468,6 @@ class DriftDetector:
                 continue
 
             code_iso = _iso_from_mtime(code_mtime)
-            doc_iso = _iso_from_mtime(doc_mtime) if doc_mtime > 0 else ""
 
             # Analyze public API using pre-read source (no second file read).
             surface = analyzer.analyze_from_source(py_file, content, project_root=project_root)
@@ -440,6 +475,12 @@ class DriftDetector:
 
             if not public_names:
                 continue
+
+            # Per-file: max mtime of doc files mentioning any token of any public name.
+            # Falls back to global doc_mtime when no doc covers any token from this file.
+            relevant_doc_mtime = _get_relevant_doc_mtime(public_names, doc_token_mtime)
+            effective_doc_mtime = relevant_doc_mtime if relevant_doc_mtime > 0 else doc_mtime
+            doc_iso = _iso_from_mtime(effective_doc_mtime) if effective_doc_mtime > 0 else ""
 
             # Docstring corpus from pre-read source (no third file read or AST re-parse).
             docstring_corpus = _collect_docstrings_from_source(content) if docstring_coverage_counts else ""
@@ -457,13 +498,14 @@ class DriftDetector:
                 undocumented.append(name)
 
             if undocumented:
-                # Determine severity: if code is newer than docs, it's more urgent
+                # Determine severity using per-file relevant doc mtime (reduces false-positive
+                # errors when one unrelated doc is touched but relevant docs are stale).
                 severity = "warning"
-                if doc_mtime > 0 and code_mtime > doc_mtime:
+                if effective_doc_mtime > 0 and code_mtime > effective_doc_mtime:
                     severity = "error"
 
                 drift_type = "added_undocumented"
-                if doc_mtime > 0 and code_mtime > doc_mtime:
+                if effective_doc_mtime > 0 and code_mtime > effective_doc_mtime:
                     drift_type = "modified_undocumented"
 
                 items.append(
