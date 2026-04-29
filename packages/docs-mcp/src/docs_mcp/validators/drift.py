@@ -231,18 +231,14 @@ def _name_covered_by_docstring(name: str, docstring_corpus_lower: str) -> bool:
     return False
 
 
-def _collect_docstrings(py_file: Path) -> str:
-    """Return the concatenated module/class/function docstrings of *py_file*.
+def _collect_docstrings_from_source(source: str) -> str:
+    """Return concatenated module/class/function docstrings from pre-read source.
 
-    Falls back to an empty string on parse errors or unreadable files. The output is
-    lowercased so callers can do case-insensitive substring checks.
+    Falls back to empty string on parse errors. The output is lowercased so callers
+    can do case-insensitive substring checks.
     """
     import ast
 
-    try:
-        source = py_file.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -383,7 +379,8 @@ class DriftDetector:
             # Skip test files — test helpers/fixtures are not public API
             if "test" in rel_path.lower():
                 continue
-            # Skip __init__.py with no significant content
+
+            # Single file read shared across empty-check, API analysis, and docstrings.
             try:
                 content = py_file.read_text(encoding="utf-8", errors="replace")
             except OSError:
@@ -403,16 +400,15 @@ class DriftDetector:
             code_iso = _iso_from_mtime(code_mtime)
             doc_iso = _iso_from_mtime(doc_mtime) if doc_mtime > 0 else ""
 
-            # Analyze public API
-            surface = analyzer.analyze(py_file, project_root=project_root)
+            # Analyze public API using pre-read source (no second file read).
+            surface = analyzer.analyze_from_source(py_file, content, project_root=project_root)
             public_names = _get_public_names(surface)
 
             if not public_names:
                 continue
 
-            # Per-file docstring corpus (lowercase). Cheaper than parsing twice —
-            # only compute when the feature is enabled.
-            docstring_corpus = _collect_docstrings(py_file) if docstring_coverage_counts else ""
+            # Docstring corpus from pre-read source (no third file read or AST re-parse).
+            docstring_corpus = _collect_docstrings_from_source(content) if docstring_coverage_counts else ""
 
             # Check each public name against doc content + optional docstring + ignores
             undocumented: list[str] = []

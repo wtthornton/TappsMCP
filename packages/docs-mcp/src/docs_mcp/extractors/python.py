@@ -58,6 +58,26 @@ class PythonExtractor:
 
         return self._extract_module(tree, rel_path)
 
+    def extract_from_source(
+        self,
+        source: str,
+        file_path: Path,
+        *,
+        project_root: Path | None = None,
+    ) -> ModuleInfo:
+        """Extract module information from pre-read source content.
+
+        Avoids a redundant file read when the caller already has the source.
+        Never raises on malformed input — returns degraded ModuleInfo instead.
+        """
+        rel_path = self._relative_path(file_path, project_root)
+        try:
+            tree = ast.parse(source, filename=str(file_path), type_comments=True)
+        except SyntaxError:
+            logger.warning("syntax_error", path=str(file_path))
+            return ModuleInfo(path=rel_path)
+        return self._extract_module(tree, rel_path)
+
     # ------------------------------------------------------------------
     # Module-level extraction
     # ------------------------------------------------------------------

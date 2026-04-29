@@ -162,6 +162,66 @@ class APISurfaceAnalyzer:
             total_public=total_public,
         )
 
+    def analyze_from_source(
+        self,
+        file_path: "Path",
+        source: str,
+        *,
+        project_root: "Path | None" = None,
+        depth: str = "public",
+        include_types: bool = True,
+    ) -> APISurface:
+        """Analyze API surface from pre-read source content (avoids file I/O).
+
+        Falls back to the normal file-based ``analyze`` path for non-Python files
+        where the extractor does not support pre-read source.
+        """
+        from docs_mcp.extractors.python import PythonExtractor
+
+        extractor = self._get_extractor(file_path)
+        if isinstance(extractor, PythonExtractor):
+            module_info = extractor.extract_from_source(source, file_path, project_root=project_root)
+        else:
+            module_info = extractor.extract(file_path, project_root=project_root)
+
+        all_exports = module_info.all_exports
+        functions = self._build_functions(module_info.functions, all_exports, depth)
+        classes = self._build_classes(module_info.classes, all_exports, depth)
+        constants = self._build_constants(module_info.constants, all_exports, depth)
+        type_aliases = (
+            self._detect_type_aliases(module_info, all_exports, depth) if include_types else []
+        )
+        re_exports = self._detect_re_exports(module_info, file_path)
+
+        all_public_names: list[str] = (
+            [f.name for f in functions] + [c.name for c in classes] + [c.name for c in constants]
+        )
+        total_public = len(all_public_names)
+        documented_names = {f.name for f in functions if f.docstring_present} | {
+            c.name for c in classes if c.docstring_present
+        }
+        docstring_eligible = [f.name for f in functions] + [c.name for c in classes]
+        eligible_count = len(docstring_eligible)
+        coverage = (
+            len(documented_names) / eligible_count
+            if eligible_count > 0
+            else (1.0 if total_public > 0 else 0.0)
+        )
+        missing_docs = [n for n in docstring_eligible if n not in documented_names]
+
+        return APISurface(
+            source_path=module_info.path,
+            functions=functions,
+            classes=classes,
+            constants=constants,
+            type_aliases=type_aliases,
+            re_exports=re_exports,
+            all_exports=all_exports,
+            coverage=coverage,
+            missing_docs=missing_docs,
+            total_public=total_public,
+        )
+
     def _is_visible(self, name: str, all_exports: list[str] | None, depth: str) -> bool:
         """Determine if a name should be included based on visibility rules."""
         if depth == "all":
