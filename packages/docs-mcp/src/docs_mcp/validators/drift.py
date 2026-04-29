@@ -567,15 +567,11 @@ class DriftDetector:
                 undocumented.append(name)
 
             if undocumented:
-                # Determine severity using per-file relevant doc mtime (reduces false-positive
-                # errors when one unrelated doc is touched but relevant docs are stale).
-                severity = "warning"
-                if effective_doc_mtime > 0 and code_mtime > effective_doc_mtime:
-                    severity = "error"
-
-                drift_type = "added_undocumented"
-                if effective_doc_mtime > 0 and code_mtime > effective_doc_mtime:
-                    drift_type = "modified_undocumented"
+                # Reduces false-positive errors: only raise to error/modified when this
+                # file's relevant docs are provably older than the code.
+                is_code_newer = effective_doc_mtime > 0 and code_mtime > effective_doc_mtime
+                severity = "error" if is_code_newer else "warning"
+                drift_type = "modified_undocumented" if is_code_newer else "added_undocumented"
 
                 items.append(
                     DriftItem(

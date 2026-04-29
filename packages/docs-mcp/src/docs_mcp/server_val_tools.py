@@ -141,7 +141,7 @@ async def docs_check_drift(
         "showing": len(items),
         "items": [it.model_dump() for it in items],
         "drift_score": report.drift_score,
-        "drift_fraction": getattr(report, "drift_fraction", None),
+        "drift_fraction": report.drift_fraction,
         "checked_files": report.checked_files,
     }
 
@@ -169,7 +169,21 @@ async def docs_check_drift(
         _logger.debug("tapps_enrichment_failed", error=str(exc))
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    return success_response("docs_check_drift", elapsed_ms, data)
+
+    next_steps: list[str]
+    if report.drift_score == 0:
+        next_steps = [
+            "No drift detected — documentation is current.",
+            "Re-run after code changes or use `since` to scope to recent commits.",
+        ]
+    else:
+        next_steps = [
+            "Update documentation to cover the undocumented public names in `items`.",
+            "Use `source_files` to scope to specific files for targeted fixes.",
+            "Run with `ignore_patterns='defaults'` to suppress private/test symbols.",
+        ]
+
+    return success_response("docs_check_drift", elapsed_ms, data, next_steps=next_steps)
 
 
 async def docs_check_completeness(
