@@ -59,11 +59,19 @@ _CAMEL_SPLIT_RE = re.compile(
 )
 
 
+# Valid values for DriftItem.drift_type.
+# "added_undocumented"   — public name exists in code, not mentioned in docs (no prior doc mtime).
+# "modified_undocumented"— code is newer than the docs that cover it (severity: error).
+# Inverse detection (stale doc references to removed symbols) is out of scope: it requires
+# expensive reverse lookup and produces high false-positive rates on prose text.
+DRIFT_TYPES: frozenset[str] = frozenset({"added_undocumented", "modified_undocumented"})
+
+
 class DriftItem(BaseModel):
     """A single drift finding between code and documentation."""
 
     file_path: str
-    drift_type: str  # "added_undocumented", "modified_undocumented", "removed_stale"
+    drift_type: str  # one of DRIFT_TYPES: "added_undocumented" | "modified_undocumented"
     severity: str = "warning"  # "warning", "error"
     description: str = ""
     symbols: list[str] = []  # full list of undocumented public names (not truncated)

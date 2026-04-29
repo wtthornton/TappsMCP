@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from docs_mcp.validators.drift import (
+    DRIFT_TYPES,
     DriftDetector,
     DriftItem,
     DriftReport,
@@ -901,6 +902,56 @@ class TestPublicConstants:
         (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
         report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
         assert report.total_items == 0
+
+
+# ---------------------------------------------------------------------------
+# Drift type contract
+# ---------------------------------------------------------------------------
+
+
+class TestDriftTypeContract:
+    """Verify the DRIFT_TYPES constant and that check() only produces declared values."""
+
+    def test_drift_types_constant(self) -> None:
+        """DRIFT_TYPES contains exactly the two supported values."""
+        assert DRIFT_TYPES == {"added_undocumented", "modified_undocumented"}
+
+    def test_added_undocumented_produced(self, tmp_path: Path) -> None:
+        """added_undocumented is produced when a name is absent from docs."""
+        (tmp_path / "app.py").write_text(
+            '"""Module."""\n\ndef new_capability() -> None:\n    pass\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        assert any(it.drift_type == "added_undocumented" for it in report.items)
+
+    def test_modified_undocumented_produced(self, tmp_path: Path) -> None:
+        """modified_undocumented is produced when code is newer than docs."""
+        readme = tmp_path / "README.md"
+        readme.write_text("# Project\n", encoding="utf-8")
+        old_time = __import__("time").time() - 86400 * 30
+        __import__("os").utime(readme, (old_time, old_time))
+        (tmp_path / "app.py").write_text(
+            '"""Module."""\n\ndef recently_added_feature() -> None:\n    pass\n',
+            encoding="utf-8",
+        )
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        assert any(it.drift_type == "modified_undocumented" for it in report.items)
+
+    def test_all_produced_types_are_declared(self, tmp_path: Path) -> None:
+        """Every drift_type value in a report must be in DRIFT_TYPES."""
+        src = tmp_path / "src"
+        src.mkdir()
+        for i in range(3):
+            (src / f"mod{i}.py").write_text(
+                f'"""Module {i}."""\n\ndef func_{i}() -> None:\n    pass\n',
+                encoding="utf-8",
+            )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        produced = {it.drift_type for it in report.items}
+        assert produced.issubset(DRIFT_TYPES)
 
 
 # ---------------------------------------------------------------------------
