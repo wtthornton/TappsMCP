@@ -123,6 +123,9 @@ async def docs_check_drift(
     items = report.items
     total_unfiltered = len(items)
 
+    if source_filter:
+        items = [it for it in items if any(sf in it.file_path for sf in source_filter)]
+
     if search_names.strip():
         names_lower = {n.strip().lower() for n in search_names.split(",") if n.strip()}
         items = [

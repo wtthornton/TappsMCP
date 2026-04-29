@@ -85,7 +85,7 @@ class TestPerIssueResults:
     def test_clean_issue_is_agent_ready(self) -> None:
         report = triage_issues([_clean_issue("TAP-1")])
         assert report.per_issue[0].agent_ready is True
-        assert report.per_issue[0].suggested_label == "spec-ready"
+        assert report.per_issue[0].suggested_label == ""
         assert report.per_issue[0].suggested_status == "Backlog"
 
     def test_bad_issue_not_agent_ready(self) -> None:
@@ -94,11 +94,13 @@ class TestPerIssueResults:
         assert report.per_issue[0].suggested_label == ""
         assert report.per_issue[0].suggested_status == "Triage"
 
-    def test_current_agent_label_extracted(self) -> None:
+    def test_current_agent_label_empty_when_agent_labels_retired(self) -> None:
+        # spec-ready is retired (TAP-1086); _AGENT_LABELS is now empty, so
+        # current_agent_label is always "" regardless of what labels are present.
         issue = _clean_issue("TAP-1")
         issue["labels"] = ["Bug", "spec-ready"]
         report = triage_issues([issue])
-        assert report.per_issue[0].current_agent_label == "spec-ready"
+        assert report.per_issue[0].current_agent_label == ""
 
     def test_current_agent_label_empty_when_none_set(self) -> None:
         issue = _clean_issue("TAP-1")
@@ -113,36 +115,31 @@ class TestPerIssueResults:
 
 
 class TestLabelProposals:
-    def test_no_proposal_when_current_matches_suggested(self) -> None:
+    # spec-ready is retired (TAP-1086); _AGENT_LABELS is empty, so
+    # label_proposals is always [] — readiness is now expressed solely via
+    # suggested_status ("Backlog" / "Triage").
+
+    def test_no_proposals_for_agent_ready_issue_with_spec_ready_label(self) -> None:
         issue = _clean_issue("TAP-1")
         issue["labels"] = ["spec-ready"]
         report = triage_issues([issue])
         assert report.label_proposals == []
 
-    def test_proposal_when_stale_legacy_label_present(self) -> None:
-        # Legacy ``needs-spec`` label is no longer in _AGENT_LABELS, so it's
-        # treated as "no current agent label". The agent-ready issue gets a
-        # proposal to add ``spec-ready``.
+    def test_no_proposals_for_issue_with_legacy_label(self) -> None:
         issue = _clean_issue("TAP-1")
         issue["labels"] = ["needs-spec"]
         report = triage_issues([issue])
-        assert len(report.label_proposals) == 1
-        p = report.label_proposals[0]
-        assert p.from_label == ""
-        assert p.to_label == "spec-ready"
+        assert report.label_proposals == []
 
-    def test_proposal_when_no_current_agent_label(self) -> None:
+    def test_no_proposals_for_issue_with_no_agent_label(self) -> None:
         issue = _clean_issue("TAP-1")
-        issue["labels"] = ["Bug"]  # No agent label at all.
+        issue["labels"] = ["Bug"]
         report = triage_issues([issue])
-        assert len(report.label_proposals) == 1
-        assert report.label_proposals[0].from_label == ""
-        assert report.label_proposals[0].to_label == "spec-ready"
+        assert report.label_proposals == []
 
     def test_bad_issue_does_not_propose_label_change(self) -> None:
         # Not-agent-ready issues are routed via suggested_status (Triage),
-        # not a label change. The triage tool no longer proposes a label
-        # for these — the agent reads suggested_status instead.
+        # not a label change.
         report = triage_issues([_bad_issue("TAP-3")])
         assert report.label_proposals == []
         assert report.per_issue[0].suggested_status == "Triage"
@@ -251,9 +248,10 @@ class TestReturnTypes:
         assert isinstance(report, TriageReport)
 
     def test_proposals_are_pydantic(self) -> None:
-        issue = _clean_issue("TAP-1")
-        issue["labels"] = ["needs-spec"]
-        report = triage_issues([issue])
+        # label_proposals is always [] (spec-ready retired), so verify the
+        # field itself is the right list type.
+        report = triage_issues([_clean_issue("TAP-1")])
+        assert isinstance(report.label_proposals, list)
         for p in report.label_proposals:
             assert isinstance(p, LabelProposal)
 

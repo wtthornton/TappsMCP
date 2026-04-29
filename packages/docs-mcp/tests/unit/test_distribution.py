@@ -103,7 +103,7 @@ class TestCLICommands:
         runner = CliRunner()
         result = runner.invoke(cli, ["generate"])
         assert result.exit_code == 0
-        assert "Not yet implemented" in result.output
+        assert "MCP tools" in result.output
 
 
 class TestDockerfile:
