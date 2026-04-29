@@ -46,6 +46,18 @@ class TestDriftItemModel:
         assert item.drift_type == "modified_undocumented"
         assert item.severity == "error"
 
+    def test_symbols_field_default_empty(self) -> None:
+        item = DriftItem(file_path="src/app.py", drift_type="added_undocumented")
+        assert item.symbols == []
+
+    def test_symbols_field_stored(self) -> None:
+        item = DriftItem(
+            file_path="src/app.py",
+            drift_type="added_undocumented",
+            symbols=["foo", "bar", "baz"],
+        )
+        assert item.symbols == ["foo", "bar", "baz"]
+
 
 class TestDriftReportModel:
     """Test DriftReport Pydantic model."""
@@ -186,13 +198,21 @@ class TestQualifyAndIgnorePatterns:
     """Test qualified-name building and glob matching."""
 
     def test_qualify_module(self) -> None:
-        assert _qualify("src/pkg/mod.py", "Foo") == "src.pkg.mod.Foo"
+        # src/ prefix is stripped so ignore_patterns work on logical package names.
+        assert _qualify("src/pkg/mod.py", "Foo") == "pkg.mod.Foo"
 
     def test_qualify_init(self) -> None:
-        assert _qualify("src/pkg/__init__.py", "Foo") == "src.pkg.Foo"
+        assert _qualify("src/pkg/__init__.py", "Foo") == "pkg.Foo"
 
     def test_qualify_windows_slashes(self) -> None:
-        assert _qualify("src\\pkg\\mod.py", "Foo") == "src.pkg.mod.Foo"
+        assert _qualify("src\\pkg\\mod.py", "Foo") == "pkg.mod.Foo"
+
+    def test_qualify_lib_prefix_stripped(self) -> None:
+        assert _qualify("lib/pkg/mod.py", "Bar") == "pkg.mod.Bar"
+
+    def test_qualify_no_prefix(self) -> None:
+        # Paths without src/ or lib/ are unchanged.
+        assert _qualify("mypkg/cli.py", "run") == "mypkg.cli.run"
 
     def test_matches_qualified_glob(self) -> None:
         assert _matches_any_pattern("mypkg.cli.main", ["mypkg.cli.*"]) is True
@@ -203,6 +223,22 @@ class TestQualifyAndIgnorePatterns:
 
     def test_no_match(self) -> None:
         assert _matches_any_pattern("mypkg.api.public", ["mypkg.cli.*"]) is False
+
+    def test_src_layout_ignore_pattern_works(self, tmp_path: Path) -> None:
+        """ignore_patterns on logical names must suppress src-layout symbols."""
+        src = tmp_path / "src" / "mypkg"
+        src.mkdir(parents=True)
+        (src / "cli.py").write_text(
+            "def subcommand_one() -> None:\n    pass\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+
+        # Without ignore: drift detected.
+        assert DriftDetector().check(tmp_path).total_items == 1
+        # With logical package pattern (no src. prefix): suppressed.
+        report = DriftDetector().check(tmp_path, ignore_patterns=["mypkg.cli.*"])
+        assert report.total_items == 0
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +388,34 @@ class TestDriftDetector:
         # At least one item should have error severity
         severities = {item.severity for item in report.items}
         assert "error" in severities
+
+    def test_symbols_populated_on_drift_item(self, tmp_path: Path) -> None:
+        """DriftItem.symbols must contain the full undocumented name list."""
+        (tmp_path / "app.py").write_text(
+            '"""Mod."""\n\n'
+            "def alpha_func() -> None:\n    pass\n"
+            "def beta_func() -> None:\n    pass\n"
+            "def gamma_func() -> None:\n    pass\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        assert report.total_items == 1
+        item = report.items[0]
+        assert set(item.symbols) == {"alpha_func", "beta_func", "gamma_func"}
+
+    def test_symbols_not_truncated_beyond_five(self, tmp_path: Path) -> None:
+        """symbols must include all names even when > 5 (description truncates to 5)."""
+        funcs = "\n".join(
+            f"def func_{i}() -> None:\n    pass" for i in range(8)
+        )
+        (tmp_path / "app.py").write_text(f'"""Mod."""\n\n{funcs}\n', encoding="utf-8")
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+        report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)
+        assert report.total_items == 1
+        item = report.items[0]
+        assert len(item.symbols) == 8
+        assert "(+3 more)" in item.description  # description is still truncated
 
     def test_doc_dirs_filter(self, tmp_path: Path) -> None:
         """doc_dirs parameter should restrict which docs are searched."""

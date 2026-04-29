@@ -44,8 +44,8 @@ async def docs_check_drift(
     Compares public API names in Python source files against documentation
     content. Reports undocumented additions and stale references.
 
-    The returned ``drift_score`` is on a 0-100 scale (higher = less drift),
-    matching sibling validators such as ``freshness_score``.
+    The returned ``drift_score`` is on a 0-100 scale (higher = more drift;
+    0 = no drift, 100 = severe drift), matching the ``DriftReport`` model.
 
     Args:
         since: Reserved for future use (git ref or date filter).
@@ -121,7 +121,10 @@ async def docs_check_drift(
 
     if search_names.strip():
         names_lower = {n.strip().lower() for n in search_names.split(",") if n.strip()}
-        items = [it for it in items if any(nm in it.description.lower() for nm in names_lower)]
+        items = [
+            it for it in items
+            if any(nm in sym.lower() for nm in names_lower for sym in it.symbols)
+        ]
 
     total_filtered = len(items)
 

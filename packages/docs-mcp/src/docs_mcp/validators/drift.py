@@ -62,6 +62,7 @@ class DriftItem(BaseModel):
     drift_type: str  # "added_undocumented", "modified_undocumented", "removed_stale"
     severity: str = "warning"  # "warning", "error"
     description: str = ""
+    symbols: list[str] = []  # full list of undocumented public names (not truncated)
     code_last_modified: str = ""  # ISO date
     doc_last_modified: str = ""  # ISO date
 
@@ -274,7 +275,9 @@ def _matches_any_pattern(qualified_name: str, patterns: list[str]) -> bool:
 def _qualify(rel_path: str, name: str) -> str:
     """Build a dotted fully-qualified symbol name from a relative file path.
 
-    ``src/pkg/mod.py`` + ``Foo`` -> ``src.pkg.mod.Foo``. Trailing ``/__init__.py`` is
+    ``pkg/mod.py`` + ``Foo`` -> ``pkg.mod.Foo``. Strips common src-layout prefixes
+    (``src/``, ``lib/``) so that ``ignore_patterns`` like ``pkg.mod.*`` work correctly
+    on projects that follow a src-layout convention. Trailing ``/__init__.py`` is
     stripped so package symbols look natural.
     """
     path = rel_path.replace("\\", "/")
@@ -282,6 +285,11 @@ def _qualify(rel_path: str, name: str) -> str:
         path = path[: -len("/__init__.py")]
     elif path.endswith(".py"):
         path = path[:-3]
+    # Strip src-layout prefixes so logical package names are used in qualified names.
+    for prefix in ("src/", "lib/"):
+        if path.startswith(prefix):
+            path = path[len(prefix):]
+            break
     module = path.replace("/", ".")
     return f"{module}.{name}" if module else name
 
@@ -421,6 +429,7 @@ class DriftDetector:
                             f"Public names not found in docs: {', '.join(undocumented[:5])}"
                             + (f" (+{len(undocumented) - 5} more)" if len(undocumented) > 5 else "")
                         ),
+                        symbols=list(undocumented),
                         code_last_modified=code_iso,
                         doc_last_modified=doc_iso,
                     )
