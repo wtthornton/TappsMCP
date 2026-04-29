@@ -868,6 +868,21 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Git pre-commit gate (TAP-979) — opt-in pre-commit hook that runs
+    # ``tapps-mcp validate-changed --quick`` and fails the commit on a
+    # quality-gate failure. Bypass with ``TAPPS_SKIP_GATE=1``.
+    install_git_hooks: bool = Field(
+        default=False,
+        description=(
+            "When True, tapps_init writes a `.githooks/pre-commit` script "
+            "that runs `tapps-mcp validate-changed --quick` on staged Python "
+            "files and points `core.hooksPath` at `.githooks`. Closes the "
+            "git boundary so commits made outside Claude Code (human shell, "
+            "non-Claude tools) still go through the quality pipeline. Bypass "
+            "with TAPPS_SKIP_GATE=1."
+        ),
+    )
+
     # Business experts (Epic 43)
     business_experts_enabled: bool = Field(
         default=True,

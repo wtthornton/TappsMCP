@@ -69,6 +69,7 @@ class BootstrapConfig:
     overwrite_tech_stack_md: bool = False
     destructive_guard: bool = False
     linear_enforce_gate: bool = False
+    install_git_hooks: bool = False
     minimal: bool = False
     dry_run: bool = False
     verify_only: bool = False
@@ -241,6 +242,7 @@ def bootstrap_pipeline(
     memory_auto_recall: bool = False,
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
+    install_git_hooks: bool = False,
     minimal: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
@@ -285,6 +287,7 @@ def bootstrap_pipeline(
             memory_auto_capture=memory_auto_capture,
             destructive_guard=destructive_guard,
             linear_enforce_gate=linear_enforce_gate,
+            install_git_hooks=install_git_hooks,
             minimal=minimal,
             dry_run=dry_run,
             verify_only=verify_only,
@@ -794,6 +797,16 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 destructive_guard=cfg.destructive_guard,
                 linear_enforce_gate=cfg.linear_enforce_gate,
             )
+            if cfg.install_git_hooks:
+                from tapps_mcp.pipeline.git_hooks import install_git_pre_commit
+
+                state.result["git_hooks"] = install_git_pre_commit(
+                    state.project_root,
+                    dry_run=state.dry_run,
+                    content_return=state.content_return,
+                )
+                if state.result["git_hooks"].get("installed"):
+                    state.created.append(".githooks/pre-commit")
             state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
             state.result["skills"] = generate_skills(
                 state.project_root, "claude", engagement_level=engagement

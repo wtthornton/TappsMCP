@@ -16,3 +16,15 @@ repos:
         args: [--strict]
         pass_filenames: false
         entry: mypy src/
+
+  # TAP-979: gate commits on the tapps-mcp quality pipeline. Bypass with
+  # SKIP=tapps-validate-changed git commit ... or TAPPS_SKIP_GATE=1.
+  - repo: local
+    hooks:
+      - id: tapps-validate-changed
+        name: tapps-mcp validate-changed (quick)
+        entry: uv run tapps-mcp validate-changed --quick
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-commit]

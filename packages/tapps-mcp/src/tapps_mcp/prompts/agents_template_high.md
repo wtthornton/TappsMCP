@@ -204,6 +204,7 @@ These add blocking `PreToolUse` matchers. They're independent — enable each ba
 
 - **`destructive_guard: true`** — installs `tapps-pre-bash.sh`, blocks Bash commands containing `rm -rf`, `format c:`, fork-bomb patterns, etc. Exit 2 blocks the command.
 - **`linear_enforce_gate: true`** — installs `tapps-pre-linear-write.sh` + `tapps-post-docs-validate.sh` (TAP-981). Blocks `mcp__plugin_linear_linear__save_issue` unless a `mcp__docs-mcp__docs_validate_linear_issue` call happened in the last 30 minutes. Steers Linear writes through the `linear-issue` skill's generator/validator pipeline. Emergency bypass: `TAPPS_LINEAR_SKIP_VALIDATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`). Bash on Linux/macOS, PowerShell `.ps1` on Windows (TAP-986). Default: on at high/medium engagement, off at low. Update-only `save_issue` calls (with `id` and no `title`/`description`) skip the sentinel — status, label, priority, and assignee edits pass through without re-validation.
+- **`install_git_hooks: true`** — writes `.githooks/pre-commit` and points `core.hooksPath` at it (TAP-979). The hook runs `uv run tapps-mcp validate-changed --quick` on staged Python files and fails the commit on quality-gate failure, closing the git boundary so commits made outside Claude Code (human shell, scripts, non-Claude tools) still go through the pipeline. Emergency bypass: `TAPPS_SKIP_GATE=1 git commit ...`. Default: off.
 
 Run `tapps-mcp doctor` to see which `PreToolUse` matchers are wired in your project.
 

@@ -516,6 +516,7 @@ async def tapps_init(
     memory_auto_recall: bool = False,
     destructive_guard: bool | None = None,
     linear_enforce_gate: bool | None = None,
+    install_git_hooks: bool | None = None,
     minimal: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
@@ -567,6 +568,10 @@ async def tapps_init(
         # TAP-981: engagement-aware default — true at high/medium, false at low.
         # Honors explicit overrides from .tapps-mcp.yaml or env.
         leg = settings.linear_enforce_gate_resolved()
+    igh = install_git_hooks
+    if igh is None:
+        # TAP-979: opt-in git pre-commit hook.
+        igh = getattr(settings, "install_git_hooks", False)
 
     cfg = _pih.build_init_bootstrap_config(
         create_handoff=create_handoff,
@@ -587,6 +592,7 @@ async def tapps_init(
         memory_auto_recall=memory_auto_recall,
         destructive_guard=dg,
         linear_enforce_gate=leg,
+        install_git_hooks=igh,
         minimal=minimal,
         dry_run=dry_run,
         verify_only=verify_only,
