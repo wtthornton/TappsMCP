@@ -70,6 +70,10 @@ class BootstrapConfig:
     destructive_guard: bool = False
     linear_enforce_gate: bool = False
     install_git_hooks: bool = False
+    linear_sdlc: bool = False
+    linear_issue_prefix: str = "TAP"
+    linear_team_id: str = ""
+    linear_project_id: str = ""
     minimal: bool = False
     dry_run: bool = False
     verify_only: bool = False
@@ -243,6 +247,10 @@ def bootstrap_pipeline(
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
     install_git_hooks: bool = False,
+    linear_sdlc: bool = False,
+    linear_issue_prefix: str = "TAP",
+    linear_team_id: str = "",
+    linear_project_id: str = "",
     minimal: bool = False,
     dry_run: bool = False,
     verify_only: bool = False,
@@ -288,6 +296,10 @@ def bootstrap_pipeline(
             destructive_guard=destructive_guard,
             linear_enforce_gate=linear_enforce_gate,
             install_git_hooks=install_git_hooks,
+            linear_sdlc=linear_sdlc,
+            linear_issue_prefix=linear_issue_prefix,
+            linear_team_id=linear_team_id,
+            linear_project_id=linear_project_id,
             minimal=minimal,
             dry_run=dry_run,
             verify_only=verify_only,
@@ -807,6 +819,22 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 )
                 if state.result["git_hooks"].get("installed"):
                     state.created.append(".githooks/pre-commit")
+            if cfg.linear_sdlc:
+                from tapps_mcp.pipeline.linear_sdlc import LinearSDLCConfig
+                from tapps_mcp.pipeline.linear_sdlc.installer import install_linear_sdlc
+
+                sdlc_config = LinearSDLCConfig(
+                    issue_prefix=cfg.linear_issue_prefix,
+                    team_id=cfg.linear_team_id,
+                    project_id=cfg.linear_project_id,
+                )
+                state.result["linear_sdlc"] = install_linear_sdlc(
+                    state.project_root,
+                    sdlc_config,
+                    dry_run=state.dry_run,
+                    content_return=state.content_return,
+                )
+                state.created.extend(state.result["linear_sdlc"].get("files_written", []))
             state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
             state.result["skills"] = generate_skills(
                 state.project_root, "claude", engagement_level=engagement
