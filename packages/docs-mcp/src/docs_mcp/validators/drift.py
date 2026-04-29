@@ -158,6 +158,40 @@ def _read_doc_content(doc_files: list[Path]) -> str:
     return "\n".join(parts)
 
 
+def _build_doc_word_set(doc_files: list[Path]) -> frozenset[str]:
+    """Build an inverted word-set from all documentation files.
+
+    Reads each doc file once and tokenizes its content into a frozenset of lowercase
+    words (``\\w+`` tokens). Used by :func:`_name_covered_by_word_set` for O(1)
+    membership lookups instead of O(n) substring scans on a concatenated string.
+    """
+    words: set[str] = set()
+    for fp in doc_files:
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        words.update(re.findall(r"\w+", text.lower()))
+    return frozenset(words)
+
+
+def _name_covered_by_word_set(name: str, word_set: frozenset[str]) -> bool:
+    """Return True if ``name`` or any long-enough token appears in *word_set*.
+
+    Uses O(1) set membership instead of the O(n) substring scan in
+    :func:`_name_covered_by_prose`. Matching is case-insensitive. Tokens shorter
+    than :data:`_MIN_FUZZY_TOKEN_LEN` are skipped to avoid false positives.
+    """
+    if not word_set:
+        return False
+    for token in _tokenize_name(name):
+        if len(token) < _MIN_FUZZY_TOKEN_LEN:
+            continue
+        if token.lower() in word_set:
+            return True
+    return False
+
+
 def _get_public_names(surface: APISurface) -> list[str]:
     """Extract public API names from an APISurface."""
     names: list[str] = []
@@ -356,8 +390,8 @@ class DriftDetector:
         else:
             resolved_ignore = []
 
-        # Read all doc content for reference checking
-        doc_content_lower = _read_doc_content(doc_files).lower()
+        # Build inverted word-set once for O(1) name lookups (replaces flat-string scan).
+        doc_word_set = _build_doc_word_set(doc_files)
 
         # Get the most recent doc modification time (or 0 if no docs)
         doc_mtime: float = 0.0
@@ -416,7 +450,7 @@ class DriftDetector:
                 qualified = _qualify(rel_path, name)
                 if resolved_ignore and _matches_any_pattern(qualified, resolved_ignore):
                     continue
-                if _name_covered_by_prose(name, doc_content_lower):
+                if _name_covered_by_word_set(name, doc_word_set):
                     continue
                 if docstring_coverage_counts and _name_covered_by_docstring(name, docstring_corpus):
                     continue

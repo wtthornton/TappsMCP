@@ -10,11 +10,13 @@ from docs_mcp.validators.drift import (
     DriftDetector,
     DriftItem,
     DriftReport,
+    _build_doc_word_set,
     _find_doc_files,
     _find_python_files,
     _iso_from_mtime,
     _matches_any_pattern,
     _name_covered_by_prose,
+    _name_covered_by_word_set,
     _qualify,
     _tokenize_name,
 )
@@ -239,6 +241,51 @@ class TestQualifyAndIgnorePatterns:
         # With logical package pattern (no src. prefix): suppressed.
         report = DriftDetector().check(tmp_path, ignore_patterns=["mypkg.cli.*"])
         assert report.total_items == 0
+
+
+# ---------------------------------------------------------------------------
+# Inverted word-set tests
+# ---------------------------------------------------------------------------
+
+
+class TestDocWordSet:
+    """Test the inverted doc-word-set builder and O(1) coverage checker."""
+
+    def test_build_empty(self, tmp_path: Path) -> None:
+        ws = _build_doc_word_set([])
+        assert ws == frozenset()
+
+    def test_build_reads_all_files(self, tmp_path: Path) -> None:
+        (tmp_path / "a.md").write_text("hello world", encoding="utf-8")
+        (tmp_path / "b.md").write_text("scorer reranker", encoding="utf-8")
+        ws = _build_doc_word_set([tmp_path / "a.md", tmp_path / "b.md"])
+        assert "hello" in ws
+        assert "scorer" in ws
+
+    def test_build_lowercased(self, tmp_path: Path) -> None:
+        (tmp_path / "a.md").write_text("SCORER PaymentProcessor", encoding="utf-8")
+        ws = _build_doc_word_set([tmp_path / "a.md"])
+        assert "scorer" in ws
+        assert "paymentprocessor" in ws
+        assert "SCORER" not in ws
+
+    def test_build_skips_unreadable(self, tmp_path: Path) -> None:
+        missing = tmp_path / "missing.md"
+        ws = _build_doc_word_set([missing])
+        assert ws == frozenset()
+
+    def test_covered_by_word_set(self) -> None:
+        ws = frozenset({"scorer", "reranker", "processor"})
+        assert _name_covered_by_word_set("BM25Scorer", ws) is True
+        assert _name_covered_by_word_set("FlashRankReranker", ws) is True
+        assert _name_covered_by_word_set("UnrelatedThing", ws) is False
+
+    def test_not_covered_empty_set(self) -> None:
+        assert _name_covered_by_word_set("BM25Scorer", frozenset()) is False
+
+    def test_short_token_not_matched(self) -> None:
+        ws = frozenset({"id", "go"})
+        assert _name_covered_by_word_set("id", ws) is False
 
 
 # ---------------------------------------------------------------------------
