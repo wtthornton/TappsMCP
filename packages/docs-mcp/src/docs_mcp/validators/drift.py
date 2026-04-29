@@ -5,6 +5,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -330,6 +331,49 @@ def _collect_docstrings_from_source(source: str) -> str:
     return "\n".join(parts).lower()
 
 
+def _get_files_changed_since(project_root: Path, since: str) -> set[str]:
+    """Return relative paths of files changed since the given git ref or ISO date.
+
+    Tries ``git diff --name-only <since>`` first (works for refs, branches, tags,
+    and ``HEAD~N`` expressions), then falls back to ``git log --since=<since>
+    --name-only`` for ISO date strings. Returns an empty set on any error so the
+    caller can fall back to scanning all files.
+
+    Paths are returned with forward slashes to match the convention used elsewhere
+    in the drift detector.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", since],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            paths = {p.strip().replace("\\", "/") for p in result.stdout.splitlines() if p.strip()}
+            if paths:
+                return paths
+    except Exception:
+        pass
+
+    # Fallback: ISO date strings are not valid git refs; use git log --since.
+    try:
+        result = subprocess.run(
+            ["git", "log", f"--since={since}", "--name-only", "--pretty=format:"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            return {p.strip().replace("\\", "/") for p in result.stdout.splitlines() if p.strip()}
+    except Exception:
+        pass
+
+    return set()
+
+
 def _matches_any_pattern(qualified_name: str, patterns: list[str]) -> bool:
     """Return True if ``qualified_name`` matches any fnmatch-style glob pattern."""
     for pat in patterns:
@@ -381,7 +425,11 @@ class DriftDetector:
 
         Args:
             project_root: Root of the project to scan.
-            since: Unused for MVP (reserved for git ref/date filtering).
+            since: Git ref (``HEAD~1``, ``origin/main``, ``v1.0.0``) or ISO date
+                (``2026-04-01``) that scopes the drift check to files changed since
+                that point. When provided and git is available, only modified Python
+                files are analyzed. Falls back to scanning all files when git is
+                unavailable or the ref cannot be resolved.
             doc_dirs: Optional list of directories containing docs.
             source_files: Optional list of relative path suffixes (e.g.
                 ``["server.py", "tools/init.py"]``) to scope the scan to. Files
@@ -407,6 +455,15 @@ class DriftDetector:
 
         py_files = _find_python_files(project_root)
         doc_files = _find_doc_files(project_root, doc_dirs)
+
+        # Pre-filter by `since` git ref/date: only changed files need drift analysis.
+        if since:
+            changed_paths = _get_files_changed_since(project_root, since)
+            if changed_paths:
+                py_files = [
+                    f for f in py_files
+                    if str(f.relative_to(project_root)).replace("\\", "/") in changed_paths
+                ]
 
         # Pre-filter by source_files to skip unneeded files before analysis.
         if source_files:

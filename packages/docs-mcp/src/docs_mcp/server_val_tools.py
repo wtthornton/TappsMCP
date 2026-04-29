@@ -48,7 +48,10 @@ async def docs_check_drift(
     0 = no drift, 100 = severe drift), matching the ``DriftReport`` model.
 
     Args:
-        since: Reserved for future use (git ref or date filter).
+        since: Git ref (``HEAD~1``, ``origin/main``, ``v1.0.0``) or ISO date
+            (``2026-04-01``) to scope the check to files changed since that point.
+            Falls back to scanning all files when git is unavailable or the ref
+            cannot be resolved.
         doc_dirs: Comma-separated list of documentation directories to search.
             When empty, scans the entire project for doc files.
         source_files: Comma-separated list of source file paths to limit drift

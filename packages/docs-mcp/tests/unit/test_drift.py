@@ -6,6 +6,8 @@ import os
 import time
 from pathlib import Path
 
+from unittest.mock import MagicMock, patch
+
 from docs_mcp.validators.drift import (
     DriftDetector,
     DriftItem,
@@ -14,6 +16,7 @@ from docs_mcp.validators.drift import (
     _build_doc_word_set,
     _find_doc_files,
     _find_python_files,
+    _get_files_changed_since,
     _get_relevant_doc_mtime,
     _iso_from_mtime,
     _matches_any_pattern,
@@ -348,6 +351,79 @@ class TestDocTokenMtimeMap:
         # "zzzz_unrelated_func" is not mentioned in README, so no relevant doc mtime
         # → falls back to global doc_mtime → code (1M) < doc (2M) → severity=warning, not error
         assert report.items[0].severity == "warning"
+
+
+class TestSinceFilter:
+    """Test git-based incremental drift filtering via the `since` parameter."""
+
+    def test_get_files_changed_since_ref(self, tmp_path: Path) -> None:
+        """Successful git diff result returns the changed paths."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "src/app.py\nsrc/utils.py\n"
+        with patch("docs_mcp.validators.drift.subprocess.run", return_value=mock_result):
+            paths = _get_files_changed_since(tmp_path, "HEAD~1")
+        assert paths == {"src/app.py", "src/utils.py"}
+
+    def test_get_files_changed_since_falls_back_to_log(self, tmp_path: Path) -> None:
+        """When git diff returns nothing, git log --since is tried."""
+        diff_result = MagicMock()
+        diff_result.returncode = 0
+        diff_result.stdout = ""  # empty → try date fallback
+        log_result = MagicMock()
+        log_result.returncode = 0
+        log_result.stdout = "src/changed.py\n\n"
+        with patch(
+            "docs_mcp.validators.drift.subprocess.run",
+            side_effect=[diff_result, log_result],
+        ):
+            paths = _get_files_changed_since(tmp_path, "2026-04-01")
+        assert paths == {"src/changed.py"}
+
+    def test_get_files_changed_since_empty_on_error(self, tmp_path: Path) -> None:
+        """Returns empty set when git is unavailable."""
+        with patch("docs_mcp.validators.drift.subprocess.run", side_effect=FileNotFoundError):
+            paths = _get_files_changed_since(tmp_path, "HEAD~1")
+        assert paths == set()
+
+    def test_detector_since_filters_to_changed_files(self, tmp_path: Path) -> None:
+        """When `since` returns specific files, only those files are analyzed."""
+        (tmp_path / "changed.py").write_text(
+            '"""Mod."""\n\ndef changed_func() -> None:\n    pass\n', encoding="utf-8"
+        )
+        (tmp_path / "unchanged.py").write_text(
+            '"""Mod."""\n\ndef unchanged_func() -> None:\n    pass\n', encoding="utf-8"
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+
+        with patch(
+            "docs_mcp.validators.drift._get_files_changed_since",
+            return_value={"changed.py"},
+        ):
+            report = DriftDetector().check(
+                tmp_path, since="HEAD~1", docstring_coverage_counts=False
+            )
+
+        assert report.checked_files == 1
+        assert report.total_items == 1
+        assert report.items[0].file_path == "changed.py"
+
+    def test_detector_since_empty_result_scans_all(self, tmp_path: Path) -> None:
+        """When git returns no changed files, all files are scanned."""
+        (tmp_path / "app.py").write_text(
+            '"""Mod."""\n\ndef some_func() -> None:\n    pass\n', encoding="utf-8"
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+
+        with patch(
+            "docs_mcp.validators.drift._get_files_changed_since",
+            return_value=set(),
+        ):
+            report = DriftDetector().check(
+                tmp_path, since="HEAD~1", docstring_coverage_counts=False
+            )
+
+        assert report.checked_files == 1  # fell back to scanning all
 
 
 # ---------------------------------------------------------------------------
