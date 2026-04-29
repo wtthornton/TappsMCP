@@ -52,7 +52,7 @@ LOG_MAX_OUTPUT_FILES=20
 CLAUDE_AUTO_UPDATE=true
 CLAUDE_MIN_VERSION="2.0.76"
 RALPH_VERBOSE=false
-RALPH_USE_AGENT=true
+RALPH_USE_AGENT=false  # was true; legacy mode is forced anyway by custom ALLOWED_TOOLS (Issue #154) — explicit avoids per-loop fallback warning
 RALPH_AGENT_NAME="ralph"
 
 # =============================================================================
@@ -165,3 +165,6 @@ RALPH_TASK_SOURCE="file"
 # =============================================================================
 # Beads project for scoped queries
 # =============================================================================
+
+# Pin model to keep loop costs predictable (added by cost-insurance pass)
+CLAUDE_MODEL="claude-sonnet-4-6"  # main Ralph loop on Sonnet; ralph-architect uses Opus only when delegated for LARGE tasks
