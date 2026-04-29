@@ -70,4 +70,7 @@ When updating an existing issue, the same routing applies: fetch, lint/validate,
 
 ## Enforcement
 
-Currently soft-enforced (rule is auto-loaded into the system prompt). A follow-up ticket covers adding a `PreToolUse` hook that blocks `mcp__plugin_linear_linear__save_issue` when no prior `docs_validate_linear_issue` call has been recorded in the same turn cluster.
+Hard-enforced via hooks in `.claude/settings.json` (shipped by `tapps_upgrade` as of TAP-981):
+
+- **PostToolUse** on `mcp__docs-mcp__docs_validate_linear_issue` → `.claude/hooks/tapps-post-docs-validate.sh` writes a sentinel to `.tapps-mcp/.linear-validate-sentinel`.
+- **PreToolUse** on `mcp__plugin_linear_linear__save_issue` → `.claude/hooks/tapps-pre-linear-write.sh` blocks the call if the sentinel is missing or > 30 minutes old. Bypass with `TAPPS_LINEAR_SKIP_VALIDATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`).
