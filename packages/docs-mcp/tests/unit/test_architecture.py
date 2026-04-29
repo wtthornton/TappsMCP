@@ -279,7 +279,7 @@ class TestComponentValueDescription:
         gen = ArchitectureGenerator()
         text = gen._generate_component_value("models", "", 1, 0, 4)
         assert "4 classes" in text
-        assert "abstractions" in text
+        assert "interface" in text
 
 
 # ---------------------------------------------------------------------------

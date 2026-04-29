@@ -51,6 +51,92 @@ _COUPLING_HIGH = 20
 _DEP_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+")
 
 # ---------------------------------------------------------------------------
+# Polyglot / multi-language project detection
+# ---------------------------------------------------------------------------
+
+_AGENT_MARKERS: frozenset[str] = frozenset({"AGENT.md", "IDENTITY.md", "SOUL.md"})
+_WORKFLOW_EXTS: frozenset[str] = frozenset({".yaml", ".yml"})
+
+# External package name → (category, display_name, data_flow_direction)
+_INTEGRATION_MAP: dict[str, tuple[str, str, str]] = {
+    "httpx": ("http", "HTTP Client (httpx)", "outbound"),
+    "requests": ("http", "HTTP Client (requests)", "outbound"),
+    "aiohttp": ("http", "HTTP Client (aiohttp)", "outbound"),
+    "fastapi": ("http", "FastAPI Server", "inbound"),
+    "starlette": ("http", "Starlette / ASGI", "inbound"),
+    "flask": ("http", "Flask Server", "inbound"),
+    "django": ("http", "Django Server", "inbound"),
+    "asyncpg": ("database", "PostgreSQL (asyncpg)", "outbound"),
+    "psycopg": ("database", "PostgreSQL (psycopg)", "outbound"),
+    "psycopg2": ("database", "PostgreSQL (psycopg2)", "outbound"),
+    "sqlalchemy": ("database", "SQLAlchemy ORM", "outbound"),
+    "alembic": ("database", "Alembic Migrations", "outbound"),
+    "motor": ("database", "MongoDB (motor)", "outbound"),
+    "pymongo": ("database", "MongoDB", "outbound"),
+    "redis": ("cache", "Redis", "outbound"),
+    "aioredis": ("cache", "Redis (async)", "outbound"),
+    "boto3": ("cloud", "AWS SDK (boto3)", "outbound"),
+    "botocore": ("cloud", "AWS SDK (botocore)", "outbound"),
+    "aiobotocore": ("cloud", "AWS SDK (async)", "outbound"),
+    "anthropic": ("llm", "Anthropic Claude API", "outbound"),
+    "openai": ("llm", "OpenAI API", "outbound"),
+    "cohere": ("llm", "Cohere API", "outbound"),
+    "stripe": ("payments", "Stripe Payments", "outbound"),
+    "sendgrid": ("email", "SendGrid Email", "outbound"),
+    "mailgun": ("email", "Mailgun Email", "outbound"),
+    "supabase": ("database", "Supabase", "outbound"),
+    "celery": ("queue", "Celery Task Queue", "both"),
+    "dramatiq": ("queue", "Dramatiq Queue", "both"),
+    "pika": ("queue", "RabbitMQ (pika)", "both"),
+    "nats": ("queue", "NATS Messaging", "both"),
+}
+
+_DEPLOY_MARKERS: list[tuple[str, str, str]] = [
+    ("Dockerfile", "docker", "container"),
+    ("docker-compose.yml", "compose", "container"),
+    ("docker-compose.yaml", "compose", "container"),
+    ("render.yaml", "render", "cloud"),
+    ("fly.toml", "fly", "cloud"),
+    ("app.yaml", "gae", "cloud"),
+    ("vercel.json", "vercel", "serverless"),
+    ("netlify.toml", "netlify", "serverless"),
+    ("Procfile", "heroku", "cloud"),
+    ("heroku.yml", "heroku", "cloud"),
+]
+
+_DEPLOY_LABEL: dict[str, str] = {
+    "docker": "Docker",
+    "compose": "Docker Compose",
+    "render": "Render.com",
+    "fly": "Fly.io",
+    "gae": "Google App Engine",
+    "vercel": "Vercel",
+    "netlify": "Netlify",
+    "heroku": "Heroku",
+    "github-actions": "GitHub Actions",
+}
+
+_TECH_COLORS: dict[str, tuple[str, str]] = {
+    "TypeScript": ("#3178c6", "#fafafa"),
+    "Astro": ("#ff5d01", "#fafafa"),
+    "Next.js": ("#000000", "#fafafa"),
+    "React": ("#61dafb", "#0a0a0f"),
+    "Vue": ("#42b883", "#fafafa"),
+    "Svelte": ("#ff3e00", "#fafafa"),
+    "Node.js": ("#339933", "#fafafa"),
+    "Python": ("#3776ab", "#fafafa"),
+    "YAML": ("#d4a847", "#0a0a0f"),
+    "JSON Schema": ("#6b7280", "#fafafa"),
+    "Markdown": ("#71717a", "#fafafa"),
+    "AI Agent": ("#8b5cf6", "#fafafa"),
+    "Workflow": ("#d97706", "#0a0a0f"),
+    "Docker": ("#2496ed", "#fafafa"),
+    "Render": ("#46e3b7", "#0a0a0f"),
+    "Fly.io": ("#8b5cf6", "#fafafa"),
+    "GitHub Actions": ("#2088ff", "#fafafa"),
+}
+
+# ---------------------------------------------------------------------------
 # Motion configuration (deterministic — never derived from time/random/env).
 # Used by _build_circular_dep_svg / _build_grid_dep_svg when motion is enabled.
 # ---------------------------------------------------------------------------
@@ -229,6 +315,18 @@ class ArchitectureGenerator:
             project_root, module_map, dep_graph, motion=motion
         )
 
+        # 5d. Scan non-Python components (TypeScript apps, AI agent dirs, YAML workflows)
+        polyglot_components = self._scan_polyglot_components(project_root)
+
+        # 5e. Scan deployment artifacts (Dockerfile, render.yaml, etc.)
+        deployment_artifacts = self._scan_deployment_artifacts(project_root)
+
+        # 5f. Map external dependency imports to named integration categories
+        integration_points = self._scan_integration_points(dep_graph)
+
+        # 5g. Extract narrative context from README
+        business_context = self._extract_business_context(project_root, metadata)
+
         # 6. Render HTML (pass pre-collected packages to avoid re-collection)
         content = self._render_html(
             project_root=project_root,
@@ -241,6 +339,10 @@ class ArchitectureGenerator:
             packages=packages,
             archetype_html=archetype_html,
             motion=motion,
+            polyglot_components=polyglot_components,
+            deployment_artifacts=deployment_artifacts,
+            integration_points=integration_points,
+            business_context=business_context,
         )
 
         edge_count = dep_graph.total_internal_imports if dep_graph else 0
@@ -510,6 +612,250 @@ class ArchitectureGenerator:
 
         return results or [project_root]
 
+    # ------------------------------------------------------------------
+    # Polyglot / multi-language component scanners
+    # ------------------------------------------------------------------
+
+    def _scan_polyglot_components(self, project_root: Path) -> list[dict[str, Any]]:
+        """Detect non-Python components: TypeScript apps, AI agent dirs, YAML workflows, schemas."""
+        components: list[dict[str, Any]] = []
+        skip = {".git", ".venv", "venv", "node_modules", "__pycache__", ".tapps-mcp"}
+
+        # 1. TypeScript / Node apps: dirs with package.json + src/ or framework config
+        for subdir in sorted(project_root.iterdir()):
+            if not subdir.is_dir() or subdir.name.startswith(".") or subdir.name in skip:
+                continue
+            pkg_json = subdir / "package.json"
+            if not pkg_json.exists():
+                continue
+            try:
+                import json as _json
+
+                data: dict[str, Any] = _json.loads(pkg_json.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+            name = str(data.get("name") or subdir.name)
+            description = str(data.get("description", ""))
+            all_deps: dict[str, Any] = {
+                **data.get("dependencies", {}),
+                **data.get("devDependencies", {}),
+            }
+            if "astro" in all_deps:
+                tech = "Astro"
+            elif "next" in all_deps:
+                tech = "Next.js"
+            elif "react" in all_deps:
+                tech = "React"
+            elif "vue" in all_deps:
+                tech = "Vue"
+            elif "svelte" in all_deps:
+                tech = "Svelte"
+            elif any("typescript" in k.lower() for k in all_deps):
+                tech = "TypeScript"
+            else:
+                tech = "Node.js"
+            src_dir = subdir / "src"
+            file_count = (
+                sum(1 for _ in src_dir.rglob("*.ts"))
+                + sum(1 for _ in src_dir.rglob("*.tsx"))
+                if src_dir.is_dir()
+                else 0
+            )
+            components.append(
+                {
+                    "name": name,
+                    "kind": "app",
+                    "path": str(subdir.relative_to(project_root)),
+                    "tech": tech,
+                    "description": description or f"{tech} application",
+                    "stats": f"{file_count} source files" if file_count else "",
+                    "subcomponents": [],
+                }
+            )
+
+        # 2. Agent directories: dirs containing AGENT.md or IDENTITY.md markers
+        agents_dir = project_root / "agents"
+        if agents_dir.is_dir():
+            pe_agents: list[str] = []
+            poc_agents: list[str] = []
+            other_agents: list[str] = []
+            for agent_dir in sorted(agents_dir.iterdir()):
+                if not agent_dir.is_dir():
+                    continue
+                if any((agent_dir / m).exists() for m in _AGENT_MARKERS):
+                    if agent_dir.name.startswith("pe-"):
+                        pe_agents.append(agent_dir.name[3:])
+                    elif agent_dir.name.startswith("poc-"):
+                        poc_agents.append(agent_dir.name[4:])
+                    else:
+                        other_agents.append(agent_dir.name)
+            if pe_agents:
+                components.append(
+                    {
+                        "name": "PE Evaluation Agents",
+                        "kind": "agent-group",
+                        "path": "agents/pe-*",
+                        "tech": "AI Agent",
+                        "description": (
+                            f"Private equity analysis team: {len(pe_agents)} specialized AI "
+                            "agents that collaborate to evaluate investment opportunities."
+                        ),
+                        "stats": f"{len(pe_agents)} agents",
+                        "subcomponents": pe_agents,
+                    }
+                )
+            if poc_agents:
+                components.append(
+                    {
+                        "name": "POC Builder Agents",
+                        "kind": "agent-group",
+                        "path": "agents/poc-*",
+                        "tech": "AI Agent",
+                        "description": (
+                            f"Proof-of-concept team: {len(poc_agents)} AI agents that "
+                            "validate and build portfolio concepts."
+                        ),
+                        "stats": f"{len(poc_agents)} agents",
+                        "subcomponents": poc_agents,
+                    }
+                )
+            if other_agents:
+                components.append(
+                    {
+                        "name": "Agent Roles",
+                        "kind": "agent-group",
+                        "path": "agents/",
+                        "tech": "AI Agent",
+                        "description": f"{len(other_agents)} AI agent role definitions.",
+                        "stats": f"{len(other_agents)} agents",
+                        "subcomponents": other_agents,
+                    }
+                )
+
+        # 3. YAML workflow definitions
+        workflows_dir = project_root / "workflows"
+        if workflows_dir.is_dir():
+            wf_files = [
+                f.name
+                for f in sorted(workflows_dir.iterdir())
+                if f.suffix in _WORKFLOW_EXTS and not f.name.startswith(".")
+            ]
+            if wf_files:
+                components.append(
+                    {
+                        "name": "AgentForge Workflows",
+                        "kind": "workflow",
+                        "path": "workflows/",
+                        "tech": "YAML",
+                        "description": (
+                            f"{len(wf_files)} AgentForge workflow specifications "
+                            "defining agent orchestration pipelines."
+                        ),
+                        "stats": f"{len(wf_files)} workflows",
+                        "subcomponents": [Path(f).stem for f in wf_files],
+                    }
+                )
+
+        # 4. JSON Schema / template definitions
+        templates_dir = project_root / "templates"
+        if templates_dir.is_dir():
+            schema_files = [str(f.name) for f in sorted(templates_dir.rglob("*.schema.json"))]
+            if schema_files:
+                components.append(
+                    {
+                        "name": "Data Schemas",
+                        "kind": "schema",
+                        "path": "templates/",
+                        "tech": "JSON Schema",
+                        "description": (
+                            f"{len(schema_files)} JSON Schema definitions governing "
+                            "data contracts between agents and workflows."
+                        ),
+                        "stats": f"{len(schema_files)} schemas",
+                        "subcomponents": [
+                            Path(f).stem.replace(".schema", "") for f in schema_files[:8]
+                        ],
+                    }
+                )
+
+        return components
+
+    def _scan_deployment_artifacts(self, project_root: Path) -> list[dict[str, Any]]:
+        """Detect deployment artifacts: Dockerfile, render.yaml, GitHub Actions, etc."""
+        found: list[dict[str, Any]] = []
+        for filename, kind, target in _DEPLOY_MARKERS:
+            if (project_root / filename).exists():
+                found.append(
+                    {
+                        "file": filename,
+                        "kind": kind,
+                        "target": target,
+                        "label": _DEPLOY_LABEL.get(kind, filename),
+                    }
+                )
+        gha_dir = project_root / ".github" / "workflows"
+        if gha_dir.is_dir():
+            wf_count = sum(1 for f in gha_dir.iterdir() if f.suffix in {".yml", ".yaml"})
+            if wf_count:
+                found.append(
+                    {
+                        "file": ".github/workflows/",
+                        "kind": "github-actions",
+                        "target": "ci",
+                        "label": f"GitHub Actions ({wf_count} workflows)",
+                    }
+                )
+        return found
+
+    def _scan_integration_points(
+        self,
+        dep_graph: ImportGraph | None,
+    ) -> list[dict[str, Any]]:
+        """Map external dependencies to named integration categories.
+
+        ``ImportGraph.external_imports`` is ``{file_path: [pkg_name, ...]}``;
+        we need to flatten the values to get the actual package names.
+        """
+        if dep_graph is None:
+            return []
+        # Flatten {file: [pkg, ...]} → set of package names
+        all_pkgs: set[str] = set()
+        ext = dep_graph.external_imports or {}
+        if isinstance(ext, dict):
+            for v in ext.values():
+                if isinstance(v, list):
+                    all_pkgs.update(v)
+                else:
+                    all_pkgs.add(str(v))
+        seen: dict[str, dict[str, Any]] = {}
+        for pkg_name in all_pkgs:
+            for key, (category, display, direction) in _INTEGRATION_MAP.items():
+                if pkg_name == key or pkg_name.startswith(key + "."):
+                    if category not in seen:
+                        seen[category] = {
+                            "category": category,
+                            "display": display,
+                            "direction": direction,
+                        }
+                    break
+        return list(seen.values())
+
+    def _extract_business_context(
+        self, project_root: Path, metadata: ProjectMetadata
+    ) -> str:
+        """Extract business context narrative from README.md or metadata description."""
+        for readme_name in ("README.md", "readme.md", "README.rst"):
+            readme = project_root / readme_name
+            if readme.exists():
+                try:
+                    content = readme.read_text(encoding="utf-8", errors="replace")
+                    paragraph = self._extract_first_paragraph(content)
+                    if paragraph and len(paragraph) > 30:
+                        return paragraph
+                except OSError:
+                    pass
+        return metadata.description or ""
+
     @staticmethod
     def _is_noise_path(path: Path) -> bool:
         """Check if a path belongs to noise directories like .venv, tests, etc."""
@@ -543,6 +889,10 @@ class ArchitectureGenerator:
         packages: list[dict[str, Any]] | None = None,
         archetype_html: str = "",
         motion: str = "off",
+        polyglot_components: list[dict[str, Any]] | None = None,
+        deployment_artifacts: list[dict[str, Any]] | None = None,
+        integration_points: list[dict[str, Any]] | None = None,
+        business_context: str = "",
     ) -> str:
         """Render the complete HTML architecture document."""
         safe_name = html.escape(proj_name)
@@ -552,6 +902,10 @@ class ArchitectureGenerator:
         if packages is None:
             packages = self._collect_packages(module_map)
         dep_edges = self._collect_edges(dep_graph, packages)
+
+        _polyglot = polyglot_components or []
+        _deployment = deployment_artifacts or []
+        _integrations = integration_points or []
 
         sections: list[str] = []
 
@@ -565,12 +919,15 @@ class ArchitectureGenerator:
         sections.append(self._render_document_purpose())
 
         # Table of contents
-        toc_ids = [
+        toc_ids: list[str] = [
             "executive-summary",
             "architecture-diagram",
             "data-flow",
+            *( ["polyglot-layer"] if _polyglot else []),
             "component-details",
             "dependency-flow",
+            *( ["integration-catalog"] if _integrations else []),
+            *( ["deployment"] if _deployment else []),
             "api-surface",
             "tech-stack",
             "health-insights",
@@ -587,6 +944,8 @@ class ArchitectureGenerator:
                 dep_graph,
                 api_info,
                 packages,
+                polyglot_components=_polyglot,
+                business_context=business_context,
             )
         )
 
@@ -596,11 +955,23 @@ class ArchitectureGenerator:
         # Data flow pipeline SVG
         sections.append(self._render_data_flow(packages))
 
+        # Polyglot component layer (TypeScript apps, AI agents, YAML workflows, schemas)
+        if _polyglot:
+            sections.append(self._render_polyglot_overview(_polyglot))
+
         # Package deep-dive
         sections.append(self._render_package_details(packages, module_map))
 
         # Dependency flow SVG
         sections.append(self._render_dependency_flow(packages, dep_edges, motion=motion))
+
+        # Integration catalog (external services mapped from imports)
+        if _integrations:
+            sections.append(self._render_integration_catalog(_integrations, dep_graph))
+
+        # Deployment & operations
+        if _deployment:
+            sections.append(self._render_deployment_architecture(_deployment))
 
         # API surface (filtered + capped)
         if api_info:
@@ -661,8 +1032,11 @@ class ArchitectureGenerator:
             "executive-summary": "Executive Summary",
             "architecture-diagram": "High-Level Architecture",
             "data-flow": "Data Flow Pipeline",
+            "polyglot-layer": "Application & Agent Layer",
             "component-details": "Component Deep-Dive",
             "dependency-flow": "Dependency Flow",
+            "integration-catalog": "Integration Points",
+            "deployment": "Deployment & Operations",
             "api-surface": "Public API Surface",
             "tech-stack": "Technology Stack",
             "health-insights": "Architecture Health",
@@ -776,7 +1150,10 @@ class ArchitectureGenerator:
         dep_graph: ImportGraph | None,
         api_info: list[dict[str, Any]],
         packages: list[dict[str, Any]] | None = None,
+        polyglot_components: list[dict[str, Any]] | None = None,
+        business_context: str = "",
     ) -> str:
+        _polyglot = polyglot_components or []
         parts: list[str] = []
         parts.append(
             '<section class="section" id="executive-summary" role="region" aria-labelledby="exec-summary-heading">'
@@ -787,8 +1164,8 @@ class ArchitectureGenerator:
             "key metrics support risk assessment and technical debt visibility.</p>"
         )
 
-        # Purpose statement
-        purpose = subtitle or metadata.description or "A software project."
+        # Purpose statement — prefer README narrative, then subtitle, then description
+        purpose = business_context or subtitle or metadata.description or "A software project."
         parts.append(f"""
 <div class="purpose-block">
   <h3>Purpose &amp; Intent</h3>
@@ -802,33 +1179,52 @@ class ArchitectureGenerator:
         else:
             pkg = module_map.total_packages if module_map else 0
             mod = module_map.total_modules if module_map else 0
-        api_count = module_map.public_api_count if module_map else 0
         deps = dep_graph.total_external_imports if dep_graph else 0
         cls_count = len(api_info)
 
-        parts.append(f"""
-<div class="stats-grid">
-  <div class="stat-card">
-    <div class="stat-number">{pkg}</div>
-    <div class="stat-label">Packages</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-number">{mod}</div>
-    <div class="stat-label">Modules</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-number">{cls_count}</div>
-    <div class="stat-label">Public Classes</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-number">{api_count}</div>
-    <div class="stat-label">Public APIs (fns + methods)</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-number">{deps}</div>
-    <div class="stat-label">External Imports</div>
-  </div>
-</div>""")
+        # Polyglot component counts
+        agent_count = sum(
+            len(c.get("subcomponents", [])) or 1
+            for c in _polyglot
+            if c.get("kind") == "agent-group"
+        )
+        app_count = sum(1 for c in _polyglot if c.get("kind") == "app")
+        workflow_count = sum(1 for c in _polyglot if c.get("kind") == "workflow")
+
+        stat_cards: list[str] = []
+        pkg_label = "Python Packages" if (_polyglot or app_count) else "Packages"
+        stat_cards.append(
+            f'<div class="stat-card"><div class="stat-number">{pkg}</div>'
+            f'<div class="stat-label">{pkg_label}</div></div>'
+        )
+        stat_cards.append(
+            f'<div class="stat-card"><div class="stat-number">{mod}</div>'
+            f'<div class="stat-label">Modules</div></div>'
+        )
+        if agent_count:
+            stat_cards.append(
+                f'<div class="stat-card"><div class="stat-number">{agent_count}</div>'
+                f'<div class="stat-label">AI Agents</div></div>'
+            )
+        if app_count:
+            stat_cards.append(
+                f'<div class="stat-card"><div class="stat-number">{app_count}</div>'
+                f'<div class="stat-label">Applications</div></div>'
+            )
+        if workflow_count:
+            stat_cards.append(
+                f'<div class="stat-card"><div class="stat-number">{workflow_count}</div>'
+                f'<div class="stat-label">Workflows</div></div>'
+            )
+        stat_cards.append(
+            f'<div class="stat-card"><div class="stat-number">{cls_count}</div>'
+            f'<div class="stat-label">Public Classes</div></div>'
+        )
+        stat_cards.append(
+            f'<div class="stat-card"><div class="stat-number">{deps}</div>'
+            f'<div class="stat-label">External Imports</div></div>'
+        )
+        parts.append(f'<div class="stats-grid">\n{"".join(stat_cards)}\n</div>')
 
         # Metadata details
         if metadata.version or metadata.license or metadata.python_requires:
@@ -1930,6 +2326,207 @@ class ArchitectureGenerator:
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
+    # Polyglot / multi-language section renderers
+    # ------------------------------------------------------------------
+
+    def _render_polyglot_overview(self, components: list[dict[str, Any]]) -> str:
+        """Render the application & agent layer (TypeScript apps, AI agents, YAML workflows)."""
+        parts: list[str] = []
+        parts.append(
+            '<section class="section" id="polyglot-layer" role="region"'
+            ' aria-labelledby="polyglot-heading">'
+        )
+        parts.append(
+            '<h2 class="section-title" id="polyglot-heading">'
+            "Application &amp; Agent Layer</h2>"
+        )
+        parts.append(
+            "<p>Beyond the Python core, this system includes application frontends, "
+            "AI agent roles, workflow orchestration, and data schemas. "
+            "These components form the complete operational surface of the system.</p>"
+        )
+        parts.append('<div class="polyglot-grid">')
+
+        kind_colors: dict[str, tuple[str, str]] = {
+            "app": ("#3178c6", "#60a5fa"),
+            "agent-group": ("#7c3aed", "#a78bfa"),
+            "workflow": ("#d97706", "#fbbf24"),
+            "schema": ("#475569", "#94a3b8"),
+        }
+
+        for i, comp in enumerate(components):
+            kind = str(comp.get("kind", "app"))
+            c1, c2 = kind_colors.get(kind, ("#14b8a6", "#2dd4bf"))
+            name = html.escape(str(comp["name"]))
+            tech = str(comp.get("tech", ""))
+            description = html.escape(str(comp.get("description", "")))
+            stats = html.escape(str(comp.get("stats", "")))
+            subcomponents: list[str] = list(comp.get("subcomponents", []))
+
+            parts.append(
+                f'<div class="polyglot-card" style="animation-delay:{i * 0.05:.2f}s">'
+            )
+            parts.append(
+                f'  <div class="polyglot-header" style="background:'
+                f" linear-gradient(135deg, {c1}, {c2});\">"
+            )
+            parts.append(f'    <span class="polyglot-name">{name}</span>')
+            parts.append(f'    <span class="polyglot-stats">{stats}</span>')
+            parts.append("  </div>")
+            parts.append('  <div class="polyglot-body">')
+            parts.append(f'    <p class="polyglot-desc">{description}</p>')
+
+            if tech:
+                tc = _TECH_COLORS.get(tech, ("#6b7280", "#fafafa"))
+                parts.append(
+                    f'    <span class="tech-pill"'
+                    f' style="background:{tc[0]};color:{tc[1]}">'
+                    f"{html.escape(tech)}</span>"
+                )
+
+            if subcomponents:
+                parts.append('    <div class="agent-chip-list">')
+                for sub in subcomponents[:12]:
+                    parts.append(f'      <span class="agent-chip">{html.escape(sub)}</span>')
+                if len(subcomponents) > 12:
+                    extra = len(subcomponents) - 12
+                    parts.append(f'      <span class="agent-chip">+{extra} more</span>')
+                parts.append("    </div>")
+
+            parts.append("  </div>")
+            parts.append("</div>")
+
+        parts.append("</div>")
+        parts.append("</section>")
+        return "\n".join(parts)
+
+    def _render_integration_catalog(
+        self,
+        integrations: list[dict[str, Any]],
+        dep_graph: ImportGraph | None,
+    ) -> str:
+        """Render the external integration points catalog."""
+        parts: list[str] = []
+        parts.append(
+            '<section class="section" id="integration-catalog" role="region"'
+            ' aria-labelledby="integration-heading">'
+        )
+        parts.append(
+            '<h2 class="section-title" id="integration-heading">Integration Points</h2>'
+        )
+        parts.append(
+            "<p><strong>Why this matters:</strong> External integrations create runtime "
+            "dependencies on third-party services. Understanding the integration surface "
+            "informs reliability planning, cost modeling, and vendor risk assessment.</p>"
+        )
+        parts.append('<div class="integration-grid">')
+
+        category_icons: dict[str, str] = {
+            "http": "🌐",
+            "database": "🗄️",
+            "cache": "⚡",
+            "cloud": "☁️",
+            "llm": "🤖",
+            "payments": "💳",
+            "email": "📧",
+            "queue": "📬",
+            "auth": "🔐",
+            "storage": "📦",
+        }
+        direction_labels: dict[str, str] = {
+            "outbound": "Outbound →",
+            "inbound": "← Inbound",
+            "both": "↔ Bidirectional",
+        }
+        dir_colors: dict[str, str] = {
+            "outbound": "var(--accent-primary)",
+            "inbound": "#a78bfa",
+            "both": "var(--accent-secondary)",
+        }
+
+        for i, intg in enumerate(integrations):
+            category = str(intg.get("category", "http"))
+            display = html.escape(str(intg.get("display", category)))
+            direction = str(intg.get("direction", "outbound"))
+            icon = category_icons.get(category, "🔌")
+            dir_label = direction_labels.get(direction, direction)
+            dir_color = dir_colors.get(direction, "var(--accent-primary)")
+
+            parts.append(
+                f'<div class="integration-card"'
+                f' style="animation-delay:{i * 0.05:.2f}s;border-left-color:{dir_color}">'
+            )
+            parts.append(f'  <div class="integration-icon">{icon}</div>')
+            parts.append(f'  <div class="integration-name">{display}</div>')
+            parts.append(
+                f'  <div class="integration-dir" style="color:{dir_color}">'
+                f"{html.escape(dir_label)}</div>"
+            )
+            parts.append("</div>")
+
+        parts.append("</div>")
+        parts.append("</section>")
+        return "\n".join(parts)
+
+    def _render_deployment_architecture(self, artifacts: list[dict[str, Any]]) -> str:
+        """Render the deployment & operations section."""
+        parts: list[str] = []
+        parts.append(
+            '<section class="section" id="deployment" role="region"'
+            ' aria-labelledby="deploy-heading">'
+        )
+        parts.append(
+            '<h2 class="section-title" id="deploy-heading">Deployment &amp; Operations</h2>'
+        )
+        parts.append(
+            "<p>Deployment artifacts define how this system is packaged, distributed, "
+            "and operated. These files represent the operational surface and are critical "
+            "for infrastructure planning and runbook authoring.</p>"
+        )
+        parts.append('<div class="deploy-grid">')
+
+        kind_icons: dict[str, str] = {
+            "docker": "🐳",
+            "compose": "🐳",
+            "render": "🚀",
+            "fly": "✈️",
+            "gae": "☁️",
+            "vercel": "▲",
+            "netlify": "🌐",
+            "heroku": "💜",
+            "github-actions": "⚙️",
+        }
+        target_badges: dict[str, str] = {
+            "container": "Container",
+            "cloud": "Cloud Platform",
+            "serverless": "Serverless",
+            "ci": "CI / CD",
+        }
+
+        for i, artifact in enumerate(artifacts):
+            kind = str(artifact.get("kind", ""))
+            label = html.escape(str(artifact.get("label", artifact.get("file", ""))))
+            file_name = html.escape(str(artifact.get("file", "")))
+            target = str(artifact.get("target", ""))
+            icon = kind_icons.get(kind, "📄")
+            badge = target_badges.get(target, target.title())
+
+            parts.append(f'<div class="deploy-card" style="animation-delay:{i * 0.05:.2f}s">')
+            parts.append(f'  <div class="deploy-icon">{icon}</div>')
+            parts.append(f'  <div class="deploy-name">{label}</div>')
+            parts.append(f'  <div class="deploy-file">{file_name}</div>')
+            parts.append(
+                f'  <div style="margin-top:8px">'
+                f'<span class="meta-badge" style="font-size:0.6875rem">'
+                f"{html.escape(badge)}</span></div>"
+            )
+            parts.append("</div>")
+
+        parts.append("</div>")
+        parts.append("</section>")
+        return "\n".join(parts)
+
+    # ------------------------------------------------------------------
     # Content generation helpers
     # ------------------------------------------------------------------
 
@@ -1947,41 +2544,27 @@ class ArchitectureGenerator:
         if docstring:
             # Use the first sentence of the docstring as the lead
             first_sentence = docstring.strip().split("\n")[0].rstrip(".")
-            parts.append(f"The {name} package {first_sentence.lower()}.")
+            lead = first_sentence.lower()
+            # Avoid repeating the package name if docstring already starts with it
+            if lead.startswith(name.lower()):
+                parts.append(f"{first_sentence.rstrip('.')}.")
+            else:
+                parts.append(f"The {name} package {lead}.")
         else:
-            parts.append(
-                f"The {name} package provides a cohesive set of functionality "
-                f"that serves as a building block within the larger system."
-            )
+            parts.append(f"The {name} package provides core functionality within this system.")
 
         if mod_count > 1:
-            parts.append(
-                f"It is composed of {mod_count} modules that work together "
-                f"to deliver its capabilities."
-            )
+            parts.append(f"Composed of {mod_count} modules.")
 
         if func_count > 0 and cls_count > 0:
             parts.append(
-                f"The package exposes {func_count} functions and "
-                f"{cls_count} classes, offering both procedural and "
-                f"object-oriented interfaces to its consumers."
+                f"Exposes {func_count} functions and {cls_count} classes, "
+                f"offering both procedural and object-oriented interfaces."
             )
         elif func_count > 0:
-            parts.append(
-                f"With {func_count} functions, it provides a functional "
-                f"interface designed for straightforward integration."
-            )
+            parts.append(f"Provides {func_count} functions as its public interface.")
         elif cls_count > 0:
-            parts.append(
-                f"Through its {cls_count} classes, it establishes "
-                f"well-defined abstractions that encapsulate complex behavior."
-            )
-
-        parts.append(
-            "This component adds value by encapsulating domain-specific logic "
-            "behind clean interfaces, reducing coupling between other parts "
-            "of the system and enabling independent evolution of its internals."
-        )
+            parts.append(f"Exposes {cls_count} classes as its public interface.")
 
         return " ".join(parts)
 
@@ -2564,5 +3147,145 @@ body {
   body { color: var(--text-primary); }
   .hero { background: linear-gradient(135deg, #f8f9fc 0%, #f0f1f5 30%, #e5e7ed 70%, #ccfbf1 100%); }
   .stat-number { color: var(--accent-primary); }
+}
+
+/* Tech stack pills */
+.tech-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-family: var(--font-sans);
+}
+
+/* Polyglot layer — application & agent cards */
+.polyglot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.polyglot-card {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--motion-fast) var(--ease-enter),
+              box-shadow var(--motion-fast) var(--ease-enter);
+  animation: fadeIn 0.4s var(--ease-enter) both;
+}
+.polyglot-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+}
+.polyglot-header {
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.polyglot-body { padding: 16px 18px; }
+.polyglot-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: white;
+}
+.polyglot-stats {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.75);
+  font-family: var(--font-mono);
+}
+.polyglot-desc {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+.agent-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+.agent-chip {
+  background: var(--bg-primary);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.6875rem;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+/* Integration points catalog */
+.integration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.integration-card {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+  animation: fadeIn 0.4s var(--ease-enter) both;
+}
+.integration-icon { font-size: 1.25rem; margin-bottom: 6px; }
+.integration-name {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.integration-dir {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+/* Deployment & operations */
+.deploy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.deploy-card {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+  animation: fadeInScale 0.4s var(--ease-enter) both;
+}
+.deploy-icon { font-size: 1.75rem; margin-bottom: 8px; }
+.deploy-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.deploy-file {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 """
