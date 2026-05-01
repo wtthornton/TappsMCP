@@ -991,6 +991,9 @@ All Linear writes in this project — epic creation, story creation, issue updat
 4. Validate before push.
 5. `save_issue(id=..., description=...)`; invalidate cache.
 
+### For multi-issue reads (TAP-1260)
+All list-style Linear reads route through the `linear-read` skill (4-step cache-first dance: `snapshot_get` → on miss `list_issues` → `snapshot_put` → use cached on hit). Single-issue lookups go straight to `get_issue(id)` — never via filtered `list_issues`. Raw `mcp__plugin_linear_linear__list_issues` calls without a prior `snapshot_get` for the same key are a rule violation. See the `linear-read` skill for the antipattern catalogue (6-poll kickoff, status-bucket sweep, unfiltered scroll).
+
 ## Assignee defaults
 
 All Linear writes from this project — epics, stories, subtasks, triage updates — default to the **agent** as assignee, never a human (see `autonomy.md`):
@@ -1019,6 +1022,8 @@ Linear's server-side markdown processor silently drops some content. These patte
 ## How to apply
 
 When the user says "create a Linear issue", "file an epic", "open a ticket for X", or "track this in Linear" — invoke the `linear-issue` skill. Do not call `save_issue` directly. If the skill is unavailable in the session, flag it to the user rather than falling back to raw writes.
+
+When the user says "list Linear issues", "what's open in TAP", "find issues assigned to X", or "review the backlog" — invoke the `linear-read` skill. Do not call `list_issues` directly. Single-issue lookups (user has an id like "TAP-686") go straight to `get_issue` without the skill.
 
 When updating an existing issue, the same routing applies: fetch, lint/validate, regenerate or edit, re-validate, save, invalidate.
 

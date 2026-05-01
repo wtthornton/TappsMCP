@@ -27,15 +27,16 @@ All Linear writes in this project — epic creation, story creation, issue updat
 4. Validate before push.
 5. `save_issue(id=..., description=...)`; invalidate cache.
 
-### Reads — always cache-first (TAP-967)
+### Reads — route through the `linear-read` skill (TAP-1260)
 
-Before any `mcp__plugin_linear_linear__list_issues` call:
+Multi-issue Linear reads MUST go through the `linear-read` skill, which performs the cache-first dance for the agent. Raw `mcp__plugin_linear_linear__list_issues` calls without a prior `tapps_linear_snapshot_get` for the same `(team, project, state)` key are a rule violation.
 
-1. **Single-issue lookup:** if you have an ID, `mcp__plugin_linear_linear__get_issue(id=...)` — do NOT list-and-filter.
-2. **Multi-issue read:** call `mcp__tapps-mcp__tapps_linear_snapshot_get(team, project, state)` first. On `cached=true`, use `data.issues` — Linear is not called.
-3. **On cache miss:** call `list_issues` with NARROW filters (`team`, `project`, `state`, `includeArchived=false`). Never call `list_issues({})` or with only a `team` and `limit:250` — those broad scrolls are the highest-cost antipattern (see CLAUDE.md "Linear Issue Reads — Anti-patterns").
-4. **Always populate the cache** after a miss: `tapps_linear_snapshot_put(team, project, issues_json=..., state, ...)` with the same key dimensions.
-5. **No status-bucket fan-out.** A 6-call kickoff (`Backlog/p1` … `Backlog/p4` + `In Progress` + `Todo`) collapses into one `snapshot_get(state="open")` plus an in-memory filter. The 5 min open-state TTL means subsequent kickoffs land as cache hits.
+The skill encapsulates these steps so the agent doesn't reconstruct them from prose:
+
+1. **Single-issue lookup:** if you have an ID, `mcp__plugin_linear_linear__get_issue(id=...)` — skip the skill, do NOT list-and-filter.
+2. **Multi-issue read:** invoke `linear-read`. The skill calls `mcp__tapps-mcp__tapps_linear_snapshot_get(team, project, state)` first. On `cached=true`, uses `data.issues` and filters in memory — Linear is not called.
+3. **On cache miss:** the skill calls `list_issues` with NARROW filters (`team`, `project`, `state`, `includeArchived=false`), then immediately `tapps_linear_snapshot_put(team, project, issues_json=..., state, ...)` with the same key dimensions.
+4. **No status-bucket fan-out.** A 6-call kickoff (`Backlog/p1` … `Backlog/p4` + `In Progress` + `Todo`) collapses into one `snapshot_get(state="open")` plus an in-memory filter. The 5 min open-state TTL means subsequent kickoffs land as cache hits. The skill enforces this shape.
 
 ## Assignee defaults
 

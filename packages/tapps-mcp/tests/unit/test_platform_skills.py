@@ -331,6 +331,50 @@ class TestLinearIssueSkillUpdated:
         assert "mcp__plugin_linear_linear__save_issue" in content
 
 
+class TestLinearReadSkill:
+    """TAP-1260: linear-read skill encodes the cache-first dance for multi-issue reads."""
+
+    def test_claude_skill_registered(self) -> None:
+        assert "linear-read" in CLAUDE_SKILLS
+
+    def test_cursor_skill_registered(self) -> None:
+        assert "linear-read" in CURSOR_SKILLS
+
+    def test_claude_allowed_tools_include_snapshot_and_list(self) -> None:
+        content = CLAUDE_SKILLS["linear-read"]
+        assert "mcp__tapps-mcp__tapps_linear_snapshot_get" in content
+        assert "mcp__tapps-mcp__tapps_linear_snapshot_put" in content
+        assert "mcp__plugin_linear_linear__list_issues" in content
+        assert "mcp__plugin_linear_linear__get_issue" in content
+
+    def test_skill_documents_six_poll_antipattern(self) -> None:
+        content = CLAUDE_SKILLS["linear-read"]
+        assert "6-poll kickoff" in content
+        # Confirm the collapse-to-one-call replacement is shown.
+        assert 'snapshot_get(team=<team>, project=<project>, state="open")' in content
+
+    def test_skill_documents_unfiltered_scroll_antipattern(self) -> None:
+        content = CLAUDE_SKILLS["linear-read"]
+        assert "unfiltered scroll" in content.lower()
+
+    def test_skill_routes_single_issue_to_get_issue(self) -> None:
+        content = CLAUDE_SKILLS["linear-read"]
+        assert "get_issue" in content
+        # Skip-the-skill instruction for id-only lookups must be present.
+        assert "Single-issue lookup" in content or "single-issue" in content.lower()
+
+    def test_skill_is_user_invocable(self) -> None:
+        content = CLAUDE_SKILLS["linear-read"]
+        assert "user-invocable: true" in content
+
+    def test_generated_linear_read_lands_at_expected_path(self, tmp_path: Path) -> None:
+        generate_skills(tmp_path, "claude")
+        target = tmp_path / ".claude" / "skills" / "linear-read" / "SKILL.md"
+        assert target.exists()
+        content = target.read_text(encoding="utf-8")
+        assert "mcp__tapps-mcp__tapps_linear_snapshot_get" in content
+
+
 class TestFinishTaskSkill:
     """TAP-977: tapps-finish-task bundles validate -> checklist -> memory."""
 

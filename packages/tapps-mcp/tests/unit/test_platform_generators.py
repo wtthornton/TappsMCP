@@ -175,14 +175,18 @@ class TestSkillTemplates:
     """Verify skill template dicts and generation."""
 
     def test_claude_skills_count(self) -> None:
-        assert len(CLAUDE_SKILLS) == 14  # 13 tapps-* (incl. tapps-finish-task) + linear-issue
+        # 13 tapps-* (incl. tapps-finish-task) + linear-issue + linear-release-update
+        # + linear-read (TAP-1260) = 16.
+        assert len(CLAUDE_SKILLS) == 16
 
     def test_cursor_skills_count(self) -> None:
-        assert len(CURSOR_SKILLS) == 14  # 13 tapps-* (incl. tapps-finish-task) + linear-issue
+        # 13 tapps-* + linear-issue + linear-read (TAP-1260) = 15. Cursor does not
+        # ship linear-release-update (Linear plugin is Claude-only for that flow).
+        assert len(CURSOR_SKILLS) == 15
 
     def test_generate_claude_skills(self, tmp_path: Path) -> None:
         result = generate_skills(tmp_path, "claude")
-        assert len(result["created"]) == 14
+        assert len(result["created"]) == 16
         assert (tmp_path / ".claude" / "skills" / "tapps-score" / "SKILL.md").exists()
 
     def test_generate_skills_high_engagement(self, tmp_path: Path) -> None:
@@ -200,7 +204,7 @@ class TestSkillTemplates:
     def test_generate_skills_skips_existing(self, tmp_path: Path) -> None:
         generate_skills(tmp_path, "claude")
         result = generate_skills(tmp_path, "claude")
-        assert len(result["skipped"]) == 14  # 13 tapps-* (incl. tapps-finish-task) + linear-issue
+        assert len(result["skipped"]) == 16  # 13 tapps-* + linear-issue + linear-release-update + linear-read (TAP-1260)
         assert len(result["created"]) == 0
 
 
