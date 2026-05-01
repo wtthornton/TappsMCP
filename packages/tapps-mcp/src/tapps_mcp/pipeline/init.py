@@ -794,6 +794,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 generate_claude_autonomy_rule,
                 generate_claude_config_files_rule,
                 generate_claude_hooks,
+                generate_claude_integration_hygiene_rule,
                 generate_claude_linear_standards_rule,
                 generate_claude_python_quality_rule,
                 generate_claude_security_rule,
@@ -849,6 +850,9 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 state.project_root,
             )
             state.result["linear_standards_rule"] = generate_claude_linear_standards_rule(
+                state.project_root,
+            )
+            state.result["integration_hygiene_rule"] = generate_claude_integration_hygiene_rule(
                 state.project_root,
             )
             # TAP-978: scoped quality rules. Init runs only when user

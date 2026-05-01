@@ -20,7 +20,7 @@
 5. **tapps_dashboard** - Metrics dashboard (async)
 6. **tapps_stats** - Usage statistics
 7. **tapps_feedback** - Submit tool feedback
-8. **tapps_research** - Expert + docs combined (async)
+8. ~~tapps_research~~ — REMOVED (EPIC-94). Use `tapps_lookup_docs(library, topic)` instead.
 9. **tapps_report** - Generate reports (async)
 10. **tapps_dead_code** - Unused code detection (async)
 11. **tapps_dependency_scan** - Vulnerability scanning (async)
@@ -33,7 +33,7 @@
 
 ### Knowledge & Expert Tools (5)
 16. **tapps_lookup_docs** - Library documentation (async)
-17. **tapps_consult_expert** - Domain expert consultation
+17. ~~tapps_consult_expert~~ — REMOVED (EPIC-94). Use `tapps_lookup_docs(library, topic)` for domain guidance.
 18. **tapps_list_experts** - List expert domains
 19. **tapps_project_profile** - Project context detection
 20. **tapps_memory** - Persistent cross-session memory (async)
@@ -77,7 +77,7 @@
 
 ### AGENTS.md Analysis
 ✓ **Tool table**: All 28 tools listed with "When to use it" guidance (lines 39-69)
-✓ **Domain hints**: Guidance for tapps_consult_expert domains (lines 93-100+)
+✓ **Domain hints**: Guidance for tapps_lookup_docs domains (lines 93-100+)
 ✓ **Session start guidance**: Clear session_start vs init distinction (lines 73-90)
 ✓ **File path guidance**: Relative vs absolute path handling explained
 ✓ **Engagement levels**: Mentioned as high/medium/low feature
@@ -120,7 +120,7 @@ Spot-checked entries:
 - tapps_session_start: ✓ Described as "FIRST call in every session"
 - tapps_memory: ✓ All 11 actions listed (save, get, list, delete, search, reinforce, contradictions, gc, reseed, import, export)
 - tapps_validate_changed: ✓ Mentions quick mode and impact analysis
-- tapps_research: ✓ Shows file_context parameter for auto-library detection
+- ~~tapps_research~~: REMOVED (EPIC-94); replaced by `tapps_lookup_docs`.
 - tapps_set_engagement_level: ✓ Indicates follow-up init call needed
 
 ### Latest version references

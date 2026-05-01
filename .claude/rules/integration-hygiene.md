@@ -1,3 +1,6 @@
+---
+alwaysApply: true
+---
 # Integration Hygiene (TappsMCP)
 
 When integrating with external services, sibling repos, or sub-agent reports, respect upstream sources of truth. Don't build parallel decision paths around something an authoritative system already does, and don't cite second-hand claims about external APIs without checking the producer.

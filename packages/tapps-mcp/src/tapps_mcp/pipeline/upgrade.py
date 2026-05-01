@@ -94,6 +94,7 @@ _SKIP_TOKENS: dict[str, frozenset[str]] = {
     "agent_scope_rule": frozenset({".claude/rules/agent-scope.md"}),
     "autonomy_rule": frozenset({".claude/rules/autonomy.md"}),
     "linear_standards_rule": frozenset({".claude/rules/linear-standards.md"}),
+    "integration_hygiene_rule": frozenset({".claude/rules/integration-hygiene.md"}),
     "pipeline_rule": frozenset({".claude/rules/tapps-pipeline.md"}),
     # TAP-978: scoped quality rules with same skip-token pattern.
     "security_rule": frozenset({".claude/rules/security.md"}),
@@ -569,6 +570,11 @@ def _upgrade_claude_code_dry_run(
         "skipped (upgrade_skip_files)" if _skipped("autonomy_rule", skip) else "would-regenerate"
     )
     result["components"]["linear_standards_rule"] = "would-regenerate"
+    result["components"]["integration_hygiene_rule"] = (
+        "skipped (upgrade_skip_files)"
+        if _skipped("integration_hygiene_rule", skip)
+        else "would-regenerate"
+    )
     result["components"]["pipeline_rule"] = (
         "would-regenerate" if (python_ok or infra_ok) else "skipped (no python or infra detected)"
     )
@@ -614,6 +620,7 @@ def _upgrade_claude_code_live(
         generate_claude_autonomy_rule,
         generate_claude_config_files_rule,
         generate_claude_hooks,
+        generate_claude_integration_hygiene_rule,
         generate_claude_linear_standards_rule,
         generate_claude_python_quality_rule,
         generate_claude_security_rule,
@@ -697,6 +704,15 @@ def _upgrade_claude_code_live(
     else:
         result["components"]["linear_standards_rule"] = generate_claude_linear_standards_rule(
             project_root,
+        )
+
+    # integration-hygiene.md is universal — three patterns the agent has been bitten by:
+    # Linear-is-OAuth, don't-mirror-server-state, verify-subagent-claims (TAP-1215).
+    if _skipped("integration_hygiene_rule", skip):
+        result["components"]["integration_hygiene_rule"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["integration_hygiene_rule"] = (
+            generate_claude_integration_hygiene_rule(project_root)
         )
 
     if _skipped("pipeline_rule", skip):
