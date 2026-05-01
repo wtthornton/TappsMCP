@@ -266,13 +266,17 @@ def _detect_brain_auth_failure(
     memory_status: dict[str, Any] | None,
     elapsed_ms: int,
 ) -> dict[str, Any] | None:
-    """TAP-1082: Detect tapps-brain auth-probe 401/403 and return a hard error.
+    """TAP-1082 / TAP-1257: Detect tapps-brain auth-probe failures and return a hard error.
 
     Returns ``None`` when memory is disabled, when the agent has opted in to
-    tolerating auth failures (``memory.tolerate_brain_auth_failure``), or
-    when the auth probe did not return 401/403. Otherwise returns a fully-
-    formed error envelope with ``code='brain_auth_failed'`` and actionable
-    ``next_steps`` so the agent fixes the auth instead of retrying blindly.
+    tolerating auth failures (``memory.tolerate_brain_auth_failure``), or when
+    the auth probe did not return a recognised auth/identity failure.
+
+    Recognised failure shapes:
+      * HTTP 401 / 403 → ``code='brain_auth_failed'`` (TAP-1082)
+      * HTTP 400 with ``X-Project-Id`` in the body → ``code='brain_project_id_missing'``
+        (TAP-1257). tapps-brain 3.14.x returns this when the
+        ``X-Project-Id`` header is missing on ``/mcp`` requests.
     """
     if not getattr(settings.memory, "enabled", True):
         return None
@@ -284,12 +288,45 @@ def _detect_brain_auth_failure(
     if not isinstance(auth_probe, dict):
         return None
     http_status = auth_probe.get("http_status")
+    detail_raw = auth_probe.get("detail") or auth_probe.get("error") or ""
+    detail = str(detail_raw)
+
+    if http_status == 400 and "X-Project-Id" in detail:
+        message = (
+            "tapps-brain rejected the /mcp request with HTTP 400 because the "
+            "X-Project-Id header is missing. Memory operations cannot proceed."
+        )
+        return error_response(
+            "tapps_session_start",
+            "brain_project_id_missing",
+            message,
+            extra={
+                "http_status": http_status,
+                "memory_status": memory_status,
+                "elapsed_ms": elapsed_ms,
+                "next_steps": [
+                    (
+                        "Set TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID in your env or "
+                        ".mcp.json env block to the registered tapps-brain project slug"
+                    ),
+                    (
+                        "Or set memory.brain_project_id (or memory.project_id, "
+                        "auto-derived) in .tapps-mcp.yaml"
+                    ),
+                    (
+                        "If running offline / without tapps-brain, set "
+                        "memory.tolerate_brain_auth_failure: true in .tapps-mcp.yaml "
+                        "to keep the degraded behavior"
+                    ),
+                ],
+            },
+        )
+
     if http_status not in (401, 403):
         return None
 
-    detail = auth_probe.get("detail") or auth_probe.get("error") or "unauthorized"
     message = (
-        f"tapps-brain auth probe returned HTTP {http_status}: {detail}. "
+        f"tapps-brain auth probe returned HTTP {http_status}: {detail or 'unauthorized'}. "
         "Memory operations cannot proceed."
     )
     return error_response(

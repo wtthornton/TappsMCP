@@ -136,6 +136,39 @@ class TestDetectBrainAuthFailure:
         assert result is not None
         assert "probe_raised" in result["error"]["message"]
 
+    def test_returns_project_id_missing_envelope_on_400(self) -> None:
+        """TAP-1257: HTTP 400 with X-Project-Id in body → brain_project_id_missing."""
+        settings = _FakeSettings(_FakeMemorySettings())
+        body = '{"error":"bad_request","detail":"X-Project-Id header is required for /mcp requests."}'
+        result = _detect_brain_auth_failure(settings, _ms(400, body), 25)
+
+        assert result is not None
+        assert result["success"] is False
+        assert result["error"]["code"] == "brain_project_id_missing"
+        assert result["error"]["http_status"] == 400
+        next_steps = result["error"]["next_steps"]
+        assert any("TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID" in s for s in next_steps)
+        assert any("brain_project_id" in s for s in next_steps)
+
+    def test_passes_through_on_400_without_project_id_phrase(self) -> None:
+        """A generic 400 (not the X-Project-Id case) should not trigger the new code."""
+        settings = _FakeSettings(_FakeMemorySettings())
+        result = _detect_brain_auth_failure(
+            settings, _ms(400, '{"error":"bad_request","detail":"Malformed JSON."}'), 0
+        )
+
+        assert result is None
+
+    def test_400_project_id_missing_respects_tolerate_flag(self) -> None:
+        settings = _FakeSettings(_FakeMemorySettings(tolerate=True))
+        result = _detect_brain_auth_failure(
+            settings,
+            _ms(400, "X-Project-Id header is required for /mcp requests."),
+            0,
+        )
+
+        assert result is None
+
     def test_memory_status_is_preserved_in_error(self) -> None:
         """Agents that need the original memory_status payload can still get it."""
         settings = _FakeSettings(_FakeMemorySettings())

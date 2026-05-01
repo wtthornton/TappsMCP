@@ -158,3 +158,43 @@ class TestToolCurationSettings:
         ):
             s = TappsMCPSettings()
             assert s.enabled_tools == ["tapps_session_start", "tapps_quick_check"]
+
+
+class TestMemoryProjectIdAutoDerive:
+    """TAP-1257: brain_project_id and project_id auto-derive from each other."""
+
+    def test_brain_project_id_copied_from_project_id_when_empty(self) -> None:
+        from tapps_core.config.settings import MemorySettings
+
+        m = MemorySettings(project_id="my-tenant", brain_project_id="")
+        assert m.project_id == "my-tenant"
+        assert m.brain_project_id == "my-tenant"
+
+    def test_project_id_copied_from_brain_project_id_when_empty(self) -> None:
+        from tapps_core.config.settings import MemorySettings
+
+        m = MemorySettings(project_id="", brain_project_id="my-tenant")
+        assert m.project_id == "my-tenant"
+        assert m.brain_project_id == "my-tenant"
+
+    def test_both_empty_stays_empty(self) -> None:
+        from tapps_core.config.settings import MemorySettings
+
+        m = MemorySettings()
+        assert m.project_id == ""
+        assert m.brain_project_id == ""
+
+    def test_disagreement_prefers_brain_project_id(self) -> None:
+        """When both are set and differ, brain_project_id wins (more-specific name)."""
+        from tapps_core.config.settings import MemorySettings
+
+        m = MemorySettings(project_id="legacy", brain_project_id="canonical")
+        assert m.brain_project_id == "canonical"
+        assert m.project_id == "legacy"
+
+    def test_matching_values_no_op(self) -> None:
+        from tapps_core.config.settings import MemorySettings
+
+        m = MemorySettings(project_id="same", brain_project_id="same")
+        assert m.brain_project_id == "same"
+        assert m.project_id == "same"
