@@ -37,14 +37,8 @@
 - [Story 9.4 -- Claude CLI Token Budget Monitoring](docs/issues/story-009.4-token-budget-monitoring.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-08)*
 ## Planning
 
-- [Epic 12: Agent Catalog Governance — Deduplication, Overlap Prevention, and Lifecycle](docs/epics/EPIC-12-catalog-governance.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-07)*
-- [Epic 12: Agent Catalog Governance — Deduplication, Overlap Prevention, and Lifecycle](docs/epics/EPIC-12-catalog-governance.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-07)*
-- [Epic 2: Hybrid Matcher — Embedding-Based Agent Matching Infrastructure](docs/epics/EPIC-2-hybrid-matcher.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-07)*
-- [Epic 2: Hybrid Matcher — Embedding-Based Agent Matching Infrastructure](docs/epics/EPIC-2-hybrid-matcher.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-07)*
-- [Epic 39: Agent Credential Vault — Runtime Secrets Management](docs/epics/EPIC-39-agent-credential-vault.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
-- [Epic 39: Agent Credential Vault — Runtime Secrets Management](docs/epics/EPIC-39-agent-credential-vault.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
-- [Epic 43: tapps-brain v3.4.0 — Postgres-Native Memory Layer](docs/epics/EPIC-43-tapps-brain-v3-postgres.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-13)*
-- [Epic 43: tapps-brain v3.4.0 — Postgres-Native Memory Layer](docs/epics/EPIC-43-tapps-brain-v3-postgres.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-13)*
+Epic and story specs are tracked in Linear (project: TappsMCP Platform). See https://linear.app/tappscodingagents.
+
 - [Epic 2: System Hardening](docs/issues/epic-002-system-hardening.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
 - [Epic 2: System Hardening](docs/issues/epic-002-system-hardening.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
 - [Epic 3: Observability Stack](docs/issues/epic-003-observability-stack.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*

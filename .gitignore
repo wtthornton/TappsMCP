@@ -80,11 +80,19 @@ architecture-report*.png
 
 # Transient ralph per-loop state + local upgrade backups
 .ralph/.files_modified_this_loop
+.ralph/.last_completed_files
+.ralph/.ralph_run_id
 .ralph/.upgrade-backups/
 .ralph/.circuit_breaker_state
+.ralph/.import_graph.json
+.ralph/.import_graph.json.stale
+.ralph/.linear_next_issue
+.ralph/.call_count
 .ralph/live.log
 .ralph/logs/
+.ralph/metrics/
 .ralph/status.json
+.ralphrc.bak.*
 
 # Agent worktrees spawned by the Agent tool (full git clones — never commit)
 .claude/worktrees/

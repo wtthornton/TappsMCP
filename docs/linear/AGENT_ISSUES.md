@@ -88,5 +88,5 @@ Concrete things the linter flags:
 
 ## References
 
-- Audit of 50 existing issues: see `docs/epics/EPIC-103-linear-issue-quality-tooling.md` (commit history)
+- Audit of 50 existing issues: see Linear epic TAP-1078 (audit-of-record) and the original commit history.
 - Agent-scope write rules: `.claude/rules/agent-scope.md`
