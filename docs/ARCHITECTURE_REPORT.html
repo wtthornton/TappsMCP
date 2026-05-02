@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TappsMCP Workspace - Architecture Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+
+/* HomeIQ Design System — Architecture Report */
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1e1e2a;
+  --card-bg: rgba(18, 18, 26, 0.95);
+  --card-bg-alt: rgba(30, 30, 42, 0.95);
+  --card-border: rgba(63, 63, 90, 0.5);
+  --accent-primary: #14b8a6;
+  --accent-secondary: #d4a847;
+  --accent-glow: rgba(20, 184, 166, 0.12);
+  --text-primary: #fafafa;
+  --text-secondary: #d4d4d8;
+  --text-tertiary: #a1a1aa;
+  --text-muted: #71717a;
+  --focus-ring: rgba(20, 184, 166, 0.5);
+  --shadow-card: 0 4px 6px -1px rgba(0,0,0,0.3), 0 0 0 1px rgba(63,63,90,0.3);
+  --shadow-hover: 0 4px 12px -2px rgba(0,0,0,0.25);
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+  --motion-fast: 150ms;
+  --motion-normal: 250ms;
+  --ease-enter: cubic-bezier(0.4, 0, 0.2, 1);
+  --font-display: 'Outfit', 'Inter', system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.45;
+  font-size: 0.875rem;
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'cv11' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+/* Focus */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.15); }
+  50% { box-shadow: 0 0 20px 4px rgba(20, 184, 166, 0.08); }
+}
+
+/* Hero */
+.hero {
+  background: linear-gradient(135deg, #0a0a0f 0%, #12121a 30%, #1e1e2a 70%, #0d3d38 100%);
+  padding: 80px 40px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle at 30% 50%, rgba(20,184,166,0.1) 0%, transparent 50%),
+              radial-gradient(circle at 70% 80%, rgba(212,168,71,0.06) 0%, transparent 50%);
+  animation: pulseGlow 8s ease-in-out infinite;
+}
+.hero-content { position: relative; z-index: 1; max-width: 800px; margin: 0 auto; }
+.hero-title {
+  font-family: var(--font-display);
+  font-size: 2.25rem; font-weight: 700;
+  letter-spacing: -0.025em; margin-bottom: 12px;
+  color: var(--text-primary);
+}
+.hero-subtitle {
+  font-size: 1rem; color: var(--text-secondary);
+  margin-bottom: 16px; line-height: 1.6;
+}
+.hero-arch {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  margin-top: 8px;
+}
+.arch-badge-hero {
+  display: inline-block;
+  padding: 5px 18px; border-radius: 8px;
+  font-weight: 800; font-size: 0.8rem; letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hero-arch svg { border-radius: 10px; }
+.hero-meta {
+  font-size: 0.75rem; color: var(--accent-primary);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* Sections */
+.section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 40px;
+  animation: fadeIn 0.4s var(--ease-enter) both;
+}
+.section-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+  position: relative;
+  padding-bottom: 12px;
+}
+.section-title::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 48px; height: 3px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+  border-radius: 2px;
+}
+.section > p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin-bottom: 24px;
+  max-width: 900px;
+}
+
+/* Purpose block */
+.purpose-block {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 32px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+}
+.purpose-block h3 {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.purpose-text {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Stats grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  text-align: center;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--motion-fast) var(--ease-enter),
+              box-shadow var(--motion-fast) var(--ease-enter);
+  animation: fadeInScale 0.4s var(--ease-enter) both;
+}
+.stat-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-card:nth-child(2) { animation-delay: 0.1s; }
+.stat-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-card:nth-child(4) { animation-delay: 0.2s; }
+.stat-card:nth-child(5) { animation-delay: 0.25s; }
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+}
+.stat-number {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+}
+.stat-label {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+/* Meta badges */
+.meta-details {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.meta-badge {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+/* Diagram container */
+.diagram-container {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin: 24px 0;
+  overflow-x: auto;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+}
+.diagram-container svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Component cards */
+.component-card {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--motion-fast) var(--ease-enter),
+              box-shadow var(--motion-fast) var(--ease-enter);
+  animation: fadeIn 0.4s var(--ease-enter) both;
+}
+.component-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+}
+.component-header {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.component-name {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+}
+.component-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.75);
+  font-family: var(--font-mono);
+}
+.component-body {
+  padding: 20px;
+}
+.component-description {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 0.875rem;
+}
+.submodule-list {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+}
+.submodule-list h4 {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.submodule-list ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.submodule-list li {
+  background: var(--bg-primary);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 3px 10px;
+  font-size: 0.75rem;
+}
+.submodule-list li code {
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+}
+
+/* API surface */
+.api-module {
+  margin-bottom: 20px;
+}
+.api-module-path {
+  font-size: 0.8125rem;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--card-border);
+  margin-bottom: 10px;
+}
+.api-class {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  margin-bottom: 8px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.api-class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.api-class-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+}
+.api-bases {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+.api-doc {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  margin-bottom: 6px;
+}
+.api-methods {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.api-methods code {
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+}
+
+/* Tech stack */
+.dep-group {
+  margin-bottom: 20px;
+}
+.dep-group h4 {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.dep-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dep-tag {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: border-color var(--motion-fast) var(--ease-enter),
+              transform var(--motion-fast) var(--ease-enter);
+}
+.dep-tag:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+}
+.dep-tag.dep-dev {
+  border-style: dashed;
+  color: var(--text-tertiary);
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  padding: 8px 16px;
+  z-index: 100;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  transition: top 0.2s var(--ease-enter);
+}
+.skip-link:focus {
+  top: 8px;
+}
+
+/* TOC */
+.toc-section {
+  padding: 24px 40px;
+}
+.toc {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+}
+.toc-title {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+.toc-list {
+  list-style: none;
+}
+.toc-list li {
+  margin-bottom: 6px;
+}
+.toc-list a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.8125rem;
+}
+.toc-list a:hover {
+  color: var(--accent-primary);
+}
+
+/* Back to top */
+.back-to-top {
+  color: var(--accent-primary);
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.back-to-top:hover {
+  text-decoration: underline;
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 32px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  border-top: 1px solid var(--card-border);
+  margin-top: 32px;
+}
+.footer strong {
+  color: var(--accent-primary);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .anim-particle {
+    visibility: hidden !important;
+    animation-play-state: paused !important;
+  }
+}
+
+/* High contrast */
+@media (prefers-contrast: high) {
+  .component-card, .stat-card, .api-class { border: 2px solid currentColor; }
+}
+
+/* Print */
+@media print {
+  body { background: white; color: black; }
+  .hero { background: #f0f0f0; color: black; }
+  .hero-title, .hero-subtitle, .hero-meta { color: black; }
+  .stat-number { color: black; -webkit-text-fill-color: black; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hero { padding: 48px 20px; }
+  .hero-title { font-size: 1.5rem; }
+  .section { padding: 32px 20px; }
+  .component-header { flex-direction: column; gap: 6px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Light theme (TappMCP style guide) */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary: #f8f9fc;
+    --bg-secondary: #f0f1f5;
+    --card-bg: rgba(255, 255, 255, 0.92);
+    --card-bg-alt: rgba(245, 245, 250, 0.95);
+    --card-border: rgba(0, 0, 0, 0.08);
+    --accent-primary: #0d9488;
+    --accent-secondary: #b8941f;
+    --text-primary: #1a1a2e;
+    --text-secondary: #4a4a5e;
+    --text-muted: #9ca3af;
+  }
+  body { color: var(--text-primary); }
+  .hero { background: linear-gradient(135deg, #f8f9fc 0%, #f0f1f5 30%, #e5e7ed 70%, #ccfbf1 100%); }
+  .stat-number { color: var(--accent-primary); }
+}
+
+/* Tech stack pills */
+.tech-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-family: var(--font-sans);
+}
+
+/* Polyglot layer — application & agent cards */
+.polyglot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.polyglot-card {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--motion-fast) var(--ease-enter),
+              box-shadow var(--motion-fast) var(--ease-enter);
+  animation: fadeIn 0.4s var(--ease-enter) both;
+}
+.polyglot-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+}
+.polyglot-header {
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.polyglot-body { padding: 16px 18px; }
+.polyglot-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: white;
+}
+.polyglot-stats {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.75);
+  font-family: var(--font-mono);
+}
+.polyglot-desc {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+.agent-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+.agent-chip {
+  background: var(--bg-primary);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.6875rem;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+/* Integration points catalog */
+.integration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.integration-card {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+  animation: fadeIn 0.4s var(--ease-enter) both;
+}
+.integration-icon { font-size: 1.25rem; margin-bottom: 6px; }
+.integration-name {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.integration-dir {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+/* Deployment & operations */
+.deploy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.deploy-card {
+  background: linear-gradient(135deg, var(--card-bg), var(--card-bg-alt));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+  animation: fadeInScale 0.4s var(--ease-enter) both;
+}
+.deploy-icon { font-size: 1.75rem; margin-bottom: 8px; }
+.deploy-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.deploy-file {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+</style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<section class="hero">
+  <div class="hero-content">
+    <h1 class="hero-title">TappsMCP Workspace</h1>
+    <p class="hero-subtitle">Code-quality + documentation MCP servers (uv workspace monorepo)</p>
+    <div class="hero-arch"><span class="arch-badge-hero" style="background:#d4a847;color:#111">MICROSERVICE · 70%</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 200" width="360" height="257" class="pattern-svg" aria-label="MICROSERVICE architecture diagram"><defs>
+  <marker id="pp-arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L8,3 L0,6 Z" fill="#a1a1aa"/>
+  </marker>
+  <marker id="pp-arr-teal" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L8,3 L0,6 Z" fill="#14B8A6"/>
+  </marker>
+  <marker id="pp-arr-gold" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L8,3 L0,6 Z" fill="#d4a847"/>
+  </marker>
+  <filter id="pp-shadow" x="-10%" y="-10%" width="120%" height="130%">
+    <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.4"/>
+  </filter>
+</defs><rect width="280" height="200" rx="10" fill="#0a0a0f"/>
+<rect x="105" y="14" width="70" height="22" rx="5" fill="#d4a847" filter="url(#pp-shadow)"/>
+<text x="140" y="28" fill="#111" font-size="8.5" font-weight="700" text-anchor="middle" font-family="system-ui,sans-serif">API Gateway</text>
+<line x1="140" y1="36" x2="54" y2="52" stroke="#d4a847" stroke-width="1" marker-end="url(#pp-arr-gold)" opacity="0.7"/>
+<rect x="20" y="52" width="68" height="30" rx="6" fill="#14B8A6" filter="url(#pp-shadow)"/>
+<text x="54" y="65" fill="#fff" font-size="8" font-weight="700" text-anchor="middle" font-family="system-ui,sans-serif">Catalog</text>
+<text x="54" y="76" fill="#fff" font-size="6.5" text-anchor="middle" font-family="system-ui,sans-serif">Service</text>
+<rect x="34" y="105" width="40" height="13" fill="#374151"/>
+<ellipse cx="54" cy="105" rx="20" ry="5" fill="#4B5563"/>
+<ellipse cx="54" cy="118" rx="20" ry="5" fill="#2d3748"/>
+<text x="54" y="114" fill="#9ca3af" font-size="6.5" text-anchor="middle" font-family="system-ui,sans-serif">DB</text>
+<line x1="54" y1="82" x2="54" y2="105" stroke="#4B5563" stroke-width="1.5" stroke-dasharray="3,2"/>
+<line x1="140" y1="36" x2="140" y2="52" stroke="#d4a847" stroke-width="1" marker-end="url(#pp-arr-gold)" opacity="0.7"/>
+<rect x="106" y="52" width="68" height="30" rx="6" fill="#F5A9D0" filter="url(#pp-shadow)"/>
+<text x="140" y="65" fill="#111" font-size="8" font-weight="700" text-anchor="middle" font-family="system-ui,sans-serif">Ordering</text>
+<text x="140" y="76" fill="#111" font-size="6.5" text-anchor="middle" font-family="system-ui,sans-serif">Service</text>
+<rect x="120" y="105" width="40" height="13" fill="#374151"/>
+<ellipse cx="140" cy="105" rx="20" ry="5" fill="#4B5563"/>
+<ellipse cx="140" cy="118" rx="20" ry="5" fill="#2d3748"/>
+<text x="140" y="114" fill="#9ca3af" font-size="6.5" text-anchor="middle" font-family="system-ui,sans-serif">DB</text>
+<line x1="140" y1="82" x2="140" y2="105" stroke="#4B5563" stroke-width="1.5" stroke-dasharray="3,2"/>
+<line x1="140" y1="36" x2="226" y2="52" stroke="#d4a847" stroke-width="1" marker-end="url(#pp-arr-gold)" opacity="0.7"/>
+<rect x="192" y="52" width="68" height="30" rx="6" fill="#9333EA" filter="url(#pp-shadow)"/>
+<text x="226" y="65" fill="#fff" font-size="8" font-weight="700" text-anchor="middle" font-family="system-ui,sans-serif">Shipping</text>
+<text x="226" y="76" fill="#fff" font-size="6.5" text-anchor="middle" font-family="system-ui,sans-serif">Service</text>
+<rect x="206" y="105" width="40" height="13" fill="#374151"/>
+<ellipse cx="226" cy="105" rx="20" ry="5" fill="#4B5563"/>
+<ellipse cx="226" cy="118" rx="20" ry="5" fill="#2d3748"/>
+<text x="226" y="114" fill="#9ca3af" font-size="6.5" text-anchor="middle" font-family="system-ui,sans-serif">DB</text>
+<line x1="226" y1="82" x2="226" y2="105" stroke="#4B5563" stroke-width="1.5" stroke-dasharray="3,2"/>
+<line x1="88" y1="67" x2="106" y2="67" stroke="#a1a1aa" stroke-width="1.5" marker-end="url(#pp-arr)"/>
+<line x1="174" y1="67" x2="192" y2="67" stroke="#a1a1aa" stroke-width="1.5" marker-end="url(#pp-arr)"/>
+<circle class="flow-dot dot-ms" r="3.5" fill="#d4a847"/></svg></div>
+  </div>
+</section>
+
+<section class="section document-purpose" id="main-content">
+  <h2 class="section-title">Document Purpose</h2>
+  <div class="purpose-block">
+    <h3>Audience &amp; Use</h3>
+    <p class="purpose-text">This report is for <strong>developers and architects</strong>. It explains how components fit together, why they are structured this way, and what constraints apply. Use it to understand the system before making changes, justify architectural decisions, and plan refactors.</p>
+  </div>
+</section>
+<section class="section toc-section">
+  <nav class="toc" aria-label="Table of contents">
+    <h3 class="toc-title">Contents</h3>
+    <ul class="toc-list">
+      <li><a href="#executive-summary">Executive Summary</a></li>
+      <li><a href="#architecture-diagram">High-Level Architecture</a></li>
+      <li><a href="#data-flow">Data Flow Pipeline</a></li>
+      <li><a href="#polyglot-layer">Application &amp; Agent Layer</a></li>
+      <li><a href="#component-details">Component Deep-Dive</a></li>
+      <li><a href="#dependency-flow">Dependency Flow</a></li>
+      <li><a href="#integration-catalog">Integration Points</a></li>
+      <li><a href="#deployment">Deployment &amp; Operations</a></li>
+      <li><a href="#api-surface">Public API Surface</a></li>
+      <li><a href="#tech-stack">Technology Stack</a></li>
+      <li><a href="#health-insights">Architecture Health</a></li>
+    </ul>
+  </nav>
+</section>
+<section class="section" id="executive-summary" role="region" aria-labelledby="exec-summary-heading">
+<h2 class="section-title" id="exec-summary-heading">Executive Summary</h2>
+<p><strong>Why this matters:</strong> Quick overview for stakeholders; key metrics support risk assessment and technical debt visibility.</p>
+
+<div class="purpose-block">
+  <h3>Purpose &amp; Intent</h3>
+  <p class="purpose-text">MCP server for automated documentation generation, validation, and maintenance</p>
+</div>
+<div class="stats-grid">
+<div class="stat-card"><div class="stat-number">3</div><div class="stat-label">Python Packages</div></div><div class="stat-card"><div class="stat-number">62</div><div class="stat-label">Modules</div></div><div class="stat-card"><div class="stat-number">2</div><div class="stat-label">Applications</div></div><div class="stat-card"><div class="stat-number">55</div><div class="stat-label">Public Classes</div></div><div class="stat-card"><div class="stat-number">555</div><div class="stat-label">External Imports</div></div>
+</div>
+</section>
+<section class="section" id="architecture-diagram">
+<h2 class="section-title">High-Level Architecture</h2>
+<p>The diagram below illustrates the major packages and components that comprise the system. Each box represents a distinct package or subsystem with its own responsibilities and boundaries.</p>
+<figure role="figure" aria-labelledby="arch-figcaption">
+<div class="diagram-container"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 290" class="arch-svg" role="img" aria-labelledby="arch-svg-title">
+  <title id="arch-svg-title">High-level architecture: TappsMCP Workspace</title>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="2" dy="4" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="grad0" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#2dd4bf"/>
+    </linearGradient>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4a847"/>
+      <stop offset="100%" stop-color="#e8c060"/>
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d9488"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+  <rect width="860" height="290" rx="16" fill="#0a0a0f" />
+  <text x="430.0" y="45" text-anchor="middle" fill="#fafafa" font-size="22" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">TappsMCP Workspace — Architecture Overview</text>
+  <rect x="60" y="130" width="220" height="100" rx="12" fill="url(#grad0)" filter="url(#shadow)" />
+  <text x="170.0" y="170" text-anchor="middle" fill="#0a0a0f" font-size="16" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">docs_mcp</text>
+  <text x="170.0" y="195" text-anchor="middle" fill="#0a0a0f" font-size="11" opacity="0.8" font-family="Outfit, Inter, system-ui, sans-serif">19 modules</text>
+  <rect x="320" y="130" width="220" height="100" rx="12" fill="url(#grad1)" filter="url(#shadow)" />
+  <text x="430.0" y="170" text-anchor="middle" fill="#0a0a0f" font-size="16" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">tapps_core</text>
+  <text x="430.0" y="195" text-anchor="middle" fill="#0a0a0f" font-size="11" opacity="0.8" font-family="Outfit, Inter, system-ui, sans-serif">13 modules</text>
+  <rect x="580" y="130" width="220" height="100" rx="12" fill="url(#grad2)" filter="url(#shadow)" />
+  <text x="690.0" y="170" text-anchor="middle" fill="#fafafa" font-size="16" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">tapps_mcp</text>
+  <text x="690.0" y="195" text-anchor="middle" fill="#fafafa" font-size="11" opacity="0.8" font-family="Outfit, Inter, system-ui, sans-serif">30 modules</text>
+</svg></div>
+<figcaption id="arch-figcaption">High-level architecture overview</figcaption>
+</figure>
+</section>
+<section class="section" id="data-flow" role="region" aria-labelledby="data-flow-heading">
+<h2 class="section-title" id="data-flow-heading">Data Flow Pipeline</h2>
+<p><strong>Why this matters:</strong> Understanding runtime flow helps trace how input moves through layers toward output. Each stage represents a processing boundary.</p>
+<figure role="figure" aria-labelledby="data-flow-figcaption">
+<div class="diagram-container"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 242" class="flow-svg">
+  <defs>
+    <marker id="flowArrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#14b8a6"/>
+    </marker>
+  </defs>
+  <rect width="480" height="242" rx="8" fill="#0a0a0f"/>
+  <text x="240.0" y="35" text-anchor="middle" fill="#fafafa" font-size="18" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">Data Flow Pipeline</text>
+  <text x="120.0" y="82" text-anchor="middle" fill="#14b8a6" font-size="13" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">Core Logic</text>
+  <rect x="40" y="90" width="160" height="52" rx="6" fill="rgba(18,18,26,0.85)" stroke="#14b8a6" stroke-width="1" opacity="0.8"/>
+  <text x="120.0" y="116" text-anchor="middle" fill="#d4d4d8" font-size="11" font-weight="500" font-family="Outfit, Inter, system-ui, sans-serif">tapps_core</text>
+  <line x1="205" y1="108.0" x2="275" y2="108.0" stroke="#14b8a6" stroke-width="2" marker-end="url(#flowArrow)" opacity="0.7"/>
+  <text x="360.0" y="82" text-anchor="middle" fill="#d4a847" font-size="13" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">Output / API</text>
+  <rect x="280" y="90" width="160" height="88" rx="6" fill="rgba(18,18,26,0.85)" stroke="#d4a847" stroke-width="1" opacity="0.8"/>
+  <text x="360.0" y="116" text-anchor="middle" fill="#d4d4d8" font-size="11" font-weight="500" font-family="Outfit, Inter, system-ui, sans-serif">docs_mcp</text>
+  <text x="360.0" y="152" text-anchor="middle" fill="#d4d4d8" font-size="11" font-weight="500" font-family="Outfit, Inter, system-ui, sans-serif">tapps_mcp</text>
+</svg></div>
+<figcaption id="data-flow-figcaption">Data flow pipeline</figcaption>
+</figure>
+</section>
+<section class="section" id="polyglot-layer" role="region" aria-labelledby="polyglot-heading">
+<h2 class="section-title" id="polyglot-heading">Application &amp; Agent Layer</h2>
+<p>Beyond the Python core, this system includes application frontends, AI agent roles, workflow orchestration, and data schemas. These components form the complete operational surface of the system.</p>
+<div class="polyglot-grid">
+<div class="polyglot-card" style="animation-delay:0.00s">
+  <div class="polyglot-header" style="background: linear-gradient(135deg, #3178c6, #60a5fa);">
+    <span class="polyglot-name">tapps-mcp</span>
+    <span class="polyglot-stats"></span>
+  </div>
+  <div class="polyglot-body">
+    <p class="polyglot-desc">MCP server providing code quality tools - npm wrapper for the Python tapps-mcp package</p>
+    <span class="tech-pill" style="background:#339933;color:#fafafa">Node.js</span>
+  </div>
+</div>
+<div class="polyglot-card" style="animation-delay:0.05s">
+  <div class="polyglot-header" style="background: linear-gradient(135deg, #3178c6, #60a5fa);">
+    <span class="polyglot-name">docs-mcp</span>
+    <span class="polyglot-stats"></span>
+  </div>
+  <div class="polyglot-body">
+    <p class="polyglot-desc">MCP server for automated documentation generation, validation, and maintenance - npm wrapper for the Python docs-mcp package</p>
+    <span class="tech-pill" style="background:#339933;color:#fafafa">Node.js</span>
+  </div>
+</div>
+</div>
+</section>
+<section class="section" id="component-details">
+<h2 class="section-title">Component Deep-Dive</h2>
+<p>Each component in the architecture serves a specific purpose, contributing to the overall system through well-defined responsibilities. Understanding these individual building blocks is essential for navigating the codebase, extending functionality, and maintaining the project over time.</p>
+
+<div class="component-card">
+  <div class="component-header" style="background: linear-gradient(
+    135deg, #14b8a6, #2dd4bf);">
+    <h3 class="component-name">docs_mcp</h3>
+    <div class="component-stats">
+      <span>19 modules</span>
+      <span>93 functions</span>
+      <span>0 classes</span>
+    </div>
+  </div>
+  <div class="component-body">
+    <p class="component-description">The docs_mcp package docs mcp: documentation mcp server for the tapps platform. Composed of 19 modules. Provides 93 functions as its public interface.</p>
+    <div class="submodule-list">
+      <h4>Key Modules</h4>
+      <ul>
+        <li><code>agents</code></li>
+        <li><code>analyzers</code></li>
+        <li><code>cli</code></li>
+        <li><code>config</code></li>
+        <li><code>constants</code></li>
+        <li><code>extractors</code></li>
+        <li><code>generators</code></li>
+        <li><code>integrations</code></li>
+        <li><code>linters</code></li>
+        <li><code>server</code></li>
+        <li><code>server_analysis</code></li>
+        <li><code>server_gen_tools</code></li>
+        <li><em>... and 7 more</em></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="component-card">
+  <div class="component-header" style="background: linear-gradient(
+    135deg, #d4a847, #e8c060);">
+    <h3 class="component-name">tapps_core</h3>
+    <div class="component-stats">
+      <span>13 modules</span>
+      <span>11 functions</span>
+      <span>4 classes</span>
+    </div>
+  </div>
+  <div class="component-body">
+    <p class="component-description">The tapps_core package tapps core: shared infrastructure library for the tapps platform. Composed of 13 modules. Exposes 11 functions and 4 classes, offering both procedural and object-oriented interfaces.</p>
+    <div class="submodule-list">
+      <h4>Key Modules</h4>
+      <ul>
+        <li><code>adaptive</code></li>
+        <li><code>agent_identity</code></li>
+        <li><code>brain_auth</code></li>
+        <li><code>brain_bridge</code></li>
+        <li><code>common</code></li>
+        <li><code>config</code></li>
+        <li><code>experts</code></li>
+        <li><code>insights</code></li>
+        <li><code>knowledge</code></li>
+        <li><code>memory</code></li>
+        <li><code>metrics</code></li>
+        <li><code>prompts</code></li>
+        <li><em>... and 1 more</em></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="component-card">
+  <div class="component-header" style="background: linear-gradient(
+    135deg, #0d9488, #14b8a6);">
+    <h3 class="component-name">tapps_mcp</h3>
+    <div class="component-stats">
+      <span>30 modules</span>
+      <span>239 functions</span>
+      <span>3 classes</span>
+    </div>
+  </div>
+  <div class="component-body">
+    <p class="component-description">The tapps_mcp package tappsmcp: mcp server providing code quality tools. Composed of 30 modules. Exposes 239 functions and 3 classes, offering both procedural and object-oriented interfaces.</p>
+    <div class="submodule-list">
+      <h4>Key Modules</h4>
+      <ul>
+        <li><code>adaptive</code></li>
+        <li><code>benchmark</code></li>
+        <li><code>cli</code></li>
+        <li><code>common</code></li>
+        <li><code>config</code></li>
+        <li><code>diagnostics</code></li>
+        <li><code>distribution</code></li>
+        <li><code>gates</code></li>
+        <li><code>knowledge</code></li>
+        <li><code>memory</code></li>
+        <li><code>metrics</code></li>
+        <li><code>pipeline</code></li>
+        <li><em>... and 18 more</em></li>
+      </ul>
+    </div>
+  </div>
+</div>
+</section>
+<section class="section" id="dependency-flow" role="region" aria-labelledby="dep-flow-heading">
+<h2 class="section-title" id="dep-flow-heading">Dependency Flow</h2>
+<p><strong>Why this matters:</strong> The dependency flow reveals coupling between packages. Arrows show import relationships; understanding them helps plan refactors and avoid circular dependencies.</p>
+<figure role="figure" aria-labelledby="dep-flow-figcaption">
+<div class="diagram-container"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700" class="dep-svg">
+  <defs>
+    <filter id="dshadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="1" dy="3" stdDeviation="4" flood-opacity="0.2"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#a1a1aa"/>
+    </marker>
+    <linearGradient id="dgrad0" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#2dd4bf"/>
+    </linearGradient>
+    <linearGradient id="dgrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4a847"/>
+      <stop offset="100%" stop-color="#e8c060"/>
+    </linearGradient>
+    <linearGradient id="dgrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d9488"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="700" rx="16" fill="#0a0a0f"/>
+  <text x="400" y="35" text-anchor="middle" fill="#fafafa" font-size="18" font-weight="700" font-family="Outfit, Inter, system-ui, sans-serif">Dependency Flow</text>
+  <path id="dep-edge-0" d="M 400 100 Q 465 312 617 475" fill="none" stroke="rgba(63,63,90,0.5)" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowhead)" opacity="0.7"/>
+  <path id="dep-edge-1" d="M 183 475 Q 400 425 617 475" fill="none" stroke="rgba(63,63,90,0.5)" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowhead)" opacity="0.7"/>
+  <path id="dep-edge-2" d="M 183 475 Q 335 313 400 100" fill="none" stroke="rgba(63,63,90,0.5)" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowhead)" opacity="0.7"/>
+  <circle cx="400" cy="100" r="50" fill="url(#dgrad0)" filter="url(#dshadow)"/>
+  <text x="400" y="105" text-anchor="middle" fill="#0a0a0f" font-size="12" font-weight="600" font-family="Outfit, Inter, system-ui, sans-serif">docs_mcp</text>
+  <circle cx="617" cy="475" r="50" fill="url(#dgrad1)" filter="url(#dshadow)"/>
+  <text x="617" y="480" text-anchor="middle" fill="#0a0a0f" font-size="12" font-weight="600" font-family="Outfit, Inter, system-ui, sans-serif">tapps_core</text>
+  <circle cx="183" cy="475" r="50" fill="url(#dgrad2)" filter="url(#dshadow)"/>
+  <text x="183" y="480" text-anchor="middle" fill="#fafafa" font-size="12" font-weight="600" font-family="Outfit, Inter, system-ui, sans-serif">tapps_mcp</text>
+</svg></div>
+<figcaption id="dep-flow-figcaption">Package import relationships</figcaption>
+</figure>
+</section>
+<section class="section" id="integration-catalog" role="region" aria-labelledby="integration-heading">
+<h2 class="section-title" id="integration-heading">Integration Points</h2>
+<p><strong>Why this matters:</strong> External integrations create runtime dependencies on third-party services. Understanding the integration surface informs reliability planning, cost modeling, and vendor risk assessment.</p>
+<div class="integration-grid">
+<div class="integration-card" style="animation-delay:0.00s;border-left-color:#a78bfa">
+  <div class="integration-icon">🌐</div>
+  <div class="integration-name">Starlette / ASGI</div>
+  <div class="integration-dir" style="color:#a78bfa">← Inbound</div>
+</div>
+</div>
+</section>
+<section class="section" id="deployment" role="region" aria-labelledby="deploy-heading">
+<h2 class="section-title" id="deploy-heading">Deployment &amp; Operations</h2>
+<p>Deployment artifacts define how this system is packaged, distributed, and operated. These files represent the operational surface and are critical for infrastructure planning and runbook authoring.</p>
+<div class="deploy-grid">
+<div class="deploy-card" style="animation-delay:0.00s">
+  <div class="deploy-icon">🐳</div>
+  <div class="deploy-name">Docker</div>
+  <div class="deploy-file">Dockerfile</div>
+  <div style="margin-top:8px"><span class="meta-badge" style="font-size:0.6875rem">Container</span></div>
+</div>
+<div class="deploy-card" style="animation-delay:0.05s">
+  <div class="deploy-icon">🐳</div>
+  <div class="deploy-name">Docker Compose</div>
+  <div class="deploy-file">docker-compose.yml</div>
+  <div style="margin-top:8px"><span class="meta-badge" style="font-size:0.6875rem">Container</span></div>
+</div>
+<div class="deploy-card" style="animation-delay:0.10s">
+  <div class="deploy-icon">⚙️</div>
+  <div class="deploy-name">GitHub Actions (4 workflows)</div>
+  <div class="deploy-file">.github/workflows/</div>
+  <div style="margin-top:8px"><span class="meta-badge" style="font-size:0.6875rem">CI / CD</span></div>
+</div>
+</div>
+</section>
+<section class="section" id="api-surface">
+<h2 class="section-title">Public API Surface</h2>
+<p>The public API surface defines the contract between this project and its consumers. Classes listed below represent publicly accessible interfaces that external code may depend upon. This is a curated selection of the 55 public classes discovered.</p>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/agents/catalog.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">AgentCatalog</code>
+    </div>
+    <p class="api-doc">Manages a collection of agent configurations.</p>
+    <div class="api-methods">Methods: <code>from_directory</code>, <code>agents</code>, <code>active_agents</code>, <code>get</code>, <code>add</code>, <code>remove</code></div>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/agents/dedup.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">DedupResult</code>
+    </div>
+    <p class="api-doc">Result of a deduplication check.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">DedupMatch</code>
+    </div>
+    <p class="api-doc">A single overlap match from dedup checking.</p>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/agents/embeddings.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">EmbeddingBackend</code> <span class="api-bases">extends ABC</span>
+    </div>
+    <p class="api-doc">Abstract base class for embedding computation.</p>
+    <div class="api-methods">Methods: <code>embed</code>, <code>dimension</code></div>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">StubEmbeddingBackend</code> <span class="api-bases">extends EmbeddingBackend</span>
+    </div>
+    <p class="api-doc">Test backend that returns deterministic hash-based vectors.</p>
+    <div class="api-methods">Methods: <code>embed</code>, <code>dimension</code></div>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">LocalEmbeddingBackend</code> <span class="api-bases">extends EmbeddingBackend</span>
+    </div>
+    <p class="api-doc">Embedding backend using sentence-transformers (local CPU inference).</p>
+    <div class="api-methods">Methods: <code>embed</code>, <code>dimension</code></div>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">EmbeddingCache</code>
+    </div>
+    <p class="api-doc">Disk-based cache for embedding vectors keyed by content hash.</p>
+    <div class="api-methods">Methods: <code>get</code>, <code>put</code>, <code>get_or_compute</code></div>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/agents/health.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">OverlapPair</code>
+    </div>
+    <p class="api-doc">A pair of agents with high embedding similarity.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">CatalogHealthReport</code>
+    </div>
+    <p class="api-doc">Health report for the agent catalog.</p>
+    <div class="api-methods">Methods: <code>health_score</code>, <code>to_dict</code></div>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/agents/lifecycle.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">DeprecationResult</code>
+    </div>
+    <p class="api-doc">Result of deprecating an agent.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">CleanupResult</code>
+    </div>
+    <p class="api-doc">Result of running lifecycle cleanup.</p>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/agents/matcher.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">MatchResult</code>
+    </div>
+    <p class="api-doc">Result of matching a prompt against an agent.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">HybridMatcher</code>
+    </div>
+    <p class="api-doc">Combines keyword and embedding matching for agent routing.</p>
+    <div class="api-methods">Methods: <code>is_degraded</code>, <code>match</code>, <code>pairwise_similarity</code></div>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/agents/merge.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">MergeSuggestion</code>
+    </div>
+    <p class="api-doc">Structured suggestion for merging capabilities into an existing agent.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">MergeReport</code>
+    </div>
+    <p class="api-doc">Collection of merge suggestions for a single proposal.</p>
+    <div class="api-methods">Methods: <code>to_dict</code></div>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/agents/models.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">MemoryProfile</code> <span class="api-bases">extends StrEnum</span>
+    </div>
+    <p class="api-doc">Controls how an agent interacts with tapps-brain memory.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">AgentConfig</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">Configuration for a single agent in the catalog.</p>
+    <div class="api-methods">Methods: <code>embedding_text</code></div>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/agents/overlap_guard.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">OverlapContext</code>
+    </div>
+    <p class="api-doc">Context about existing agents that overlap with a proposal.</p>
+    <div class="api-methods">Methods: <code>to_prompt_injection</code>, <code>to_dict</code></div>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/analyzers/api_surface.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">APIFunction</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">Public function in the API surface.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">APIClass</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">Public class in the API surface.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">APIConstant</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">Public constant in the API surface.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">APISurface</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">Complete public API surface for a module.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">APISurfaceAnalyzer</code>
+    </div>
+    <p class="api-doc">Detects public API surface of source modules.</p>
+    <div class="api-methods">Methods: <code>analyze</code>, <code>analyze_from_source</code></div>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/analyzers/commit_parser.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">ParsedCommit</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">Result of parsing/classifying a single commit message.</p>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/analyzers/dependency.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">ImportEdge</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">A single import relationship between two modules.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">ImportGraph</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">Directed graph of import relationships in a project.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">ImportGraphBuilder</code>
+    </div>
+    <p class="api-doc">Builds a directed import dependency graph for a Python project.</p>
+    <div class="api-methods">Methods: <code>build</code></div>
+  </div>
+</div>
+<div class="api-module">
+  <h4 class="api-module-path">packages/docs-mcp/src/docs_mcp/analyzers/diataxis.py</h4>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">DiataxisResult</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">Classification result for a single document.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">DiataxisCoverage</code> <span class="api-bases">extends BaseModel</span>
+    </div>
+    <p class="api-doc">Coverage map across all four quadrants for a project.</p>
+  </div>
+
+  <div class="api-class">
+    <div class="api-class-header">
+      <code class="api-class-name">DiataxisClassifier</code>
+    </div>
+    <p class="api-doc">Deterministic classifier for Diataxis content quadrants.</p>
+    <div class="api-methods">Methods: <code>classify</code></div>
+  </div>
+</div>
+<p style="color:var(--text-muted);font-size:0.75rem;">Showing 30 of 55 public classes. 25 additional classes omitted for brevity.</p>
+</section>
+<section class="section" id="tech-stack" role="region" aria-labelledby="tech-stack-heading">
+<h2 class="section-title" id="tech-stack-heading">Technology Stack</h2>
+<p><strong>Why this matters:</strong> Understanding dependencies helps set up your environment, assess supply-chain risk, and plan upgrades.</p>
+<p>The technology stack represents the foundation upon which this project is built. Each dependency has been selected to address specific technical requirements, from core framework capabilities to development tooling. Understanding these dependencies helps developers set up their environment and appreciate the design choices made.</p>
+<div class="dep-group">
+  <h4>Runtime Dependencies</h4>
+  <div class="dep-tags">
+    <span class="dep-tag">anyio</span>
+    <span class="dep-tag">bandit</span>
+    <span class="dep-tag">click</span>
+    <span class="dep-tag">cryptography</span>
+    <span class="dep-tag">docs-mcp</span>
+    <span class="dep-tag">filelock</span>
+    <span class="dep-tag">gitpython</span>
+    <span class="dep-tag">httpx</span>
+    <span class="dep-tag">jinja2</span>
+    <span class="dep-tag">mcp</span>
+    <span class="dep-tag">perflint</span>
+    <span class="dep-tag">pip-audit</span>
+    <span class="dep-tag">pydantic-settings</span>
+    <span class="dep-tag">pydantic</span>
+    <span class="dep-tag">pygments</span>
+    <span class="dep-tag">pyjwt</span>
+    <span class="dep-tag">pylint</span>
+    <span class="dep-tag">python-multipart</span>
+    <span class="dep-tag">pyyaml</span>
+    <span class="dep-tag">radon</span>
+    <span class="dep-tag">requests</span>
+    <span class="dep-tag">structlog</span>
+    <span class="dep-tag">tapps-brain</span>
+    <span class="dep-tag">tapps-core</span>
+    <span class="dep-tag">vulture</span>
+  </div>
+</div>
+<div class="dep-group">
+  <h4>Development Dependencies</h4>
+  <div class="dep-tags">
+    <span class="dep-tag dep-dev">cohere</span>
+    <span class="dep-tag dep-dev">faiss-cpu</span>
+    <span class="dep-tag dep-dev">mypy</span>
+    <span class="dep-tag dep-dev">numpy</span>
+    <span class="dep-tag dep-dev">playwright</span>
+    <span class="dep-tag dep-dev">pre-commit</span>
+    <span class="dep-tag dep-dev">pytest-asyncio</span>
+    <span class="dep-tag dep-dev">pytest-cov</span>
+    <span class="dep-tag dep-dev">pytest-timeout</span>
+    <span class="dep-tag dep-dev">pytest</span>
+    <span class="dep-tag dep-dev">ruff</span>
+    <span class="dep-tag dep-dev">sentence-transformers</span>
+    <span class="dep-tag dep-dev">tree-sitter-go</span>
+    <span class="dep-tag dep-dev">tree-sitter-java</span>
+    <span class="dep-tag dep-dev">tree-sitter-rust</span>
+    <span class="dep-tag dep-dev">tree-sitter-typescript</span>
+    <span class="dep-tag dep-dev">tree-sitter</span>
+    <span class="dep-tag dep-dev">types-PyYAML</span>
+  </div>
+</div>
+</section>
+<section class="section" id="health-insights">
+<h2 class="section-title">Architecture Health</h2>
+<p>Key indicators for technical leadership assessing system maturity, maintainability risk, and architectural fitness.</p>
+<div class="stats-grid">
+
+<div class="stat-card">
+  <div class="stat-number" style="color:var(--accent-secondary)">Medium</div>
+  <div class="stat-label">Modularity</div>
+</div>
+
+<div class="stat-card">
+  <div class="stat-number">20.7</div>
+  <div class="stat-label">Avg Modules/Package</div>
+</div>
+
+<div class="stat-card">
+  <div class="stat-number" style="color:#ef4444">High</div>
+  <div class="stat-label">External Coupling</div>
+</div>
+
+<div class="stat-card">
+  <div class="stat-number">88.7%</div>
+  <div class="stat-label">Class Coverage</div>
+</div>
+</div>
+<div class="purpose-block">
+<h3>Complexity Hotspots</h3><p class="purpose-text">The following packages have more than 15 modules, suggesting potential candidates for decomposition or boundary refinement:</p>
+<div class="dep-tags" style="margin-top:12px">
+<span class="dep-tag">docs_mcp (19 modules)</span>
+<span class="dep-tag">tapps_mcp (30 modules)</span>
+</div></div>
+<div class="purpose-block">
+<h3>Highest Functionality Concentration</h3><p class="purpose-text">Packages with the most functions represent the core business logic. These are the most critical to test thoroughly and document carefully:</p>
+<div class="dep-tags" style="margin-top:12px">
+<span class="dep-tag">tapps_mcp (239 fn)</span>
+<span class="dep-tag">docs_mcp (93 fn)</span>
+<span class="dep-tag">tapps_core (11 fn)</span>
+</div></div>
+<div class="purpose-block">
+<h3>Recommendations</h3>
+<p class="purpose-text">Consider breaking down large packages into smaller, more focused modules to reduce cognitive load.</p>
+<p class="purpose-text">High external dependency count increases supply chain risk. Audit dependencies for overlap and necessity.</p>
+<p class="purpose-text">No license detected. Add a license to clarify usage rights.</p>
+</div>
+</section>
+
+<footer class="footer">
+  <p><a href="#" class="back-to-top">Back to top</a></p>
+  <p>Generated by <strong>DocsMCP</strong> &mdash; Architecture Report</p>
+  <p style="margin-top:6px">
+    3 packages &middot; 62 modules &middot;
+    55 public classes &middot; 2026-05-02 16:11 UTC
+  </p>
+</footer>
+</body>
+</html>
