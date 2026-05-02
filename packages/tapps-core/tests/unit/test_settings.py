@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest import mock
 
 
@@ -198,3 +199,62 @@ class TestMemoryProjectIdAutoDerive:
         m = MemorySettings(project_id="same", brain_project_id="same")
         assert m.brain_project_id == "same"
         assert m.project_id == "same"
+
+
+class TestProjectIdRootFallback:
+    """TAP-1286: when both memory ids are empty, derive from project_root.name."""
+
+    def test_derives_slug_from_project_root_name(self, tmp_path: Path) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        repo = tmp_path / "my-repo"
+        repo.mkdir()
+        s = TappsMCPSettings(project_root=repo)
+
+        assert s.memory.brain_project_id == "my-repo"
+        assert s.memory.project_id == "my-repo"
+
+    def test_slugifies_non_alphanum_chars(self, tmp_path: Path) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        repo = tmp_path / "MyApp_Name v2"
+        repo.mkdir()
+        s = TappsMCPSettings(project_root=repo)
+
+        assert s.memory.brain_project_id == "myapp-name-v2"
+
+    def test_generic_name_does_not_derive(self) -> None:
+        """Generic dir names like 'tmp' would collide across unrelated repos."""
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(project_root=Path("/tmp"))
+        assert s.memory.brain_project_id == ""
+        assert s.memory.project_id == ""
+
+    def test_explicit_brain_project_id_wins_over_root(self, tmp_path: Path) -> None:
+        """Explicit setting must NOT be overwritten by the root fallback."""
+        from tapps_core.config.settings import MemorySettings, TappsMCPSettings
+
+        repo = tmp_path / "repo-name"
+        repo.mkdir()
+        s = TappsMCPSettings(
+            project_root=repo,
+            memory=MemorySettings(brain_project_id="explicit-tenant"),
+        )
+
+        # TAP-1257 cross-fill copies explicit -> project_id; root fallback skipped
+        assert s.memory.brain_project_id == "explicit-tenant"
+        assert s.memory.project_id == "explicit-tenant"
+
+    def test_slugify_helper_returns_empty_for_generic_names(self) -> None:
+        from tapps_core.config.settings import _slugify_project_root
+
+        for generic in ("tmp", "home", "code", "src", "workspace", ""):
+            assert _slugify_project_root(Path(f"/x/{generic}").parent / generic) == ""
+
+    def test_slugify_helper_handles_real_names(self) -> None:
+        from tapps_core.config.settings import _slugify_project_root
+
+        assert _slugify_project_root(Path("/var/MyApp")) == "myapp"
+        assert _slugify_project_root(Path("/var/tapps-mcp")) == "tapps-mcp"
+        assert _slugify_project_root(Path("/var/foo.bar")) == "foo-bar"

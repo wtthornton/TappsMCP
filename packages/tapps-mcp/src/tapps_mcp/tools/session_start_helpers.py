@@ -469,7 +469,11 @@ def _collect_memory_status(settings: Any) -> dict[str, Any]:
 
         bridge = _get_brain_bridge()
         if bridge is not None and getattr(bridge, "is_http_mode", False):
-            return _memory_status_http_mode(bridge)
+            http_status = _memory_status_http_mode(bridge)
+            # TAP-1286: surface the resolved (possibly derived) brain_project_id
+            # so the agent can see which slug was used.
+            http_status["brain_project_id"] = settings.memory.brain_project_id
+            return http_status
 
         mem_store = _get_memory_store()
         if mem_store is None:

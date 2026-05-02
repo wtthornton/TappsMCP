@@ -1092,6 +1092,53 @@ class TappsMCPSettings(BaseSettings):
             return self.linear_enforce_gate
         return self.llm_engagement_level in ("high", "medium")
 
+    # TAP-1286: when both memory.brain_project_id and memory.project_id are
+    # empty after env + YAML resolution, fall back to a slug derived from
+    # project_root.name. TAP-1257's MemorySettings cross-fill only triggers
+    # when one side is populated; this fills the both-empty gap so fresh
+    # installs don't hit brain_project_id_missing on first session_start.
+    @model_validator(mode="after")
+    def _derive_project_id_from_root(self) -> TappsMCPSettings:
+        if self.memory.brain_project_id.strip() or self.memory.project_id.strip():
+            return self
+        slug = _slugify_project_root(self.project_root)
+        if not slug:
+            return self
+        self.memory.brain_project_id = slug
+        self.memory.project_id = slug
+        logger.info(
+            "memory.brain_project_id_auto_derived_from_root",
+            source_dir=str(self.project_root),
+            value=slug,
+        )
+        return self
+
+
+# Generic directory names that should NOT be used as a project slug — they
+# yield ambiguous tenant identifiers across unrelated repos. Derivation
+# falls through to the existing fail-loud error when these are encountered.
+_GENERIC_PROJECT_ROOT_NAMES: frozenset[str] = frozenset(
+    {"", "/", ".", "tmp", "temp", "home", "code", "src", "workspace", "projects"}
+)
+
+
+def _slugify_project_root(project_root: Path) -> str:
+    """Return a slugified project_root.name suitable for use as a brain
+    project_id, or empty string when the directory name is generic enough
+    that two unrelated repos could collide on it.
+
+    Slug: lowercase, non-alphanumeric replaced with ``-``, collapsed and
+    stripped. Empty result + generic-name guard both yield ``""``, which
+    preserves the current fail-loud `brain_project_id_missing` path.
+    """
+    import re
+
+    raw = project_root.name if project_root else ""
+    slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
+    if not slug or slug in _GENERIC_PROJECT_ROOT_NAMES:
+        return ""
+    return slug
+
 
 # Settings cache - only the no-arg (default) case is cached.
 _cached_settings: TappsMCPSettings | None = None
