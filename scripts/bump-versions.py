@@ -76,6 +76,7 @@ def update_npm_version(path: Path, new_version: str) -> str:
 
 
 def main() -> int:
+    """Bump pyproject + npm versions atomically across every workspace package."""
     parser = argparse.ArgumentParser(description="Bump versions across TappsMCP monorepo")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--major", action="store_true", help="Bump major version")

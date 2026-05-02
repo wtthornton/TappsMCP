@@ -73,6 +73,7 @@ def get_tools_from_server(command: list[str], server_name: str) -> list[dict]:
 
 
 def main() -> None:
+    """Generate docker-mcp/<server>/tools.json for each MCP server in this repo."""
     repo_root = Path(__file__).resolve().parent.parent
     docker_mcp_dir = repo_root / "docker-mcp"
 

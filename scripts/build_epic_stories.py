@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> int:
+    """Generate the EPIC-69 epic markdown plus its child story stubs via docs-mcp."""
     # Epic 69: Expert Personas (from research: add optional persona/voice to experts)
     epic_number = 69
     epic_title = "Expert Personas"

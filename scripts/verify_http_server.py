@@ -15,6 +15,7 @@ import sys
 
 
 def main() -> int:
+    """Drive Playwright against a running TappsMCP HTTP server and assert health."""
     parser = argparse.ArgumentParser(description="Verify TappsMCP HTTP server with Playwright")
     parser.add_argument("--url", default="http://localhost:8000", help="Base URL of the server")
     parser.add_argument(
