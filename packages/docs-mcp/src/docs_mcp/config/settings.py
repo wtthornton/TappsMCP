@@ -246,6 +246,28 @@ class DocsMCPSettings(BaseSettings):
             return list(v)
         return []
 
+    # Archive paths excluded from validators (TAP-1278)
+    archive_paths: list[str] = Field(
+        default_factory=lambda: ["docs/archive/**", "**/archive/**"],
+        description=(
+            "Glob patterns excluded from docs_check_style, docs_check_cross_refs, "
+            "docs_check_links, and docs_check_diataxis. Pass an empty list to "
+            "include archived content in scoring. "
+            "Env: DOCS_MCP_ARCHIVE_PATHS (CSV)."
+        ),
+    )
+
+    @field_validator("archive_paths", mode="before")
+    @classmethod
+    def _parse_archive_paths(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        if isinstance(v, list):
+            return [str(s) for s in v]
+        return []
+
     # tapps-brain write path (EPIC-102)
     brain_write_enabled: bool = Field(
         default=False,

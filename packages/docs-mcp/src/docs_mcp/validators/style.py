@@ -21,6 +21,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from docs_mcp.constants import SKIP_DIRS as _BASE_SKIP_DIRS
+from docs_mcp.validators._scan_filters import matches_any_pattern
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
@@ -72,6 +73,7 @@ class StyleReport(BaseModel):
     top_issues: list[str] = Field(default_factory=list)
     truncated: bool = False
     total_available: int = 0
+    excluded_paths_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -868,6 +870,7 @@ class StyleChecker:
         max_items: int = 300,
         rule_filter: list[str] | None = None,
         file_filter: list[str] | None = None,
+        archive_paths: list[str] | None = None,
     ) -> StyleReport:
         """Check all markdown files in a project.
 
@@ -884,11 +887,26 @@ class StyleChecker:
         project_root = project_root.resolve()
         md_files = self._find_markdown_files(project_root, doc_dirs)
 
+        excluded_count = 0
+        if archive_paths:
+            kept: list[Path] = []
+            for f in md_files:
+                try:
+                    rel = str(f.relative_to(project_root)).replace("\\", "/")
+                except ValueError:
+                    rel = str(f).replace("\\", "/")
+                if matches_any_pattern(rel, archive_paths):
+                    excluded_count += 1
+                else:
+                    kept.append(f)
+            md_files = kept
+
         if not md_files:
             return StyleReport(
                 total_files=0,
                 total_issues=0,
                 aggregate_score=100.0,
+                excluded_paths_count=excluded_count,
             )
 
         results: list[FileStyleResult] = []
@@ -930,6 +948,7 @@ class StyleChecker:
             top_issues=top_issues,
             truncated=truncated,
             total_available=total_available,
+            excluded_paths_count=excluded_count,
         )
 
     def _find_markdown_files(

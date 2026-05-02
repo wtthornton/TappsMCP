@@ -288,6 +288,7 @@ async def docs_check_links(
     from docs_mcp.validators.link_checker import LinkChecker
 
     checker = LinkChecker()
+    archive_paths = list(getattr(settings, "archive_paths", []) or [])
     report = checker.check(
         root,
         files=files_list,
@@ -295,6 +296,7 @@ async def docs_check_links(
         max_items=max_items,
         broken_only=broken_only,
         include_backtick_refs=include_backtick_refs,
+        archive_paths=archive_paths,
     )
 
     data: dict[str, Any] = report.model_dump()
@@ -513,7 +515,12 @@ async def docs_check_diataxis(
 
     try:
         validator = DiataxisValidator()
-        coverage = validator.validate(root, max_unclassified_samples=max_unclassified_samples)
+        archive_paths = list(getattr(settings, "archive_paths", []) or [])
+        coverage = validator.validate(
+            root,
+            max_unclassified_samples=max_unclassified_samples,
+            archive_paths=archive_paths,
+        )
     except Exception as exc:
         return error_response(
             "docs_check_diataxis",
@@ -542,6 +549,7 @@ async def docs_check_diataxis(
         "unclassified_files": coverage.unclassified_files,
         "per_file": [r.model_dump() for r in coverage.per_file[:50]],
         "recommendations": coverage.recommendations,
+        "excluded_paths_count": coverage.excluded_paths_count,
     }
 
     return success_response(
@@ -610,11 +618,13 @@ async def docs_check_cross_refs(
 
     try:
         validator = CrossRefValidator()
+        archive_paths = list(getattr(settings, "archive_paths", []) or [])
         report = validator.validate(
             root,
             doc_dirs=dirs_list,
             check_backlinks=check_backlinks,
             group_by_source=group_by_source,
+            archive_paths=archive_paths,
         )
     except Exception as exc:
         return error_response(
@@ -637,6 +647,7 @@ async def docs_check_cross_refs(
         "groups": [g.model_dump() for g in report.groups],
         "patterns": [p.model_dump() for p in report.patterns],
         "issues": [] if group_by_source else [i.model_dump() for i in report.issues[:50]],
+        "excluded_paths_count": report.excluded_paths_count,
     }
 
     return success_response(
@@ -849,12 +860,14 @@ async def docs_check_style(
                 extra={"requested_files": missing, "project_root": str(root)},
             )
     else:
+        archive_paths = list(getattr(settings, "archive_paths", []) or [])
         report = checker.check_project(
             root,
             summary_only=summary_only,
             max_items=max_items,
             rule_filter=rule_filter_list,
             file_filter=file_filter_list,
+            archive_paths=archive_paths,
         )
         missing = []
 
@@ -902,6 +915,7 @@ def _style_report_structured(report: StyleReport) -> dict[str, Any]:
         "file_issue_counts": getattr(report, "file_issue_counts", {}),
         "truncated": getattr(report, "truncated", False),
         "total_available": getattr(report, "total_available", 0),
+        "excluded_paths_count": getattr(report, "excluded_paths_count", 0),
         "files": files_data,
     }
 

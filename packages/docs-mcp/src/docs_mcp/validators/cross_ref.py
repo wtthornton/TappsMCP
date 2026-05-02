@@ -15,6 +15,8 @@ from typing import ClassVar
 import structlog
 from pydantic import BaseModel
 
+from docs_mcp.validators._scan_filters import matches_any_pattern
+
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 # Directories to skip when scanning.
@@ -100,6 +102,7 @@ class CrossRefReport(BaseModel):
     score: int  # 0-100, per-file-mean scoring
     legacy_score: int  # 0-100, old per-total-ref scoring (for calibration)
     scoring_method: str  # always "per_file_mean" for the new score
+    excluded_paths_count: int = 0
 
 
 class CrossRefValidator:
@@ -133,6 +136,7 @@ class CrossRefValidator:
         doc_dirs: list[str] | None = None,
         check_backlinks: bool = True,
         group_by_source: bool = False,
+        archive_paths: list[str] | None = None,
     ) -> CrossRefReport:
         """Validate cross-references in documentation.
 
@@ -165,8 +169,16 @@ class CrossRefValidator:
                     rel = str(f.relative_to(project_root)).replace("\\", "/")
                     doc_files.add(rel)
 
+        excluded_count = 0
+        if archive_paths:
+            kept = {p for p in doc_files if not matches_any_pattern(p, archive_paths)}
+            excluded_count = len(doc_files) - len(kept)
+            doc_files = kept
+
         if not doc_files:
-            return self._empty_report()
+            report = self._empty_report()
+            report.excluded_paths_count = excluded_count
+            return report
 
         ref_graph, total_refs, issues, per_file_refs, per_file_broken = self._build_ref_graph(
             doc_files,
@@ -207,6 +219,7 @@ class CrossRefValidator:
             score=score,
             legacy_score=legacy_score,
             scoring_method="per_file_mean",
+            excluded_paths_count=excluded_count,
         )
 
     def _empty_report(self) -> CrossRefReport:

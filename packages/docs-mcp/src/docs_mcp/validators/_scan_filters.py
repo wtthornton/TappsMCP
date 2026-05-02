@@ -46,6 +46,7 @@ from pathlib import Path, PurePosixPath
 __all__ = [
     "BASELINE_EXCLUDE_DIRS",
     "load_gitignore_patterns",
+    "matches_any_pattern",
     "should_exclude",
 ]
 
@@ -211,6 +212,22 @@ def _under_prefix(rel_path: str, prefix: str) -> bool:
         if not fnmatch.fnmatchcase(ap, pp):
             return False
     return True
+
+
+def matches_any_pattern(rel_path: str, patterns: list[str]) -> bool:
+    """Return True if ``rel_path`` matches any of the given gitignore-style globs.
+
+    Used by validators to apply archive-path exclusions on top of (and
+    independently of) the baseline + gitignore filtering done by
+    :func:`should_exclude`. Empty input returns False.
+    """
+    if not rel_path or not patterns:
+        return False
+    normalized = rel_path.replace("\\", "/")
+    for pattern in patterns:
+        if _pattern_matches(normalized, pattern):
+            return True
+    return False
 
 
 def should_exclude(

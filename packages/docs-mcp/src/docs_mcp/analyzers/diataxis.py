@@ -52,6 +52,7 @@ class DiataxisCoverage(BaseModel):
     per_file: list[DiataxisResult] = []
     recommendations: list[str] = []
     scoring_note: str = ""
+    excluded_paths_count: int = 0
 
 
 class DiataxisClassifier:

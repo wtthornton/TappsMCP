@@ -13,6 +13,7 @@ from typing import ClassVar
 import structlog
 
 from docs_mcp.analyzers.diataxis import DiataxisClassifier, DiataxisCoverage, DiataxisResult
+from docs_mcp.validators._scan_filters import matches_any_pattern
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
@@ -57,6 +58,7 @@ class DiataxisValidator:
         *,
         doc_dirs: list[str] | None = None,
         max_unclassified_samples: int = 20,
+        archive_paths: list[str] | None = None,
     ) -> DiataxisCoverage:
         """Scan and classify all markdown files, producing a coverage report.
 
@@ -73,6 +75,20 @@ class DiataxisValidator:
         project_root = project_root.resolve()
         md_files = self._find_markdown_files(project_root, doc_dirs)
 
+        excluded_count = 0
+        if archive_paths:
+            kept: list[Path] = []
+            for f in md_files:
+                try:
+                    rel = str(f.relative_to(project_root)).replace("\\", "/")
+                except ValueError:
+                    rel = str(f).replace("\\", "/")
+                if matches_any_pattern(rel, archive_paths):
+                    excluded_count += 1
+                else:
+                    kept.append(f)
+            md_files = kept
+
         total_scanned = len(md_files)
 
         if not md_files:
@@ -84,6 +100,7 @@ class DiataxisValidator:
                 scoring_note=(
                     "No files scanned; adjusted_balance_score is the trustworthy metric."
                 ),
+                excluded_paths_count=excluded_count,
             )
 
         # Classify each file. Track unclassified paths (read failures or capped by _MAX_FILES).
@@ -132,6 +149,7 @@ class DiataxisValidator:
                 scoring_note=(
                     "No files classified; adjusted_balance_score is the trustworthy metric."
                 ),
+                excluded_paths_count=excluded_count,
             )
 
         # Calculate coverage percentages (of classified files)
@@ -159,6 +177,7 @@ class DiataxisValidator:
             unclassified_files=unclassified_sample,
             classification_coverage=classification_coverage,
             per_file=results,
+            excluded_paths_count=excluded_count,
         )
 
         # Calculate balance score (existing, unchanged)

@@ -63,6 +63,18 @@ class TestDocsMCPSettings:
         settings = DocsMCPSettings()
         assert settings.log_level == "INFO"
 
+    def test_archive_paths_default(self) -> None:
+        settings = DocsMCPSettings()
+        assert settings.archive_paths == ["docs/archive/**", "**/archive/**"]
+
+    def test_archive_paths_csv_string_parsed(self) -> None:
+        settings = DocsMCPSettings(archive_paths="a/**, b/**")
+        assert settings.archive_paths == ["a/**", "b/**"]
+
+    def test_archive_paths_can_be_emptied(self) -> None:
+        settings = DocsMCPSettings(archive_paths=[])
+        assert settings.archive_paths == []
+
 
 class TestLoadDocsSettings:
     def test_load_docs_settings_returns_settings(self) -> None:

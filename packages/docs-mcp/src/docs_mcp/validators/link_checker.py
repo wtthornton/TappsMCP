@@ -9,6 +9,8 @@ from pathlib import Path
 import structlog
 from pydantic import BaseModel
 
+from docs_mcp.validators._scan_filters import matches_any_pattern
+
 logger = structlog.get_logger(__name__)
 
 # Regex for markdown links: [text](target)
@@ -90,6 +92,7 @@ class LinkReport(BaseModel):
     total_available_broken_links: int = 0
     total_available_backtick_references: int = 0
     total_available_warnings: int = 0
+    excluded_paths_count: int = 0
 
 
 def _compute_score(
@@ -401,6 +404,7 @@ class LinkChecker:
         max_items: int = 200,
         broken_only: bool = False,
         include_backtick_refs: bool = True,
+        archive_paths: list[str] | None = None,
     ) -> LinkReport:
         """Run link validation.
 
@@ -433,6 +437,20 @@ class LinkChecker:
             return LinkReport()
 
         doc_files = _find_doc_files(project_root, files)
+
+        excluded_count = 0
+        if archive_paths:
+            kept: list[Path] = []
+            for f in doc_files:
+                try:
+                    rel = str(f.relative_to(project_root)).replace("\\", "/")
+                except ValueError:
+                    rel = str(f).replace("\\", "/")
+                if matches_any_pattern(rel, archive_paths):
+                    excluded_count += 1
+                else:
+                    kept.append(f)
+            doc_files = kept
 
         total_links = 0
         valid_links = 0
@@ -541,4 +559,5 @@ class LinkChecker:
             total_available_broken_links=total_avail_broken,
             total_available_backtick_references=total_avail_backtick,
             total_available_warnings=total_avail_warnings,
+            excluded_paths_count=excluded_count,
         )
