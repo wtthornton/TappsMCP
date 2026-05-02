@@ -113,6 +113,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Deterministic tools only** -- no LLM calls in the tool chain; same input → same output. Missing external checkers fall back to AST analysis and mark results `degraded: true`. See [ADR-0004](docs/adr/0004-deterministic-tools-only-contract.md).
 - **Architectural decisions** live in [docs/adr/](docs/adr/) — see the [index](docs/adr/README.md). When changing a load-bearing decision, supersede the ADR; do not edit history.
 
+<!-- BEGIN: tapps-obligations v3.7.1 -->
 # TAPPS Quality Pipeline
 
 This project uses the TAPPS MCP server for code quality enforcement.
@@ -140,7 +141,7 @@ This runs scoring + quality gate + security scan in a single call.
 
 ### Before Declaring Work Complete
 
-For multi-file changes: You should call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Always pass `file_paths`** — auto-detect scans all git-changed files and can be very slow. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit). See [ADR-0006](docs/adr/0006-tapps-validate-changed-requires-explicit-file-paths.md).
+For multi-file changes: You should call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Always pass `file_paths`** — auto-detect scans all git-changed files and can be very slow. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
 Run the quality gate before considering work done.
 You should call `tapps_checklist(task_type)` as the final step to verify no required tools were skipped.
 
@@ -158,28 +159,9 @@ This maps the blast radius via import graph analysis.
 
 You should call `tapps_validate_config(file_path)` when changing Dockerfile, docker-compose, or infra config.
 
-### Linear Issue Reads
-
-Linear access in this workspace is OAuth via the `mcp__plugin_linear_linear__*` plugin — the session always has it. tapps-mcp does not call Linear; it only caches results the agent fetched. For triage and bulk reads:
-
-1. Call `tapps_linear_snapshot_get(team, project, state)` first. On `cached=true`, use `data.issues` — no Linear call happens.
-2. On `cached=false`, call `mcp__plugin_linear_linear__list_issues` with narrow filters (`team`, `project`, `state`, `includeArchived=false`), then call `tapps_linear_snapshot_put(team, project, issues_json=json.dumps(issues), state)` with the same team/project/state/label/limit so the cache key aligns.
-3. After any Linear write (`save_issue`, `save_comment`), call `tapps_linear_snapshot_invalidate(team, project)` so the next get returns fresh data.
-
-TTLs are state-bucketed: 5 min for open/in-progress (backlog/unstarted/started/triage), 1 h for closed (completed/canceled). No API key configuration required.
-
-#### Anti-patterns to avoid (TAP-967 audit, 30-day window)
-
-A 30-day session-log audit found 5,368 `list_issues` calls with only 0.26% cache adoption — most callers ignore the rule above. Specific patterns to never write:
-
-- **The 6-poll kickoff (~70% of all traffic):** `list_issues × 6` per session, one call per `state × priority` bucket (`Backlog/p1`, `Backlog/p2`, …, `In Progress`, `Todo`). Replace with **one** `tapps_linear_snapshot_get(team, project, state="open")` + in-memory filter on `state.type` and `priority`. The open-state TTL is 5 min, so the next session warms instantly.
-- **The status-bucket sweep:** three sequential calls for `state="backlog"` / `"unstarted"` / `"started"`. Same fix — one snapshot_get on `state="open"`, filter in memory.
-- **The unfiltered scroll (`list_issues({})` or `{team:"TAP", limit:250}`):** never write. If you need every story under an epic, use `parentId=<TAP-ID>`. If you need recent activity, use `updatedAt=-P7D` plus a state filter. The plugin's flat parameters (`parentId`, `state`, `assignee`, `label`, `priority`) cover almost every real query — there is no need to drop into raw GraphQL filter shapes like `{filter:{parent:{id:{eq:...}}}}`.
-- **The re-fetch loop:** firing the same narrow query 5–12 times in one assistant turn with no intervening writes. The cache is the answer here too — second call lands as a hit.
-
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 5000 entries per project (`TAPPS_BRAIN_MAX_ENTRIES`; auto-evicts at cap, no warning — monitor via `brain_status()`). Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
+`tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
 
 ## Quality Gate Behavior
 
@@ -191,6 +173,7 @@ A security floor of 50/100 is enforced regardless of overall score.
 After upgrading TappsMCP, run `tapps_upgrade` to refresh generated files.
 A timestamped backup is created before overwriting. Use `tapps-mcp rollback` to restore.
 To protect customized files from upgrade, add them to `upgrade_skip_files` in `.tapps-mcp.yaml`.
+<!-- END: tapps-obligations -->
 
 <!-- BEGIN: karpathy-guidelines c9a44ae (MIT, forrestchang/andrej-karpathy-skills) -->
 <!--

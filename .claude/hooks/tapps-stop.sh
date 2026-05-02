@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.3.0
+# tapps-mcp-hook-version: 3.7.1
 # TappsMCP Stop hook
 # Reminds to run tapps_validate_changed but does NOT block.
 # Reads sidecar progress file for richer context when available.
@@ -47,5 +47,5 @@ except Exception:
 " 2>/dev/null)
   [ -n "$REPORT_SUMMARY" ] && echo "$REPORT_SUMMARY"
 fi
-echo "Reminder: Run tapps_validate_changed before ending the session." >&2
+echo "Reminder: Before declaring complete, run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually)." >&2
 exit 0

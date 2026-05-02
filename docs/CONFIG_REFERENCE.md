@@ -99,6 +99,8 @@ Nested under `adaptive`.
 |---|---|---|---|
 | `llm_engagement_level` | string | `"medium"` | How intensely the LLM should use TappsMCP tools. `high` = mandatory enforcement, `medium` = balanced, `low` = optional guidance. |
 | `destructive_guard` | bool | `false` | Generate a PreToolUse hook that blocks destructive Bash commands. |
+| `linear_enforce_gate` | bool | _engagement-default_ | TAP-981. Hard-enforce that `mcp__plugin_linear_linear__save_issue` follows a recent `docs_validate_linear_issue`. Default `true` at `high`/`medium`, `false` at `low`. Bypass with `TAPPS_LINEAR_SKIP_VALIDATE=1`. |
+| `linear_enforce_cache_gate` | string | `"warn"` (eng. default) | TAP-1224. Hard-enforce cache-first reads of `list_issues`. `off` = no hooks installed; `warn` = log violations to `.tapps-mcp/.cache-gate-violations.jsonl` and allow; `block` = reject calls without a recent `tapps_linear_snapshot_get` sentinel (< 300 s) for the same `(team, project, state, label, limit)` slice. Default `warn` at `high`/`medium` engagement, `off` at `low`. Bypass with `TAPPS_LINEAR_SKIP_CACHE_GATE=1` (logged). `tapps doctor` reports current mode + 24-h violation count. |
 
 ### Business Experts
 

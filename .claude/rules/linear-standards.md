@@ -27,16 +27,8 @@ All Linear writes in this project — epic creation, story creation, issue updat
 4. Validate before push.
 5. `save_issue(id=..., description=...)`; invalidate cache.
 
-### Reads — route through the `linear-read` skill (TAP-1260)
-
-Multi-issue Linear reads MUST go through the `linear-read` skill, which performs the cache-first dance for the agent. Raw `mcp__plugin_linear_linear__list_issues` calls without a prior `tapps_linear_snapshot_get` for the same `(team, project, state)` key are a rule violation.
-
-The skill encapsulates these steps so the agent doesn't reconstruct them from prose:
-
-1. **Single-issue lookup:** if you have an ID, `mcp__plugin_linear_linear__get_issue(id=...)` — skip the skill, do NOT list-and-filter.
-2. **Multi-issue read:** invoke `linear-read`. The skill calls `mcp__tapps-mcp__tapps_linear_snapshot_get(team, project, state)` first. On `cached=true`, uses `data.issues` and filters in memory — Linear is not called.
-3. **On cache miss:** the skill calls `list_issues` with NARROW filters (`team`, `project`, `state`, `includeArchived=false`), then immediately `tapps_linear_snapshot_put(team, project, issues_json=..., state, ...)` with the same key dimensions.
-4. **No status-bucket fan-out.** A 6-call kickoff (`Backlog/p1` … `Backlog/p4` + `In Progress` + `Todo`) collapses into one `snapshot_get(state="open")` plus an in-memory filter. The 5 min open-state TTL means subsequent kickoffs land as cache hits. The skill enforces this shape.
+### For multi-issue reads (TAP-1260)
+All list-style Linear reads route through the `linear-read` skill (4-step cache-first dance: `snapshot_get` → on miss `list_issues` → `snapshot_put` → use cached on hit). Single-issue lookups go straight to `get_issue(id)` — never via filtered `list_issues`. Raw `mcp__plugin_linear_linear__list_issues` calls without a prior `snapshot_get` for the same key are a rule violation. See the `linear-read` skill for the antipattern catalogue (6-poll kickoff, status-bucket sweep, unfiltered scroll).
 
 ## Assignee defaults
 
@@ -66,6 +58,8 @@ Linear's server-side markdown processor silently drops some content. These patte
 ## How to apply
 
 When the user says "create a Linear issue", "file an epic", "open a ticket for X", or "track this in Linear" — invoke the `linear-issue` skill. Do not call `save_issue` directly. If the skill is unavailable in the session, flag it to the user rather than falling back to raw writes.
+
+When the user says "list Linear issues", "what's open in TAP", "find issues assigned to X", or "review the backlog" — invoke the `linear-read` skill. Do not call `list_issues` directly. Single-issue lookups (user has an id like "TAP-686") go straight to `get_issue` without the skill.
 
 When updating an existing issue, the same routing applies: fetch, lint/validate, regenerate or edit, re-validate, save, invalidate.
 

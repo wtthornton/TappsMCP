@@ -13,7 +13,7 @@ Post a structured Linear project update document when a new version is released.
 
 1. Call `mcp__tapps-mcp__tapps_release_update(version, prev_version, team, project)`.
    - `version` and `prev_version` are required. Parse from the user's prompt or ask once if both are missing.
-   - `team` and `project`: read from `.tapps-mcp.yaml` if present (`linear_team`, `linear_project` fields), otherwise pass empty strings and let the tool use project defaults.
+   - `team` and `project`: read from `.tapps-mcp.yaml` if present (`linear_team`, `linear_project` fields), otherwise pass empty strings.
    - If `dry_run=true` is requested, pass it through — the tool returns the body without requiring validation to pass.
 
 2. Check the response:
@@ -22,7 +22,7 @@ Post a structured Linear project update document when a new version is released.
    - If `agent_ready=true`: proceed.
 
 3. Call `mcp__plugin_linear_linear__save_document`:
-   - `project`: use `data.project` from the tool response (falls back to the configured project name).
+   - `project`: use `data.project` from the tool response.
    - `title`: use `data.document_title` from the tool response (format: `Release vX.Y.Z — YYYY-MM-DD`).
    - `content`: use `data.body` from the tool response verbatim.
 
@@ -36,4 +36,3 @@ Post a structured Linear project update document when a new version is released.
 - Never call `save_document` without a prior `agent_ready=true` from `tapps_release_update` (unless `dry_run=true`).
 - `document_title` must use the em-dash format from `data.document_title` — do not construct it manually.
 - Do not modify the body returned by the tool. Pass `data.body` verbatim.
-- Assignee on Linear writes: this skill does not create issues, only documents — no assignee needed.

@@ -1,4 +1,4 @@
-<!-- tapps-agents-version: 3.6.0 -->
+<!-- tapps-agents-version: 3.7.1 -->
 # TappsMCP - instructions for AI assistants
 
 When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
@@ -63,8 +63,8 @@ When the **TappsMCP** MCP server is configured, you have access to tools for **c
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 6. **Before declaring work complete:**
-   - Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to score + gate changed files. Never call without `file_paths` in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
-   - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
+   - Recommended: invoke the `/tapps-finish-task` skill — bundles `tapps_validate_changed` + `tapps_checklist` + an optional memory save and reports a one-line summary.
+   - If you'd rather run the steps manually: `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to score + gate changed files (never call without `file_paths` in large repos; default is quick mode), then `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
 7. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
@@ -258,15 +258,20 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 
 ### Hooks (auto-generated)
 
-**Claude Code** (`.claude/hooks/`): hook scripts that enforce quality automatically:
+**Claude Code** (`.claude/hooks/`): 7 hook scripts that enforce quality automatically:
 - **SessionStart** - Injects TappsMCP awareness on session start and after compaction
 - **PostToolUse (Edit/Write)** - Reminds you to run `tapps_quick_check` after Python edits
-- **Stop** - Reminds you to run `/tapps-finish-task` (or `tapps_validate_changed` + `tapps_checklist`) before session end (non-blocking; blocking at engagement=high)
+- **Stop** - Reminds you to run `tapps_validate_changed` before session end (non-blocking)
 - **TaskCompleted** - Reminds you to validate before marking task complete (non-blocking)
 - **PreCompact** - Backs up scoring context before context window compaction
 - **SubagentStart** - Injects TappsMCP awareness into spawned subagents
-- **PostToolUseFailure** (engagement=high) - Logs `mcp__tapps-mcp__*` failures to `.tapps-mcp/.failure-log.jsonl` and prints a `tapps_doctor` hint (TAP-976)
-- **UserPromptSubmit** (engagement=high or medium) - Per-prompt pipeline-state reminder (TAP-975). Stays silent when `tapps_session_start` was within 30 min and the last `tapps_checklist` returned `complete:true`. Fires when (a) the session-start sidecar `.tapps-mcp/.session-start-marker` is missing or older than 1800s, or (b) the checklist sidecar `.tapps-mcp/.checklist-state.json` shows `complete:false` with missing required tools. Closes the "agent forgot session_start after a topic shift" failure mode without being noisy on fresh state.
+
+Opt-in `PreToolUse` gates are independent flags in `.tapps-mcp.yaml` — enable each based on what you want blocked:
+- `destructive_guard: true` — blocks destructive Bash commands (`rm -rf`, `format c:`, etc.).
+- `linear_enforce_gate: true` — blocks `mcp__plugin_linear_linear__save_issue` unless the `linear-issue` skill flow (with `docs_validate_linear_issue`) was used recently. Bypass: `TAPPS_LINEAR_SKIP_VALIDATE=1`. Bash + PowerShell. Default: on at medium/high engagement, off at low.
+- `install_git_hooks: true` (TAP-979) — writes `.githooks/pre-commit` and sets `core.hooksPath = .githooks`. Runs `tapps-mcp validate-changed --quick` on staged Python files and fails the commit on gate failure. Bypass: `TAPPS_SKIP_GATE=1`. Default: off.
+
+Run `tapps-mcp doctor` to list wired matchers.
 
 **Cursor** (`.cursor/hooks/`): 3 hook scripts:
 - **beforeMCPExecution** - Logs MCP tool invocations for observability
