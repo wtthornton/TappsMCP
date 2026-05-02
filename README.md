@@ -1330,6 +1330,7 @@ DocsMCP is feature-complete with 32 MCP tools covering README generation, API do
 | Doc | Description |
 |-----|-------------|
 | [AGENTS.md](AGENTS.md) | AI assistant workflow guide - when to use each tool, recommended workflow, troubleshooting. |
+| [docs/tutorials/](docs/tutorials/) | Copy-paste runnable walkthroughs: add an MCP tool, run the quality pipeline, wire tapps-brain. |
 | [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) | Upgrade guide for projects that install TappsMCP. |
 | [docs/INIT_AND_UPGRADE_FEATURE_LIST.md](docs/INIT_AND_UPGRADE_FEATURE_LIST.md) | Init and upgrade: `tapps_init` vs `tapps-mcp init`, overwrite flags, upgrade path. |
 | [docs/ONBOARDING.md](docs/ONBOARDING.md) | Getting started guide for new developers. |
