@@ -21,6 +21,39 @@ _MAX_KEY_FILES = 30
 _MAX_ENTRY_POINTS = 20
 _MAX_DEPENDENCIES = 40
 
+# Path segments that indicate vendored / generated content. Files under any
+# of these are never reported as project entry points (TAP-1277).
+_VENDORED_PATH_SEGMENTS: frozenset[str] = frozenset(
+    {
+        ".venv",
+        "venv",
+        ".env",
+        "env",
+        "site-packages",
+        "node_modules",
+        "__pycache__",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".eggs",
+    }
+)
+
+
+def _is_vendored(path: Path, project_root: Path) -> bool:
+    """Return True if *path* lives under a vendored / build / cache directory."""
+    try:
+        rel = path.relative_to(project_root)
+    except ValueError:
+        rel = path
+    for part in rel.parts:
+        if part in _VENDORED_PATH_SEGMENTS or part.startswith(".venv"):
+            return True
+    return False
+
 
 class LlmsTxtSection(BaseModel):
     """A single section in the llms.txt output."""
@@ -198,21 +231,62 @@ class LlmsTxtGenerator:
         project_root: Path,
         metadata: ProjectMetadata,
     ) -> LlmsTxtSection:
-        """List project entry points from metadata and common patterns."""
+        """List project entry points.
+
+        Source priority:
+
+        1. ``[project.scripts]`` entries from the root ``pyproject.toml``
+           (already in ``metadata.entry_points``).
+        2. ``[project.scripts]`` entries from each ``packages/*`` member of
+           a uv workspace, so a monorepo surfaces every CLI it ships rather
+           than only the root's.
+        3. Package ``__main__.py`` and ``cli.py`` modules under
+           ``packages/*/src/*``, which are the canonical Python entry-point
+           shapes for workspace packages.
+        4. Fallback to common script filenames at the project root.
+
+        Vendored paths (``.venv``, ``site-packages``, ``node_modules``, etc.)
+        are excluded so site-packages CLIs like ``markdown_it`` / ``mypy``
+        never appear (TAP-1277).
+        """
         entries: list[str] = []
+        seen: set[str] = set()
 
-        # From pyproject.toml scripts/console_scripts
-        for name, target in list(metadata.entry_points.items())[:_MAX_ENTRY_POINTS]:
-            entries.append(f"- `{name}` -> `{target}`")
+        def _add(line: str) -> None:
+            if line not in seen:
+                seen.add(line)
+                entries.append(line)
 
-        # Common entry point files
+        # 1. Root pyproject [project.scripts]
+        for name, target in metadata.entry_points.items():
+            _add(f"- `{name}` -> `{target}`")
+
+        # 2. Workspace-member [project.scripts]
+        packages_dir = project_root / "packages"
+        if packages_dir.is_dir():
+            for pkg_dir in sorted(packages_dir.iterdir()):
+                if not pkg_dir.is_dir() or pkg_dir.name.startswith("."):
+                    continue
+                pkg_pyproject = pkg_dir / "pyproject.toml"
+                if not pkg_pyproject.is_file():
+                    continue
+                for name, target in _read_pyproject_scripts(pkg_pyproject).items():
+                    _add(f"- `{name}` -> `{target}`")
+
+        # 3. Workspace package modules (__main__.py, cli.py, server.py)
+        if packages_dir.is_dir():
+            for ep_name in ("__main__.py", "cli.py", "server.py"):
+                for f in sorted(packages_dir.rglob(f"src/*/{ep_name}")):
+                    if _is_vendored(f, project_root):
+                        continue
+                    rel = str(f.relative_to(project_root)).replace("\\", "/")
+                    _add(f"- `{rel}`")
+
+        # 4. Fallback: common script filenames at project root only
         for ep_file in ("main.py", "app.py", "cli.py", "manage.py", "__main__.py"):
-            found = list(project_root.rglob(ep_file))
-            for f in found[:3]:  # Limit per pattern
-                rel = str(f.relative_to(project_root)).replace("\\", "/")
-                entry = f"- `{rel}`"
-                if entry not in entries:
-                    entries.append(entry)
+            candidate = project_root / ep_file
+            if candidate.is_file():
+                _add(f"- `{ep_file}`")
 
         if not entries:
             return LlmsTxtSection(heading="Entry Points", content="")
@@ -355,3 +429,24 @@ class LlmsTxtGenerator:
         for section in sections:
             parts.append(section.content)
         return "\n\n".join(parts) + "\n"
+
+
+def _read_pyproject_scripts(path: Path) -> dict[str, str]:
+    """Return ``[project.scripts]`` from a pyproject.toml, or ``{}`` on failure.
+
+    Standalone helper so callers don't depend on MetadataExtractor's full
+    parser when they only need the script entries.
+    """
+    import tomllib
+
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+    project = data.get("project", {})
+    if not isinstance(project, dict):
+        return {}
+    scripts = project.get("scripts", {})
+    if not isinstance(scripts, dict):
+        return {}
+    return {str(k): str(v) for k, v in scripts.items()}

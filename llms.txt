@@ -1,0 +1,71 @@
+# tapps-mcp
+
+> MCP server for automated documentation generation, validation, and maintenance
+
+## Tech Stack
+
+- Python
+- Pydantic
+- uv (package manager)
+- Docker
+- GitHub Actions
+
+## Entry Points
+
+- `docsmcp` -> `docs_mcp.cli:cli`
+- `tapps-mcp` -> `tapps_mcp.cli:main`
+- `tapps-platform` -> `tapps_mcp.platform.cli:cli`
+- `packages/docs-mcp/src/docs_mcp/__main__.py`
+- `packages/docs-mcp/src/docs_mcp/cli.py`
+- `packages/tapps-mcp/src/tapps_mcp/cli.py`
+- `packages/docs-mcp/src/docs_mcp/server.py`
+- `packages/tapps-mcp/src/tapps_mcp/server.py`
+
+## Key Files
+
+- `README.md`
+- `CLAUDE.md`
+- `AGENTS.md`
+- `CONTRIBUTING.md`
+- `CHANGELOG.md`
+- `LICENSE`
+- `pyproject.toml`
+- `Dockerfile`
+- `docker-compose.yml`
+- `.hadolint.yaml`
+- `.pre-commit-config.yaml`
+- `.tapps-mcp.yaml`
+
+## Documentation Map
+
+- `AGENTS.md`
+- `CHANGELOG.md`
+- `CLAUDE.md`
+- `CODE_OF_CONDUCT.md`
+- `CONTRIBUTING.md`
+- `README.md`
+- `SECURITY.md`
+- `TECH_STACK.md`
+- `docs/ARCHITECTURE.md`
+- `docs/CHECKLIST.md`
+- `docs/CONFIG_REFERENCE.md`
+- `docs/DOCKER_DEPLOYMENT.md`
+- `docs/DOCKER_MCP_TOOLKIT.md`
+- `docs/FEEDBACK_2026-03-24_ralph-planopt-review.md`
+- `docs/FEEDBACK_2026-04-06_agentforge-cleanup-session.md`
+- `docs/GITHUB_SETUP_GUIDE.md`
+- `docs/INDEX.md`
+- `docs/INIT_AND_UPGRADE_FEATURE_LIST.md`
+- `docs/MEMORY_REFERENCE.md`
+- `docs/ONBOARDING.md`
+- `docs/STYLE_GUIDE.md`
+- `docs/TAPPS_BACKLOG_PLAN.md`
+- `docs/TAPPS_BRAIN_V2.1_TAG.md`
+- `docs/TAPPS_RALPH_FEEDBACK_TASKS.md`
+- `docs/TROUBLESHOOTING.md`
+- `docs/UPGRADE_FOR_CONSUMERS.md`
+- `docs/architecture/zeek-network-intelligence-prd.md`
+- `docs/archive/README.md`
+- `docs/archive/api/docs-mcp-api.md`
+- `docs/archive/api/tapps-core-api.md`
+- ... and 247 more

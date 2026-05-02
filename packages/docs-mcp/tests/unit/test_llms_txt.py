@@ -256,3 +256,91 @@ class TestDocsGenerateLlmsTxtTool:
 
         assert result["success"] is True
         assert "content" in result["data"]
+
+
+# ---------------------------------------------------------------------------
+# TAP-1277: entry-point detection must exclude vendored paths and prefer
+# pyproject scripts + workspace package modules.
+# ---------------------------------------------------------------------------
+
+
+def _make_workspace(root: Path) -> None:
+    """Build a uv-workspace tree with two member packages."""
+    _write(
+        root / "pyproject.toml",
+        """
+[project]
+name = "monorepo"
+version = "1.0.0"
+
+[tool.uv.workspace]
+members = ["packages/*"]
+""",
+    )
+    _make_pyproject(
+        root / "packages" / "pkg-a",
+        name="pkg-a",
+        scripts={"pkg-a-cli": "pkg_a.cli:main"},
+    )
+    _make_pyproject(
+        root / "packages" / "pkg-b",
+        name="pkg-b",
+        scripts={"pkg-b-cli": "pkg_b.cli:main"},
+    )
+    _write(root / "packages/pkg-a/src/pkg_a/__main__.py", "pass\n")
+    _write(root / "packages/pkg-a/src/pkg_a/cli.py", "def main(): pass\n")
+    _write(root / "packages/pkg-b/src/pkg_b/__main__.py", "pass\n")
+
+
+class TestEntryPointDetection:
+    def test_excludes_vendored_paths(self, tmp_path: Path) -> None:
+        """Files under .venv, site-packages, node_modules must not be reported."""
+        _make_pyproject(tmp_path)
+        # Plant decoys that the old rglob would have surfaced.
+        _write(tmp_path / ".venv/lib/python3.12/site-packages/markdown_it/cli.py", "")
+        _write(tmp_path / ".venv/lib/python3.12/site-packages/mypy/__main__.py", "")
+        _write(tmp_path / "node_modules/foo/cli.py", "")
+
+        gen = LlmsTxtGenerator()
+        result = gen.generate(tmp_path)
+
+        assert ".venv" not in result.content
+        assert "site-packages" not in result.content
+        assert "node_modules" not in result.content
+        assert "markdown_it" not in result.content
+
+    def test_workspace_aggregates_member_scripts(self, tmp_path: Path) -> None:
+        """All packages/*/pyproject [project.scripts] entries must appear."""
+        _make_workspace(tmp_path)
+        gen = LlmsTxtGenerator()
+        result = gen.generate(tmp_path)
+
+        assert "pkg-a-cli" in result.content
+        assert "pkg-b-cli" in result.content
+
+    def test_workspace_surfaces_package_main_modules(self, tmp_path: Path) -> None:
+        """packages/*/src/*/__main__.py and cli.py should be listed."""
+        _make_workspace(tmp_path)
+        gen = LlmsTxtGenerator()
+        result = gen.generate(tmp_path)
+
+        assert "packages/pkg-a/src/pkg_a/__main__.py" in result.content
+        assert "packages/pkg-a/src/pkg_a/cli.py" in result.content
+        assert "packages/pkg-b/src/pkg_b/__main__.py" in result.content
+
+    def test_no_entry_points_when_nothing_real(self, tmp_path: Path) -> None:
+        """A pyproject without scripts and no package modules yields an
+        empty Entry Points section (filtered out, not site-packages noise)."""
+        # Pyproject without scripts
+        _write(
+            tmp_path / "pyproject.toml",
+            "[project]\nname = \"x\"\nversion = \"0\"\n",
+        )
+        # Vendored decoy that the old code would have surfaced
+        _write(tmp_path / ".venv/lib/python3.12/site-packages/foo/cli.py", "")
+
+        gen = LlmsTxtGenerator()
+        result = gen.generate(tmp_path)
+
+        # Entry Points section is filtered (empty content) → header should not appear
+        assert "## Entry Points" not in result.content
