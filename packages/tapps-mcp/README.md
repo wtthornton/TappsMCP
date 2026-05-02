@@ -2,60 +2,69 @@
 
 <!-- mcp-name: io.github.wtthornton/tapps-mcp -->
 
-MCP server providing deterministic code quality tools for AI coding assistants (scoring, gates, security, validation).
+MCP server providing deterministic code-quality tools for AI coding assistants. Scores Python (full) plus TypeScript / JavaScript / Go / Rust files across seven categories, runs security scans, enforces quality gates, looks up library docs, validates configs, and persists cross-session knowledge through [tapps-brain](https://github.com/wtthornton/tapps-brain). All tools are deterministic — same input, same output — so they slot cleanly into agent loops without LLM-in-the-loop variance.
 
-## Features
-
-- **Code scoring** (0-100) across 7 categories: complexity, security, maintainability, test coverage, performance, structure, developer experience
-- **Multi-language support**: Python (full), TypeScript/JavaScript, Go, Rust (tree-sitter-based)
-- **Quality gates** with configurable presets (standard, strict, framework)
-- **Security scanning** with Bandit and secret detection
-- **Dead code detection** with Vulture
-- **Dependency vulnerability scanning** with pip-audit
-- **Documentation lookup** via Context7 or LlmsTxt
-- **Shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) for cross-session knowledge persistence
-- **Platform integration** for Claude Code, Cursor, VS Code Copilot
+Part of the [TappsMCP Platform](https://github.com/wtthornton/TappsMCP). Pairs with [docs-mcp](../docs-mcp) (documentation tooling) and [tapps-core](../tapps-core) (shared infrastructure).
 
 ## Installation
 
-```bash
-# Using pip
-pip install tapps-mcp
-
-# Using uv
-uv pip install tapps-mcp
-
-# Using pipx (recommended for CLI)
-pipx install tapps-mcp
-```
-
-## Quick Start
+tapps-mcp is **not published to PyPI** — it installs from this checkout. Clone the workspace and install the CLI globally with uv:
 
 ```bash
-# Start the MCP server (stdio)
-tapps-mcp serve
-
-# Initialize in a project
-tapps-mcp init
-
-# Run diagnostics
-tapps-mcp doctor
+git clone https://github.com/wtthornton/TappsMCP.git
+cd TappsMCP
+uv sync --all-packages
+uv tool install -e packages/tapps-mcp
 ```
 
-## MCP Tools
+Upgrade later with `git pull && uv tool install --reinstall packages/tapps-mcp`.
 
-TappsMCP provides 26 MCP tools for code quality automation. See the [main README](../../README.md) for the complete tool reference.
+## Quick start
+
+```bash
+tapps-mcp serve                         # stdio transport (default)
+tapps-mcp serve --transport http --port 8000
+tapps-mcp doctor                        # diagnose config + memory
+tapps-mcp init                          # bootstrap in a consuming project
+```
+
+Wire it into Claude Code via `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "tapps-mcp": {
+      "command": "uv",
+      "args": ["run", "tapps-mcp", "serve"],
+      "env": { "TAPPS_MCP_PROJECT_ROOT": "." }
+    }
+  }
+}
+```
+
+## Top 5 MCP tools
+
+The most-used handlers in a typical agent session — see [AGENTS.md](../../AGENTS.md) for the full 26-tool reference.
+
+1. `tapps_session_start` — initialise project context, load memory, surface server info.
+2. `tapps_quick_check(file_path)` — score + quality gate + security scan in one call after every Python edit.
+3. `tapps_validate_changed(file_paths=...)` — batch validate before declaring work complete.
+4. `tapps_lookup_docs(library, topic)` — fetch authoritative library docs to prevent hallucinated APIs.
+5. `tapps_checklist(task_type)` — final-step audit that nothing required was skipped.
+
+## Entry points
+
+- `packages/tapps-mcp/src/tapps_mcp/__main__.py` and `cli.py` — CLI shipped as `tapps-mcp`.
+- `packages/tapps-mcp/src/tapps_mcp/platform/cli.py` — CLI shipped as `tapps-platform`.
+- `packages/tapps-mcp/src/tapps_mcp/server.py` — FastMCP server registration.
 
 ## Documentation
 
-- [Main Documentation](../../README.md)
-- [AGENTS.md](../../AGENTS.md) - AI assistant integration guide
-- [CLAUDE.md](../../CLAUDE.md) - Architecture and development guide
+- [AGENTS.md](../../AGENTS.md) — AI assistant integration guide and full tool reference.
+- [CLAUDE.md](../../CLAUDE.md) — repo conventions, dev commands, known gotchas.
+- [docs/](../../docs) — architecture, config reference, troubleshooting.
+- Issues: [github.com/wtthornton/TappsMCP/issues](https://github.com/wtthornton/TappsMCP/issues) (Linear project: TappsMCP Platform).
 
 ## License
 
-MIT
-
----
-
-Part of the [TappsMCP Platform](https://github.com/wtthornton/TappsMCP).
+MIT.
