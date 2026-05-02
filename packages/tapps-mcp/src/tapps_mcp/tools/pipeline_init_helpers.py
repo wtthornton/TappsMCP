@@ -9,14 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from mcp.server.fastmcp import Context
 
 from tapps_mcp.server_helpers import emit_ctx_info, success_response
-
-if TYPE_CHECKING:
-    pass
 
 
 async def maybe_elicit_init_confirmation(
@@ -163,6 +160,7 @@ def build_init_bootstrap_config(
     memory_auto_recall: bool,
     destructive_guard: bool,
     linear_enforce_gate: bool,
+    linear_enforce_cache_gate: str,
     install_git_hooks: bool,
     linear_sdlc: bool,
     linear_issue_prefix: str,
@@ -198,6 +196,7 @@ def build_init_bootstrap_config(
         memory_auto_recall=memory_auto_recall,
         destructive_guard=destructive_guard,
         linear_enforce_gate=linear_enforce_gate,
+        linear_enforce_cache_gate=linear_enforce_cache_gate,
         install_git_hooks=install_git_hooks,
         linear_sdlc=linear_sdlc,
         linear_issue_prefix=linear_issue_prefix,

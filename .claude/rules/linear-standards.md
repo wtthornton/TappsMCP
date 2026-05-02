@@ -83,7 +83,20 @@ With `dry_run=True`, the tool returns the body without gating on `agent_ready`.
 
 ## Enforcement
 
-Hard-enforced via hooks in `.claude/settings.json` (shipped by `tapps_upgrade` as of TAP-981):
+### Writes (TAP-981)
+
+Hard-enforced via hooks in `.claude/settings.json`:
 
 - **PostToolUse** on `mcp__docs-mcp__docs_validate_linear_issue` → `.claude/hooks/tapps-post-docs-validate.sh` writes a sentinel to `.tapps-mcp/.linear-validate-sentinel`.
 - **PreToolUse** on `mcp__plugin_linear_linear__save_issue` → `.claude/hooks/tapps-pre-linear-write.sh` blocks the call if the sentinel is missing or > 30 minutes old. Bypass with `TAPPS_LINEAR_SKIP_VALIDATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`).
+
+### Reads (TAP-1224)
+
+Hard-enforced via the cache-first read gate. Mode controlled by `linear_enforce_cache_gate` in `.tapps-mcp.yaml` (`off` | `warn` | `block`; default `warn` at high/medium engagement, `off` at low):
+
+- **PostToolUse** on `mcp__tapps-mcp__tapps_linear_snapshot_get` → `.claude/hooks/tapps-post-linear-snapshot-get.sh` writes a per-`(team, project, state, label, limit)` sentinel at `.tapps-mcp/.linear-snapshot-sentinel-<key>` on **both** `cached=true` and `cached=false` responses. Cache hit means the agent did the right thing; cache miss means the agent is authorized to call `list_issues` for that exact slice.
+- **PreToolUse** on `mcp__plugin_linear_linear__list_issues` → `.claude/hooks/tapps-pre-linear-list.sh` derives the same sentinel key from the call args and:
+  - **warn mode** (default): logs the violation to `.tapps-mcp/.cache-gate-violations.jsonl` and lets the call through. Use the first release for telemetry; `tapps doctor` reports the 24-hour violation count.
+  - **block mode**: rejects the call with exit 2 unless a matching sentinel < 300 s old exists. Bypass with `TAPPS_LINEAR_SKIP_CACHE_GATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`).
+- **No exempt parameters.** Single-issue lookups must use `mcp__plugin_linear_linear__get_issue(id=...)`. There is no `query=` / `parentId=` / `cycle=` exemption — every multi-issue read goes through `tapps_linear_snapshot_get` first (the `linear-read` skill from TAP-1260 routes this for you).
+- **Per-key isolation.** A snapshot_get for project A does **not** unlock a list_issues for project B — the sentinel hash includes team, project, state, label, and limit so cross-slice unlock is impossible.

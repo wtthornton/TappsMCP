@@ -69,6 +69,7 @@ class BootstrapConfig:
     overwrite_tech_stack_md: bool = False
     destructive_guard: bool = False
     linear_enforce_gate: bool = False
+    linear_enforce_cache_gate: str = "off"
     install_git_hooks: bool = False
     linear_sdlc: bool = False
     linear_issue_prefix: str = "TAP"
@@ -246,6 +247,7 @@ def bootstrap_pipeline(
     memory_auto_recall: bool = False,
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
+    linear_enforce_cache_gate: str = "off",
     install_git_hooks: bool = False,
     linear_sdlc: bool = False,
     linear_issue_prefix: str = "TAP",
@@ -295,6 +297,7 @@ def bootstrap_pipeline(
             memory_auto_capture=memory_auto_capture,
             destructive_guard=destructive_guard,
             linear_enforce_gate=linear_enforce_gate,
+            linear_enforce_cache_gate=linear_enforce_cache_gate,
             install_git_hooks=install_git_hooks,
             linear_sdlc=linear_sdlc,
             linear_issue_prefix=linear_issue_prefix,
@@ -809,6 +812,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 engagement_level=engagement,
                 destructive_guard=cfg.destructive_guard,
                 linear_enforce_gate=cfg.linear_enforce_gate,
+                linear_enforce_cache_gate=cfg.linear_enforce_cache_gate,
             )
             if cfg.install_git_hooks:
                 from tapps_mcp.pipeline.git_hooks import install_git_pre_commit

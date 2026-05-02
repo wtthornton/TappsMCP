@@ -553,6 +553,7 @@ async def tapps_init(
     memory_auto_recall: bool = False,
     destructive_guard: bool | None = None,
     linear_enforce_gate: bool | None = None,
+    linear_enforce_cache_gate: str | None = None,
     install_git_hooks: bool | None = None,
     linear_sdlc: bool = False,
     linear_issue_prefix: str = "TAP",
@@ -609,6 +610,10 @@ async def tapps_init(
         # TAP-981: engagement-aware default — true at high/medium, false at low.
         # Honors explicit overrides from .tapps-mcp.yaml or env.
         leg = settings.linear_enforce_gate_resolved()
+    lcg = linear_enforce_cache_gate
+    if lcg is None:
+        # TAP-1224: engagement-aware default — "warn" at high/medium, "off" at low.
+        lcg = settings.linear_enforce_cache_gate_resolved()
     igh = install_git_hooks
     if igh is None:
         # TAP-979: opt-in git pre-commit hook.
@@ -633,6 +638,7 @@ async def tapps_init(
         memory_auto_recall=memory_auto_recall,
         destructive_guard=dg,
         linear_enforce_gate=leg,
+        linear_enforce_cache_gate=lcg,
         install_git_hooks=igh,
         linear_sdlc=linear_sdlc,
         linear_issue_prefix=linear_issue_prefix,

@@ -617,4 +617,4 @@ class TestDoctorMatchersCheck:
         result = check_pretooluse_matchers(tmp_path)
         assert result.ok is True
         assert "Linear routing gate: active" in result.message
-        assert "NOT enabled" not in result.message
+        assert "Linear routing gate: NOT enabled" not in result.message

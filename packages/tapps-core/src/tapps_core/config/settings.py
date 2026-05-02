@@ -901,6 +901,22 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Linear cache-first read gate (TAP-1224) — opt-in PreToolUse + PostToolUse pair
+    linear_enforce_cache_gate: Literal["off", "warn", "block"] = Field(
+        default="warn",
+        description=(
+            "Mode for the Linear cache-first read gate (TAP-1224). 'off' "
+            "skips installing the hooks. 'warn' (default) installs the "
+            "hooks but logs violations to .tapps-mcp/.cache-gate-violations.jsonl "
+            "and allows the call through — gives one release of telemetry "
+            "before tightening. 'block' rejects raw "
+            "mcp__plugin_linear_linear__list_issues calls that lack a recent "
+            "matching tapps_linear_snapshot_get sentinel (within 300 s). "
+            "Bypass with TAPPS_LINEAR_SKIP_CACHE_GATE=1 (logged to "
+            ".tapps-mcp/.bypass-log.jsonl)."
+        ),
+    )
+
     # Release update config (TAP-1112, TAP-1114)
     linear_team: str = Field(
         default="",
@@ -1091,6 +1107,21 @@ class TappsMCPSettings(BaseSettings):
         if "linear_enforce_gate" in self.model_fields_set:
             return self.linear_enforce_gate
         return self.llm_engagement_level in ("high", "medium")
+
+    def linear_enforce_cache_gate_resolved(self) -> Literal["off", "warn", "block"]:
+        """Resolve linear_enforce_cache_gate with engagement-aware defaulting (TAP-1224).
+
+        When the user explicitly sets ``linear_enforce_cache_gate``, that
+        value wins. Otherwise the default is ``"warn"`` for ``high`` /
+        ``medium`` engagement (telemetry-first rollout per TAP-1224) and
+        ``"off"`` for ``low`` — matching the field's role as a teaching
+        nudge: low-engagement consumers don't carry the hook overhead.
+        """
+        if "linear_enforce_cache_gate" in self.model_fields_set:
+            return self.linear_enforce_cache_gate
+        if self.llm_engagement_level in ("high", "medium"):
+            return "warn"
+        return "off"
 
     # TAP-1286: when both memory.brain_project_id and memory.project_id are
     # empty after env + YAML resolution, fall back to a slug derived from

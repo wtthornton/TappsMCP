@@ -493,6 +493,7 @@ def _upgrade_claude_code_dry_run(
     skip: set[str],
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
+    linear_enforce_cache_gate: str = "off",
 ) -> None:
     """Populate dry-run component hints for the claude-code host.
 
@@ -527,6 +528,10 @@ def _upgrade_claude_code_dry_run(
             conditional_managed.append("tapps-pre-bash.sh")
         if linear_enforce_gate:
             conditional_managed.extend(["tapps-pre-linear-write.sh", "tapps-post-docs-validate.sh"])
+        if linear_enforce_cache_gate in ("warn", "block"):
+            conditional_managed.extend(
+                ["tapps-pre-linear-list.sh", "tapps-post-linear-snapshot-get.sh"]
+            )
         hooks_component: dict[str, Any] = {
             "action": "would-write-managed-scripts",
             "note": "settings.json hooks merged by matcher — existing entries preserved",
@@ -536,6 +541,7 @@ def _upgrade_claude_code_dry_run(
             hooks_component["managed_files"] = sorted(conditional_managed)
         hooks_component["destructive_guard"] = destructive_guard
         hooks_component["linear_enforce_gate"] = linear_enforce_gate
+        hooks_component["linear_enforce_cache_gate"] = linear_enforce_cache_gate
         result["components"]["hooks"] = hooks_component
 
     if _skipped("claude_agents", skip):
@@ -611,6 +617,7 @@ def _upgrade_claude_code_live(
     infra_ok: bool,
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
+    linear_enforce_cache_gate: str = "off",
 ) -> None:
     """Run live (non-dry-run) artifact upgrades for the claude-code host."""
     from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_claude_settings
@@ -650,12 +657,14 @@ def _upgrade_claude_code_live(
             engagement_level=engagement_level,
             destructive_guard=destructive_guard,
             linear_enforce_gate=linear_enforce_gate,
+            linear_enforce_cache_gate=linear_enforce_cache_gate,
         )
         result["components"]["hooks"] = {
             "scripts_created": hooks_result.get("scripts_created", []),
             "hooks_added": hooks_result.get("hooks_added", 0),
             "destructive_guard": hooks_result.get("destructive_guard", False),
             "linear_enforce_gate": hooks_result.get("linear_enforce_gate", False),
+            "linear_enforce_cache_gate": hooks_result.get("linear_enforce_cache_gate", "off"),
         }
 
     if _skipped("claude_agents", skip):
@@ -862,6 +871,7 @@ def _upgrade_platform(
     force_python_rule: bool = False,
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
+    linear_enforce_cache_gate: str = "off",
 ) -> dict[str, Any]:
     """Upgrade platform-specific files for a single host.
 
@@ -933,6 +943,7 @@ def _upgrade_platform(
                 skip=_skip,
                 destructive_guard=destructive_guard,
                 linear_enforce_gate=linear_enforce_gate,
+                linear_enforce_cache_gate=linear_enforce_cache_gate,
             )
         else:
             _upgrade_claude_code_live(
@@ -945,6 +956,7 @@ def _upgrade_platform(
                 infra_ok=infra_ok,
                 destructive_guard=destructive_guard,
                 linear_enforce_gate=linear_enforce_gate,
+                linear_enforce_cache_gate=linear_enforce_cache_gate,
             )
     elif host == "cursor":
         if dry_run:
@@ -1528,6 +1540,7 @@ def upgrade_pipeline(
                 force_python_rule=settings.force_python_quality_rule,
                 destructive_guard=settings.destructive_guard,
                 linear_enforce_gate=settings.linear_enforce_gate_resolved(),
+                linear_enforce_cache_gate=settings.linear_enforce_cache_gate_resolved(),
             )
             platform_results.append(host_result)
         except Exception as exc:

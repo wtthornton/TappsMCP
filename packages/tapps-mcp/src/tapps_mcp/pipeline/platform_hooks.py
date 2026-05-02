@@ -16,7 +16,6 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from tapps_mcp import __version__ as _TAPPS_VERSION
-
 from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOK_SCRIPTS as _CLAUDE_HOOK_SCRIPTS,
 )
@@ -57,6 +56,15 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     ENGAGEMENT_HOOK_EVENTS as _ENGAGEMENT_HOOK_EVENTS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    INVALID_CLAUDE_HOOK_KEYS as _INVALID_CLAUDE_HOOK_KEYS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    LINEAR_CACHE_GATE_HOOKS_CONFIG as _LINEAR_CACHE_GATE_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    LINEAR_CACHE_GATE_HOOKS_CONFIG_PS as _LINEAR_CACHE_GATE_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     LINEAR_GATE_HOOKS_CONFIG as _LINEAR_GATE_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -67,9 +75,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     LINEAR_GATE_SCRIPTS_PS as _LINEAR_GATE_SCRIPTS_PS,
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
-    INVALID_CLAUDE_HOOK_KEYS as _INVALID_CLAUDE_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_AUTO_CAPTURE_HOOKS_CONFIG as _MEMORY_AUTO_CAPTURE_HOOKS_CONFIG,
@@ -103,6 +108,9 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     _memory_auto_recall_script_ps as _memory_auto_recall_script_ps_fn,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    render_cache_gate_scripts as _render_cache_gate_scripts,
 )
 
 if TYPE_CHECKING:
@@ -232,6 +240,9 @@ def _filter_scripts(
         # TAP-981 Linear routing gate
         "tapps-pre-linear-write": "PreToolUse",
         "tapps-post-docs-validate": "PostToolUse",
+        # TAP-1224 Linear cache-first read gate
+        "tapps-pre-linear-list": "PreToolUse",
+        "tapps-post-linear-snapshot-get": "PostToolUse",
         # TAP-956 reactive-event scripts
         "tapps-cwd-changed": "CwdChanged",
         "tapps-permission-denied": "PermissionDenied",
@@ -389,6 +400,7 @@ def generate_claude_hooks(
     prompt_hooks: bool = False,
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
+    linear_enforce_cache_gate: str = "off",
     reactive_hooks: dict[str, bool] | None = None,
 ) -> dict[str, Any]:
     """Generate Claude Code hook scripts and settings.json hooks config.
@@ -430,6 +442,14 @@ def generate_claude_hooks(
     if linear_gate_active:
         allowed_events.add("PreToolUse")
         allowed_events.add("PostToolUse")
+    # TAP-1224: cache-first read gate. "off" (default) installs nothing;
+    # "warn" / "block" install the post-snapshot-get sentinel writer + the
+    # pre-list gate, with the mode baked into the pre-list script.
+    cache_gate_mode = linear_enforce_cache_gate if linear_enforce_cache_gate in ("off", "warn", "block") else "off"
+    cache_gate_active = cache_gate_mode in ("warn", "block")
+    if cache_gate_active:
+        allowed_events.add("PreToolUse")
+        allowed_events.add("PostToolUse")
 
     # Select base scripts and config. Deep-copy the hooks config so the
     # opt-in-gate extend()s below mutate our local copy, not the module-level
@@ -446,6 +466,12 @@ def generate_claude_hooks(
         lg_config = _LINEAR_GATE_HOOKS_CONFIG_PS if win else _LINEAR_GATE_HOOKS_CONFIG
         base_scripts = {**base_scripts, **lg_scripts}
         for event, entries in lg_config.items():
+            hooks_config.setdefault(event, []).extend(entries)
+    if cache_gate_active:
+        cg_scripts = _render_cache_gate_scripts(cache_gate_mode, win=win)
+        cg_config = _LINEAR_CACHE_GATE_HOOKS_CONFIG_PS if win else _LINEAR_CACHE_GATE_HOOKS_CONFIG
+        base_scripts = {**base_scripts, **cg_scripts}
+        for event, entries in cg_config.items():
             hooks_config.setdefault(event, []).extend(entries)
 
     # TAP-956: opt-in reactive-event hooks (CwdChanged, PermissionDenied,
@@ -522,6 +548,7 @@ def generate_claude_hooks(
         "prompt_hooks": prompt_hooks,
         "destructive_guard": destructive_guard,
         "linear_enforce_gate": linear_gate_active,
+        "linear_enforce_cache_gate": cache_gate_mode,
     }
 
 

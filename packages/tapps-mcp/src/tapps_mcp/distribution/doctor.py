@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -698,17 +699,88 @@ def check_pretooluse_matchers(project_root: Path) -> CheckResult:
         else "Linear routing gate: NOT enabled (set linear_enforce_gate: true in .tapps-mcp.yaml)"
     )
 
+    # TAP-1224: cache-first read gate state + violation count.
+    cache_matcher = "mcp__plugin_linear_linear__list_issues"
+    cache_active = cache_matcher in matchers
+    cache_mode = _detect_cache_gate_mode(project_root) if cache_active else "off"
+    viol_24h = _count_cache_gate_violations_24h(project_root) if cache_active else 0
+    cache_status = (
+        f"Linear cache-first read gate: {cache_mode} ({viol_24h} violations in last 24h)"
+        if cache_active
+        else "Linear cache-first read gate: NOT enabled (set linear_enforce_cache_gate: warn|block in .tapps-mcp.yaml)"
+    )
+
     if not matchers:
         return CheckResult(
             "PreToolUse matchers",
             True,
-            f"no PreToolUse matchers wired (no opt-in gates enabled). {linear_status}",
+            f"no PreToolUse matchers wired (no opt-in gates enabled). {linear_status}. {cache_status}",
         )
     return CheckResult(
         "PreToolUse matchers",
         True,
-        f"wired: {', '.join(matchers)}. {linear_status}",
+        f"wired: {', '.join(matchers)}. {linear_status}. {cache_status}",
     )
+
+
+def _detect_cache_gate_mode(project_root: Path) -> str:
+    """Read the baked MODE from the installed pre-list hook script (TAP-1224).
+
+    Returns "warn" or "block" when the script is present and parseable; "off"
+    otherwise. Reads the first 20 lines so the file does not have to be loaded
+    in full for a doctor sweep.
+    """
+    script = project_root / ".claude" / "hooks" / "tapps-pre-linear-list.sh"
+    if not script.exists():
+        return "off"
+    try:
+        with script.open(encoding="utf-8") as f:
+            head = "".join(f.readline() for _ in range(20))
+    except OSError:
+        return "off"
+    if 'MODE="block"' in head:
+        return "block"
+    if 'MODE="warn"' in head:
+        return "warn"
+    return "off"
+
+
+def _count_cache_gate_violations_24h(project_root: Path) -> int:
+    """Count cache-gate violations from the last 24 h (TAP-1224).
+
+    Reads ``.tapps-mcp/.cache-gate-violations.jsonl`` and counts entries whose
+    ``ts`` field is within 24 hours of now. Returns 0 when the log is missing
+    or unparseable — this is a doctor-time signal, not a gate, so failures
+    degrade silently.
+    """
+    log_path = project_root / ".tapps-mcp" / ".cache-gate-violations.jsonl"
+    if not log_path.exists():
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
+    count = 0
+    try:
+        with log_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ts_raw = entry.get("ts", "")
+                if not isinstance(ts_raw, str):
+                    continue
+                try:
+                    # Hooks emit ISO-8601 with trailing Z; normalize for fromisoformat.
+                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if ts >= cutoff:
+                    count += 1
+    except OSError:
+        return 0
+    return count
 
 
 def check_finish_task_skill(project_root: Path) -> CheckResult:

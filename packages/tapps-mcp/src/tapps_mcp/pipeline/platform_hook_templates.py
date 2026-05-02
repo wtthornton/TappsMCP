@@ -1812,6 +1812,366 @@ LINEAR_GATE_SCRIPTS_PS: dict[str, str] = {
     "tapps-post-docs-validate.ps1": LINEAR_GATE_POST_VALIDATE_SCRIPT_PS,
 }
 
+# ---------------------------------------------------------------------------
+# Linear cache-first read gate (TAP-1224) — opt-in via linear_enforce_cache_gate
+# ---------------------------------------------------------------------------
+# Two cooperating hooks gate raw mcp__plugin_linear_linear__list_issues calls
+# behind a tapps_linear_snapshot_get sentinel. Mirrors TAP-981's save_issue
+# pattern. Sentinels are per-(team, project, state, label, limit) so a
+# snapshot_get for project A does NOT unlock list_issues for project B.
+#
+# The post-snapshot-get hook writes a sentinel on BOTH cached=true and
+# cached=false responses — a hit means the agent did the right thing; a miss
+# means the agent is authorized to call list_issues for that exact slice.
+#
+# Mode is baked into the pre-list script at install time via the
+# __CACHE_GATE_MODE__ placeholder ("warn" or "block"). When mode=warn,
+# violations are logged to .tapps-mcp/.cache-gate-violations.jsonl and the
+# call is allowed through. When mode=block, the call is rejected with exit 2.
+
+LINEAR_CACHE_GATE_KEY_PY = """\
+import sys, json, hashlib
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print('')
+    print('')
+    sys.exit(0)
+name = d.get('tool_name') or d.get('toolName') or ''
+inp = d.get('tool_input') or d.get('toolInput') or {}
+team = (inp.get('team') or '').strip()
+project = (inp.get('project') or '').strip()
+state = (inp.get('state') or '').strip()
+label = (inp.get('label') or '').strip()
+try:
+    limit = int(inp.get('limit') or 50)
+except Exception:
+    limit = 50
+# Mirror tapps_mcp.server_linear_tools._filter_hash: drop None/'' values.
+filt = {k: v for k, v in sorted({
+    'state': state, 'label': label, 'limit': limit,
+}.items()) if v not in (None, '')}
+payload = json.dumps(filt, sort_keys=True, default=str).encode('utf-8')
+fhash = hashlib.sha256(payload).hexdigest()[:16]
+parts = [
+    (team.replace('/', '_') or '_'),
+    (project.replace('/', '_') or '_'),
+    ((state or 'any').replace('/', '_')),
+    fhash,
+]
+key = '__'.join(parts)
+# Skip the gate when the call is a single-issue get (id-only). The agent
+# should be using mcp__plugin_linear_linear__get_issue, but if list_issues
+# was called with a query that targets a single id, we have no team/project
+# context to key on — let it through with empty key.
+if not team or not project:
+    key = ''
+print(name)
+print(key)
+"""
+
+LINEAR_CACHE_GATE_POST_SNAPSHOT_SCRIPT = (
+    """\
+#!/usr/bin/env bash
+# TappsMCP PostToolUse hook — Linear cache-gate sentinel writer (TAP-1224)
+# Writes a per-(team, project, state, label, limit) sentinel on BOTH
+# cached=true and cached=false responses from tapps_linear_snapshot_get.
+# Paired with tapps-pre-linear-list.sh which reads the sentinel to gate
+# downstream list_issues calls.
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+if [ -z "$PYBIN" ]; then
+  exit 0
+fi
+PARSED=$(echo "$INPUT" | "$PYBIN" -c "
+"""
+    + LINEAR_CACHE_GATE_KEY_PY
+    + """\
+" 2>/dev/null)
+TOOL=$(echo "$PARSED" | sed -n '1p')
+KEY=$(echo "$PARSED" | sed -n '2p')
+case "$TOOL" in
+  mcp__tapps-mcp__tapps_linear_snapshot_get|tapps_linear_snapshot_get) ;;
+  *) exit 0 ;;
+esac
+if [ -z "$KEY" ]; then
+  exit 0
+fi
+ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+date +%s > "$ROOT/.tapps-mcp/.linear-snapshot-sentinel-${KEY}" 2>/dev/null
+exit 0
+"""
+)
+
+LINEAR_CACHE_GATE_PRE_LIST_SCRIPT = (
+    """\
+#!/usr/bin/env bash
+# TappsMCP PreToolUse hook — Linear cache-first read gate (TAP-1224)
+# Gates raw mcp__plugin_linear_linear__list_issues calls behind a recent
+# tapps_linear_snapshot_get sentinel for the same (team, project, state,
+# label, limit) slice (within 300s). Mode is baked in at install time:
+# "warn" logs to .cache-gate-violations.jsonl and allows; "block" exits 2.
+# Bypass with TAPPS_LINEAR_SKIP_CACHE_GATE=1 (logged to .bypass-log.jsonl).
+MODE="__CACHE_GATE_MODE__"
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+if [ -z "$PYBIN" ]; then
+  # No python available — cannot compute key; fail-open for portability.
+  exit 0
+fi
+PARSED=$(echo "$INPUT" | "$PYBIN" -c "
+"""
+    + LINEAR_CACHE_GATE_KEY_PY
+    + """\
+" 2>/dev/null)
+TOOL=$(echo "$PARSED" | sed -n '1p')
+KEY=$(echo "$PARSED" | sed -n '2p')
+case "$TOOL" in
+  mcp__plugin_linear_linear__list_issues|list_issues) ;;
+  *) exit 0 ;;
+esac
+if [ -z "$KEY" ]; then
+  exit 0
+fi
+ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+if [ "${TAPPS_LINEAR_SKIP_CACHE_GATE:-0}" = "1" ]; then
+  mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+  echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"bypass\\":\\"TAPPS_LINEAR_SKIP_CACHE_GATE\\",\\"key\\":\\"${KEY}\\"}" \\
+    >> "$ROOT/.tapps-mcp/.bypass-log.jsonl" 2>/dev/null
+  exit 0
+fi
+SENTINEL="$ROOT/.tapps-mcp/.linear-snapshot-sentinel-${KEY}"
+if [ -f "$SENTINEL" ]; then
+  NOW=$(date +%s)
+  SENT=$(cat "$SENTINEL" 2>/dev/null)
+  if echo "$SENT" | grep -Eq '^[0-9]+$'; then
+    AGE=$((NOW - SENT))
+    if [ "$AGE" -le 300 ]; then
+      exit 0
+    fi
+  fi
+fi
+# No matching sentinel (or stale). Log the violation in either mode.
+mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"key\\":\\"${KEY}\\",\\"mode\\":\\"${MODE}\\"}" \\
+  >> "$ROOT/.tapps-mcp/.cache-gate-violations.jsonl" 2>/dev/null
+if [ "$MODE" = "warn" ]; then
+  cat >&2 <<MSG
+TappsMCP: Linear cache-first read rule (TAP-1224, warn mode) — no recent tapps_linear_snapshot_get for this (team, project, state) slice.
+Route reads through the \\`linear-read\\` skill (TAP-1260):
+  1. tapps_linear_snapshot_get(team, project, state)
+  2. On cached=false: list_issues with the same filters, then tapps_linear_snapshot_put.
+This call is allowed (warn mode) but logged to .tapps-mcp/.cache-gate-violations.jsonl.
+See .claude/rules/linear-standards.md.
+MSG
+  exit 0
+fi
+cat >&2 <<MSG
+TappsMCP: Blocked mcp__plugin_linear_linear__list_issues — no recent tapps_linear_snapshot_get for this (team, project, state) slice.
+Route reads through the \\`linear-read\\` skill (TAP-1260):
+  1. tapps_linear_snapshot_get(team, project, state)
+  2. On cached=true: filter in memory (no Linear call).
+  3. On cached=false: list_issues with the same filters, then tapps_linear_snapshot_put.
+For a single-issue lookup, use mcp__plugin_linear_linear__get_issue(id=...) instead.
+Or set TAPPS_LINEAR_SKIP_CACHE_GATE=1 for emergency bypass (logged).
+See .claude/rules/linear-standards.md.
+MSG
+exit 2
+"""
+)
+
+LINEAR_CACHE_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
+    "PreToolUse": [
+        {
+            "matcher": "mcp__plugin_linear_linear__list_issues",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-pre-linear-list.sh",
+                },
+            ],
+        },
+    ],
+    "PostToolUse": [
+        {
+            "matcher": "mcp__tapps-mcp__tapps_linear_snapshot_get",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-post-linear-snapshot-get.sh",
+                },
+            ],
+        },
+    ],
+}
+
+LINEAR_CACHE_GATE_SCRIPTS: dict[str, str] = {
+    "tapps-pre-linear-list.sh": LINEAR_CACHE_GATE_PRE_LIST_SCRIPT,
+    "tapps-post-linear-snapshot-get.sh": LINEAR_CACHE_GATE_POST_SNAPSHOT_SCRIPT,
+}
+
+# PowerShell variants — same sentinel path, same key derivation rules.
+LINEAR_CACHE_GATE_KEY_PS = """\
+$inp = $null
+if ($d.PSObject.Properties.Name -contains 'tool_input') { $inp = $d.tool_input }
+elseif ($d.PSObject.Properties.Name -contains 'toolInput') { $inp = $d.toolInput }
+$team = ''; $project = ''; $state = ''; $label = ''; $limit = 50
+if ($inp) {
+    if ($inp.PSObject.Properties.Name -contains 'team' -and $inp.team) { $team = [string]$inp.team }
+    if ($inp.PSObject.Properties.Name -contains 'project' -and $inp.project) { $project = [string]$inp.project }
+    if ($inp.PSObject.Properties.Name -contains 'state' -and $inp.state) { $state = [string]$inp.state }
+    if ($inp.PSObject.Properties.Name -contains 'label' -and $inp.label) { $label = [string]$inp.label }
+    if ($inp.PSObject.Properties.Name -contains 'limit' -and $inp.limit) {
+        try { $limit = [int]$inp.limit } catch { $limit = 50 }
+    }
+}
+$key = ''
+if ($team -and $project) {
+    $filtObj = [ordered]@{}
+    if ($state) { $filtObj['state'] = $state }
+    if ($label) { $filtObj['label'] = $label }
+    if ($limit) { $filtObj['limit'] = $limit }
+    $payload = ($filtObj | ConvertTo-Json -Compress)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+    $hash = [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLower().Substring(0, 16)
+    $teamPart = if ($team) { $team.Replace('/', '_') } else { '_' }
+    $projPart = if ($project) { $project.Replace('/', '_') } else { '_' }
+    $statePart = if ($state) { $state.Replace('/', '_') } else { 'any' }
+    $key = "${teamPart}__${projPart}__${statePart}__${hash}"
+}
+"""
+
+LINEAR_CACHE_GATE_POST_SNAPSHOT_SCRIPT_PS = (
+    """\
+# TappsMCP PostToolUse hook — Linear cache-gate sentinel writer (TAP-1224)
+$stdin = [Console]::In.ReadToEnd()
+$tool = ''
+try {
+    $d = $stdin | ConvertFrom-Json
+    if ($d.tool_name) { $tool = [string]$d.tool_name }
+    elseif ($d.toolName) { $tool = [string]$d.toolName }
+} catch { exit 0 }
+if ($tool -ne 'mcp__tapps-mcp__tapps_linear_snapshot_get' -and $tool -ne 'tapps_linear_snapshot_get') {
+    exit 0
+}
+"""
+    + LINEAR_CACHE_GATE_KEY_PS
+    + """\
+if (-not $key) { exit 0 }
+$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+$dir = Join-Path $root '.tapps-mcp'
+if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+$ts = [int64]([DateTimeOffset]::Now.ToUnixTimeSeconds())
+Set-Content -Path (Join-Path $dir ".linear-snapshot-sentinel-${key}") -Value $ts -Encoding UTF8
+exit 0
+"""
+)
+
+LINEAR_CACHE_GATE_PRE_LIST_SCRIPT_PS = (
+    """\
+# TappsMCP PreToolUse hook — Linear cache-first read gate (TAP-1224)
+$mode = '__CACHE_GATE_MODE__'
+$stdin = [Console]::In.ReadToEnd()
+$tool = ''
+try {
+    $d = $stdin | ConvertFrom-Json
+    if ($d.tool_name) { $tool = [string]$d.tool_name }
+    elseif ($d.toolName) { $tool = [string]$d.toolName }
+} catch { exit 0 }
+if ($tool -ne 'mcp__plugin_linear_linear__list_issues' -and $tool -ne 'list_issues') {
+    exit 0
+}
+"""
+    + LINEAR_CACHE_GATE_KEY_PS
+    + """\
+if (-not $key) { exit 0 }
+$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+$dir = Join-Path $root '.tapps-mcp'
+if ($env:TAPPS_LINEAR_SKIP_CACHE_GATE -eq '1') {
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $entry = @{ ts = (Get-Date -Format 'o'); bypass = 'TAPPS_LINEAR_SKIP_CACHE_GATE'; key = $key } | ConvertTo-Json -Compress
+    Add-Content -Path (Join-Path $dir '.bypass-log.jsonl') -Value $entry
+    exit 0
+}
+$sentinel = Join-Path $dir ".linear-snapshot-sentinel-${key}"
+if (Test-Path $sentinel) {
+    $now = [int64]([DateTimeOffset]::Now.ToUnixTimeSeconds())
+    $sent = 0
+    try { $sent = [int64](Get-Content $sentinel -Raw).Trim() } catch {}
+    if ($sent -gt 0 -and ($now - $sent) -le 300) { exit 0 }
+}
+if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+$violation = @{ ts = (Get-Date -Format 'o'); key = $key; mode = $mode } | ConvertTo-Json -Compress
+Add-Content -Path (Join-Path $dir '.cache-gate-violations.jsonl') -Value $violation
+if ($mode -eq 'warn') {
+    [Console]::Error.WriteLine("TappsMCP: Linear cache-first read rule (TAP-1224, warn mode) - no recent tapps_linear_snapshot_get for this slice.")
+    [Console]::Error.WriteLine("Route reads through the linear-read skill. Allowed (warn) but logged to .tapps-mcp/.cache-gate-violations.jsonl.")
+    [Console]::Error.WriteLine("See .claude/rules/linear-standards.md.")
+    exit 0
+}
+[Console]::Error.WriteLine("TappsMCP: Blocked mcp__plugin_linear_linear__list_issues - no recent tapps_linear_snapshot_get for this slice.")
+[Console]::Error.WriteLine("Route reads through the linear-read skill (TAP-1260): tapps_linear_snapshot_get -> filter on hit, or list_issues + snapshot_put on miss.")
+[Console]::Error.WriteLine("For a single-issue lookup, use get_issue. Bypass: TAPPS_LINEAR_SKIP_CACHE_GATE=1 (logged).")
+[Console]::Error.WriteLine("See .claude/rules/linear-standards.md.")
+exit 2
+"""
+)
+
+LINEAR_CACHE_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
+    "PreToolUse": [
+        {
+            "matcher": "mcp__plugin_linear_linear__list_issues",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-pre-linear-list.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "PostToolUse": [
+        {
+            "matcher": "mcp__tapps-mcp__tapps_linear_snapshot_get",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-post-linear-snapshot-get.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+}
+
+LINEAR_CACHE_GATE_SCRIPTS_PS: dict[str, str] = {
+    "tapps-pre-linear-list.ps1": LINEAR_CACHE_GATE_PRE_LIST_SCRIPT_PS,
+    "tapps-post-linear-snapshot-get.ps1": LINEAR_CACHE_GATE_POST_SNAPSHOT_SCRIPT_PS,
+}
+
+
+def render_cache_gate_scripts(
+    mode: str,
+    *,
+    win: bool = False,
+) -> dict[str, str]:
+    """Return the cache-gate script set with ``__CACHE_GATE_MODE__`` baked in.
+
+    Mode must be ``"warn"`` or ``"block"``. ``"off"`` should be handled by the
+    caller (skip the install entirely) — passing it here renders a no-op safe
+    "warn" variant so a stray render call cannot accidentally produce a block.
+    """
+    chosen = mode if mode in ("warn", "block") else "warn"
+    src = LINEAR_CACHE_GATE_SCRIPTS_PS if win else LINEAR_CACHE_GATE_SCRIPTS
+    return {name: body.replace("__CACHE_GATE_MODE__", chosen) for name, body in src.items()}
+
+
 DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
         {
