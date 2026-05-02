@@ -17,7 +17,7 @@ If you discover a security vulnerability in TappsMCP, please report it responsib
 
 Instead, please email security concerns to the repository maintainers via GitHub's private vulnerability reporting:
 
-1. Go to the [Security tab](../../security) of this repository
+1. Go to the [Security tab](https://github.com/wtthornton/TappsMCP/security) of this repository
 2. Click "Report a vulnerability"
 3. Fill in the details of the vulnerability
 

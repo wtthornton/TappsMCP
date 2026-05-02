@@ -107,10 +107,13 @@ class TestHelpers:
         assert "step-1" in anchors
 
     def test_extract_headings_with_special_chars(self) -> None:
+        # GitHub maps each space to a hyphen without collapsing repeats, so
+        # `FAQ & Help` becomes `faq--help` (the `&` is stripped, the
+        # surrounding spaces both become hyphens).
         content = "# What's New?\n## FAQ & Help\n"
         anchors = _extract_headings(content)
         assert "whats-new" in anchors
-        assert "faq-help" in anchors
+        assert "faq--help" in anchors
 
     def test_extract_headings_empty(self) -> None:
         anchors = _extract_headings("")

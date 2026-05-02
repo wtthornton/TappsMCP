@@ -185,7 +185,7 @@ Major bump: the default audience of `docs_generate_story` flipped from human-rev
 
 ### Closed epics
 
-- **EPIC-91** (epic generator quality gaps) — all 5 stories confirmed implemented by the [EPIC-103 generator review](docs/reviews/EPIC-103-REVIEW-generators.md). Status flipped from "Proposed" to "Done".
+- **EPIC-91** (epic generator quality gaps) — all 5 stories confirmed implemented by the EPIC-103 generator review. Status flipped from "Proposed" to "Done".
 - **EPIC-92** (story generator quality gaps) — all 5 stories confirmed implemented. Status flipped from "Proposed" to "Done".
 - **EPIC-103** (Linear issue quality tooling) — policy + 3 tools + skill + review doc. 6 of 6 stories shipped in one day.
 - **EPIC-104** (agent-mode for doc generators) — 4 of 4 stories shipped; STORY-104.1 reversed to agent-default per user call; STORY-104.4 slimmed to the `## Refs` emitter per the review's "option 3" recommendation.

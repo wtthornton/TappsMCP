@@ -295,7 +295,7 @@ Epic 84 -- Doc Style & Tone Validation.
 
 ## API Reference
 
-See the [API documentation](docs/api.md) for detailed reference.
+See [AGENTS.md](../AGENTS.md) for the full 32-tool reference and integration guide.
 
 ## Development
 

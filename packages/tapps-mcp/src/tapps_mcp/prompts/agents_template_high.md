@@ -305,7 +305,7 @@ When the **DocsMCP** MCP server is also configured, you have access to documenta
 
 DocsMCP is a separate MCP server. Install via `pip install docs-mcp` or `npx docs-mcp serve`. See [DocsMCP docs](https://github.com/tapps-mcp/tapps-mcp/tree/master/packages/docs-mcp) for setup.
 
-**Combined server (TappsPlatform):** For clients that support 47+ tools (Claude Code, GitHub Copilot), you can run both servers as one via `tapps-platform serve`. This shares singletons (memory, knowledge cache, settings) and reduces overhead. Note: Cursor has a 40-tool limit, so use standalone servers there. See [COMPOSITION_GUIDE.md](docs/COMPOSITION_GUIDE.md) for configuration details.
+**Combined server (TappsPlatform):** For clients that support 47+ tools (Claude Code, GitHub Copilot), you can run both servers as one via `tapps-platform serve`. This shares singletons (memory, knowledge cache, settings) and reduces overhead. Note: Cursor has a 40-tool limit, so use standalone servers there. See the [COMPOSITION_GUIDE](https://github.com/wtthornton/TappsMCP/blob/master/docs/archive/reference/COMPOSITION_GUIDE.md) in the tapps-mcp repo for configuration details.
 
 ### Optional: More specialized agents
 
@@ -315,7 +315,7 @@ For more specialized agents (e.g. Frontend Developer, Reality Checker), see [age
 
 ## Troubleshooting: MCP server not available
 
-For the full consumer requirements checklist, see [docs/TAPPS_MCP_REQUIREMENTS.md](docs/TAPPS_MCP_REQUIREMENTS.md).
+For the full consumer requirements checklist, see the [TAPPS_MCP_REQUIREMENTS doc](https://github.com/wtthornton/TappsMCP/blob/master/docs/archive/reference/TAPPS_MCP_REQUIREMENTS.md) in the tapps-mcp repo.
 
 TappsMCP tools (`tapps_session_start`, `tapps_init`, `tapps_quick_check`, etc.) are only callable when the tapps-mcp server is **listed as an available MCP server** in your host (Claude Code, Cursor, or VS Code). If the server is configured in MCP config files but not visible to the agent, tool calls will fail.
 

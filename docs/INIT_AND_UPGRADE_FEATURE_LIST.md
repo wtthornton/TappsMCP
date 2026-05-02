@@ -34,7 +34,7 @@ This document lists what each init-related process does. The codebase has **two 
 | **Agent Teams** | `agent_teams=True` | Opt-in. Generates TeammateIdle and TaskCompleted hooks for quality watchdog teammate in `.claude/hooks/` and merges into `.claude/settings.json`. Only applies when `platform="claude"`. |
 | **Memory capture** | `memory_capture=True` | Opt-in. Generates a Stop hook that captures session quality data for memory persistence (Claude Code only). |
 | **Interactive wizard** | (auto on first run) | When MCP elicitation is supported and no existing `.tapps-mcp.yaml` or `.claude/settings.json` exists, runs a 5-question interactive wizard to configure quality preset, engagement level, agent teams, skill tier, and prompt hooks. Skipped when explicit parameters are provided. |
-| **Dry run** | `dry_run=True` | Computes and returns what would be created without writing files or warming caches. Skips server verification. Keeps run lightweight (~2-5s). See [MCP_CLIENT_TIMEOUTS.md](MCP_CLIENT_TIMEOUTS.md). |
+| **Dry run** | `dry_run=True` | Computes and returns what would be created without writing files or warming caches. Skips server verification. Keeps run lightweight (~2-5s). |
 | **Verify only** | `verify_only=True` | Runs only server verification and returns immediately (~1-3s). Use for quick connectivity/checker checks. |
 
 ### Result shape

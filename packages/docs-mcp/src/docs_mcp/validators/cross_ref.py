@@ -38,6 +38,9 @@ _SKIP_DIRS: frozenset[str] = frozenset(
         "build",
         ".eggs",
         ".tapps-mcp",
+        ".tapps-mcp-cache",
+        ".claude",
+        ".ralph",
     }
 )
 

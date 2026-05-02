@@ -253,4 +253,4 @@ pytest
 
 ## Next Steps
 
-- Browse the [documentation](docs/) for detailed guides
+- Browse the [documentation](.) for detailed guides

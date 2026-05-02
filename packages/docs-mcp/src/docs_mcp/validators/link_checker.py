@@ -49,6 +49,9 @@ _SKIP_DIRS: frozenset[str] = frozenset(
         "build",
         ".eggs",
         ".tapps-mcp",
+        ".tapps-mcp-cache",
+        ".claude",
+        ".ralph",
     }
 )
 
@@ -148,7 +151,11 @@ def _extract_headings(content: str) -> set[str]:
             # Convert to slug
             slug = heading_text.lower()
             slug = re.sub(r"[^\w\s-]", "", slug)
-            slug = re.sub(r"\s+", "-", slug)
+            # GitHub maps each space to a hyphen WITHOUT collapsing repeats,
+            # so "Spacing & Layout" -> "spacing--layout" (after & is stripped).
+            # Collapsing here would produce "spacing-layout" and falsely flag
+            # the GitHub-style anchor as broken.
+            slug = slug.replace(" ", "-")
             slug = slug.strip("-")
             if slug:
                 anchors.add(slug)

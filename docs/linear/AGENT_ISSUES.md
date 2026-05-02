@@ -37,7 +37,7 @@ TAP-### (prior work), commit <sha>
 
 - **Title ≤ 80 chars.** Pattern: `file.py: symptom` for bugs, `file.py: change` for features. Drop em-dash preambles.
 - **No fenced code blocks** unless the bug IS the exact text (regex, specific error string). A `file.py:LINE` anchor beats a reprinted snippet.
-- **Inline-code filenames**: `` `AGENTS.md` `` — never `[AGENTS.md](AGENTS.md)`. Linear's autolinker mangles bare filenames into `<http://AGENTS.md>` garbage.
+- **Inline-code filenames**: write `` `AGENTS.md` `` (backticks) — never a markdown link with the filename as both the link text and the target. Linear's autolinker mangles bare filenames into `http://AGENTS.md`-style garbage.
 - **Bare issue refs**: `TAP-###`. Never wrap in `<issue id="UUID">…</issue>` — the UUID is pure noise.
 - **Acceptance is mandatory.** Every issue needs ≥1 verifiable checkbox. If you can't write one, keep it in **Triage** status until it can be specified.
 - **Estimates required** on all stories. Agents use estimate as a "fits-one-session" budget signal.
@@ -79,7 +79,7 @@ Three-level nesting requires justification in the epic's description. Most issue
 
 Concrete things the linter flags:
 
-1. `[AGENTS.md](<http://AGENTS.md>)` — broken autolinker output. Replace with `` `AGENTS.md` ``.
+1. Markdown links of the form `filename → http://filename` (the autolinker's broken output for bare filenames) — replace with backtick-wrapped filenames such as `` `AGENTS.md` ``.
 2. `<issue id="<UUID>">TAP-###</issue>` — replace with bare `TAP-###`.
 3. Titles >80 chars — restate the symptom as the title, not a preamble.
 4. Fenced code block with no `file.py:LINE` anchor — add the anchor; drop the snippet unless it's load-bearing.
