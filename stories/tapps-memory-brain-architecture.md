@@ -46,7 +46,7 @@ full-text search, schema versioning with forward migrations (currently v4).
 
 ### MemoryEntry (Pydantic v2)
 
-Source: [`packages/tapps-core/src/tapps_core/memory/models.py`](packages/tapps-core/src/tapps_core/memory/models.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/models.py`](../packages/tapps-core/src/tapps_core/memory/models.py)
 
 | Field | Type | Description |
 |---|---|---|
@@ -94,7 +94,7 @@ When `confidence=-1.0` (auto), the model validator applies:
 
 ## 3. Memory Tiers & Decay
 
-Source: [`packages/tapps-core/src/tapps_core/memory/decay.py`](packages/tapps-core/src/tapps_core/memory/decay.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/decay.py`](../packages/tapps-core/src/tapps_core/memory/decay.py)
 
 ### Exponential decay formula
 
@@ -132,7 +132,7 @@ Decay is **lazy** -- computed at read-time only. No background threads or timers
 
 ## 5. The MemoryStore
 
-Source: [`packages/tapps-core/src/tapps_core/memory/store.py`](packages/tapps-core/src/tapps_core/memory/store.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/store.py`](../packages/tapps-core/src/tapps_core/memory/store.py)
 
 ### Architecture
 
@@ -176,7 +176,7 @@ get(key, scope?, branch?)
 
 ## 6. Persistence Layer
 
-Source: [`packages/tapps-core/src/tapps_core/memory/persistence.py`](packages/tapps-core/src/tapps_core/memory/persistence.py)
+Source: `tapps_brain/memory/persistence.py` (lives in the [tapps-brain](https://github.com/wtthornton/tapps-brain) repo; tapps-core re-exports via `BrainBridge`)
 
 ### SQLite configuration
 
@@ -227,7 +227,7 @@ Forward-only, applied sequentially:
 
 ## 7. Retrieval & Ranking
 
-Source: [`packages/tapps-core/src/tapps_core/memory/retrieval.py`](packages/tapps-core/src/tapps_core/memory/retrieval.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/retrieval.py`](../packages/tapps-core/src/tapps_core/memory/retrieval.py)
 
 ### MemoryRetriever
 
@@ -257,7 +257,7 @@ score = 0.40 * relevance + 0.30 * confidence + 0.15 * recency + 0.15 * frequency
 
 ### BM25 engine
 
-Source: [`packages/tapps-core/src/tapps_core/memory/bm25.py`](packages/tapps-core/src/tapps_core/memory/bm25.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/bm25.py`](../packages/tapps-core/src/tapps_core/memory/bm25.py)
 
 - Okapi BM25 (k1=1.2, b=0.75)
 - Preprocessing: lowercase, tokenize, stop-word removal (~50 words), suffix stripping
@@ -271,13 +271,13 @@ When `semantic_search.enabled=true`:
 2. Merge results via **Reciprocal Rank Fusion** (RRF, k=60)
 3. RRF formula per document: `score = sum(1/(k + rank))` across both lists
 
-Source: [`packages/tapps-core/src/tapps_core/memory/fusion.py`](packages/tapps-core/src/tapps_core/memory/fusion.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/fusion.py`](../packages/tapps-core/src/tapps_core/memory/fusion.py)
 
 ### Reranking (optional)
 
 When enabled, takes top 20 BM25 candidates and reranks to top_k via pluggable provider.
 
-Source: [`packages/tapps-core/src/tapps_core/memory/reranker.py`](packages/tapps-core/src/tapps_core/memory/reranker.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/reranker.py`](../packages/tapps-core/src/tapps_core/memory/reranker.py)
 
 ### Retrieval policy
 
@@ -293,7 +293,7 @@ By default, entries that were consolidated into other entries (marked with `cont
 
 ### Similarity detection
 
-Source: [`packages/tapps-core/src/tapps_core/memory/similarity.py`](packages/tapps-core/src/tapps_core/memory/similarity.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/similarity.py`](../packages/tapps-core/src/tapps_core/memory/similarity.py)
 
 Combined similarity = `0.4 * tag_similarity + 0.6 * text_similarity`
 
@@ -310,7 +310,7 @@ Combined similarity = `0.4 * tag_similarity + 0.6 * text_similarity`
 
 ### Consolidation engine
 
-Source: [`packages/tapps-core/src/tapps_core/memory/consolidation.py`](packages/tapps-core/src/tapps_core/memory/consolidation.py)
+Source: `tapps_brain/memory/consolidation.py` (lives in the [tapps-brain](https://github.com/wtthornton/tapps-brain) repo)
 
 **Merging rules (deterministic, no LLM):**
 
@@ -326,7 +326,7 @@ Source: [`packages/tapps-core/src/tapps_core/memory/consolidation.py`](packages/
 
 ### Auto-consolidation
 
-Source: [`packages/tapps-core/src/tapps_core/memory/auto_consolidation.py`](packages/tapps-core/src/tapps_core/memory/auto_consolidation.py)
+Source: `tapps_brain/memory/auto_consolidation.py` (lives in the [tapps-brain](https://github.com/wtthornton/tapps-brain) repo)
 
 **On save:** After saving a new entry, if config `enabled=true`:
 - Find similar entries above threshold
@@ -346,7 +346,7 @@ Reverses consolidation: restores source entries' `contradicted=False`, deletes t
 
 ## 9. Entity Relations
 
-Source: [`packages/tapps-core/src/tapps_core/memory/relations.py`](packages/tapps-core/src/tapps_core/memory/relations.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/relations.py`](../packages/tapps-core/src/tapps_core/memory/relations.py)
 
 **Rule-based relation extraction** from memory values using regex patterns:
 
@@ -364,7 +364,7 @@ Source: [`packages/tapps-core/src/tapps_core/memory/relations.py`](packages/tapp
 
 ## 10. Garbage Collection
 
-Source: [`packages/tapps-core/src/tapps_core/memory/gc.py`](packages/tapps-core/src/tapps_core/memory/gc.py)
+Source: `tapps_brain/memory/gc.py` (lives in the [tapps-brain](https://github.com/wtthornton/tapps-brain) repo)
 
 **Three archival criteria (any one triggers):**
 
@@ -383,7 +383,7 @@ Source: [`packages/tapps-core/src/tapps_core/memory/gc.py`](packages/tapps-core/
 
 ## 11. Reinforcement
 
-Source: [`packages/tapps-core/src/tapps_core/memory/reinforcement.py`](packages/tapps-core/src/tapps_core/memory/reinforcement.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/reinforcement.py`](../packages/tapps-core/src/tapps_core/memory/reinforcement.py)
 
 Reinforcing a memory:
 1. Resets `last_reinforced` to now (resets the decay clock)
@@ -395,7 +395,7 @@ Reinforcing a memory:
 
 ## 12. Contradiction Detection
 
-Source: [`packages/tapps-core/src/tapps_core/memory/contradictions.py`](packages/tapps-core/src/tapps_core/memory/contradictions.py)
+Source: `tapps_brain/memory/contradictions.py` (lives in the [tapps-brain](https://github.com/wtthornton/tapps-brain) repo)
 
 Compares memories against **observable project state** (from `detect_project_profile()`):
 
@@ -413,7 +413,7 @@ All detection is deterministic -- regex pattern matching against project profile
 
 ## 13. Memory Injection
 
-Source: [`packages/tapps-core/src/tapps_core/memory/injection.py`](packages/tapps-core/src/tapps_core/memory/injection.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/injection.py`](../packages/tapps-core/src/tapps_core/memory/injection.py)
 
 When `inject_into_experts=true`, relevant memories are injected into expert consultation and research responses:
 
@@ -434,7 +434,7 @@ When `inject_into_experts=true`, relevant memories are injected into expert cons
 
 ## 14. Cross-Project Federation
 
-Source: [`packages/tapps-core/src/tapps_core/memory/federation.py`](packages/tapps-core/src/tapps_core/memory/federation.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/federation.py`](../packages/tapps-core/src/tapps_core/memory/federation.py)
 
 **All operations are explicit** -- no automatic sharing.
 
@@ -472,7 +472,7 @@ Project A                      Hub                         Project B
 
 ## 15. Session Indexing
 
-Source: [`packages/tapps-core/src/tapps_core/memory/session_index.py`](packages/tapps-core/src/tapps_core/memory/session_index.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/session_index.py`](../packages/tapps-core/src/tapps_core/memory/session_index.py)
 
 Stores chunks of session text for searchability:
 - Max 50 chunks per session, 500 chars each
@@ -484,7 +484,7 @@ Stores chunks of session text for searchability:
 
 ## 16. Profile Seeding
 
-Source: [`packages/tapps-core/src/tapps_core/memory/seeding.py`](packages/tapps-core/src/tapps_core/memory/seeding.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/seeding.py`](../packages/tapps-core/src/tapps_core/memory/seeding.py)
 
 On first run (empty store), auto-populates memories from `detect_project_profile()`:
 - Project type, languages, frameworks, test frameworks, package managers, CI systems, Docker
@@ -496,7 +496,7 @@ On first run (empty store), auto-populates memories from `detect_project_profile
 
 ## 17. Import/Export
 
-Source: [`packages/tapps-core/src/tapps_core/memory/io.py`](packages/tapps-core/src/tapps_core/memory/io.py)
+Source: [`packages/tapps-core/src/tapps_core/memory/io.py`](../packages/tapps-core/src/tapps_core/memory/io.py)
 
 ### Export formats
 
@@ -595,7 +595,7 @@ All dispatched through `tapps_memory(action, ...)` in `server_memory_tools.py`:
 
 ## 20. Configuration
 
-From [`packages/tapps-core/src/tapps_core/config/default.yaml`](packages/tapps-core/src/tapps_core/config/default.yaml):
+From [`packages/tapps-core/src/tapps_core/config/default.yaml`](../packages/tapps-core/src/tapps_core/config/default.yaml):
 
 ```yaml
 memory:
