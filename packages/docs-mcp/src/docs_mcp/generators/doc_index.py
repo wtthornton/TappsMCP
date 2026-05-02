@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import ClassVar
 
 import structlog
@@ -123,23 +123,33 @@ class DocIndexGenerator:
         if not project_root.is_dir():
             return DocIndexResult(content="", entries=[], total_files=0, categories={})
 
-        # Collect doc files
+        project_root = project_root.resolve()
+
+        # Collect doc files. Dedupe by posix-relative path so the same file
+        # discovered via two scan branches (root iterdir + recursive walk)
+        # only renders once.
+        seen_paths: set[str] = set()
         entries: list[DocEntry] = []
+
+        def _add(entry: DocEntry | None) -> None:
+            if entry and entry.path not in seen_paths:
+                seen_paths.add(entry.path)
+                entries.append(entry)
+
         if doc_dirs:
             for d in doc_dirs:
                 dir_path = project_root / d
                 if dir_path.is_dir():
-                    entries.extend(self._scan_dir(project_root, dir_path))
+                    for e in self._scan_dir(project_root, dir_path):
+                        _add(e)
         else:
-            entries.extend(self._scan_dir(project_root, project_root))
-
-        # Also pick up root-level docs
-        if not doc_dirs:
+            for e in self._scan_dir(project_root, project_root):
+                _add(e)
+            # Also pick up root-level docs (the recursive scan starts from
+            # project_root, but we double-cover here for older callers).
             for f in project_root.iterdir():
                 if f.is_file() and f.suffix.lower() in _DOC_EXTENSIONS:
-                    entry = self._make_entry(project_root, f)
-                    if entry and not any(e.path == entry.path for e in entries):
-                        entries.append(entry)
+                    _add(self._make_entry(project_root, f))
 
         entries.sort(key=lambda e: (e.category, e.path))
 
@@ -152,6 +162,7 @@ class DocIndexGenerator:
             entries,
             categories,
             project_root.name,
+            project_root=project_root,
             output_path=output_path,
         )
 
@@ -259,14 +270,25 @@ class DocIndexGenerator:
         categories: dict[str, int],
         project_name: str,
         *,
+        project_root: Path,
         output_path: str | None = None,
     ) -> str:
-        """Render the index as markdown."""
-        # Base directory used to make link targets relative. When an output
-        # path is supplied (e.g. "docs/INDEX.md"), links are resolved relative
-        # to its parent ("docs/") so markdown viewers don't produce doubled
-        # paths like "docs/docs/guides/foo.md".
-        link_base = PurePath(output_path).parent.as_posix() if output_path else ""
+        """Render the index as markdown.
+
+        Link targets are computed via absolute-path arithmetic anchored to
+        the resolved on-disk parent directory of the index file. This is
+        robust to ``output_path`` shapes that previously broke (bare filename
+        like ``"INDEX.md"``, sub-package writes, mismatched project_root):
+        whatever the caller passed, the rendered link is always relative to
+        where the index actually lives on disk.
+        """
+        # When the caller did not pass output_path, fall back to the historic
+        # project-root-relative behaviour by anchoring at project_root itself.
+        index_dir_abs = (
+            (project_root / output_path).parent.resolve()
+            if output_path
+            else project_root
+        )
 
         lines: list[str] = []
         lines.append(f"# {project_name} — Documentation Index")
@@ -292,7 +314,7 @@ class DocIndexGenerator:
                 lines.append(f"## {current_category}")
                 lines.append("")
 
-            link_target = _relativize_link(entry.path, link_base)
+            link_target = _relativize_link(project_root, entry.path, index_dir_abs)
             desc = f" — {entry.description}" if entry.description else ""
             modified = f" *(updated {entry.last_modified})*" if entry.last_modified else ""
             lines.append(f"- [{entry.title}]({link_target}){desc}{modified}")
@@ -301,15 +323,15 @@ class DocIndexGenerator:
         return "\n".join(lines)
 
 
-def _relativize_link(entry_path: str, link_base: str) -> str:
-    """Return entry_path rewritten relative to link_base (posix-style).
+def _relativize_link(project_root: Path, entry_path: str, index_dir_abs: Path) -> str:
+    """Return ``entry_path`` rewritten relative to ``index_dir_abs`` (posix-style).
 
-    entry_path is always project-root-relative. link_base is either an empty
-    string (legacy: keep project-root-relative) or a project-root-relative
-    directory like "docs". The result uses forward slashes regardless of the
-    host OS so the emitted markdown is portable.
+    ``entry_path`` is project-root-relative. ``index_dir_abs`` is the
+    absolute on-disk parent directory of the rendered index file. Computing
+    via absolute paths means the link is correct regardless of how
+    ``output_path`` was specified (bare filename, nested, sub-package).
+    Result always uses forward slashes for portability.
     """
-    if not link_base or link_base == ".":
-        return entry_path
-    rel = os.path.relpath(entry_path, start=link_base)
-    return PurePath(rel).as_posix()
+    entry_abs = (project_root / entry_path).resolve()
+    rel = os.path.relpath(entry_abs, start=index_dir_abs)
+    return rel.replace(os.sep, "/")
