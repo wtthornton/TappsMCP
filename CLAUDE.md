@@ -102,16 +102,16 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Ruff RUF012**: Mutable class-level attributes need `ClassVar` annotation.
 - **Windows testing**: Use `python -c "import time; time.sleep(N)"` for timeout tests -- Git Bash intercepts `cmd /c timeout`.
 - **Patching lazy imports**: Some imports happen inside tool handlers from `tapps_core`. Patch at source modules, not `tapps_mcp.server`.
-- **tapps-brain version**: TappsMCP pins tapps-brain at [`>=3.7.2,<4`](https://github.com/wtthornton/tapps-brain/releases/tag/v3.7.2) in `packages/tapps-core/pyproject.toml`. 3.7.2 fixes the `TappsBrainClient` `/mcp` → `/mcp/mcp` path and the 3.7.1 streamable-HTTP lifespan crash — not load-bearing for tapps-mcp (in-process `AgentBrain` via `BrainBridge`, not the network client), but the floor is bumped so any future migration to remote brain-as-a-service gets a working client. Imports still use `try/except ImportError` for defensive degradation in non-standard installs.
-- **MCP server zombies**: Claude Code spawns a new MCP server process per session but never cleans up old ones. The `.claude/hooks/tapps-session-start.sh` hook kills tapps-mcp/docsmcp processes older than 2 hours at startup. Do not remove this cleanup block.
+- **tapps-brain version pin**: see [ADR-0002](docs/adr/0002-pin-tapps-brain-version-floor-at-372.md) and [ADR-0001](docs/adr/0001-in-process-agentbrain-via-brainbridge.md) (in-process AgentBrain).
+- **MCP server zombies**: see [ADR-0005](docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md). Do not remove the cleanup block from `.claude/hooks/tapps-session-start.sh`.
 - **brain auth 401/403 (TAP-1082)**: `tapps_session_start` returns a hard error with `code: brain_auth_failed` when the tapps-brain auth probe returns 401 or 403, instead of silently degrading. Set `TAPPS_BRAIN_AUTH_TOKEN` in your env or `.mcp.json` to fix. For offline / no-brain workflows, set `memory.tolerate_brain_auth_failure: true` in `.tapps-mcp.yaml` to keep the old soft-degraded behavior.
 
 ## Important context
 
 - TappsMCP is a **tool for other projects** -- changes should consider how consuming projects will be affected
 - The `tapps_init` MCP tool bootstraps TappsMCP in consuming projects (creates AGENTS.md, TECH_STACK.md, platform rules, hooks, agents, skills)
-- All tools are **deterministic** -- no LLM calls in the tool chain; same input produces same output
-- When external checkers are missing, tools fall back to AST-based analysis and mark results as `degraded: true`
+- **Deterministic tools only** -- no LLM calls in the tool chain; same input → same output. Missing external checkers fall back to AST analysis and mark results `degraded: true`. See [ADR-0004](docs/adr/0004-deterministic-tools-only-contract.md).
+- **Architectural decisions** live in [docs/adr/](docs/adr/) — see the [index](docs/adr/README.md). When changing a load-bearing decision, supersede the ADR; do not edit history.
 
 # TAPPS Quality Pipeline
 
@@ -140,7 +140,7 @@ This runs scoring + quality gate + security scan in a single call.
 
 ### Before Declaring Work Complete
 
-For multi-file changes: You should call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Always pass `file_paths`** — auto-detect scans all git-changed files and can be very slow. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
+For multi-file changes: You should call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Always pass `file_paths`** — auto-detect scans all git-changed files and can be very slow. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit). See [ADR-0006](docs/adr/0006-tapps-validate-changed-requires-explicit-file-paths.md).
 Run the quality gate before considering work done.
 You should call `tapps_checklist(task_type)` as the final step to verify no required tools were skipped.
 
