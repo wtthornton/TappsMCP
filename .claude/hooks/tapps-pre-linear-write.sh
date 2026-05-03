@@ -1,20 +1,37 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.3.0
+# tapps-mcp-hook-version: 3.9.0
 # TappsMCP PreToolUse hook — Linear write gate (TAP-981)
 # Blocks mcp__plugin_linear_linear__save_issue if no recent
 # docs_validate_linear_issue sentinel (within 30 minutes). Bypass with
 # TAPPS_LINEAR_SKIP_VALIDATE=1 (logged to .tapps-mcp/.bypass-log.jsonl).
 INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-TOOL=$(echo "$INPUT" | "$PYBIN" -c   "import sys,json
+PARSED=$(echo "$INPUT" | "$PYBIN" -c   "import sys,json
 try:
-    d=json.load(sys.stdin); print(d.get('tool_name') or d.get('toolName') or '')
+    d=json.load(sys.stdin)
+    name=d.get('tool_name') or d.get('toolName') or ''
+    inp=d.get('tool_input') or d.get('toolInput') or {}
+    has_id=bool(inp.get('id'))
+    has_template=bool(inp.get('title')) or bool(inp.get('description'))
+    update_only='1' if (has_id and not has_template) else '0'
+    print(name)
+    print(update_only)
 except Exception:
-    print('')" 2>/dev/null)
+    print('')
+    print('0')" 2>/dev/null)
+TOOL=$(echo "$PARSED" | sed -n '1p')
+UPDATE_ONLY=$(echo "$PARSED" | sed -n '2p')
 case "$TOOL" in
   mcp__plugin_linear_linear__save_issue|save_issue) ;;
   *) exit 0 ;;
 esac
+# Update-only allow-list (TAP-981 FP reduction): save_issue calls that target
+# an existing issue (id present) and do NOT modify title/description skip the
+# sentinel — status, priority, label, assignee, parent updates don't need a
+# fresh template validation.
+if [ "$UPDATE_ONLY" = "1" ]; then
+  exit 0
+fi
 if [ "${TAPPS_LINEAR_SKIP_VALIDATE:-0}" = "1" ]; then
   ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null

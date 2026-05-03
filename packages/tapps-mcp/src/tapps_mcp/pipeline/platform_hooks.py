@@ -302,6 +302,16 @@ def _hook_has_user_edits(path: Path) -> bool:
     return _HOOK_VERSION_MARKER_RE.search(head) is None
 
 
+def _hook_marker_version(path: Path) -> str | None:
+    """Return the ``tapps-mcp-hook-version`` marker on disk, or None if absent."""
+    try:
+        head = path.read_text(encoding="utf-8")[:_HOOK_MARKER_SCAN_CHARS]
+    except (OSError, UnicodeDecodeError):
+        return None
+    match = _HOOK_VERSION_MARKER_RE.search(head)
+    return match.group(1) if match else None
+
+
 def _backup_hook_file(path: Path) -> Path:
     """Copy *path* to ``<path>.pre-upgrade.<unix-ts>`` and return the backup path."""
     ts = int(time.time())
@@ -333,7 +343,17 @@ def _write_hook_scripts(
     for name, content in script_templates.items():
         script_path = hooks_dir / name
         if script_path.exists() and name not in always_overwrite:
-            continue
+            # TAP-1325 / v3.9.0: rewrite when the deployed marker version
+            # differs from the running tapps-mcp version. Without this, hook
+            # content updates landing in a release never reach consumer
+            # projects unless the hook is in ``always_overwrite``.
+            on_disk_version = _hook_marker_version(script_path)
+            if on_disk_version == _TAPPS_VERSION:
+                continue
+            # No marker → user-authored, fall through to the user-edits path
+            # below. Marker present but stale → back up before rewriting.
+            if on_disk_version is not None:
+                _backup_hook_file(script_path)
         # If an existing file lacks the marker, preserve user edits first.
         if script_path.exists() and _hook_has_user_edits(script_path):
             _backup_hook_file(script_path)

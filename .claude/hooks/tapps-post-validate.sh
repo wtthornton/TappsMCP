@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+# tapps-mcp-hook-version: 3.9.0
 # TappsMCP PostToolUse hook (tapps_validate_changed)
 # Reads the sidecar progress file and echoes a summary to the transcript.
+# This provides a second delivery path for validation results.
 INPUT=$(cat)
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
@@ -20,7 +22,7 @@ try:
         gp='ALL PASSED' if d.get('all_gates_passed') else f'{failed} FAILED'
         print(f'[TappsMCP] Validation: {total} files, {gp} ({sec:.1f}s)')
     elif status=='error':
-        print(f'[TappsMCP] Validation error: {d.get(\"error\",\"unknown\")}')
+        print(f'[TappsMCP] Validation error: {d.get("error","unknown")}')
     elif status=='running':
         done=d.get('completed',0)
         total=d.get('total',0)

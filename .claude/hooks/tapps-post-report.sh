@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# tapps-mcp-hook-version: 3.9.0
 # TappsMCP PostToolUse hook (tapps_report)
 # Reads the report sidecar progress file and echoes a summary.
 INPUT=$(cat)
@@ -20,7 +21,7 @@ try:
         else:
             print(f'[TappsMCP] Report: {total} files scored')
     elif status=='error':
-        print(f'[TappsMCP] Report error: {d.get(\"error\",\"unknown\")}')
+        print(f'[TappsMCP] Report error: {d.get("error","unknown")}')
     elif status=='running':
         done=d.get('completed',0)
         total=d.get('total',0)

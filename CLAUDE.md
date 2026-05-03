@@ -114,6 +114,8 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Architectural decisions** live in [docs/adr/](docs/adr/) — see the [index](docs/adr/README.md). When changing a load-bearing decision, supersede the ADR; do not edit history.
 
 <!-- BEGIN: tapps-obligations v3.8.1 -->
+
+<!-- BEGIN: tapps-obligations v3.9.0 -->
 # TAPPS Quality Pipeline
 
 This project uses the TAPPS MCP server for code quality enforcement.
