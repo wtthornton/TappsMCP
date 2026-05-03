@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-05-03
+
+### Added
+
+Epic [TAP-1325](https://linear.app/tappscodingagents/issue/TAP-1325) — quality-gate enforcement bundle. Eight stories ship the platform side of automated gate enforcement, per-loop telemetry, lookup_docs cache warming, and a pre-release docs gate. Origin: the 2026-04-14 AgentForge audit (472 tool calls, 13 MCP calls = 2.7%, zero `tapps_validate_changed` / `tapps_checklist` / `tapps_lookup_docs` calls across 23 loops).
+
+- **`feat(hooks): override Ralph EXIT_SIGNAL on missing quality gate or checklist` ([TAP-1326](https://linear.app/tappscodingagents/issue/TAP-1326), [TAP-1327](https://linear.app/tappscodingagents/issue/TAP-1327)).** [`platform_hook_templates.py`](packages/tapps-mcp/src/tapps_mcp/pipeline/platform_hook_templates.py) — Stop hook now reads `.ralph/status.json` and overrides `EXIT_SIGNAL=true` to `false` when modified `.py`/`.ts`/`.tsx`/`.go`/`.rs` files in the loop did not receive a `tapps_quick_check`/`tapps_validate_changed`/`tapps_quality_gate` call, or when `tapps_checklist` was not called. Logs `QUALITY_GATE_SKIP` / `CHECKLIST_MISSING` to `.ralph/logs/on-stop.log` and appends a TODO line to `.ralph/PROMPT.md` for the next iteration. No-op for non-Ralph projects.
+- **`feat(hooks): record edits + flag new external imports in post-edit hook` ([TAP-1330](https://linear.app/tappscodingagents/issue/TAP-1330)).** PostToolUse hook on Edit/Write writes the modified path to `.ralph/.edits_this_loop` (consumed by the Stop hook above) and parses added Python/TS imports to surface a `tapps_lookup_docs` reminder for newly-introduced external libraries.
+- **`feat(hooks): require agent_ready=true before unlocking save_issue` ([TAP-1328](https://linear.app/tappscodingagents/issue/TAP-1328)).** `LINEAR_GATE_POST_VALIDATE_SCRIPT` now writes the `.linear-validate-sentinel` only when `docs_validate_linear_issue` returns `agent_ready=true`. Previously, any validate call (passing or failing) unlocked the next `save_issue`.
+- **`feat(session_start): background lookup_docs cache warm` ([TAP-1331](https://linear.app/tappscodingagents/issue/TAP-1331)).** [`session_start_helpers.py`](packages/tapps-mcp/src/tapps_mcp/tools/session_start_helpers.py) — `_schedule_lookup_docs_warm` fires a fire-and-forget warm of the top covered libraries from `search_first.covered` so the next session's first lookup is a cache hit, not a 1-3 s Context7 round-trip. Throttled to once per 24 h via `.tapps-mcp-cache/.cache-warm-marker`. Reported in `session_start.data.cache_warm`.
+- **`feat(upgrade): canonical hook manifest verification` ([TAP-1332](https://linear.app/tappscodingagents/issue/TAP-1332)).** [`upgrade.py`](packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py) — new `_CANONICAL_HOOK_MANIFEST` and `_verify_hook_manifest()` surface missing / extra `tapps-*.sh` scripts in `tapps_upgrade`'s response under `components.hooks.manifest_verification`. Catches drift between consumer projects (the AgentForge / ralph-claude-code mismatch on 2026-05-02 motivated this).
+- **`feat(telemetry): per-loop MCP-call ratio + cache-gate auto-promote` ([TAP-1333](https://linear.app/tappscodingagents/issue/TAP-1333)).** Stop hook appends one JSONL row per loop to `.tapps-mcp/loop-metrics.jsonl` (rotated at 10 MB) with `{ts, files_edited, mcp_calls, gate_skipped_files, lookup_docs_called, checklist_called, tools_used}`. New [`tapps_mcp.tools.loop_metrics`](packages/tapps-mcp/src/tapps_mcp/tools/loop_metrics.py) module aggregates 7-day rolling stats (`mcp_call_ratio`, `gate_skip_rate`, `lookup_docs_to_edit_ratio`). [`tapps_doctor`](packages/tapps-mcp/src/tapps_mcp/server_pipeline_tools.py) surfaces them under `loop_metrics_7d`. New `linear_enforce_cache_gate_auto_promote` setting (default `true`) lets `tapps_upgrade` flip the cache-gate from `warn` to `block` automatically when the rolling skip rate is below 5%.
+- **`feat(docs-mcp): docs_release_gate aggregate verdict tool` ([TAP-1335](https://linear.app/tappscodingagents/issue/TAP-1335)).** [`server_val_tools.py`](packages/docs-mcp/src/docs_mcp/server_val_tools.py) — new `docs_release_gate(prev_version, version)` aggregates `docs_check_drift` + `docs_check_freshness` + `docs_check_links` into a single response with `agent_ready`, structured drift / freshness / broken_links sub-reports, and `recommendations`. `agent_ready=true` requires drift_score < 30, zero ancient docs, and zero broken links. Registered in [`ALL_DOCS_TOOL_NAMES`](packages/docs-mcp/src/docs_mcp/server.py).
+
+### Fixed
+
+- **`fix(self-bootstrap): declare brain_project_id so tapps_session_start works` ([TAP-1334](https://linear.app/tappscodingagents/issue/TAP-1334)).** [`.tapps-mcp.yaml`](.tapps-mcp.yaml) declares `memory.brain_project_id: tapps-mcp`; [`.mcp.json`](.mcp.json) env block carries `TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID`. Without this, this repo's own `tapps_session_start` failed with `brain_project_id_missing` on every cold session, making it impossible to dogfood the platform.
+
+### Skipped
+
+- **TAP-1329** (ralph.md surface brain_recall / security_scan / score_file) — deferred per maintainer direction; being moved to a different repo since `ralph.md` is owned by AgentForge / Ralph rather than tapps-mcp templates.
+
+### Out-of-scope deferrals on shipped stories
+
+BATS test scaffolding, the dedicated `.github/workflows/release.yml` step calling `docs_release_gate` before `gh release create`, and the `linear-release-update` SKILL.md edits that wire `docs_release_gate` ahead of `save_document`. Core enforcement, telemetry, and tool surfaces all ship in this release; CI integration is followup work.
+
 ## [3.8.1] - 2026-05-02
 
 ### Documentation
