@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-05-02
+
+### Added
+
+- **`feat(tapps-mcp): hard-enforce Linear cache-first reads via PreToolUse hook` ([TAP-1224](https://linear.app/tappscodingagents/issue/TAP-1224)).** New PreToolUse hook on `mcp__plugin_linear_linear__list_issues` that gates raw Linear list calls behind a `tapps_linear_snapshot_get` sentinel, mirroring the [TAP-981](https://linear.app/tappscodingagents/issue/TAP-981) `save_issue` pattern. Pairs with the [`linear-read` skill (TAP-1260)](https://linear.app/tappscodingagents/issue/TAP-1260) which teaches the cache-first dance.
+  - **Hooks** ([`platform_hook_templates.py`](packages/tapps-mcp/src/tapps_mcp/pipeline/platform_hook_templates.py)): `tapps-post-linear-snapshot-get.sh` writes a per-`(team, project, state, label, limit)` sentinel at `.tapps-mcp/.linear-snapshot-sentinel-<key>` on **both** `cached=true` and `cached=false` responses (bash + PowerShell variants). `tapps-pre-linear-list.sh` derives the same sentinel key from `tool_input` via embedded Python (no `jq` dependency) and warns/blocks based on baked-in mode. Sentinel key uses the same `_filter_hash` + `_cache_key` derivation as [`server_linear_tools._resolve_cache_key`](packages/tapps-mcp/src/tapps_mcp/server_linear_tools.py).
+  - **Setting** ([`settings.py`](packages/tapps-core/src/tapps_core/config/settings.py)): new `linear_enforce_cache_gate: Literal["off", "warn", "block"]` (default `"warn"` at high/medium engagement, `"off"` at low). Engagement-aware resolver `linear_enforce_cache_gate_resolved()`. **Warn mode** (default for one release) logs violations to `.tapps-mcp/.cache-gate-violations.jsonl` and lets the call through. **Block mode** rejects with exit 2 unless a matching sentinel < 300 s old exists. Bypass via `TAPPS_LINEAR_SKIP_CACHE_GATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`).
+  - **Doctor** ([`doctor.py`](packages/tapps-mcp/src/tapps_mcp/distribution/doctor.py)): `check_pretooluse_matchers` now reports the cache-gate state (`off`/`warn`/`block`) and the count of violations from the last 24 h, parsed from the JSONL log via `_detect_cache_gate_mode` and `_count_cache_gate_violations_24h`.
+  - **Per-key isolation.** A snapshot for project A does **not** unlock list_issues for project B — the sentinel hash includes team, project, state, label, and limit so cross-slice unlock is impossible.
+  - **No exempt parameters on `list_issues`.** Single-issue lookups must use `mcp__plugin_linear_linear__get_issue(id=...)`. There is no `query=` / `parentId=` / `cycle=` exemption — every multi-issue read goes through `tapps_linear_snapshot_get` first.
+  - 35 new regression tests in [`test_linear_cache_gate.py`](packages/tapps-mcp/tests/unit/test_linear_cache_gate.py) cover sentinel write on hit/miss, no-sentinel block, fresh-sentinel pass, key-mismatch isolation, warn-mode allow-with-log, env-var bypass, no-team/project fail-open, non-target tool no-op, and PowerShell template parity.
+
+- **`docs(adr): introduce docs/adr/ for architectural decisions buried in CLAUDE.md` ([TAP-1280](https://linear.app/tappscodingagents/issue/TAP-1280)).** New [`docs/adr/`](docs/adr/) directory with seven MADR-format Architecture Decision Records lifted out of [`CLAUDE.md`](CLAUDE.md) prose: in-process AgentBrain via BrainBridge ([ADR-0001](docs/adr/0001-in-process-agentbrain-via-brainbridge.md)), tapps-brain version pin ([ADR-0002](docs/adr/0002-pin-tapps-brain-version-floor-at-372.md)), no-PyPI-publish policy ([ADR-0003](docs/adr/0003-no-pypi-or-npm-publish-global-install-from-local-checkout.md)), deterministic-tools-only contract ([ADR-0004](docs/adr/0004-deterministic-tools-only-contract.md)), MCP zombie-cleanup hook ([ADR-0005](docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md)), `tapps_validate_changed` file-paths convention ([ADR-0006](docs/adr/0006-tapps-validate-changed-requires-explicit-file-paths.md)), and Linear agent-assignee default ([ADR-0007](docs/adr/0007-linear-writes-default-assignee-to-the-agent-never-the-oauth-human.md)). `CLAUDE.md` now points at ADRs by number rather than embedding the deciding context inline. `docs_check_diataxis`: explanation coverage **20% → 30.8%**, balance **70.4 → 99.9**.
+
+- **`docs(tutorials): add 3 walk-throughs under docs/tutorials/` ([TAP-1284](https://linear.app/tappscodingagents/issue/TAP-1284)).** Three copy-paste runnable tutorials with explicit verification steps in new [`docs/tutorials/`](docs/tutorials/) directory: [`01-add-an-mcp-tool.md`](docs/tutorials/01-add-an-mcp-tool.md) (handler → checklist → AGENTS.md → test, ~15 min), [`02-quality-pipeline-walkthrough.md`](docs/tutorials/02-quality-pipeline-walkthrough.md) (init → bad function → quick_check → fix → validate_changed → checklist, ~10 min), [`03-wire-tapps-brain.md`](docs/tutorials/03-wire-tapps-brain.md) (Docker → import → auth token → doctor → save/recall round-trip, ~20 min). Plus [`docs/tutorials/README.md`](docs/tutorials/README.md) index and a Documentation cross-link from the workspace [`README.md`](README.md). `docs_check_diataxis` tutorial coverage: **2.6% → 11.6%**.
+
+### Changed
+
+- **`docs+templates: sync TAP-1224 enforcement into linear-standards.md template`.** The [`_CLAUDE_LINEAR_STANDARDS_RULE`](packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py) constant gains a new `### Reads (TAP-1224)` enforcement subsection alongside the existing `### Writes (TAP-981)` block — documents the cache-gate hooks, mode semantics, bypass env var, and per-key isolation guarantee. Without this template sync, `tapps_upgrade` would silently overwrite consumer projects' deployed `linear-standards.md` with the old TAP-981-only enforcement, dropping the cache-gate docs. The previously deployed-only `## Release Updates` section was also lifted into the template so it survives upgrades.
+
+- **`docs(reference): document linear_enforce_gate + linear_enforce_cache_gate in CONFIG_REFERENCE.md`.** [`docs/CONFIG_REFERENCE.md`](docs/CONFIG_REFERENCE.md) gains entries for both Linear gate settings under the LLM Engagement section.
+
+- **`docs(index): link tutorials/ and adr/ from docs/INDEX.md`.** [`docs/INDEX.md`](docs/INDEX.md) Getting Started section now links the Tutorials directory; Reference section now links the ADR index.
+
+### Internal
+
+- **Doctor regression test updated.** The TAP-981 `test_confirms_linear_gate_when_present` assertion was tightened from "`NOT enabled` not in message" to "`Linear routing gate: NOT enabled` not in message" so the cache-gate's own "NOT enabled" string (when the cache gate is off) doesn't trip the routing-gate-only test.
+
+- **Epic close-outs.** [TAP-1118](https://linear.app/tappscodingagents/issue/TAP-1118) (`docs_check_drift`: 10 child stories) and [TAP-400](https://linear.app/tappscodingagents/issue/TAP-400) (Linear SDLC Bootstrap clone-and-layer epic) closed as Done after status sweep — all in-scope children shipped (or properly Canceled per epic Out-of-Scope sections).
+
 ## [3.6.0] - 2026-04-28
 
 ### Added

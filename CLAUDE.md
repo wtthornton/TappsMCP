@@ -113,7 +113,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Deterministic tools only** -- no LLM calls in the tool chain; same input → same output. Missing external checkers fall back to AST analysis and mark results `degraded: true`. See [ADR-0004](docs/adr/0004-deterministic-tools-only-contract.md).
 - **Architectural decisions** live in [docs/adr/](docs/adr/) — see the [index](docs/adr/README.md). When changing a load-bearing decision, supersede the ADR; do not edit history.
 
-<!-- BEGIN: tapps-obligations v3.7.1 -->
+<!-- BEGIN: tapps-obligations v3.8.0 -->
 # TAPPS Quality Pipeline
 
 This project uses the TAPPS MCP server for code quality enforcement.
