@@ -17,7 +17,9 @@
       "Bash(gh *)",
       "mcp__tapps-mcp__*",
       "mcp__docs-mcp__*",
-      "mcp__tapps-mcp"
+      "mcp__tapps-mcp",
+      "Bash(uv run ruff *)",
+      "Bash(uv run mypy *)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -307,6 +309,28 @@
           {
             "type": "command",
             "command": ".claude/hooks/tapps-user-prompt-submit.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/tapps-session-end.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__tapps-mcp__.*",
+        "if": "mcp__tapps-mcp__*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/tapps-tool-failure.sh"
           }
         ]
       }

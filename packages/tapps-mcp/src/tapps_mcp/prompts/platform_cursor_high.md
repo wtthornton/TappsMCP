@@ -8,6 +8,18 @@ alwaysApply: true
 This project uses the TAPPS MCP server for automated code quality enforcement.
 Every tool response includes `next_steps` - follow them.
 
+## Tapps Rules
+
+These are the seven rules every agent in this project MUST follow. They override default behavior.
+
+1. **Fix root causes — never workarounds.** No `--no-verify`, no swallowed exceptions, no commented-out failing tests. If a check fails, diagnose and fix it. A solution that re-breaks next sprint is a regression, not a fix.
+2. **Query tapps-mcp before writing code when confidence is not 100%.** Use `tapps_lookup_docs` for library APIs and `tapps_memory(action="search")` for prior decisions and patterns. Guessing from training memory is the leading cause of hallucinated APIs and re-litigated decisions.
+3. **`tapps_lookup_docs` is a Context7-backed local cache — call it freely.** Repeat lookups for the same library/topic are near-zero cost. There is no budget to conserve. If the real API surface would help, fetch it.
+4. **Protect the main context window — delegate to subagents.** Route searches, log scans, and exploratory file reads through `Explore` or `general-purpose`. They return summaries, not raw output. If a task would consume more than three file reads or any large tool result you will not reference again, spawn a subagent.
+5. **Write code a senior reviewer would accept on first pass.** Clear names, no dead branches, no commented-out code, no speculative abstractions. Match existing style. Every line MUST justify its presence.
+6. **The simplest solution that satisfies the requirement is the correct one.** No flexibility for hypothetical futures. No configuration knobs nobody asked for. No abstractions for single-use code. Three similar lines beat a premature abstraction.
+7. **All Linear writes go through the `linear-issue` skill; all multi-issue reads through `linear-read`.** NEVER call `mcp__plugin_linear_linear__save_issue` or `list_issues` directly. Epics and stories MUST be generated via `docs_generate_epic` / `docs_generate_story` and pass `docs_validate_linear_issue` (`agent_ready: true`) before push. Single-issue lookups go straight to `get_issue(id=...)`. Release announcements go through the `linear-release-update` skill.
+
 ## CRITICAL: Tool Call Obligations
 
 These are BLOCKING REQUIREMENTS, not suggestions. Skipping any step risks shipping broken, insecure, or hallucinated code.

@@ -14,9 +14,10 @@ from tapps_mcp import __version__
 # Constants
 # ---------------------------------------------------------------------------
 
-# The 9 canonical sections in the AGENTS.md template (## headings)
-# Slimmed template (P1) uses "Essential tools" instead of "What TappsMCP is" + "When to use each tool"
+# Canonical sections in the AGENTS.md template (## headings).
+# "Tapps Rules" is the leading section ahead of the tool tables.
 EXPECTED_SECTIONS: list[str] = [
+    "Tapps Rules",
     "Essential tools (always-on workflow)",
     "tapps_session_start vs tapps_init",
     "Using tapps_lookup_docs for domain guidance",

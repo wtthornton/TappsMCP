@@ -7,6 +7,16 @@ alwaysApply: false
 
 This project can use the TAPPS MCP server for code quality. Tool responses include `next_steps` - consider them when useful.
 
+## Tapps Rules
+
+- Fix root causes — no workarounds.
+- Query tapps-mcp (`tapps_lookup_docs`, `tapps_memory`) when uncertain.
+- `tapps_lookup_docs` is a cached Context7 front — call it freely.
+- Delegate noisy reads/searches to subagents to protect context.
+- Write clean, efficient code; match existing style.
+- Simplest correct solution wins.
+- Linear writes via `linear-issue` skill; multi-issue reads via `linear-read` skill.
+
 ## Optional Tool Usage
 
 Consider these steps when they fit your task.

@@ -933,11 +933,13 @@ Control how strongly the AI is prompted to use TappsMCP tools: **high** (mandato
 llm_engagement_level: medium   # high | medium | low
 ```
 
-- **high** — AGENTS.md and platform rules use MUST/REQUIRED language; checklist requires more tools; hooks use strong reminders.
-- **medium** — Balanced (default). Recommended workflow and standard required tools.
-- **low** — Softer “consider” language; fewer required tools; optional reminders.
+- **high** — AGENTS.md and platform rules use MUST/REQUIRED language; the **`## Tapps Rules`** section uses imperative voice (e.g. *"NEVER call save_issue directly"*); checklist requires more tools; hooks use strong reminders.
+- **medium** — Balanced (default). Recommended workflow and standard required tools. **`## Tapps Rules`** uses *"should"* language.
+- **low** — Softer "consider" language; fewer required tools; optional reminders. **`## Tapps Rules`** is a one-liner bullet list.
 
-To change the level at runtime, use the **`tapps_set_engagement_level(level)`** MCP tool (e.g. when the user says “set tappsmcp to high”). Then run `tapps_init` with `overwrite_agents_md=True` to regenerate AGENTS.md and platform rules with the new level. From the CLI: `tapps-mcp init --engagement-level high` (or `medium` / `low`).
+**What each level actually swaps:** `tapps_init` and `tapps_upgrade` resolve the level and load `agents_template_<level>.md`, `platform_claude_<level>.md`, and `platform_cursor_<level>.md` from the prompts package. All three variants share the same seven Tapps Rules (root-cause fixes, query-tapps-mcp-when-uncertain, free `tapps_lookup_docs`, subagent delegation, clean code, no over-engineering, Linear via skills) — only the voice and verbosity differ.
+
+To change the level at runtime, use the **`tapps_set_engagement_level(level)`** MCP tool (e.g. when the user says "set tappsmcp to high"). Then run `tapps_init` with `overwrite_agents_md=True` to regenerate AGENTS.md and platform rules with the new level. From the CLI: `tapps-mcp init --engagement-level high` (or `medium` / `low`).
 
 ### Environment variables
 

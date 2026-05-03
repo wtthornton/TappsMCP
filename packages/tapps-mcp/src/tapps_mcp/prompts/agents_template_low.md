@@ -6,6 +6,18 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 
 ---
 
+## Tapps Rules
+
+- Fix root causes — no workarounds.
+- Query tapps-mcp (`tapps_lookup_docs`, `tapps_memory`) when uncertain.
+- `tapps_lookup_docs` is a cached Context7 front — call it freely.
+- Delegate noisy reads/searches to subagents to protect context.
+- Write clean, efficient code; match existing style.
+- Simplest correct solution wins.
+- Linear writes via `linear-issue` skill; multi-issue reads via `linear-read` skill.
+
+---
+
 ## Essential tools (always-on workflow)
 
 | Tool | When to use |

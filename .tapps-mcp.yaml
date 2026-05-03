@@ -1,4 +1,4 @@
-llm_engagement_level: medium
+llm_engagement_level: high
 quality_preset: standard
 memory:
   brain_project_id: tapps-mcp

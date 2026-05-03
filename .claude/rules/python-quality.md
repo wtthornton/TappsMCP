@@ -4,11 +4,13 @@ paths:
 ---
 # Python Quality Rules (TappsMCP)
 
-Run `tapps_quick_check(file_path)` after editing Python files.
+REQUIRED: Run `tapps_quick_check(file_path)` after editing Python files.
 
-Use `tapps_lookup_docs(library, topic)` before using unfamiliar library APIs.
+REQUIRED: Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths before declaring work complete. Never call without `file_paths`. Default is quick mode; only use `quick=false` as a last resort.
 
-Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths before declaring work complete. Never call without `file_paths`. Default is quick mode; only use `quick=false` as a last resort.
+REQUIRED: Use `tapps_lookup_docs(library, topic)` before using unfamiliar library APIs.
+
+Do NOT mark tasks complete if quality gate has not passed.
 
 ## Quality Scoring (7 Categories, 0-100 each)
 
@@ -20,4 +22,4 @@ Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit path
 6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
 7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
 
-Any category scoring below 70 should be addressed.
+Any category scoring below 70 MUST be addressed immediately.

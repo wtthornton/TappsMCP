@@ -100,3 +100,7 @@ architecture-report*.png
 # Defensive: catch generator project-root bugs that write a workspace member
 # inside itself (e.g. packages/docs-mcp/packages/docs-mcp/...).
 packages/*/packages/
+
+# tapps_upgrade timestamped backups (local rollback only; never commit)
+*.pre-upgrade.*
+.ralph/.edits_this_loop

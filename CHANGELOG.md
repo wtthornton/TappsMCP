@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.10.0] - 2026-05-03
+
+### Added
+
+- **`docs(prompts): "## Tapps Rules" section in all platform/agents templates`.** Seven imperative rules surface at the top of every CLAUDE.md / AGENTS.md / `.cursor/rules/` deployed by `tapps_init` / `tapps_upgrade`: root-cause fixes, query tapps-mcp when uncertain, free `tapps_lookup_docs` (Context7-backed cache), subagent delegation for context discipline, clean-code defaults, no over-engineering, and Linear writes via the `linear-issue` skill (multi-issue reads via `linear-read`). Each engagement level gets a tone-adjusted variant — MUST/NEVER (high), should (medium), one-liner bullets (low). Shipped in [`platform_claude_*.md`](packages/tapps-mcp/src/tapps_mcp/prompts/), [`platform_cursor_*.md`](packages/tapps-mcp/src/tapps_mcp/prompts/), and [`agents_template_*.md`](packages/tapps-mcp/src/tapps_mcp/prompts/).
+- **`feat(agents_md): Tapps Rules in EXPECTED_SECTIONS`.** [`agents_md.py:19`](packages/tapps-mcp/src/tapps_mcp/pipeline/agents_md.py) — added `Tapps Rules` to the validator's expected-section list so existing consumer AGENTS.md files trigger a smart-merge refresh instead of validating as up-to-date and skipping the new section.
+- **`docs(README): expanded LLM engagement level section`.** [`README.md`](README.md) — explicit per-level voice (MUST/should/one-liners), what each level swaps under the hood (`agents_template_<level>.md`, `platform_<host>_<level>.md`), and a callout listing the seven shared Tapps Rules.
+
+### Fixed
+
+- **`fix(hooks): tapps-post-edit.sh bash/Python quoting collision`.** [`platform_hook_templates.py:36`](packages/tapps-mcp/src/tapps_mcp/pipeline/platform_hook_templates.py) — replaced inline `python -c "..."` (which collided with embedded Python `r"""..."""` triple-quotes and produced `syntax error near unexpected token '('` on every Edit/Write) with a heredoc form that passes the JSON via `TAPPS_HOOK_INPUT` env var to avoid the heredoc-vs-pipe stdin conflict. Deployed copy at `.claude/hooks/tapps-post-edit.sh` regenerated.
+
 ## [3.9.0] - 2026-05-03
 
 ### Added
