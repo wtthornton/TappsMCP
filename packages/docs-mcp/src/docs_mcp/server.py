@@ -118,6 +118,7 @@ ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset(
         "docs_linear_triage",
         "docs_generate_release_update",
         "docs_validate_release_update",
+        "docs_release_gate",
     }
 )
 

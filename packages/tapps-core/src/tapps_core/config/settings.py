@@ -917,6 +917,19 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # TAP-1333: auto-promote cache-gate from warn to block when 7-day
+    # gate-skip rate is below 5%. Idempotent; reversible via .tapps-mcp.yaml
+    # by setting linear_enforce_cache_gate explicitly.
+    linear_enforce_cache_gate_auto_promote: bool = Field(
+        default=True,
+        description=(
+            "TAP-1333: when true (default), tapps_upgrade promotes "
+            "linear_enforce_cache_gate from 'warn' to 'block' once a project's "
+            "rolling 7-day gate-skip rate falls below 5% (telemetry from "
+            ".tapps-mcp/loop-metrics.jsonl). Set false to disable auto-promotion."
+        ),
+    )
+
     # Release update config (TAP-1112, TAP-1114)
     linear_team: str = Field(
         default="",

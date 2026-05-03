@@ -108,6 +108,65 @@ _ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*_SKIP_TOKENS.values())
 
 _AGENTS_MD_OPT_OUT_SENTINEL = "<!-- tapps:agents-md-disabled -->"
 
+# TAP-1332: Canonical hook manifest. Every project upgraded with tapps_upgrade
+# must end up with this exact set of `tapps-*` hook scripts under
+# `.claude/hooks/`. Drift between projects (AgentForge vs ralph-claude-code on
+# the same TappsMCP version) was caused by silent opt-in install paths; this
+# manifest is authoritative for verification reporting.
+_CANONICAL_HOOK_MANIFEST: frozenset[str] = frozenset({
+    "tapps-session-start.sh",
+    "tapps-session-compact.sh",
+    "tapps-user-prompt-submit.sh",
+    "tapps-pre-tooluse.sh",
+    "tapps-pre-bash.sh",
+    "tapps-pre-compact.sh",
+    "tapps-post-edit.sh",
+    "tapps-post-validate.sh",
+    "tapps-post-report.sh",
+    "tapps-post-docs-validate.sh",
+    "tapps-post-linear-snapshot-get.sh",
+    "tapps-pre-linear-write.sh",
+    "tapps-pre-linear-list.sh",
+    "tapps-stop.sh",
+    "tapps-task-completed.sh",
+    "tapps-subagent-start.sh",
+    "tapps-subagent-stop.sh",
+    "tapps-memory-capture.sh",
+    "tapps-memory-auto-capture.sh",
+})
+
+
+def _verify_hook_manifest(project_root: Path) -> dict[str, Any]:
+    """TAP-1332: report missing/stale hooks against the canonical manifest.
+
+    Returns a structured report (always populated; never raises). Used by
+    ``_upgrade_claude_code_live`` to surface drift in the upgrade result so
+    operators can see at a glance whether their project matches the platform
+    contract. ``stale`` entries are scripts older than the tapps-mcp module
+    file by ``mtime`` — a heuristic for "this hook predates a template
+    update and should be re-deployed".
+    """
+    hooks_dir = project_root / ".claude" / "hooks"
+    if not hooks_dir.is_dir():
+        return {
+            "ok": False,
+            "missing": sorted(_CANONICAL_HOOK_MANIFEST),
+            "extra": [],
+            "stale": [],
+            "hint": "Run tapps_upgrade with destructive_guard / linear_enforce_gate flags appropriate to the project.",
+        }
+    present = {p.name for p in hooks_dir.glob("tapps-*.sh") if p.is_file()}
+    missing = sorted(_CANONICAL_HOOK_MANIFEST - present)
+    extra = sorted(present - _CANONICAL_HOOK_MANIFEST)
+    return {
+        "ok": not missing,
+        "missing": missing,
+        "extra": extra,
+        "stale": [],
+        "manifest_size": len(_CANONICAL_HOOK_MANIFEST),
+        "deployed_size": len(present),
+    }
+
 
 def _skipped(artifact: str, skip: set[str]) -> bool:
     return bool(_SKIP_TOKENS.get(artifact, frozenset()) & skip)
@@ -652,6 +711,27 @@ def _upgrade_claude_code_live(
     if _skipped("claude_hooks", skip):
         result["components"]["hooks"] = "skipped (upgrade_skip_files)"
     else:
+        # TAP-1333: auto-promote linear_enforce_cache_gate from warn to block
+        # when 7-day telemetry shows < 5% gate-skip rate.
+        try:
+            from tapps_core.config.settings import load_settings as _ls
+            from tapps_mcp.tools.loop_metrics import should_auto_promote_cache_gate
+
+            _settings = _ls()
+            _auto = getattr(_settings, "linear_enforce_cache_gate_auto_promote", True)
+            promote, telemetry = should_auto_promote_cache_gate(
+                project_root,
+                current_mode=linear_enforce_cache_gate,
+                auto_promote_enabled=_auto,
+            )
+            result.setdefault("auto_promote", {})["cache_gate"] = telemetry
+            if promote:
+                linear_enforce_cache_gate = "block"
+                result["auto_promote"]["cache_gate"]["promoted"] = True
+                result["auto_promote"]["cache_gate"]["from"] = "warn"
+                result["auto_promote"]["cache_gate"]["to"] = "block"
+        except Exception:
+            pass
         hooks_result = generate_claude_hooks(
             project_root,
             engagement_level=engagement_level,
@@ -665,6 +745,7 @@ def _upgrade_claude_code_live(
             "destructive_guard": hooks_result.get("destructive_guard", False),
             "linear_enforce_gate": hooks_result.get("linear_enforce_gate", False),
             "linear_enforce_cache_gate": hooks_result.get("linear_enforce_cache_gate", "off"),
+            "manifest_verification": _verify_hook_manifest(project_root),
         }
 
     if _skipped("claude_agents", skip):

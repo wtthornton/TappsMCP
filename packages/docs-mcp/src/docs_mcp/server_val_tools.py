@@ -984,6 +984,104 @@ async def docs_validate_release_update(
 
 
 # ---------------------------------------------------------------------------
+# TAP-1335: docs_release_gate — aggregate pre-release verdict
+# ---------------------------------------------------------------------------
+
+
+async def docs_release_gate(
+    prev_version: str = "",
+    version: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Aggregate pre-release docs gate (TAP-1335).
+
+    Runs ``docs_check_drift``, ``docs_check_freshness``, and
+    ``docs_check_links`` against the diff from ``prev_version`` to ``version``
+    (or ``HEAD`` when ``version`` is empty) and returns a single verdict.
+
+    Args:
+        prev_version: Previous git tag or ref to diff against. Required.
+        version: Target version tag (used for the report header). Empty =
+            HEAD.
+        project_root: Override project root.
+
+    Returns:
+        Envelope with::
+
+            {
+              agent_ready: bool,
+              drift: {drift_score, items_count},
+              freshness: {stale_count, ancient_count},
+              broken_links: {broken_count, total_links},
+              recommendations: [str, ...],
+            }
+
+        ``agent_ready`` is True iff drift_score < 30, no ancient docs, and
+        broken_links count is zero.
+    """
+    start = time.perf_counter_ns()
+    _record_call("docs_release_gate")
+
+    try:
+        drift = await docs_check_drift(since=prev_version, project_root=project_root)
+        freshness = await docs_check_freshness(project_root=project_root)
+        links = await docs_check_links(project_root=project_root)
+    except Exception as exc:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        return error_response(
+            "docs_release_gate",
+            elapsed_ms,
+            f"docs_release_gate aggregation failed: {exc}",
+            code="release_gate_failure",
+        )
+
+    def _data(resp: dict[str, Any]) -> dict[str, Any]:
+        d = resp.get("data") if isinstance(resp, dict) else None
+        return d if isinstance(d, dict) else {}
+
+    drift_data = _data(drift)
+    fresh_data = _data(freshness)
+    links_data = _data(links)
+
+    drift_score = int(drift_data.get("drift_score", 0))
+    items_count = int(drift_data.get("items_count") or len(drift_data.get("items", []) or []))
+    stale_count = int(fresh_data.get("stale_count", 0))
+    ancient_count = int(fresh_data.get("ancient_count", 0))
+    broken_count = int(links_data.get("broken_count", 0))
+    total_links = int(links_data.get("total_links", 0))
+
+    recommendations: list[str] = []
+    if drift_score >= 30:
+        recommendations.append(
+            f"Drift score {drift_score} >= 30 — run docs_generate_api / update prose to close the gap."
+        )
+    if ancient_count > 0:
+        recommendations.append(
+            f"{ancient_count} ancient docs — refresh or archive before release."
+        )
+    if broken_count > 0:
+        recommendations.append(
+            f"{broken_count} broken links — fix or remove. Run docs_check_links for details."
+        )
+
+    agent_ready = drift_score < 30 and ancient_count == 0 and broken_count == 0
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    return success_response(
+        "docs_release_gate",
+        elapsed_ms,
+        {
+            "agent_ready": agent_ready,
+            "prev_version": prev_version,
+            "version": version,
+            "drift": {"drift_score": drift_score, "items_count": items_count},
+            "freshness": {"stale_count": stale_count, "ancient_count": ancient_count},
+            "broken_links": {"broken_count": broken_count, "total_links": total_links},
+            "recommendations": recommendations,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registration (Epic 79.2: conditional)
 # ---------------------------------------------------------------------------
 
@@ -1008,3 +1106,5 @@ def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:  #
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_style)
     if "docs_validate_release_update" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_validate_release_update)
+    if "docs_release_gate" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_release_gate)

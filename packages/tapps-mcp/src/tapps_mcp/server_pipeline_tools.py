@@ -24,8 +24,8 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import time
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -54,10 +54,10 @@ from tapps_mcp.tools.decompose_helpers import (
     tapps_decompose,
 )
 from tapps_mcp.tools.session_start_helpers import (
+    _DOCS_COVERED,
     _build_search_first,
     _collect_brain_bridge_health,
     _collect_memory_status,
-    _DOCS_COVERED,
     _enrich_memory_profile_status,
     _enrich_memory_status_hints,
     _maybe_auto_gc,
@@ -69,34 +69,84 @@ from tapps_mcp.tools.session_start_helpers import (
 )
 from tapps_mcp.tools.validate_changed import (
     _AUTO_DETECT_BUDGET_S as _AUTO_DETECT_BUDGET_S,
-    _cache_hit_as_file_result as _cache_hit_as_file_result,
-    _collect_results as _collect_results,
-    _discover_changed_files as _discover_changed_files,
-    _emit_file_info as _emit_file_info,
-    _maybe_run_wizard as _maybe_run_wizard,
-    _maybe_warm_dependency_cache as _maybe_warm_dependency_cache,
-    _partition_by_cache as _partition_by_cache,
+)
+from tapps_mcp.tools.validate_changed import (
     _PROGRESS_HEARTBEAT_INTERVAL as _PROGRESS_HEARTBEAT_INTERVAL,
-    _ProgressTracker as _ProgressTracker,
-    _report_initial_progress as _report_initial_progress,
-    _start_progress_reporting as _start_progress_reporting,
+)
+from tapps_mcp.tools.validate_changed import (
     _VALIDATE_CONCURRENCY as _VALIDATE_CONCURRENCY,
+)
+from tapps_mcp.tools.validate_changed import (
     _VALIDATE_OK_MARKER as _VALIDATE_OK_MARKER,
+)
+from tapps_mcp.tools.validate_changed import (
     _VALIDATION_PROGRESS_FILE as _VALIDATION_PROGRESS_FILE,
+)
+from tapps_mcp.tools.validate_changed import (
+    _cache_hit_as_file_result as _cache_hit_as_file_result,
+)
+from tapps_mcp.tools.validate_changed import (
+    _collect_results as _collect_results,
+)
+from tapps_mcp.tools.validate_changed import (
+    _discover_changed_files as _discover_changed_files,
+)
+from tapps_mcp.tools.validate_changed import (
+    _emit_file_info as _emit_file_info,
+)
+from tapps_mcp.tools.validate_changed import (
+    _maybe_run_wizard as _maybe_run_wizard,
+)
+from tapps_mcp.tools.validate_changed import (
+    _maybe_warm_dependency_cache as _maybe_warm_dependency_cache,
+)
+from tapps_mcp.tools.validate_changed import (
+    _partition_by_cache as _partition_by_cache,
+)
+from tapps_mcp.tools.validate_changed import (
+    _ProgressTracker as _ProgressTracker,
+)
+from tapps_mcp.tools.validate_changed import (
+    _report_initial_progress as _report_initial_progress,
+)
+from tapps_mcp.tools.validate_changed import (
+    _start_progress_reporting as _start_progress_reporting,
+)
+from tapps_mcp.tools.validate_changed import (
     _validate_progress_heartbeat as _validate_progress_heartbeat,
+)
+from tapps_mcp.tools.validate_changed import (
     _validate_single_file as _validate_single_file,
+)
+from tapps_mcp.tools.validate_changed import (
     _warm_dependency_cache as _warm_dependency_cache,
+)
+from tapps_mcp.tools.validate_changed import (
     _write_validate_ok_marker as _write_validate_ok_marker,
+)
+from tapps_mcp.tools.validate_changed import (
     tapps_validate_changed as tapps_validate_changed,
 )
 from tapps_mcp.tools.validate_changed_output import (
-    _build_per_file_results as _build_per_file_results,
-    _build_structured_validation_output as _build_structured_validation_output,
-    _build_validation_summary as _build_validation_summary,
-    _compute_impact_analysis as _compute_impact_analysis,
-    _handle_no_changed_files as _handle_no_changed_files,
-    _resolve_security_depth as _resolve_security_depth,
     _SEVERITY_RANK as _SEVERITY_RANK,
+)
+from tapps_mcp.tools.validate_changed_output import (
+    _build_per_file_results as _build_per_file_results,
+)
+from tapps_mcp.tools.validate_changed_output import (
+    _build_structured_validation_output as _build_structured_validation_output,
+)
+from tapps_mcp.tools.validate_changed_output import (
+    _build_validation_summary as _build_validation_summary,
+)
+from tapps_mcp.tools.validate_changed_output import (
+    _compute_impact_analysis as _compute_impact_analysis,
+)
+from tapps_mcp.tools.validate_changed_output import (
+    _handle_no_changed_files as _handle_no_changed_files,
+)
+from tapps_mcp.tools.validate_changed_output import (
+    _resolve_security_depth as _resolve_security_depth,
 )
 
 if TYPE_CHECKING:
@@ -415,6 +465,16 @@ async def tapps_session_start(
     search_first = _build_search_first(settings.project_root)
     if search_first is not None:
         data["search_first"] = search_first
+        # TAP-1331: schedule background lookup_docs cache warm so the next
+        # session's first call is a hit, not a 1-3s Context7 round-trip.
+        try:
+            from tapps_mcp.tools.session_start_helpers import _schedule_lookup_docs_warm
+
+            data["cache_warm"] = _schedule_lookup_docs_warm(
+                settings.project_root, search_first.get("covered", [])
+            )
+        except Exception:
+            data["cache_warm"] = {"scheduled": False, "skipped": "exception"}
 
     # TAP-1082: Hard-fail on tapps-brain auth probe 401/403 unless explicitly
     # tolerated. Audit (38 sessions, worst case 18 retries) shows agents do
@@ -849,6 +909,14 @@ def tapps_doctor(
     root = project_root or str(settings.project_root)
 
     result = run_doctor_structured(project_root=root, quick=quick)
+
+    # TAP-1333: surface 7-day MCP-call ratio + gate-skip rate.
+    try:
+        from tapps_mcp.tools.loop_metrics import compute_rolling_stats
+
+        result["loop_metrics_7d"] = compute_rolling_stats(Path(root))
+    except Exception:
+        result["loop_metrics_7d"] = {"loops": 0, "error": "loop_metrics_unavailable"}
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_doctor", start)

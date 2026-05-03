@@ -35,36 +35,188 @@ exit 0
 """,
     "tapps-post-edit.sh": """\
 #!/usr/bin/env bash
-# TappsMCP PostToolUse hook (Edit/Write)
-# Reminds the agent to run quality checks after file edits.
+# TappsMCP PostToolUse hook (Edit/Write) — TAP-1326 / TAP-1330
+# Records edited gate-tracked files to .ralph/.edits_this_loop and detects
+# new external imports requiring tapps_lookup_docs. Advisory only here; the
+# Stop hook enforces the gate.
 INPUT=$(cat)
-PY="import sys,json
-d=json.load(sys.stdin)
-ti=d.get('tool_input',{})
-f=ti.get('file_path',ti.get('path',''))
-if f.endswith('.py'): print(f)"
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-FILE=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
-if [ -n "$FILE" ]; then
-  echo "Python file edited: $FILE"
-  echo "Consider running tapps_quick_check on it."
-fi
+PARSED=$(echo "$INPUT" | "$PYBIN" -c \
+  "import sys,json,re
+try:
+    d=json.load(sys.stdin)
+    ti=d.get('tool_input') or d.get('toolInput') or {}
+    f=ti.get('file_path') or ti.get('path') or ''
+    content=ti.get('content') or ti.get('new_string') or ''
+    print(f)
+    # extract new external imports for hint-only output
+    libs=set()
+    if f.endswith(('.py','.pyi')):
+        for m in re.finditer(r'^\\s*(?:from|import)\\s+([A-Za-z_][A-Za-z0-9_]*)', content, re.M):
+            libs.add(m.group(1))
+    elif f.endswith(('.ts','.tsx','.js','.jsx','.mjs','.cjs')):
+        for m in re.finditer(r\"\"\"^\\s*import[^'\\\"]*['\\\"]([^'\\\"./][^'\\\"]*)['\\\"]\"\"\", content, re.M):
+            libs.add(m.group(1).split('/')[0])
+    print(','.join(sorted(libs)))
+except Exception:
+    print('')
+    print('')" 2>/dev/null)
+FILE=$(echo "$PARSED" | sed -n '1p')
+LIBS=$(echo "$PARSED" | sed -n '2p')
+case "$FILE" in
+  *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
+    ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+    mkdir -p "$ROOT/.ralph" 2>/dev/null
+    LOOP_FILE="$ROOT/.ralph/.edits_this_loop"
+    touch "$LOOP_FILE"
+    if ! grep -Fxq "$FILE" "$LOOP_FILE" 2>/dev/null; then
+      echo "$FILE" >> "$LOOP_FILE"
+    fi
+    echo "Edited: $FILE — run tapps_quick_check before EXIT_SIGNAL." >&2
+    if [ -n "$LIBS" ]; then
+      echo "New imports detected ($LIBS) — call tapps_lookup_docs(library=...) before declaring complete (TAP-1330)." >&2
+    fi
+    ;;
+esac
 exit 0
 """,
     "tapps-stop.sh": """\
 #!/usr/bin/env bash
-# TappsMCP Stop hook
-# Reminds to run tapps_validate_changed but does NOT block.
-# Reads sidecar progress file for richer context when available.
+# TappsMCP Stop hook — TAP-1326 / TAP-1327
+# Enforces tapps_quick_check / validate_changed / quality_gate after file
+# edits and tapps_checklist before EXIT_SIGNAL. Overrides Ralph status.json
+# EXIT_SIGNAL=true → false on miss; logs to .ralph/logs/on-stop.log.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 INPUT=$(cat)
-PY="import sys,json; d=json.load(sys.stdin); print(d.get('stop_hook_active','false'))"
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-ACTIVE=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
+PARSED=$(echo "$INPUT" | "$PYBIN" -c \
+  "import sys,json
+try:
+    d=json.load(sys.stdin)
+    print(d.get('stop_hook_active','false'))
+    print(d.get('transcript_path',''))
+except Exception:
+    print('false'); print('')" 2>/dev/null)
+ACTIVE=$(echo "$PARSED" | sed -n '1p')
+TRANSCRIPT=$(echo "$PARSED" | sed -n '2p')
 if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
   exit 0
 fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+STATUS_JSON="$PROJECT_DIR/.ralph/status.json"
+EDITS_FILE="$PROJECT_DIR/.ralph/.edits_this_loop"
+LOG_DIR="$PROJECT_DIR/.ralph/logs"
+PROMPT_FILE="$PROJECT_DIR/.ralph/PROMPT.md"
+# EXIT_SIGNAL gate (Ralph projects only — no-op if status.json absent).
+if [ -f "$STATUS_JSON" ]; then
+  EXIT_SIGNAL=$("$PYBIN" -c "
+import json
+try:
+    d=json.load(open('$STATUS_JSON'))
+    print('true' if d.get('EXIT_SIGNAL') is True or str(d.get('EXIT_SIGNAL','')).lower()=='true' else 'false')
+except Exception:
+    print('false')" 2>/dev/null)
+  if [ "$EXIT_SIGNAL" = "true" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+    GATE_REPORT=$("$PYBIN" - <<PYEOF 2>/dev/null
+import json,os,time
+transcript='$TRANSCRIPT'
+edits_file='$EDITS_FILE'
+project_dir='$PROJECT_DIR'
+gate_tools={'tapps_quick_check','tapps_validate_changed','tapps_quality_gate',
+            'mcp__tapps-mcp__tapps_quick_check','mcp__tapps-mcp__tapps_validate_changed',
+            'mcp__tapps-mcp__tapps_quality_gate','mcp__tapps-quality__tapps_quick_check',
+            'mcp__tapps-quality__tapps_validate_changed','mcp__tapps-quality__tapps_quality_gate'}
+checklist_tools={'tapps_checklist','mcp__tapps-mcp__tapps_checklist','mcp__tapps-quality__tapps_checklist'}
+lookup_tools={'tapps_lookup_docs','mcp__tapps-mcp__tapps_lookup_docs','mcp__tapps-quality__tapps_lookup_docs'}
+mcp_calls=0
+gate_called=False
+checklist_called=False
+lookup_called=False
+tools_used=set()
+try:
+    with open(transcript) as fh:
+        for line in fh:
+            try: row=json.loads(line)
+            except Exception: continue
+            msg=row.get('message') or {}
+            for blk in (msg.get('content') or []):
+                if not isinstance(blk,dict): continue
+                if blk.get('type')!='tool_use': continue
+                name=blk.get('name','')
+                tools_used.add(name)
+                if name.startswith('mcp__'): mcp_calls+=1
+                if name in gate_tools: gate_called=True
+                if name in checklist_tools: checklist_called=True
+                if name in lookup_tools: lookup_called=True
+except Exception:
+    pass
+edits=[]
+if os.path.exists(edits_file):
+    with open(edits_file) as fh:
+        edits=[ln.strip() for ln in fh if ln.strip()]
+needs_gate=any(p.endswith(('.py','.pyi','.ts','.tsx','.js','.jsx','.go','.rs')) for p in edits)
+miss=[]
+gate_skipped=[]
+if needs_gate and not gate_called:
+    miss.append('QUALITY_GATE_SKIP:'+','.join(edits[:8]))
+    gate_skipped=edits
+if not checklist_called:
+    miss.append('CHECKLIST_MISSING')
+# TAP-1333: append per-loop telemetry (rotates at 10 MB).
+try:
+    metrics_dir=os.path.join(project_dir,'.tapps-mcp')
+    os.makedirs(metrics_dir,exist_ok=True)
+    metrics_path=os.path.join(metrics_dir,'loop-metrics.jsonl')
+    if os.path.exists(metrics_path) and os.path.getsize(metrics_path) > 10*1024*1024:
+        os.replace(metrics_path, metrics_path + '.1')
+    with open(metrics_path,'a') as fh:
+        fh.write(json.dumps({
+            'ts': int(time.time()),
+            'files_edited': edits,
+            'mcp_calls': mcp_calls,
+            'gate_skipped_files': gate_skipped,
+            'lookup_docs_called': lookup_called,
+            'checklist_called': checklist_called,
+            'tools_used': sorted(tools_used)[:50],
+        }) + '\\n')
+except Exception:
+    pass
+print('|'.join(miss))
+PYEOF
+)
+    if [ -n "$GATE_REPORT" ]; then
+      mkdir -p "$LOG_DIR" 2>/dev/null
+      TS=$(date -u +%FT%TZ)
+      echo "{\\"ts\\":\\"$TS\\",\\"override\\":\\"EXIT_SIGNAL\\",\\"reasons\\":\\"$GATE_REPORT\\"}" \\
+        >> "$LOG_DIR/on-stop.log" 2>/dev/null
+      "$PYBIN" - <<PYEOF 2>/dev/null
+import json
+try:
+    p='$STATUS_JSON'
+    d=json.load(open(p))
+    d['EXIT_SIGNAL']=False
+    d['exit_signal_override']='$GATE_REPORT'
+    json.dump(d,open(p,'w'),indent=2)
+except Exception:
+    pass
+PYEOF
+      if [ -f "$PROMPT_FILE" ]; then
+        {
+          echo ""
+          echo "<!-- TappsMCP override $TS: EXIT_SIGNAL forced false. Run missing gates next loop: $GATE_REPORT -->"
+        } >> "$PROMPT_FILE" 2>/dev/null
+      fi
+      cat >&2 <<MSG
+TappsMCP: EXIT_SIGNAL=true overridden to false — required gates skipped:
+  $GATE_REPORT
+Run tapps_quick_check / tapps_validate_changed and tapps_checklist before retrying.
+See .claude/rules/tapps-pipeline.md.
+MSG
+    fi
+  fi
+  # Reset edits_this_loop after Stop processes it.
+  : > "$EDITS_FILE" 2>/dev/null
+fi
 PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
 if [ -f "$PROGRESS" ]; then
   SUMMARY=$("$PYBIN" -c "
@@ -1539,26 +1691,43 @@ DESTRUCTIVE_GUARD_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
 
 LINEAR_GATE_POST_VALIDATE_SCRIPT = """\
 #!/usr/bin/env bash
-# TappsMCP PostToolUse hook — Linear gate sentinel writer (TAP-981)
-# Writes .tapps-mcp/.linear-validate-sentinel with current epoch seconds
-# whenever an agent calls mcp__docs-mcp__docs_validate_linear_issue. Paired
-# with tapps-pre-linear-write.sh which reads the sentinel to decide whether
-# to allow a downstream save_issue.
+# TappsMCP PostToolUse hook — Linear gate sentinel writer (TAP-981 / TAP-1328)
+# Writes .tapps-mcp/.linear-validate-sentinel ONLY when the validate call
+# returned agent_ready=true. Failed validations no longer unlock save_issue.
 INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-TOOL=$(echo "$INPUT" | "$PYBIN" -c \
+PARSED=$(echo "$INPUT" | "$PYBIN" -c \
   "import sys,json
 try:
-    d=json.load(sys.stdin); print(d.get('tool_name') or d.get('toolName') or '')
+    d=json.load(sys.stdin)
+    tool=d.get('tool_name') or d.get('toolName') or ''
+    resp=d.get('tool_response') or d.get('toolResponse') or {}
+    if isinstance(resp,str):
+        try: resp=json.loads(resp)
+        except Exception: resp={}
+    data=resp.get('data') if isinstance(resp,dict) else None
+    ready=False
+    if isinstance(data,dict) and data.get('agent_ready') is True:
+        ready=True
+    elif isinstance(resp,dict) and resp.get('agent_ready') is True:
+        ready=True
+    print(tool)
+    print('1' if ready else '0')
 except Exception:
-    print('')" 2>/dev/null)
+    print('')
+    print('0')" 2>/dev/null)
+TOOL=$(echo "$PARSED" | sed -n '1p')
+READY=$(echo "$PARSED" | sed -n '2p')
 case "$TOOL" in
-  mcp__docs-mcp__docs_validate_linear_issue|docs_validate_linear_issue)
-    ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
-    mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
-    date +%s > "$ROOT/.tapps-mcp/.linear-validate-sentinel" 2>/dev/null
-    ;;
+  mcp__docs-mcp__docs_validate_linear_issue|docs_validate_linear_issue) ;;
+  *) exit 0 ;;
 esac
+if [ "$READY" != "1" ]; then
+  exit 0
+fi
+ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+date +%s > "$ROOT/.tapps-mcp/.linear-validate-sentinel" 2>/dev/null
 exit 0
 """
 

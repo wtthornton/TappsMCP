@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
+import time
 import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -663,3 +664,77 @@ def _build_search_first(project_root: Path) -> dict[str, Any] | None:
     if unknown:
         result["unknown_deps"] = sorted(unknown)
     return result
+
+
+# ---------------------------------------------------------------------------
+# TAP-1331: background lookup_docs cache warm on session_start
+# ---------------------------------------------------------------------------
+
+_CACHE_WARM_FLAG_NAME = ".cache-warm-marker"
+_BACKGROUND_TASKS: set[asyncio.Task[Any]] = set()
+
+
+def _schedule_lookup_docs_warm(
+    project_root: Path,
+    covered: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Fire-and-forget warm of the lookup_docs cache for top covered libraries.
+
+    Runs once per (CACHE_WARM_TTL) day on session_start. Skips when no
+    Context7 API key is configured. Returns a structured status dict so the
+    session_start response can surface what happened without blocking.
+    """
+    if not covered:
+        return {"scheduled": False, "skipped": "no_covered_libraries"}
+
+    flag = project_root / ".tapps-mcp-cache" / _CACHE_WARM_FLAG_NAME
+    try:
+        if flag.exists():
+            age = time.time() - flag.stat().st_mtime
+            if age < 86_400:  # one day
+                return {
+                    "scheduled": False,
+                    "skipped": "warmed_within_24h",
+                    "age_seconds": int(age),
+                }
+    except Exception:
+        _logger.debug("cache_warm_flag_stat_failed", exc_info=True)
+
+    libraries = [c["library"] for c in covered][:10]
+
+    async def _runner() -> None:
+        try:
+            from tapps_core.config.settings import load_settings as _ls
+            from tapps_core.knowledge.cache import KBCache
+            from tapps_core.knowledge.warming import warm_cache
+
+            s = _ls()
+            api_key = getattr(s, "context7_api_key", None)
+            if not api_key or not api_key.get_secret_value():
+                return
+            cache = KBCache(project_root / ".tapps-mcp-cache")
+            await warm_cache(
+                project_root,
+                cache,
+                api_key=api_key,
+                libraries=libraries,
+                max_libraries=len(libraries),
+            )
+            try:
+                flag.parent.mkdir(parents=True, exist_ok=True)
+                flag.write_text(str(int(time.time())))
+            except Exception:
+                _logger.debug("cache_warm_flag_write_failed", exc_info=True)
+        except Exception:
+            _logger.debug("cache_warm_runner_failed", exc_info=True)
+
+    try:
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(_runner())
+        # Keep a reference so the task isn't GC'd before completion (RUF006).
+        # Background fire-and-forget; we don't await.
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
+        return {"scheduled": True, "libraries": libraries, "count": len(libraries)}
+    except RuntimeError:
+        return {"scheduled": False, "skipped": "no_running_loop"}
