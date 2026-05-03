@@ -884,6 +884,31 @@ class TestEnvInConfig:
         assert entry["args"] == ["serve"]
         assert "env" in entry
 
+    def test_claude_code_includes_brain_env_block(self, tmp_path):
+        """TAP-1336: tapps_init/upgrade emits the brain memory env block by default.
+
+        Without these keys a fresh consumer install hits brain with no auth /
+        identity and tapps_session_start hard-fails on the first call.
+        """
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            (tmp_path / "myproject").mkdir()
+            _generate_config("claude-code", tmp_path / "myproject", scope="user")
+        data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
+        env = data["mcpServers"]["tapps-mcp"]["env"]
+        assert env["TAPPS_MCP_MEMORY_BRAIN_HTTP_URL"] == "http://localhost:8080"
+        # Token uses ${...} substitution so the file is safe to commit.
+        assert env["TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN"] == "${TAPPS_BRAIN_AUTH_TOKEN}"
+        assert env["TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID"] == "myproject"
+
+    def test_brain_env_token_is_substitution_not_literal(self, tmp_path):
+        """The auth token must never be written as a literal value (commit safety)."""
+        project = tmp_path / "demo"
+        project.mkdir()
+        _generate_config("cursor", project)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        token = data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN"]
+        assert token.startswith("${") and token.endswith("}")
+
     def test_merge_preserves_other_servers_with_env(self, tmp_path):
         """Merging preserves existing servers while adding env to tapps-mcp."""
         project = tmp_path / "project"

@@ -232,15 +232,44 @@ def _detect_command_path() -> str:
     return cmd
 
 
+def _derive_brain_project_id(project_root: Path | None) -> str:
+    """TAP-1336: Derive a default ``X-Project-Id`` slug from the project dir name.
+
+    Lowercased, with whitespace collapsed to dashes. Falls back to ``""`` when
+    the path is unusable, in which case tapps-mcp emits a hard error at
+    runtime telling the agent to set ``TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID``
+    explicitly. We deliberately do not silently invent a slug.
+    """
+    if project_root is None:
+        return ""
+    try:
+        name = Path(project_root).resolve().name
+    except (OSError, RuntimeError):
+        return ""
+    if not name:
+        return ""
+    return "-".join(name.lower().split())
+
+
 def _build_server_entry(
     host: str,
     *,
     uv_launch: tuple[str, list[str]] | None = None,
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
     """Build the tapps-mcp server config entry for the given host.
 
     Claude Code gets an extra ``instructions`` field for Tool Search discovery.
-    All platforms get the ``env`` block with ``TAPPS_MCP_PROJECT_ROOT``.
+    All platforms get the ``env`` block with ``TAPPS_MCP_PROJECT_ROOT`` and
+    the tapps-brain memory connection (TAP-1336): ``HTTP_URL``, ``AUTH_TOKEN``
+    via ``${TAPPS_BRAIN_AUTH_TOKEN}`` substitution, and ``PROJECT_ID`` derived
+    from the project directory name. Without this, brand-new ``tapps_init``
+    installs hit the brain server with no auth/identity and
+    ``tapps_session_start`` hard-fails with ``brain_auth_token_missing``.
+
+    The auth token uses env-var substitution rather than a literal value so
+    consuming projects can safely commit ``.mcp.json``. The merge logic in
+    :func:`_merge_config` preserves any user-customized values on upgrade.
 
     Claude Code uses ``"."`` because it launches the MCP server with CWD set to
     the project root and does **not** resolve VS Code variables like
@@ -256,11 +285,19 @@ def _build_server_entry(
         command, args = _resolve_tapps_mcp_launch()
     # Claude Code CWD == project root; VS Code/Cursor resolve ${workspaceFolder}
     project_root_value = "." if host == "claude-code" else "${workspaceFolder}"
+    env: dict[str, str] = {
+        "TAPPS_MCP_PROJECT_ROOT": project_root_value,
+        "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://localhost:8080",
+        "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": "${TAPPS_BRAIN_AUTH_TOKEN}",
+    }
+    project_id = _derive_brain_project_id(project_root)
+    if project_id:
+        env["TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID"] = project_id
     entry: dict[str, Any] = {
         "type": "stdio",
         "command": command,
         "args": args,
-        "env": {"TAPPS_MCP_PROJECT_ROOT": project_root_value},
+        "env": env,
     }
     if host == "claude-code":
         entry["instructions"] = _SERVER_INSTRUCTIONS
@@ -412,6 +449,7 @@ def _merge_config(
     *,
     upgrade_mode: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
     """Merge the tapps-mcp entry into an existing config dict.
 
@@ -437,7 +475,7 @@ def _merge_config(
     if servers_key not in merged:
         merged[servers_key] = {}
 
-    new_entry = _build_server_entry(host, uv_launch=uv_launch)
+    new_entry = _build_server_entry(host, uv_launch=uv_launch, project_root=project_root)
     old_entry = merged[servers_key].get("tapps-mcp")
     if isinstance(old_entry, dict):
         if upgrade_mode and "command" in old_entry:
@@ -661,12 +699,20 @@ def _generate_config(
                         )
                         return True
 
-        merged = _merge_config(existing, host, upgrade_mode=upgrade_mode, uv_launch=uv_launch)
+        merged = _merge_config(
+            existing,
+            host,
+            upgrade_mode=upgrade_mode,
+            uv_launch=uv_launch,
+            project_root=project_root,
+        )
     else:
         servers_key_new = _get_servers_key(host)
         merged = {
             servers_key_new: {
-                "tapps-mcp": _build_server_entry(host, uv_launch=uv_launch),
+                "tapps-mcp": _build_server_entry(
+                    host, uv_launch=uv_launch, project_root=project_root
+                ),
             }
         }
 
