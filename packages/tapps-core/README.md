@@ -24,7 +24,7 @@ from tapps_core.knowledge.lookup import lookup_docs
 
 | Module | Purpose |
 |---|---|
-| `config/` | Pydantic v2 + YAML + env-var settings (`TappsMCPSettings`, `MemorySettings`). |
+| `config/` | Pydantic v2 + YAML + env-var settings (`TappsMCPSettings`, `MemorySettings`). Includes the engagement-aware Linear gate flags `linear_enforce_gate` (TAP-981, write gate) and `linear_enforce_cache_gate` (TAP-1224, cache-first read gate; `off`/`warn`/`block`). |
 | `security/` | Path validation, IO guardrails, secret scanning, governance. |
 | `common/` | Exceptions, structured logging (structlog), shared models, utilities. |
 | `knowledge/` | Context7 / LlmsTxt doc lookup, cache, fuzzy matching, RAG safety. |

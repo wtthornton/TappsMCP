@@ -910,6 +910,21 @@ memory_hooks:
 
 Memory data lives under `{project_root}/.tapps-mcp/memory/`. Add `.tapps-mcp/` to `.gitignore` if you do not want local state in git. Run `tapps-mcp doctor` to see **Memory pipeline (effective config)** for your project.
 
+### Linear enforcement gates
+
+Two opt-in PreToolUse hooks steer Linear traffic through TappsMCP's structured tool flows. Configured in `.tapps-mcp.yaml`; both engage by default at `medium` / `high` engagement.
+
+```yaml
+# Writes — TAP-981. Block raw save_issue without a recent docs_validate_linear_issue.
+linear_enforce_gate: true              # bool; default on at medium/high, off at low
+
+# Reads — TAP-1224. Cache-first read gate for list_issues.
+linear_enforce_cache_gate: warn        # off | warn | block; default warn at medium/high, off at low
+```
+
+- **`linear_enforce_gate`** (TAP-981) — installs `tapps-pre-linear-write.sh` + `tapps-post-docs-validate.sh`. Blocks `mcp__plugin_linear_linear__save_issue` unless `mcp__docs-mcp__docs_validate_linear_issue` was called within the last 30 minutes for the same payload. Steers writes through the `linear-issue` skill. Bypass via `TAPPS_LINEAR_SKIP_VALIDATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`).
+- **`linear_enforce_cache_gate`** (TAP-1224) — installs `tapps-pre-linear-list.sh` + `tapps-post-linear-snapshot-get.sh`. Gates `mcp__plugin_linear_linear__list_issues` behind a recent `mcp__tapps-mcp__tapps_linear_snapshot_get` for the same `(team, project, state, label, limit)` slice (sentinel < 300 s). **`warn`** mode (default) logs each violation to `.tapps-mcp/.cache-gate-violations.jsonl` and allows the call — telemetry-first rollout. **`block`** rejects with exit 2 and emits a remediation message pointing at the `linear-read` skill (TAP-1260) and `mcp__plugin_linear_linear__get_issue` for single-issue lookups. Zero exempt parameters: no `query=` / `parentId=` / `cycle=` carve-out. Per-key isolation: a snapshot for project A does not unlock list_issues for project B. Bypass via `TAPPS_LINEAR_SKIP_CACHE_GATE=1`. `tapps doctor` reports current mode + 24-h violation count.
+
 ### LLM Engagement Level
 
 Control how strongly the AI is prompted to use TappsMCP tools: **high** (mandatory), **medium** (balanced), or **low** (optional). Set in `.tapps-mcp.yaml` or via `TAPPS_MCP_LLM_ENGAGEMENT_LEVEL`:

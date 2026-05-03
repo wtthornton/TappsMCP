@@ -52,6 +52,15 @@ The most-used handlers in a typical agent session — see [AGENTS.md](../../AGEN
 4. `tapps_lookup_docs(library, topic)` — fetch authoritative library docs to prevent hallucinated APIs.
 5. `tapps_checklist(task_type)` — final-step audit that nothing required was skipped.
 
+## Linear enforcement gates
+
+Two opt-in PreToolUse hook pairs steer Linear traffic through structured tool flows (default on at `medium` / `high` engagement):
+
+- `linear_enforce_gate` (TAP-981) — blocks raw `mcp__plugin_linear_linear__save_issue` without a recent `docs_validate_linear_issue`. Bypass: `TAPPS_LINEAR_SKIP_VALIDATE=1`.
+- `linear_enforce_cache_gate` (TAP-1224) — gates `mcp__plugin_linear_linear__list_issues` behind a recent `tapps_linear_snapshot_get` for the same `(team, project, state, label, limit)` slice. Modes: `off`, `warn` (default at `medium` / `high`; logs violations to `.tapps-mcp/.cache-gate-violations.jsonl` and allows), `block` (rejects). Single-issue lookups must use `mcp__plugin_linear_linear__get_issue`. Bypass: `TAPPS_LINEAR_SKIP_CACHE_GATE=1`.
+
+`tapps doctor` reports current mode + 24-hour violation count for both gates.
+
 ## Entry points
 
 - `packages/tapps-mcp/src/tapps_mcp/__main__.py` and `cli.py` — CLI shipped as `tapps-mcp`.

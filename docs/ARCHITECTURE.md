@@ -202,6 +202,15 @@ TappsMCP generates platform-specific hooks at `tapps_init()` that run at key mom
 
 Each hook is a Bash script on macOS/Linux or PowerShell on Windows (auto-detected by `tapps_init`).
 
+### Linear enforcement gates (PreToolUse + PostToolUse pairs)
+
+Two opt-in gate pairs steer Linear traffic through structured tool flows. Both follow the same write-the-sentinel-then-check-the-sentinel pattern:
+
+- **Linear write gate (TAP-981)** — `tapps-post-docs-validate.sh` writes `.tapps-mcp/.linear-validate-sentinel` (Unix epoch) on every `mcp__docs-mcp__docs_validate_linear_issue` call. `tapps-pre-linear-write.sh` reads the sentinel and blocks `mcp__plugin_linear_linear__save_issue` when the sentinel is missing or older than 30 minutes. Update-only `save_issue` calls (with `id` and no `title` / `description`) skip the sentinel check. Bypass: `TAPPS_LINEAR_SKIP_VALIDATE=1`.
+- **Linear cache-first read gate (TAP-1224)** — `tapps-post-linear-snapshot-get.sh` writes a per-`(team, project, state, label, limit)` sentinel at `.tapps-mcp/.linear-snapshot-sentinel-<key>` on **both** `cached=true` and `cached=false` responses from `mcp__tapps-mcp__tapps_linear_snapshot_get`. The sentinel key is computed via the same `_filter_hash` + `_cache_key` derivation as `server_linear_tools._resolve_cache_key`, so the hook key matches the cache key exactly. `tapps-pre-linear-list.sh` derives the same key from `mcp__plugin_linear_linear__list_issues` args (via embedded Python — no `jq` dep) and warns or blocks based on the mode baked in at install time. Mode controlled by `linear_enforce_cache_gate: off | warn | block` in `.tapps-mcp.yaml` (default `warn` at medium / high engagement, `off` at low). Per-key isolation: a snapshot for project A does **not** unlock list_issues for project B. Zero exempt parameters. Bypass: `TAPPS_LINEAR_SKIP_CACHE_GATE=1`. `tapps doctor` reports current mode + 24-h violation count.
+
+Both gates emit bypass entries to `.tapps-mcp/.bypass-log.jsonl` and warn-mode violations (cache gate only) to `.tapps-mcp/.cache-gate-violations.jsonl`.
+
 ## Doctor diagnostics
 
 The `tapps_doctor` tool/CLI command runs configuration and connectivity checks:

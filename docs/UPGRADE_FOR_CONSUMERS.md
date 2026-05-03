@@ -4,6 +4,24 @@ When you **install or upgrade** TappsMCP in a project that uses it for quality c
 
 ---
 
+## 0. Behavioral changes since v3.7.x
+
+Upgrading to v3.8.x **enables a new opt-in PreToolUse hook by default at `medium` / `high` engagement**:
+
+- **Linear cache-first read gate (TAP-1224)** — `tapps_upgrade` deploys two new scripts (`tapps-pre-linear-list.sh`, `tapps-post-linear-snapshot-get.sh`) and switches on `linear_enforce_cache_gate: warn` for `medium` / `high` engagement consumers. **Warn mode is non-blocking** — calls are allowed through but each violation lands in `.tapps-mcp/.cache-gate-violations.jsonl` for telemetry. Block mode (`linear_enforce_cache_gate: block` in `.tapps-mcp.yaml`) is opt-in once you've reviewed the warn-mode log.
+
+To **stay on `off`** through the upgrade, set the flag in `.tapps-mcp.yaml` **before** running `tapps_upgrade`:
+
+```yaml
+linear_enforce_cache_gate: off
+```
+
+Emergency bypass at call time: `TAPPS_LINEAR_SKIP_CACHE_GATE=1 <command>` (logged to `.tapps-mcp/.bypass-log.jsonl`). Same envelope as the existing `TAPPS_LINEAR_SKIP_VALIDATE=1` for the TAP-981 write gate.
+
+The **`linear-standards.md` rule** also gains a new `### Reads (TAP-1224)` enforcement subsection alongside the existing `### Writes (TAP-981)` block. The deployed copy is regenerated on `tapps_upgrade`. If you've hand-edited it, add `linear_standards_rule` to `upgrade_skip_files` in `.tapps-mcp.yaml` to preserve your edits.
+
+---
+
 ## 1. Upgrade the package
 
 ```bash

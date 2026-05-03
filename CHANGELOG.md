@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.1] - 2026-05-02
+
+### Documentation
+
+Documentation-only patch — no code, hook, or behavior changes. Brings user-facing docs and AGENTS template content in line with the v3.8.0 cache-gate work.
+
+- **`docs(README): add Linear enforcement gates section`.** [`README.md`](README.md) Configuration section gains a new "Linear enforcement gates" subsection covering both `linear_enforce_gate` (TAP-981) and `linear_enforce_cache_gate` (TAP-1224) — defaults, mode semantics, bypass envs, and the per-key isolation guarantee.
+- **`docs(upgrade): warn consumers about v3.8.x behavioral changes`.** [`docs/UPGRADE_FOR_CONSUMERS.md`](docs/UPGRADE_FOR_CONSUMERS.md) gains a new "Behavioral changes since v3.7.x" preamble explaining that `tapps_upgrade` now deploys the cache-gate hooks and switches on `linear_enforce_cache_gate: warn` by default at `medium` / `high` engagement. Includes the opt-out incantation (`linear_enforce_cache_gate: off`) and the bypass env (`TAPPS_LINEAR_SKIP_CACHE_GATE=1`).
+- **`docs(architecture): document the cache-gate sentinel mechanic`.** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) "Hook system" section gains a "Linear enforcement gates" subsection describing both gate pairs — sentinel paths, key derivation parity with `server_linear_tools._resolve_cache_key`, no-jq embedded-Python implementation, and the warn-mode telemetry log path.
+- **`docs(packages): mention gates in package READMEs`.** [`packages/tapps-mcp/README.md`](packages/tapps-mcp/README.md) gains a Linear enforcement gates section between "Top 5 MCP tools" and "Entry points". [`packages/tapps-core/README.md`](packages/tapps-core/README.md) `config/` module description now lists both Linear gate flags as part of `TappsMCPSettings`.
+- **`docs(agents): add cache-gate bullet to AGENTS.md templates (low/medium/high)`.** All three engagement-level AGENTS.md templates ([`agents_template_low.md`](packages/tapps-mcp/src/tapps_mcp/prompts/agents_template_low.md), [`agents_template_medium.md`](packages/tapps-mcp/src/tapps_mcp/prompts/agents_template_medium.md), [`agents_template_high.md`](packages/tapps-mcp/src/tapps_mcp/prompts/agents_template_high.md)) gain a `linear_enforce_cache_gate` bullet next to the existing `linear_enforce_gate` one in the Platform automation section. Without this, consumer agents reading their deployed AGENTS.md after `tapps_upgrade` would have no documented awareness of the new gate.
+
+The v3.8.0 release shipped the cache-gate **code** but missed mentions in user-facing docs (this caused the gate to engage by default at `tapps_upgrade` time without any consumer-readable explanation of why or how to opt out).
+
 ## [3.8.0] - 2026-05-02
 
 ### Added
