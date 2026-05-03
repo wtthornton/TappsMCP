@@ -24,15 +24,27 @@ import pytest
 from tapps_mcp.server_pipeline_tools import _detect_brain_auth_failure
 
 
+class _FakeSecret:
+    """Stand-in for pydantic.SecretStr with the same get_secret_value() shape."""
+
+    def __init__(self, value: str) -> None:
+        self._value = value
+
+    def get_secret_value(self) -> str:
+        return self._value
+
+
 class _FakeMemorySettings:
     def __init__(
         self,
         *,
         enabled: bool = True,
         tolerate: bool = False,
+        token: str | None = "real-token-abc123",
     ) -> None:
         self.enabled = enabled
         self.tolerate_brain_auth_failure = tolerate
+        self.brain_auth_token = _FakeSecret(token) if token is not None else None
 
 
 class _FakeSettings:
@@ -169,6 +181,43 @@ class TestDetectBrainAuthFailure:
 
         assert result is None
 
+    def test_unsubstituted_token_yields_distinct_error_code(self) -> None:
+        """TAP-1336: literal ${TAPPS_BRAIN_AUTH_TOKEN} → propagation-failure error."""
+        settings = _FakeSettings(_FakeMemorySettings(token="${TAPPS_BRAIN_AUTH_TOKEN}"))
+        result = _detect_brain_auth_failure(settings, _ms(401, "Unauthorized"), 10)
+
+        assert result is not None
+        assert result["error"]["code"] == "brain_auth_token_unsubstituted"
+        assert result["error"]["token_state"] == "unsubstituted"
+        next_steps = result["error"]["next_steps"]
+        assert any("Export TAPPS_BRAIN_AUTH_TOKEN" in s for s in next_steps)
+        assert any(".mcp.json" in s for s in next_steps)
+
+    def test_missing_token_yields_distinct_error_code(self) -> None:
+        """TAP-1336: empty/None token → missing-token error."""
+        settings = _FakeSettings(_FakeMemorySettings(token=None))
+        result = _detect_brain_auth_failure(settings, _ms(401, "Unauthorized"), 10)
+
+        assert result is not None
+        assert result["error"]["code"] == "brain_auth_token_missing"
+        assert result["error"]["token_state"] == "missing"
+
+    def test_empty_string_token_treated_as_missing(self) -> None:
+        settings = _FakeSettings(_FakeMemorySettings(token="   "))
+        result = _detect_brain_auth_failure(settings, _ms(403, "Forbidden"), 0)
+
+        assert result is not None
+        assert result["error"]["code"] == "brain_auth_token_missing"
+
+    def test_present_token_keeps_legacy_error_code(self) -> None:
+        """Backward-compat: a real-looking token still returns brain_auth_failed."""
+        settings = _FakeSettings(_FakeMemorySettings(token="abc.def.ghi"))
+        result = _detect_brain_auth_failure(settings, _ms(403, "Invalid token"), 0)
+
+        assert result is not None
+        assert result["error"]["code"] == "brain_auth_failed"
+        assert result["error"]["token_state"] == "present"
+
     def test_memory_status_is_preserved_in_error(self) -> None:
         """Agents that need the original memory_status payload can still get it."""
         settings = _FakeSettings(_FakeMemorySettings())
@@ -190,6 +239,10 @@ class TestSessionStartIntegration:
     async def test_session_start_returns_brain_auth_failed_on_403(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # Configure a real-looking token so the failure classifies as
+        # "present token, server rejected" rather than missing/unsubstituted.
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "real-token-abc123")
+
         from tapps_mcp.tools import session_start_core as ssc
 
         async def fake_collect(_settings: Any) -> tuple[Any, dict, dict, dict, dict]:
