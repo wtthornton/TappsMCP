@@ -13,11 +13,15 @@
 #
 # What it does
 # ------------
-# When pushing any ref to master, runs the fast unit suite for tapps-mcp
-# (`pytest -m "not slow"`) on the local checkout and aborts the push on red.
-# Pushes to non-master branches are not gated. The hook only runs unit tests
-# from packages/tapps-mcp/tests/unit/ — the slow integration suite has its own
-# CI job and would push runtime past anyone's patience.
+# When pushing any ref to master, runs the same scope CI runs
+# (`pytest packages/tapps-mcp/tests/ -m "not slow"`) on the local checkout
+# and aborts the push on red. Pushes to non-master branches are not gated.
+# Slow tests are excluded — they have their own CI job and would push
+# runtime past anyone's patience.
+#
+# IMPORTANT: scope must mirror .github/workflows/non-slow-tests.yml exactly,
+# otherwise CI will fail on what the local hook lets through (this happened
+# once already — integration tests caught what unit-only didn't).
 #
 # Bypass
 # ------
@@ -67,7 +71,7 @@ fi
 echo "[pre-push] Running tapps-mcp non-slow unit suite before push to $remote_ref..." >&2
 echo "[pre-push] Bypass with TAPPS_SKIP_PREPUSH=1 git push (logged)." >&2
 
-if ! uv run pytest packages/tapps-mcp/tests/unit/ -m "not slow" -q --tb=no 2>&1 | tail -20; then
+if ! uv run pytest packages/tapps-mcp/tests/ -m "not slow" -q --tb=no --timeout=60 2>&1 | tail -20; then
   echo "" >&2
   echo "[pre-push] FAILED. Push blocked." >&2
   echo "[pre-push] Investigate: uv run pytest packages/tapps-mcp/tests/ -m 'not slow' -v" >&2

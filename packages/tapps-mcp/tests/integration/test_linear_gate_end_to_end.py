@@ -100,9 +100,16 @@ class TestFreshInitProducesWorkingGate:
     def test_validated_save_issue_allowed(self, tmp_path: Path) -> None:
         _bootstrap_high_engagement_project(tmp_path)
         # 1. PostToolUse on docs_validate_linear_issue writes the sentinel.
+        # TAP-1328: hook now requires tool_response.data.agent_ready==true
+        # before writing — pre-1328 callers would silently fail to gate.
         rc, _ = _run_hook(
             tmp_path / ".claude" / "hooks" / "tapps-post-docs-validate.sh",
-            json.dumps({"tool_name": "mcp__docs-mcp__docs_validate_linear_issue"}),
+            json.dumps(
+                {
+                    "tool_name": "mcp__docs-mcp__docs_validate_linear_issue",
+                    "tool_response": {"data": {"agent_ready": True}},
+                }
+            ),
             tmp_path,
         )
         assert rc == 0
