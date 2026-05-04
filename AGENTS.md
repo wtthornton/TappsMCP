@@ -190,7 +190,7 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Tiers:** `architectural` (180-day half-life, stable decisions), `pattern` (60-day, conventions), `procedural` (30-day, workflows), `context` (14-day, short-lived)
 
-**Scopes:** `project` (default, all sessions), `branch` (git branch), `session` (ephemeral), `shared` (federation-eligible)
+**Scopes:** `project` (default, all sessions), `branch` (git branch), `session` (current session only). Cross-project handoff goes through federation actions, not a `scope=` value.
 
 **Memory profiles:** Built-in profiles from tapps-brain (e.g. `repo-brain` default). Use `profile_info`, `profile_list`, `profile_switch` actions.
 

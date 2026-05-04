@@ -173,7 +173,7 @@ You should call `tapps_validate_config(file_path)` when changing Dockerfile, doc
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
+`tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
 
 **Cross-session handoff:** when one session needs to pass a token, ID, or payload to a later session, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing to stdout — the default `project` scope is already cross-session within the same repo. Read it back from the next session with `action="get"` (by key) or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"`; for cross-project, use the federation actions.
 

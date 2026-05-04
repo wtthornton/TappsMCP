@@ -87,6 +87,15 @@ _VALID_ACTIONS = {
     "agent_register",
 }
 
+# Scope values accepted by save / save_bulk / get / list / search.
+# `shared` is a MemoryScope enum value but is NOT accepted by save — it is a
+# server-side propagation tier used by federate_publish. Public docs and
+# templates that promise "scope=shared" for save are wrong and will mislead
+# agents into stdout-printing handoff payloads. The drift test in
+# test_agents_template_memory_docs.py asserts no template claims a save scope
+# outside this set.
+SAVE_SCOPES = frozenset({"project", "branch", "session"})
+
 # Async actions require special dispatch.
 # - validate: doc lookups are async
 # - gc/consolidate/unconsolidate/contradictions/verify_integrity/maintain/health:
