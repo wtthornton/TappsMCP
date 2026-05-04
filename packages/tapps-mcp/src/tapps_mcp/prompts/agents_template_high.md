@@ -177,6 +177,10 @@ Shipped defaults enable expert auto-save, recurring quick_check memory, architec
 | **session** | Current session (expires 7 days) | Temporary notes |
 | **shared** | Federation-eligible (cross-project) | Reusable knowledge across projects |
 
+### Cross-session handoff
+
+When one session needs to pass a token, ID, or short payload to a later session in the same project, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing it to stdout. The default `project` scope is already cross-session within the same repo. Read it back from the next session with `tapps_memory(action="get", key="<slug>")` or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"` (see Hive section above); for cross-project handoff, use the federation actions (`federate_publish` + `federate_subscribe` + `federate_sync`).
+
 ### Memory configuration (`.tapps-mcp.yaml`)
 
 ```yaml

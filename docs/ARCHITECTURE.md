@@ -184,6 +184,8 @@ Two deployment modes via `BrainBridge` (server_helpers.py):
 
 `BrainBridge` exposes a unified async API regardless of mode. Stable agent identity (UUIDv4) persisted to `.tapps-mcp/agent.id` is attached to every write for cross-session traceability.
 
+**Cross-session handoff.** The default `project` scope is already cross-session: a `tapps_memory(action="save", scope="project")` write from one Claude Code / Cursor session is readable by `action="get"` / `action="search"` from any later session in the same repo. This is the recommended path for passing tokens, IDs, or short payloads between sessions instead of relying on stdout. For cross-agent handoff in Agent Teams, use `action="hive_propagate"` (see Hive section in [docs/MEMORY_REFERENCE.md](MEMORY_REFERENCE.md)); for cross-project, use the federation actions (`federate_publish` / `federate_subscribe` / `federate_sync`).
+
 ## Platform generation
 
 Split across `pipeline/` modules: hooks, rules, skills, subagents, bundles. AGENTS.md smart-merge preserves custom sections. Three engagement levels (high/medium/low) for all templates.

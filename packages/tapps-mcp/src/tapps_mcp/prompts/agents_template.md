@@ -177,6 +177,8 @@ Your project may have two complementary memory systems. Use the right one for ea
 
 Use `tapps_memory` for architecture decisions and quality patterns.
 
+**Cross-session handoff:** when one session needs to pass a token, ID, or short payload to a later session in the same project, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing it to stdout. The default `project` scope is already cross-session within the same repo. Read it back from the next session with `tapps_memory(action="get", key="<slug>")` or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"`; for cross-project, use the federation actions.
+
 ---
 
 ## Platform hooks and automation

@@ -70,6 +70,8 @@ This validates against security and operational best practices.
 
 **Memory hooks:** Auto-recall and auto-capture default **on** in shipped `default.yaml`; configure under `memory_hooks` in `.tapps-mcp.yaml`. High engagement also merges hook entries during init. Tune `min_score` to balance coverage vs noise.
 
+**Cross-session handoff:** when one session needs to pass a token, ID, or payload to a later session, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing to stdout — the default `project` scope is already cross-session within the same repo. Read it back from the next session with `action="get"` (by key) or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"`; for cross-project, use the federation actions (`federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`).
+
 ## 5-Stage Pipeline
 
 Execute these stages IN ORDER for every code task:

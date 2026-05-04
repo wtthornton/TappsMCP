@@ -120,6 +120,8 @@ OPTIONAL: Consider using `tapps_memory` for important architecture decisions.
 
 **Tiers:** `architectural` (180-day), `pattern` (60-day), `procedural` (30-day), `context` (14-day). **Scopes:** `project` (default), `branch`, `session`, `shared` (cross-project). Max 1500 entries per project. Configure `capture_prompt` and `write_rules` in `.tapps-mcp.yaml`.
 
+**Cross-session handoff:** to pass a token, ID, or short payload to a later session in the same project, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing to stdout — `project` scope is already cross-session. Read back via `action="get"` or `action="search"`.
+
 ---
 
 ## Platform hooks and automation

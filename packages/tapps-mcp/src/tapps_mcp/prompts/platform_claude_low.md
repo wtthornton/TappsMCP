@@ -48,6 +48,8 @@ Consider calling `tapps_validate_config(file_path)` when changing Dockerfile, do
 
 `tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). Tiers: architectural/pattern/procedural/context. Scopes: project/branch/session/shared. Max 1500 entries. Memory is manual at low engagement: call `search` at session start and `save` before end. Auto-recall/capture hooks are disabled.
 
+**Cross-session handoff:** when one session needs to pass a token, ID, or payload to a later session, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing to stdout — the default `project` scope is already cross-session within the same repo. Read it back from the next session with `action="get"` or `action="search"`.
+
 ## 5-Stage Pipeline (optional)
 
 When following a full workflow:

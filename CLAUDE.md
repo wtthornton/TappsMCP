@@ -113,7 +113,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Deterministic tools only** -- no LLM calls in the tool chain; same input → same output. Missing external checkers fall back to AST analysis and mark results `degraded: true`. See [ADR-0004](docs/adr/0004-deterministic-tools-only-contract.md).
 - **Architectural decisions** live in [docs/adr/](docs/adr/) — see the [index](docs/adr/README.md). When changing a load-bearing decision, supersede the ADR; do not edit history.
 
-<!-- BEGIN: tapps-obligations v3.10.0 -->
+<!-- BEGIN: tapps-obligations v3.10.4 -->
 # TAPPS Quality Pipeline
 
 This project uses the TAPPS MCP server for code quality enforcement.
@@ -174,6 +174,8 @@ You should call `tapps_validate_config(file_path)` when changing Dockerfile, doc
 ## Memory System
 
 `tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
+
+**Cross-session handoff:** when one session needs to pass a token, ID, or payload to a later session, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing to stdout — the default `project` scope is already cross-session within the same repo. Read it back from the next session with `action="get"` (by key) or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"`; for cross-project, use the federation actions.
 
 ## Quality Gate Behavior
 

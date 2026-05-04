@@ -70,6 +70,8 @@ This validates against security and operational best practices.
 
 `tapps_memory` provides persistent cross-session knowledge with **33 actions** (save, search, consolidate, federation, profiles, hive, health, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session, shared. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
 
+**Cross-session handoff:** for tokens/IDs/payloads needed by a later session, `tapps_memory(action="save", key=..., value=...)` (default `project` scope is cross-session) and `action="get"` to retrieve. See AGENTS.md for cross-agent and cross-project variants.
+
 ## 5-Stage Pipeline
 
 Recommended order for every code task:

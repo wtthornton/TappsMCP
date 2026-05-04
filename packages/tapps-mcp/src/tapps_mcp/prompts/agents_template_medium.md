@@ -170,6 +170,8 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Configuration:** Override `memory.profile`, `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
 
+**Cross-session handoff:** when one session needs to pass a token, ID, or short payload to a later session in the same project, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing it to stdout. The default `project` scope is already cross-session within the same repo. Read it back with `action="get"` (by key) or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"`; for cross-project, use the federation actions above.
+
 ---
 
 ## Platform hooks and automation
