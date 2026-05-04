@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.10.4] - 2026-05-04
+
+### Fixed
+
+- **`fix(upgrade): exclude high-only hooks from canonical manifest`.** [`upgrade.py:116-137`](packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py) — v3.10.3 unconditionally added `tapps-session-end.sh` and `tapps-tool-failure.sh` to `_CANONICAL_HOOK_MANIFEST`, but those scripts wire to `SessionEnd` / `PostToolUseFailure` events which only appear in `ENGAGEMENT_HOOK_EVENTS["high"]`. Medium/low engagement projects (the default) deploy 18 hooks but were verified against a 20-entry manifest — false-positive missing. Manifest is now scoped to the 18 hooks that ship at every engagement level.
+
 ## [3.10.3] - 2026-05-04
 
 ### Fixed
