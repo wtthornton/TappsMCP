@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.10.3] - 2026-05-04
+
+### Fixed
+
+- **`fix(upgrade): canonical hook manifest matches templated hook set`.** [`upgrade.py:116-137`](packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py) — removed `tapps-pre-tooluse.sh` (no template existed; superseded by `tapps-pre-bash.sh`) and added `tapps-session-end.sh` and `tapps-tool-failure.sh` (both templated and wired into `settings.json` but missing from the manifest). `_verify_hook_manifest` no longer reports a phantom missing script on every `tapps_upgrade`.
+
 ## [3.10.0] - 2026-05-03
 
 ### Added

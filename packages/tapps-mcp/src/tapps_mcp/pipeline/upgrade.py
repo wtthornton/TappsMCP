@@ -116,8 +116,8 @@ _AGENTS_MD_OPT_OUT_SENTINEL = "<!-- tapps:agents-md-disabled -->"
 _CANONICAL_HOOK_MANIFEST: frozenset[str] = frozenset({
     "tapps-session-start.sh",
     "tapps-session-compact.sh",
+    "tapps-session-end.sh",
     "tapps-user-prompt-submit.sh",
-    "tapps-pre-tooluse.sh",
     "tapps-pre-bash.sh",
     "tapps-pre-compact.sh",
     "tapps-post-edit.sh",
@@ -129,6 +129,7 @@ _CANONICAL_HOOK_MANIFEST: frozenset[str] = frozenset({
     "tapps-pre-linear-list.sh",
     "tapps-stop.sh",
     "tapps-task-completed.sh",
+    "tapps-tool-failure.sh",
     "tapps-subagent-start.sh",
     "tapps-subagent-stop.sh",
     "tapps-memory-capture.sh",
