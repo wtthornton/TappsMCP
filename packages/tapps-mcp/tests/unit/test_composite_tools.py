@@ -1128,6 +1128,15 @@ class TestTappsQuickCheck:
 class TestChecklistEquivalence:
     """Test that composite tools satisfy individual tool requirements."""
 
+    @pytest.fixture(autouse=True)
+    def _pin_engagement_level(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Pin engagement to medium — review requirements differ across maps.
+        Same rationale as TestCallTracker._pin_engagement_level in
+        test_checklist.py: medium-map assertions can't depend on whatever
+        engagement leaks in from sibling tests on CI.
+        """
+        monkeypatch.setenv("TAPPS_MCP_LLM_ENGAGEMENT_LEVEL", "medium")
+
     def test_quick_check_satisfies_score_and_gate(self) -> None:
         CallTracker.record("tapps_quick_check")
         result = CallTracker.evaluate("feature")

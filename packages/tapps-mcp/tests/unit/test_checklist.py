@@ -63,6 +63,19 @@ class TestTaskToolMap:
 
 
 class TestCallTracker:
+    @pytest.fixture(autouse=True)
+    def _pin_engagement_level(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Pin engagement to medium for this whole class.
+
+        Tests in this class assert against the medium TASK_TOOL_MAP. They were
+        written before the high/low maps existed and read engagement from
+        ``load_settings().llm_engagement_level``, which on CI can resolve to
+        a different value if another test leaks a TAPPS_MCP_LLM_ENGAGEMENT_LEVEL
+        env var or mutates `.tapps-mcp.yaml`. Pinning here keeps the assertions
+        meaningful regardless of cross-test state.
+        """
+        monkeypatch.setenv("TAPPS_MCP_LLM_ENGAGEMENT_LEVEL", "medium")
+
     def setup_method(self):
         CallTracker.reset()
 
