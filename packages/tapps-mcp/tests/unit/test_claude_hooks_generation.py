@@ -92,11 +92,22 @@ class TestClaudeHooksScripts:
             assert "command -v python3" in content, f"{name} should probe python3"
             assert "command -v python" in content, f"{name} should fall back to python"
 
-    def test_post_edit_does_not_use_grep(self, tmp_path):
-        """Post-edit hook should not depend on external grep."""
+    def test_post_edit_grep_use_is_dedup_only(self, tmp_path):
+        """Post-edit hook may use `grep -Fxq` for the .ralph/.edits_this_loop
+        dedup check (TAP-1330) — that's the only sanctioned grep call. Reject
+        any other grep usage so we don't accidentally reintroduce a broader
+        external-tool dependency that breaks on minimal Windows environments.
+        """
         generate_claude_hooks(tmp_path, force_windows=False)
         content = (tmp_path / ".claude" / "hooks" / "tapps-post-edit.sh").read_text()
-        assert "grep" not in content
+        sanitized = "\n".join(
+            line for line in content.splitlines() if "grep -Fxq" not in line
+        )
+        assert "grep" not in sanitized, (
+            "post-edit hook contains a grep call other than the TAP-1330 "
+            "loop-dedup `grep -Fxq`. If the new usage is intentional, update "
+            "this test to whitelist it explicitly."
+        )
 
     def test_session_start_script_has_required_directive(self, tmp_path):
         """Session-start hook should use directive language."""

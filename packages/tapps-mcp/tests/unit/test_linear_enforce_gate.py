@@ -202,11 +202,20 @@ class TestGateScriptBehavior:
         return proc.returncode, proc.stderr
 
     def test_post_validate_writes_sentinel(self, tmp_path: Path) -> None:
+        # TAP-1328: post-docs-validate.sh now requires
+        # tool_response.data.agent_ready==true before writing the sentinel,
+        # so passing only tool_name (the pre-1328 contract) no longer
+        # produces a sentinel. Send a complete validator response.
         hooks = self._setup(tmp_path)
         script = hooks / "tapps-post-docs-validate.sh"
         rc, _ = self._run(
             script,
-            json.dumps({"tool_name": "mcp__docs-mcp__docs_validate_linear_issue"}),
+            json.dumps(
+                {
+                    "tool_name": "mcp__docs-mcp__docs_validate_linear_issue",
+                    "tool_response": {"data": {"agent_ready": True}},
+                }
+            ),
             env={"CLAUDE_PROJECT_DIR": str(tmp_path)},
             cwd=tmp_path,
         )

@@ -693,13 +693,21 @@ class TestGenerateRules:
         _generate_rules("vscode", tmp_path)
         assert not (tmp_path / "CLAUDE.md").exists()
 
-    def test_skips_existing_claude_md_with_tapps(self, tmp_path):
-        """Skips CLAUDE.md if it already has TAPPS reference."""
-        (tmp_path / "CLAUDE.md").write_text("# Rules\nUse TAPPS pipeline.\n")
+    def test_existing_claude_md_gets_obligations_block_appended(self, tmp_path):
+        """An existing user-authored CLAUDE.md is preserved; the marker-wrapped
+        TAPPS obligations block is appended (TAP-970). User content remains
+        unchanged at the top; the block lives at the bottom and can be
+        refreshed by tapps_upgrade without disturbing the user's prose.
+        """
+        original = "# Rules\nUse TAPPS pipeline.\n"
+        (tmp_path / "CLAUDE.md").write_text(original)
         _generate_rules("claude-code", tmp_path)
-        # Content should be unchanged (not doubled)
         content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
-        assert content == "# Rules\nUse TAPPS pipeline.\n"
+        # User-authored prose preserved verbatim at top.
+        assert content.startswith(original)
+        # Marker-wrapped obligations block appended (TAP-970).
+        assert "<!-- BEGIN: tapps-obligations" in content
+        assert "<!-- END: tapps-obligations -->" in content
 
     def test_skips_existing_cursor_rules(self, tmp_path):
         """Skips cursor rules if file already exists."""

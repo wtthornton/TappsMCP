@@ -164,9 +164,9 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.readOnlyHint
         ]
-        # 18 closed-world + 2 open-world + 1 linear-snapshot-get = 21
-        assert len(read_only) == 21, (
-            f"Expected 21 read-only tools, got {len(read_only)}"
+        # 18 closed-world + 2 open-world + 1 linear-snapshot-get + 1 release-update = 22
+        assert len(read_only) == 22, (
+            f"Expected 22 read-only tools, got {len(read_only)}"
         )
 
     def test_side_effect_count(self) -> None:
@@ -199,9 +199,9 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.idempotentHint
         ]
-        # 22 prior + 3 linear-snapshot tools (all idempotent) = 25
-        assert len(idempotent) == 25, (
-            f"Expected 25 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # 22 prior + 3 linear-snapshot + 1 release-update = 26
+        assert len(idempotent) == 26, (
+            f"Expected 26 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 

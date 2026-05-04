@@ -315,6 +315,29 @@ def _make_test_bridge(store: Any) -> Any:
 
 
 @pytest.fixture(autouse=True)
+def _tolerate_brain_auth_failure_in_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
+    """Force ``memory.tolerate_brain_auth_failure=true`` for every unit test.
+
+    Production sets the default to False so that ``tapps_session_start`` returns
+    a hard ``brain_auth_failed`` error when the bridge has no auth token (TAP-1082).
+    That's the right default for real users — silent degradation hides
+    misconfiguration. But unit tests don't run a real brain and don't set the
+    auth token, so ~13 ``test_server_pipeline_tools`` /
+    ``test_composite_tools`` ``TestTappsSessionStart::*`` tests would always
+    fail on a bare master checkout.
+
+    Setting the env var here keeps the production default intact while letting
+    the tests exercise the soft-degraded path they were originally written
+    against. Tests that specifically verify the hard-error branch can opt out
+    by overriding this fixture or unsetting the env var inside the test.
+    """
+    monkeypatch.setenv("TAPPS_MCP_MEMORY_TOLERATE_BRAIN_AUTH_FAILURE", "true")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _inject_test_brain_bridge(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Patch ``_get_brain_bridge`` to wrap whatever store ``_get_memory_store`` returns.
 

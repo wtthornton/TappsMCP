@@ -217,6 +217,11 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_quality_gate", "tapps_validate_changed"],
         "optional": ["tapps_security_scan"],
     },
+    "release": {
+        "required": ["tapps_release_update", "tapps_dependency_scan"],
+        "recommended": ["tapps_checklist", "tapps_security_scan"],
+        "optional": [],
+    },
 }
 
 # Low engagement: fewer tools required (lighter)
@@ -250,6 +255,11 @@ TASK_TOOL_MAP_LOW: dict[str, dict[str, list[str]]] = {
         "required": ["tapps_checklist"],
         "recommended": ["tapps_score_file"],
         "optional": ["tapps_quality_gate", "tapps_validate_changed"],
+    },
+    "release": {
+        "required": ["tapps_release_update"],
+        "recommended": ["tapps_dependency_scan"],
+        "optional": ["tapps_checklist"],
     },
 }
 

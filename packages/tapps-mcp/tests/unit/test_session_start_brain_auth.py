@@ -242,6 +242,10 @@ class TestSessionStartIntegration:
         # Configure a real-looking token so the failure classifies as
         # "present token, server rejected" rather than missing/unsubstituted.
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "real-token-abc123")
+        # Opt out of the conftest-level _tolerate_brain_auth_failure_in_tests
+        # autouse fixture: this test exists specifically to verify the hard-error
+        # path that the fixture suppresses.
+        monkeypatch.delenv("TAPPS_MCP_MEMORY_TOLERATE_BRAIN_AUTH_FAILURE", raising=False)
 
         from tapps_mcp.tools import session_start_core as ssc
 

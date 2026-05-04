@@ -54,7 +54,7 @@ class TestTaskToolMap:
         assert "tapps_quality_gate" in m["required"]
 
     def test_all_task_types_present(self):
-        expected = {"feature", "bugfix", "refactor", "security", "review", "epic"}
+        expected = {"feature", "bugfix", "refactor", "security", "review", "epic", "release"}
         assert set(TASK_TOOL_MAP.keys()) == expected
 
     def test_epic_task(self):
@@ -679,9 +679,19 @@ class TestEpicWithRealFixtures:
         return Path()  # unreachable but satisfies mypy
 
     def test_real_epic_parses_without_crash(self, epics_dir: Path) -> None:
-        """Every real epic file should parse without raising."""
+        """Every real epic file should parse without raising.
+
+        Per `feedback_no_md_drafts_for_linear.md`, this repo stopped keeping
+        epic markdown on disk — Linear is canonical. So an empty
+        `docs/planning/epics/` is the steady-state, not a regression. Skip
+        when there's nothing to parse instead of failing.
+        """
         epic_files = sorted(epics_dir.glob("EPIC-*.md"))
-        assert len(epic_files) > 0, "Expected at least one epic file"
+        if not epic_files:
+            pytest.skip(
+                "No EPIC-*.md files in docs/planning/epics/ — epics live in "
+                "Linear in this repo (see feedback_no_md_drafts_for_linear.md)."
+            )
         for ef in epic_files[:5]:  # sample first 5 to keep fast
             content = ef.read_text(encoding="utf-8")
             result = validate_epic_markdown(content)

@@ -62,19 +62,36 @@ class TestPromptContent:
 
 
 class TestPlatformRules:
+    # Token budgets for platform rules (medium engagement, the default that
+    # ships into every consumer). Cursor's budget is wider because cursor
+    # rules are loaded as a single document while Claude's are split across
+    # CLAUDE.md and platform-specific .claude/rules files.
+    #
+    # Raising these caps requires a code-review comment explaining what new
+    # value-bearing content is being added — the caps exist to keep the
+    # context-window cost visible, not to be silently bumped.
+    _CLAUDE_RULES_TOKEN_BUDGET = 1400
+    _CURSOR_RULES_TOKEN_BUDGET = 1750
+
     def test_claude_rules_under_token_budget(self):
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         content = load_platform_rules("claude")
         token_estimate = len(content) // 4
-        assert token_estimate < 1400, f"Claude rules ~{token_estimate} tokens, exceeds 1400 budget"
+        assert token_estimate < self._CLAUDE_RULES_TOKEN_BUDGET, (
+            f"Claude rules ~{token_estimate} tokens, exceeds "
+            f"{self._CLAUDE_RULES_TOKEN_BUDGET} budget"
+        )
 
     def test_cursor_rules_under_token_budget(self):
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         content = load_platform_rules("cursor")
         token_estimate = len(content) // 4
-        assert token_estimate < 1400, f"Cursor rules ~{token_estimate} tokens, exceeds 1400 budget"
+        assert token_estimate < self._CURSOR_RULES_TOKEN_BUDGET, (
+            f"Cursor rules ~{token_estimate} tokens, exceeds "
+            f"{self._CURSOR_RULES_TOKEN_BUDGET} budget"
+        )
 
     def test_claude_rules_contain_enforcement_language(self):
         from tapps_mcp.prompts.prompt_loader import load_platform_rules

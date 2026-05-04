@@ -255,6 +255,17 @@ class TestSessionStartEnrichedMemory:
                 "tapps_mcp.server_helpers._get_memory_store",
                 return_value=mock_store,
             ),
+            # Force the in-process path inside `_collect_memory_status` by
+            # making `_get_brain_bridge` return None — otherwise the conftest
+            # bridge fixture is considered HTTP-mode in some test orderings,
+            # which short-circuits before enrichment runs and leaves
+            # consolidation_hint absent. With bridge=None, the function falls
+            # through to the mocked `_get_memory_store`, computes the snapshot,
+            # and runs the enrichment helpers we want to verify.
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=None,
+            ),
         ):
             result = await tapps_session_start()
 
@@ -320,6 +331,17 @@ class TestSessionStartEnrichedMemory:
             patch(
                 "tapps_mcp.server_helpers._get_memory_store",
                 return_value=mock_store,
+            ),
+            # Force the in-process path inside `_collect_memory_status` by
+            # making `_get_brain_bridge` return None — otherwise the conftest
+            # bridge fixture is considered HTTP-mode in some test orderings,
+            # which short-circuits before enrichment runs and leaves
+            # consolidation_hint absent. With bridge=None, the function falls
+            # through to the mocked `_get_memory_store`, computes the snapshot,
+            # and runs the enrichment helpers we want to verify.
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=None,
             ),
         ):
             result = await tapps_session_start()
