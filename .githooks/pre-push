@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# .githooks/pre-push
+#
+# Tapps-mcp pre-push test gate.
+#
+# Why this exists
+# ---------------
+# This repo's workflow is "commit directly to master, no feature branches, no
+# PRs" (see .claude/rules/repo-workflow.md). That convention only stays safe
+# if something local enforces a green test baseline before push — without it,
+# CI goes red, real regressions hide in noise, and the "is my change safe"
+# bar drifts to "did I break MORE tests" instead of "tests pass."
+#
+# What it does
+# ------------
+# When pushing any ref to master, runs the fast unit suite for tapps-mcp
+# (`pytest -m "not slow"`) on the local checkout and aborts the push on red.
+# Pushes to non-master branches are not gated. The hook only runs unit tests
+# from packages/tapps-mcp/tests/unit/ — the slow integration suite has its own
+# CI job and would push runtime past anyone's patience.
+#
+# Bypass
+# ------
+# For genuine emergencies (e.g. shipping a doc-only fix while master is
+# already red for unrelated reasons), set TAPPS_SKIP_PREPUSH=1. Each bypass
+# is logged to .tapps-mcp/.bypass-log.jsonl with timestamp and current
+# commit, so the pattern of bypasses can be audited later.
+#
+# Install
+# -------
+# Run scripts/install-git-hooks.sh once per fresh clone. The script
+# configures core.hooksPath = .githooks (project-scoped) so this file is
+# picked up automatically. No symlinks; no per-developer .git/hooks/ edits.
+
+set -e
+
+remote="$1"
+url="$2"
+
+# Read the refs being pushed from stdin (git's pre-push protocol).
+# Format: <local_ref> <local_sha> <remote_ref> <remote_sha>
+gating_master=0
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/master|refs/heads/main)
+      gating_master=1
+      ;;
+  esac
+done
+
+if [[ "$gating_master" -eq 0 ]]; then
+  exit 0
+fi
+
+if [[ -n "${TAPPS_SKIP_PREPUSH:-}" ]]; then
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  sha="$(git rev-parse HEAD)"
+  log_dir=".tapps-mcp"
+  mkdir -p "$log_dir" 2>/dev/null || true
+  printf '{"ts":"%s","commit":"%s","reason":"TAPPS_SKIP_PREPUSH=%s"}\n' \
+    "$ts" "$sha" "${TAPPS_SKIP_PREPUSH}" \
+    >> "$log_dir/.bypass-log.jsonl" 2>/dev/null || true
+  echo "[pre-push] TAPPS_SKIP_PREPUSH set; skipping test gate. Logged to $log_dir/.bypass-log.jsonl" >&2
+  exit 0
+fi
+
+echo "[pre-push] Running tapps-mcp non-slow unit suite before push to $remote_ref..." >&2
+echo "[pre-push] Bypass with TAPPS_SKIP_PREPUSH=1 git push (logged)." >&2
+
+if ! uv run pytest packages/tapps-mcp/tests/unit/ -m "not slow" -q --tb=no 2>&1 | tail -20; then
+  echo "" >&2
+  echo "[pre-push] FAILED. Push blocked." >&2
+  echo "[pre-push] Investigate: uv run pytest packages/tapps-mcp/tests/ -m 'not slow' -v" >&2
+  echo "[pre-push] Bypass:      TAPPS_SKIP_PREPUSH=1 git push" >&2
+  exit 1
+fi
+
+echo "[pre-push] OK — proceeding with push." >&2
+exit 0
