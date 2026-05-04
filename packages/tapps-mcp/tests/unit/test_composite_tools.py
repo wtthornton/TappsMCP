@@ -1128,25 +1128,21 @@ class TestTappsQuickCheck:
 class TestChecklistEquivalence:
     """Test that composite tools satisfy individual tool requirements."""
 
-    @pytest.fixture(autouse=True)
-    def _pin_engagement_level(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Pin engagement to medium — review requirements differ across maps.
-        Same rationale as TestCallTracker._pin_engagement_level in
-        test_checklist.py: medium-map assertions can't depend on whatever
-        engagement leaks in from sibling tests on CI.
-        """
-        monkeypatch.setenv("TAPPS_MCP_LLM_ENGAGEMENT_LEVEL", "medium")
+    # These assertions pin to the medium TASK_TOOL_MAP; pass engagement_level
+    # explicitly so a sibling test that mutates global engagement state can't
+    # flip these into HIGH-map territory (which has different
+    # required/recommended sets).
 
     def test_quick_check_satisfies_score_and_gate(self) -> None:
         CallTracker.record("tapps_quick_check")
-        result = CallTracker.evaluate("feature")
-        # feature requires: tapps_score_file, tapps_quality_gate
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        # feature (medium) requires: tapps_score_file, tapps_quality_gate
         assert result.complete is True
 
     def test_validate_changed_satisfies_review(self) -> None:
         CallTracker.record("tapps_validate_changed")
-        result = CallTracker.evaluate("review")
-        # review requires: tapps_score_file, tapps_security_scan, tapps_quality_gate
+        result = CallTracker.evaluate("review", engagement_level="medium")
+        # review (medium) requires: tapps_score_file, tapps_security_scan, tapps_quality_gate
         assert result.complete is True
 
 

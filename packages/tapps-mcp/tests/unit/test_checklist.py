@@ -63,18 +63,17 @@ class TestTaskToolMap:
 
 
 class TestCallTracker:
-    @pytest.fixture(autouse=True)
-    def _pin_engagement_level(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Pin engagement to medium for this whole class.
+    # Tests in this class assert against the medium TASK_TOOL_MAP. They were
+    # written before the high/low maps existed and historically read engagement
+    # from `load_settings().llm_engagement_level`. That coupling is order-
+    # dependent on CI — sibling tests that monkeypatch TAPPS_MCP_LLM_ENGAGEMENT_LEVEL
+    # or call tapps_set_engagement_level() can leak HIGH/LOW into the cached
+    # settings. Pass engagement_level="medium" explicitly via the helper below
+    # so these assertions are independent of global state.
 
-        Tests in this class assert against the medium TASK_TOOL_MAP. They were
-        written before the high/low maps existed and read engagement from
-        ``load_settings().llm_engagement_level``, which on CI can resolve to
-        a different value if another test leaks a TAPPS_MCP_LLM_ENGAGEMENT_LEVEL
-        env var or mutates `.tapps-mcp.yaml`. Pinning here keeps the assertions
-        meaningful regardless of cross-test state.
-        """
-        monkeypatch.setenv("TAPPS_MCP_LLM_ENGAGEMENT_LEVEL", "medium")
+    @staticmethod
+    def _evaluate(task_type, **kwargs):
+        return CallTracker.evaluate(task_type, engagement_level="medium", **kwargs)
 
     def setup_method(self):
         CallTracker.reset()
@@ -104,20 +103,20 @@ class TestCallTracker:
     def test_evaluate_complete(self):
         CallTracker.record("tapps_score_file")
         CallTracker.record("tapps_quality_gate")
-        result = CallTracker.evaluate("feature")
+        result = self._evaluate("feature")
         assert result.complete is True
         assert result.missing_required == []
         assert result.task_type == "feature"
 
     def test_evaluate_incomplete(self):
-        result = CallTracker.evaluate("feature")
+        result = self._evaluate("feature")
         assert result.complete is False
         assert "tapps_score_file" in result.missing_required
         assert "tapps_quality_gate" in result.missing_required
 
     def test_evaluate_partial(self):
         CallTracker.record("tapps_score_file")
-        result = CallTracker.evaluate("feature")
+        result = self._evaluate("feature")
         assert result.complete is False
         assert "tapps_quality_gate" in result.missing_required
         assert "tapps_score_file" not in result.missing_required
@@ -126,7 +125,7 @@ class TestCallTracker:
         CallTracker.record("tapps_score_file")
         CallTracker.record("tapps_security_scan")
         CallTracker.record("tapps_quality_gate")
-        result = CallTracker.evaluate("unknown_task")
+        result = self._evaluate("unknown_task")
         assert result.task_type == "unknown_task"
         assert result.complete is True
         assert result.policy_fallback is True
@@ -134,7 +133,7 @@ class TestCallTracker:
 
     def test_evaluate_unknown_task_strict_raises(self):
         with pytest.raises(ValueError, match="Unknown task_type"):
-            CallTracker.evaluate(
+            self._evaluate(
                 "not_a_real_task",
                 strict_unknown_task_type=True,
             )
@@ -143,28 +142,28 @@ class TestCallTracker:
         CallTracker.record("tapps_score_file")
         CallTracker.begin_session()
         CallTracker.record("tapps_quality_gate")
-        r = CallTracker.evaluate("feature")
+        r = self._evaluate("feature")
         assert "tapps_score_file" not in r.called
         assert "tapps_quality_gate" in r.called
 
     def test_evaluate_includes_recommended(self):
-        result = CallTracker.evaluate("feature")
+        result = self._evaluate("feature")
         assert "tapps_security_scan" in result.missing_recommended
 
     def test_evaluate_includes_optional(self):
-        result = CallTracker.evaluate("feature")
+        result = self._evaluate("feature")
         assert "tapps_checklist" in result.missing_optional
 
     def test_evaluate_total_calls(self):
         CallTracker.record("tapps_score_file")
         CallTracker.record("tapps_quality_gate")
-        result = CallTracker.evaluate("feature")
+        result = self._evaluate("feature")
         assert result.total_calls == 2
 
     def test_evaluate_called_sorted(self):
         CallTracker.record("tapps_quality_gate")
         CallTracker.record("tapps_score_file")
-        result = CallTracker.evaluate("feature")
+        result = self._evaluate("feature")
         assert result.called == ["tapps_quality_gate", "tapps_score_file"]
 
     def test_evaluate_engagement_high_feature_requires_more(self):
