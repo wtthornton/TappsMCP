@@ -1,7 +1,9 @@
 # .github/workflows/agents-md-stamp.yml
-# TAP-982: fail the build if AGENTS.md <!-- tapps-agents-version: X.Y.Z -->
-# does not match packages/tapps-mcp/pyproject.toml. Prevents release-time
-# stamp drift like the 3.2.4 vs 3.3.0 gap found in TAP-972.
+# TAP-982 + TAP-1372 + TAP-1378: fail the build if any derived file lags
+# packages/tapps-mcp/pyproject.toml. The release flow has bumped pyproject
+# without refreshing AGENTS.md's stamp three times in two days (commits
+# 79ef6e3, 2e2f378, 05caaaa); scripts/bump-versions.py --check now owns
+# the gate so the bump and the verify share one source of truth.
 name: AGENTS.md Stamp Check
 
 on:
@@ -19,18 +21,17 @@ concurrency:
 
 jobs:
   verify-stamp:
-    name: Verify AGENTS.md stamp matches package version
+    name: Verify derived files in sync with tapps-mcp pyproject
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Sync workspace
-        run: uv sync --all-packages
-
-      - name: Check stamp
-        run: uv run tapps-mcp check-agents-md-stamp
+      - name: Run bump-versions --check
+        run: python3 scripts/bump-versions.py --check
