@@ -168,6 +168,31 @@ def collect_drift(target_version: str) -> list[str]:
         elif stamp != target_version:
             findings.append(f"{rel}: stamp {stamp} != pyproject {target_version}")
 
+    # Unified-versioning gate: every workspace pyproject must match
+    # tapps-mcp's version. Per-package independent bumps drift every
+    # release (this script's previous behaviour produced a 3.10.9 vs
+    # 3.10.1 split between tapps-mcp and tapps-core / docs-mcp); the
+    # gate forces a future re-sync rather than letting the gap grow.
+    for pyproject_rel, npm_rel in PACKAGES:
+        if pyproject_rel == TAPPS_MCP_PYPROJECT:
+            continue
+        path = REPO_ROOT / pyproject_rel
+        if not path.exists():
+            continue
+        ver = read_pyproject_version(path)
+        if ver != target_version:
+            findings.append(
+                f"{pyproject_rel}: {ver} != tapps-mcp {target_version} (run --sync)"
+            )
+        if npm_rel:
+            npm_path = REPO_ROOT / npm_rel
+            if npm_path.exists():
+                npm_ver = read_npm_version(npm_path)
+                if npm_ver != target_version:
+                    findings.append(
+                        f"{npm_rel}: {npm_ver} != tapps-mcp {target_version} (run --sync)"
+                    )
+
     templates = all_template_hook_names()
     actual = actual_hook_manifest()
     phantom = sorted(actual - templates)
@@ -196,9 +221,35 @@ def run_check() -> int:
     return 1
 
 
-def collect_bump_changes(part: str) -> list[tuple[Path, str, str, str]]:
-    """Compute every (path, old, new, content) needed for an atomic bump."""
+def _max_current_version() -> str:
+    """Return the highest version currently set across all packages.
+
+    Used as the bump origin so all packages converge on a single new
+    version, not an independent per-package bump that drifts each release.
+    """
+    versions: list[tuple[int, int, int]] = []
+    for pyproject_rel, _ in PACKAGES:
+        path = REPO_ROOT / pyproject_rel
+        if path.exists():
+            versions.append(parse_version(read_pyproject_version(path)))
+    if not versions:
+        raise SystemExit("No pyproject.toml files found.")
+    major, minor, patch = max(versions)
+    return f"{major}.{minor}.{patch}"
+
+
+def collect_bump_changes(part: str | None) -> list[tuple[Path, str, str, str]]:
+    """Compute every (path, old, new, content) needed for an atomic bump.
+
+    Unified versioning: all three packages converge on a single new version.
+    The bump is computed once from `max(current versions)` and applied to
+    every pyproject + npm package + the AGENTS.md stamp. With `part=None`
+    (the --sync mode) we just align everything to the current max without
+    bumping — used when the packages have drifted to different versions
+    and need to re-synchronise.
+    """
     changes: list[tuple[Path, str, str, str]] = []
+    target_version = _max_current_version() if part is None else bump(_max_current_version(), part)
     new_tapps_mcp_version: str | None = None
 
     for pyproject_rel, npm_rel in PACKAGES:
@@ -208,21 +259,26 @@ def collect_bump_changes(part: str) -> list[tuple[Path, str, str, str]]:
             continue
 
         old_ver = read_pyproject_version(pyproject_path)
-        new_ver = bump(old_ver, part)
-        content = update_pyproject_version(pyproject_path, old_ver, new_ver)
-        changes.append((pyproject_path, old_ver, new_ver, content))
-        print(f"  {pyproject_rel}: {old_ver} -> {new_ver}")
+        if old_ver != target_version:
+            content = update_pyproject_version(pyproject_path, old_ver, target_version)
+            changes.append((pyproject_path, old_ver, target_version, content))
+            print(f"  {pyproject_rel}: {old_ver} -> {target_version}")
+        else:
+            print(f"  {pyproject_rel}: {old_ver} (already at target)")
 
         if pyproject_rel == TAPPS_MCP_PYPROJECT:
-            new_tapps_mcp_version = new_ver
+            new_tapps_mcp_version = target_version
 
         if npm_rel:
             npm_path = REPO_ROOT / npm_rel
             if npm_path.exists():
                 npm_old = read_npm_version(npm_path)
-                npm_content = update_npm_version(npm_path, new_ver)
-                changes.append((npm_path, npm_old, new_ver, npm_content))
-                print(f"  {npm_rel}: {npm_old} -> {new_ver}")
+                if npm_old != target_version:
+                    npm_content = update_npm_version(npm_path, target_version)
+                    changes.append((npm_path, npm_old, target_version, npm_content))
+                    print(f"  {npm_rel}: {npm_old} -> {target_version}")
+                else:
+                    print(f"  {npm_rel}: {npm_old} (already at target)")
             else:
                 print(f"  SKIP {npm_rel} (not found)")
 
@@ -265,6 +321,12 @@ def main() -> int:
     group.add_argument("--minor", action="store_true", help="Bump minor version")
     group.add_argument("--patch", action="store_true", help="Bump patch version")
     group.add_argument(
+        "--sync",
+        action="store_true",
+        help="Re-align all packages to the current max version (no bump). "
+        "Used when packages have drifted out of sync.",
+    )
+    group.add_argument(
         "--check",
         action="store_true",
         help="CI gate: exit 1 if any derived file lags pyproject. No writes.",
@@ -275,9 +337,14 @@ def main() -> int:
     if args.check:
         return run_check()
 
-    part = "major" if args.major else "minor" if args.minor else "patch"
+    part: str | None = (
+        "major" if args.major else "minor" if args.minor else "patch" if args.patch else None
+    )
 
-    print(f"Bumping {part} version across all packages...\n")
+    if part is None:
+        print(f"Syncing all packages to {_max_current_version()}...\n")
+    else:
+        print(f"Bumping {part} version across all packages (unified)...\n")
 
     changes = collect_bump_changes(part)
 

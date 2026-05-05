@@ -156,3 +156,86 @@ class TestBumpAtomicity:
         )
         with pytest.raises(SystemExit, match="BUMP REFUSED"):
             bump_module.collect_bump_changes("patch")
+
+
+class TestUnifiedVersioning:
+    """The script must keep all three packages on the same version.
+
+    Pre-TAP-1378-followup behaviour: each package was bumped independently
+    by `+1 patch`, so a session that bumped tapps-mcp four times left
+    tapps-core / docs-mcp three releases behind. The unified-versioning
+    fix computes the bump from `max(current versions)` once and applies
+    it to every pyproject + npm + the AGENTS.md stamp.
+    """
+
+    def test_drifted_packages_bump_to_same_target(
+        self, fake_repo: Path, bump_module
+    ) -> None:
+        # Mimic the real-world drift that motivated this change: tapps-mcp
+        # ahead, the other two languishing on an older release.
+        (fake_repo / "packages/tapps-mcp/pyproject.toml").write_text(
+            '[project]\nname = "tapps-mcp"\nversion = "1.0.5"\n', encoding="utf-8"
+        )
+        (fake_repo / "AGENTS.md").write_text(
+            "<!-- tapps-agents-version: 1.0.5 -->\n", encoding="utf-8"
+        )
+        # tapps-core + docs-mcp still at 1.0.0; npm files at 1.0.0.
+        changes = bump_module.collect_bump_changes("patch")
+        for path, _, _, content in changes:
+            path.write_text(content, encoding="utf-8")
+        # Unified target = max(1.0.5, 1.0.0, 1.0.0) bumped patch = 1.0.6.
+        for rel in (
+            "packages/tapps-core/pyproject.toml",
+            "packages/tapps-mcp/pyproject.toml",
+            "packages/docs-mcp/pyproject.toml",
+        ):
+            assert (
+                bump_module.read_pyproject_version(fake_repo / rel) == "1.0.6"
+            ), f"{rel} did not converge on the unified bump target"
+        assert bump_module.read_npm_version(fake_repo / "npm/package.json") == "1.0.6"
+        assert (
+            bump_module.read_npm_version(fake_repo / "npm-docs-mcp/package.json") == "1.0.6"
+        )
+        assert bump_module.read_stamp(fake_repo / "AGENTS.md") == "1.0.6"
+        # Post-bump --check must pass.
+        assert bump_module.run_check() == 0
+
+    def test_sync_realigns_without_bumping(
+        self, fake_repo: Path, bump_module
+    ) -> None:
+        """`part=None` (the --sync mode) brings everyone to current max.
+
+        Used as a one-time fix after drift; should NOT advance the version.
+        """
+        (fake_repo / "packages/tapps-mcp/pyproject.toml").write_text(
+            '[project]\nname = "tapps-mcp"\nversion = "1.0.9"\n', encoding="utf-8"
+        )
+        (fake_repo / "AGENTS.md").write_text(
+            "<!-- tapps-agents-version: 1.0.9 -->\n", encoding="utf-8"
+        )
+        changes = bump_module.collect_bump_changes(None)  # --sync semantics
+        for path, _, _, content in changes:
+            path.write_text(content, encoding="utf-8")
+        for rel in (
+            "packages/tapps-core/pyproject.toml",
+            "packages/tapps-mcp/pyproject.toml",
+            "packages/docs-mcp/pyproject.toml",
+        ):
+            assert bump_module.read_pyproject_version(fake_repo / rel) == "1.0.9"
+
+    def test_check_flags_drift_between_packages(
+        self, fake_repo: Path, bump_module, capsys
+    ) -> None:
+        """`--check` must catch a tapps-mcp / tapps-core mismatch."""
+        (fake_repo / "packages/tapps-mcp/pyproject.toml").write_text(
+            '[project]\nname = "tapps-mcp"\nversion = "1.0.5"\n', encoding="utf-8"
+        )
+        (fake_repo / "AGENTS.md").write_text(
+            "<!-- tapps-agents-version: 1.0.5 -->\n", encoding="utf-8"
+        )
+        rc = bump_module.run_check()
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "packages/tapps-core/pyproject.toml" in out
+        assert "1.0.0" in out and "tapps-mcp 1.0.5" in out
+        assert "run --sync" in out
