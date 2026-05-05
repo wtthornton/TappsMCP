@@ -58,7 +58,10 @@ def _make_mock_settings(tmp_path: Path) -> MagicMock:
 
 class TestTappsSessionStart:
     def setup_method(self) -> None:
+        from tapps_mcp.server_pipeline_tools import _reset_session_start_cache
+
         CallTracker.reset()
+        _reset_session_start_cache()
 
     @pytest.mark.asyncio
     async def test_returns_success(self) -> None:

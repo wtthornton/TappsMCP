@@ -290,6 +290,27 @@ def _reset_session_state() -> None:
 # Without strong references, asyncio tasks may be collected before completion.
 _background_tasks: set[asyncio.Task[Any]] = set()
 
+
+# TAP-1379: Per-process cache of tapps_session_start responses keyed by the
+# MetricsHub _SESSION_ID (process-lifetime UUID). Same session_id + same
+# quick mode + not force => return the cached response untouched. Audit
+# (2026-05-04) showed agents calling tapps_session_start ~23 times per
+# Claude session; a defensive re-call is cheap, but a full re-init burns
+# ~270ms on subprocess + Brain probes.
+_SESSION_START_CACHE: dict[tuple[str, bool], dict[str, Any]] = {}
+
+
+def _session_start_cache_key(quick: bool) -> tuple[str, bool]:
+    """Build a cache key from the MCP server's process session id + quick flag."""
+    from tapps_core.metrics.collector import _SESSION_ID
+
+    return (_SESSION_ID, quick)
+
+
+def _reset_session_start_cache() -> None:
+    """Clear the tapps_session_start memoization cache (for testing)."""
+    _SESSION_START_CACHE.clear()
+
 _ANNOTATIONS_READ_ONLY = ToolAnnotations(
     readOnlyHint=True,
     destructiveHint=False,
@@ -511,6 +532,7 @@ def _prepend_next_step(resp: dict[str, Any], step: str) -> None:
 async def tapps_session_start(
     project_root: str = "",
     quick: bool = False,
+    force: bool = False,
 ) -> dict[str, Any]:
     """REQUIRED as the FIRST call in every session. Returns server info
     (version, checkers, configuration, and project context).
@@ -519,6 +541,9 @@ async def tapps_session_start(
         project_root: Unused; reserved for future use. Server uses configured root.
         quick: When True, return minimal response using cached tool versions
             (no subprocess calls, no diagnostics, no memory GC). Target: < 1s.
+        force: When True, bypass the per-process memoization cache and re-run
+            the full session bootstrap. Default False — repeat calls within the
+            same MCP server process return the cached response (TAP-1379).
     """
     from tapps_mcp.server import (
         _record_call,
@@ -528,6 +553,25 @@ async def tapps_session_start(
     from tapps_mcp.tools import session_start_core as _ssc
 
     start = time.perf_counter_ns()
+
+    # TAP-1379: short-circuit on repeat calls within the same MCP process.
+    # Audit showed ~23 redundant calls per Claude session; the cached path
+    # returns instantly with a `cached: true` marker so the agent can tell
+    # this was a no-op. Done BEFORE begin_session() so we don't churn the
+    # checklist session id on a cached hit.
+    if not force:
+        cached = _SESSION_START_CACHE.get(_session_start_cache_key(quick))
+        if cached is not None:
+            _record_call("tapps_session_start")
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+            _record_execution("tapps_session_start", start)
+            resp = dict(cached)
+            data = dict(cached.get("data") or {})
+            data["cached"] = True
+            data["elapsed_ms"] = elapsed_ms
+            resp["data"] = data
+            return resp
+
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
@@ -537,7 +581,9 @@ async def tapps_session_start(
     _record_call("tapps_session_start")
 
     if quick:
-        return await _session_start_quick(start, _record_execution, _with_nudges)
+        resp = await _session_start_quick(start, _record_execution, _with_nudges)
+        _SESSION_START_CACHE[_session_start_cache_key(True)] = resp
+        return resp
 
     settings = load_settings()
     (
@@ -624,6 +670,9 @@ async def tapps_session_start(
     resp = _with_nudges("tapps_session_start", resp, {})
     if degraded_warning:
         _prepend_next_step(resp, degraded_warning)
+    # TAP-1379: memoize the full response so subsequent same-process calls
+    # (without force=True) return instantly from cache.
+    _SESSION_START_CACHE[_session_start_cache_key(False)] = resp
     return resp
 
 

@@ -452,7 +452,10 @@ def _reset_caches() -> Generator[None, None, None]:
         _reset_scorer_cache,
         _reset_session_state,
     )
-    from tapps_mcp.server_pipeline_tools import _reset_session_gc_flag
+    from tapps_mcp.server_pipeline_tools import (
+        _reset_session_gc_flag,
+        _reset_session_start_cache,
+    )
     from tapps_mcp.tools.dependency_scan_cache import clear_dependency_cache
     from tapps_mcp.tools.tool_detection import _reset_tools_cache
 
@@ -463,6 +466,7 @@ def _reset_caches() -> Generator[None, None, None]:
     _reset_session_state()
     _reset_tools_cache()
     _reset_session_gc_flag()
+    _reset_session_start_cache()
     clear_dependency_cache()
     _reset_recurring_quick_check_state()
 
