@@ -15,6 +15,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0005](0005-mcp-server-zombie-cleanup-hook-on-session-start.md) | MCP server zombie-cleanup hook on session start | Accepted |
 | [0006](0006-tapps-validate-changed-requires-explicit-file-paths.md) | tapps_validate_changed requires explicit file_paths | Accepted |
 | [0007](0007-linear-writes-default-assignee-to-the-agent-never-the-oauth-human.md) | Linear writes default assignee to the agent, never the OAuth human | Accepted |
+| [0008](0008-delete-sqlite-persistence-edge-case-tests.md) | Delete SQLite MemoryPersistence edge-case tests | Accepted |
 
 ## Adding a new ADR
 

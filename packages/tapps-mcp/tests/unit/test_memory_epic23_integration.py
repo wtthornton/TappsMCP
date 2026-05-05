@@ -17,7 +17,6 @@ from tapps_mcp.memory.models import (
     MemoryEntry,
     MemoryTier,
 )
-from tapps_mcp.memory.persistence import MemoryPersistence
 from tapps_mcp.memory.store import MemoryStore
 
 
@@ -192,32 +191,3 @@ class TestConcurrency:
         t_write.join()
 
         assert not errors
-
-
-@pytest.mark.skip(
-    reason="TestPersistenceEdgeCases tests the removed SQLite MemoryPersistence layer (tapps-brain v3 ADR-007). Behaviour is now in tapps-brain's own test suite."
-)
-class TestPersistenceEdgeCases:
-    """Edge cases for the SQLite persistence layer."""
-
-    def test_schema_version_persists(self, tmp_path: Path) -> None:
-        p1 = MemoryPersistence(tmp_path)
-        assert p1.get_schema_version() == 17
-        p1.close()
-
-        p2 = MemoryPersistence(tmp_path)
-        assert p2.get_schema_version() == 17
-        p2.close()
-
-    def test_fts_special_chars_no_crash(self, tmp_path: Path) -> None:
-        p = MemoryPersistence(tmp_path)
-        p.save(MemoryEntry(key="special", value="Use C++ and C# languages"))
-        results = p.search("C++")
-        assert isinstance(results, list)
-        p.close()
-
-    def test_empty_fts_search(self, tmp_path: Path) -> None:
-        p = MemoryPersistence(tmp_path)
-        assert p.search("") == []
-        assert p.search("   ") == []
-        p.close()
