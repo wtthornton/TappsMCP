@@ -243,6 +243,8 @@ def _filter_scripts(
         # TAP-1224 Linear cache-first read gate
         "tapps-pre-linear-list": "PreToolUse",
         "tapps-post-linear-snapshot-get": "PostToolUse",
+        # TAP-1412 Linear list_issues auto-populate
+        "tapps-post-linear-list": "PostToolUse",
         # TAP-956 reactive-event scripts
         "tapps-cwd-changed": "CwdChanged",
         "tapps-permission-denied": "PermissionDenied",

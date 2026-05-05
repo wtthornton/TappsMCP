@@ -752,12 +752,25 @@ def _count_cache_gate_violations_24h(project_root: Path) -> int:
     ``ts`` field is within 24 hours of now. Returns 0 when the log is missing
     or unparseable — this is a doctor-time signal, not a gate, so failures
     degrade silently.
+
+    TAP-1411: only counts ``category=gate_miss`` (default for legacy entries
+    without the field). ``category=cross_project`` entries are tracked
+    separately and not flagged as actionable violations.
     """
+    return _categorize_cache_gate_violations_24h(project_root)["gate_miss"]
+
+
+def _categorize_cache_gate_violations_24h(project_root: Path) -> dict[str, int]:
+    """Bucket the 24-h cache-gate violations by ``category`` (TAP-1411).
+
+    Returns a dict with keys ``gate_miss`` and ``cross_project``. Legacy
+    entries that pre-date the category field are counted as ``gate_miss``.
+    """
+    counts = {"gate_miss": 0, "cross_project": 0}
     log_path = project_root / ".tapps-mcp" / ".cache-gate-violations.jsonl"
     if not log_path.exists():
-        return 0
+        return counts
     cutoff = datetime.now(UTC) - timedelta(hours=24)
-    count = 0
     try:
         with log_path.open(encoding="utf-8") as f:
             for line in f:
@@ -772,15 +785,19 @@ def _count_cache_gate_violations_24h(project_root: Path) -> int:
                 if not isinstance(ts_raw, str):
                     continue
                 try:
-                    # Hooks emit ISO-8601 with trailing Z; normalize for fromisoformat.
                     ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
                 except ValueError:
                     continue
-                if ts >= cutoff:
-                    count += 1
+                if ts < cutoff:
+                    continue
+                category = entry.get("category", "gate_miss")
+                if category == "cross_project":
+                    counts["cross_project"] += 1
+                else:
+                    counts["gate_miss"] += 1
     except OSError:
-        return 0
-    return count
+        return counts
+    return counts
 
 
 def check_finish_task_skill(project_root: Path) -> CheckResult:

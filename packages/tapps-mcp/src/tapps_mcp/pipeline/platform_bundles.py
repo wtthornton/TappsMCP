@@ -1121,12 +1121,15 @@ Hard-enforced via hooks in `.claude/settings.json`:
 
 Hard-enforced via the cache-first read gate. Mode controlled by `linear_enforce_cache_gate` in `.tapps-mcp.yaml` (`off` | `warn` | `block`; default `warn` at high/medium engagement, `off` at low):
 
-- **PostToolUse** on `mcp__tapps-mcp__tapps_linear_snapshot_get` → `.claude/hooks/tapps-post-linear-snapshot-get.sh` writes a per-`(team, project, state, label, limit)` sentinel at `.tapps-mcp/.linear-snapshot-sentinel-<key>` on **both** `cached=true` and `cached=false` responses. Cache hit means the agent did the right thing; cache miss means the agent is authorized to call `list_issues` for that exact slice.
+- **PostToolUse** on `mcp__tapps-mcp__tapps_linear_snapshot_get` → `.claude/hooks/tapps-post-linear-snapshot-get.sh` writes a per-`(team, project, state, label, limit)` sentinel at `.tapps-mcp/.linear-snapshot-sentinel-<key>` on **both** `cached=true` and `cached=false` responses. When `state` is `open` (a tapps-mcp TTL bucket alias), `''`, or any open-bucket member (`backlog`/`unstarted`/`started`/`triage`), the hook ALSO writes alias sentinels for every other open-bucket state (TAP-1374) so concrete `list_issues` calls don't self-trip the gate.
+- **PostToolUse** on `mcp__plugin_linear_linear__list_issues` → `.claude/hooks/tapps-post-linear-list.sh` auto-populates `.tapps-mcp-cache/linear-snapshots/<key>.json` directly from the response payload (TAP-1412). Eliminates the agent's manual `tapps_linear_snapshot_put` step that was being skipped, leaving the cache empty.
 - **PreToolUse** on `mcp__plugin_linear_linear__list_issues` → `.claude/hooks/tapps-pre-linear-list.sh` derives the same sentinel key from the call args and:
   - **warn mode** (default): logs the violation to `.tapps-mcp/.cache-gate-violations.jsonl` and lets the call through. Use the first release for telemetry; `tapps doctor` reports the 24-hour violation count.
   - **block mode**: rejects the call with exit 2 unless a matching sentinel < 300 s old exists. Bypass with `TAPPS_LINEAR_SKIP_CACHE_GATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`).
+  - **cross-project tagging (TAP-1411)**: when the call's `team`/`project` differ from this repo's `linear_team`/`linear_project` in `.tapps-mcp.yaml`, the violation is tagged `category: cross_project` and passes through regardless of mode (agent-scope.md allows cross-project READS). Same-project misses are tagged `category: gate_miss`.
 - **No exempt parameters.** Single-issue lookups must use `mcp__plugin_linear_linear__get_issue(id=...)`. There is no `query=` / `parentId=` / `cycle=` exemption — every multi-issue read goes through `tapps_linear_snapshot_get` first (the `linear-read` skill from TAP-1260 routes this for you).
 - **Per-key isolation.** A snapshot_get for project A does **not** unlock a list_issues for project B — the sentinel hash includes team, project, state, label, and limit so cross-slice unlock is impossible.
+- **Violation-log schema.** Each line in `.cache-gate-violations.jsonl` carries `ts`, `key`, `mode`, `category` (`gate_miss`|`cross_project`), `call_team`, `call_project`. Older lines (pre-TAP-1411) lack the category field — treat as `gate_miss`.
 """
 
 

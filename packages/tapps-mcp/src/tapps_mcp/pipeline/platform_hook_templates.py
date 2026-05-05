@@ -2006,6 +2006,8 @@ try:
 except Exception:
     print('')
     print('')
+    print('')
+    print('')
     sys.exit(0)
 name = d.get('tool_name') or d.get('toolName') or ''
 inp = d.get('tool_input') or d.get('toolInput') or {}
@@ -2017,27 +2019,46 @@ try:
     limit = int(inp.get('limit') or 50)
 except Exception:
     limit = 50
-# Mirror tapps_mcp.server_linear_tools._filter_hash: drop None/'' values.
-filt = {k: v for k, v in sorted({
-    'state': state, 'label': label, 'limit': limit,
-}.items()) if v not in (None, '')}
-payload = json.dumps(filt, sort_keys=True, default=str).encode('utf-8')
-fhash = hashlib.sha256(payload).hexdigest()[:16]
-parts = [
-    (team.replace('/', '_') or '_'),
-    (project.replace('/', '_') or '_'),
-    ((state or 'any').replace('/', '_')),
-    fhash,
-]
-key = '__'.join(parts)
-# Skip the gate when the call is a single-issue get (id-only). The agent
-# should be using mcp__plugin_linear_linear__get_issue, but if list_issues
-# was called with a query that targets a single id, we have no team/project
-# context to key on — let it through with empty key.
+# Open-bucket alias: tapps-mcp's TTL bucket 'open' covers backlog, unstarted,
+# started, triage. The skill tells agents to snapshot_get(state='open') and
+# then list_issues with a concrete state. Without alias support the keys
+# differ and the gate self-trips (TAP-1374). Fix: derive a bucket alias and
+# emit additional sentinels for it. Same logic on both sides.
+OPEN_BUCKET = ('backlog', 'unstarted', 'started', 'triage')
+state_lc = state.lower()
+def _key_for(state_part: str) -> str:
+    filt = {k: v for k, v in sorted({
+        'state': state_part, 'label': label, 'limit': limit,
+    }.items()) if v not in (None, '')}
+    payload = json.dumps(filt, sort_keys=True, default=str).encode('utf-8')
+    fhash = hashlib.sha256(payload).hexdigest()[:16]
+    parts = [
+        (team.replace('/', '_') or '_'),
+        (project.replace('/', '_') or '_'),
+        ((state_part or 'any').replace('/', '_')),
+        fhash,
+    ]
+    return '__'.join(parts)
+key = _key_for(state)
+# Bucket alias keys: when state is 'open' (a tapps-mcp alias), '' (any), or
+# any open-bucket member, every other open-bucket member should resolve.
+alias_keys = []
 if not team or not project:
     key = ''
+else:
+    if state_lc in OPEN_BUCKET or state_lc in ('open', ''):
+        for m in OPEN_BUCKET:
+            alias_keys.append(_key_for(m))
+        alias_keys.append(_key_for('open'))
+        alias_keys.append(_key_for(''))
+    # de-dup while preserving order; drop the exact key
+    seen = {key}
+    alias_keys = [k for k in alias_keys if not (k in seen or seen.add(k))]
 print(name)
 print(key)
+print(team)
+print(project)
+print('|'.join(alias_keys))
 """
 
 LINEAR_CACHE_GATE_POST_SNAPSHOT_SCRIPT = (
@@ -2060,6 +2081,7 @@ PARSED=$(echo "$INPUT" | "$PYBIN" -c "
 " 2>/dev/null)
 TOOL=$(echo "$PARSED" | sed -n '1p')
 KEY=$(echo "$PARSED" | sed -n '2p')
+ALIASES=$(echo "$PARSED" | sed -n '5p')
 case "$TOOL" in
   mcp__tapps-mcp__tapps_linear_snapshot_get|tapps_linear_snapshot_get) ;;
   *) exit 0 ;;
@@ -2069,7 +2091,18 @@ if [ -z "$KEY" ]; then
 fi
 ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
 mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
-date +%s > "$ROOT/.tapps-mcp/.linear-snapshot-sentinel-${KEY}" 2>/dev/null
+NOW=$(date +%s)
+echo "$NOW" > "$ROOT/.tapps-mcp/.linear-snapshot-sentinel-${KEY}" 2>/dev/null
+# TAP-1374: also write bucket-alias sentinels so a snapshot for state='open'
+# (a tapps-mcp TTL bucket alias) unlocks list_issues for any open-bucket
+# member state without self-tripping the gate.
+if [ -n "$ALIASES" ]; then
+  IFS='|' read -r -a _ALIAS_KEYS <<< "$ALIASES"
+  for ak in "${_ALIAS_KEYS[@]}"; do
+    [ -z "$ak" ] && continue
+    echo "$NOW" > "$ROOT/.tapps-mcp/.linear-snapshot-sentinel-${ak}" 2>/dev/null
+  done
+fi
 exit 0
 """
 )
@@ -2097,6 +2130,8 @@ PARSED=$(echo "$INPUT" | "$PYBIN" -c "
 " 2>/dev/null)
 TOOL=$(echo "$PARSED" | sed -n '1p')
 KEY=$(echo "$PARSED" | sed -n '2p')
+CALL_TEAM=$(echo "$PARSED" | sed -n '3p')
+CALL_PROJECT=$(echo "$PARSED" | sed -n '4p')
 case "$TOOL" in
   mcp__plugin_linear_linear__list_issues|list_issues) ;;
   *) exit 0 ;;
@@ -2122,10 +2157,31 @@ if [ -f "$SENTINEL" ]; then
     fi
   fi
 fi
-# No matching sentinel (or stale). Log the violation in either mode.
+# No matching sentinel (or stale). Determine violation category before logging.
+# TAP-1411: cross-project reads (allowed by agent-scope.md) must NOT be
+# treated as gate misses. Read expected team/project from .tapps-mcp.yaml
+# (linear_team / linear_project flat keys); if the call's team/project differ,
+# tag category=cross_project and pass through even in block mode.
+EXPECTED_TEAM=""
+EXPECTED_PROJECT=""
+if [ -f "$ROOT/.tapps-mcp.yaml" ]; then
+  EXPECTED_TEAM=$(grep -E '^linear_team:' "$ROOT/.tapps-mcp.yaml" 2>/dev/null | head -1 | sed -E 's/^linear_team:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\\1/')
+  EXPECTED_PROJECT=$(grep -E '^linear_project:' "$ROOT/.tapps-mcp.yaml" 2>/dev/null | head -1 | sed -E 's/^linear_project:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\\1/')
+fi
+CATEGORY="gate_miss"
+if [ -n "$EXPECTED_TEAM" ] && [ -n "$EXPECTED_PROJECT" ] && [ -n "$CALL_TEAM" ] && [ -n "$CALL_PROJECT" ]; then
+  if [ "$CALL_TEAM" != "$EXPECTED_TEAM" ] || [ "$CALL_PROJECT" != "$EXPECTED_PROJECT" ]; then
+    CATEGORY="cross_project"
+  fi
+fi
 mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
-echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"key\\":\\"${KEY}\\",\\"mode\\":\\"${MODE}\\"}" \\
+echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"key\\":\\"${KEY}\\",\\"mode\\":\\"${MODE}\\",\\"category\\":\\"${CATEGORY}\\",\\"call_team\\":\\"${CALL_TEAM}\\",\\"call_project\\":\\"${CALL_PROJECT}\\"}" \\
   >> "$ROOT/.tapps-mcp/.cache-gate-violations.jsonl" 2>/dev/null
+# Cross-project reads pass through regardless of mode — agent-scope.md allows
+# read-only access to other projects; the gate is for THIS project's writes.
+if [ "$CATEGORY" = "cross_project" ]; then
+  exit 0
+fi
 if [ "$MODE" = "warn" ]; then
   cat >&2 <<MSG
 TappsMCP: Linear cache-first read rule (TAP-1224, warn mode) — no recent tapps_linear_snapshot_get for this (team, project, state) slice.
@@ -2151,6 +2207,120 @@ exit 2
 """
 )
 
+# TAP-1412: auto-populate the snapshot cache directly from the list_issues
+# response. The agent forgetting to call tapps_linear_snapshot_put is the
+# common failure mode that leaves .tapps-mcp-cache/linear-snapshots/ empty
+# despite sentinels being written. This hook removes the human-in-the-loop
+# step: it intercepts the PostToolUse for list_issues, computes the same key
+# the snapshot tools use, extracts the issues array from tool_response, and
+# writes the cache file directly. The cooperating server-side
+# tapps_linear_snapshot_get reads it on the next call.
+LINEAR_CACHE_GATE_POST_LIST_SCRIPT = (
+    """\
+#!/usr/bin/env bash
+# TappsMCP PostToolUse hook — Linear list_issues auto-populate (TAP-1412)
+# After a successful mcp__plugin_linear_linear__list_issues call, write the
+# response into .tapps-mcp-cache/linear-snapshots/<key>.json so the next
+# tapps_linear_snapshot_get returns cached=true. Eliminates the manual
+# snapshot_put step that was being skipped.
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+if [ -z "$PYBIN" ]; then
+  exit 0
+fi
+ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+echo "$INPUT" | TAPPS_PROJECT_ROOT="$ROOT" "$PYBIN" -c "
+import sys, os, json, hashlib, time
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+name = d.get('tool_name') or d.get('toolName') or ''
+if name not in ('mcp__plugin_linear_linear__list_issues', 'list_issues'):
+    sys.exit(0)
+inp = d.get('tool_input') or d.get('toolInput') or {}
+team = (inp.get('team') or '').strip()
+project = (inp.get('project') or '').strip()
+state = (inp.get('state') or '').strip()
+label = (inp.get('label') or '').strip()
+try:
+    limit = int(inp.get('limit') or 50)
+except Exception:
+    limit = 50
+if not team or not project:
+    sys.exit(0)
+filt = {k: v for k, v in sorted({
+    'state': state, 'label': label, 'limit': limit,
+}.items()) if v not in (None, '')}
+payload = json.dumps(filt, sort_keys=True, default=str).encode('utf-8')
+fhash = hashlib.sha256(payload).hexdigest()[:16]
+key = '__'.join([
+    team.replace('/', '_') or '_',
+    project.replace('/', '_') or '_',
+    (state or 'any').replace('/', '_'),
+    fhash,
+])
+resp = d.get('tool_response') or d.get('toolResponse') or {}
+if isinstance(resp, str):
+    try:
+        resp = json.loads(resp)
+    except Exception:
+        resp = {}
+def _find_issues(o):
+    if isinstance(o, list):
+        if o and isinstance(o[0], dict) and any(
+            k in o[0] for k in ('identifier', 'id', 'title')
+        ):
+            return o
+        for e in o:
+            r = _find_issues(e)
+            if r is not None:
+                return r
+        return None
+    if isinstance(o, dict):
+        if isinstance(o.get('issues'), list):
+            return o['issues']
+        for v in o.values():
+            r = _find_issues(v)
+            if r is not None:
+                return r
+    return None
+issues = _find_issues(resp) or []
+# TTL aligned with server-side _ttl_for_state defaults (5 min open, 1 h closed).
+state_lc = state.lower()
+ttl = 3600 if state_lc in ('completed', 'canceled') else 300
+now = time.time()
+out = {
+    'issues': issues,
+    'cached_at': now,
+    'expires_at': now + ttl,
+    'state': state or None,
+    'team': team,
+    'project': project,
+    'auto_populated': True,
+}
+root = os.environ.get('TAPPS_PROJECT_ROOT') or os.getcwd()
+cache_dir = os.path.join(root, '.tapps-mcp-cache', 'linear-snapshots')
+try:
+    os.makedirs(cache_dir, exist_ok=True)
+    target = os.path.join(cache_dir, key + '.json')
+    tmp = target + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        json.dump(out, fh)
+    os.replace(tmp, target)
+    # Also drop a sentinel so a subsequent list_issues call passes the gate
+    # without needing a snapshot_get round-trip first.
+    sentinel_dir = os.path.join(root, '.tapps-mcp')
+    os.makedirs(sentinel_dir, exist_ok=True)
+    with open(os.path.join(sentinel_dir, '.linear-snapshot-sentinel-' + key), 'w') as fh:
+        fh.write(str(int(now)))
+except OSError:
+    pass
+" 2>/dev/null
+exit 0
+"""
+)
+
 LINEAR_CACHE_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
         {
@@ -2173,12 +2343,22 @@ LINEAR_CACHE_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
                 },
             ],
         },
+        {
+            "matcher": "mcp__plugin_linear_linear__list_issues",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-post-linear-list.sh",
+                },
+            ],
+        },
     ],
 }
 
 LINEAR_CACHE_GATE_SCRIPTS: dict[str, str] = {
     "tapps-pre-linear-list.sh": LINEAR_CACHE_GATE_PRE_LIST_SCRIPT,
     "tapps-post-linear-snapshot-get.sh": LINEAR_CACHE_GATE_POST_SNAPSHOT_SCRIPT,
+    "tapps-post-linear-list.sh": LINEAR_CACHE_GATE_POST_LIST_SCRIPT,
 }
 
 # PowerShell variants — same sentinel path, same key derivation rules.

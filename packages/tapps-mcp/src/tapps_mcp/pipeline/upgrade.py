@@ -124,6 +124,7 @@ _CANONICAL_HOOK_MANIFEST: frozenset[str] = frozenset({
     "tapps-post-report.sh",
     "tapps-post-docs-validate.sh",
     "tapps-post-linear-snapshot-get.sh",
+    "tapps-post-linear-list.sh",
     "tapps-pre-linear-write.sh",
     "tapps-pre-linear-list.sh",
     "tapps-stop.sh",
@@ -592,7 +593,11 @@ def _upgrade_claude_code_dry_run(
             conditional_managed.extend(["tapps-pre-linear-write.sh", "tapps-post-docs-validate.sh"])
         if linear_enforce_cache_gate in ("warn", "block"):
             conditional_managed.extend(
-                ["tapps-pre-linear-list.sh", "tapps-post-linear-snapshot-get.sh"]
+                [
+                    "tapps-pre-linear-list.sh",
+                    "tapps-post-linear-snapshot-get.sh",
+                    "tapps-post-linear-list.sh",
+                ]
             )
         hooks_component: dict[str, Any] = {
             "action": "would-write-managed-scripts",

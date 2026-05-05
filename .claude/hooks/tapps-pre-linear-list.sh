@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.10.0
 # TappsMCP PreToolUse hook — Linear cache-first read gate (TAP-1224)
 # Gates raw mcp__plugin_linear_linear__list_issues calls behind a recent
 # tapps_linear_snapshot_get sentinel for the same (team, project, state,
@@ -20,6 +19,8 @@ try:
 except Exception:
     print('')
     print('')
+    print('')
+    print('')
     sys.exit(0)
 name = d.get('tool_name') or d.get('toolName') or ''
 inp = d.get('tool_input') or d.get('toolInput') or {}
@@ -31,30 +32,51 @@ try:
     limit = int(inp.get('limit') or 50)
 except Exception:
     limit = 50
-# Mirror tapps_mcp.server_linear_tools._filter_hash: drop None/'' values.
-filt = {k: v for k, v in sorted({
-    'state': state, 'label': label, 'limit': limit,
-}.items()) if v not in (None, '')}
-payload = json.dumps(filt, sort_keys=True, default=str).encode('utf-8')
-fhash = hashlib.sha256(payload).hexdigest()[:16]
-parts = [
-    (team.replace('/', '_') or '_'),
-    (project.replace('/', '_') or '_'),
-    ((state or 'any').replace('/', '_')),
-    fhash,
-]
-key = '__'.join(parts)
-# Skip the gate when the call is a single-issue get (id-only). The agent
-# should be using mcp__plugin_linear_linear__get_issue, but if list_issues
-# was called with a query that targets a single id, we have no team/project
-# context to key on — let it through with empty key.
+# Open-bucket alias: tapps-mcp's TTL bucket 'open' covers backlog, unstarted,
+# started, triage. The skill tells agents to snapshot_get(state='open') and
+# then list_issues with a concrete state. Without alias support the keys
+# differ and the gate self-trips (TAP-1374). Fix: derive a bucket alias and
+# emit additional sentinels for it. Same logic on both sides.
+OPEN_BUCKET = ('backlog', 'unstarted', 'started', 'triage')
+state_lc = state.lower()
+def _key_for(state_part: str) -> str:
+    filt = {k: v for k, v in sorted({
+        'state': state_part, 'label': label, 'limit': limit,
+    }.items()) if v not in (None, '')}
+    payload = json.dumps(filt, sort_keys=True, default=str).encode('utf-8')
+    fhash = hashlib.sha256(payload).hexdigest()[:16]
+    parts = [
+        (team.replace('/', '_') or '_'),
+        (project.replace('/', '_') or '_'),
+        ((state_part or 'any').replace('/', '_')),
+        fhash,
+    ]
+    return '__'.join(parts)
+key = _key_for(state)
+# Bucket alias keys: when state is 'open' (a tapps-mcp alias), '' (any), or
+# any open-bucket member, every other open-bucket member should resolve.
+alias_keys = []
 if not team or not project:
     key = ''
+else:
+    if state_lc in OPEN_BUCKET or state_lc in ('open', ''):
+        for m in OPEN_BUCKET:
+            alias_keys.append(_key_for(m))
+        alias_keys.append(_key_for('open'))
+        alias_keys.append(_key_for(''))
+    # de-dup while preserving order; drop the exact key
+    seen = {key}
+    alias_keys = [k for k in alias_keys if not (k in seen or seen.add(k))]
 print(name)
 print(key)
+print(team)
+print(project)
+print('|'.join(alias_keys))
 " 2>/dev/null)
 TOOL=$(echo "$PARSED" | sed -n '1p')
 KEY=$(echo "$PARSED" | sed -n '2p')
+CALL_TEAM=$(echo "$PARSED" | sed -n '3p')
+CALL_PROJECT=$(echo "$PARSED" | sed -n '4p')
 case "$TOOL" in
   mcp__plugin_linear_linear__list_issues|list_issues) ;;
   *) exit 0 ;;
@@ -80,10 +102,31 @@ if [ -f "$SENTINEL" ]; then
     fi
   fi
 fi
-# No matching sentinel (or stale). Log the violation in either mode.
+# No matching sentinel (or stale). Determine violation category before logging.
+# TAP-1411: cross-project reads (allowed by agent-scope.md) must NOT be
+# treated as gate misses. Read expected team/project from .tapps-mcp.yaml
+# (linear_team / linear_project flat keys); if the call's team/project differ,
+# tag category=cross_project and pass through even in block mode.
+EXPECTED_TEAM=""
+EXPECTED_PROJECT=""
+if [ -f "$ROOT/.tapps-mcp.yaml" ]; then
+  EXPECTED_TEAM=$(grep -E '^linear_team:' "$ROOT/.tapps-mcp.yaml" 2>/dev/null | head -1 | sed -E 's/^linear_team:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/')
+  EXPECTED_PROJECT=$(grep -E '^linear_project:' "$ROOT/.tapps-mcp.yaml" 2>/dev/null | head -1 | sed -E 's/^linear_project:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/')
+fi
+CATEGORY="gate_miss"
+if [ -n "$EXPECTED_TEAM" ] && [ -n "$EXPECTED_PROJECT" ] && [ -n "$CALL_TEAM" ] && [ -n "$CALL_PROJECT" ]; then
+  if [ "$CALL_TEAM" != "$EXPECTED_TEAM" ] || [ "$CALL_PROJECT" != "$EXPECTED_PROJECT" ]; then
+    CATEGORY="cross_project"
+  fi
+fi
 mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
-echo "{\"ts\":\"$(date -u +%FT%TZ)\",\"key\":\"${KEY}\",\"mode\":\"${MODE}\"}" \
+echo "{\"ts\":\"$(date -u +%FT%TZ)\",\"key\":\"${KEY}\",\"mode\":\"${MODE}\",\"category\":\"${CATEGORY}\",\"call_team\":\"${CALL_TEAM}\",\"call_project\":\"${CALL_PROJECT}\"}" \
   >> "$ROOT/.tapps-mcp/.cache-gate-violations.jsonl" 2>/dev/null
+# Cross-project reads pass through regardless of mode — agent-scope.md allows
+# read-only access to other projects; the gate is for THIS project's writes.
+if [ "$CATEGORY" = "cross_project" ]; then
+  exit 0
+fi
 if [ "$MODE" = "warn" ]; then
   cat >&2 <<MSG
 TappsMCP: Linear cache-first read rule (TAP-1224, warn mode) — no recent tapps_linear_snapshot_get for this (team, project, state) slice.
