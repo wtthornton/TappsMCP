@@ -8,7 +8,7 @@ Covers two production reliability bugs found in the 30-day audit:
 - Async actions that need the local store (e.g. ``consolidate``) used to
   null-deref with "'NoneType' object has no attribute 'list_all'" when the
   bridge was in HTTP mode. The async dispatch now returns a structured
-  ``http_mode_not_supported`` error, mirroring the sync path.
+  ``requires_in_process_store`` error, mirroring the sync path.
 """
 
 from __future__ import annotations
@@ -143,7 +143,7 @@ class TestAsyncDispatchNoneStoreGuard:
             result = await tapps_memory(action="consolidate")
 
         assert result["success"] is False
-        assert result["error"]["code"] == "http_mode_not_supported"
+        assert result["error"]["code"] == "requires_in_process_store"
         assert "consolidate" in result["error"]["message"]
 
     async def test_validate_with_none_store_returns_structured_error(self) -> None:
@@ -154,7 +154,7 @@ class TestAsyncDispatchNoneStoreGuard:
             result = await tapps_memory(action="validate", key="x")
 
         assert result["success"] is False
-        assert result["error"]["code"] == "http_mode_not_supported"
+        assert result["error"]["code"] == "requires_in_process_store"
 
     async def test_hive_status_with_none_store_does_not_crash(self) -> None:
         """hive_status is on the HTTP-OK allowlist — None store must not block it."""
@@ -165,9 +165,9 @@ class TestAsyncDispatchNoneStoreGuard:
             result = await tapps_memory(action="hive_status")
 
         # hive_status returns success=True with degraded info; it must NOT
-        # be the http_mode_not_supported gate.
+        # be the requires_in_process_store gate.
         if result.get("success") is False:
-            assert result.get("error", {}).get("code") != "http_mode_not_supported"
+            assert result.get("error", {}).get("code") != "requires_in_process_store"
 
     async def test_health_with_none_store_does_not_crash(self) -> None:
         """health is on the HTTP-OK allowlist."""
@@ -178,4 +178,4 @@ class TestAsyncDispatchNoneStoreGuard:
             result = await tapps_memory(action="health")
 
         if result.get("success") is False:
-            assert result.get("error", {}).get("code") != "http_mode_not_supported"
+            assert result.get("error", {}).get("code") != "requires_in_process_store"

@@ -131,6 +131,22 @@ _ASYNC_HTTP_OK_ACTIONS = {
     "agent_register",
 }
 
+# TAP-1421: sync actions whose primitives are also exposed on BrainBridge as
+# async methods (search/get/list_memories/save/delete/reinforce). When the
+# bridge is in HTTP mode (store is None), route these to a thin async fallback
+# that calls BrainBridge directly. The previous behaviour returned
+# `http_mode_not_supported` for save, leaving HTTP-mode users unable to write
+# memory at all — which silently disables federation, auto-capture, and every
+# other write-side workflow.
+_HTTP_BRIDGE_FALLBACK_ACTIONS = {
+    "save",
+    "get",
+    "delete",
+    "search",
+    "list",
+    "reinforce",
+}
+
 
 def _classify_store_init_error(exc: BaseException) -> str:
     """TAP-1080: classify an exception from _get_memory_store into a sub-code.
@@ -483,33 +499,16 @@ async def tapps_memory(
             # directly and would crash with "'NoneType' object has no
             # attribute ..." if we let store=None through.
             if store is None and action not in _ASYNC_HTTP_OK_ACTIONS:
-                return error_response(
-                    "tapps_memory",
-                    "http_mode_not_supported",
-                    (
-                        f"Action '{action}' requires a local memory store, "
-                        f"but the BrainBridge is running in HTTP mode "
-                        f"(TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is set). This action "
-                        f"has not yet been ported to the async HTTP bridge. "
-                        f"Unset TAPPS_MCP_MEMORY_BRAIN_HTTP_URL to fall back to "
-                        f"in-process mode, or use an async/HTTP-capable action."
-                    ),
-                )
+                return _requires_in_process_store_response(action)
             result_data = await _ASYNC_DISPATCH[action](store, params)
+        elif store is None and action in _HTTP_BRIDGE_FALLBACK_ACTIONS:
+            # TAP-1421: HTTP-bridge mode — route core CRUD through BrainBridge
+            # async methods so write actions (save) and reads (get/list/...)
+            # work without an in-process store.
+            result_data = await _HTTP_BRIDGE_DISPATCH[action](params)
         else:
             if store is None:
-                return error_response(
-                    "tapps_memory",
-                    "http_mode_not_supported",
-                    (
-                        f"Action '{action}' requires a local memory store, "
-                        f"but the BrainBridge is running in HTTP mode "
-                        f"(TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is set). This action "
-                        f"has not yet been ported to the async HTTP bridge. "
-                        f"Unset TAPPS_MCP_MEMORY_BRAIN_HTTP_URL to fall back to "
-                        f"in-process mode, or use an async/HTTP-capable action."
-                    ),
-                )
+                return _requires_in_process_store_response(action)
             result_data = _DISPATCH[action](store, params)
     except Exception as exc:
         return error_response(
@@ -2431,6 +2430,167 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     # maintain, and health moved to _ASYNC_DISPATCH (TAP-412 / EPIC-95.3).
     # NOTE: hive_status, hive_search, hive_propagate, agent_register moved to
     # _ASYNC_DISPATCH (TAP-413 / EPIC-95.4) — they delegate to BrainBridge.
+}
+
+
+# ---------------------------------------------------------------------------
+# HTTP-bridge fallback handlers (TAP-1421)
+#
+# In HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL set), ``BrainBridge.store`` is
+# None and the sync handlers above can't run. These thin async wrappers call
+# the matching ``BrainBridge`` async methods so the core CRUD actions still
+# work end-to-end. Anything that needs raw MemoryStore primitives (history,
+# supersede, list_all with filters not on the wire, federation, etc.) keeps
+# the gate and now returns ``requires_in_process_store``.
+# ---------------------------------------------------------------------------
+
+
+def _requires_in_process_store_response(action: str) -> dict[str, Any]:
+    """Structured error for actions that need a local MemoryStore.
+
+    Renamed from ``http_mode_not_supported`` (TAP-1421) so the code reflects
+    what the caller must do: drop back to in-process mode by configuring
+    ``memory.database_url`` (or ``TAPPS_BRAIN_DATABASE_URL``) instead of an
+    HTTP bridge URL.
+    """
+    return error_response(
+        "tapps_memory",
+        "requires_in_process_store",
+        (
+            f"Action '{action}' needs raw MemoryStore access (history, "
+            f"supersede, federation, or maintenance APIs not exposed over the "
+            f"HTTP bridge). The BrainBridge is currently in HTTP mode "
+            f"(TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is set / "
+            f".tapps-mcp.yaml memory.brain_http_url). Either unset the HTTP "
+            f"URL and configure memory.database_url for an in-process bridge, "
+            f"or use an HTTP-capable action (save, get, list, delete, search, "
+            f"reinforce, gc, contradictions, verify_integrity, maintain, "
+            f"health, hive_status, hive_search, hive_propagate, "
+            f"agent_register)."
+        ),
+        extra={"sub_code": "http_bridge_lacks_primitive"},
+    )
+
+
+def _require_bridge() -> Any:
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        raise RuntimeError(
+            "BrainBridge unavailable: neither TAPPS_BRAIN_DATABASE_URL nor "
+            "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is configured."
+        )
+    return bridge
+
+
+async def _http_handle_save(p: _Params) -> dict[str, Any]:
+    if not p.key:
+        return {"error": "missing_key", "message": "Key is required for save."}
+    if not p.value:
+        return {"error": "missing_value", "message": "Value is required for save."}
+    bridge = _require_bridge()
+    entry = await bridge.save(
+        key=p.key,
+        value=p.value,
+        tier=p.tier,
+        scope=p.scope,
+        tags=p.tag_list or None,
+        source=p.source,
+        source_agent=p.source_agent,
+        branch=p.branch or None,
+        confidence=p.confidence,
+    )
+    return {
+        "action": "save",
+        "entry": entry,
+        "store_metadata": {"mode": "http_bridge"},
+    }
+
+
+async def _http_handle_get(p: _Params) -> dict[str, Any]:
+    if not p.key:
+        return {"error": "missing_key", "message": "Key is required for get."}
+    bridge = _require_bridge()
+    entry = await bridge.get(p.key)
+    if entry is None:
+        return {
+            "action": "get",
+            "found": False,
+            "key": p.key,
+            "store_metadata": {"mode": "http_bridge"},
+        }
+    return {
+        "action": "get",
+        "found": True,
+        "entry": entry,
+        "store_metadata": {"mode": "http_bridge"},
+    }
+
+
+async def _http_handle_delete(p: _Params) -> dict[str, Any]:
+    if not p.key:
+        return {"error": "missing_key", "message": "Key is required for delete."}
+    bridge = _require_bridge()
+    deleted = await bridge.delete(p.key)
+    return {
+        "action": "delete",
+        "deleted": bool(deleted),
+        "key": p.key,
+        "store_metadata": {"mode": "http_bridge"},
+    }
+
+
+async def _http_handle_search(p: _Params) -> dict[str, Any]:
+    if not p.query:
+        return {
+            "error": "missing_query",
+            "message": "Query required for search in HTTP-bridge mode.",
+        }
+    effective_limit = p.limit if p.limit > 0 else _SEARCH_DEFAULT_LIMIT
+    bridge = _require_bridge()
+    tier = p.tier if p.tier and p.tier != "pattern" else None
+    results = await bridge.search(p.query, limit=effective_limit, tier=tier)
+    return {
+        "action": "search",
+        "query": p.query,
+        "results": results,
+        "result_count": len(results),
+        "store_metadata": {"mode": "http_bridge"},
+    }
+
+
+async def _http_handle_list(p: _Params) -> dict[str, Any]:
+    effective_limit = p.limit if p.limit > 0 else _LIST_DEFAULT_LIMIT
+    bridge = _require_bridge()
+    tier = p.tier if p.tier and p.tier != "pattern" else None
+    entries = await bridge.list_memories(limit=effective_limit, tier=tier)
+    return {
+        "action": "list",
+        "entries": entries,
+        "total_count": len(entries),
+        "returned_count": len(entries),
+        "store_metadata": {"mode": "http_bridge"},
+    }
+
+
+async def _http_handle_reinforce(p: _Params) -> dict[str, Any]:
+    if not p.key:
+        return {"error": "missing_key", "message": "Key is required for reinforce."}
+    bridge = _require_bridge()
+    entry = await bridge.reinforce(p.key)
+    return {
+        "action": "reinforce",
+        "entry": entry,
+        "store_metadata": {"mode": "http_bridge"},
+    }
+
+
+_HTTP_BRIDGE_DISPATCH: dict[str, Any] = {
+    "save": _http_handle_save,
+    "get": _http_handle_get,
+    "delete": _http_handle_delete,
+    "search": _http_handle_search,
+    "list": _http_handle_list,
+    "reinforce": _http_handle_reinforce,
 }
 
 
