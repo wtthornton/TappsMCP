@@ -310,3 +310,110 @@ class TestEdgeCases:
         notes = store.list_all()
         notes.clear()
         assert store.note_count == 1
+
+
+class TestMachineIdentityGate:
+    """TAP-1377: cross-machine session-state recovery must be blocked."""
+
+    def _write_session_file(
+        self,
+        project_root: Path,
+        *,
+        host: str | None,
+        os_name: str | None,
+        cwd: str | None,
+        include_identity: bool = True,
+    ) -> Path:
+        """Helper: write a session JSON with explicit machine-identity fields."""
+        sessions_dir = project_root / ".tapps-mcp" / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+        path = sessions_dir / "deadbeef0001.json"
+        payload: dict[str, object] = {
+            "session_id": "deadbeef0001",
+            "project_root": str(project_root),
+            "notes": {
+                "carry": {
+                    "key": "carry",
+                    "value": "from-prior-session",
+                    "created_at": "2026-05-04T00:00:00+00:00",
+                    "updated_at": "2026-05-04T00:00:00+00:00",
+                }
+            },
+            "session_started": "2026-05-04T00:00:00+00:00",
+        }
+        if include_identity:
+            payload["host"] = host
+            payload["os"] = os_name
+            payload["cwd"] = cwd
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    def test_same_machine_recovery_loads_notes(self, tmp_path: Path) -> None:
+        """Happy path: file written by current host/os/cwd loads normally."""
+        import socket
+        import sys
+
+        self._write_session_file(
+            tmp_path,
+            host=socket.gethostname(),
+            os_name=sys.platform,
+            cwd=str(tmp_path),
+        )
+        store = SessionNoteStore(project_root=tmp_path)
+        assert store.note_count == 1
+        assert store.session_id == "deadbeef0001"
+        note = store.get("carry")
+        assert note is not None
+        assert note.value == "from-prior-session"
+
+    def test_different_host_is_discarded_and_warned(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """File from a different host must NOT load and must emit a warning."""
+        import sys
+
+        path = self._write_session_file(
+            tmp_path,
+            host="some-other-machine.example.com",
+            os_name=sys.platform,
+            cwd=str(tmp_path),
+        )
+        store = SessionNoteStore(project_root=tmp_path)
+        assert store.note_count == 0
+        assert store.get("carry") is None
+        # Mismatched file is preserved (not deleted) for debug.
+        assert path.exists()
+        captured = capsys.readouterr()
+        assert "session_notes_recovery_mismatch_discarded" in (
+            captured.out + captured.err
+        )
+
+    def test_legacy_file_without_identity_is_discarded(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Pre-TAP-1377 files have no host/os/cwd → discard with migration log."""
+        path = self._write_session_file(
+            tmp_path,
+            host=None,
+            os_name=None,
+            cwd=None,
+            include_identity=False,
+        )
+        store = SessionNoteStore(project_root=tmp_path)
+        assert store.note_count == 0
+        assert path.exists()  # not deleted
+        captured = capsys.readouterr()
+        assert "session_notes_recovery_legacy_discarded" in (
+            captured.out + captured.err
+        )
+
+    def test_snapshot_includes_machine_identity(self, tmp_path: Path) -> None:
+        """snapshot() must include host/os/cwd so persisted files are gated."""
+        import socket
+        import sys
+
+        store = SessionNoteStore(project_root=tmp_path)
+        snap = store.snapshot()
+        assert snap.host == socket.gethostname()
+        assert snap.os == sys.platform
+        assert snap.cwd == str(tmp_path)

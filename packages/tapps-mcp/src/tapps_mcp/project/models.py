@@ -136,3 +136,9 @@ class SessionNotesSnapshot(BaseModel):
     project_root: str
     notes: dict[str, SessionNote] = Field(default_factory=dict)
     session_started: str = ""
+    # TAP-1377: machine-identity fields used to gate cross-machine recovery.
+    # Optional for backward compat — legacy snapshots without these fields
+    # are treated as foreign and discarded on load.
+    host: str | None = None
+    os: str | None = None
+    cwd: str | None = None
