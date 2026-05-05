@@ -27,6 +27,7 @@ from docs_mcp.server_helpers import (
     _get_settings,
     error_response,
     finalize_output,
+    safe_slug,
     success_response,
 )
 
@@ -1110,6 +1111,7 @@ async def docs_generate_epic(
     auto_populate: bool = False,
     quick_start: bool = False,
     output_path: str = "",
+    write_to_disk: bool = False,
     project_root: str = "",
 ) -> dict[str, Any]:
     """Generate an Epic planning document with stories and acceptance criteria.
@@ -1171,7 +1173,12 @@ async def docs_generate_epic(
             filled in automatically. Explicit parameters always override
             quick-start defaults. Style defaults to "auto" in quick-start mode.
         output_path: File path to write the epic (relative to project root).
-            When empty, returns the content without writing a file.
+            When empty, defaults to ``docs/epics/EPIC-{number}.md`` (or a
+            slug-derived path when ``number`` is unset).
+        write_to_disk: When False (the default, TAP-1413), the epic body is
+            returned inline (or via FileManifest for large bodies) and no
+            file is written. Linear is the canonical store for epics, so
+            disk drafts are opt-in via ``write_to_disk=True``.
         project_root: Override project root path (default: configured root).
 
     Returns:
@@ -1270,16 +1277,19 @@ async def docs_generate_epic(
     elif number:
         target = f"docs/epics/EPIC-{number}.md"
     else:
-        slug = title.strip().replace(" ", "-").lower()[:60]
+        slug = safe_slug(title) or "untitled"
         target = f"docs/epics/EPIC-{slug}.md"
 
-    # Three-tier output: write-first / inline / manifest
+    # Three-tier output: write-first / inline / manifest.
+    # TAP-1413: default write_to_disk=False — Linear is canonical for epics,
+    # so don't litter the repo with .md drafts unless the caller opts in.
     out = await finalize_output(
         "docs_generate_epic",
         content,
         target,
         root,
         description=f"Epic planning document: {title}",
+        write_to_disk=write_to_disk,
     )
     if not out.get("success", True):
         return out
@@ -1333,6 +1343,7 @@ async def docs_generate_story(
     auto_populate: bool = False,
     quick_start: bool = False,
     output_path: str = "",
+    write_to_disk: bool = False,
     project_root: str = "",
     audience: str = "agent",
 ) -> dict[str, Any]:
@@ -1382,9 +1393,15 @@ async def docs_generate_story(
             so_that, points, size, tasks, and acceptance criteria are filled in
             automatically. Explicit parameters always override quick-start defaults.
         output_path: File path to write the story (relative to project root).
-            When empty, returns the content without writing a file.
-            When set with ``epic_path``, the epic link is rewritten relative to
-            this file (e.g. ``../EPIC-99.md`` for stories in a subdirectory).
+            When empty, defaults to
+            ``docs/epics/stories/STORY-{epic}.{story}.md`` (or a slug-derived
+            path when numbers are unset). When set with ``epic_path``, the
+            epic link is rewritten relative to this file (e.g.
+            ``../EPIC-99.md`` for stories in a subdirectory).
+        write_to_disk: When False (the default, TAP-1413), the story body is
+            returned inline (or via FileManifest for large bodies) and no
+            file is written. Linear is the canonical store for stories, so
+            disk drafts are opt-in via ``write_to_disk=True``.
         project_root: Override project root path (default: configured root).
         audience: Output target — ``"agent"`` (default) emits the 5-section
             Linear-issue template with validation enforcement;
@@ -1496,16 +1513,19 @@ async def docs_generate_story(
     elif epic_number and story_number:
         target = f"docs/epics/stories/STORY-{epic_number}.{story_number}.md"
     else:
-        slug = title.strip().replace(" ", "-").lower()[:60]
+        slug = safe_slug(title) or "untitled"
         target = f"docs/epics/stories/STORY-{slug}.md"
 
-    # Three-tier output: write-first / inline / manifest
+    # Three-tier output: write-first / inline / manifest.
+    # TAP-1413: default write_to_disk=False — Linear is canonical for stories,
+    # so don't litter the repo with .md drafts unless the caller opts in.
     out = await finalize_output(
         "docs_generate_story",
         content,
         target,
         root,
         description=f"User story: {title}",
+        write_to_disk=write_to_disk,
     )
     if not out.get("success", True):
         return out

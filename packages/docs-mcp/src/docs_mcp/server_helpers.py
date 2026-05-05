@@ -3,10 +3,35 @@
 from __future__ import annotations
 
 import asyncio
+import re
+import unicodedata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from docs_mcp.config.settings import DocsMCPSettings
+
+
+# ---------------------------------------------------------------------------
+# Filename slugification (TAP-1413).
+# ---------------------------------------------------------------------------
+
+
+def safe_slug(text: str, *, max_length: int = 60) -> str:
+    """Return a filesystem-safe slug for ``text``.
+
+    Strips diacritics, lowercases, replaces every non ``[a-z0-9-]`` character
+    with ``-``, collapses runs of ``-``, trims leading/trailing ``-`` and caps
+    length at ``max_length``. Guarantees the result is a single path segment
+    (no ``/``, ``:``, ``;``, ``.``, etc.) safe to embed in a filename.
+    """
+    normalised = unicodedata.normalize("NFKD", text)
+    ascii_only = normalised.encode("ascii", "ignore").decode("ascii")
+    lowered = ascii_only.lower()
+    replaced = re.sub(r"[^a-z0-9-]+", "-", lowered)
+    collapsed = re.sub(r"-+", "-", replaced).strip("-")
+    if max_length > 0:
+        collapsed = collapsed[:max_length].rstrip("-")
+    return collapsed
 
 if TYPE_CHECKING:
     from docs_mcp.validators.style import StyleChecker
@@ -219,17 +244,20 @@ async def finalize_output(
     root: Path,
     *,
     description: str = "",
+    write_to_disk: bool = True,
 ) -> dict[str, Any]:
     """Three-tier output handler for generator tools.
 
-    **Tier 1 — write-first** (writable filesystem): write to disk, return
-    summary only (path, size, section_count).  Never includes ``content``.
+    **Tier 1 — write-first** (writable filesystem and ``write_to_disk=True``):
+    write to disk, return summary only (path, size, section_count). Never
+    includes ``content``.
 
-    **Tier 2 — inline** (read-only, content < 20 K chars): return content
-    directly in the response.
+    **Tier 2 — inline** (read-only or ``write_to_disk=False``, content
+    < 20 K chars): return content directly in the response.
 
-    **Tier 3 — manifest** (read-only, content >= 20 K chars): return a
-    ``FileManifest`` so the AI client can apply the file.
+    **Tier 3 — manifest** (read-only or ``write_to_disk=False``,
+    content >= 20 K chars): return a ``FileManifest`` so the AI client can
+    apply the file.
 
     Returns a dict fragment to **merge** into the tool's ``data`` dict.
     If a write error occurs the returned dict is a full ``error_response``
@@ -244,7 +272,7 @@ async def finalize_output(
     if not output_path.endswith((".html", ".htm", ".txt")):
         fragment["section_count"] = _count_sections(content)
 
-    if can_write_to_project(root):
+    if write_to_disk and can_write_to_project(root):
         # Tier 1: write to disk, return metadata only
         try:
             from tapps_core.security.path_validator import PathValidator

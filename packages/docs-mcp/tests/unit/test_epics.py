@@ -1050,6 +1050,7 @@ class TestEpicFileHintsMCPTool:
                 title="File Hints Epic",
                 files="setup.py",
                 project_root=str(tmp_path),
+                write_to_disk=True,
             )
 
         assert "written_to" in result["data"]
@@ -1066,6 +1067,7 @@ class TestEpicFileHintsMCPTool:
             result = await self._call(
                 title="No Files Epic",
                 project_root=str(tmp_path),
+                write_to_disk=True,
             )
 
         # Should not have file-hint style table
@@ -1086,6 +1088,7 @@ class TestEpicFileHintsMCPTool:
                 title="Files Only Epic",
                 files="README.md",
                 project_root=str(tmp_path),
+                write_to_disk=True,
             )
 
         assert "written_to" in result["data"]

@@ -699,6 +699,7 @@ class TestDocsGenerateStoryQuickStart:
                 quick_start=True,
                 project_root=str(root),
                 audience="human",
+                write_to_disk=True,
             )
 
         assert result["success"] is True
@@ -729,6 +730,7 @@ class TestDocsGenerateStoryQuickStart:
                 quick_start=True,
                 project_root=str(root),
                 audience="human",
+                write_to_disk=True,
             )
 
         assert result["success"] is True
@@ -1079,6 +1081,7 @@ class TestAgentAudienceViaMCPHandler:
                 files="foo.py:12-20",
                 acceptance_criteria="criterion one, criterion two",
                 project_root=str(root),
+                write_to_disk=True,
             )
         assert result["success"] is True
         assert result["data"]["audience"] == "agent"
