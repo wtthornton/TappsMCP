@@ -230,6 +230,32 @@ class TestMissingFileAnchor:
         rules = [f.rule for f in result.findings]
         assert RULE_MISSING_FILE_ANCHOR not in rules
 
+    def test_shell_script_anchor_passes(self) -> None:
+        # TAP-1420: shell-script extensions were missing from the regex
+        # allowlist, so every `## Where` anchor pointing at a .sh/.bash/.zsh
+        # file failed with missing-file-anchor regardless of path shape.
+        # Cover all three extensions and both with-dir / bare-filename paths.
+        for anchor in (
+            "lib/foo.sh:1-50",
+            "install.sh:42",
+            "scripts/setup.bash:10-20",
+            "tools/deploy.zsh:1",
+        ):
+            result = lint_issue(
+                title="x",
+                description=(
+                    f"## What\nthing\n## Where\n`{anchor}`\n"
+                    "## Acceptance\n- [ ] done\n"
+                ),
+                priority=3,
+                estimate=1.0,
+            )
+            rules = [f.rule for f in result.findings]
+            assert RULE_MISSING_FILE_ANCHOR not in rules, (
+                f"shell anchor {anchor!r} should satisfy file-anchor rule, "
+                f"got findings={rules}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Rule: missing-acceptance / acceptance-empty
