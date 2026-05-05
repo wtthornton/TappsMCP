@@ -490,6 +490,24 @@ def _detect_brain_auth_failure(
     )
 
 
+def _prepend_next_step(resp: dict[str, Any], step: str) -> None:
+    """Prepend a next-step string to ``resp.data.next_steps`` (creating the list).
+
+    Used to inject high-priority warnings (e.g. degraded checker availability)
+    after ``_with_nudges`` has populated next_steps from the global ranker.
+    """
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        return
+    existing = data.get("next_steps")
+    if isinstance(existing, list):
+        if step in existing:
+            existing.remove(step)
+        data["next_steps"] = [step, *existing]
+    else:
+        data["next_steps"] = [step]
+
+
 async def tapps_session_start(
     project_root: str = "",
     quick: bool = False,
@@ -577,6 +595,13 @@ async def tapps_session_start(
     if auth_failure_response is not None:
         return auth_failure_response
 
+    # TAP-1414: Surface ruff/mypy missing on Python projects as a loud warning.
+    degraded_checkers, degraded_warning = _ssc.compute_python_degraded_checkers(
+        Path(settings.project_root), data["installed_checkers"]
+    )
+    if degraded_checkers:
+        data["degraded_checkers"] = degraded_checkers
+
     resp = success_response("tapps_session_start", elapsed_ms, data)
     _ssc.attach_session_start_structured_output(resp, info)
 
@@ -596,7 +621,10 @@ async def tapps_session_start(
     # the next 30 minutes of prompts.
     write_session_start_marker(settings.project_root)
 
-    return _with_nudges("tapps_session_start", resp, {})
+    resp = _with_nudges("tapps_session_start", resp, {})
+    if degraded_warning:
+        _prepend_next_step(resp, degraded_warning)
+    return resp
 
 
 async def _session_start_quick(
@@ -658,6 +686,13 @@ async def _session_start_quick(
         ),
     }
 
+    # TAP-1414: Surface ruff/mypy missing on Python projects as a loud warning.
+    degraded_checkers, degraded_warning = _ssc.compute_python_degraded_checkers(
+        Path(settings.project_root), installed
+    )
+    if degraded_checkers:
+        data["degraded_checkers"] = degraded_checkers
+
     resp = success_response("tapps_session_start", elapsed_ms, data)
     _ssc.attach_quick_session_structured_output(resp, settings, installed)
 
@@ -677,7 +712,10 @@ async def _session_start_quick(
     # TAP-975: refresh sidecar in quick path too.
     write_session_start_marker(settings.project_root)
 
-    return with_nudges("tapps_session_start", resp, {})
+    resp = with_nudges("tapps_session_start", resp, {})
+    if degraded_warning:
+        _prepend_next_step(resp, degraded_warning)
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -1009,11 +1047,31 @@ def tapps_doctor(
     except Exception:
         result["loop_metrics_7d"] = {"loops": 0, "error": "loop_metrics_unavailable"}
 
+    # TAP-1414: surface ruff/mypy missing as a top-level field for parity with
+    # tapps_session_start. The per-tool checks already include install hints,
+    # but agents reading the doctor result programmatically need a single
+    # field to react to.
+    try:
+        from tapps_mcp.tools.session_start_core import compute_python_degraded_checkers
+        from tapps_mcp.tools.tool_detection import detect_installed_tools
+
+        degraded_checkers, degraded_warning = compute_python_degraded_checkers(
+            Path(root), detect_installed_tools()
+        )
+        if degraded_checkers:
+            result["degraded_checkers"] = degraded_checkers
+            result["degraded_checkers_warning"] = degraded_warning
+    except Exception:
+        pass
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_doctor", start)
 
     resp = success_response("tapps_doctor", elapsed_ms, result)
-    return _with_nudges("tapps_doctor", resp)
+    resp = _with_nudges("tapps_doctor", resp)
+    if result.get("degraded_checkers_warning"):
+        _prepend_next_step(resp, result["degraded_checkers_warning"])
+    return resp
 
 
 # ---------------------------------------------------------------------------

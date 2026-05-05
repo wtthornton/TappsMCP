@@ -20,6 +20,66 @@ from tapps_mcp.server_helpers import (
 
 _logger = structlog.get_logger(__name__)
 
+# TAP-1414: Python projects with ruff/mypy missing run the quality gate degraded
+# (ruff and mypy are the two highest-signal Python checkers). Surface a loud
+# warning at session start instead of letting agents discover this by reading
+# tool-versions.json after they've already shipped degraded results.
+_PYTHON_CRITICAL_CHECKERS: tuple[str, ...] = ("ruff", "mypy")
+_PYTHON_DEGRADED_WARNING = (
+    "WARNING: ruff and mypy are missing — quality gate will run degraded. "
+    "Install: uv tool install tapps-mcp --with ruff --with mypy"
+)
+_PYTHON_DEGRADED_WARNING_SINGLE = (
+    "WARNING: {checker} is missing — quality gate will run degraded. "
+    "Install: uv tool install tapps-mcp --with {checker}"
+)
+
+
+def _is_python_project(project_root: Path) -> bool:
+    """Return True if the project root looks like a Python project."""
+    if (project_root / "pyproject.toml").exists():
+        return True
+    if (project_root / "setup.py").exists() or (project_root / "setup.cfg").exists():
+        return True
+    try:
+        return any(project_root.glob("*.py"))
+    except OSError:
+        return False
+
+
+def compute_python_degraded_checkers(
+    project_root: Path,
+    installed_checkers: list[Any],
+) -> tuple[list[str], str | None]:
+    """Return (degraded_checker_names, warning_message) for a Python project.
+
+    Returns ``([], None)`` when the project is not Python or all critical
+    checkers are available. Each entry of ``installed_checkers`` may be a dict
+    or an object with ``name``/``available`` attributes.
+    """
+    if not _is_python_project(project_root):
+        return [], None
+
+    degraded: list[str] = []
+    for entry in installed_checkers:
+        if isinstance(entry, dict):
+            name = entry.get("name", "")
+            available = bool(entry.get("available", False))
+        else:
+            name = getattr(entry, "name", "")
+            available = bool(getattr(entry, "available", False))
+        if name in _PYTHON_CRITICAL_CHECKERS and not available:
+            degraded.append(name)
+
+    if not degraded:
+        return [], None
+
+    if len(degraded) == 1:
+        warning = _PYTHON_DEGRADED_WARNING_SINGLE.format(checker=degraded[0])
+    else:
+        warning = _PYTHON_DEGRADED_WARNING
+    return degraded, warning
+
 
 def build_session_start_data(
     settings: Any,
@@ -202,6 +262,7 @@ __all__ = [
     "attach_session_start_structured_output",
     "build_session_start_data",
     "collect_session_start_phases",
+    "compute_python_degraded_checkers",
     "detect_path_mapping",
     "get_checklist_session_id",
 ]
