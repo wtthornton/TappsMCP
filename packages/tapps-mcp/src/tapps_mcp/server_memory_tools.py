@@ -175,6 +175,53 @@ def _classify_store_init_error(exc: BaseException) -> str:
     return "unknown"
 
 
+def _classify_http_bridge_result(
+    action: str, result_data: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Surface failures hidden inside the HTTP-bridge ``entry`` payload.
+
+    Without this, brain validation errors (``{"error": "invalid_source", ...}``)
+    and circuit-open queue responses (``{"success": false, "degraded": true,
+    "reason": "circuit open", "queued": true}``) come back as ``success: True``
+    at the tool level with the failure buried under ``data.entry``. The agent
+    then thinks the save landed.
+
+    Returns:
+        - An ``error_response`` when the entry contains a brain-side error.
+        - A ``success_response`` flagged ``degraded=True`` when the entry is a
+          breaker/queued degraded payload.
+        - ``None`` when the result looks healthy and the caller should proceed
+          with the normal success-wrapping path.
+    """
+    entry = result_data.get("entry")
+    if not isinstance(entry, dict):
+        return None
+
+    err = entry.get("error")
+    if err:
+        message = entry.get("message") or f"tapps-brain rejected {action}: {err}"
+        extra: dict[str, Any] = {"action": action, "brain_error": err}
+        valid = entry.get("valid_values")
+        if valid is not None:
+            extra["valid_values"] = valid
+        return error_response("tapps_memory", "brain_validation_failed", str(message), extra=extra)
+
+    if entry.get("degraded") is True or entry.get("success") is False:
+        reason = entry.get("reason") or "bridge degraded"
+        return success_response(
+            "tapps_memory",
+            0,
+            result_data,
+            degraded=True,
+            next_steps=[
+                f"tapps-brain HTTP bridge is degraded ({reason}); call queued. "
+                f"Wait for the circuit to reset (~30s) and retry, or call "
+                f"tapps_memory(action='health') to inspect bridge state.",
+            ],
+        )
+    return None
+
+
 def _bridge_unavailable_response(action: str) -> dict[str, Any]:
     """Standard response when BrainBridge is unconfigured (TAP-412 / EPIC-95.7 shape)."""
     return {
@@ -506,6 +553,9 @@ async def tapps_memory(
             # async methods so write actions (save) and reads (get/list/...)
             # work without an in-process store.
             result_data = await _HTTP_BRIDGE_DISPATCH[action](params)
+            classified = _classify_http_bridge_result(action, result_data)
+            if classified is not None:
+                return classified
         else:
             if store is None:
                 return _requires_in_process_store_response(action)

@@ -79,6 +79,28 @@ _DRAIN_DEADLINE_SECONDS: float = 5.0
 # Temporary Redirect → /mcp/, and a POST without these Accept values receives
 # 406 Not Acceptable (TAP-516 regression found against brain 3.10.x).
 _MCP_ACCEPT_HEADERS: dict[str, str] = {"Accept": "application/json, text/event-stream"}
+_HTTP_ERROR_BODY_MAX = 500
+
+
+def _raise_with_body(response: httpx.Response, tool_name: str) -> None:
+    """Like ``response.raise_for_status()`` but includes the response body.
+
+    httpx's :class:`HTTPStatusError` only carries the status code, so callers
+    that wrap it (the bridge's retry loop) lose the actual error detail —
+    e.g. ``{"error": "bad_request", "detail": "X-Project-Id header is required"}``
+    becomes the opaque message ``"all retries exhausted: ... 400 ..."``. Capture
+    up to :data:`_HTTP_ERROR_BODY_MAX` chars of the body so the underlying
+    failure reaches the agent.
+    """
+    if response.status_code < 400:
+        return
+    try:
+        body = response.text[:_HTTP_ERROR_BODY_MAX]
+    except Exception:  # noqa: BLE001 — body decode is best-effort
+        body = "<unreadable>"
+    raise RuntimeError(
+        f"tapps-brain HTTP {response.status_code} for {tool_name!r}: {body}"
+    )
 
 
 class BrainBridgeUnavailable(Exception):  # noqa: N818  (public API name predates the lint rule; renaming would break consumers)
@@ -1053,7 +1075,7 @@ class HttpBrainBridge(BrainBridge):
             response = await self._http_client.post(
                 f"{self._http_url}/mcp/", json=init_payload
             )
-            response.raise_for_status()
+            _raise_with_body(response, "initialize")
             session_id = response.headers.get("mcp-session-id")
             if not session_id:
                 # Older brains that don't use the session model — use a
@@ -1100,7 +1122,7 @@ class HttpBrainBridge(BrainBridge):
             response = await self._http_client.post(
                 f"{self._http_url}/mcp/", json=payload, headers=extra_headers
             )
-        response.raise_for_status()
+        _raise_with_body(response, tool_name)
         data: dict[str, Any] = response.json()
 
         rpc_error = data.get("error")

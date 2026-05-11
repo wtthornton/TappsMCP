@@ -1,9 +1,8 @@
-llm_engagement_level: high
+llm_engagement_level: medium
 quality_preset: standard
 memory:
   brain_project_id: tapps-mcp
   brain_http_url: http://localhost:8080
-# TAP-981: Linear routing gate — blocks raw save_issue without recent docs_validate_linear_issue.
 linear_enforce_gate: true
 thresholds:
   overall: 70
