@@ -6,26 +6,27 @@ This guide walks you through setting up TappsMCP for development or as a consume
 
 ### Quick Start
 
-The fastest way to add TappsMCP quality tools to your project:
+TappsMCP is **not published to PyPI**. Install from a local checkout of this repo:
 
 ```bash
-# Install from PyPI
-pip install tapps-mcp
-
-# Or with uv
-uv add tapps-mcp
+git clone https://github.com/wtthornton/TappsMCP.git
+cd TappsMCP
+uv tool install -e packages/tapps-mcp
+uv tool install -e packages/docs-mcp
 ```
+
+This puts `tapps-mcp` and `docsmcp` on your `$PATH`. To upgrade later, `git pull` and re-run `uv tool install --reinstall -e <path>`.
 
 ### Configure Your MCP Client
 
-**Claude Code** (`~/.claude.json` or project `.claude/settings.json`):
+**Claude Code** (`~/.claude.json` or project `.mcp.json`):
 
 ```json
 {
   "mcpServers": {
     "tapps-mcp": {
-      "command": "uvx",
-      "args": ["tapps-mcp", "serve"]
+      "command": "tapps-mcp",
+      "args": ["serve"]
     }
   }
 }
@@ -37,8 +38,8 @@ uv add tapps-mcp
 {
   "mcpServers": {
     "tapps-mcp": {
-      "command": "uvx",
-      "args": ["tapps-mcp", "serve"]
+      "command": "tapps-mcp",
+      "args": ["serve"]
     }
   }
 }
@@ -90,15 +91,16 @@ uv sync --all-packages
 
 ```
 packages/
-  tapps-core/     # Shared library (config, security, logging, knowledge, memory, experts)
-  tapps-mcp/      # Code quality MCP server (26 tools)
-  docs-mcp/       # Documentation MCP server (32 tools)
+  tapps-core/     # Shared library (config, security, logging, knowledge)
+                  #   memory/ is a re-export shim to tapps-brain
+  tapps-mcp/      # Code quality MCP server (30 tools)
+  docs-mcp/       # Documentation MCP server (38 tools)
 ```
 
 **Dependency graph:**
 ```
-tapps-core (library)  <--  tapps-mcp (26 tools)
-                      <--  docs-mcp  (32 tools)
+tapps-core (library)  <--  tapps-mcp (30 tools)
+                      <--  docs-mcp  (38 tools)
 ```
 
 ### Key Directories in tapps-mcp
@@ -150,7 +152,7 @@ uv run docsmcp doctor             # DocsMCP diagnostics
 
 ## Next Steps
 
-- Read the [Contributing Guide](../CONTRIBUTING.md) for coding standards and PR workflow
+- Read the [Contributing Guide](../CONTRIBUTING.md) for coding standards and the commit-to-master workflow
 - Check the [README](../README.md) for the full tools reference
 - See the [Architecture Reference](ARCHITECTURE.md) for internal design details
 - Review [CLAUDE.md](../CLAUDE.md) for AI assistant instructions

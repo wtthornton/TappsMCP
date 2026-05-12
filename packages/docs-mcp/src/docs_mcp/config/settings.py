@@ -268,6 +268,69 @@ class DocsMCPSettings(BaseSettings):
             return [str(s) for s in v]
         return []
 
+    # Project-wide validator defaults (consumed by docs_check_drift /
+    # docs_check_completeness / docs_check_freshness when their call-time
+    # arguments are empty). Explicit call-time arguments still win entirely.
+    drift_ignore_patterns: list[str] | str = Field(
+        default_factory=list,
+        description=(
+            "Default ignore patterns for docs_check_drift. Either a list of "
+            "fnmatch globs on fully-qualified symbol names (e.g. "
+            "['mypkg.cli.*', 'pkg.internal._*']) or the literal string "
+            "'defaults' to opt into the built-in private/test pattern list "
+            "(_*, test_*, TEST_*, *_TEST, *_FIXTURE, tests.*, *._*). "
+            "Overridden when docs_check_drift is called with an explicit "
+            "ignore_patterns argument. "
+            "Env: DOCS_MCP_DRIFT_IGNORE_PATTERNS (CSV, or 'defaults')."
+        ),
+    )
+    completeness_exclude: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Default exclude glob patterns for docs_check_completeness, on top "
+            "of the built-in baseline (.git, __pycache__, node_modules, "
+            ".venv*, dist, build, etc.). Overridden when docs_check_completeness "
+            "is called with an explicit exclude argument. "
+            "Env: DOCS_MCP_COMPLETENESS_EXCLUDE (CSV)."
+        ),
+    )
+    freshness_exclude: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Default exclude glob patterns for docs_check_freshness, on top of "
+            "the built-in baseline. Overridden when docs_check_freshness is "
+            "called with an explicit exclude argument. "
+            "Env: DOCS_MCP_FRESHNESS_EXCLUDE (CSV)."
+        ),
+    )
+
+    @field_validator("drift_ignore_patterns", mode="before")
+    @classmethod
+    def _parse_drift_ignore_patterns(cls, v: Any) -> list[str] | str:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                return []
+            if stripped == "defaults":
+                return "defaults"
+            return [s.strip() for s in stripped.split(",") if s.strip()]
+        if isinstance(v, list):
+            return [str(s) for s in v]
+        return []
+
+    @field_validator("completeness_exclude", "freshness_exclude", mode="before")
+    @classmethod
+    def _parse_validator_exclude(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        if isinstance(v, list):
+            return [str(s) for s in v]
+        return []
+
     # tapps-brain write path (EPIC-102)
     brain_write_enabled: bool = Field(
         default=False,

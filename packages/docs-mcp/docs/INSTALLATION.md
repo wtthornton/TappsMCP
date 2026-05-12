@@ -1,27 +1,20 @@
 # DocsMCP Installation Guide
 
-DocsMCP is an MCP server for automated documentation generation, validation, and maintenance.
+DocsMCP is an MCP server for automated documentation generation, validation, and maintenance. It is **not published to PyPI** — install from a local checkout of the TappsMCP repo.
 
 ## Installation
 
-### Via uv (recommended)
-
 ```bash
-uv add docs-mcp
+git clone https://github.com/wtthornton/TappsMCP.git
+cd TappsMCP
+uv tool install -e packages/docs-mcp
 ```
 
-### Via pip
+This puts `docsmcp` on your `$PATH`. To work on docs-mcp itself:
 
 ```bash
-pip install docs-mcp
-```
-
-### From source (development)
-
-```bash
-git clone https://github.com/tapps-mcp/tapps-mcp.git
-cd tapps-mcp
-uv sync --all-packages
+uv sync --all-packages           # full workspace dev install
+uv run docsmcp serve             # run from the checkout
 ```
 
 ## Quick Start
@@ -162,7 +155,7 @@ docker run -d --rm \
 
 ## Available Tools
 
-DocsMCP provides 24 MCP tools across these categories:
+DocsMCP provides 38 MCP tools across these categories:
 
 ### Session
 - `docs_session_start` - Initialize session and detect project context

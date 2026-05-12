@@ -71,7 +71,9 @@ async def docs_check_drift(
             symbol names (e.g. ``"mypkg.cli.*"``) that should never be flagged
             as drifted. The literal string ``"defaults"`` opts into a built-in
             list covering private/test names (``_*``, ``test_*``, ``TEST_*``,
-            ``*_TEST``, ``*_FIXTURE``, ``tests.*``, ``*._*``).
+            ``*_TEST``, ``*_FIXTURE``, ``tests.*``, ``*._*``). When empty,
+            falls back to ``drift_ignore_patterns`` in ``.docsmcp.yaml`` (also
+            accepts the ``"defaults"`` literal); an explicit value wins.
     """
     _record_call("docs_check_drift")
     start = time.perf_counter_ns()
@@ -99,10 +101,17 @@ async def docs_check_drift(
         source_filter = [f.strip() for f in source_files.split(",") if f.strip()]
 
     # Parse ignore_patterns: "defaults" sentinel, empty, or comma-separated globs.
+    # When empty, fall back to settings.drift_ignore_patterns from .docsmcp.yaml.
     ignore_arg: list[str] | str | None
     stripped_ignore = ignore_patterns.strip()
     if not stripped_ignore:
-        ignore_arg = None
+        settings_default = settings.drift_ignore_patterns
+        if isinstance(settings_default, str) and settings_default == "defaults":
+            ignore_arg = "defaults"
+        elif isinstance(settings_default, list) and settings_default:
+            ignore_arg = list(settings_default)
+        else:
+            ignore_arg = None
     elif stripped_ignore == "defaults":
         ignore_arg = "defaults"
     else:
@@ -205,7 +214,8 @@ async def docs_check_completeness(
         exclude: Comma-separated glob patterns to skip during scanning, on top
             of the built-in baseline (``.git``, ``__pycache__``, ``node_modules``,
             ``.venv*``, ``dist``, ``build``, etc.). Example:
-            ``"vendored/**/*,third_party/**/*"``.
+            ``"vendored/**/*,third_party/**/*"``. When empty, falls back to
+            ``completeness_exclude`` in ``.docsmcp.yaml``; an explicit value wins.
         respect_gitignore: When True (default), honor patterns in the project's
             root ``.gitignore``. Pass False to restore pre-2.10 behavior.
     """
@@ -227,6 +237,8 @@ async def docs_check_completeness(
     exclude_list: list[str] | None = None
     if exclude.strip():
         exclude_list = [e.strip() for e in exclude.split(",") if e.strip()]
+    elif settings.completeness_exclude:
+        exclude_list = list(settings.completeness_exclude)
 
     checker = CompletenessChecker()
     report = checker.check(root, exclude=exclude_list, respect_gitignore=respect_gitignore)
@@ -336,7 +348,9 @@ async def docs_check_freshness(
             (e.g. ``"stale,ancient"``). Only items matching one of the
             listed categories are returned. Empty means all categories.
         exclude: Comma-separated glob patterns to skip during scanning, on top
-            of the built-in baseline. Example: ``"vendored/**/*"``.
+            of the built-in baseline. Example: ``"vendored/**/*"``. When empty,
+            falls back to ``freshness_exclude`` in ``.docsmcp.yaml``; an
+            explicit value wins.
         respect_gitignore: When True (default), honor the project's root
             ``.gitignore``. Pass False to restore pre-2.10 behavior.
     """
@@ -369,6 +383,8 @@ async def docs_check_freshness(
     exclude_list: list[str] | None = None
     if exclude.strip():
         exclude_list = [e.strip() for e in exclude.split(",") if e.strip()]
+    elif settings.freshness_exclude:
+        exclude_list = list(settings.freshness_exclude)
 
     checker = FreshnessChecker()
     report = checker.check(

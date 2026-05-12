@@ -28,8 +28,6 @@ When the MCP server is unavailable, use these CLI equivalents directly in the te
 | `tapps_memory` (import) | `tapps-mcp memory import-file --file PATH` |
 | `tapps_memory` (export) | `tapps-mcp memory export-file --file PATH` |
 | `tapps_lookup_docs` | `tapps-mcp lookup-docs --library LIB [--topic TOPIC] [--mode code\|info]` |
-| `tapps_research` | `tapps-mcp research --question "..." [--domain DOMAIN] [--library LIB]` |
-| `tapps_consult_expert` | `tapps-mcp consult-expert --question "..." [--domain DOMAIN]` |
 | `tapps_validate_changed` | `tapps-mcp validate-changed [--quick\|--full]` |
 | `tapps_doctor` | `tapps-mcp doctor [--quick]` |
 
@@ -113,19 +111,11 @@ If `tapps-mcp lookup-docs` fails with a connection error, check:
 
 Without an API key, only cached and llms.txt documentation is available.
 
-### Expert consultation returns low confidence
-
-Low confidence results indicate the question may not match the expert's knowledge base well. Try:
-
-1. Use `--domain` to explicitly route to the correct expert domain
-2. Rephrase the question with domain-specific terminology
-3. Supplement with `tapps-mcp lookup-docs` for library-specific documentation
-
 ## Cursor hooks on Windows
 
 **Problem:** On Windows, when Cursor runs TappsMCP hooks, the `.sh` script files open in the editor instead of executing. The hook does not run; you see the script source (e.g. `tapps-before-mcp.sh`) in a new tab.
 
-**Cause:** TappsMCP generates Bash (`.sh`) hooks when init/upgrade runs on a non-Windows environment (e.g. WSL, CI, or older behavior). On Windows, the default association for `.sh` is often “open in editor,” and there is no system Bash unless you use Git Bash or WSL. So Cursor’s hook “command” is treated as a file to open, not a script to run.
+**Cause:** TappsMCP generates Bash (`.sh`) hooks when init/upgrade runs on a non-Windows environment (e.g. WSL, CI, or older behavior). On Windows, the default association for `.sh` is often "open in editor," and there is no system Bash unless you use Git Bash or WSL. So Cursor's hook "command" is treated as a file to open, not a script to run.
 
 **Fix:** Run upgrade from **native Windows** (PowerShell or cmd) so TappsMCP detects `sys.platform == "win32"` and generates PowerShell (`.ps1`) hooks and updates `.cursor/hooks.json` to invoke them explicitly (e.g. `powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/tapps-before-mcp.ps1`).
 

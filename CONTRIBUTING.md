@@ -29,10 +29,10 @@ This is a **uv workspace monorepo** with three packages:
 | Package | Path | Purpose |
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (26 tools) |
-| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (32 tools) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (38 tools) |
 
-Together, **tapps-mcp** + **docs-mcp** expose **58** deterministic MCP tools. `tapps-mcp doctor` reports resolved memory pipeline flags for the project under test.
+Together, **tapps-mcp** + **docs-mcp** expose **68** deterministic MCP tools. `tapps-mcp doctor` reports resolved memory pipeline flags for the project under test.
 
 ## Running Tests
 
@@ -100,13 +100,9 @@ When TappsMCP's own MCP server is available, use it on this codebase:
 
 ## Submitting Changes
 
-1. Create a feature branch from `master`:
+This repository follows a **commit-direct-to-master** workflow — no feature branches, no pull requests. See [`.claude/rules/repo-workflow.md`](.claude/rules/repo-workflow.md).
 
-   ```bash
-   git checkout -b feature/my-feature
-   ```
-
-2. Make your changes and ensure tests pass:
+1. Make your changes and ensure tests pass:
 
    ```bash
    uv run pytest packages/<affected-package>/tests/ -v
@@ -114,13 +110,13 @@ When TappsMCP's own MCP server is available, use it on this codebase:
    uv run mypy --strict packages/<affected-package>/src/<package_name>/
    ```
 
-3. Commit with a descriptive message (conventional commits preferred):
+2. Commit with a descriptive message (conventional commits preferred):
 
    ```bash
    git commit -m "feat: add my new feature"
    ```
 
-4. Push and open a Pull Request against `master`
+3. Push to `master`. The pre-push hook (`.githooks/pre-push`, activated by `scripts/install-git-hooks.sh`) enforces a green non-slow unit suite before allowing the push.
 
 ## Known Gotchas
 

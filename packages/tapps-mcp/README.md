@@ -44,7 +44,7 @@ Wire it into Claude Code via `.mcp.json`:
 
 ## Top 5 MCP tools
 
-The most-used handlers in a typical agent session — see [AGENTS.md](../../AGENTS.md) for the full 26-tool reference.
+The most-used handlers in a typical agent session — see [AGENTS.md](../../AGENTS.md) for the full 30-tool reference.
 
 1. `tapps_session_start` — initialise project context, load memory, surface server info.
 2. `tapps_quick_check(file_path)` — score + quality gate + security scan in one call after every Python edit.

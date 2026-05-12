@@ -75,6 +75,50 @@ class TestDocsMCPSettings:
         settings = DocsMCPSettings(archive_paths=[])
         assert settings.archive_paths == []
 
+    def test_drift_ignore_patterns_default(self) -> None:
+        settings = DocsMCPSettings()
+        assert settings.drift_ignore_patterns == []
+
+    def test_drift_ignore_patterns_list(self) -> None:
+        settings = DocsMCPSettings(drift_ignore_patterns=["mypkg.cli.*", "_*"])
+        assert settings.drift_ignore_patterns == ["mypkg.cli.*", "_*"]
+
+    def test_drift_ignore_patterns_csv_string(self) -> None:
+        settings = DocsMCPSettings(drift_ignore_patterns="mypkg.cli.*, pkg.internal._*")
+        assert settings.drift_ignore_patterns == ["mypkg.cli.*", "pkg.internal._*"]
+
+    def test_drift_ignore_patterns_defaults_sentinel(self) -> None:
+        settings = DocsMCPSettings(drift_ignore_patterns="defaults")
+        assert settings.drift_ignore_patterns == "defaults"
+
+    def test_drift_ignore_patterns_none(self) -> None:
+        settings = DocsMCPSettings(drift_ignore_patterns=None)
+        assert settings.drift_ignore_patterns == []
+
+    def test_completeness_exclude_default(self) -> None:
+        settings = DocsMCPSettings()
+        assert settings.completeness_exclude == []
+
+    def test_completeness_exclude_list(self) -> None:
+        settings = DocsMCPSettings(completeness_exclude=["vendored/**", "third_party/**"])
+        assert settings.completeness_exclude == ["vendored/**", "third_party/**"]
+
+    def test_completeness_exclude_csv_string(self) -> None:
+        settings = DocsMCPSettings(completeness_exclude="vendored/**, third_party/**")
+        assert settings.completeness_exclude == ["vendored/**", "third_party/**"]
+
+    def test_freshness_exclude_default(self) -> None:
+        settings = DocsMCPSettings()
+        assert settings.freshness_exclude == []
+
+    def test_freshness_exclude_list(self) -> None:
+        settings = DocsMCPSettings(freshness_exclude=["docs/legacy/**"])
+        assert settings.freshness_exclude == ["docs/legacy/**"]
+
+    def test_freshness_exclude_csv_string(self) -> None:
+        settings = DocsMCPSettings(freshness_exclude="docs/legacy/**, archive/**")
+        assert settings.freshness_exclude == ["docs/legacy/**", "archive/**"]
+
 
 class TestLoadDocsSettings:
     def test_load_docs_settings_returns_settings(self) -> None:

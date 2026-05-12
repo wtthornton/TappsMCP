@@ -4,15 +4,15 @@
 
 **A quality and documentation toolset for AI coding assistants.**
 
-Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs **58 deterministic tools** for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and shared memory.
+Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs **68 deterministic tools** for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and shared memory.
 
 [![CI](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/tests-6%2C900%2B_passing-brightgreen.svg)](#development)
-[![Tools](https://img.shields.io/badge/MCP_tools-58-blue.svg)](#tools-reference)
-[![Version](https://img.shields.io/badge/version-2.10.7-informational.svg)](#)
+[![Tools](https://img.shields.io/badge/MCP_tools-68-blue.svg)](#tools-reference)
+[![Version](https://img.shields.io/badge/version-3.10.10-informational.svg)](#)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
@@ -24,14 +24,14 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 ## Overview
 
-**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **58 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
+**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **68 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
-### What's new in v2.10+
+### What's new in v3.10
 
-- **Resilient BrainBridge** (v2.10.0) — runtime tapps-brain version validation, stable agent identity persisted across restarts, offline write-queue drain on shutdown, graceful `BrainBridgeUnavailable` degraded payloads in every `tapps_memory` action.
-- **DocsMCP quality fixes** (v2.10.2) — `docs_generate_changelog` refuses to overwrite hand-crafted files without `force=True`; `docs_check_style` auto-detects heading convention instead of defaulting to sentence-case; drift and completeness checkers no longer false-positive on test files.
-- **Session reliability** (v2.10.3) — `_SessionFlags` dataclass eliminates magic-string race conditions in session state; atomic write for `AGENTS.md` upgrades; upgrade aborts on backup failure; workspace monorepo `pip-audit` scans now pass `--skip-editable`.
-- **Karpathy behavioral guidelines** (v2.9.0) — vendored into the package and installed/refreshed by `tapps_init` / `tapps_upgrade` / verified by `tapps_doctor`.
+- **Brain HTTP error surfacing** (v3.10.10) — `tapps_session_start` returns a hard `code: brain_auth_failed` error on 401/403 from tapps-brain instead of silently degrading. Override with `memory.tolerate_brain_auth_failure: true` for offline workflows.
+- **Cache-first Linear reads** (v3.10.x, TAP-1224) — `list_issues` calls go through `tapps_linear_snapshot_get` first; warn-mode logs violations to `.tapps-mcp/.cache-gate-violations.jsonl` and block-mode enforces a fresh sentinel.
+- **Autonomy defaults** (v3.10.x, TAP-1087) — in-scope writes (Linear issues, edits, commits within this repo) proceed without human-in-the-loop confirmation; Linear assignee defaults to the agent identity, never the OAuth human.
+- **Quality-gate bundle enforcement** (v3.10.x, TAP-1325) — `tapps_validate_changed` always evaluates the full gate bundle; partial pass results return a structured `gate_partial` payload rather than silently passing.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
@@ -41,22 +41,24 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ### Packages
 
-| Package | PyPI Name | Purpose | Tools |
-|---|---|---|---|
-| **tapps-brain** | `tapps-brain` | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). See [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for the canonical storage/retrieval/federation docs. | 0 (library; brain_* MCP tools ship in the service) |
-| **tapps-core** | `tapps-core` | Shared infrastructure (config, security, logging, knowledge, metrics, adaptive) | 0 (library) |
-| **tapps-mcp** | `tapps-mcp` | Code quality MCP server (scoring, gates, tools, validation) | 26 |
-| **docs-mcp** | `docs-mcp` | Documentation generation and maintenance MCP server | 32 |
+| Package | Purpose | Tools |
+|---|---|---|
+| **tapps-brain** | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). External repo — see [tapps-brain](https://github.com/wtthornton/tapps-brain) for the canonical storage/retrieval/federation docs. | 0 (library; brain_* MCP tools ship in the service) |
+| **tapps-core** | Shared infrastructure (config, security, logging, knowledge, metrics, adaptive) | 0 (library) |
+| **tapps-mcp** | Code quality MCP server (scoring, gates, tools, validation) | 30 |
+| **docs-mcp** | Documentation generation and maintenance MCP server | 38 |
+
+Install is from the local checkout (`uv tool install -e packages/tapps-mcp`); the packages are not published to PyPI. See [Install](#install).
 
 ```
-tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (26 tools)
-                                                          <──  docs-mcp  (32 tools)
-                                                                      = 58 MCP tools
+tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (30 tools)
+                                                          <──  docs-mcp  (38 tools)
+                                                                      = 68 MCP tools
 ```
 
 ### Key highlights
 
-- **58 deterministic MCP tools** (26 TappsMCP + 32 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
+- **68 deterministic MCP tools** (30 TappsMCP + 38 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Documentation lookup** via Context7 and LlmsTxt providers with local caching
 - **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP and exposes it through `tapps_memory` (33 actions). Retrieval, decay, consolidation, and federation internals are documented in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain).
@@ -103,7 +105,7 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 
 ## Features
 
-The platform exposes **58 MCP tools** (26 TappsMCP + 32 DocsMCP) plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
+The platform exposes **68 MCP tools** (30 TappsMCP + 38 DocsMCP) plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
 
 ### Code quality & scoring
 
@@ -193,78 +195,45 @@ When tree-sitter is not installed, scorers fall back to regex-based analysis wit
 
 ## Install
 
-Choose one of the following. After installing, see [Quick start](#quick-start) to configure your AI client and start the server.
+TappsMCP is **not published to PyPI or npm**. Install from a local checkout of this repo. After installing, see [Quick start](#quick-start) to configure your AI client and start the server.
 
 | Method | Requirements | Use when |
 |--------|--------------|----------|
-| **MCP Registry** | MCP-compatible client | One-click install from the official MCP server registry. |
-| **PyPI** | Python 3.12+, pip | You want a global or venv install and will run from any project. |
-| **npx** | Node.js 18+ | Optional; use only if an npm package matches your release. Prefer **PyPI** or **`uv run`** from source otherwise. |
-| **From source** | Python 3.12+, [uv](https://docs.astral.sh/uv/) or pip | You are developing TappsMCP or want the latest code. |
-| **Docker** | Docker, Docker Compose | You want HTTP transport or to run in a container. |
+| **uv tool (recommended)** | Python 3.12+, [uv](https://docs.astral.sh/uv/) | Global install for use across multiple projects. |
+| **From source (workspace)** | Python 3.12+, uv | You are developing TappsMCP, or want to run it directly from the checkout. |
+| **Docker** | Docker, Docker Compose | You want HTTP transport or to run in a container. See [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md). |
 
-### Install from MCP Registry
-
-The official [MCP Registry](https://registry.modelcontextprotocol.io) provides one-click installation for compatible clients:
-
-- **tapps-mcp**: [`io.github.wtthornton/tapps-mcp`](https://registry.modelcontextprotocol.io/servers/io.github.wtthornton/tapps-mcp) — Code quality tools
-- **docs-mcp**: [`io.github.wtthornton/docs-mcp`](https://registry.modelcontextprotocol.io/servers/io.github.wtthornton/docs-mcp) — Documentation tools
-
-Search for "tapps" or "docs-mcp" in your MCP client's server browser.
-
-### Install from PyPI
-
-```bash
-pip install tapps-mcp
-```
-
-Or in a virtual environment:
-
-```bash
-python -m venv .venv
-
-# Activate:
-source .venv/bin/activate       # Linux / macOS
-.venv\Scripts\activate          # Windows (cmd)
-.venv/Scripts/activate          # Windows (Git Bash / PowerShell)
-
-pip install tapps-mcp
-```
-
-**Upgrade:** `pip install -U tapps-mcp` then run `tapps-mcp upgrade` to refresh all generated files (AGENTS.md, platform rules, hooks, permissions). A backup is created automatically before overwriting — use `tapps-mcp rollback` if needed. See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide.
-
-### Install with npx (optional)
-
-If a matching npm package is published for your TappsMCP version, you can run without a prior `pip`/`uv` install:
-
-```bash
-npx tapps-mcp serve
-```
-
-If `npx` fails or the package is unavailable, use [PyPI](#install-from-pypi) or [from source](#install-from-source) (`uv run tapps-mcp serve`) instead.
-
-### Install from source
-
-Clone the repo and install in editable mode with [uv](https://docs.astral.sh/uv/) (recommended):
+### Install globally with uv tool
 
 ```bash
 git clone https://github.com/wtthornton/TappsMCP.git
-cd tapps-mcp
+cd TappsMCP
+uv tool install -e packages/tapps-mcp
+uv tool install -e packages/docs-mcp
 ```
 
-**With uv (monorepo workspace):**
+This makes `tapps-mcp` and `docsmcp` available on your `$PATH` from any directory.
+
+**Upgrade** by pulling the repo and reinstalling:
 
 ```bash
+git pull
+uv tool install --reinstall -e packages/tapps-mcp
+uv tool install --reinstall -e packages/docs-mcp
+```
+
+Then run `tapps-mcp upgrade` inside a consuming project to refresh AGENTS.md, platform rules, hooks, and permissions. A backup is created automatically before overwriting — use `tapps-mcp rollback` if needed. See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide.
+
+### Install from source (workspace dev)
+
+For active development, run from the checkout with `uv run`:
+
+```bash
+git clone https://github.com/wtthornton/TappsMCP.git
+cd TappsMCP
 uv sync --all-packages           # install all 3 packages
 uv run tapps-mcp serve           # run TappsMCP
 uv run docsmcp serve             # run DocsMCP
-```
-
-**With pip (single package):**
-
-```bash
-pip install -e packages/tapps-mcp
-# Run with: tapps-mcp serve
 ```
 
 ### Install with Docker
@@ -309,7 +278,6 @@ uv --directory C:\path\to\tapps-mcp run tapps-mcp init --project-root C:\path\to
 ```bash
 tapps-mcp serve                           # stdio (local clients)
 # or: uv run tapps-mcp serve             # if installed from source with uv
-# or: npx tapps-mcp serve                # if using npx
 # or: tapps-mcp serve --transport http    # HTTP (remote / container)
 ```
 
@@ -969,13 +937,7 @@ Best results come with these tools installed; the server degrades gracefully wit
 | vulture | Dead code detection | `pip install vulture` or `uv add vulture` |
 | pip-audit | Dependency vulnerability scanning | `pip install pip-audit` or `uv add pip-audit` |
 
-**Vector RAG (optional):** For semantic search over memory entries, install the `rag` extras:
-
-```bash
-pip install tapps-mcp[rag]   # or: uv add tapps-mcp[rag]
-```
-
-This adds `faiss-cpu`, `sentence-transformers`, and `numpy`. When not installed, the memory system uses keyword-based search (no configuration needed).
+Memory retrieval is handled by tapps-brain (Postgres-backed). See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for the authoritative retrieval description and any optional search extensions.
 
 ---
 
@@ -1107,7 +1069,7 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(26 tools)     (32 tools)
+(30 tools)     (38 tools)
 ```
 
 **[tapps-brain](https://github.com/wtthornton/tapps-brain)** is the standalone memory service extracted from tapps-core. It runs as a Dockerized Postgres-backed service that TappsMCP clients reach over HTTP at `localhost:8080`. Storage engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC internals all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) and its README/CHANGELOG — refer there for the authoritative description so this page doesn't drift. tapps-brain has its own release cycle and test suite.
@@ -1196,13 +1158,12 @@ packages/
 │       ├── prompts/                   # Workflow prompt templates
 │       ├── knowledge/                 # Context7 client, cache, lookup, warming, RAG safety,
 │       │                              #   Context7 + LlmsTxt providers (providers/)
-│       ├── experts/                   # Domain detector, engine, RAG, 174 knowledge files
 │       ├── memory/                    # Re-export shims delegating to tapps-brain
 │       │                              #   (injection.py is a bridge adapter)
 │       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export
 │       └── adaptive/                  # Adaptive scoring, expert voting, weight distribution
 │
-├── tapps-mcp/                         # Code quality MCP server (26 tools)
+├── tapps-mcp/                         # Code quality MCP server (30 tools)
 │   └── src/tapps_mcp/
 │       ├── server.py, cli.py          # Entry points and MCP server
 │       ├── server_*.py                # Tool modules (scoring, pipeline, metrics, memory, analysis)
@@ -1216,7 +1177,7 @@ packages/
 │       ├── pipeline/                  # Pipeline orchestration, platform generators
 │       └── (re-exports)              # Backward-compatible re-exports from tapps-core
 │
-└── docs-mcp/                          # Documentation MCP server (32 tools)
+└── docs-mcp/                          # Documentation MCP server (38 tools)
     └── src/docs_mcp/
         ├── server.py, cli.py          # Entry points and MCP server
         ├── server_*.py                # Tool modules (helpers, analysis, git, validation, generation)
@@ -1234,7 +1195,7 @@ examples/
 └── agent-sdk/                         # Claude Agent SDK integration examples (Python + TypeScript)
 ```
 
-**External dependency:** [tapps-brain](https://github.com/wtthornton/tapps-brain) (`pip install tapps-brain`) provides the standalone memory system. It is a required dependency of tapps-core and is installed automatically.
+**External dependency:** [tapps-brain](https://github.com/wtthornton/tapps-brain) provides the standalone memory system as a separately-installed Docker service (Postgres-backed, HTTP at `localhost:8080`). It is a required dependency of tapps-core.
 
 **Backward compatibility:** `from tapps_mcp.config import load_settings` and `from tapps_core.memory.store import MemoryStore` still work - tapps-mcp re-exports from tapps-core, and tapps-core re-exports from tapps-brain. Existing consuming projects need no changes.
 
@@ -1244,7 +1205,7 @@ examples/
 
 DocsMCP is a companion MCP server for documentation generation, drift detection, and maintenance. It shares infrastructure with TappsMCP via `tapps-core`.
 
-### Tools (32)
+### Tools (38)
 
 #### Session & Configuration
 
@@ -1329,7 +1290,7 @@ diagram_format: mermaid               # mermaid | plantuml | d2
 git_log_limit: 500                    # Max git commits to analyze
 
 # Tool filtering (optional)
-tool_preset: full                     # full (all 32 DocsMCP tools) | core (subset)
+tool_preset: full                     # full (all 38 DocsMCP tools) | core (subset)
 enabled_tools: []                     # Allow list — when non-empty, only these tools are exposed
 disabled_tools: []                    # Deny list — excluded from the exposed set
 ```

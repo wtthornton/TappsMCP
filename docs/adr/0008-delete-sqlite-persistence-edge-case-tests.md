@@ -1,4 +1,4 @@
-# ADR-0008: Delete SQLite MemoryPersistence edge-case tests
+# 8. Delete SQLite MemoryPersistence edge-case tests
 
 Status: Accepted
 Date: 2026-05-04
@@ -11,8 +11,8 @@ exercised the local SQLite-backed `MemoryPersistence` class — schema-version
 pinning at v17, FTS5 special-character handling, and empty-query behavior.
 
 That class was removed from this repo in commit `f5f4132` (EPIC-95.1+95.2)
-when persistence moved to tapps-brain v3 (see ADR-0001, ADR-0002, and
-tapps-brain ADR-007). `tapps_mcp.memory.persistence` is now a thin re-export
+when persistence moved to tapps-brain v3 (see ADR-0001, ADR-0002, and the
+sibling tapps-brain repo's ADR-0007). `tapps_mcp.memory.persistence` is now a thin re-export
 shim aliasing `tapps_brain.store.MemoryStore`. The shim has a different
 constructor signature, schema versioning scheme (returns `1`, not `17`), and
 `save()` API (`save(key, value, ...)` not `save(MemoryEntry)`), so the

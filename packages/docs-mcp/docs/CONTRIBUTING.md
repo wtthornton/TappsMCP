@@ -1,66 +1,42 @@
 # Contributing to docs-mcp
 
-Thank you for your interest in contributing to docs-mcp! This guide will help you get started.
+docs-mcp lives inside the TappsMCP monorepo and follows the same conventions as the parent project. See the [top-level CONTRIBUTING guide](../../../CONTRIBUTING.md) for canonical setup, code conventions, and the commit-direct-to-master workflow.
 
 ## Getting Started
 
-1. Fork the repository on GitHub
-2. Clone your fork locally:
-
 ```bash
-git clone https://github.com/tapps-mcp/tapps-mcp
-cd docs-mcp
+git clone https://github.com/wtthornton/TappsMCP.git
+cd TappsMCP
+uv sync --all-packages
 ```
-
-## Development Setup
-
-```bash
-# Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-
-# Install in development mode
-pip install -e '.[dev]'
-```
-
-## Coding Standards
-
-Please ensure your code follows the project's style conventions.
 
 ## Testing
 
-Please ensure all tests pass before submitting a pull request.
-
 ```bash
-pytest -v
+uv run pytest packages/docs-mcp/tests/ -v
 ```
 
 When adding new features, please include appropriate tests.
 
 ## Submitting Changes
 
-1. Create a feature branch from `main`:
+This repository follows a **commit-direct-to-master** workflow — no feature branches, no pull requests (see [`.claude/rules/repo-workflow.md`](../../../.claude/rules/repo-workflow.md)).
+
+1. Make your changes and verify they pass:
 
    ```bash
-   git checkout -b feature/my-feature
+   uv run pytest packages/docs-mcp/tests/ -v
+   uv run ruff check packages/docs-mcp/src/
+   uv run mypy --strict packages/docs-mcp/src/docs_mcp/
    ```
 
-2. Make your changes and commit with a descriptive message:
+2. Commit with a descriptive message (conventional commits preferred):
 
    ```bash
-   git add .
-   git commit -m "feat: add my new feature"
+   git commit -m "feat(docs-mcp): add my new feature"
    ```
 
-3. Push your branch to your fork:
-
-   ```bash
-   git push origin feature/my-feature
-   ```
-
-4. Open a Pull Request against the `main` branch
-5. Describe your changes and link any related issues
-6. Wait for review and address any feedback
+3. Push to `master`. The pre-push hook enforces a green non-slow unit suite before allowing the push.
 
 ## Reporting Issues
 

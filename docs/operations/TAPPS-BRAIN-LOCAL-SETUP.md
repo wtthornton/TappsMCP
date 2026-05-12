@@ -1,7 +1,7 @@
 # tapps-brain: Local and Multi-Project Setup
 
 This guide explains how to connect tapps-mcp to tapps-brain for persistent memory.
-Two transport modes are available; **HTTP is recommended** for all deployments.
+Two transport modes are available — the choice depends on your topology.
 
 ---
 
@@ -9,15 +9,18 @@ Two transport modes are available; **HTTP is recommended** for all deployments.
 
 | Mode | Env vars required | When to use |
 |------|-------------------|-------------|
-| **HTTP** (recommended) | `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` | Any workstation or server running tapps-brain-http |
-| In-process / legacy | `TAPPS_BRAIN_DATABASE_URL` | Local development only; single-tenant, direct Postgres access |
+| **In-process** (default for single-workstation use) | `TAPPS_BRAIN_DATABASE_URL` | Same-host setups where tapps-mcp and Postgres run together. See [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md). |
+| **HTTP** (recommended for multi-workstation / multi-tenant) | `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` | Shared brain server, server-side deployment, or any environment where per-project isolation is needed |
 
-### Why HTTP is preferred
+### When to pick which
 
-- **Multi-tenant isolation** — `X-Project-Id` per request scopes reads/writes to one project. Direct-DB gives every process access to all rows.
-- **Secret surface** — one bearer token to rotate. Direct-DB exposes a Postgres password on every host.
-- **Deployment topology** — tapps-brain-http is the intended bridge between external consumers and Postgres. Duplicating the Postgres connection on every host defeats the isolation model.
-- **Diagnostic clarity** — HTTP mode eliminates the "two-pipe ambiguity" where `tapps_session_start()` reports `memory_status.enabled: false` even though `mcp__tapps-brain__*` tools succeed over MCP (TAP-596 / tapps-mcp-two-pipes-to-tapps-brain).
+**In-process is the tapps-mcp default per [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md).** `BrainBridge` loads `AgentBrain` directly in the tapps-mcp process and routes reads/writes through it — no network round-trip, no HTTP lifespan race, no diagnostic ambiguity from a separate service being down.
+
+**HTTP mode is the right choice when:**
+- **Multi-tenant isolation** is required — the `X-Project-Id` header scopes reads/writes per request; in-process gives every process direct row access.
+- **Secret surface** matters — one bearer token to rotate beats a Postgres password on every host.
+- **Cross-host deployment** — when consumers other than tapps-mcp need the same memory store, the HTTP service is the canonical surface they reach.
+- **Diagnostic clarity** — HTTP mode eliminates the "two-pipe ambiguity" where `tapps_session_start()` reports `memory_status.enabled: false` even though `mcp__tapps-brain__*` tools succeed over MCP (TAP-596).
 
 ---
 
@@ -125,20 +128,19 @@ uv run tapps-mcp doctor
 
 ---
 
-## In-process / legacy setup (local dev only)
+## In-process setup (default)
 
-The in-process path is kept as a fallback for local development where running a
-separate HTTP service is inconvenient.
+The in-process path is the tapps-mcp default per [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md). `BrainBridge` loads `AgentBrain` directly and connects to Postgres via the DSN below; no separate HTTP service is required.
 
 ```bash
 export TAPPS_BRAIN_DATABASE_URL=postgresql://user:pass@localhost:5432/tapps_brain
 ```
 
-### Limitations
+### Tradeoffs vs HTTP mode
 
-- Requires every tapps-mcp process to have a direct Postgres connection.
-- No per-project row isolation — all tenants share the same Postgres role.
-- Multi-workstation setups are error-prone (connection pool contention, credential rotation).
+- Each tapps-mcp process opens its own Postgres connection pool. Cross-process consistency comes from Postgres, not from a shared in-memory cache.
+- No per-project row isolation at the connection layer — all tenants share the same Postgres role. (For multi-tenant deployments, prefer HTTP mode.)
+- Multi-workstation setups require Postgres credential distribution; rotation touches every host. (HTTP mode rotates one bearer token instead.)
 
 ---
 

@@ -133,7 +133,8 @@ The MCP server is split across five tool files sharing the same `mcp` FastMCP in
 - **`server_analysis.py`** -- `docs_module_map`, `docs_api_surface`
 - **`server_git_tools.py`** -- `docs_git_summary`
 - **`server_gen_tools.py`** -- `docs_generate_readme`, `docs_generate_changelog`, `docs_generate_release_notes`, `docs_generate_api`, `docs_generate_adr`, `docs_generate_onboarding`, `docs_generate_contributing`, `docs_generate_prd`, `docs_generate_diagram`, `docs_generate_architecture`, `docs_generate_epic`, `docs_generate_story`, `docs_generate_prompt`, `docs_generate_llms_txt`, `docs_generate_frontmatter`, `docs_generate_interactive_diagrams`, `docs_generate_purpose`, `docs_generate_doc_index`
-- **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`, `docs_validate_epic`, `docs_check_diataxis`, `docs_check_cross_refs`, `docs_check_style`
+- **`server_val_tools.py`** -- `docs_check_drift`, `docs_check_completeness`, `docs_check_links`, `docs_check_freshness`, `docs_validate_epic`, `docs_check_diataxis`, `docs_check_cross_refs`, `docs_check_style`, `docs_validate_release_update`, `docs_release_gate`
+- **`server_linear_tools.py`** -- `docs_lint_linear_issue`, `docs_validate_linear_issue`, `docs_linear_triage`
 - **`server_helpers.py`** -- Response builders (`error_response`, `success_response`), settings singleton (`_get_settings`), three-tier output helper (`finalize_output`)
 
 ### Generator output behavior (three-tier)
@@ -170,7 +171,7 @@ To add a new MCP tool:
 4. Use `error_response()` and `success_response()` for return values
 5. Add tests in `packages/docs-mcp/tests/unit/`
 
-## The 32 MCP tools
+## The 38 MCP tools
 
 | Category | Tool | Description |
 |---|---|---|
@@ -206,6 +207,12 @@ To add a new MCP tool:
 | Validation | `docs_check_diataxis` | Diataxis quadrant coverage analysis and balance scoring |
 | Validation | `docs_check_cross_refs` | Cross-reference validation (orphans, broken refs, backlinks) |
 | Validation | `docs_check_style` | Deterministic markdown style/tone checks |
+| Validation | `docs_validate_release_update` | Validate a release-update document against the canonical template |
+| Validation | `docs_release_gate` | Aggregate verdict combining `docs_check_drift` + `docs_check_freshness` + `docs_check_links` (TAP-1335) |
+| Generation | `docs_generate_release_update` | Generate a structured release-update document |
+| Linear | `docs_lint_linear_issue` | Lint a Linear issue payload against the agent-issue template |
+| Linear | `docs_validate_linear_issue` | Validate a Linear issue payload (gates `agent_ready=true` for `save_issue`) |
+| Linear | `docs_linear_triage` | Batch-triage Linear issue payloads for quality scoring |
 
 ## Code conventions
 

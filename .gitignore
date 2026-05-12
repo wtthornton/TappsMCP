@@ -92,6 +92,7 @@ architecture-report*.png
 .ralph/logs/
 .ralph/metrics/
 .ralph/status.json
+.ralph/upgrade.log
 .ralphrc.bak.*
 
 # Agent worktrees spawned by the Agent tool (full git clones — never commit)

@@ -30,13 +30,13 @@ Should return JSON with `status: "ok"`. If it doesn't, give it ~30 seconds — t
 
 ## Step 2 — Confirm tapps-mcp imports tapps-brain
 
-tapps-mcp uses the in-process `AgentBrain` adapter (see [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md)), which is shipped by the `tapps-brain` PyPI package as a transitive dependency of `tapps-core`.
+tapps-mcp uses the in-process `AgentBrain` adapter (see [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md)). The `tapps-brain` Python package is declared as a dependency of `tapps-core` and installed by `uv sync --all-packages` against the local tapps-brain checkout — there is no PyPI distribution ([ADR-0003](../adr/0003-no-pypi-or-npm-publish-global-install-from-local-checkout.md)).
 
 ```bash
 uv run python -c "from tapps_brain import AgentBrain; print('import ok')"
 ```
 
-Should print `import ok`. If it raises `ImportError`, the package isn't installed — run `uv sync --all-packages` from the tapps-mcp checkout.
+Should print `import ok`. If it raises `ImportError`, the package isn't installed — clone the tapps-brain repo next to tapps-mcp and run `uv sync --all-packages` from the tapps-mcp checkout.
 
 ## Step 3 — Set the auth token
 
@@ -72,7 +72,7 @@ If the doctor flags `brain_auth_failed`, your token didn't propagate to the MCP 
 Open Claude Code in any project and ask it to call:
 
 ```
-tapps_memory(action="save", title="Tutorial fact", content="The brain test value is 42.", tier="context", scope="project")
+tapps_memory(action="save", key="tutorial-fact", value="The brain test value is 42.", tier="context", scope="project")
 ```
 
 The response should include `success: true`, an entry id, and an `expires_at` timestamp 14 days out (the default for the `context` tier).

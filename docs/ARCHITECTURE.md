@@ -13,10 +13,10 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(26 tools)     (32 tools)
+(30 tools)     (38 tools)
 ```
 
-**tapps-brain** is the standalone memory service extracted from tapps-core. It runs as a Dockerized PostgreSQL-backed service that tapps-mcp reaches over HTTP (default `localhost:8080`) via `BrainBridge`. Persistence engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) — refer there for the authoritative description. tapps-brain has its own repository, release cycle, and test suite.
+**tapps-brain** is the standalone memory service extracted from tapps-core. It runs as a Dockerized PostgreSQL-backed service. tapps-mcp accesses it **in-process via `BrainBridge`** (see [ADR-0001](adr/0001-in-process-agentbrain-via-brainbridge.md)); the HTTP surface at `localhost:8080` exists for external clients and future remote-brain consumers, not for tapps-mcp itself. Persistence engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) — refer there for the authoritative description. tapps-brain has its own repository, release cycle, and test suite.
 
 Shared infrastructure (config, security, logging, knowledge, experts, metrics, adaptive) lives in `tapps-core`. Both MCP servers depend on it. Server files in tapps-mcp import from `tapps_core` directly for extracted packages.
 
@@ -24,24 +24,26 @@ tapps-core's `memory/` package contains thin re-export shims delegating to tapps
 
 ## Server module split (tapps-mcp)
 
-The MCP server is split across eight files (server.py + 7 modules) sharing the same `mcp` FastMCP instance created in `server.py`:
+The MCP server is split across ten files (server.py + 9 modules) sharing the same `mcp` FastMCP instance created in `server.py`:
 
 - **`server.py`** -- Creates the `FastMCP("TappsMCP")` instance and 5 core tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_checklist`). Imports the other modules which register their tools/resources on the shared `mcp` object.
 - **`server_scoring_tools.py`** -- `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
-- **`server_pipeline_tools.py`** -- `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`
-- **`server_metrics_tools.py`** -- `tapps_dashboard`, `tapps_stats`, `tapps_feedback`, `tapps_research` (deprecated stub), `tapps_consult_expert` (deprecated stub)
+- **`server_pipeline_tools.py`** -- `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`, `tapps_pipeline`, `tapps_decompose`
+- **`server_metrics_tools.py`** -- `tapps_dashboard`, `tapps_stats`, `tapps_feedback`. (`tapps_research` and `tapps_consult_expert` are deprecation stubs that return `TOOL_DEPRECATED`; they are kept in the registry for back-compat but are not counted toward the active tool surface.)
 - **`server_memory_tools.py`** -- `tapps_memory` (33 actions)
 - **`server_analysis_tools.py`** -- `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`
+- **`server_linear_tools.py`** -- `tapps_linear_snapshot_get`, `tapps_linear_snapshot_put`, `tapps_linear_snapshot_invalidate` (cache-first Linear read path; see [`.claude/rules/linear-standards.md`](../.claude/rules/linear-standards.md))
+- **`server_release_tools.py`** -- `tapps_release_update` (builds release-update payload for the `linear-release-update` skill)
 - **`server_resources.py`** -- MCP resources (knowledge, config) and prompts (pipeline, workflow)
 - **`server_helpers.py`** -- Shared utilities: `emit_ctx_info()`, response builders, singleton caches
 
 ## Mode-scoped server registration (TAP-1084)
 
-`tapps-mcp` exposes its 26 tools through a single binary registered three times in `.mcp.json` under different names, each scoped to a tool preset. The MCP client sees these as three "servers"; under the hood it's one `FastMCP("TappsMCP")` instance whose `_register_tool_modules()` filters by the `TAPPS_MCP_TOOL_PRESET` env var that the CLI sets from `--mode`.
+`tapps-mcp` exposes its 30 tools through a single binary registered three times in `.mcp.json` under different names, each scoped to a tool preset. The MCP client sees these as three "servers"; under the hood it's one `FastMCP("TappsMCP")` instance whose `_register_tool_modules()` filters by the `TAPPS_MCP_TOOL_PRESET` env var that the CLI sets from `--mode`.
 
 | `.mcp.json` name | CLI invocation | Preset | Tool count | Purpose |
 |---|---|---|---|---|
-| `tapps-mcp` | `serve` (default `--mode all`) | full | 26 | Canonical entry — backward-compatible, all tools registered |
+| `tapps-mcp` | `serve` (default `--mode all`) | full | 30 | Canonical entry — backward-compatible, all tools registered |
 | `tapps-quality` | `serve --mode quality` | `TAPPS_TOOL_PRESET_QUALITY` | 14 | Coding-session tools only (scoring, gate, security, validate, memory, lookup_docs); reduces tool-list overhead during edit-loop work |
 | `tapps-admin` | `serve --mode admin` | `TAPPS_TOOL_PRESET_ADMIN` | 12 | Setup/troubleshooting tools (init, upgrade, doctor, dashboard, stats, decompose) |
 
@@ -176,13 +178,11 @@ The RAG-based expert consultation system was removed in EPIC-94. `tapps_consult_
 
 ## Memory subsystem
 
-Backed by **tapps-brain** — see the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for the canonical description of storage, retrieval (BM25 + boosts), time-based confidence decay, contradiction detection, and garbage collection. Per-project entry cap is controlled by tapps-brain's `TAPPS_BRAIN_MAX_ENTRIES`. tapps-core/memory/ modules are re-export shims; `injection.py` is a bridge adapter translating TappsMCP settings into brain's config.
+Backed by **tapps-brain** (Postgres in Docker) — see the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for the canonical description of storage, retrieval (BM25 + boosts), time-based confidence decay, contradiction detection, and garbage collection. Per-project entry cap is controlled by tapps-brain's `TAPPS_BRAIN_MAX_ENTRIES`. tapps-core/memory/ modules are re-export shims; `injection.py` is a bridge adapter translating TappsMCP settings into brain's config.
 
-Two deployment modes via `BrainBridge` (server_helpers.py):
-- **HTTP mode** (default): Connects to tapps-brain HTTP service at `TAPPS_BRAIN_HTTP_URL` (default `http://localhost:8080`). Supports offline write-queue drain, circuit breaker with half-open recovery, graceful `BrainBridgeUnavailable` degraded payloads. Runtime version check validates installed brain meets the floor version.
-- **In-process mode**: `AgentBrain` with SQLite + WAL + FTS5. Federation via central hub at `~/.tapps-mcp/memory/federated.db`. TappsMCP passes `store_dir=".tapps-mcp"` for backward compat (brain defaults to `.tapps-brain`).
+tapps-mcp talks to tapps-brain **in-process via `BrainBridge`** (see [ADR-0001](adr/0001-in-process-agentbrain-via-brainbridge.md)). The brain's HTTP surface at `localhost:8080` is for external clients — not for tapps-mcp. `BrainBridge` exposes a unified async API and adds offline write-queue drain, circuit-breaker with half-open recovery, and graceful `BrainBridgeUnavailable` degraded payloads on every `tapps_memory` action. Runtime version check (`brain_bridge.py:1599`) validates installed brain meets the floor version (`>=3.7.2, <4`; [ADR-0002](adr/0002-pin-tapps-brain-version-floor-at-372.md)).
 
-`BrainBridge` exposes a unified async API regardless of mode. Stable agent identity (UUIDv4) persisted to `.tapps-mcp/agent.id` is attached to every write for cross-session traceability.
+Stable agent identity (UUIDv4) persisted to `.tapps-mcp/agent.id` is attached to every write for cross-session traceability.
 
 **Cross-session handoff.** The default `project` scope is already cross-session: a `tapps_memory(action="save", scope="project")` write from one Claude Code / Cursor session is readable by `action="get"` / `action="search"` from any later session in the same repo. This is the recommended path for passing tokens, IDs, or short payloads between sessions instead of relying on stdout. For cross-agent handoff in Agent Teams, use `action="hive_propagate"` (see Hive section in [docs/MEMORY_REFERENCE.md](MEMORY_REFERENCE.md)); for cross-project, use the federation actions (`federate_publish` / `federate_subscribe` / `federate_sync`).
 

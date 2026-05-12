@@ -7,16 +7,19 @@
 
 ## Installation
 
+docs-mcp is not published to PyPI. Install from a local checkout of the TappsMCP repo:
+
 ```bash
-pip install docs-mcp
+git clone https://github.com/wtthornton/TappsMCP.git
+cd TappsMCP
+uv tool install -e packages/docs-mcp
 ```
 
-For development:
+For development inside the workspace:
 
 ```bash
-git clone <repository-url>
-cd docs-mcp
-pip install -e '.[dev]'
+uv sync --all-packages
+uv run docsmcp serve
 ```
 
 ## Project Structure

@@ -107,4 +107,4 @@ Tutorial-only — delete the handler, checklist entry, AGENTS.md row, and test f
 
 ## What you learned
 
-The five touchpoints for any new MCP tool: handler registration, `_record_call`, checklist mapping, AGENTS.md documentation, and a unit test. The same pattern applies to all 26 production tapps-mcp tools — see [server_scoring_tools.py](../../packages/tapps-mcp/src/tapps_mcp/server_scoring_tools.py) for a real, larger-shape example.
+The five touchpoints for any new MCP tool: handler registration, `_record_call`, checklist mapping, AGENTS.md documentation, and a unit test. The same pattern applies to all 30 production tapps-mcp tools — see [server_scoring_tools.py](../../packages/tapps-mcp/src/tapps_mcp/server_scoring_tools.py) for a real, larger-shape example.

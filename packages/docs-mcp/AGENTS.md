@@ -6,7 +6,7 @@ When the **DocsMCP** MCP server is configured in your host (Claude Code, Cursor,
 
 ## What DocsMCP is
 
-DocsMCP is an MCP server that provides 35 tools for:
+DocsMCP is an MCP server that provides 38 tools for:
 
 - **Code analysis** -- module maps, API surface extraction, dependency analysis via AST parsing
 - **Git analysis** -- commit history with conventional commit parsing, version detection from tags
@@ -259,7 +259,7 @@ Settings can be viewed/changed via `docs_config` or set in `.docsmcp.yaml`:
 | `style_auto_detect_max_terms` | `80` | Max terms to add from auto-detect |
 | `enabled_tools` | *(none)* | Allow list: only these tools are exposed. Empty/missing = all tools. Env: `DOCS_MCP_ENABLED_TOOLS` (comma-separated). |
 | `disabled_tools` | `[]` | Deny list: excluded from the exposed set. Ignored when `enabled_tools` is set. Env: `DOCS_MCP_DISABLED_TOOLS`. |
-| `tool_preset` | *(none)* | Preset: `full` (all 32 tools, default) or `core` (6 tools: session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). Env: `DOCS_MCP_TOOL_PRESET`. |
+| `tool_preset` | *(none)* | Preset: `full` (all 38 tools, default) or `core` (6 tools: session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). Env: `DOCS_MCP_TOOL_PRESET`. |
 
 Environment variables use the `DOCS_MCP_` prefix (e.g., `DOCS_MCP_OUTPUT_DIR`).
 
@@ -271,4 +271,4 @@ When using DocsMCP with TappsMCP or in environments where the combined tool coun
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `DOCS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools, default when unset) or `core` (6 essential tools). Env: `DOCS_MCP_TOOL_PRESET=core`.
 
-Empty or missing = all 32 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. See tool-count best practices in the repo planning docs (Epic 79).
+Empty or missing = all 38 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. See tool-count best practices in the repo planning docs (Epic 79).

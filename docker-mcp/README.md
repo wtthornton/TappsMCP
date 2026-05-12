@@ -16,13 +16,13 @@ and `docs-mcp` server entries in your MCP client config.
     "tapps-mcp": {
       "type": "stdio",
       "command": "uv",
-      "args": ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "tapps-mcp", "serve"],
+      "args": ["--directory", "C:\\path\\to\\TappsMCP", "run", "--no-sync", "tapps-mcp", "serve"],
       "env": { "TAPPS_MCP_PROJECT_ROOT": "." }
     },
     "docs-mcp": {
       "type": "stdio",
       "command": "uv",
-      "args": ["--directory", "C:\\cursor\\TappMCP", "run", "--no-sync", "docsmcp", "serve"],
+      "args": ["--directory", "C:\\path\\to\\TappsMCP", "run", "--no-sync", "docsmcp", "serve"],
       "env": { "DOCS_MCP_PROJECT_ROOT": "." }
     }
   }
@@ -39,14 +39,14 @@ For external distribution or CI/CD:
 
 ```bash
 # TappsMCP
-docker build -t tapps-mcp:1.14.0 -t tapps-mcp:latest .
+docker build -t tapps-mcp:3.10.10 -t tapps-mcp:latest .
 
 # DocsMCP
-docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:1.14.0 -t docs-mcp:latest .
+docker build -f packages/docs-mcp/Dockerfile -t docs-mcp:3.10.10 -t docs-mcp:latest .
 
 # Verify
-docker run --rm tapps-mcp:1.14.0 tapps-mcp --version
-docker run --rm docs-mcp:1.14.0 docsmcp --version
+docker run --rm tapps-mcp:3.10.10 tapps-mcp --version
+docker run --rm docs-mcp:3.10.10 docsmcp --version
 ```
 
 ## Structure
@@ -68,7 +68,7 @@ docker-mcp/
     tapps-developer.yaml    # Role: daily feature/bugfix development
     tapps-standard-170.yaml # Pinned to 1.7.0
     tapps-standard-1100.yaml # Pinned to 1.10.0
-    tapps-standard-1110.yaml # Pinned to 1.14.0
+    tapps-standard-1110.yaml # Pinned to 3.10.10
   examples/
     tools-core-tier1.yaml       # Tier 1 only (~11 tools)
     tools-core-tier1-tier2.yaml # Tier 1+2 (~23 tools)
@@ -80,7 +80,7 @@ docker-mcp/
 |---------|---------|----------|
 | `tapps-standard-170` | tapps-mcp, docs-mcp, context7 @ 1.7.0 | Pinned to 1.7.0 |
 | `tapps-standard-1100` | tapps-mcp, docs-mcp, context7 @ 1.10.0 | Pinned to 1.10.0 |
-| `tapps-standard-1110` | tapps-mcp, docs-mcp, context7 @ 1.14.0 | Pinned to 1.14.0 |
+| `tapps-standard-1110` | tapps-mcp, docs-mcp, context7 @ 3.10.10 | Pinned to 3.10.10 |
 | `tapps-minimal` | tapps-mcp | Code quality only |
 | `tapps-standard` | tapps-mcp, docs-mcp, context7 | Quality + docs + library lookup |
 | `tapps-full` | tapps-mcp, docs-mcp, context7, github, filesystem | Full developer workflow |
@@ -135,8 +135,8 @@ docker run --rm \
 
 ## Images
 
-| Server | Image (pinned 1.14.0) | Dockerfile |
+| Server | Image (pinned 3.10.10) | Dockerfile |
 |--------|----------------------|------------|
-| tapps-mcp | `ghcr.io/wtthornton/tapps-mcp:1.14.0` | `Dockerfile` |
-| docs-mcp | `ghcr.io/wtthornton/docs-mcp:1.14.0` | `packages/docs-mcp/Dockerfile` |
+| tapps-mcp | `ghcr.io/wtthornton/tapps-mcp:3.10.10` | `Dockerfile` |
+| docs-mcp | `ghcr.io/wtthornton/docs-mcp:3.10.10` | `packages/docs-mcp/Dockerfile` |
 | combined | `ghcr.io/wtthornton/tapps-platform` | `Dockerfile.platform` |

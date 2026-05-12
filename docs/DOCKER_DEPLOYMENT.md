@@ -14,7 +14,7 @@ Run TappsMCP as a **local Docker MCP server** using Streamable HTTP. The server 
 
 ```bash
 # From the TappsMCP repo root
-cd c:\cursor\TappsMCP   # or your path
+cd <path-to-TappsMCP-checkout>
 
 # Build and start
 docker compose up --build -d
@@ -84,7 +84,7 @@ Run Docker from the TappsMCP repo but mount the **other project** as `/workspace
 
 ```bash
 # From the TappsMCP repo
-cd c:\cursor\TappsMCP
+cd <path-to-TappsMCP-checkout>
 
 # Override the volume for this run (Windows example)
 docker compose run -d -p 8000:8000 -v "C:\projects\myapp:/workspace:ro" tapps-mcp

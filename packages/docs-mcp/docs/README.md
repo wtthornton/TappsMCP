@@ -1,6 +1,6 @@
 # docs-mcp
 
-![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)  ![License](https://img.shields.io/badge/license-MIT-green)  ![Version](https://img.shields.io/badge/version-2.4.0-blue)
+![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)  ![License](https://img.shields.io/badge/license-MIT-green)  ![Version](https://img.shields.io/badge/version-3.10.10-blue)
 
 MCP server for automated documentation generation, validation, and maintenance
 
@@ -26,8 +26,12 @@ MCP server for automated documentation generation, validation, and maintenance
 
 ## Installation
 
+docs-mcp is not published to PyPI. Install from a local checkout of the TappsMCP repo:
+
 ```bash
-pip install docs-mcp
+git clone https://github.com/wtthornton/TappsMCP.git
+cd TappsMCP
+uv tool install -e packages/docs-mcp
 ```
 
 ## Usage
@@ -295,7 +299,7 @@ Epic 84 -- Doc Style & Tone Validation.
 
 ## API Reference
 
-See [AGENTS.md](../AGENTS.md) for the full 32-tool reference and integration guide.
+See [AGENTS.md](../AGENTS.md) for the full 38-tool reference and integration guide.
 
 ## Development
 

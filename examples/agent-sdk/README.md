@@ -10,14 +10,14 @@ sessions for both Python and TypeScript.
 - Python 3.12+
 - `claude-code-sdk` package (`pip install claude-code-sdk`)
 - `ANTHROPIC_API_KEY` environment variable set
-- TappsMCP installed (`pip install tapps-mcp` or `uvx tapps-mcp serve`)
+- TappsMCP installed from local checkout (`uv tool install -e packages/tapps-mcp` from the TappsMCP repo) — the package is not on PyPI
 
 ### TypeScript
 
 - Node.js 18+
 - `@anthropic-ai/claude-code` npm package
 - `ANTHROPIC_API_KEY` environment variable set
-- TappsMCP installed (`pip install tapps-mcp`)
+- TappsMCP installed from local checkout (`uv tool install -e packages/tapps-mcp`)
 
 ## Python Examples
 
@@ -79,8 +79,8 @@ session. TappsMCP is configured as:
 ```json
 {
   "tapps-mcp": {
-    "command": "uvx",
-    "args": ["tapps-mcp", "serve"],
+    "command": "tapps-mcp",
+    "args": ["serve"],
     "env": {
       "TAPPS_MCP_PROJECT_ROOT": "/path/to/project"
     }

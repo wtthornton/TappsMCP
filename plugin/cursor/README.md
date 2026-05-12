@@ -48,10 +48,6 @@ TappsMCP scores Python code across 7 categories (0-100 each):
 | Testing | Coverage, edge cases, assertions |
 | Style | PEP 8, formatting, consistency |
 
-## Screenshot
-
-<!-- TODO: Add screenshot or GIF of TappsMCP in action -->
-
 ## License
 
 MIT

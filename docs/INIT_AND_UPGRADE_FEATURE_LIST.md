@@ -100,7 +100,7 @@ To refresh all generated files at once, use **`tapps-mcp upgrade`** (CLI) or **`
 
 ## Upgrading when TappsMCP ships new features (consuming projects)
 
-When you upgrade TappsMCP (`pip install -U tapps-mcp` or similar), new workflow templates and AGENTS.md content may be available. To get the latest templates in your project:
+When you upgrade TappsMCP (`git pull && uv tool install --reinstall -e packages/tapps-mcp` from the checkout), new workflow templates and AGENTS.md content may be available. To get the latest templates in your project:
 
 | What to refresh | How |
 |-----------------|-----|
@@ -112,27 +112,6 @@ When you upgrade TappsMCP (`pip install -U tapps-mcp` or similar), new workflow 
 **Example (via AI):** “Call tapps_init with overwrite_agents_md=True and overwrite_platform_rules=True, platform=cursor, to refresh to the latest TappsMCP templates.”
 
 **Example (CLI):** `tapps-mcp init --force --host cursor` to refresh MCP config. Platform rules are generated but not overwritten if they already exist (use tapps_init with overwrite_platform_rules for that).
-
----
-
-## Epic 10+11 (complete): Expert + Context7 Integration & Retrieval Optimization
-
-Epic 10 and Epic 11 added tighter coupling between expert consultation and doc lookup, plus retrieval quality improvements. All 10 stories are shipped and tested (230 epic-scoped tests passing).
-
-| Enhancement | Delivered via | Status |
-|-------------|---------------|--------|
-| Expert + doc lookup workflow guidance | AGENTS.md, agents_template.md, recommended_workflow | ✅ Shipped |
-| Structured `suggested_tool` / `suggested_library` / `suggested_topic` when RAG is empty | `tapps_consult_expert` response | ✅ Shipped |
-| Auto-fallback to Context7 when expert RAG is empty | `tapps_consult_expert` (configurable via `expert_auto_fallback`) | ✅ Shipped |
-| Broader testing-strategies KB (test config, URLs, env) | Knowledge files (`test-configuration-and-urls.md`) | ✅ Shipped |
-| `tapps_research` combined tool | New MCP tool | ✅ Shipped |
-| Hybrid fusion + rerank retrieval | `VectorKnowledgeBase._hybrid_fuse()` | ✅ Shipped |
-| Hot-rank adaptive ranking | `experts/hot_rank.py` | ✅ Shipped |
-| Fuzzy matcher v2 (multi-signal) | `knowledge/fuzzy_matcher.py` | ✅ Shipped |
-| Context7 code-reference normalization | `knowledge/content_normalizer.py` | ✅ Shipped |
-| Retrieval evaluation harness + quality gates | `experts/retrieval_eval.py` | ✅ Shipped |
-
-**To get Epic 10+11 content in your project:** After upgrading TappsMCP, run `tapps_init` with `overwrite_agents_md=True` and `overwrite_platform_rules=True` so AGENTS.md and platform rules include the new workflow. See [TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md](archive/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md).
 
 ---
 

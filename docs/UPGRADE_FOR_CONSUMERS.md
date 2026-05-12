@@ -24,9 +24,13 @@ The **`linear-standards.md` rule** also gains a new `### Reads (TAP-1224)` enfor
 
 ## 1. Upgrade the package
 
+TappsMCP is not published to PyPI — pull the latest checkout and reinstall:
+
 ```bash
-pip install -U tapps-mcp
-# or: uv tool install -U tapps-mcp
+cd <path-to-TappsMCP-checkout>
+git pull
+uv tool install --reinstall -e packages/tapps-mcp
+uv tool install --reinstall -e packages/docs-mcp
 ```
 
 ---
@@ -75,7 +79,7 @@ Per-component details live under `components.platforms[].components.{agents,skil
 
 ## 3. Or use the MCP tools from within a session
 
-**Quick upgrade (new in v0.3.0):** Use the **`tapps_upgrade`** MCP tool to refresh all generated files without leaving your AI session:
+**Quick upgrade:** Use the **`tapps_upgrade`** MCP tool to refresh all generated files without leaving your AI session:
 
 ```
 tapps_upgrade(dry_run=true)   # preview changes
@@ -133,7 +137,7 @@ A normal `tapps_init` run (without overwrite flags) will:
 
 | What | How |
 |------|-----|
-| Upgrade the package | `pip install -U tapps-mcp` |
+| Upgrade the package | `git pull && uv tool install --reinstall -e packages/tapps-mcp` (from the checkout) |
 | Refresh everything (recommended) | `tapps-mcp upgrade` (CLI) or `tapps_upgrade()` (MCP tool) |
 | Get latest AGENTS.md and workflow | `tapps_init(overwrite_agents_md=True)` |
 | Get latest platform rules | `tapps_init(overwrite_platform_rules=True, platform="cursor")` or `platform="claude"` |

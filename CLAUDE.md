@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## What is TappsMCP?
 
-TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs and AI coding assistants. It scores Python files, runs security scans, enforces quality gates, looks up library docs, and validates configs -- all via structured MCP tool calls (26 tools). Any MCP-capable client (Claude Code, Cursor, VS Code Copilot) can use it. If you are a consuming project, see [AGENTS.md](AGENTS.md) instead.
+TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs and AI coding assistants. It scores Python files, runs security scans, enforces quality gates, looks up library docs, and validates configs -- all via structured MCP tool calls (30 tools). Any MCP-capable client (Claude Code, Cursor, VS Code Copilot) can use it. If you are a consuming project, see [AGENTS.md](AGENTS.md) instead.
 
 ## Repository structure
 
@@ -14,8 +14,8 @@ This is a **uv workspace monorepo** with three packages plus an external depende
 |---|---|---|
 | **tapps-brain** | [github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain) | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). Accessed from tapps-mcp via `BrainBridge` and exposed through `tapps_memory`. See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for storage internals, retrieval, and operational docs — treat that as the source of truth. |
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, metrics, adaptive) |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (26 tools) |
-| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (32 tools) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (38 tools) |
 
 tapps-core's `memory/` modules are re-export shims delegating to tapps-brain (except `injection.py` which is a bridge adapter). tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
 

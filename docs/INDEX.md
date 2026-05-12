@@ -7,7 +7,7 @@
 | [README](../README.md) | Project overview, installation, tools reference |
 | [Onboarding Guide](ONBOARDING.md) | Setup for consumers and developers |
 | [Tutorials](tutorials/) | Copy-paste runnable walkthroughs (add an MCP tool, run the quality pipeline, wire tapps-brain) |
-| [Contributing Guide](../CONTRIBUTING.md) | Code standards, testing, PR workflow |
+| [Contributing Guide](../CONTRIBUTING.md) | Code standards, testing, contribution workflow |
 
 ## Reference
 

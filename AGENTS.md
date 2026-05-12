@@ -31,7 +31,7 @@ Seven rules every agent in this project should follow.
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (26 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+**For full tool reference** (30 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 
@@ -73,14 +73,14 @@ Seven rules every agent in this project should follow.
 1. **Session start:** Call `tapps_session_start` (returns server info and project context).
 2. **Check project memory:** Consider calling `tapps_memory(action="search", query="...")` to recall past decisions and project context.
 3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
-3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
-4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
-5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
-6. **Before declaring work complete:**
+4. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
+5. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
+6. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
+7. **Before declaring work complete:**
    - Recommended: invoke the `/tapps-finish-task` skill — bundles `tapps_validate_changed` + `tapps_checklist` + an optional memory save and reports a one-line summary.
    - If you'd rather run the steps manually: `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to score + gate changed files (never call without `file_paths` in large repos; default is quick mode), then `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
-7. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
+8. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
 
@@ -243,7 +243,7 @@ For direct stdio connections you can expose only a subset of tools to keep the a
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `TAPPS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools), `core` (7 Tier-1 tools), `pipeline` (Tier 1 + Tier 2), or role presets: `reviewer`, `planner`, `frontend`, `developer` (Epic 79.5). Env: `TAPPS_MCP_TOOL_PRESET=core`.
 
-Empty or missing = all 26 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see `docs/archive/planning/TOOL-SUBSETS-AND-DOCKER-FILTERING.md`.
+Empty or missing = all 30 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see `docs/archive/planning/TOOL-SUBSETS-AND-DOCKER-FILTERING.md`.
 
 ---
 ## tapps_session_start vs tapps_init
