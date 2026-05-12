@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`fix(brain-bridge): call maintenance_gc instead of unregistered memory_gc`.** [`brain_bridge.py:1430`](packages/tapps-core/src/tapps_core/brain_bridge.py#L1430) — `HttpBrainBridge.gc()` was calling the MCP tool name `memory_gc`, which has never been registered on the tapps-brain side (only `maintenance_gc` exists, and only in the `operator` profile). On non-operator brains the call surfaces as a profile-denial McpError; on any brain it surfaces as `Unknown tool`. The bridge now calls `maintenance_gc` and falls back to a structured degraded payload (`{"archived_count": 0, "degraded": True, "reason": ...}`) when the tool is missing or gated, matching the existing `consolidate()` behaviour.
+
+### Added
+
+- **`feat(brain-bridge): structured McpError discriminator + X-Brain-Profile pin`.** [`brain_bridge.py`](packages/tapps-core/src/tapps_core/brain_bridge.py) — new `BrainMcpError(RuntimeError)` preserves the JSON-RPC `code`, `data`, and `tool_name` fields from the brain's error envelope so callers can discriminate between "tool gated by profile" (`data.error == "tool_not_in_profile"`, EPIC-073) and "tool removed from registry" without re-parsing the stringified message. Module-level `_classify_mcp_error(exc)` helper returns `"gated"` / `"removed"` / `"other"` and handles both direct exceptions and the `BrainBridgeUnavailable` retry-exhausted wrapper. `HttpBrainBridge.__init__` now sets `setdefault("X-Brain-Profile", "full")` on every request — no-op today, guardrail when EPIC-073 Phase 3 flips the deployed default to `coder`.
+
+## [3.10.10] - 2026-05-11
+
+### Changed
+
+- **`feat(brain-bridge): surface tapps-brain HTTP auth failures instead of silently degrading` ([TAP-1082](https://linear.app/tappscodingagents/issue/TAP-1082)).** `tapps_session_start` now returns a hard error with `code: brain_auth_failed` when the tapps-brain auth probe returns 401 or 403, replacing the prior silent-degradation behavior. Set `TAPPS_BRAIN_AUTH_TOKEN` in the env or `.mcp.json` to fix. For offline / no-brain workflows, set `memory.tolerate_brain_auth_failure: true` in `.tapps-mcp.yaml` to retain the soft-degraded behavior. Sync of local hooks and brain HTTP error surfacing in the same release.
+
+## [3.10.9] - 2026-05-04
+
+### Fixed
+
+- **`fix(memory): http_mode_not_supported gate dropped for save + CRUD primitives` ([TAP-1421](https://linear.app/tappscodingagents/issue/TAP-1421)).** When the bridge runs in HTTP mode (store is None), `save / get / delete / search / list / reinforce` now route through a thin async fallback that calls `BrainBridge` directly. The previous behaviour returned `http_mode_not_supported` for save, silently disabling federation, auto-capture, and every other write-side workflow.
+- **`fix(linear-cache): cross-project tag, alias unlock, auto-populate` ([TAP-1411](https://linear.app/tappscodingagents/issue/TAP-1411), [TAP-1374](https://linear.app/tappscodingagents/issue/TAP-1374), [TAP-1412](https://linear.app/tappscodingagents/issue/TAP-1412)).** Snapshot sentinels now include the resolved team/project so a cache hit on project A no longer unlocks a `list_issues` on project B. Aliased project names unlock the canonical key. Successful `get_issue` populates the snapshot so single-issue reads warm the cache.
+- **`fix(perf): same-session-id short-circuit for tapps_session_start` ([TAP-1379](https://linear.app/tappscodingagents/issue/TAP-1379)).** Repeat `tapps_session_start` calls within the same session id (e.g. from background hook ping) skip the full diagnostic pipeline and return the cached payload.
+- **`fix(release): atomic release-prep + sync stamp + caplog` ([TAP-1378](https://linear.app/tappscodingagents/issue/TAP-1378), [TAP-1372](https://linear.app/tappscodingagents/issue/TAP-1372), [TAP-1377](https://linear.app/tappscodingagents/issue/TAP-1377)).** Release-prep tool writes all version-stamped files atomically; the `tapps-agents-version:` stamp in deployed AGENTS.md stays in sync with `pyproject.toml`; cross-machine session state is discarded on host/os/cwd mismatch.
+
+### Added
+
+- **`feat(doctor): warn loudly on missing ruff/mypy on Python projects` ([TAP-1414](https://linear.app/tappscodingagents/issue/TAP-1414)).** `tapps doctor` surfaces a clearly-marked warning when Python projects don't have ruff or mypy on `$PATH`, rather than burying the finding under "optional dependencies".
+
+## [3.10.5 — 3.10.8] - 2026-05-04
+
+Internal release plumbing — unified versioning sync across `pyproject.toml` files and CI. See `fix(release): unified versioning — sync 3.10.1 → 3.10.9 + enforce going forward` (commit `127ce78`).
+
 ## [3.10.4] - 2026-05-04
 
 ### Fixed

@@ -45,7 +45,7 @@ Complete reference for the `tapps_memory` tool’s **33 actions** (single MCP to
 | Action | Parameters | Description |
 |--------|-----------|-------------|
 | **reinforce** | `key`, `boost` | Reset decay clock, optionally boost confidence (max +0.2) |
-| **gc** | -- | Archive stale memories |
+| **gc** | -- | Archive stale memories. HTTP bridge calls `maintenance_gc` (operator-profile only — `memory_gc` was never registered on the brain side). When the active brain profile excludes `maintenance_gc` (default `full` does not include it), the bridge returns a structured `{"archived_count": 0, "degraded": True, "reason": ...}` payload instead of raising. See [`brain_bridge.py:1430`](../packages/tapps-core/src/tapps_core/brain_bridge.py#L1430). |
 | **contradictions** | -- | Detect memories contradicting current project state |
 | **reseed** | -- | Re-seed from project profile (never overwrites human memories) |
 
@@ -53,8 +53,8 @@ Complete reference for the `tapps_memory` tool’s **33 actions** (single MCP to
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| **consolidate** | `entry_ids` or `query`, `dry_run` | Merge related memories with provenance |
-| **unconsolidate** | `key` | Undo consolidation, restore sources |
+| **consolidate** | `entry_ids` or `query`, `dry_run` | **Degraded since tapps-brain 3.10**. `memory_consolidate` was removed on the brain side; `BrainBridge` returns a structured degraded payload (`groups_found: 0`, `degraded: True`, `reason`) via the fallback at [`brain_bridge.py:1455`](../packages/tapps-core/src/tapps_core/brain_bridge.py#L1455). The same fallback also covers EPIC-073 profile gating (`reason: "memory_consolidate not in active brain profile"`). Plan to deprecate this action surface in tapps-mcp once the deprecation cycle completes. |
+| **unconsolidate** | `key` | Same status as `consolidate` — returns degraded payload on tapps-brain 3.10+. |
 
 ## Import / export
 

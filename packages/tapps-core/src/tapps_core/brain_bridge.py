@@ -107,6 +107,55 @@ class BrainBridgeUnavailable(Exception):  # noqa: N818  (public API name predate
     """Raised when the circuit is open or the bridge is not configured."""
 
 
+class BrainMcpError(RuntimeError):
+    """Raised when the brain returns a structured JSON-RPC error envelope.
+
+    Preserves the original ``code``, ``data`` and ``tool_name`` so callers can
+    discriminate between "tool gated by profile" (EPIC-073) and "tool removed
+    from registry" without re-parsing the stringified message. Subclass of
+    ``RuntimeError`` to keep ``except RuntimeError`` clauses (and the existing
+    ``test_rpc_error_raises`` contract) working.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: int | None = None,
+        data: Any = None,
+        tool_name: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.data = data
+        self.tool_name = tool_name
+
+
+def _classify_mcp_error(exc: BaseException) -> str:
+    """Return one of ``"gated"`` / ``"removed"`` / ``"other"`` for a brain failure.
+
+    - ``"gated"``: tool exists but the caller's profile excludes it (EPIC-073
+      ``tool_filter`` raises ``McpError(code=-32601, data={"error": "tool_not_in_profile", ...})``).
+    - ``"removed"``: tool name is not registered at all — surfaces as the
+      generic ``"Unknown tool"`` string in the error message.
+    - ``"other"``: anything else (network, timeout, payload validation, …).
+    """
+    chain_parts: list[str] = [str(exc)]
+    cause = exc.__cause__
+    if cause is not None:
+        chain_parts.append(str(cause))
+        data = getattr(cause, "data", None)
+        if isinstance(data, dict) and data.get("error") == "tool_not_in_profile":
+            return "gated"
+    data = getattr(exc, "data", None)
+    if isinstance(data, dict) and data.get("error") == "tool_not_in_profile":
+        return "gated"
+    chain = " ".join(chain_parts)
+    if "Unknown tool" in chain:
+        return "removed"
+    return "other"
+
+
 class BrainBridge:
     """Async-safe wrapper over :class:`tapps_brain.AgentBrain`.
 
@@ -974,8 +1023,8 @@ class HttpBrainBridge(BrainBridge):
     delete                    memory_delete
     reinforce                 memory_reinforce
     supersede                 memory_supersede
-    gc                        memory_gc
-    consolidate               memory_consolidate
+    gc                        maintenance_gc (operator profile only)
+    consolidate               memory_consolidate (removed in brain 3.10+)
     hive_search               hive_search
     hive_status               hive_status
     hive_propagate            hive_propagate
@@ -1006,6 +1055,11 @@ class HttpBrainBridge(BrainBridge):
         }
         self._http_url: str = http_url.rstrip("/")
         self._http_headers: dict[str, str] = dict(headers)
+        # EPIC-073 Phase 3 will eventually flip the deployed default profile
+        # from ``full`` to ``coder``. The bridge calls tools outside ``coder``
+        # (``memory_supersede``, ``agent_register``, …), so pin ``full``
+        # explicitly. No-op today (default already ``full``); guardrail later.
+        self._http_headers.setdefault("X-Brain-Profile", "full")
         self._http_client: httpx.AsyncClient | None = None
         # TAP-836: brain 3.10.3+ enforces the MCP streamable-HTTP session
         # lifecycle — an initialize handshake returns an Mcp-Session-Id
@@ -1127,7 +1181,14 @@ class HttpBrainBridge(BrainBridge):
 
         rpc_error = data.get("error")
         if rpc_error:
-            raise RuntimeError(f"tapps-brain MCP RPC error: {rpc_error}")
+            err_code = rpc_error.get("code") if isinstance(rpc_error, dict) else None
+            err_data = rpc_error.get("data") if isinstance(rpc_error, dict) else None
+            raise BrainMcpError(
+                f"tapps-brain MCP RPC error: {rpc_error}",
+                code=err_code,
+                data=err_data,
+                tool_name=tool_name,
+            )
 
         result: dict[str, Any] = data.get("result", {})
         if result.get("isError"):
@@ -1367,26 +1428,50 @@ class HttpBrainBridge(BrainBridge):
     # -------------------------------------------------------------------------
 
     async def gc(self, dry_run: bool = False) -> dict[str, Any]:
-        result = await self._http_mcp_call("memory_gc", {"dry_run": dry_run})
+        # tapps-brain only registers ``maintenance_gc`` (operator profile);
+        # ``memory_gc`` was never a registered name. When the brain is
+        # reachable on a non-operator profile (``full``/``coder``/…), the
+        # call surfaces as a profile-denial McpError (``-32601`` with
+        # ``data.error=="tool_not_in_profile"``). Treat that the same way
+        # ``consolidate`` treats removal: degraded stub instead of raising.
+        try:
+            result = await self._http_mcp_call("maintenance_gc", {"dry_run": dry_run})
+        except (RuntimeError, BrainBridgeUnavailable) as exc:
+            classification = _classify_mcp_error(exc)
+            if classification in {"gated", "removed"}:
+                return {
+                    "archived_count": 0,
+                    "degraded": True,
+                    "reason": (
+                        "maintenance_gc not in active brain profile"
+                        if classification == "gated"
+                        else "maintenance_gc unavailable on this brain"
+                    ),
+                    "dry_run": dry_run,
+                }
+            raise
         return result if isinstance(result, dict) else {"archived_count": 0}
 
     async def consolidate(self, dry_run: bool = False) -> dict[str, Any]:
         # brain 3.10+ removed ``memory_consolidate`` entirely with no drop-in
         # replacement. Fall through to a graceful degraded stub when the tool
-        # is missing, so callers (hooks, background tasks) don't crash on
-        # newer brain versions. Older brains still work via the RPC path.
-        # Tracked in TAP-800 drift 1.
-        # Retry-exhausted tool-not-found surfaces as BrainBridgeUnavailable
-        # with the original RuntimeError as __cause__; check both.
+        # is missing or gated by profile (EPIC-073), so callers (hooks,
+        # background tasks) don't crash on newer brain versions or
+        # narrower-profile deployments. Older brains still work via the RPC
+        # path. Tracked in TAP-800 drift 1.
         try:
             result = await self._http_mcp_call("memory_consolidate", {"dry_run": dry_run})
         except (RuntimeError, BrainBridgeUnavailable) as exc:
-            chain = f"{exc} {exc.__cause__}"
-            if "Unknown tool" in chain and "memory_consolidate" in chain:
+            classification = _classify_mcp_error(exc)
+            if classification in {"gated", "removed"}:
                 return {
                     "groups_found": 0,
                     "degraded": True,
-                    "reason": "memory_consolidate removed in tapps-brain 3.10+",
+                    "reason": (
+                        "memory_consolidate not in active brain profile"
+                        if classification == "gated"
+                        else "memory_consolidate removed in tapps-brain 3.10+"
+                    ),
                     "dry_run": dry_run,
                 }
             raise
