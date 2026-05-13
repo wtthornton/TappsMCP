@@ -90,6 +90,9 @@ _VALID_ACTIONS = {
     "relations",
     "neighbors",
     "explain_connection",
+    # TAP-1631: batch ops (single-round-trip wrappers around brain's *_many)
+    "recall_many",
+    "reinforce_many",
 }
 
 # Scope values accepted by save / save_bulk / get / list / search.
@@ -123,6 +126,9 @@ _ASYNC_ACTIONS = {
     "relations",
     "neighbors",
     "explain_connection",
+    # TAP-1631: batch ops delegate to BrainBridge.
+    "recall_many",
+    "reinforce_many",
 }
 
 # TAP-1080: async actions that work when the in-process store is None
@@ -144,6 +150,9 @@ _ASYNC_HTTP_OK_ACTIONS = {
     "relations",
     "neighbors",
     "explain_connection",
+    # TAP-1631: batch ops are HTTP-only — no in-process store path required.
+    "recall_many",
+    "reinforce_many",
 }
 
 # TAP-1421: sync actions whose primitives are also exposed on BrainBridge as
@@ -160,6 +169,9 @@ _HTTP_BRIDGE_FALLBACK_ACTIONS = {
     "search",
     "list",
     "reinforce",
+    # TAP-1631: bulk save in HTTP mode routes to memory_save_many (1 round
+    # trip) instead of the N-call in-process loop.
+    "save_bulk",
 }
 
 
@@ -2124,6 +2136,153 @@ async def _handle_neighbors(store: MemoryStore, p: _Params) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# TAP-1631: Batch operation handlers
+# ---------------------------------------------------------------------------
+
+
+def _batch_transport_unavailable(action: str, missing_method: str) -> dict[str, Any]:
+    """Response when the active bridge does not implement the batch method.
+
+    Batch ops require the HTTP transport and a brain that exposes
+    ``memory_save_many`` / ``memory_recall_many`` / ``memory_reinforce_many``
+    (tapps-brain 3.17+). Older brains and the in-process :class:`BrainBridge`
+    fall back to per-entry round-trips elsewhere; here we degrade explicitly
+    so callers know the latency win is unavailable.
+    """
+    return {
+        "action": action,
+        "success": False,
+        "degraded": True,
+        "reason": "batch_ops_require_http_bridge",
+        "missing_method": missing_method,
+        "next_steps": [
+            "Batch actions require the tapps-brain HTTP transport and "
+            "brain 3.17+. Set TAPPS_MCP_MEMORY_BRAIN_HTTP_URL so the bridge "
+            "runs in HTTP mode, or fall back to single-entry actions.",
+        ],
+    }
+
+
+async def _handle_recall_many(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Batch recall via the brain's ``memory_recall_many``.
+
+    Reads queries from the ``entries`` MCP parameter as a JSON-encoded list
+    of strings (the same channel ``save_bulk`` uses for its batch payload).
+    """
+    if not p.entries:
+        return {
+            "action": "recall_many",
+            "success": False,
+            "error": "missing_queries",
+            "message": ("recall_many requires entries=<JSON array of query strings>."),
+        }
+    try:
+        queries = json.loads(p.entries)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {
+            "action": "recall_many",
+            "success": False,
+            "error": "invalid_json",
+            "message": f"Failed to parse entries as JSON: {exc}",
+        }
+    if not isinstance(queries, list) or not all(isinstance(q, str) for q in queries):
+        return {
+            "action": "recall_many",
+            "success": False,
+            "error": "invalid_format",
+            "message": "entries must be a JSON array of strings.",
+        }
+    if not queries:
+        return {
+            "action": "recall_many",
+            "success": True,
+            "results": [],
+            "query_count": 0,
+        }
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("recall_many")
+    if not hasattr(bridge, "recall_many"):
+        return _batch_transport_unavailable("recall_many", "recall_many")
+    try:
+        result = await bridge.recall_many(queries)
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("recall_many", exc)
+    return {
+        "action": "recall_many",
+        "success": True,
+        "query_count": len(queries),
+        "result": result,
+    }
+
+
+async def _handle_reinforce_many(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Batch reinforce via the brain's ``memory_reinforce_many``.
+
+    Reads entries from the ``entries`` MCP parameter as a JSON array of
+    objects. Each object must have a ``key`` and may include a numeric
+    ``confidence_boost``.
+    """
+    if not p.entries:
+        return {
+            "action": "reinforce_many",
+            "success": False,
+            "error": "missing_entries",
+            "message": (
+                "reinforce_many requires entries=<JSON array of {key, confidence_boost?} objects>."
+            ),
+        }
+    try:
+        parsed = json.loads(p.entries)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {
+            "action": "reinforce_many",
+            "success": False,
+            "error": "invalid_json",
+            "message": f"Failed to parse entries as JSON: {exc}",
+        }
+    if not isinstance(parsed, list):
+        return {
+            "action": "reinforce_many",
+            "success": False,
+            "error": "invalid_format",
+            "message": "entries must be a JSON array.",
+        }
+    normalised: list[dict[str, Any]] = []
+    for i, entry in enumerate(parsed):
+        if not isinstance(entry, dict) or not entry.get("key"):
+            return {
+                "action": "reinforce_many",
+                "success": False,
+                "error": "invalid_entry",
+                "message": (f"Entry {i} must be an object with a non-empty 'key'."),
+            }
+        normalised.append(entry)
+    if not normalised:
+        return {
+            "action": "reinforce_many",
+            "success": True,
+            "result": {"reinforced": 0, "failed": 0, "total": 0},
+            "entry_count": 0,
+        }
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("reinforce_many")
+    if not hasattr(bridge, "reinforce_many"):
+        return _batch_transport_unavailable("reinforce_many", "reinforce_many")
+    try:
+        result = await bridge.reinforce_many(normalised)
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("reinforce_many", exc)
+    return {
+        "action": "reinforce_many",
+        "success": True,
+        "entry_count": len(normalised),
+        "result": result,
+    }
+
+
 async def _handle_explain_connection(store: MemoryStore, p: _Params) -> dict[str, Any]:
     """Explain how *subject* connects to *object_entity* (``brain_explain_connection``)."""
     if not (p.subject and p.object_entity):
@@ -2132,8 +2291,7 @@ async def _handle_explain_connection(store: MemoryStore, p: _Params) -> dict[str
             "success": False,
             "error": "missing_endpoints",
             "message": (
-                "explain_connection requires subject=<entity-id> and "
-                "object_entity=<entity-id>."
+                "explain_connection requires subject=<entity-id> and object_entity=<entity-id>."
             ),
         }
     bridge = _get_brain_bridge()
@@ -2858,6 +3016,143 @@ async def _http_handle_reinforce(p: _Params) -> dict[str, Any]:
     }
 
 
+async def _http_handle_save_bulk(p: _Params) -> dict[str, Any]:
+    """TAP-1631: single-round-trip bulk save via ``memory_save_many``.
+
+    Replaces the per-entry ``memory_save`` loop from the in-process handler
+    with the brain's batched endpoint. Per-entry safety checks still run
+    client-side so a blocked entry does not poison the rest of the batch;
+    valid entries are passed to ``bridge.save_many`` in one HTTP call.
+    """
+    if not p.entries:
+        return {
+            "error": "missing_entries",
+            "message": "entries parameter is required for save_bulk.",
+        }
+    try:
+        parsed = json.loads(p.entries)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {
+            "error": "invalid_json",
+            "message": f"Failed to parse entries as JSON: {exc}",
+        }
+    if not isinstance(parsed, list):
+        return {"error": "invalid_format", "message": "entries must be a JSON array."}
+    if len(parsed) > _BULK_SAVE_MAX_ENTRIES:
+        return {
+            "error": "too_many_entries",
+            "message": f"Maximum {_BULK_SAVE_MAX_ENTRIES} entries per call, got {len(parsed)}.",
+        }
+
+    from tapps_core.config.settings import load_settings
+
+    settings = load_settings()
+    enforcement = settings.memory.safety.enforcement
+    bypass_allowed = p.safety_bypass and (
+        p.source == "system" or settings.memory.safety.allow_bypass
+    )
+    if p.safety_bypass and not bypass_allowed:
+        logger.warning(
+            "memory_save_bulk_bypass_denied",
+            source=p.source,
+            reason="safety_bypass requires source='system' or allow_bypass config",
+        )
+    check_content_safety_fn = None
+    if not bypass_allowed:
+        try:
+            from tapps_brain.safety import check_content_safety
+
+            check_content_safety_fn = check_content_safety
+        except ImportError:
+            pass
+
+    payload: list[dict[str, Any]] = []
+    skipped = 0
+    blocked = 0
+    errors: list[dict[str, str]] = []
+
+    for i, entry in enumerate(parsed):
+        if not isinstance(entry, dict):
+            errors.append({"index": str(i), "error": "Entry must be an object."})
+            skipped += 1
+            continue
+        e_key = entry.get("key", "")
+        e_value = entry.get("value", "")
+        if not e_key:
+            errors.append({"index": str(i), "error": "Missing required field 'key'."})
+            skipped += 1
+            continue
+        if not e_value:
+            errors.append(
+                {"index": str(i), "key": e_key, "error": "Missing required field 'value'."}
+            )
+            skipped += 1
+            continue
+        if check_content_safety_fn is not None:
+            safety_result = check_content_safety_fn(e_value)
+            if not safety_result.safe and enforcement == "block":
+                logger.warning(
+                    "memory_save_bulk_safety_flagged",
+                    key=e_key,
+                    index=i,
+                    flagged_patterns=safety_result.flagged_patterns,
+                    enforcement=enforcement,
+                )
+                errors.append(
+                    {
+                        "index": str(i),
+                        "key": e_key,
+                        "error": f"Content blocked by safety check: {safety_result.warning}",
+                    }
+                )
+                blocked += 1
+                continue
+
+        e_tags_raw = entry.get("tags", "")
+        e_tags = (
+            [t.strip() for t in e_tags_raw.split(",") if t.strip()]
+            if isinstance(e_tags_raw, str) and e_tags_raw
+            else (e_tags_raw if isinstance(e_tags_raw, list) else [])
+        )
+        wire_entry: dict[str, Any] = {
+            "key": e_key,
+            "value": e_value,
+            "tier": entry.get("tier", p.tier),
+            "scope": entry.get("scope", p.scope),
+            "source": entry.get("source", p.source),
+            "source_agent": entry.get("source_agent", p.source_agent),
+        }
+        if e_tags:
+            wire_entry["tags"] = e_tags
+        if "confidence" in entry:
+            wire_entry["confidence"] = entry["confidence"]
+        elif p.confidence >= 0:
+            wire_entry["confidence"] = p.confidence
+        if p.branch:
+            wire_entry["branch"] = p.branch
+        payload.append(wire_entry)
+
+    bridge = _require_bridge()
+    if not hasattr(bridge, "save_many"):
+        return _batch_transport_unavailable("save_bulk", "save_many")
+    try:
+        result = await bridge.save_many(payload)
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("save_bulk", exc)
+
+    response: dict[str, Any] = {
+        "action": "save_bulk",
+        "saved": int(result.get("saved", 0)),
+        "skipped": skipped,
+        "errors": errors,
+        "result": result,
+        "store_metadata": {"mode": "http_bridge"},
+    }
+    if blocked > 0:
+        response["blocked"] = blocked
+    return response
+
+
 _HTTP_BRIDGE_DISPATCH: dict[str, Any] = {
     "save": _http_handle_save,
     "get": _http_handle_get,
@@ -2865,6 +3160,8 @@ _HTTP_BRIDGE_DISPATCH: dict[str, Any] = {
     "search": _http_handle_search,
     "list": _http_handle_list,
     "reinforce": _http_handle_reinforce,
+    # TAP-1631: single-round-trip bulk save against tapps-brain HTTP.
+    "save_bulk": _http_handle_save_bulk,
 }
 
 
@@ -2972,6 +3269,9 @@ _ASYNC_DISPATCH: dict[str, Any] = {
     "relations": _handle_relations,
     "neighbors": _handle_neighbors,
     "explain_connection": _handle_explain_connection,
+    # TAP-1631: batch ops delegate to BrainBridge.
+    "recall_many": _handle_recall_many,
+    "reinforce_many": _handle_reinforce_many,
 }
 
 

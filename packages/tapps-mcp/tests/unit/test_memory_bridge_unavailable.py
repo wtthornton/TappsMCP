@@ -10,6 +10,7 @@ handler that hits a ``BrainBridge`` method.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,9 +29,12 @@ from tapps_mcp.server_memory_tools import (
     _handle_hive_status,
     _handle_maintain,
     _handle_neighbors,
+    _handle_recall_many,
+    _handle_reinforce_many,
     _handle_related,
     _handle_relations,
     _handle_verify_integrity,
+    _http_handle_save_bulk,
     _Params,
 )
 
@@ -347,9 +351,7 @@ def _http_bridge_with_method(method: str, return_value: Any) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_related_happy_path(store: MagicMock) -> None:
-    bridge = _http_bridge_with_method(
-        "find_related", [{"key": "k-near", "score": 0.9}]
-    )
+    bridge = _http_bridge_with_method("find_related", [{"key": "k-near", "score": 0.9}])
     with patch(
         "tapps_mcp.server_memory_tools._get_brain_bridge",
         return_value=bridge,
@@ -439,14 +441,10 @@ async def test_relations_by_triple_calls_query_relations(store: MagicMock) -> No
         "tapps_mcp.server_memory_tools._get_brain_bridge",
         return_value=bridge,
     ):
-        out = await _handle_relations(
-            store, _params(subject="A", predicate="uses")
-        )
+        out = await _handle_relations(store, _params(subject="A", predicate="uses"))
     assert out["success"] is True
     assert out["mode"] == "by_triple"
-    bridge.query_relations.assert_awaited_once_with(
-        subject="A", predicate="uses", object_entity=""
-    )
+    bridge.query_relations.assert_awaited_once_with(subject="A", predicate="uses", object_entity="")
     bridge.entry_relations.assert_not_awaited()
 
 
@@ -468,9 +466,7 @@ async def test_relations_rejects_empty_query(store: MagicMock) -> None:
 
 @pytest.mark.asyncio
 async def test_neighbors_serializes_entry_ids_and_passes_filter(store: MagicMock) -> None:
-    bridge = _http_bridge_with_method(
-        "get_neighbors", {"neighbors": [{"id": "n1"}], "edges": []}
-    )
+    bridge = _http_bridge_with_method("get_neighbors", {"neighbors": [{"id": "n1"}], "edges": []})
     with patch(
         "tapps_mcp.server_memory_tools._get_brain_bridge",
         return_value=bridge,
@@ -509,9 +505,7 @@ async def test_neighbors_rejects_missing_entity_ids(store: MagicMock) -> None:
 async def test_explain_connection_passes_endpoints_and_max_hops(
     store: MagicMock,
 ) -> None:
-    bridge = _http_bridge_with_method(
-        "explain_connection", {"path": ["A", "B"], "hops": 1}
-    )
+    bridge = _http_bridge_with_method("explain_connection", {"path": ["A", "B"], "hops": 1})
     with patch(
         "tapps_mcp.server_memory_tools._get_brain_bridge",
         return_value=bridge,
@@ -536,7 +530,131 @@ async def test_explain_connection_rejects_partial_endpoints(
         return_value=MagicMock(),
     ):
         out = await _handle_explain_connection(
-            store, _params(subject="A")  # missing object_entity
+            store,
+            _params(subject="A"),  # missing object_entity
         )
     assert out["success"] is False
     assert out["error"] == "missing_endpoints"
+
+
+# ---------------------------------------------------------------------------
+# TAP-1631: batch op handlers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_recall_many_routes_queries_to_bridge_in_one_call(
+    store: MagicMock,
+) -> None:
+    bridge = _http_bridge_with_method("recall_many", {"results": [{"query": "q1", "hits": []}]})
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_recall_many(store, _params(entries='["q1", "q2"]'))
+    assert out["success"] is True
+    assert out["query_count"] == 2
+    bridge.recall_many.assert_awaited_once_with(["q1", "q2"])
+
+
+@pytest.mark.asyncio
+async def test_recall_many_rejects_non_string_queries(store: MagicMock) -> None:
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=MagicMock(),
+    ):
+        out = await _handle_recall_many(store, _params(entries='["q", 42]'))
+    assert out["success"] is False
+    assert out["error"] == "invalid_format"
+
+
+@pytest.mark.asyncio
+async def test_recall_many_returns_graph_transport_unavailable_in_process(
+    store: MagicMock,
+) -> None:
+    bridge = MagicMock(spec=["health"])  # no recall_many attribute
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_recall_many(store, _params(entries='["q1"]'))
+    assert out["success"] is False
+    assert out["reason"] == "batch_ops_require_http_bridge"
+
+
+@pytest.mark.asyncio
+async def test_reinforce_many_passes_entries_in_one_call(store: MagicMock) -> None:
+    bridge = _http_bridge_with_method("reinforce_many", {"reinforced": 2, "failed": 0, "total": 2})
+    payload = '[{"key": "k1", "confidence_boost": 0.1}, {"key": "k2"}]'
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_reinforce_many(store, _params(entries=payload))
+    assert out["success"] is True
+    assert out["entry_count"] == 2
+    bridge.reinforce_many.assert_awaited_once_with(
+        [{"key": "k1", "confidence_boost": 0.1}, {"key": "k2"}]
+    )
+
+
+@pytest.mark.asyncio
+async def test_reinforce_many_rejects_entry_without_key(store: MagicMock) -> None:
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=MagicMock(),
+    ):
+        out = await _handle_reinforce_many(store, _params(entries='[{"confidence_boost": 0.1}]'))
+    assert out["success"] is False
+    assert out["error"] == "invalid_entry"
+
+
+@pytest.mark.asyncio
+async def test_http_save_bulk_calls_save_many_once_for_n_entries(
+    store: MagicMock,
+) -> None:
+    """Acceptance criterion: save_bulk must call save_many in one round trip
+    instead of looping memory_save N times (TAP-1631).
+    """
+    bridge = _http_bridge_with_method("save_many", {"saved": 50, "failed": 0, "total": 50})
+    bulk_entries = json.dumps([{"key": f"k{i}", "value": f"v{i}"} for i in range(50)])
+    with patch(
+        "tapps_mcp.server_memory_tools._require_bridge",
+        return_value=bridge,
+    ):
+        out = await _http_handle_save_bulk(_params(entries=bulk_entries))
+    assert out["action"] == "save_bulk"
+    assert out["saved"] == 50
+    assert out["skipped"] == 0
+    # One bridge call for the entire batch — not 50.
+    bridge.save_many.assert_awaited_once()
+    call_entries = bridge.save_many.await_args.args[0]
+    assert len(call_entries) == 50
+    assert call_entries[0]["key"] == "k0"
+
+
+@pytest.mark.asyncio
+async def test_http_save_bulk_filters_invalid_entries_before_batching(
+    store: MagicMock,
+) -> None:
+    """Per-entry validation still runs locally — invalid entries are
+    skipped and reported in ``errors``; only valid entries reach the wire.
+    """
+    bridge = _http_bridge_with_method("save_many", {"saved": 1, "failed": 0, "total": 1})
+    bulk_entries = json.dumps(
+        [
+            {"key": "valid", "value": "v"},
+            {"key": "", "value": "no-key"},  # missing key
+            {"key": "no-value"},  # missing value
+        ]
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._require_bridge",
+        return_value=bridge,
+    ):
+        out = await _http_handle_save_bulk(_params(entries=bulk_entries))
+    assert out["saved"] == 1
+    assert out["skipped"] == 2
+    assert len(out["errors"]) == 2
+    call_entries = bridge.save_many.await_args.args[0]
+    assert [e["key"] for e in call_entries] == ["valid"]

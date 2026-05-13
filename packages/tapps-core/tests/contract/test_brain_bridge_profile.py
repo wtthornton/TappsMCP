@@ -385,9 +385,7 @@ async def test_knowledge_graph_methods_reach_the_wire(
         # methods run first; ``brain_get_neighbors`` is exercised LAST because
         # its current brain-side bug exhausts the retry budget and opens the
         # circuit breaker for any later call in the same bridge instance.
-        related = await bridge.find_related(
-            "tap-1630-probe-nonexistent-key", max_hops=1
-        )
+        related = await bridge.find_related("tap-1630-probe-nonexistent-key", max_hops=1)
         assert isinstance(related, list)
 
         relations = await bridge.entry_relations("tap-1630-probe-nonexistent-key")
@@ -411,12 +409,92 @@ async def test_knowledge_graph_methods_reach_the_wire(
         from tapps_core.brain_bridge import BrainBridgeUnavailable
 
         try:
-            neighbors = await bridge.get_neighbors(
-                ["tap-1630-probe-entity"], hops=1, limit=3
-            )
+            neighbors = await bridge.get_neighbors(["tap-1630-probe-entity"], hops=1, limit=3)
         except BrainBridgeUnavailable as exc:
             assert "parameter $5" in str(exc) or "brain_get_neighbors" in str(exc)
         else:
             assert isinstance(neighbors, dict)
     finally:
         bridge.close()
+
+
+# ---------------------------------------------------------------------------
+# TAP-1631: batch latency benchmark against the live brain
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_save_many_collapses_50_entries_into_one_wire_round_trip(
+    brain_url: str, auth_token: str, project_id: str
+) -> None:
+    """TAP-1631 architectural acceptance: ``memory_save_many`` writes N
+    entries in **one** wire round-trip instead of N.
+
+    Wall-clock speedup against the live brain on this hardware is modest
+    (~1.1x) because tapps-brain 3.17.1's ``memory_save_many`` handler does
+    not batch the underlying DB writes into a single transaction — it
+    loops server-side. Per the epic non-goals we do NOT modify the brain
+    to fix this, so the wall-clock 5x target on the original Linear
+    acceptance is gated on a follow-up brain change. What is unambiguously
+    deliverable from tapps-mcp is the wire-trip reduction, which this
+    test asserts directly by counting POSTs to the brain's MCP endpoint.
+    """
+    import time
+    import uuid
+
+    skip_reason = _check_profile_loaded_lenient(brain_url, auth_token, project_id, "full")
+    if skip_reason:
+        pytest.skip(skip_reason)
+
+    N = 50
+    run_id = uuid.uuid4().hex[:8]
+    batch_entries = [
+        {"key": f"tap1631-batch-{run_id}-{i}", "value": f"batch value {i}", "tier": "context"}
+        for i in range(N)
+    ]
+
+    batch_bridge = _build_bridge(brain_url, auth_token, project_id, "full")
+    initial_post_calls = 0
+    try:
+        # Drive initialize + negotiation so subsequent counts only reflect
+        # the actual save_many call.
+        await batch_bridge._http_mcp_call("brain_status", {})
+
+        # Wrap the bridge's httpx client to count POSTs.
+        real_post = batch_bridge._http_client.post  # type: ignore[union-attr]
+        post_count = 0
+
+        async def _counting_post(*args: Any, **kwargs: Any) -> Any:
+            nonlocal post_count
+            post_count += 1
+            return await real_post(*args, **kwargs)
+
+        batch_bridge._http_client.post = _counting_post  # type: ignore[union-attr]
+        initial_post_calls = post_count
+
+        start = time.perf_counter()
+        batch_result = await batch_bridge.save_many(batch_entries)
+        elapsed = time.perf_counter() - start
+        post_calls = post_count - initial_post_calls
+    finally:
+        batch_bridge.close()
+
+    cleanup_bridge = _build_bridge(brain_url, auth_token, project_id, "full")
+    try:
+        for entry in batch_entries:
+            try:
+                await cleanup_bridge.delete(entry["key"])
+            except Exception:
+                pass
+    finally:
+        cleanup_bridge.close()
+
+    assert batch_result["saved"] == N, batch_result
+    # The headline architectural win: 50 saves -> exactly 1 wire POST.
+    assert post_calls == 1, (
+        f"save_many issued {post_calls} HTTP POST(s) for {N} entries — "
+        "the batched-call architecture requires exactly one round trip."
+    )
+    # Bound the wall-clock so a brain regression that goes substantially
+    # backwards still fails the test even though we don't hit 5x today.
+    assert elapsed < 10.0, f"save_many took {elapsed:.2f}s for {N} entries"

@@ -674,6 +674,109 @@ class TestKnowledgeGraphInBridgeUsedTools:
 
 
 # ---------------------------------------------------------------------------
+# TAP-1631: batch operations
+# ---------------------------------------------------------------------------
+
+
+class TestBatchOps:
+    @pytest.mark.asyncio
+    async def test_save_many_calls_memory_save_many_in_one_post(self) -> None:
+        """The HTTP bridge must override the base-class loop with a real
+        batched call — exactly one POST to ``memory_save_many`` for N entries.
+        """
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"memory_save_many"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"saved": 3, "failed": 0, "total": 3}))
+        bridge._http_client.post = post_mock
+
+        entries = [{"key": f"k{i}", "value": f"v{i}", "tier": "pattern"} for i in range(3)]
+        result = await bridge.save_many(entries)
+
+        assert result["saved"] == 3
+        assert result["failed"] == 0
+        assert result["total"] == 3
+        # CRITICAL acceptance: one HTTP POST for the entire batch.
+        assert post_mock.await_count == 1
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "memory_save_many"
+        assert payload["params"]["arguments"]["entries"] == entries
+
+    @pytest.mark.asyncio
+    async def test_save_many_empty_short_circuits(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = AsyncMock(
+            side_effect=AssertionError("empty input must not POST")
+        )
+
+        result = await bridge.save_many([])
+
+        assert result == {"saved": 0, "failed": 0, "total": 0, "entries": []}
+        bridge._http_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_recall_many_calls_memory_recall_many(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"memory_recall_many"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(
+            _mcp_response({"results": [{"query": "q1", "hits": []}, {"query": "q2", "hits": []}]})
+        )
+        bridge._http_client.post = post_mock
+
+        result = await bridge.recall_many(["q1", "q2"])
+
+        assert "results" in result
+        assert post_mock.await_count == 1
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "memory_recall_many"
+        assert payload["params"]["arguments"]["queries"] == ["q1", "q2"]
+
+    @pytest.mark.asyncio
+    async def test_reinforce_many_calls_memory_reinforce_many(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"memory_reinforce_many"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"reinforced": 2, "failed": 0, "total": 2}))
+        bridge._http_client.post = post_mock
+
+        entries = [
+            {"key": "k1", "confidence_boost": 0.1},
+            {"key": "k2", "confidence_boost": 0.2},
+        ]
+        result = await bridge.reinforce_many(entries)
+
+        assert result["reinforced"] == 2
+        assert post_mock.await_count == 1
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "memory_reinforce_many"
+        assert payload["params"]["arguments"]["entries"] == entries
+
+
+class TestBatchOpsInBridgeUsedTools:
+    """All three batch tools must surface through profile_mismatch (TAP-1631)."""
+
+    def test_batch_tools_present(self) -> None:
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
+
+        for tool in (
+            "memory_save_many",
+            "memory_recall_many",
+            "memory_reinforce_many",
+        ):
+            assert tool in _BRIDGE_USED_TOOLS, tool
+
+
+# ---------------------------------------------------------------------------
 # Write operations
 # ---------------------------------------------------------------------------
 

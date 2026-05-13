@@ -242,6 +242,10 @@ _BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
         "memory_query_relations",
         "brain_get_neighbors",
         "brain_explain_connection",
+        # TAP-1631: batch ops added by tapps_memory phase 3 (single round-trip).
+        "memory_save_many",
+        "memory_recall_many",
+        "memory_reinforce_many",
     }
 )
 
@@ -1711,6 +1715,71 @@ class HttpBrainBridge(BrainBridge):
         if isinstance(result, dict):
             return result
         return {"explanation": result}
+
+    # -------------------------------------------------------------------------
+    # Batch operations (TAP-1631)
+    # -------------------------------------------------------------------------
+
+    async def save_many(self, entries: list[dict[str, Any]]) -> dict[str, Any]:
+        """Single-round-trip bulk save via ``memory_save_many`` (TAP-1631).
+
+        Overrides the base :meth:`BrainBridge.save_many` loop with a real
+        batched call. Each entry must include ``key`` and ``value``; other
+        per-entry fields (``tier``, ``scope``, ``tags``, ``source``, …) flow
+        through verbatim. Returns the brain's aggregate dict, normalised so
+        callers always see ``saved`` / ``failed`` / ``total`` keys.
+        """
+        if not entries:
+            return {"saved": 0, "failed": 0, "total": 0, "entries": []}
+        result = await self._http_mcp_call("memory_save_many", {"entries": entries})
+        if not isinstance(result, dict):
+            return {"saved": len(entries), "failed": 0, "total": len(entries)}
+        # Normalise: brain returns shape varies between releases; collapse to
+        # the saved/failed/total triad the agent expects.
+        saved = int(
+            result.get("saved")
+            or result.get("saved_count")
+            or len(result.get("entries", []) if result.get("entries") else [])
+        )
+        failed = int(result.get("failed") or result.get("failed_count") or 0)
+        total = int(result.get("total") or saved + failed or len(entries))
+        return {**result, "saved": saved, "failed": failed, "total": total}
+
+    async def recall_many(self, queries: list[str]) -> dict[str, Any]:
+        """Batch recall via ``memory_recall_many``.
+
+        Issues *queries* as a single call instead of N separate
+        ``memory_recall`` round-trips. Returns the brain response dict
+        unchanged (typically ``{"results": [{"query": ..., "hits": [...]}, ...]}``).
+        """
+        if not queries:
+            return {"results": []}
+        result = await self._http_mcp_call("memory_recall_many", {"queries": queries})
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list):
+            return {"results": result}
+        return {"results": []}
+
+    async def reinforce_many(self, entries: list[dict[str, Any]]) -> dict[str, Any]:
+        """Batch confidence boost via ``memory_reinforce_many``.
+
+        Each entry must have a ``key`` and may include a ``confidence_boost``
+        float (defaults are applied server-side when omitted).
+        """
+        if not entries:
+            return {"reinforced": 0, "failed": 0, "total": 0}
+        result = await self._http_mcp_call("memory_reinforce_many", {"entries": entries})
+        if not isinstance(result, dict):
+            return {"reinforced": len(entries), "failed": 0, "total": len(entries)}
+        reinforced = int(
+            result.get("reinforced")
+            or result.get("reinforced_count")
+            or len(result.get("entries", []) if result.get("entries") else [])
+        )
+        failed = int(result.get("failed") or result.get("failed_count") or 0)
+        total = int(result.get("total") or reinforced + failed or len(entries))
+        return {**result, "reinforced": reinforced, "failed": failed, "total": total}
 
     async def hive_search(
         self,
