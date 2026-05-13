@@ -181,6 +181,64 @@ async def test_health_returns_degraded_when_bridge_unavailable(
 
 
 @pytest.mark.asyncio
+async def test_health_surfaces_brain_profile_block_when_available(
+    store: MagicMock,
+) -> None:
+    """TAP-1629: ``_handle_health`` exposes ``profile_status()`` under the
+    ``brain_profile`` key so agents can read the active capability profile
+    and any gated bridge tools without a second tool call.
+    """
+    bridge = MagicMock()
+    bridge.health = AsyncMock(
+        return_value={"status": "ok", "entry_count": 0, "tier_distribution": {}}
+    )
+    bridge.profile_status = MagicMock(
+        return_value={
+            "negotiated": True,
+            "declared_profile": "coder",
+            "memory_profile_name": "repo-brain",
+            "memory_profile": {"name": "repo-brain"},
+            "exposed_tools": ["brain_remember", "memory_reinforce"],
+            "bridge_used_tools": ["memory_save", "memory_get"],
+            "gated_used_tools": ["memory_save", "memory_get"],
+            "profile_mismatch": True,
+            "negotiation_error": None,
+        }
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_health(store, _params())
+
+    assert out["success"] is True
+    assert out["brain_profile"]["declared_profile"] == "coder"
+    assert out["brain_profile"]["profile_mismatch"] is True
+    assert "memory_save" in out["brain_profile"]["gated_used_tools"]
+
+
+@pytest.mark.asyncio
+async def test_health_omits_brain_profile_for_in_process_bridge(
+    store: MagicMock,
+) -> None:
+    """In-process :class:`BrainBridge` (no HTTP) has no ``profile_status``;
+    the key must simply be omitted rather than crash.
+    """
+    bridge = MagicMock(spec=["health"])
+    bridge.health = AsyncMock(
+        return_value={"status": "ok", "entry_count": 0, "tier_distribution": {}}
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_health(store, _params())
+
+    assert out["success"] is True
+    assert "brain_profile" not in out
+
+
+@pytest.mark.asyncio
 async def test_verify_integrity_returns_degraded_when_bridge_unavailable(
     store: MagicMock,
 ) -> None:

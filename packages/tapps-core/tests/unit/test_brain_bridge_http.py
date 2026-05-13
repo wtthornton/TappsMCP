@@ -25,7 +25,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -386,6 +385,7 @@ class TestDoMcpPost:
     async def test_non_json_text_returned_as_value_dict(self) -> None:
         bridge = _make_http_bridge()
         bridge._session_id = "__test__"
+        bridge._negotiated = True  # TAP-1629: skip capability handshake in this unit test
         bridge._http_client = AsyncMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -408,6 +408,7 @@ class TestDoMcpPost:
     async def test_http_4xx_raises(self) -> None:
         bridge = _make_http_bridge()
         bridge._session_id = "__test__"
+        bridge._negotiated = True  # TAP-1629: skip capability handshake in this unit test
         bridge._http_client = AsyncMock()
         bridge._http_client.post = _make_async_post({}, status_code=401)
 
@@ -669,8 +670,12 @@ class TestHttpRetry:
     async def test_retries_on_transient_error_then_succeeds(self) -> None:
         bridge = _make_http_bridge()
         # Pre-populate the session so _ensure_session() short-circuits
-        # and the retry test only counts tools/call POSTs (TAP-836).
+        # and the retry test only counts tools/call POSTs (TAP-836). TAP-1629
+        # extended _ensure_session to also run capability negotiation on the
+        # first call — flag it as done so this retry test isolates the
+        # tools/call retry loop.
         bridge._session_id = "__test__"
+        bridge._negotiated = True
         response_data = _mcp_response({"results": []})
         ok_response = MagicMock()
         ok_response.status_code = 200
@@ -719,6 +724,11 @@ class TestHttpRetry:
 
         bridge = _make_http_bridge()
         bridge._session_id = "__test__"
+        bridge._negotiated = True  # TAP-1629: skip capability handshake
+        # Pretend the wire knows about memory_save so the client-side
+        # short-circuit does not fire — this test is about the wire-level
+        # error path, not the preflight ProfileMismatchError path.
+        bridge._exposed_tools = frozenset({"memory_save"})
 
         gated_response = MagicMock()
         gated_response.status_code = 200
@@ -808,6 +818,14 @@ class TestHttpSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_initialize_called_on_first_tool_invocation(self) -> None:
+        """TAP-836 initialize handshake + TAP-1629 capability negotiation.
+
+        First tool invocation now triggers four POSTs in order:
+          1. ``initialize`` (returns Mcp-Session-Id)
+          2. ``tools/list`` (capability negotiation — fills ``_exposed_tools``)
+          3. ``tools/call profile_info`` (negotiation — fills ``_memory_profile``)
+          4. ``tools/call memory_list`` (the actual user call)
+        """
         bridge = _make_http_bridge()
         init_response = MagicMock()
         init_response.status_code = 200
@@ -815,30 +833,53 @@ class TestHttpSessionLifecycle:
         init_response.raise_for_status = MagicMock()
         init_response.json.return_value = {"jsonrpc": "2.0", "id": 1, "result": {}}
 
+        tools_list_response = MagicMock()
+        tools_list_response.status_code = 200
+        tools_list_response.raise_for_status = MagicMock()
+        tools_list_response.json.return_value = _tools_list_response(_FULL_PROFILE_TOOLS)
+
+        profile_info_response = MagicMock()
+        profile_info_response.status_code = 200
+        profile_info_response.raise_for_status = MagicMock()
+        profile_info_response.json.return_value = _profile_info_response()
+
         tool_response = MagicMock()
         tool_response.status_code = 200
         tool_response.raise_for_status = MagicMock()
         tool_response.json.return_value = _mcp_response({"ok": True})
 
-        post_mock = AsyncMock(side_effect=[init_response, tool_response])
+        post_mock = AsyncMock(
+            side_effect=[
+                init_response,
+                tools_list_response,
+                profile_info_response,
+                tool_response,
+            ]
+        )
         bridge._http_client = AsyncMock()
         bridge._http_client.post = post_mock
 
         await bridge._http_mcp_call("memory_list", {"limit": 1})
 
         assert bridge._session_id == "sess-abc"
-        # Two POSTs: initialize + tools/call.
-        assert post_mock.await_count == 2
+        assert post_mock.await_count == 4
         init_call = post_mock.await_args_list[0]
-        tool_call = post_mock.await_args_list[1]
+        tools_list_call = post_mock.await_args_list[1]
+        profile_info_call = post_mock.await_args_list[2]
+        tool_call = post_mock.await_args_list[3]
         assert init_call.kwargs["json"]["method"] == "initialize"
+        assert tools_list_call.kwargs["json"]["method"] == "tools/list"
+        assert profile_info_call.kwargs["json"]["params"]["name"] == "profile_info"
         # Session id threaded into the subsequent tools/call.
         assert tool_call.kwargs["headers"]["Mcp-Session-Id"] == "sess-abc"
+        # Negotiation cache is populated.
+        assert "memory_list" in (bridge._exposed_tools or set())
 
     @pytest.mark.asyncio
     async def test_second_tool_call_reuses_cached_session(self) -> None:
         bridge = _make_http_bridge()
         bridge._session_id = "cached-sess"
+        bridge._negotiated = True  # TAP-1629: pretend negotiation already ran
 
         tool_response = MagicMock()
         tool_response.status_code = 200
@@ -858,6 +899,7 @@ class TestHttpSessionLifecycle:
     async def test_400_triggers_session_refresh(self) -> None:
         bridge = _make_http_bridge()
         bridge._session_id = "stale-sess"
+        bridge._negotiated = True  # TAP-1629: skip negotiation; isolate refresh path
 
         stale_response = MagicMock()
         stale_response.status_code = 400
@@ -894,7 +936,12 @@ class TestHttpSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_no_session_header_becomes_sentinel(self) -> None:
-        """Older brains don't return Mcp-Session-Id. Sentinel avoids re-handshake."""
+        """Older brains don't return Mcp-Session-Id. Sentinel avoids re-handshake.
+
+        Negotiation (TAP-1629) still runs after init even on no-session brains;
+        the side_effect therefore covers init → tools/list → profile_info →
+        tools/call.
+        """
         bridge = _make_http_bridge()
         init_response = MagicMock()
         init_response.status_code = 200
@@ -902,13 +949,30 @@ class TestHttpSessionLifecycle:
         init_response.raise_for_status = MagicMock()
         init_response.json.return_value = {"jsonrpc": "2.0", "id": 1, "result": {}}
 
+        tools_list_response = MagicMock()
+        tools_list_response.status_code = 200
+        tools_list_response.raise_for_status = MagicMock()
+        tools_list_response.json.return_value = _tools_list_response(_FULL_PROFILE_TOOLS)
+
+        profile_info_response = MagicMock()
+        profile_info_response.status_code = 200
+        profile_info_response.raise_for_status = MagicMock()
+        profile_info_response.json.return_value = _profile_info_response()
+
         tool_response = MagicMock()
         tool_response.status_code = 200
         tool_response.raise_for_status = MagicMock()
         tool_response.json.return_value = _mcp_response({"ok": True})
 
         bridge._http_client = AsyncMock()
-        bridge._http_client.post = AsyncMock(side_effect=[init_response, tool_response])
+        bridge._http_client.post = AsyncMock(
+            side_effect=[
+                init_response,
+                tools_list_response,
+                profile_info_response,
+                tool_response,
+            ]
+        )
 
         await bridge._http_mcp_call("memory_list", {"limit": 1})
 
@@ -1004,3 +1068,327 @@ class TestHttpModeFlag:
         brain.store.count.return_value = 0
         bridge = BrainBridge(brain)
         assert not getattr(bridge, "is_http_mode", False)
+
+
+# ---------------------------------------------------------------------------
+# TAP-1629: profile negotiation + ProfileMismatchError short-circuit
+# ---------------------------------------------------------------------------
+
+
+_FULL_PROFILE_TOOLS = [
+    "memory_save",
+    "memory_get",
+    "memory_delete",
+    "memory_search",
+    "memory_list",
+    "memory_recall",
+    "memory_reinforce",
+    "memory_supersede",
+    "memory_save_many",
+    "memory_recall_many",
+    "memory_reinforce_many",
+    "memory_index_session",
+    "memory_search_sessions",
+    "memory_capture",
+    "feedback_rate",
+    "feedback_gap",
+    "profile_info",
+    "profile_switch",
+    "hive_status",
+    "hive_search",
+    "hive_propagate",
+    "agent_register",
+    "memory_find_related",
+    "memory_relations",
+    "brain_get_neighbors",
+    "brain_explain_connection",
+]
+
+_CODER_PROFILE_TOOLS = [
+    "brain_remember",
+    "brain_recall",
+    "brain_forget",
+    "brain_status",
+    "memory_reinforce",
+    "memory_index_session",
+    "memory_search_sessions",
+    "memory_capture",
+    "feedback_rate",
+    "feedback_gap",
+    "hive_search",
+    "memory_find_related",
+    "brain_get_neighbors",
+    "brain_explain_connection",
+]
+
+
+def _tools_list_response(names: list[str]) -> dict[str, Any]:
+    """Build a fake JSON-RPC ``tools/list`` response."""
+    return {
+        "jsonrpc": "2.0",
+        "id": "negotiate_tools",
+        "result": {"tools": [{"name": n} for n in names]},
+    }
+
+
+def _profile_info_response(profile_name: str = "repo-brain") -> dict[str, Any]:
+    payload = {"name": profile_name, "version": "1.1", "layers": []}
+    return {
+        "jsonrpc": "2.0",
+        "id": "negotiate_profile",
+        "result": {
+            "content": [{"type": "text", "text": json.dumps(payload)}],
+            "isError": False,
+        },
+    }
+
+
+def _negotiation_post(tools: list[str], profile_name: str = "repo-brain") -> AsyncMock:
+    """AsyncMock that dispatches tools/list vs tools/call responses by method.
+
+    Returns the right canned response based on the ``method`` field of the
+    JSON-RPC request body so the same mock can serve multiple distinct
+    requests in one negotiation pass.
+    """
+
+    async def _post(url: str, **kwargs: Any) -> MagicMock:
+        body = kwargs.get("json", {})
+        method = body.get("method")
+        params = body.get("params") or {}
+        name = params.get("name") if isinstance(params, dict) else None
+        response = MagicMock()
+        response.status_code = 200
+        response.raise_for_status = MagicMock()
+        if method == "tools/list":
+            response.json.return_value = _tools_list_response(tools)
+        elif method == "tools/call" and name == "profile_info":
+            response.json.return_value = _profile_info_response(profile_name)
+        else:
+            response.json.return_value = _mcp_response({"ok": True})
+        return response
+
+    return AsyncMock(side_effect=_post)
+
+
+class TestProfileMismatchError:
+    """ProfileMismatchError is the typed exception agents catch (TAP-1629)."""
+
+    def test_is_subclass_of_tool_not_in_profile(self) -> None:
+        from tapps_core.brain_bridge import ProfileMismatchError, ToolNotInProfileError
+
+        assert issubclass(ProfileMismatchError, ToolNotInProfileError)
+
+    def test_carries_out_of_profile_reason_with_preflight_transport(self) -> None:
+        from tapps_core.brain_bridge import ProfileMismatchError
+
+        exc = ProfileMismatchError(
+            "denied",
+            tool="memory_save",
+            profile="coder",
+            exposed_tools=frozenset({"brain_remember"}),
+        )
+        assert exc.tool == "memory_save"
+        assert exc.profile == "coder"
+        assert exc.code == -32602
+        assert isinstance(exc.data, dict)
+        assert exc.data["reason"] == "out_of_profile"
+        assert exc.data["transport"] == "client_preflight"
+        assert exc.exposed_tools == frozenset({"brain_remember"})
+
+    def test_classify_mcp_error_treats_profile_mismatch_as_gated(self) -> None:
+        """ProfileMismatchError must classify as ``gated`` so existing degraded
+        paths (gc, consolidate) keep working with the preflight error.
+        """
+        from tapps_core.brain_bridge import ProfileMismatchError, _classify_mcp_error
+
+        exc = ProfileMismatchError("denied", tool="memory_save", profile="coder")
+        assert _classify_mcp_error(exc) == "gated"
+
+
+class TestNegotiateProfile:
+    """Capability negotiation populates exposed_tools + memory_profile."""
+
+    @pytest.mark.asyncio
+    async def test_full_profile_populates_exposed_tools(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _negotiation_post(_FULL_PROFILE_TOOLS)
+        bridge._session_id = "test-session"
+
+        await bridge._negotiate_profile_locked()
+
+        assert bridge._negotiated is True
+        assert bridge._exposed_tools is not None
+        assert "memory_save" in bridge._exposed_tools
+        assert "agent_register" in bridge._exposed_tools
+        assert bridge._memory_profile == {
+            "name": "repo-brain",
+            "version": "1.1",
+            "layers": [],
+        }
+        assert bridge._negotiation_error is None
+
+    @pytest.mark.asyncio
+    async def test_coder_profile_marks_bridge_tools_as_gated(self) -> None:
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
+
+        bridge = _make_http_bridge(
+            headers={"Authorization": "Bearer t", "X-Brain-Profile": "coder"}
+        )
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _negotiation_post(_CODER_PROFILE_TOOLS)
+        bridge._session_id = "test-session"
+
+        await bridge._negotiate_profile_locked()
+
+        status = bridge.profile_status()
+        assert status["negotiated"] is True
+        assert status["declared_profile"] == "coder"
+        assert status["memory_profile_name"] == "repo-brain"
+        # The seven gated-write tools called out in TAP-1629 must surface.
+        for required_gated in (
+            "memory_save",
+            "memory_get",
+            "memory_delete",
+            "memory_search",
+            "memory_list",
+            "memory_supersede",
+            "agent_register",
+        ):
+            assert required_gated in status["gated_used_tools"], required_gated
+            assert required_gated in _BRIDGE_USED_TOOLS, required_gated
+        assert status["profile_mismatch"] is True
+
+    @pytest.mark.asyncio
+    async def test_tools_list_failure_leaves_short_circuit_disabled(self) -> None:
+        """A flaky brain must not block legitimate calls — when tools/list
+        fails the bridge falls back to the wire as authoritative.
+        """
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+
+        async def _post(url: str, **kwargs: Any) -> MagicMock:
+            raise httpx.ConnectError("brain unreachable")
+
+        bridge._http_client.post = AsyncMock(side_effect=_post)
+        bridge._session_id = "test-session"
+
+        await bridge._negotiate_profile_locked()
+
+        assert bridge._negotiated is True
+        assert bridge._exposed_tools is None
+        assert bridge._negotiation_error is not None
+        assert "tools_list_failed" in bridge._negotiation_error
+        status = bridge.profile_status()
+        assert status["profile_mismatch"] is False  # no data, no mismatch claim
+        assert status["gated_used_tools"] == []
+
+    @pytest.mark.asyncio
+    async def test_empty_tools_list_is_treated_as_anomaly(self) -> None:
+        """A response with zero tools is structurally impossible on a healthy
+        brain (even coder exposes brain_*). Treat it as a negotiation failure
+        instead of caching an empty allow-list that would short-circuit
+        everything.
+        """
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _negotiation_post([])
+        bridge._session_id = "test-session"
+
+        await bridge._negotiate_profile_locked()
+
+        assert bridge._negotiated is True
+        assert bridge._exposed_tools is None
+        assert bridge._negotiation_error == "tools_list_empty"
+
+
+class TestProfileMismatchShortCircuit:
+    """``_do_mcp_post`` short-circuits gated bridge tools with the typed error."""
+
+    @pytest.mark.asyncio
+    async def test_gated_bridge_tool_raises_profile_mismatch_before_wire(self) -> None:
+        from tapps_core.brain_bridge import ProfileMismatchError
+
+        bridge = _make_http_bridge(
+            headers={"Authorization": "Bearer t", "X-Brain-Profile": "coder"}
+        )
+        bridge._http_client = AsyncMock()
+        # No further post() will be made — the short-circuit fires before any
+        # tools/call goes over the wire.
+        bridge._http_client.post = AsyncMock(
+            side_effect=AssertionError("post must not be called for gated tools")
+        )
+        bridge._session_id = "test-session"
+        bridge._exposed_tools = frozenset(_CODER_PROFILE_TOOLS)
+        bridge._negotiated = True
+
+        with pytest.raises(ProfileMismatchError) as excinfo:
+            await bridge._do_mcp_post("memory_save", {"key": "k", "value": "v"})
+
+        assert excinfo.value.tool == "memory_save"
+        assert excinfo.value.profile == "coder"
+        # Bridge already knew the tool would be denied — the short-circuit
+        # MUST not call out to the wire.
+        bridge._http_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_exposed_bridge_tool_passes_through(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(_mcp_response({"key": "k1", "value": "v1"}))
+        bridge._session_id = "test-session"
+        bridge._exposed_tools = frozenset(_FULL_PROFILE_TOOLS)
+        bridge._negotiated = True
+
+        result = await bridge._do_mcp_post("memory_save", {"key": "k1", "value": "v1"})
+
+        assert result == {"key": "k1", "value": "v1"}
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_is_not_short_circuited(self) -> None:
+        """Tools outside ``_BRIDGE_USED_TOOLS`` are not gated client-side —
+        the wire stays authoritative for anything we have not enumerated.
+        """
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(_mcp_response({"ok": True}))
+        bridge._session_id = "test-session"
+        bridge._exposed_tools = frozenset({"only_other_tool"})
+        bridge._negotiated = True
+
+        # ``maintenance_gc`` is invoked by HttpBrainBridge.gc() but is NOT in
+        # _BRIDGE_USED_TOOLS — it has a degraded fallback. The short-circuit
+        # must not fire for it.
+        result = await bridge._do_mcp_post("maintenance_gc", {})
+
+        assert result == {"ok": True}
+
+
+class TestProfileStatusShape:
+    """``profile_status`` returns a stable shape before and after negotiation."""
+
+    def test_before_negotiation_returns_empty_shape(self) -> None:
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
+
+        bridge = _make_http_bridge()
+        status = bridge.profile_status()
+        assert status["negotiated"] is False
+        assert status["exposed_tools"] == []
+        assert status["gated_used_tools"] == []
+        assert status["profile_mismatch"] is False
+        assert status["memory_profile_name"] is None
+        assert status["bridge_used_tools"] == sorted(_BRIDGE_USED_TOOLS)
+
+    def test_after_negotiation_lists_gated_subset(self) -> None:
+        bridge = _make_http_bridge(
+            headers={"Authorization": "Bearer t", "X-Brain-Profile": "coder"}
+        )
+        bridge._exposed_tools = frozenset(_CODER_PROFILE_TOOLS)
+        bridge._memory_profile = {"name": "repo-brain"}
+        bridge._negotiated = True
+        status = bridge.profile_status()
+        assert status["negotiated"] is True
+        assert status["declared_profile"] == "coder"
+        assert status["memory_profile_name"] == "repo-brain"
+        assert "memory_save" in status["gated_used_tools"]
+        assert status["profile_mismatch"] is True

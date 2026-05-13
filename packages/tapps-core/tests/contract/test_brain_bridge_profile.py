@@ -259,3 +259,88 @@ async def test_nonexistent_tool_is_not_misclassified_as_profile_error(
     # Reference BrainMcpError in the suite so the import isn't dead weight
     # — the same path remains the natural catch-all for typed RPC errors.
     assert BrainMcpError is not None
+
+
+# ---------------------------------------------------------------------------
+# TAP-1629: profile negotiation against the live brain
+# ---------------------------------------------------------------------------
+
+
+def _check_profile_loaded_lenient(
+    url: str, token: str, project_id: str, profile: str
+) -> str | None:
+    """Probe and return None when *profile* is loaded; else a skip reason.
+
+    Helper for the TAP-1629 negotiation tests so each profile is verified
+    independently (``full`` vs ``coder``) rather than gating on a single
+    ``agent_brain`` probe.
+    """
+    return _check_profile_loaded(url, token, project_id, profile)
+
+
+@pytest.mark.asyncio
+async def test_negotiation_against_full_profile_exposes_bridge_tools(
+    brain_url: str, auth_token: str, project_id: str
+) -> None:
+    """TAP-1629 happy path: the ``full`` profile exposes every tool the
+    bridge depends on, so :meth:`HttpBrainBridge.profile_status` reports
+    ``profile_mismatch=False`` after the first session.
+    """
+    skip_reason = _check_profile_loaded_lenient(brain_url, auth_token, project_id, "full")
+    if skip_reason:
+        pytest.skip(skip_reason)
+
+    bridge = _build_bridge(brain_url, auth_token, project_id, "full")
+    try:
+        await bridge._http_mcp_call("brain_status", {})
+        status = bridge.profile_status()
+    finally:
+        bridge.close()
+
+    assert status["negotiated"] is True
+    assert status["declared_profile"] == "full"
+    assert status["exposed_tools"], "tools/list must return at least one tool on full"
+    assert status["gated_used_tools"] == []
+    assert status["profile_mismatch"] is False
+
+
+@pytest.mark.asyncio
+async def test_negotiation_against_coder_profile_short_circuits_gated_tools(
+    brain_url: str, auth_token: str, project_id: str
+) -> None:
+    """TAP-1629 gated fallback: under ``coder``, ``memory_save`` is hidden
+    and the bridge must raise :class:`ProfileMismatchError` (a typed
+    ``ToolNotInProfileError`` subclass) BEFORE the wire round-trip.
+    """
+    from tapps_core.brain_bridge import ProfileMismatchError, ToolNotInProfileError
+
+    skip_reason = _check_profile_loaded_lenient(brain_url, auth_token, project_id, "coder")
+    if skip_reason:
+        pytest.skip(skip_reason)
+
+    bridge = _build_bridge(brain_url, auth_token, project_id, "coder")
+    try:
+        # Trigger negotiation via a tool that EXISTS in coder so the
+        # initialize + tools/list + profile_info handshake runs.
+        await bridge._http_mcp_call("brain_status", {})
+        status = bridge.profile_status()
+        # memory_save is in _BRIDGE_USED_TOOLS but not in the coder profile.
+        with pytest.raises(ToolNotInProfileError) as excinfo:
+            await bridge._http_mcp_call(
+                "memory_save",
+                {"key": "tap-1629-should-not-write", "value": "blocked"},
+            )
+    finally:
+        bridge.close()
+
+    exc = excinfo.value
+    # Specifically the preflight subclass — the wire was never hit because
+    # the bridge already knew the tool was gated.
+    assert isinstance(exc, ProfileMismatchError)
+    assert exc.tool == "memory_save"
+    assert exc.profile == "coder"
+    assert isinstance(exc.data, dict)
+    assert exc.data.get("transport") == "client_preflight"
+    # profile_status reports the same gated tool.
+    assert "memory_save" in status["gated_used_tools"]
+    assert status["profile_mismatch"] is True

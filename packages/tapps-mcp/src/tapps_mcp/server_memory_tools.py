@@ -175,9 +175,7 @@ def _classify_store_init_error(exc: BaseException) -> str:
     return "unknown"
 
 
-def _classify_http_bridge_result(
-    action: str, result_data: dict[str, Any]
-) -> dict[str, Any] | None:
+def _classify_http_bridge_result(action: str, result_data: dict[str, Any]) -> dict[str, Any] | None:
     """Surface failures hidden inside the HTTP-bridge ``entry`` payload.
 
     Without this, brain validation errors (``{"error": "invalid_source", ...}``)
@@ -1888,7 +1886,10 @@ async def _handle_health(store: MemoryStore, _p: _Params) -> dict[str, Any]:
     """Handle the health action via BrainBridge (TAP-412).
 
     Delegates to ``BrainBridge.health()`` which wraps ``store.health()`` from
-    tapps-brain v3 with circuit-breaker protection.
+    tapps-brain v3 with circuit-breaker protection. TAP-1629: also includes
+    a ``brain_profile`` block when running against the HTTP bridge, sourced
+    from :meth:`HttpBrainBridge.profile_status` after the initialize/
+    tools-list handshake.
     """
     bridge = _get_brain_bridge()
     if bridge is None:
@@ -1908,7 +1909,7 @@ async def _handle_health(store: MemoryStore, _p: _Params) -> dict[str, Any]:
         )
 
     integrity_tampered = int(health.get("integrity_tampered", 0))
-    return {
+    payload: dict[str, Any] = {
         "action": "health",
         "success": True,
         "status": health.get("status", "ok"),
@@ -1934,6 +1935,10 @@ async def _handle_health(store: MemoryStore, _p: _Params) -> dict[str, Any]:
         "rate_limit_exempt_writes": health.get("rate_limit_exempt_writes", 0),
         "relation_count": health.get("relation_count", 0),
     }
+    profile_status = getattr(bridge, "profile_status", None)
+    if callable(profile_status):
+        payload["brain_profile"] = profile_status()
+    return payload
 
 
 # ---------------------------------------------------------------------------

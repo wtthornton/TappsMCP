@@ -1285,6 +1285,135 @@ def check_brain_http_auth(root: Path) -> CheckResult:
     )
 
 
+def check_brain_profile(root: Path) -> CheckResult:
+    """TAP-1629: probe the tapps-brain capability profile via tools/list.
+
+    Surfaces (a) the declared ``X-Brain-Profile`` header, (b) the count of
+    tools the active profile exposes, and (c) any tools the HTTP bridge
+    actually invokes that are missing from the active profile. A mismatch
+    means the bridge will get :class:`ProfileMismatchError` /
+    :class:`ToolNotInProfileError` on those calls — e.g. switching to
+    ``coder`` profile hides the seven memory-write tools used by
+    ``tapps_memory(action=save)``.
+
+    Skipped (passing) when HTTP mode is not active. Failures are reported
+    as warnings rather than blocking — the bridge has degraded paths for
+    the gated tools that need them (gc, consolidate).
+    """
+    import os
+
+    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    if not http_url:
+        return CheckResult(
+            "tapps-brain capability profile",
+            True,
+            "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)",
+        )
+
+    try:
+        from tapps_core.brain_auth import build_brain_headers
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS, _MCP_ACCEPT_HEADERS
+        from tapps_core.config.settings import load_settings
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain capability profile",
+            False,
+            f"Could not load bridge modules: {exc}",
+            "Re-run after fixing the import error.",
+        )
+
+    try:
+        settings = load_settings(project_root=root)
+        headers = build_brain_headers(settings)
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain capability profile",
+            False,
+            f"Could not build brain auth headers: {exc}",
+            "Fix .tapps-mcp.yaml or env vars and re-run doctor.",
+        )
+
+    declared = headers.get("X-Brain-Profile") or "(server default)"
+
+    try:
+        import httpx as _httpx
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain capability profile",
+            False,
+            f"httpx unavailable: {exc}",
+        )
+
+    init_payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "tapps-mcp-doctor", "version": "1"},
+        },
+    }
+    try:
+        init_response = _httpx.post(
+            f"{http_url.rstrip('/')}/mcp/",
+            json=init_payload,
+            headers={**headers, **_MCP_ACCEPT_HEADERS},
+            timeout=5.0,
+            follow_redirects=True,
+        )
+        init_response.raise_for_status()
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain capability profile",
+            False,
+            f"Could not initialize MCP session at {http_url}: {exc}",
+            "Brain may be down or unreachable; see brain logs.",
+        )
+
+    session_id = init_response.headers.get("mcp-session-id", "")
+    list_headers = {**headers, **_MCP_ACCEPT_HEADERS}
+    if session_id:
+        list_headers["Mcp-Session-Id"] = session_id
+    try:
+        list_response = _httpx.post(
+            f"{http_url.rstrip('/')}/mcp/",
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            headers=list_headers,
+            timeout=5.0,
+            follow_redirects=True,
+        )
+        list_response.raise_for_status()
+        payload = list_response.json()
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain capability profile",
+            False,
+            f"tools/list failed: {exc}",
+            "Brain returned an error to tools/list; check brain version + auth.",
+        )
+
+    tools_meta = payload.get("result", {}).get("tools", [])
+    exposed = {t.get("name") for t in tools_meta if isinstance(t, dict) and t.get("name")}
+    gated_used = sorted(_BRIDGE_USED_TOOLS - exposed)
+
+    if not gated_used:
+        return CheckResult(
+            "tapps-brain capability profile",
+            True,
+            f"profile={declared}, exposed={len(exposed)} tools, no bridge mismatch",
+        )
+
+    return CheckResult(
+        "tapps-brain capability profile",
+        False,
+        f"profile={declared} hides {len(gated_used)} bridge tool(s): {', '.join(gated_used)}",
+        "Set memory.brain_profile (or TAPPS_BRAIN_PROFILE) to a profile that exposes the "
+        "tools the bridge needs (e.g. 'full' or 'operator'), or adjust the brain server's "
+        "default profile.",
+    )
+
+
 def check_memory_pipeline_config(root: Path) -> CheckResult:
     """Echo effective memory-related settings (informational; always passes).
 
@@ -1724,6 +1853,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_stale_exe_backups())
     checks.append(check_tapps_brain())
     checks.append(check_brain_http_auth(root))
+    checks.append(check_brain_profile(root))
     checks.append(check_memory_pipeline_config(root))
     checks.append(check_dual_memory_server(root))
     checks.append(check_plaintext_secrets(root))

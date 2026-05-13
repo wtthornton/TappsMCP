@@ -97,7 +97,7 @@ def _raise_with_body(response: httpx.Response, tool_name: str) -> None:
         return
     try:
         body = response.text[:_HTTP_ERROR_BODY_MAX]
-    except Exception:  # noqa: BLE001 — body decode is best-effort
+    except Exception:
         body = "<unreadable>"
     raise RuntimeError(f"tapps-brain HTTP {response.status_code} for {tool_name!r}: {body}")
 
@@ -179,6 +179,65 @@ class ToolNotInProfileError(BrainMcpError):
         super().__init__(message, code=-32602, data=data, tool_name=tool)
         self.tool = tool
         self.profile = profile
+
+
+class ProfileMismatchError(ToolNotInProfileError):
+    """Raised when the bridge short-circuits a tool call whose name is missing
+    from the server-negotiated ``exposed_tools`` set (TAP-1629).
+
+    Where :class:`ToolNotInProfileError` represents a wire-level rejection
+    (``-32602`` with ``reason=out_of_profile``), this subclass represents a
+    *client-side* preflight rejection produced by :meth:`HttpBrainBridge._negotiate_profile_locked`:
+    if the bridge already knows the tool will be denied, it raises this typed
+    error before incurring the round-trip. Subclassing :class:`ToolNotInProfileError`
+    keeps existing ``except`` clauses working and preserves the
+    ``reason=out_of_profile`` ``data`` shape.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        tool: str,
+        profile: str | None,
+        exposed_tools: frozenset[str] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            tool=tool,
+            profile=profile,
+            data={
+                "reason": "out_of_profile",
+                "tool": tool,
+                "profile": profile,
+                "transport": "client_preflight",
+            },
+        )
+        self.exposed_tools = exposed_tools
+
+
+# Tools the HTTP bridge invokes at runtime. After the handshake completes,
+# the bridge compares this set against the server's ``tools/list`` and
+# surfaces the missing-but-used subset via :meth:`HttpBrainBridge.profile_status`
+# so ``tapps_memory(action=health)`` and ``tapps doctor`` can warn before a
+# real call hits the wire. Keep in sync with the method tool-name mapping
+# documented on :class:`HttpBrainBridge`.
+_BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
+    {
+        "memory_save",
+        "memory_get",
+        "memory_delete",
+        "memory_search",
+        "memory_list",
+        "memory_recall",
+        "memory_reinforce",
+        "memory_supersede",
+        "hive_search",
+        "hive_status",
+        "hive_propagate",
+        "agent_register",
+    }
+)
 
 
 def _classify_mcp_error(exc: BaseException) -> str:
@@ -1133,6 +1192,17 @@ class HttpBrainBridge(BrainBridge):
         # the session ID and we need to re-handshake.
         self._session_id: str | None = None
         self._session_lock: asyncio.Lock = asyncio.Lock()
+        # TAP-1629: capability negotiation cache. Populated lazily on the
+        # first ``_ensure_session`` via ``_negotiate_profile_locked``. ``exposed_tools``
+        # is the set of MCP tool names the server's active profile reveals
+        # (from ``tools/list``); ``memory_profile`` is the layer/decay/scoring
+        # config returned by the brain's ``profile_info`` tool. Both are
+        # advisory — surfaced via :meth:`profile_status` and used to short-
+        # circuit calls in :meth:`_http_mcp_call`.
+        self._negotiated: bool = False
+        self._exposed_tools: frozenset[str] | None = None
+        self._memory_profile: dict[str, Any] | None = None
+        self._negotiation_error: str | None = None
 
     # -------------------------------------------------------------------------
     # HTTP JSON-RPC call layer
@@ -1175,36 +1245,184 @@ class HttpBrainBridge(BrainBridge):
         (TAP-836). Older brains ignore the header so sending it is
         back-compat safe.
         """
-        if self._session_id:
+        if self._session_id and self._negotiated:
             return self._session_id
         async with self._session_lock:
-            if self._session_id:
-                return self._session_id
-            if self._http_client is None:
-                self._http_client = httpx.AsyncClient(
-                    headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
-                    timeout=30.0,
-                    follow_redirects=True,
-                )
-            init_payload = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-11-25",
-                    "capabilities": {},
-                    "clientInfo": {"name": "tapps-mcp", "version": "http-bridge"},
-                },
+            if self._session_id is None:
+                if self._http_client is None:
+                    self._http_client = httpx.AsyncClient(
+                        headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
+                        timeout=30.0,
+                        follow_redirects=True,
+                    )
+                init_payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-11-25",
+                        "capabilities": {},
+                        "clientInfo": {"name": "tapps-mcp", "version": "http-bridge"},
+                    },
+                }
+                response = await self._http_client.post(f"{self._http_url}/mcp/", json=init_payload)
+                _raise_with_body(response, "initialize")
+                session_id = response.headers.get("mcp-session-id")
+                if not session_id:
+                    # Older brains that don't use the session model — use a
+                    # sentinel so we don't re-handshake every call.
+                    session_id = "__no_session__"
+                self._session_id = session_id
+            # TAP-1629: negotiate capabilities inside the same lock so the
+            # first batch of concurrent callers all see populated caches
+            # before they short-circuit gated tools. Negotiation cannot raise
+            # past this point — failures land in ``_negotiation_error``.
+            if not self._negotiated:
+                await self._negotiate_profile_locked()
+            assert self._session_id is not None
+            return self._session_id
+
+    async def _negotiate_profile_locked(self) -> None:
+        """Run capability negotiation while the session lock is held.
+
+        Caller must hold :attr:`_session_lock`. Exists as a separate method
+        so unit tests can drive negotiation in isolation without re-entering
+        the session bootstrap.
+        """
+        if self._negotiated:
+            return
+        if self._http_client is None or self._session_id is None:
+            self._negotiation_error = "session_unavailable"
+            self._negotiated = True
+            return
+
+        session_id = self._session_id
+        extra_headers: dict[str, str] = {}
+        if session_id and session_id != "__no_session__":
+            extra_headers["Mcp-Session-Id"] = session_id
+
+        # --- tools/list -----------------------------------------------------
+        try:
+            tools_response = await self._http_client.post(
+                f"{self._http_url}/mcp/",
+                json={"jsonrpc": "2.0", "id": "negotiate_tools", "method": "tools/list"},
+                headers=extra_headers,
+            )
+            tools_response.raise_for_status()
+            tools_payload = tools_response.json()
+            tools = tools_payload.get("result", {}).get("tools", [])
+            tool_names: set[str] = {
+                str(t["name"])
+                for t in tools
+                if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]
             }
-            response = await self._http_client.post(f"{self._http_url}/mcp/", json=init_payload)
-            _raise_with_body(response, "initialize")
-            session_id = response.headers.get("mcp-session-id")
-            if not session_id:
-                # Older brains that don't use the session model — use a
-                # sentinel so we don't re-handshake every call.
-                session_id = "__no_session__"
-            self._session_id = session_id
-            return session_id
+            if tool_names:
+                # Only cache when we actually got a non-empty list — a malformed
+                # response or empty array (impossible on a healthy brain even on
+                # the narrowest profile, which always exposes brain_*) would
+                # otherwise short-circuit every subsequent bridge call. Surface
+                # the anomaly via ``negotiation_error`` instead.
+                self._exposed_tools = frozenset(tool_names)
+            else:
+                self._negotiation_error = "tools_list_empty"
+                logger.warning(
+                    "brain_bridge.tools_list_empty",
+                    declared_profile=self._http_headers.get("X-Brain-Profile") or None,
+                )
+        except Exception as exc:
+            self._negotiation_error = f"tools_list_failed: {exc}"
+            logger.warning("brain_bridge.tools_list_failed", error=str(exc))
+
+        # --- profile_info (best-effort) ------------------------------------
+        try:
+            profile_response = await self._http_client.post(
+                f"{self._http_url}/mcp/",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "negotiate_profile",
+                    "method": "tools/call",
+                    "params": {"name": "profile_info", "arguments": {}},
+                },
+                headers=extra_headers,
+            )
+            profile_response.raise_for_status()
+            profile_payload = profile_response.json()
+            result = profile_payload.get("result", {})
+            if not result.get("isError"):
+                content_items = result.get("content", [])
+                if content_items and content_items[0].get("type") == "text":
+                    import json as _json
+
+                    text = content_items[0]["text"]
+                    parsed = _json.loads(text)
+                    if isinstance(parsed, dict):
+                        self._memory_profile = parsed
+        except Exception as exc:
+            logger.debug("brain_bridge.profile_info_failed", error=str(exc))
+
+        self._negotiated = True
+        if self._exposed_tools is not None:
+            gated_used = sorted(_BRIDGE_USED_TOOLS - self._exposed_tools)
+            if gated_used:
+                logger.warning(
+                    "brain_bridge.profile_mismatch",
+                    declared_profile=self._http_headers.get("X-Brain-Profile") or None,
+                    gated_used_tools=gated_used,
+                )
+
+    def profile_status(self) -> dict[str, Any]:
+        """Snapshot the negotiated brain capability profile (TAP-1629).
+
+        Always returns a fully-shaped dict so callers (health action, doctor)
+        can render predictable output even before the first session
+        handshake.
+
+        Keys:
+            negotiated: True after the first :meth:`_negotiate_profile_locked` run.
+            declared_profile: Value of ``X-Brain-Profile`` sent on the wire
+                (``None`` when no header is set; server-side default applies).
+            memory_profile: Memory layer/decay config from the brain's
+                ``profile_info`` tool (``None`` if not yet fetched).
+            exposed_tools: Sorted list of tool names the server's ``tools/list``
+                returned for this profile (``[]`` if not yet fetched).
+            bridge_used_tools: Sorted list of tools the bridge actually calls.
+            gated_used_tools: Sorted list of bridge tools missing from
+                ``exposed_tools`` — these will raise
+                :class:`ProfileMismatchError` when invoked.
+            profile_mismatch: True when ``gated_used_tools`` is non-empty.
+            negotiation_error: Last error from negotiation (``None`` on success).
+        """
+        declared = self._http_headers.get("X-Brain-Profile") or None
+        exposed = self._exposed_tools
+        memory_profile_name: str | None = None
+        if isinstance(self._memory_profile, dict):
+            name = self._memory_profile.get("name")
+            if isinstance(name, str):
+                memory_profile_name = name
+        if exposed is None:
+            return {
+                "negotiated": self._negotiated,
+                "declared_profile": declared,
+                "memory_profile_name": memory_profile_name,
+                "memory_profile": self._memory_profile,
+                "exposed_tools": [],
+                "bridge_used_tools": sorted(_BRIDGE_USED_TOOLS),
+                "gated_used_tools": [],
+                "profile_mismatch": False,
+                "negotiation_error": self._negotiation_error,
+            }
+        gated_used = sorted(_BRIDGE_USED_TOOLS - exposed)
+        return {
+            "negotiated": True,
+            "declared_profile": declared,
+            "memory_profile_name": memory_profile_name,
+            "memory_profile": self._memory_profile,
+            "exposed_tools": sorted(exposed),
+            "bridge_used_tools": sorted(_BRIDGE_USED_TOOLS),
+            "gated_used_tools": gated_used,
+            "profile_mismatch": bool(gated_used),
+            "negotiation_error": self._negotiation_error,
+        }
 
     async def _do_mcp_post(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """POST a single ``tools/call`` to ``{brain_http_url}/mcp``."""
@@ -1217,6 +1435,25 @@ class HttpBrainBridge(BrainBridge):
                 follow_redirects=True,
             )
         session_id = await self._ensure_session()
+        # TAP-1629: short-circuit calls to tools the negotiated profile does
+        # not expose. Skips the wire round-trip and raises the same typed
+        # error agents already handle (``ToolNotInProfileError`` subclass).
+        # ``_BRIDGE_USED_TOOLS`` is the guard list — we still let exotic /
+        # one-off tool names through so the wire stays authoritative for
+        # anything not in our known surface (covers brain-side additions
+        # we have not yet enumerated client-side).
+        if (
+            self._exposed_tools is not None
+            and tool_name in _BRIDGE_USED_TOOLS
+            and tool_name not in self._exposed_tools
+        ):
+            raise ProfileMismatchError(
+                f"tapps-brain tool {tool_name!r} is hidden by the active "
+                f"server profile {self._http_headers.get('X-Brain-Profile') or 'default'!r}",
+                tool=tool_name,
+                profile=self._http_headers.get("X-Brain-Profile") or None,
+                exposed_tools=self._exposed_tools,
+            )
         extra_headers: dict[str, str] = {}
         if session_id and session_id != "__no_session__":
             extra_headers["Mcp-Session-Id"] = session_id
