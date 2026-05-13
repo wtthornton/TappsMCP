@@ -236,6 +236,12 @@ _BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
         "hive_status",
         "hive_propagate",
         "agent_register",
+        # TAP-1630: knowledge graph surface added by tapps_memory phase 2.
+        "memory_find_related",
+        "memory_relations",
+        "memory_query_relations",
+        "brain_get_neighbors",
+        "brain_explain_connection",
     }
 )
 
@@ -1598,6 +1604,113 @@ class HttpBrainBridge(BrainBridge):
             text = result.get("text") or result.get("content")
             return str(text) if text else None
         return None
+
+    # -------------------------------------------------------------------------
+    # Knowledge graph (TAP-1630)
+    # -------------------------------------------------------------------------
+
+    async def find_related(self, key: str, max_hops: int = 2) -> list[dict[str, Any]]:
+        """Walk the knowledge graph from *key* outward and return related entries.
+
+        Maps to the brain's ``memory_find_related`` tool.
+        """
+        args: dict[str, Any] = {"key": key, "max_hops": max_hops}
+        result = await self._http_mcp_call("memory_find_related", args)
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict):
+            entries = result.get("entries") or result.get("results") or []
+            return entries if isinstance(entries, list) else []
+        return []
+
+    async def entry_relations(self, key: str) -> list[dict[str, Any]]:
+        """Return all relations attached to a single entry (``memory_relations``)."""
+        result = await self._http_mcp_call("memory_relations", {"key": key})
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict):
+            relations = result.get("relations") or result.get("results") or []
+            return relations if isinstance(relations, list) else []
+        return []
+
+    async def query_relations(
+        self,
+        *,
+        subject: str = "",
+        predicate: str = "",
+        object_entity: str = "",
+    ) -> list[dict[str, Any]]:
+        """Query relations matching an SPO triple (any field may be empty).
+
+        Maps to the brain's ``memory_query_relations`` tool. At least one of
+        *subject* / *predicate* / *object_entity* should be non-empty for a
+        useful query; the brain will return all relations otherwise.
+        """
+        args: dict[str, Any] = {}
+        if subject:
+            args["subject"] = subject
+        if predicate:
+            args["predicate"] = predicate
+        if object_entity:
+            args["object_entity"] = object_entity
+        result = await self._http_mcp_call("memory_query_relations", args)
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict):
+            relations = result.get("relations") or result.get("results") or []
+            return relations if isinstance(relations, list) else []
+        return []
+
+    async def get_neighbors(
+        self,
+        entity_ids: list[str],
+        *,
+        hops: int = 1,
+        limit: int = 20,
+        predicate_filter: str = "",
+    ) -> dict[str, Any]:
+        """Return the k-hop neighborhood of *entity_ids* (``brain_get_neighbors``).
+
+        The brain expects ``entity_ids_json`` as a JSON-encoded array of
+        string ids on the wire; this method takes a Python list and serialises.
+        """
+        import json as _json
+
+        args: dict[str, Any] = {
+            "entity_ids_json": _json.dumps(entity_ids),
+            "hops": hops,
+            "limit": limit,
+        }
+        if predicate_filter:
+            args["predicate_filter"] = predicate_filter
+        result = await self._http_mcp_call("brain_get_neighbors", args)
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list):
+            return {"neighbors": result}
+        return {"neighbors": []}
+
+    async def explain_connection(
+        self,
+        subject_id: str,
+        object_id: str,
+        *,
+        max_hops: int = 3,
+    ) -> dict[str, Any]:
+        """Explain how *subject_id* connects to *object_id* in the graph.
+
+        Maps to ``brain_explain_connection``. Returns the structured path /
+        explanation dict the brain produces.
+        """
+        args: dict[str, Any] = {
+            "subject_id": subject_id,
+            "object_id": object_id,
+            "max_hops": max_hops,
+        }
+        result = await self._http_mcp_call("brain_explain_connection", args)
+        if isinstance(result, dict):
+            return result
+        return {"explanation": result}
 
     async def hive_search(
         self,

@@ -20,12 +20,16 @@ from tapps_mcp.server_memory_tools import (
     _handle_agent_register,
     _handle_consolidate,
     _handle_contradictions,
+    _handle_explain_connection,
     _handle_gc,
     _handle_health,
     _handle_hive_propagate,
     _handle_hive_search,
     _handle_hive_status,
     _handle_maintain,
+    _handle_neighbors,
+    _handle_related,
+    _handle_relations,
     _handle_verify_integrity,
     _Params,
 )
@@ -66,6 +70,10 @@ def _params(**kwargs: Any) -> _Params:
         "session_id": "",
         "chunks": "",
         "safety_bypass": False,
+        "subject": "",
+        "predicate": "",
+        "object_entity": "",
+        "max_hops": 0,
     }
     base.update(kwargs)
     return _Params(**base)
@@ -318,3 +326,217 @@ async def test_agent_register_returns_degraded_when_bridge_unavailable(
         out = await _handle_agent_register(store, _params(key="agent-42"))
     _assert_degraded(out, "agent_register")
     assert out["enabled"] is True
+
+
+# ---------------------------------------------------------------------------
+# TAP-1630: knowledge graph handlers
+# ---------------------------------------------------------------------------
+
+
+def _http_bridge_with_method(method: str, return_value: Any) -> MagicMock:
+    """Build a bridge double that exposes the named async graph method.
+
+    Mirrors :func:`_unavailable_bridge` but returns a successful payload, so
+    happy-path coverage on the new ``related`` / ``relations`` / ``neighbors``
+    / ``explain_connection`` actions doesn't need a live brain.
+    """
+    bridge = MagicMock()
+    setattr(bridge, method, AsyncMock(return_value=return_value))
+    return bridge
+
+
+@pytest.mark.asyncio
+async def test_related_happy_path(store: MagicMock) -> None:
+    bridge = _http_bridge_with_method(
+        "find_related", [{"key": "k-near", "score": 0.9}]
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_related(store, _params(key="k1", max_hops=4))
+
+    assert out["success"] is True
+    assert out["action"] == "related"
+    assert out["key"] == "k1"
+    assert out["max_hops"] == 4
+    assert out["entries"] == [{"key": "k-near", "score": 0.9}]
+    assert out["count"] == 1
+    bridge.find_related.assert_awaited_once_with("k1", max_hops=4)
+
+
+@pytest.mark.asyncio
+async def test_related_rejects_missing_key(store: MagicMock) -> None:
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=MagicMock(),
+    ):
+        out = await _handle_related(store, _params())
+    assert out["success"] is False
+    assert out["error"] == "missing_key"
+
+
+@pytest.mark.asyncio
+async def test_related_returns_degraded_when_bridge_unavailable(
+    store: MagicMock,
+) -> None:
+    """The bridge raises BrainBridgeUnavailable (circuit open / retries
+    exhausted); the handler must surface the structured TAP-515 envelope so
+    agents see ``degraded=True`` rather than an opaque ``action_failed``.
+    """
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=_unavailable_bridge("find_related"),
+    ):
+        out = await _handle_related(store, _params(key="k1"))
+    _assert_degraded(out, "related")
+
+
+@pytest.mark.asyncio
+async def test_related_returns_graph_transport_unavailable_for_in_process(
+    store: MagicMock,
+) -> None:
+    """In-process BrainBridge has no ``find_related`` — handler must degrade
+    instead of AttributeError'ing.
+    """
+    bridge = MagicMock(spec=["health"])  # no find_related attribute
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_related(store, _params(key="k1"))
+    assert out["success"] is False
+    assert out["degraded"] is True
+    assert out["reason"] == "knowledge_graph_requires_http_bridge"
+
+
+@pytest.mark.asyncio
+async def test_relations_by_key_calls_entry_relations(store: MagicMock) -> None:
+    bridge = MagicMock()
+    bridge.entry_relations = AsyncMock(return_value=[{"subject": "k1", "predicate": "supersedes"}])
+    bridge.query_relations = AsyncMock()  # not used in this path
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_relations(store, _params(key="k1"))
+    assert out["success"] is True
+    assert out["mode"] == "by_key"
+    assert out["key"] == "k1"
+    assert out["count"] == 1
+    bridge.entry_relations.assert_awaited_once_with("k1")
+    bridge.query_relations.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_relations_by_triple_calls_query_relations(store: MagicMock) -> None:
+    bridge = MagicMock()
+    bridge.entry_relations = AsyncMock()  # not used in this path
+    bridge.query_relations = AsyncMock(
+        return_value=[{"subject": "A", "predicate": "uses", "object": "B"}]
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_relations(
+            store, _params(subject="A", predicate="uses")
+        )
+    assert out["success"] is True
+    assert out["mode"] == "by_triple"
+    bridge.query_relations.assert_awaited_once_with(
+        subject="A", predicate="uses", object_entity=""
+    )
+    bridge.entry_relations.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_relations_rejects_empty_query(store: MagicMock) -> None:
+    bridge = MagicMock()
+    bridge.entry_relations = AsyncMock()
+    bridge.query_relations = AsyncMock()
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_relations(store, _params())
+    assert out["success"] is False
+    assert out["error"] == "missing_filter"
+    bridge.entry_relations.assert_not_awaited()
+    bridge.query_relations.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_neighbors_serializes_entry_ids_and_passes_filter(store: MagicMock) -> None:
+    bridge = _http_bridge_with_method(
+        "get_neighbors", {"neighbors": [{"id": "n1"}], "edges": []}
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_neighbors(
+            store,
+            _params(
+                entry_ids=["e1", "e2"],
+                max_hops=2,
+                limit=7,
+                predicate="supersedes",
+            ),
+        )
+    assert out["success"] is True
+    assert out["entity_ids"] == ["e1", "e2"]
+    assert out["hops"] == 2
+    assert out["limit"] == 7
+    assert out["predicate_filter"] == "supersedes"
+    bridge.get_neighbors.assert_awaited_once_with(
+        ["e1", "e2"], hops=2, limit=7, predicate_filter="supersedes"
+    )
+
+
+@pytest.mark.asyncio
+async def test_neighbors_rejects_missing_entity_ids(store: MagicMock) -> None:
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=MagicMock(),
+    ):
+        out = await _handle_neighbors(store, _params())
+    assert out["success"] is False
+    assert out["error"] == "missing_entity_ids"
+
+
+@pytest.mark.asyncio
+async def test_explain_connection_passes_endpoints_and_max_hops(
+    store: MagicMock,
+) -> None:
+    bridge = _http_bridge_with_method(
+        "explain_connection", {"path": ["A", "B"], "hops": 1}
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_explain_connection(
+            store,
+            _params(subject="A", object_entity="B", max_hops=5),
+        )
+    assert out["success"] is True
+    assert out["subject_id"] == "A"
+    assert out["object_id"] == "B"
+    assert out["max_hops"] == 5
+    bridge.explain_connection.assert_awaited_once_with("A", "B", max_hops=5)
+
+
+@pytest.mark.asyncio
+async def test_explain_connection_rejects_partial_endpoints(
+    store: MagicMock,
+) -> None:
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=MagicMock(),
+    ):
+        out = await _handle_explain_connection(
+            store, _params(subject="A")  # missing object_entity
+        )
+    assert out["success"] is False
+    assert out["error"] == "missing_endpoints"

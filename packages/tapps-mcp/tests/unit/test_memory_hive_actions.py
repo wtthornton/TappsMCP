@@ -52,6 +52,10 @@ def _minimal_params(**kwargs: object) -> _Params:
         "session_id": "",
         "chunks": "",
         "safety_bypass": False,
+        "subject": "",
+        "predicate": "",
+        "object_entity": "",
+        "max_hops": 0,
     }
     base.update(kwargs)
     return _Params(**base)

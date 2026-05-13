@@ -536,6 +536,144 @@ class TestHttpReadOps:
 
 
 # ---------------------------------------------------------------------------
+# TAP-1630: knowledge graph methods
+# ---------------------------------------------------------------------------
+
+
+class TestKnowledgeGraph:
+    @pytest.mark.asyncio
+    async def test_find_related_calls_memory_find_related(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        related = [{"key": "k-near", "score": 0.9}]
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response(related))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.find_related("k1", max_hops=3)
+
+        assert result == related
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "memory_find_related"
+        assert payload["params"]["arguments"] == {"key": "k1", "max_hops": 3}
+
+    @pytest.mark.asyncio
+    async def test_find_related_unwraps_results_envelope(self) -> None:
+        """Brain may return ``{"entries": [...]}`` instead of a bare list — both
+        shapes must produce a list at the bridge boundary.
+        """
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            _mcp_response({"entries": [{"key": "k-near"}], "total": 1})
+        )
+
+        result = await bridge.find_related("k1")
+
+        assert result == [{"key": "k-near"}]
+
+    @pytest.mark.asyncio
+    async def test_entry_relations_calls_memory_relations(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        rels = [{"subject": "k1", "predicate": "supersedes", "object": "k0"}]
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response(rels))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.entry_relations("k1")
+
+        assert result == rels
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "memory_relations"
+        assert payload["params"]["arguments"] == {"key": "k1"}
+
+    @pytest.mark.asyncio
+    async def test_query_relations_calls_memory_query_relations(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        rels = [{"subject": "A", "predicate": "uses", "object": "B"}]
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response(rels))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.query_relations(predicate="uses")
+
+        assert result == rels
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "memory_query_relations"
+        # Empty subject/object are dropped — the bridge sends only set fields.
+        assert payload["params"]["arguments"] == {"predicate": "uses"}
+
+    @pytest.mark.asyncio
+    async def test_get_neighbors_json_encodes_entity_ids(self) -> None:
+        """``brain_get_neighbors`` expects ``entity_ids_json`` as a JSON-string
+        array; the Python wrapper must serialise the list before sending.
+        """
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        neighbors_payload = {"neighbors": [{"id": "n1"}], "edges": []}
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response(neighbors_payload))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.get_neighbors(["e1", "e2"], hops=2, limit=5)
+
+        assert result == neighbors_payload
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "brain_get_neighbors"
+        args = payload["params"]["arguments"]
+        assert args["entity_ids_json"] == '["e1", "e2"]'
+        assert args["hops"] == 2
+        assert args["limit"] == 5
+        assert "predicate_filter" not in args  # empty default elided
+
+    @pytest.mark.asyncio
+    async def test_explain_connection_calls_brain_explain_connection(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        explanation = {"path": ["A", "B"], "hops": 1}
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response(explanation))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.explain_connection("A", "B", max_hops=2)
+
+        assert result == explanation
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "brain_explain_connection"
+        assert payload["params"]["arguments"] == {
+            "subject_id": "A",
+            "object_id": "B",
+            "max_hops": 2,
+        }
+
+
+class TestKnowledgeGraphInBridgeUsedTools:
+    """All five graph tools must be in _BRIDGE_USED_TOOLS so profile mismatch
+    surfaces via tapps_memory(action=health) and tapps doctor (TAP-1630)."""
+
+    def test_graph_tools_present(self) -> None:
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
+
+        for tool in (
+            "memory_find_related",
+            "memory_relations",
+            "memory_query_relations",
+            "brain_get_neighbors",
+            "brain_explain_connection",
+        ):
+            assert tool in _BRIDGE_USED_TOOLS, tool
+
+
+# ---------------------------------------------------------------------------
 # Write operations
 # ---------------------------------------------------------------------------
 

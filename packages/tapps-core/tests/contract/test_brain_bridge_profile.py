@@ -344,3 +344,79 @@ async def test_negotiation_against_coder_profile_short_circuits_gated_tools(
     # profile_status reports the same gated tool.
     assert "memory_save" in status["gated_used_tools"]
     assert status["profile_mismatch"] is True
+
+
+# ---------------------------------------------------------------------------
+# TAP-1630: knowledge graph against the live brain
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_knowledge_graph_methods_reach_the_wire(
+    brain_url: str, auth_token: str, project_id: str
+) -> None:
+    """Smoke-level check that the four new bridge methods (TAP-1630) reach
+    the brain without raising. Uses the ``full`` profile so every graph tool
+    is exposed; ``memory_find_related`` / ``memory_relations`` /
+    ``memory_query_relations`` / ``brain_get_neighbors`` / ``brain_explain_connection``
+    are all in ``_BRIDGE_USED_TOOLS`` and the negotiation must record them
+    as exposed (no profile_mismatch).
+    """
+    skip_reason = _check_profile_loaded_lenient(brain_url, auth_token, project_id, "full")
+    if skip_reason:
+        pytest.skip(skip_reason)
+
+    bridge = _build_bridge(brain_url, auth_token, project_id, "full")
+    try:
+        # Drive negotiation first so profile_status() is populated.
+        await bridge._http_mcp_call("brain_status", {})
+        status = bridge.profile_status()
+        for tool in (
+            "memory_find_related",
+            "memory_relations",
+            "memory_query_relations",
+            "brain_get_neighbors",
+            "brain_explain_connection",
+        ):
+            assert tool in status["exposed_tools"], tool
+            assert tool not in status["gated_used_tools"], tool
+
+        # Each method returns the shape its handler expects. The four working
+        # methods run first; ``brain_get_neighbors`` is exercised LAST because
+        # its current brain-side bug exhausts the retry budget and opens the
+        # circuit breaker for any later call in the same bridge instance.
+        related = await bridge.find_related(
+            "tap-1630-probe-nonexistent-key", max_hops=1
+        )
+        assert isinstance(related, list)
+
+        relations = await bridge.entry_relations("tap-1630-probe-nonexistent-key")
+        assert isinstance(relations, list)
+
+        triples = await bridge.query_relations(predicate="tap-1630-probe-predicate")
+        assert isinstance(triples, list)
+
+        explanation = await bridge.explain_connection(
+            "tap-1630-probe-a", "tap-1630-probe-b", max_hops=2
+        )
+        assert isinstance(explanation, dict)
+
+        # brain_get_neighbors currently has a server-side Postgres binding bug
+        # on tapps-brain 3.17.1 ("could not determine data type of parameter
+        # $5") that fires regardless of input shape. The bridge wrapper is
+        # exercised — we confirm a propagated BrainBridgeUnavailable surfaces
+        # the wire error rather than a Python-level crash. Re-tighten this
+        # assertion when the brain ships the fix; per the epic non-goals we
+        # do NOT modify tapps-brain from this PR.
+        from tapps_core.brain_bridge import BrainBridgeUnavailable
+
+        try:
+            neighbors = await bridge.get_neighbors(
+                ["tap-1630-probe-entity"], hops=1, limit=3
+            )
+        except BrainBridgeUnavailable as exc:
+            assert "parameter $5" in str(exc) or "brain_get_neighbors" in str(exc)
+        else:
+            assert isinstance(neighbors, dict)
+    finally:
+        bridge.close()

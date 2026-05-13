@@ -85,6 +85,11 @@ _VALID_ACTIONS = {
     "hive_search",
     "hive_propagate",
     "agent_register",
+    # TAP-1630: knowledge graph
+    "related",
+    "relations",
+    "neighbors",
+    "explain_connection",
 }
 
 # Scope values accepted by save / save_bulk / get / list / search.
@@ -113,6 +118,11 @@ _ASYNC_ACTIONS = {
     "hive_search",
     "hive_propagate",
     "agent_register",
+    # TAP-1630: knowledge graph delegates to BrainBridge.
+    "related",
+    "relations",
+    "neighbors",
+    "explain_connection",
 }
 
 # TAP-1080: async actions that work when the in-process store is None
@@ -129,6 +139,11 @@ _ASYNC_HTTP_OK_ACTIONS = {
     "hive_search",
     "hive_propagate",
     "agent_register",
+    # TAP-1630: knowledge graph reads do not require an in-process store.
+    "related",
+    "relations",
+    "neighbors",
+    "explain_connection",
 }
 
 # TAP-1421: sync actions whose primitives are also exposed on BrainBridge as
@@ -327,6 +342,11 @@ class _Params:
     chunks: str = ""
     # Safety bypass (H3c)
     safety_bypass: bool = False
+    # Knowledge-graph parameters (TAP-1630)
+    subject: str = ""
+    predicate: str = ""
+    object_entity: str = ""
+    max_hops: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +388,10 @@ async def tapps_memory(
     session_id: str = "",
     chunks: str = "",
     safety_bypass: bool = False,
+    subject: str = "",
+    predicate: str = "",
+    object_entity: str = "",
+    max_hops: int = 0,
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
@@ -534,6 +558,10 @@ async def tapps_memory(
         session_id=session_id,
         chunks=chunks,
         safety_bypass=safety_bypass,
+        subject=subject,
+        predicate=predicate,
+        object_entity=object_entity,
+        max_hops=max_hops,
     )
 
     try:
@@ -1942,6 +1970,197 @@ async def _handle_health(store: MemoryStore, _p: _Params) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# TAP-1630: Knowledge graph handlers
+# ---------------------------------------------------------------------------
+
+
+def _graph_transport_unavailable(action: str) -> dict[str, Any]:
+    """Response when the active bridge is in-process and lacks the graph surface.
+
+    The knowledge graph is reached via the brain's HTTP MCP API
+    (``memory_find_related`` / ``memory_relations`` / ``memory_query_relations``
+    / ``brain_get_neighbors`` / ``brain_explain_connection``). When tapps-mcp
+    is configured against an in-process :class:`BrainBridge` (legacy / local-
+    dev) those tools are not reachable; degrade gracefully instead of
+    raising ``AttributeError``.
+    """
+    return {
+        "action": action,
+        "success": False,
+        "degraded": True,
+        "reason": "knowledge_graph_requires_http_bridge",
+        "next_steps": [
+            "Knowledge graph actions require the tapps-brain HTTP transport. "
+            "Set TAPPS_MCP_MEMORY_BRAIN_HTTP_URL (and brain auth headers) so "
+            "the bridge runs in HTTP mode against tapps-brain 3.17+.",
+        ],
+    }
+
+
+async def _handle_related(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Walk the brain knowledge graph outward from ``p.key`` (memory_find_related)."""
+    if not p.key:
+        return {
+            "action": "related",
+            "success": False,
+            "error": "missing_key",
+            "message": "related requires key=<entry-key>.",
+        }
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("related")
+    if not hasattr(bridge, "find_related"):
+        return _graph_transport_unavailable("related")
+    max_hops = p.max_hops if p.max_hops > 0 else 2
+    try:
+        entries = await bridge.find_related(p.key, max_hops=max_hops)
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("related", exc)
+    return {
+        "action": "related",
+        "success": True,
+        "key": p.key,
+        "max_hops": max_hops,
+        "entries": entries,
+        "count": len(entries),
+    }
+
+
+async def _handle_relations(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Read graph relations.
+
+    Dispatches between ``memory_relations`` (when ``key`` is set) and
+    ``memory_query_relations`` (SPO triple query otherwise). The agent must
+    provide at least one of ``key`` / ``subject`` / ``predicate`` /
+    ``object_entity`` — a fully-empty call would scan every relation on the
+    server and is rejected up-front.
+    """
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("relations")
+    if not (hasattr(bridge, "entry_relations") and hasattr(bridge, "query_relations")):
+        return _graph_transport_unavailable("relations")
+    if p.key:
+        try:
+            relations = await bridge.entry_relations(p.key)
+        except BrainBridgeUnavailable as exc:
+            return _bridge_call_failed_response("relations", exc)
+        return {
+            "action": "relations",
+            "mode": "by_key",
+            "success": True,
+            "key": p.key,
+            "relations": relations,
+            "count": len(relations),
+        }
+    if not (p.subject or p.predicate or p.object_entity):
+        return {
+            "action": "relations",
+            "success": False,
+            "error": "missing_filter",
+            "message": (
+                "relations requires either key=<entry-key>, or at least one "
+                "of subject/predicate/object_entity for an SPO query."
+            ),
+        }
+    try:
+        relations = await bridge.query_relations(
+            subject=p.subject,
+            predicate=p.predicate,
+            object_entity=p.object_entity,
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("relations", exc)
+    return {
+        "action": "relations",
+        "mode": "by_triple",
+        "success": True,
+        "subject": p.subject,
+        "predicate": p.predicate,
+        "object_entity": p.object_entity,
+        "relations": relations,
+        "count": len(relations),
+    }
+
+
+async def _handle_neighbors(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Return the k-hop neighborhood of one or more entity ids (``brain_get_neighbors``).
+
+    ``entity_ids`` flows in via the existing comma-separated ``entry_ids`` MCP
+    parameter (consistent with consolidate / save_bulk). The handler JSON-
+    encodes the list before passing it to the brain.
+    """
+    if not p.entry_ids:
+        return {
+            "action": "neighbors",
+            "success": False,
+            "error": "missing_entity_ids",
+            "message": "neighbors requires entry_ids=<comma-separated ids>.",
+        }
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("neighbors")
+    if not hasattr(bridge, "get_neighbors"):
+        return _graph_transport_unavailable("neighbors")
+    hops = p.max_hops if p.max_hops > 0 else 1
+    limit = p.limit if p.limit > 0 else 20
+    try:
+        result = await bridge.get_neighbors(
+            list(p.entry_ids),
+            hops=hops,
+            limit=limit,
+            predicate_filter=p.predicate,
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("neighbors", exc)
+    return {
+        "action": "neighbors",
+        "success": True,
+        "entity_ids": list(p.entry_ids),
+        "hops": hops,
+        "limit": limit,
+        "predicate_filter": p.predicate or None,
+        "result": result,
+    }
+
+
+async def _handle_explain_connection(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Explain how *subject* connects to *object_entity* (``brain_explain_connection``)."""
+    if not (p.subject and p.object_entity):
+        return {
+            "action": "explain_connection",
+            "success": False,
+            "error": "missing_endpoints",
+            "message": (
+                "explain_connection requires subject=<entity-id> and "
+                "object_entity=<entity-id>."
+            ),
+        }
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("explain_connection")
+    if not hasattr(bridge, "explain_connection"):
+        return _graph_transport_unavailable("explain_connection")
+    max_hops = p.max_hops if p.max_hops > 0 else 3
+    try:
+        result = await bridge.explain_connection(
+            p.subject,
+            p.object_entity,
+            max_hops=max_hops,
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("explain_connection", exc)
+    return {
+        "action": "explain_connection",
+        "success": True,
+        "subject_id": p.subject,
+        "object_id": p.object_entity,
+        "max_hops": max_hops,
+        "result": result,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Epic M1: Security surface handlers
 # ---------------------------------------------------------------------------
 
@@ -2748,6 +2967,11 @@ _ASYNC_DISPATCH: dict[str, Any] = {
     "hive_search": _handle_hive_search,
     "hive_propagate": _handle_hive_propagate,
     "agent_register": _handle_agent_register,
+    # TAP-1630: knowledge graph delegates to BrainBridge.
+    "related": _handle_related,
+    "relations": _handle_relations,
+    "neighbors": _handle_neighbors,
+    "explain_connection": _handle_explain_connection,
 }
 
 
