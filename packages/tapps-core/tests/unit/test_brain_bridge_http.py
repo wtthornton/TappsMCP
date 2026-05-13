@@ -385,8 +385,10 @@ class TestDoMcpPost:
     @pytest.mark.asyncio
     async def test_non_json_text_returned_as_value_dict(self) -> None:
         bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
         bridge._http_client = AsyncMock()
         mock_resp = MagicMock()
+        mock_resp.status_code = 200
         mock_resp.raise_for_status = MagicMock()
         mock_resp.json.return_value = {
             "jsonrpc": "2.0",
@@ -405,10 +407,11 @@ class TestDoMcpPost:
     @pytest.mark.asyncio
     async def test_http_4xx_raises(self) -> None:
         bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
         bridge._http_client = AsyncMock()
         bridge._http_client.post = _make_async_post({}, status_code=401)
 
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(RuntimeError, match="tapps-brain HTTP 401"):
             await bridge._do_mcp_post("memory_search", {})
 
     @pytest.mark.asyncio
