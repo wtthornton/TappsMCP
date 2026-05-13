@@ -56,6 +56,8 @@ def _minimal_params(**kwargs: object) -> _Params:
         "predicate": "",
         "object_entity": "",
         "max_hops": 0,
+        "rating": "",
+        "details_json": "",
     }
     base.update(kwargs)
     return _Params(**base)

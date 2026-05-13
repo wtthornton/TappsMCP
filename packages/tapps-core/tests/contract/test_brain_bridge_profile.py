@@ -498,3 +498,45 @@ async def test_save_many_collapses_50_entries_into_one_wire_round_trip(
     # Bound the wall-clock so a brain regression that goes substantially
     # backwards still fails the test even though we don't hit 5x today.
     assert elapsed < 10.0, f"save_many took {elapsed:.2f}s for {N} entries"
+
+
+# ---------------------------------------------------------------------------
+# TAP-1632: feedback flywheel + diagnostics against the live brain
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_feedback_and_diagnostics_methods_reach_the_wire(
+    brain_url: str, auth_token: str, project_id: str
+) -> None:
+    """End-to-end smoke that the four new feedback / diagnostics bridge
+    methods reach the live brain and parse its response without raising.
+    Uses the ``full`` profile so every flywheel tool is exposed.
+    """
+    skip_reason = _check_profile_loaded_lenient(brain_url, auth_token, project_id, "full")
+    if skip_reason:
+        pytest.skip(skip_reason)
+
+    bridge = _build_bridge(brain_url, auth_token, project_id, "full")
+    try:
+        gap_resp = await bridge.feedback_gap(
+            "tap-1632-probe-missing-query", session_id="tap-1632-probe-session"
+        )
+        assert isinstance(gap_resp, dict)
+
+        # feedback_rate requires a real entry_key. We don't have one to score
+        # cleanly without polluting the brain, so we test only that the wire
+        # call succeeds with a probe-keyed entry — the brain accepts unknown
+        # keys without raising on the wire.
+        rate_resp = await bridge.feedback_rate(
+            "tap-1632-probe-entry", rating="helpful", session_id="tap-1632-probe-session"
+        )
+        assert isinstance(rate_resp, dict)
+
+        flywheel = await bridge.flywheel_report(period_days=1)
+        assert isinstance(flywheel, dict)
+
+        diagnostics = await bridge.diagnostics_report(record_history=False)
+        assert isinstance(diagnostics, dict)
+    finally:
+        bridge.close()

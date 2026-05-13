@@ -93,6 +93,8 @@ _VALID_ACTIONS = {
     # TAP-1631: batch ops (single-round-trip wrappers around brain's *_many)
     "recall_many",
     "reinforce_many",
+    # TAP-1632: feedback flywheel
+    "rate",
 }
 
 # Scope values accepted by save / save_bulk / get / list / search.
@@ -129,6 +131,8 @@ _ASYNC_ACTIONS = {
     # TAP-1631: batch ops delegate to BrainBridge.
     "recall_many",
     "reinforce_many",
+    # TAP-1632: feedback flywheel
+    "rate",
 }
 
 # TAP-1080: async actions that work when the in-process store is None
@@ -153,6 +157,8 @@ _ASYNC_HTTP_OK_ACTIONS = {
     # TAP-1631: batch ops are HTTP-only — no in-process store path required.
     "recall_many",
     "reinforce_many",
+    # TAP-1632: feedback flywheel — HTTP-only.
+    "rate",
 }
 
 # TAP-1421: sync actions whose primitives are also exposed on BrainBridge as
@@ -359,6 +365,9 @@ class _Params:
     predicate: str = ""
     object_entity: str = ""
     max_hops: int = 0
+    # Feedback flywheel (TAP-1632)
+    rating: str = ""
+    details_json: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +413,8 @@ async def tapps_memory(
     predicate: str = "",
     object_entity: str = "",
     max_hops: int = 0,
+    rating: str = "",
+    details_json: str = "",
 ) -> dict[str, Any]:
     """Persist and retrieve project memories across sessions.
 
@@ -574,6 +585,8 @@ async def tapps_memory(
         predicate=predicate,
         object_entity=object_entity,
         max_hops=max_hops,
+        rating=rating,
+        details_json=details_json,
     )
 
     try:
@@ -598,6 +611,21 @@ async def tapps_memory(
             if store is None:
                 return _requires_in_process_store_response(action)
             result_data = _DISPATCH[action](store, params)
+            # TAP-1632: close the flywheel loop on sync search paths too —
+            # the in-process handler can't await, so the auto-emit runs in
+            # the async dispatcher after the local search returns. HTTP
+            # search paths already include this inline in _http_handle_search.
+            if action == "search" and isinstance(result_data, dict):
+                bridge = _get_brain_bridge()
+                feedback = await _maybe_emit_feedback_gap(
+                    bridge,
+                    query=params.query,
+                    results=int(result_data.get("returned_count", 0)),
+                    top_score=_search_top_score(result_data),
+                    session_id=params.session_id or "",
+                )
+                if feedback is not None:
+                    result_data["feedback"] = feedback
     except Exception as exc:
         return error_response(
             "tapps_memory",
@@ -2283,6 +2311,145 @@ async def _handle_reinforce_many(store: MemoryStore, p: _Params) -> dict[str, An
     }
 
 
+# ---------------------------------------------------------------------------
+# TAP-1632: Feedback flywheel + auto-emit helpers
+# ---------------------------------------------------------------------------
+
+
+def _feedback_auto_emit_settings() -> tuple[bool, float]:
+    """Read the feedback auto-emit configuration once per call.
+
+    Returns ``(enabled, min_similarity)``. Defaults match the schema in
+    ``MemorySettings`` (``True``, ``0.0``). Falls back to permissive
+    defaults if settings can't be loaded so a degraded environment does
+    not silently drop the auto-emit path entirely.
+    """
+    try:
+        from tapps_core.config.settings import load_settings
+
+        m = load_settings().memory
+        return bool(getattr(m, "feedback_auto_emit", True)), float(
+            getattr(m, "feedback_min_similarity", 0.0)
+        )
+    except Exception:
+        return True, 0.0
+
+
+def _search_top_score(result_payload: dict[str, Any]) -> float | None:
+    """Best-effort extraction of the top hit's score from a search response.
+
+    Returns None when the score shape is unknown (e.g. legacy unranked path
+    returns no score). Callers treat None the same way as "no score" — the
+    similarity-threshold trigger only fires for numeric scores.
+    """
+    results = result_payload.get("results")
+    if not isinstance(results, list) or not results:
+        return None
+    top = results[0]
+    if not isinstance(top, dict):
+        return None
+    for key in ("score", "similarity", "rank_score", "rrf_score"):
+        value = top.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    return None
+
+
+async def _maybe_emit_feedback_gap(
+    bridge: Any | None,
+    *,
+    query: str,
+    results: int,
+    top_score: float | None,
+    session_id: str,
+) -> dict[str, Any] | None:
+    """Emit a ``feedback_gap`` to the brain when a search came back empty
+    (or below the configured similarity floor). No-op when:
+
+    - ``memory.feedback_auto_emit`` is disabled
+    - the brain bridge does not expose ``feedback_gap`` (in-process /
+      older brain)
+    - the query string is empty (nothing to record a gap against)
+
+    Returns the brain's response dict, or a structured ``{"emitted": False,
+    "reason": ...}`` payload describing why it didn't fire. The handler
+    folds this under a ``feedback`` key on the search response so callers
+    can verify the loop closed.
+    """
+    if not query:
+        return {"emitted": False, "reason": "missing_query"}
+    enabled, min_sim = _feedback_auto_emit_settings()
+    if not enabled:
+        return {"emitted": False, "reason": "disabled_by_config"}
+    if bridge is None:
+        return {"emitted": False, "reason": "bridge_unavailable"}
+    if not hasattr(bridge, "feedback_gap"):
+        return {"emitted": False, "reason": "feedback_gap_not_supported_by_bridge"}
+
+    trigger: str
+    if results == 0:
+        trigger = "empty_results"
+    elif min_sim > 0.0 and top_score is not None and top_score < min_sim:
+        trigger = "below_similarity_threshold"
+    else:
+        return {"emitted": False, "reason": "results_above_threshold"}
+
+    try:
+        response = await bridge.feedback_gap(query, session_id=session_id or "")
+    except BrainBridgeUnavailable as exc:
+        logger.warning("memory_feedback_gap_emit_failed", error=str(exc))
+        return {"emitted": False, "reason": "bridge_call_failed", "error": str(exc)}
+    return {
+        "emitted": True,
+        "trigger": trigger,
+        "top_score": top_score,
+        "min_similarity": min_sim,
+        "response": response if isinstance(response, dict) else {"recorded": True},
+    }
+
+
+async def _handle_rate(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Record an explicit rating for an entry (``feedback_rate``)."""
+    if not p.key:
+        return {
+            "action": "rate",
+            "success": False,
+            "error": "missing_entry_key",
+            "message": "rate requires key=<entry-key>.",
+        }
+    rating = p.rating or "helpful"
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("rate")
+    if not hasattr(bridge, "feedback_rate"):
+        return {
+            "action": "rate",
+            "success": False,
+            "degraded": True,
+            "reason": "feedback_requires_http_bridge",
+            "next_steps": [
+                "feedback_rate requires the tapps-brain HTTP transport and "
+                "brain 3.17+. Set TAPPS_MCP_MEMORY_BRAIN_HTTP_URL.",
+            ],
+        }
+    try:
+        result = await bridge.feedback_rate(
+            p.key,
+            rating=rating,
+            session_id=p.session_id or "",
+            details_json=p.details_json or "",
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("rate", exc)
+    return {
+        "action": "rate",
+        "success": True,
+        "entry_key": p.key,
+        "rating": rating,
+        "result": result,
+    }
+
+
 async def _handle_explain_connection(store: MemoryStore, p: _Params) -> dict[str, Any]:
     """Explain how *subject* connects to *object_entity* (``brain_explain_connection``)."""
     if not (p.subject and p.object_entity):
@@ -2981,13 +3148,24 @@ async def _http_handle_search(p: _Params) -> dict[str, Any]:
     bridge = _require_bridge()
     tier = p.tier if p.tier and p.tier != "pattern" else None
     results = await bridge.search(p.query, limit=effective_limit, tier=tier)
-    return {
+    payload: dict[str, Any] = {
         "action": "search",
         "query": p.query,
         "results": results,
         "result_count": len(results),
         "store_metadata": {"mode": "http_bridge"},
     }
+    # TAP-1632: close the flywheel loop on misses.
+    feedback = await _maybe_emit_feedback_gap(
+        bridge,
+        query=p.query,
+        results=len(results),
+        top_score=_search_top_score(payload),
+        session_id=p.session_id or "",
+    )
+    if feedback is not None:
+        payload["feedback"] = feedback
+    return payload
 
 
 async def _http_handle_list(p: _Params) -> dict[str, Any]:
@@ -3272,6 +3450,8 @@ _ASYNC_DISPATCH: dict[str, Any] = {
     # TAP-1631: batch ops delegate to BrainBridge.
     "recall_many": _handle_recall_many,
     "reinforce_many": _handle_reinforce_many,
+    # TAP-1632: feedback flywheel.
+    "rate": _handle_rate,
 }
 
 

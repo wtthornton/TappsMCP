@@ -246,6 +246,11 @@ _BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
         "memory_save_many",
         "memory_recall_many",
         "memory_reinforce_many",
+        # TAP-1632: feedback flywheel + brain-health diagnostics surface.
+        "feedback_rate",
+        "feedback_gap",
+        "flywheel_report",
+        "diagnostics_report",
     }
 )
 
@@ -1780,6 +1785,62 @@ class HttpBrainBridge(BrainBridge):
         failed = int(result.get("failed") or result.get("failed_count") or 0)
         total = int(result.get("total") or reinforced + failed or len(entries))
         return {**result, "reinforced": reinforced, "failed": failed, "total": total}
+
+    # -------------------------------------------------------------------------
+    # Feedback flywheel + brain-quality diagnostics (TAP-1632)
+    # -------------------------------------------------------------------------
+
+    async def feedback_rate(
+        self,
+        entry_key: str,
+        *,
+        rating: str = "helpful",
+        session_id: str = "",
+        details_json: str = "",
+    ) -> dict[str, Any]:
+        """Score how useful a recalled entry was (``feedback_rate``).
+
+        *rating* is server-defined (typically ``"helpful"`` / ``"unhelpful"`` /
+        ``"misleading"``). ``details_json`` is an optional structured payload
+        the brain stores alongside the rating for later analysis.
+        """
+        args: dict[str, Any] = {"entry_key": entry_key, "rating": rating}
+        if session_id:
+            args["session_id"] = session_id
+        if details_json:
+            args["details_json"] = details_json
+        result = await self._http_mcp_call("feedback_rate", args)
+        return result if isinstance(result, dict) else {"recorded": True}
+
+    async def feedback_gap(
+        self,
+        query: str,
+        *,
+        session_id: str = "",
+        details_json: str = "",
+    ) -> dict[str, Any]:
+        """Record an unmet-recall signal — the agent searched and got nothing.
+
+        Drives the flywheel: the brain counts these gaps and surfaces them
+        via ``flywheel_report``.
+        """
+        args: dict[str, Any] = {"query": query}
+        if session_id:
+            args["session_id"] = session_id
+        if details_json:
+            args["details_json"] = details_json
+        result = await self._http_mcp_call("feedback_gap", args)
+        return result if isinstance(result, dict) else {"recorded": True}
+
+    async def flywheel_report(self, period_days: int = 7) -> dict[str, Any]:
+        """Summary of feedback signal collected over the last *period_days*."""
+        result = await self._http_mcp_call("flywheel_report", {"period_days": period_days})
+        return result if isinstance(result, dict) else {"summary": result}
+
+    async def diagnostics_report(self, record_history: bool = True) -> dict[str, Any]:
+        """Brain-quality snapshot (decay, coverage, contradiction load)."""
+        result = await self._http_mcp_call("diagnostics_report", {"record_history": record_history})
+        return result if isinstance(result, dict) else {"report": result}
 
     async def hive_search(
         self,

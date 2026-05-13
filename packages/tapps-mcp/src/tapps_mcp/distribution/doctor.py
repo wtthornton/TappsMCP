@@ -1414,6 +1414,156 @@ def check_brain_profile(root: Path) -> CheckResult:
     )
 
 
+def check_brain_health(root: Path) -> CheckResult:
+    """TAP-1632: pull flywheel + diagnostics summary from tapps-brain.
+
+    Synchronously calls ``flywheel_report`` and ``diagnostics_report``
+    against the configured HTTP brain and renders a compact summary so
+    operators can see at a glance whether feedback is flowing into the
+    flywheel and whether brain-side quality metrics are degrading.
+    Skipped (passing) when HTTP mode is not active.
+    """
+    import os
+
+    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    if not http_url:
+        return CheckResult(
+            "tapps-brain health",
+            True,
+            "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)",
+        )
+
+    try:
+        from tapps_core.brain_auth import build_brain_headers
+        from tapps_core.brain_bridge import _MCP_ACCEPT_HEADERS
+        from tapps_core.config.settings import load_settings
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain health",
+            False,
+            f"Could not load bridge modules: {exc}",
+            "Re-run after fixing the import error.",
+        )
+
+    try:
+        settings = load_settings(project_root=root)
+        headers = build_brain_headers(settings)
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain health",
+            False,
+            f"Could not build brain auth headers: {exc}",
+            "Fix .tapps-mcp.yaml or env vars and re-run doctor.",
+        )
+
+    try:
+        import httpx as _httpx
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain health",
+            False,
+            f"httpx unavailable: {exc}",
+        )
+
+    init_payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "tapps-mcp-doctor", "version": "1"},
+        },
+    }
+    try:
+        init_response = _httpx.post(
+            f"{http_url.rstrip('/')}/mcp/",
+            json=init_payload,
+            headers={**headers, **_MCP_ACCEPT_HEADERS},
+            timeout=5.0,
+            follow_redirects=True,
+        )
+        init_response.raise_for_status()
+    except Exception as exc:
+        return CheckResult(
+            "tapps-brain health",
+            False,
+            f"Could not initialize MCP session: {exc}",
+            "Brain may be down or unreachable; see brain logs.",
+        )
+
+    session_id = init_response.headers.get("mcp-session-id", "")
+    call_headers = {**headers, **_MCP_ACCEPT_HEADERS}
+    if session_id:
+        call_headers["Mcp-Session-Id"] = session_id
+
+    def _tool_call(name: str, args: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            response = _httpx.post(
+                f"{http_url.rstrip('/')}/mcp/",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": name, "arguments": args},
+                },
+                headers=call_headers,
+                timeout=5.0,
+                follow_redirects=True,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except Exception:
+            return None
+        result = payload.get("result", {})
+        if not isinstance(result, dict) or result.get("isError"):
+            return None
+        content = result.get("content", [])
+        if not content or content[0].get("type") != "text":
+            return None
+        try:
+            import json as _json
+
+            parsed = _json.loads(content[0]["text"])
+        except Exception:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    flywheel = _tool_call("flywheel_report", {"period_days": 7})
+    diagnostics = _tool_call("diagnostics_report", {"record_history": False})
+
+    if flywheel is None and diagnostics is None:
+        return CheckResult(
+            "tapps-brain health",
+            False,
+            "Could not fetch flywheel_report or diagnostics_report from brain",
+            "These tools require tapps-brain 3.17+ and the operator/full profile.",
+        )
+
+    parts: list[str] = []
+    if flywheel is not None:
+        gaps = flywheel.get("gap_count") or flywheel.get("gaps") or 0
+        rates = flywheel.get("rating_count") or flywheel.get("ratings") or 0
+        period = flywheel.get("period_days", 7)
+        parts.append(f"flywheel: {gaps} gap(s) / {rates} rating(s) in {period}d")
+    if diagnostics is not None:
+        score = diagnostics.get("health_score") or diagnostics.get("score")
+        if score is not None:
+            parts.append(f"diagnostics health_score={score}")
+        else:
+            parts.append("diagnostics: snapshot available")
+
+    return CheckResult(
+        "tapps-brain health",
+        True,
+        "; ".join(parts) if parts else "brain reports clean health",
+        (
+            "Detail under `tapps_memory(action=health)` and the brain's "
+            "flywheel_report/diagnostics_report tools."
+        ),
+    )
+
+
 def check_memory_pipeline_config(root: Path) -> CheckResult:
     """Echo effective memory-related settings (informational; always passes).
 
@@ -1854,6 +2004,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_tapps_brain())
     checks.append(check_brain_http_auth(root))
     checks.append(check_brain_profile(root))
+    checks.append(check_brain_health(root))
     checks.append(check_memory_pipeline_config(root))
     checks.append(check_dual_memory_server(root))
     checks.append(check_plaintext_secrets(root))

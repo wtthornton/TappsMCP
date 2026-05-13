@@ -777,6 +777,122 @@ class TestBatchOpsInBridgeUsedTools:
 
 
 # ---------------------------------------------------------------------------
+# TAP-1632: feedback flywheel + diagnostics
+# ---------------------------------------------------------------------------
+
+
+class TestFeedbackFlywheel:
+    @pytest.mark.asyncio
+    async def test_feedback_rate_calls_feedback_rate_tool(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"feedback_rate"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"recorded": True}))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.feedback_rate(
+            "k1", rating="helpful", session_id="sess-7", details_json='{"note":"good"}'
+        )
+
+        assert result == {"recorded": True}
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "feedback_rate"
+        args = payload["params"]["arguments"]
+        assert args["entry_key"] == "k1"
+        assert args["rating"] == "helpful"
+        assert args["session_id"] == "sess-7"
+        assert args["details_json"] == '{"note":"good"}'
+
+    @pytest.mark.asyncio
+    async def test_feedback_rate_omits_default_session_and_details(self) -> None:
+        """Empty session_id / details_json must NOT appear on the wire — the
+        brain's schema marks them optional and defaults are server-side.
+        """
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"feedback_rate"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"recorded": True}))
+        bridge._http_client.post = post_mock
+
+        await bridge.feedback_rate("k1")
+
+        args = post_mock.call_args[1]["json"]["params"]["arguments"]
+        assert "session_id" not in args
+        assert "details_json" not in args
+        assert args == {"entry_key": "k1", "rating": "helpful"}
+
+    @pytest.mark.asyncio
+    async def test_feedback_gap_calls_feedback_gap_tool(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"feedback_gap"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"recorded": True}))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.feedback_gap("missing fact about X", session_id="sess-7")
+
+        assert result == {"recorded": True}
+        args = post_mock.call_args[1]["json"]["params"]["arguments"]
+        assert args["query"] == "missing fact about X"
+        assert args["session_id"] == "sess-7"
+
+    @pytest.mark.asyncio
+    async def test_flywheel_report_calls_flywheel_report_tool(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"flywheel_report"})
+        bridge._http_client = AsyncMock()
+        report = {"gap_count": 3, "rating_count": 5, "period_days": 14}
+        post_mock = _make_async_post(_mcp_response(report))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.flywheel_report(period_days=14)
+
+        assert result == report
+        args = post_mock.call_args[1]["json"]["params"]["arguments"]
+        assert args == {"period_days": 14}
+
+    @pytest.mark.asyncio
+    async def test_diagnostics_report_calls_diagnostics_report_tool(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"diagnostics_report"})
+        bridge._http_client = AsyncMock()
+        snapshot = {"health_score": 0.82}
+        post_mock = _make_async_post(_mcp_response(snapshot))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.diagnostics_report(record_history=False)
+
+        assert result == snapshot
+        args = post_mock.call_args[1]["json"]["params"]["arguments"]
+        assert args == {"record_history": False}
+
+
+class TestFeedbackToolsInBridgeUsedTools:
+    """Four feedback / diagnostics tools surface through profile_mismatch."""
+
+    def test_feedback_tools_present(self) -> None:
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
+
+        for tool in (
+            "feedback_rate",
+            "feedback_gap",
+            "flywheel_report",
+            "diagnostics_report",
+        ):
+            assert tool in _BRIDGE_USED_TOOLS, tool
+
+
+# ---------------------------------------------------------------------------
 # Write operations
 # ---------------------------------------------------------------------------
 

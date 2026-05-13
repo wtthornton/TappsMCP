@@ -547,6 +547,30 @@ class MemorySettings(BaseSettings):
         ),
     )
 
+    # TAP-1632: feedback flywheel auto-emit (closes the loop so the brain's
+    # ``flywheel_report`` / ``diagnostics_report`` accumulate real signal).
+    feedback_auto_emit: bool = Field(
+        default=True,
+        description=(
+            "When True (default), tapps_memory(action=search) automatically "
+            "emits a ``feedback_gap`` to tapps-brain when results are empty "
+            "(or below ``feedback_min_similarity`` when set). Set False to "
+            "stop tapps-mcp from emitting feedback signals. "
+            "Env: TAPPS_MCP_MEMORY_FEEDBACK_AUTO_EMIT."
+        ),
+    )
+    feedback_min_similarity: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "When > 0, ``feedback_gap`` is auto-emitted not only on empty "
+            "results but also when the top result's similarity / score is "
+            "below this threshold. Default 0.0 (only empty results trigger). "
+            "Env: TAPPS_MCP_MEMORY_FEEDBACK_MIN_SIMILARITY."
+        ),
+    )
+
     # EPIC-95: tapps-brain v3 Postgres connection (BrainBridge)
     database_url: str = Field(
         default="",

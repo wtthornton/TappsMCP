@@ -29,12 +29,14 @@ from tapps_mcp.server_memory_tools import (
     _handle_hive_status,
     _handle_maintain,
     _handle_neighbors,
+    _handle_rate,
     _handle_recall_many,
     _handle_reinforce_many,
     _handle_related,
     _handle_relations,
     _handle_verify_integrity,
     _http_handle_save_bulk,
+    _maybe_emit_feedback_gap,
     _Params,
 )
 
@@ -78,6 +80,8 @@ def _params(**kwargs: Any) -> _Params:
         "predicate": "",
         "object_entity": "",
         "max_hops": 0,
+        "rating": "",
+        "details_json": "",
     }
     base.update(kwargs)
     return _Params(**base)
@@ -658,3 +662,177 @@ async def test_http_save_bulk_filters_invalid_entries_before_batching(
     assert len(out["errors"]) == 2
     call_entries = bridge.save_many.await_args.args[0]
     assert [e["key"] for e in call_entries] == ["valid"]
+
+
+# ---------------------------------------------------------------------------
+# TAP-1632: feedback flywheel handler + auto-emit
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rate_calls_feedback_rate_with_session_and_rating(
+    store: MagicMock,
+) -> None:
+    bridge = _http_bridge_with_method("feedback_rate", {"recorded": True})
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_rate(
+            store,
+            _params(
+                key="k1",
+                rating="unhelpful",
+                session_id="sess-99",
+                details_json='{"why":"stale"}',
+            ),
+        )
+    assert out["success"] is True
+    assert out["rating"] == "unhelpful"
+    bridge.feedback_rate.assert_awaited_once_with(
+        "k1", rating="unhelpful", session_id="sess-99", details_json='{"why":"stale"}'
+    )
+
+
+@pytest.mark.asyncio
+async def test_rate_defaults_rating_to_helpful(store: MagicMock) -> None:
+    bridge = _http_bridge_with_method("feedback_rate", {"recorded": True})
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_rate(store, _params(key="k1"))
+    assert out["rating"] == "helpful"
+    bridge.feedback_rate.assert_awaited_once_with(
+        "k1", rating="helpful", session_id="", details_json=""
+    )
+
+
+@pytest.mark.asyncio
+async def test_rate_rejects_missing_key(store: MagicMock) -> None:
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=MagicMock(),
+    ):
+        out = await _handle_rate(store, _params())
+    assert out["success"] is False
+    assert out["error"] == "missing_entry_key"
+
+
+@pytest.mark.asyncio
+async def test_rate_returns_degraded_when_bridge_has_no_feedback_method(
+    store: MagicMock,
+) -> None:
+    bridge = MagicMock(spec=["health"])
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_rate(store, _params(key="k1"))
+    assert out["success"] is False
+    assert out["reason"] == "feedback_requires_http_bridge"
+
+
+@pytest.mark.asyncio
+async def test_auto_emit_fires_feedback_gap_on_empty_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Acceptance: empty search results trigger feedback_gap auto-emit."""
+    bridge = MagicMock()
+    bridge.feedback_gap = AsyncMock(return_value={"recorded": True})
+
+    # Enable auto-emit unambiguously.
+    monkeypatch.setattr(
+        "tapps_mcp.server_memory_tools._feedback_auto_emit_settings",
+        lambda: (True, 0.0),
+    )
+
+    out = await _maybe_emit_feedback_gap(
+        bridge, query="anything", results=0, top_score=None, session_id="sess-99"
+    )
+
+    assert out is not None
+    assert out["emitted"] is True
+    assert out["trigger"] == "empty_results"
+    bridge.feedback_gap.assert_awaited_once_with("anything", session_id="sess-99")
+
+
+@pytest.mark.asyncio
+async def test_auto_emit_fires_below_similarity_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Acceptance: top hit below feedback_min_similarity also triggers gap."""
+    bridge = MagicMock()
+    bridge.feedback_gap = AsyncMock(return_value={"recorded": True})
+
+    monkeypatch.setattr(
+        "tapps_mcp.server_memory_tools._feedback_auto_emit_settings",
+        lambda: (True, 0.5),
+    )
+
+    out = await _maybe_emit_feedback_gap(
+        bridge, query="q", results=3, top_score=0.32, session_id=""
+    )
+
+    assert out is not None
+    assert out["emitted"] is True
+    assert out["trigger"] == "below_similarity_threshold"
+    bridge.feedback_gap.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_auto_emit_skipped_when_disabled_in_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Acceptance: memory.feedback_auto_emit=False disables the auto-emit."""
+    bridge = MagicMock()
+    bridge.feedback_gap = AsyncMock(return_value={"recorded": True})
+
+    monkeypatch.setattr(
+        "tapps_mcp.server_memory_tools._feedback_auto_emit_settings",
+        lambda: (False, 0.0),
+    )
+
+    out = await _maybe_emit_feedback_gap(
+        bridge, query="q", results=0, top_score=None, session_id=""
+    )
+
+    assert out is not None
+    assert out["emitted"] is False
+    assert out["reason"] == "disabled_by_config"
+    bridge.feedback_gap.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auto_emit_skipped_when_results_above_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = MagicMock()
+    bridge.feedback_gap = AsyncMock()
+    monkeypatch.setattr(
+        "tapps_mcp.server_memory_tools._feedback_auto_emit_settings",
+        lambda: (True, 0.5),
+    )
+    out = await _maybe_emit_feedback_gap(bridge, query="q", results=3, top_score=0.9, session_id="")
+    assert out is not None
+    assert out["emitted"] is False
+    assert out["reason"] == "results_above_threshold"
+    bridge.feedback_gap.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auto_emit_skipped_when_bridge_lacks_feedback_method(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In-process bridge has no feedback_gap; degrade silently."""
+    bridge = MagicMock(spec=["health"])  # no feedback_gap attribute
+    monkeypatch.setattr(
+        "tapps_mcp.server_memory_tools._feedback_auto_emit_settings",
+        lambda: (True, 0.0),
+    )
+    out = await _maybe_emit_feedback_gap(
+        bridge, query="q", results=0, top_score=None, session_id=""
+    )
+    assert out is not None
+    assert out["emitted"] is False
+    assert out["reason"] == "feedback_gap_not_supported_by_bridge"
