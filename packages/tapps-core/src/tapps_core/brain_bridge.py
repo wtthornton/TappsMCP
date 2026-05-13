@@ -30,6 +30,7 @@ import atexit
 import contextlib
 import os
 import random
+import re
 import signal
 import sys
 import time
@@ -98,13 +99,34 @@ def _raise_with_body(response: httpx.Response, tool_name: str) -> None:
         body = response.text[:_HTTP_ERROR_BODY_MAX]
     except Exception:  # noqa: BLE001 — body decode is best-effort
         body = "<unreadable>"
-    raise RuntimeError(
-        f"tapps-brain HTTP {response.status_code} for {tool_name!r}: {body}"
-    )
+    raise RuntimeError(f"tapps-brain HTTP {response.status_code} for {tool_name!r}: {body}")
 
 
 class BrainBridgeUnavailable(Exception):  # noqa: N818  (public API name predates the lint rule; renaming would break consumers)
     """Raised when the circuit is open or the bridge is not configured."""
+
+
+# TAP-1616: tapps-brain's tool_filter raises ``McpError(code=-32602,
+# data={"reason": "out_of_profile", ...})`` for gated tools. The wire
+# contract (documented in the tapps-brain repo) advertises that shape on
+# the JSON-RPC ``error`` envelope, but ``mcp`` 1.27.x's FastMCP HTTP
+# transport currently wraps it as ``result.isError=true`` with a text-only
+# message — the ``data`` payload never reaches the wire. The pattern below
+# parses the canonical denial message so the bridge can surface
+# :class:`ToolNotInProfileError` today; once upstream surfaces ``ErrorData``
+# correctly the JSON-RPC branch in ``_do_mcp_post`` handles it natively
+# and this fallback becomes inert.
+_OUT_OF_PROFILE_MESSAGE = re.compile(
+    r"Tool '(?P<tool>[^']+)' is not available in profile '(?P<profile>[^']+)'\."
+)
+
+
+def _parse_out_of_profile_message(message: str) -> tuple[str, str] | None:
+    """Extract ``(tool, profile)`` from a brain tool-denial message, or None."""
+    match = _OUT_OF_PROFILE_MESSAGE.search(message)
+    if match is None:
+        return None
+    return match.group("tool"), match.group("profile")
 
 
 class BrainMcpError(RuntimeError):
@@ -131,24 +153,63 @@ class BrainMcpError(RuntimeError):
         self.tool_name = tool_name
 
 
+class ToolNotInProfileError(BrainMcpError):
+    """Raised when the brain rejects a tools/call because the tool is hidden
+    by the active server-side profile (TAP-1616 — wire contract documented in
+    the tapps-brain repo at ``docs/guides/mcp-client-repo-setup.md#profile-wire-contract``).
+
+    Distinct from :class:`BrainMcpError` so callers can ``except`` exactly
+    this case and (a) declare a wider ``X-Brain-Profile`` on subsequent
+    sessions, or (b) surface the structured failure to the caller for re-
+    routing. ``-32601 METHOD_NOT_FOUND`` continues to surface as the base
+    ``BrainMcpError`` — the tool is genuinely gone.
+
+    On the wire this is ``-32602 INVALID_PARAMS`` with
+    ``data == {"reason": "out_of_profile", "tool": "<name>", "profile": "<name>"}``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        tool: str,
+        profile: str | None,
+        data: Any = None,
+    ) -> None:
+        super().__init__(message, code=-32602, data=data, tool_name=tool)
+        self.tool = tool
+        self.profile = profile
+
+
 def _classify_mcp_error(exc: BaseException) -> str:
     """Return one of ``"gated"`` / ``"removed"`` / ``"other"`` for a brain failure.
 
-    - ``"gated"``: tool exists but the caller's profile excludes it (EPIC-073
-      ``tool_filter`` raises ``McpError(code=-32601, data={"error": "tool_not_in_profile", ...})``).
+    - ``"gated"``: tool exists but the caller's profile excludes it. Covers
+      both the legacy ``{"error": "tool_not_in_profile"}`` shape and the
+      TAP-1579 / TAP-1616 wire contract (``-32602`` with
+      ``{"reason": "out_of_profile"}``), the latter raised as
+      :class:`ToolNotInProfileError`.
     - ``"removed"``: tool name is not registered at all — surfaces as the
       generic ``"Unknown tool"`` string in the error message.
     - ``"other"``: anything else (network, timeout, payload validation, …).
     """
+    if isinstance(exc, ToolNotInProfileError):
+        return "gated"
     chain_parts: list[str] = [str(exc)]
     cause = exc.__cause__
     if cause is not None:
         chain_parts.append(str(cause))
+        if isinstance(cause, ToolNotInProfileError):
+            return "gated"
         data = getattr(cause, "data", None)
-        if isinstance(data, dict) and data.get("error") == "tool_not_in_profile":
+        if isinstance(data, dict) and (
+            data.get("error") == "tool_not_in_profile" or data.get("reason") == "out_of_profile"
+        ):
             return "gated"
     data = getattr(exc, "data", None)
-    if isinstance(data, dict) and data.get("error") == "tool_not_in_profile":
+    if isinstance(data, dict) and (
+        data.get("error") == "tool_not_in_profile" or data.get("reason") == "out_of_profile"
+    ):
         return "gated"
     chain = " ".join(chain_parts)
     if "Unknown tool" in chain:
@@ -1055,11 +1116,15 @@ class HttpBrainBridge(BrainBridge):
         }
         self._http_url: str = http_url.rstrip("/")
         self._http_headers: dict[str, str] = dict(headers)
-        # EPIC-073 Phase 3 will eventually flip the deployed default profile
-        # from ``full`` to ``coder``. The bridge calls tools outside ``coder``
-        # (``memory_supersede``, ``agent_register``, …), so pin ``full``
-        # explicitly. No-op today (default already ``full``); guardrail later.
-        self._http_headers.setdefault("X-Brain-Profile", "full")
+        # TAP-1616: declare ``X-Brain-Profile`` only when the caller (factory
+        # via ``build_brain_headers``) has resolved a non-empty profile. When
+        # the header is absent the server applies its ``TAPPS_BRAIN_DEFAULT_PROFILE``
+        # — ``full`` for legacy deployments. Honouring the env var here covers
+        # the no-settings factory path (`_create_http_bridge(settings=None)`).
+        if "X-Brain-Profile" not in self._http_headers:
+            env_profile = os.environ.get("TAPPS_BRAIN_PROFILE", "").strip()
+            if env_profile:
+                self._http_headers["X-Brain-Profile"] = env_profile
         self._http_client: httpx.AsyncClient | None = None
         # TAP-836: brain 3.10.3+ enforces the MCP streamable-HTTP session
         # lifecycle — an initialize handshake returns an Mcp-Session-Id
@@ -1085,6 +1150,11 @@ class HttpBrainBridge(BrainBridge):
                 self._record_success()
                 return result
             except BrainBridgeUnavailable:
+                raise
+            except ToolNotInProfileError:
+                # TAP-1616: gated tools are a deterministic server decision —
+                # retrying wastes time and trips the circuit breaker. Surface
+                # the typed exception to the caller immediately.
                 raise
             except Exception as exc:
                 last_exc = exc
@@ -1126,9 +1196,7 @@ class HttpBrainBridge(BrainBridge):
                     "clientInfo": {"name": "tapps-mcp", "version": "http-bridge"},
                 },
             }
-            response = await self._http_client.post(
-                f"{self._http_url}/mcp/", json=init_payload
-            )
+            response = await self._http_client.post(f"{self._http_url}/mcp/", json=init_payload)
             _raise_with_body(response, "initialize")
             session_id = response.headers.get("mcp-session-id")
             if not session_id:
@@ -1168,11 +1236,7 @@ class HttpBrainBridge(BrainBridge):
         if response.status_code in (400, 404) and self._session_id:
             self._session_id = None
             session_id = await self._ensure_session()
-            extra_headers = (
-                {"Mcp-Session-Id": session_id}
-                if session_id != "__no_session__"
-                else {}
-            )
+            extra_headers = {"Mcp-Session-Id": session_id} if session_id != "__no_session__" else {}
             response = await self._http_client.post(
                 f"{self._http_url}/mcp/", json=payload, headers=extra_headers
             )
@@ -1183,6 +1247,24 @@ class HttpBrainBridge(BrainBridge):
         if rpc_error:
             err_code = rpc_error.get("code") if isinstance(rpc_error, dict) else None
             err_data = rpc_error.get("data") if isinstance(rpc_error, dict) else None
+            # TAP-1616: ``-32602 INVALID_PARAMS`` with
+            # ``data.reason == "out_of_profile"`` is the wire signal that the
+            # tool is hidden by the active server-side profile (not removed
+            # — that stays ``-32601 METHOD_NOT_FOUND``). Surface it as a
+            # distinct exception so callers can dispatch.
+            if (
+                err_code == -32602
+                and isinstance(err_data, dict)
+                and err_data.get("reason") == "out_of_profile"
+            ):
+                gated_profile = err_data.get("profile")
+                gated_tool = err_data.get("tool") or tool_name
+                raise ToolNotInProfileError(
+                    f"tapps-brain tool {gated_tool!r} is hidden by profile {gated_profile!r}",
+                    tool=gated_tool,
+                    profile=gated_profile,
+                    data=err_data,
+                )
             raise BrainMcpError(
                 f"tapps-brain MCP RPC error: {rpc_error}",
                 code=err_code,
@@ -1194,6 +1276,29 @@ class HttpBrainBridge(BrainBridge):
         if result.get("isError"):
             content = result.get("content", [])
             msg = content[0].get("text", str(result)) if content else str(result)
+            # TAP-1616: tapps-brain raises ``McpError(ErrorData(code=-32602,
+            # data={"reason": "out_of_profile", ...}))`` for gated tools, but
+            # ``mcp`` 1.27.x's FastMCP HTTP transport currently swallows the
+            # ``data`` payload and surfaces the failure as ``result.isError=true``
+            # with a text-only message — the documented JSON-RPC contract
+            # never reaches the wire. Parse the canonical message shape
+            # (``Tool 'X' is not available in profile 'Y'.``) so callers see
+            # the typed exception today; the JSON-RPC branch above will keep
+            # working once upstream surfaces ``ErrorData`` correctly.
+            gated = _parse_out_of_profile_message(msg)
+            if gated is not None:
+                gated_tool, gated_profile = gated
+                raise ToolNotInProfileError(
+                    f"tapps-brain tool {gated_tool!r} is hidden by profile {gated_profile!r}",
+                    tool=gated_tool,
+                    profile=gated_profile,
+                    data={
+                        "reason": "out_of_profile",
+                        "tool": gated_tool,
+                        "profile": gated_profile,
+                        "transport": "is_error_envelope",
+                    },
+                )
             raise RuntimeError(f"tapps-brain tool error: {msg}")
 
         content_items: list[dict[str, Any]] = result.get("content", [])
@@ -1415,7 +1520,9 @@ class HttpBrainBridge(BrainBridge):
         return False
 
     async def reinforce(self, key: str, boost: float = 0.1) -> dict[str, Any]:
-        result = await self._http_mcp_call("memory_reinforce", {"key": key, "confidence_boost": boost})
+        result = await self._http_mcp_call(
+            "memory_reinforce", {"key": key, "confidence_boost": boost}
+        )
         return result if isinstance(result, dict) else {"key": key}
 
     async def supersede(self, key: str, new_value: str, **kwargs: Any) -> dict[str, Any]:

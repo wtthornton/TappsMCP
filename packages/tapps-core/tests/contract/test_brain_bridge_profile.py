@@ -1,0 +1,261 @@
+"""TAP-1616: live contract test for BrainBridge's profile wire integration.
+
+Runs against a real ``tapps-brain-http`` server (3.17.0+) reachable on
+``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` (or ``http://127.0.0.1:8080`` by default).
+Skipped when the server is unreachable or the bearer token is unset, so the
+unit-test runs in CI without a brain stay green.
+
+Run explicitly:
+
+    TAPPS_BRAIN_AUTH_TOKEN=... \\
+    TAPPS_MCP_MEMORY_BRAIN_HTTP_URL=http://127.0.0.1:8080 \\
+    pytest packages/tapps-core/tests/contract -m brain_contract -v
+
+Exercises three wire shapes against the ``agent_brain`` profile:
+
+1. ``brain_recall`` — in profile → returns successfully.
+2. ``memory_save`` — gated by profile → ``ToolNotInProfileError``
+   (``-32602 INVALID_PARAMS`` with ``data.reason == "out_of_profile"``).
+3. ``__definitely_not_a_tool__`` — genuinely missing → ``BrainMcpError``
+   but NOT ``ToolNotInProfileError`` (the bridge must keep ``-32601`` and
+   ``-32602/out_of_profile`` distinct).
+"""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+
+import httpx
+import pytest
+
+from tapps_core.brain_bridge import (
+    BrainMcpError,
+    HttpBrainBridge,
+    ToolNotInProfileError,
+)
+
+pytestmark = pytest.mark.brain_contract
+
+
+_DEFAULT_URL = "http://127.0.0.1:8080"
+_REQUIRED_BRAIN_VERSION = (3, 17, 0)
+
+
+def _parse_version(value: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for chunk in value.split("."):
+        digits = "".join(c for c in chunk if c.isdigit())
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts)
+
+
+def _resolve_brain_url() -> str:
+    return os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", _DEFAULT_URL).rstrip("/")
+
+
+def _resolve_token() -> str:
+    return (
+        os.environ.get("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN")
+        or os.environ.get("TAPPS_BRAIN_AUTH_TOKEN")
+        or ""
+    )
+
+
+def _check_brain_reachable(url: str) -> str | None:
+    """Return None when the server is reachable and 3.17+; else a skip reason."""
+    try:
+        response = httpx.get(f"{url}/health", timeout=2.0)
+    except (httpx.RequestError, httpx.TimeoutException) as exc:
+        return f"tapps-brain unreachable at {url}: {exc}"
+    if response.status_code != 200:
+        return f"tapps-brain /health returned {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        return "tapps-brain /health returned non-JSON body"
+    version = str(payload.get("version", ""))
+    if _parse_version(version) < _REQUIRED_BRAIN_VERSION:
+        return f"tapps-brain version {version} below required 3.17.0"
+    return None
+
+
+def _check_profile_loaded(url: str, token: str, project_id: str, profile: str) -> str | None:
+    """Return None when the server has *profile* loaded; else a skip reason.
+
+    The wire contract claims unknown profile names "fail open" as ``full``,
+    but the operator's deployment (``TAPPS_BRAIN_STRICT=1``) tightens this
+    to a 400 on initialize. Either way, the contract test is meaningful
+    only when the requested profile is actually loaded — otherwise we are
+    testing the operator's strictness rather than the bridge's behaviour.
+    """
+    init_payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "tap-1616-probe", "version": "1"},
+        },
+    }
+    try:
+        response = httpx.post(
+            f"{url}/mcp/",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Project-Id": project_id,
+                "X-Agent-Id": "tap-1616-probe",
+                "X-Brain-Profile": profile,
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+            },
+            json=init_payload,
+            timeout=5.0,
+            follow_redirects=True,
+        )
+    except (httpx.RequestError, httpx.TimeoutException) as exc:
+        return f"initialize probe failed: {exc}"
+    if response.status_code == 400 and "Unknown MCP profile" in response.text:
+        return (
+            f"tapps-brain at {url} does not have profile {profile!r} loaded "
+            f"(image predates TAP-1579 — rebuild required)"
+        )
+    if response.status_code >= 400:
+        return f"initialize probe returned HTTP {response.status_code}: {response.text[:200]}"
+    return None
+
+
+@pytest.fixture(scope="module")
+def brain_url() -> str:
+    url = _resolve_brain_url()
+    skip_reason = _check_brain_reachable(url)
+    if skip_reason:
+        pytest.skip(skip_reason)
+    return url
+
+
+@pytest.fixture(scope="module")
+def auth_token() -> str:
+    token = _resolve_token()
+    if not token:
+        pytest.skip("TAPPS_BRAIN_AUTH_TOKEN / TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN not set")
+    return token
+
+
+@pytest.fixture(scope="module")
+def project_id() -> str:
+    return os.environ.get("TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID", "tapps-mcp")
+
+
+@pytest.fixture(scope="module")
+def profile_loaded(brain_url: str, auth_token: str, project_id: str) -> str:
+    """Probe the live server and skip when ``agent_brain`` isn't loaded."""
+    skip_reason = _check_profile_loaded(brain_url, auth_token, project_id, "agent_brain")
+    if skip_reason:
+        pytest.skip(skip_reason)
+    return "agent_brain"
+
+
+def _build_bridge(
+    brain_url: str, auth_token: str, project_id: str, profile: str
+) -> HttpBrainBridge:
+    headers = {
+        "Authorization": f"Bearer {auth_token}",
+        "X-Project-Id": project_id,
+        "X-Agent-Id": "tap-1616-contract-test",
+        "X-Brain-Profile": profile,
+    }
+    return HttpBrainBridge(brain_url, headers)
+
+
+@pytest.fixture
+def agent_brain_bridge(
+    brain_url: str, auth_token: str, project_id: str, profile_loaded: str
+) -> HttpBrainBridge:
+    """Bridge declaring the ``agent_brain`` profile."""
+    return _build_bridge(brain_url, auth_token, project_id, profile_loaded)
+
+
+@pytest.fixture
+def full_profile_bridge(brain_url: str, auth_token: str, project_id: str) -> HttpBrainBridge:
+    """Bridge declaring the ``full`` profile.
+
+    Required for the missing-tool path: under any non-``full`` profile the
+    server-side ``tool_filter`` runs first and cannot distinguish "tool
+    excluded by profile" from "tool does not exist" — both look identical
+    to the filter. ``full`` lets the call reach FastMCP's tool registry,
+    which surfaces unknown names as ``Unknown tool: <name>``.
+    """
+    return _build_bridge(brain_url, auth_token, project_id, "full")
+
+
+@pytest.mark.asyncio
+async def test_in_profile_tool_succeeds(agent_brain_bridge: HttpBrainBridge) -> None:
+    """``brain_recall`` lives in ``agent_brain`` — call must succeed."""
+    try:
+        result: Any = await agent_brain_bridge._http_mcp_call(
+            "brain_recall", {"query": "tap-1616 contract probe"}
+        )
+    finally:
+        agent_brain_bridge.close()
+    # Response shape varies (list of hits, dict with results, …) — what
+    # matters here is that the call returned without raising.
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_out_of_profile_tool_raises_tool_not_in_profile_error(
+    agent_brain_bridge: HttpBrainBridge,
+) -> None:
+    """``memory_save`` is excluded from ``agent_brain`` — must raise
+    :class:`ToolNotInProfileError` (NOT plain ``BrainMcpError`` /
+    ``RuntimeError``).
+    """
+    try:
+        with pytest.raises(ToolNotInProfileError) as excinfo:
+            await agent_brain_bridge._http_mcp_call(
+                "memory_save",
+                {"key": "tap-1616-should-not-write", "value": "blocked"},
+            )
+    finally:
+        agent_brain_bridge.close()
+
+    exc = excinfo.value
+    assert exc.tool == "memory_save"
+    assert exc.profile == "agent_brain"
+    assert isinstance(exc.data, dict)
+    assert exc.data.get("reason") == "out_of_profile"
+
+
+@pytest.mark.asyncio
+async def test_nonexistent_tool_is_not_misclassified_as_profile_error(
+    full_profile_bridge: HttpBrainBridge,
+) -> None:
+    """A genuinely missing tool must NOT raise ``ToolNotInProfileError``.
+
+    Under ``full`` the tool_filter is a no-op and FastMCP surfaces the
+    missing name as a tool error containing ``"Unknown tool: …"``. The
+    bridge's classifier maps this to ``"removed"``, not ``"gated"``.
+    """
+    from tapps_core.brain_bridge import _classify_mcp_error
+
+    try:
+        with pytest.raises(BaseException) as excinfo:
+            await full_profile_bridge._http_mcp_call("__tap_1616_definitely_not_a_tool__", {})
+    finally:
+        full_profile_bridge.close()
+
+    exc = excinfo.value
+    assert not isinstance(exc, ToolNotInProfileError), (
+        "Missing tool must not be misclassified as out-of-profile"
+    )
+    # Sanity: the classifier sees it as "removed", not "gated".
+    classification = _classify_mcp_error(exc)
+    assert classification in {"removed", "other"}
+    assert classification != "gated"
+    # Reference BrainMcpError in the suite so the import isn't dead weight
+    # — the same path remains the natural catch-all for typed RPC errors.
+    assert BrainMcpError is not None

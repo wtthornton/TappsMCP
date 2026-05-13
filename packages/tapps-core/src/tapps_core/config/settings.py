@@ -606,6 +606,25 @@ class MemorySettings(BaseSettings):
         ),
     )
 
+    # TAP-1616: per-client MCP profile declaration. When non-empty, the bridge
+    # adds ``X-Brain-Profile: <value>`` to every initialize + tools/call POST.
+    # When empty, no header is sent — the server applies its
+    # ``TAPPS_BRAIN_DEFAULT_PROFILE`` (``full`` for legacy deployments), so
+    # legacy installs see zero behavior change. Wire contract documented in
+    # the tapps-brain repo at
+    # ``docs/guides/mcp-client-repo-setup.md#profile-wire-contract``.
+    brain_profile: str = Field(
+        default="",
+        description=(
+            "Optional MCP profile name (``agent_brain`` | ``coder`` | "
+            "``reviewer`` | ``seeder`` | ``operator`` | ``full``) sent as the "
+            "``X-Brain-Profile`` header on every tapps-brain HTTP call. Empty "
+            "leaves the server-side default in effect. Falls back to the "
+            "``TAPPS_BRAIN_PROFILE`` env var when unset (TAP-1616). "
+            "Env: TAPPS_MCP_MEMORY_BRAIN_PROFILE."
+        ),
+    )
+
     # EPIC-069 / ADR-010: multi-tenant project_id on the wire.
     project_id: str = Field(
         default="",

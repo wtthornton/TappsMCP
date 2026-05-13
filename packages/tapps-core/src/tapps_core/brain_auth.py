@@ -82,6 +82,11 @@ def build_brain_headers(
     token_secret = memory.brain_auth_token
     project_id = memory.brain_project_id
     agent_id = get_stable_agent_id(settings)
+    # TAP-1616: prefer the explicit settings field; fall back to the canonical
+    # ``TAPPS_BRAIN_PROFILE`` env var the spec advertises so a single export
+    # works without editing ``.tapps-mcp.yaml``. Empty → no header sent →
+    # server-side default profile applies.
+    profile_name = (memory.brain_profile or os.environ.get("TAPPS_BRAIN_PROFILE", "")).strip()
 
     headers: dict[str, str] = {}
     missing: list[str] = []
@@ -102,6 +107,9 @@ def build_brain_headers(
         # ``get_stable_agent_id`` always returns a non-empty string in
         # practice, but guard against the degenerate case for completeness.
         missing.append("agent_id")
+
+    if profile_name:
+        headers["X-Brain-Profile"] = profile_name
 
     if missing:
         if _strict_mode():

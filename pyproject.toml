@@ -181,6 +181,7 @@ markers = [
     "integration: marks tests as integration tests",
     "slow: marks tests as slow (subprocess-heavy, may be skipped with -m 'not slow')",
     "optional_deps: marks tests requiring optional dependencies (sentence-transformers, faiss-cpu, cohere)",
+    "brain_contract: marks tests requiring a running tapps-brain HTTP server (3.17+)",
 ]
 addopts = "-v --tb=short -p randomly --randomly-seed=last"
 filterwarnings = [

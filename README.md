@@ -28,6 +28,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 ### What's new in v3.10
 
+- **Brain profile declaration** (TAP-1616) — `BrainBridge` sends `X-Brain-Profile: <name>` on every tapps-brain HTTP call when `memory.brain_profile` (or `TAPPS_BRAIN_PROFILE`) is set, and surfaces `-32602 INVALID_PARAMS` with `data.reason == "out_of_profile"` as a distinct `ToolNotInProfileError` (vs. `-32601 METHOD_NOT_FOUND` for genuinely removed tools). Upstream wire contract: [tapps-brain `docs/guides/mcp-client-repo-setup.md` — "Profile wire contract"](https://github.com/wtthornton/tapps-brain/blob/main/docs/guides/mcp-client-repo-setup.md).
 - **Brain HTTP error surfacing** (v3.10.10) — `tapps_session_start` returns a hard `code: brain_auth_failed` error on 401/403 from tapps-brain instead of silently degrading. Override with `memory.tolerate_brain_auth_failure: true` for offline workflows.
 - **Cache-first Linear reads** (v3.10.x, TAP-1224) — `list_issues` calls go through `tapps_linear_snapshot_get` first; warn-mode logs violations to `.tapps-mcp/.cache-gate-violations.jsonl` and block-mode enforces a fresh sentinel.
 - **Autonomy defaults** (v3.10.x, TAP-1087) — in-scope writes (Linear issues, edits, commits within this repo) proceed without human-in-the-loop confirmation; Linear assignee defaults to the agent identity, never the OAuth human.

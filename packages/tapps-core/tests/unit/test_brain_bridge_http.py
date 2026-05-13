@@ -65,6 +65,86 @@ def _make_http_bridge(url: str = "http://brain:8080", headers: dict[str, str] | 
 
 
 # ---------------------------------------------------------------------------
+# TAP-1616: X-Brain-Profile header resolution
+# ---------------------------------------------------------------------------
+
+
+class TestProfileHeader:
+    def test_caller_supplied_profile_is_preserved(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``build_brain_headers`` is the canonical resolution site —
+        whatever it returns must flow to the wire untouched.
+        """
+        monkeypatch.delenv("TAPPS_BRAIN_PROFILE", raising=False)
+        bridge = _make_http_bridge(
+            headers={
+                "Authorization": "Bearer t",
+                "X-Brain-Profile": "coder",
+            }
+        )
+        assert bridge._http_headers["X-Brain-Profile"] == "coder"
+
+    def test_env_fallback_when_header_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Direct construction without settings (``settings=None`` factory
+        path) must still honour the canonical ``TAPPS_BRAIN_PROFILE`` env.
+        """
+        monkeypatch.setenv("TAPPS_BRAIN_PROFILE", "agent_brain")
+        bridge = _make_http_bridge(headers={"Authorization": "Bearer t"})
+        assert bridge._http_headers.get("X-Brain-Profile") == "agent_brain"
+
+    def test_no_header_when_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """AC: when no profile is configured the bridge sends NO header so
+        the server-side default profile applies — zero behavior change.
+        """
+        monkeypatch.delenv("TAPPS_BRAIN_PROFILE", raising=False)
+        bridge = _make_http_bridge(headers={"Authorization": "Bearer t"})
+        assert "X-Brain-Profile" not in bridge._http_headers
+
+
+# ---------------------------------------------------------------------------
+# TAP-1616: error classifier covers the new wire shape
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyMcpError:
+    def test_out_of_profile_data_reason_is_gated(self) -> None:
+        from tapps_core.brain_bridge import (
+            BrainMcpError,
+            ToolNotInProfileError,
+            _classify_mcp_error,
+        )
+
+        # Plain ToolNotInProfileError
+        exc = ToolNotInProfileError(
+            "gated",
+            tool="memory_save",
+            profile="agent_brain",
+            data={"reason": "out_of_profile", "tool": "memory_save", "profile": "agent_brain"},
+        )
+        assert _classify_mcp_error(exc) == "gated"
+
+        # Same shape carried on a generic BrainMcpError instance
+        plain = BrainMcpError("generic", code=-32602, data={"reason": "out_of_profile"})
+        assert _classify_mcp_error(plain) == "gated"
+
+    def test_legacy_tool_not_in_profile_still_gated(self) -> None:
+        """Back-compat for brains <3.17 that emitted the old shape."""
+        from tapps_core.brain_bridge import BrainMcpError, _classify_mcp_error
+
+        legacy = BrainMcpError("legacy", code=-32601, data={"error": "tool_not_in_profile"})
+        assert _classify_mcp_error(legacy) == "gated"
+
+    def test_unknown_tool_message_is_removed(self) -> None:
+        from tapps_core.brain_bridge import _classify_mcp_error
+
+        assert _classify_mcp_error(RuntimeError("Unknown tool: foo")) == "removed"
+
+    def test_other_failures_are_other(self) -> None:
+        from tapps_core.brain_bridge import _classify_mcp_error
+
+        assert _classify_mcp_error(RuntimeError("timeout")) == "other"
+
+
+# ---------------------------------------------------------------------------
 # Factory dispatch
 # ---------------------------------------------------------------------------
 
@@ -81,7 +161,20 @@ class TestCreateBrainBridgeDispatch:
         settings.memory.brain_project_id = ""
         settings.project_root = "."
 
-        with patch("tapps_core.brain_bridge.check_brain_version", return_value={"ok": True, "skipped": True, "degraded": False, "url": "", "floor": "3.7.2", "ceiling": "4.0.0", "version": None, "errors": [], "warnings": []}):
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": True,
+                "skipped": True,
+                "degraded": False,
+                "url": "",
+                "floor": "3.7.2",
+                "ceiling": "4.0.0",
+                "version": None,
+                "errors": [],
+                "warnings": [],
+            },
+        ):
             result = create_brain_bridge(settings)
 
         assert isinstance(result, HttpBrainBridge)
@@ -91,12 +184,27 @@ class TestCreateBrainBridgeDispatch:
         monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
         from tapps_core.brain_bridge import HttpBrainBridge, create_brain_bridge
 
-        with patch("tapps_core.brain_bridge.check_brain_version", return_value={"ok": True, "skipped": True, "degraded": False, "url": "", "floor": "3.7.2", "ceiling": "4.0.0", "version": None, "errors": [], "warnings": []}):
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": True,
+                "skipped": True,
+                "degraded": False,
+                "url": "",
+                "floor": "3.7.2",
+                "ceiling": "4.0.0",
+                "version": None,
+                "errors": [],
+                "warnings": [],
+            },
+        ):
             result = create_brain_bridge(settings=None)
 
         assert isinstance(result, HttpBrainBridge)
 
-    def test_falls_back_to_inprocess_when_no_http_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_falls_back_to_inprocess_when_no_http_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", raising=False)
         monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "postgresql://x/db")
         from tapps_core.brain_bridge import BrainBridge, HttpBrainBridge, create_brain_bridge
@@ -123,7 +231,20 @@ class TestCreateBrainBridgeDispatch:
         monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "postgresql://x/db")
         from tapps_core.brain_bridge import HttpBrainBridge, create_brain_bridge
 
-        with patch("tapps_core.brain_bridge.check_brain_version", return_value={"ok": True, "skipped": True, "degraded": False, "url": "", "floor": "3.7.2", "ceiling": "4.0.0", "version": None, "errors": [], "warnings": []}):
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": True,
+                "skipped": True,
+                "degraded": False,
+                "url": "",
+                "floor": "3.7.2",
+                "ceiling": "4.0.0",
+                "version": None,
+                "errors": [],
+                "warnings": [],
+            },
+        ):
             result = create_brain_bridge(settings=None)
 
         assert isinstance(result, HttpBrainBridge)
@@ -156,6 +277,92 @@ class TestDoMcpPost:
 
         with pytest.raises(RuntimeError, match="tapps-brain MCP RPC error"):
             await bridge._do_mcp_post("memory_search", {})
+
+    @pytest.mark.asyncio
+    async def test_out_of_profile_raises_tool_not_in_profile_error(self) -> None:
+        """TAP-1616: ``-32602 INVALID_PARAMS`` with ``data.reason ==
+        "out_of_profile"`` surfaces as :class:`ToolNotInProfileError` so
+        callers can dispatch separately from a generic JSON-RPC error.
+        """
+        from tapps_core.brain_bridge import BrainMcpError, ToolNotInProfileError
+
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32602,
+                    "message": "tool is not in active profile",
+                    "data": {
+                        "reason": "out_of_profile",
+                        "tool": "memory_save",
+                        "profile": "agent_brain",
+                    },
+                },
+            }
+        )
+
+        with pytest.raises(ToolNotInProfileError) as excinfo:
+            await bridge._do_mcp_post("memory_save", {"key": "k", "value": "v"})
+
+        exc = excinfo.value
+        assert isinstance(exc, BrainMcpError)
+        assert exc.code == -32602
+        assert exc.tool == "memory_save"
+        assert exc.profile == "agent_brain"
+        assert isinstance(exc.data, dict)
+        assert exc.data["reason"] == "out_of_profile"
+
+    @pytest.mark.asyncio
+    async def test_method_not_found_does_not_raise_profile_error(self) -> None:
+        """TAP-1616: ``-32601 METHOD_NOT_FOUND`` means tool removed, NOT
+        profile-gated. Must surface as plain ``BrainMcpError``.
+        """
+        from tapps_core.brain_bridge import BrainMcpError, ToolNotInProfileError
+
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {"code": -32601, "message": "Unknown tool: bogus_tool"},
+            }
+        )
+
+        with pytest.raises(BrainMcpError) as excinfo:
+            await bridge._do_mcp_post("bogus_tool", {})
+
+        assert not isinstance(excinfo.value, ToolNotInProfileError)
+        assert excinfo.value.code == -32601
+
+    @pytest.mark.asyncio
+    async def test_invalid_params_without_out_of_profile_reason(self) -> None:
+        """TAP-1616: ``-32602`` without ``data.reason == "out_of_profile"``
+        is a generic schema rejection, NOT a profile gate.
+        """
+        from tapps_core.brain_bridge import BrainMcpError, ToolNotInProfileError
+
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32602,
+                    "message": "validation",
+                    "data": {"reason": "schema_mismatch"},
+                },
+            }
+        )
+
+        with pytest.raises(BrainMcpError) as excinfo:
+            await bridge._do_mcp_post("memory_save", {})
+
+        assert not isinstance(excinfo.value, ToolNotInProfileError)
 
     @pytest.mark.asyncio
     async def test_tool_error_raises(self) -> None:
@@ -498,6 +705,52 @@ class TestHttpRetry:
 
             with pytest.raises(BrainBridgeUnavailable, match="all retries exhausted"):
                 await bridge._http_mcp_call("memory_search", {"query": "q"})
+
+    @pytest.mark.asyncio
+    async def test_tool_not_in_profile_skips_retry(self) -> None:
+        """TAP-1616: a profile gate is a permanent server decision —
+        ``_http_mcp_call`` must propagate :class:`ToolNotInProfileError`
+        on the first attempt without exhausting the retry budget.
+        """
+        from tapps_core.brain_bridge import ToolNotInProfileError
+
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+
+        gated_response = MagicMock()
+        gated_response.status_code = 200
+        gated_response.raise_for_status = MagicMock()
+        gated_response.json.return_value = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "error": {
+                "code": -32602,
+                "message": "tool is not in active profile",
+                "data": {
+                    "reason": "out_of_profile",
+                    "tool": "memory_save",
+                    "profile": "agent_brain",
+                },
+            },
+        }
+        call_count = 0
+
+        async def _gated_post(*_args: Any, **_kwargs: Any) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            return gated_response
+
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _gated_post
+
+        with pytest.raises(ToolNotInProfileError):
+            await bridge._http_mcp_call("memory_save", {"key": "k", "value": "v"})
+
+        # No retries: one and only one tools/call POST and the circuit
+        # breaker is undisturbed.
+        assert call_count == 1
+        assert bridge._failures == 0
+        assert not bridge.circuit_open
 
 
 # ---------------------------------------------------------------------------
