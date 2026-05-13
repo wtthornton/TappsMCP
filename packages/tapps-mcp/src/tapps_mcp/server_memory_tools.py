@@ -95,6 +95,9 @@ _VALID_ACTIONS = {
     "reinforce_many",
     # TAP-1632: feedback flywheel
     "rate",
+    # TAP-1633: native session memory replaces the bespoke local index.
+    "search_sessions",
+    "session_end",
 }
 
 # Scope values accepted by save / save_bulk / get / list / search.
@@ -133,6 +136,10 @@ _ASYNC_ACTIONS = {
     "reinforce_many",
     # TAP-1632: feedback flywheel
     "rate",
+    # TAP-1633: native session memory delegates to BrainBridge.
+    "index_session",
+    "search_sessions",
+    "session_end",
 }
 
 # TAP-1080: async actions that work when the in-process store is None
@@ -159,6 +166,10 @@ _ASYNC_HTTP_OK_ACTIONS = {
     "reinforce_many",
     # TAP-1632: feedback flywheel — HTTP-only.
     "rate",
+    # TAP-1633: native session memory — HTTP-only.
+    "index_session",
+    "search_sessions",
+    "session_end",
 }
 
 # TAP-1421: sync actions whose primitives are also exposed on BrainBridge as
@@ -1685,49 +1696,151 @@ def _find_entries_by_query(
 # ---------------------------------------------------------------------------
 
 
-def _handle_index_session(store: MemoryStore, p: _Params) -> dict[str, Any]:
-    """Handle index_session action (Epic 65.10). Store session chunks for search."""
-    from tapps_core.config.settings import load_settings
-    from tapps_core.memory.session_index import index_session as do_index_session
+async def _handle_index_session(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Index session chunks via the brain's ``memory_index_session`` tool.
 
+    TAP-1633: replaces the legacy local ``tapps_core.memory.session_index``
+    path with the brain's native session-memory surface (BM25 + embeddings
+    + decay). The handler is async because it routes through BrainBridge —
+    the legacy ``memory.session_index.enabled`` config gate no longer
+    applies (the brain handles enable/disable server-side).
+    """
     if not p.session_id or not p.session_id.strip():
-        return {"error": "missing_session_id", "message": "session_id is required."}
+        return {
+            "action": "index_session",
+            "success": False,
+            "error": "missing_session_id",
+            "message": "session_id is required.",
+        }
     if not p.chunks:
-        return {"error": "missing_chunks", "message": "chunks is required (JSON array of strings)."}
+        return {
+            "action": "index_session",
+            "success": False,
+            "error": "missing_chunks",
+            "message": "chunks is required (JSON array of strings).",
+        }
     try:
         parsed = json.loads(p.chunks)
     except (json.JSONDecodeError, TypeError) as exc:
         return {
+            "action": "index_session",
+            "success": False,
             "error": "invalid_chunks",
             "message": f"chunks must be JSON array of strings: {exc}",
         }
     if not isinstance(parsed, list):
-        return {"error": "invalid_chunks", "message": "chunks must be a JSON array."}
+        return {
+            "action": "index_session",
+            "success": False,
+            "error": "invalid_chunks",
+            "message": "chunks must be a JSON array.",
+        }
     chunks_list = [str(c) for c in parsed if c]
     if not chunks_list:
-        return {"action": "index_session", "chunks_stored": 0, "session_id": p.session_id}
-
-    settings = load_settings()
-    if not settings.memory.session_index.enabled:
         return {
-            "error": "session_index_disabled",
-            "message": "Session indexing is disabled. Set memory.session_index.enabled: true in .tapps-mcp.yaml.",
+            "action": "index_session",
+            "success": True,
+            "session_id": p.session_id,
+            "chunks_stored": 0,
         }
 
-    si = settings.memory.session_index
-    count = do_index_session(
-        store.project_root,
-        p.session_id,
-        chunks_list,
-        max_chunks=si.max_chunks_per_session,
-        max_chars_per_chunk=si.max_chars_per_chunk,
-    )
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("index_session")
+    if not hasattr(bridge, "index_session"):
+        return {
+            "action": "index_session",
+            "success": False,
+            "degraded": True,
+            "reason": "native_sessions_require_http_bridge",
+            "next_steps": [
+                "Native session indexing requires the tapps-brain HTTP transport "
+                "and brain 3.17+. Set TAPPS_MCP_MEMORY_BRAIN_HTTP_URL.",
+            ],
+        }
+    try:
+        result = await bridge.index_session(p.session_id, chunks_list)
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("index_session", exc)
     return {
         "action": "index_session",
+        "success": True,
         "session_id": p.session_id,
-        "chunks_stored": count,
         "chunks_input": len(chunks_list),
-        "store_metadata": _store_metadata(store),
+        "result": result,
+    }
+
+
+async def _handle_search_sessions(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Search indexed session chunks via the brain (``memory_search_sessions``)."""
+    if not p.query:
+        return {
+            "action": "search_sessions",
+            "success": False,
+            "error": "missing_query",
+            "message": "query is required for search_sessions.",
+        }
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("search_sessions")
+    if not hasattr(bridge, "search_sessions"):
+        return {
+            "action": "search_sessions",
+            "success": False,
+            "degraded": True,
+            "reason": "native_sessions_require_http_bridge",
+        }
+    effective_limit = p.limit if p.limit > 0 else 10
+    try:
+        result = await bridge.search_sessions(p.query, limit=effective_limit)
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("search_sessions", exc)
+    return {
+        "action": "search_sessions",
+        "success": True,
+        "query": p.query,
+        "limit": effective_limit,
+        "result": result,
+    }
+
+
+async def _handle_session_end(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Record a session-end summary via the brain (``tapps_brain_session_end``).
+
+    Reads the summary from ``value`` (the standard text-content channel),
+    optional tags from ``tag_list``, and a daily-note flag from ``dry_run``.
+    Sourcing from existing params keeps the public ``tapps_memory`` surface
+    flat without inventing new keys just for this action.
+    """
+    if not p.value:
+        return {
+            "action": "session_end",
+            "success": False,
+            "error": "missing_summary",
+            "message": "session_end requires value=<summary text>.",
+        }
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return _bridge_unavailable_response("session_end")
+    if not hasattr(bridge, "session_end"):
+        return {
+            "action": "session_end",
+            "success": False,
+            "degraded": True,
+            "reason": "native_sessions_require_http_bridge",
+        }
+    try:
+        result = await bridge.session_end(
+            p.value, tags=list(p.tag_list) if p.tag_list else None, daily_note=p.dry_run
+        )
+    except BrainBridgeUnavailable as exc:
+        return _bridge_call_failed_response("session_end", exc)
+    return {
+        "action": "session_end",
+        "success": True,
+        "tags": list(p.tag_list),
+        "daily_note": p.dry_run,
+        "result": result,
     }
 
 
@@ -3018,7 +3131,7 @@ _DISPATCH: dict[str, Callable[[MemoryStore, _Params], dict[str, Any]]] = {
     "federate_sync": _handle_federate_sync,
     "federate_search": _handle_federate_search,
     "federate_status": _handle_federate_status,
-    "index_session": _handle_index_session,
+    # TAP-1633: index_session moved to _ASYNC_DISPATCH (delegates to BrainBridge).
     # Epic M1: Security surface
     "safety_check": _handle_safety_check,
     # Epic M2: Profile & lifecycle management
@@ -3452,6 +3565,10 @@ _ASYNC_DISPATCH: dict[str, Any] = {
     "reinforce_many": _handle_reinforce_many,
     # TAP-1632: feedback flywheel.
     "rate": _handle_rate,
+    # TAP-1633: native session memory via the brain HTTP transport.
+    "index_session": _handle_index_session,
+    "search_sessions": _handle_search_sessions,
+    "session_end": _handle_session_end,
 }
 
 
@@ -3546,31 +3663,12 @@ def _ranked_search(
             entry_dict["graph_boosted"] = True
         result_entries.append(entry_dict)
 
-    # Epic 65.10: optionally include session index hits
-    if include_session_index and settings.memory.session_index.enabled:
-        from tapps_core.memory.session_index import search_session_index
-
-        sess_limit = min(limit, 5)
-        sess_hits = search_session_index(store.project_root, query, limit=sess_limit)
-        for i, hit in enumerate(sess_hits):
-            score = 0.7 - (i * 0.05)
-            result_entries.append(
-                {
-                    "session_chunk": {
-                        "session_id": hit["session_id"],
-                        "chunk_index": hit["chunk_index"],
-                        "content": hit["content"][:200]
-                        + ("..." if len(hit["content"]) > 200 else ""),
-                        "created_at": hit["created_at"],
-                    },
-                    "score": max(0.4, score),
-                    "effective_confidence": 0.5,
-                    "stale": False,
-                    "source": "session_index",
-                }
-            )
-        result_entries.sort(key=lambda x: x["score"], reverse=True)
-        result_entries = result_entries[:limit]
+    # TAP-1633: removed the bespoke local session_index merge — agents that
+    # want session hits now call ``tapps_memory(action=search_sessions)``
+    # which routes to the brain's native ``memory_search_sessions`` tool.
+    # The ``include_session_index`` parameter is accepted for back-compat
+    # but is now a no-op; callers receive a flat memory search result.
+    _ = include_session_index
 
     result: dict[str, Any] = {
         "action": "search",

@@ -540,3 +540,56 @@ async def test_feedback_and_diagnostics_methods_reach_the_wire(
         assert isinstance(diagnostics, dict)
     finally:
         bridge.close()
+
+
+# ---------------------------------------------------------------------------
+# TAP-1633: native session memory against the live brain
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_session_methods_reach_the_wire(
+    brain_url: str, auth_token: str, project_id: str
+) -> None:
+    """End-to-end smoke that ``memory_index_session`` /
+    ``memory_search_sessions`` / ``tapps_brain_session_end`` are reachable
+    via the new bridge methods. Uses the ``full`` profile so all three
+    tools are exposed.
+    """
+    import uuid
+
+    skip_reason = _check_profile_loaded_lenient(brain_url, auth_token, project_id, "full")
+    if skip_reason:
+        pytest.skip(skip_reason)
+
+    session_id = f"tap-1633-probe-{uuid.uuid4().hex[:8]}"
+    bridge = _build_bridge(brain_url, auth_token, project_id, "full")
+    try:
+        # Drive negotiation so all three tools end up in exposed_tools.
+        await bridge._http_mcp_call("brain_status", {})
+        status = bridge.profile_status()
+        for tool in (
+            "memory_index_session",
+            "memory_search_sessions",
+            "tapps_brain_session_end",
+        ):
+            assert tool in status["exposed_tools"], tool
+            assert tool not in status["gated_used_tools"], tool
+
+        index_resp = await bridge.index_session(
+            session_id,
+            ["tap-1633 probe chunk alpha", "tap-1633 probe chunk beta"],
+        )
+        assert isinstance(index_resp, dict)
+
+        search_resp = await bridge.search_sessions("tap-1633 probe", limit=5)
+        assert isinstance(search_resp, dict)
+
+        end_resp = await bridge.session_end(
+            "tap-1633 contract probe summary",
+            tags=["tap-1633", "contract"],
+            daily_note=False,
+        )
+        assert isinstance(end_resp, dict)
+    finally:
+        bridge.close()

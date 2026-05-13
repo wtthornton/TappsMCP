@@ -893,6 +893,121 @@ class TestFeedbackToolsInBridgeUsedTools:
 
 
 # ---------------------------------------------------------------------------
+# TAP-1633: native session memory
+# ---------------------------------------------------------------------------
+
+
+class TestNativeSessionMemory:
+    @pytest.mark.asyncio
+    async def test_index_session_calls_memory_index_session_tool(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"memory_index_session"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"stored": 2}))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.index_session("sess-1", ["chunk a", "chunk b"])
+
+        assert result == {"stored": 2}
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "memory_index_session"
+        assert payload["params"]["arguments"] == {
+            "session_id": "sess-1",
+            "chunks": ["chunk a", "chunk b"],
+        }
+
+    @pytest.mark.asyncio
+    async def test_search_sessions_calls_memory_search_sessions_tool(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"memory_search_sessions"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(
+            _mcp_response({"results": [{"session_id": "s1", "chunk": "x"}]})
+        )
+        bridge._http_client.post = post_mock
+
+        result = await bridge.search_sessions("deploy", limit=7)
+
+        assert result == {"results": [{"session_id": "s1", "chunk": "x"}]}
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "memory_search_sessions"
+        assert payload["params"]["arguments"] == {"query": "deploy", "limit": 7}
+
+    @pytest.mark.asyncio
+    async def test_search_sessions_wraps_bare_list(self) -> None:
+        """Brain may return a bare list; the bridge normalises to a dict so
+        the handler can render a stable response shape.
+        """
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"memory_search_sessions"})
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(_mcp_response([{"session_id": "s1"}]))
+
+        result = await bridge.search_sessions("q")
+
+        assert result == {"results": [{"session_id": "s1"}]}
+
+    @pytest.mark.asyncio
+    async def test_session_end_calls_tapps_brain_session_end_tool(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"tapps_brain_session_end"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"recorded": True}))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.session_end(
+            "Did the thing", tags=["tap-1633", "session"], daily_note=True
+        )
+
+        assert result == {"recorded": True}
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "tapps_brain_session_end"
+        args = payload["params"]["arguments"]
+        assert args["summary"] == "Did the thing"
+        assert args["tags"] == ["tap-1633", "session"]
+        assert args["daily_note"] is True
+
+    @pytest.mark.asyncio
+    async def test_session_end_omits_tags_when_none(self) -> None:
+        """``tags=None`` is the schema default and should NOT appear on the
+        wire — the brain server fills the null itself.
+        """
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._exposed_tools = frozenset({"tapps_brain_session_end"})
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"recorded": True}))
+        bridge._http_client.post = post_mock
+
+        await bridge.session_end("summary only")
+
+        args = post_mock.call_args[1]["json"]["params"]["arguments"]
+        assert "tags" not in args
+        assert args == {"summary": "summary only", "daily_note": False}
+
+
+class TestNativeSessionMemoryInBridgeUsedTools:
+    def test_session_tools_present(self) -> None:
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
+
+        for tool in (
+            "memory_index_session",
+            "memory_search_sessions",
+            "tapps_brain_session_end",
+        ):
+            assert tool in _BRIDGE_USED_TOOLS, tool
+
+
+# ---------------------------------------------------------------------------
 # Write operations
 # ---------------------------------------------------------------------------
 

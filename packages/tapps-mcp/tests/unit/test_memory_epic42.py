@@ -507,5 +507,19 @@ class TestValidActions:
             "hive_search",
             "hive_propagate",
             "agent_register",
+            # TAP-1630: knowledge graph
+            "related",
+            "relations",
+            "neighbors",
+            "explain_connection",
+            # TAP-1631: batch ops
+            "recall_many",
+            "reinforce_many",
+            # TAP-1632: feedback flywheel
+            "rate",
+            # TAP-1633: native session memory (search_sessions + session_end;
+            # index_session was already valid).
+            "search_sessions",
+            "session_end",
         }
         assert expected == _VALID_ACTIONS

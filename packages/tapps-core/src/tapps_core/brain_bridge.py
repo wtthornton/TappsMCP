@@ -251,6 +251,10 @@ _BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
         "feedback_gap",
         "flywheel_report",
         "diagnostics_report",
+        # TAP-1633: native session memory (replaces the local session_index path).
+        "memory_index_session",
+        "memory_search_sessions",
+        "tapps_brain_session_end",
     }
 )
 
@@ -1841,6 +1845,52 @@ class HttpBrainBridge(BrainBridge):
         """Brain-quality snapshot (decay, coverage, contradiction load)."""
         result = await self._http_mcp_call("diagnostics_report", {"record_history": record_history})
         return result if isinstance(result, dict) else {"report": result}
+
+    # -------------------------------------------------------------------------
+    # Native session memory (TAP-1633)
+    # -------------------------------------------------------------------------
+
+    async def index_session(
+        self,
+        session_id: str,
+        chunks: list[str],
+    ) -> dict[str, Any]:
+        """Index a session's chunks for later searching (``memory_index_session``).
+
+        Replaces the legacy in-repo BM25-only session index — the brain
+        now owns this surface natively with BM25 + embeddings + decay.
+        """
+        args: dict[str, Any] = {"session_id": session_id, "chunks": chunks}
+        result = await self._http_mcp_call("memory_index_session", args)
+        return result if isinstance(result, dict) else {"stored": True}
+
+    async def search_sessions(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        """Search indexed session chunks (``memory_search_sessions``)."""
+        args: dict[str, Any] = {"query": query, "limit": limit}
+        result = await self._http_mcp_call("memory_search_sessions", args)
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list):
+            return {"results": result}
+        return {"results": []}
+
+    async def session_end(
+        self,
+        summary: str,
+        *,
+        tags: list[str] | None = None,
+        daily_note: bool = False,
+    ) -> dict[str, Any]:
+        """Record a session-end summary (``tapps_brain_session_end``)."""
+        args: dict[str, Any] = {"summary": summary, "daily_note": daily_note}
+        if tags is not None:
+            args["tags"] = tags
+        result = await self._http_mcp_call("tapps_brain_session_end", args)
+        return result if isinstance(result, dict) else {"recorded": True}
 
     async def hive_search(
         self,

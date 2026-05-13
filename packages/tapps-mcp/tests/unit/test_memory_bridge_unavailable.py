@@ -27,6 +27,7 @@ from tapps_mcp.server_memory_tools import (
     _handle_hive_propagate,
     _handle_hive_search,
     _handle_hive_status,
+    _handle_index_session,
     _handle_maintain,
     _handle_neighbors,
     _handle_rate,
@@ -34,6 +35,8 @@ from tapps_mcp.server_memory_tools import (
     _handle_reinforce_many,
     _handle_related,
     _handle_relations,
+    _handle_search_sessions,
+    _handle_session_end,
     _handle_verify_integrity,
     _http_handle_save_bulk,
     _maybe_emit_feedback_gap,
@@ -836,3 +839,125 @@ async def test_auto_emit_skipped_when_bridge_lacks_feedback_method(
     assert out is not None
     assert out["emitted"] is False
     assert out["reason"] == "feedback_gap_not_supported_by_bridge"
+
+
+# ---------------------------------------------------------------------------
+# TAP-1633: native session memory handlers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_index_session_calls_bridge_index_session(store: MagicMock) -> None:
+    bridge = _http_bridge_with_method("index_session", {"stored": 3})
+    payload = json.dumps(["chunk a", "chunk b", "chunk c"])
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_index_session(store, _params(session_id="sess-1", chunks=payload))
+    assert out["success"] is True
+    assert out["session_id"] == "sess-1"
+    assert out["chunks_input"] == 3
+    bridge.index_session.assert_awaited_once_with("sess-1", ["chunk a", "chunk b", "chunk c"])
+
+
+@pytest.mark.asyncio
+async def test_index_session_rejects_invalid_chunks_payload(store: MagicMock) -> None:
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=MagicMock(),
+    ):
+        out = await _handle_index_session(store, _params(session_id="s", chunks="not json"))
+    assert out["success"] is False
+    assert out["error"] == "invalid_chunks"
+
+
+@pytest.mark.asyncio
+async def test_index_session_degrades_when_bridge_lacks_method(
+    store: MagicMock,
+) -> None:
+    bridge = MagicMock(spec=["health"])
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_index_session(store, _params(session_id="s", chunks=json.dumps(["c"])))
+    assert out["success"] is False
+    assert out["reason"] == "native_sessions_require_http_bridge"
+
+
+@pytest.mark.asyncio
+async def test_search_sessions_calls_bridge_with_query_and_limit(
+    store: MagicMock,
+) -> None:
+    bridge = _http_bridge_with_method("search_sessions", {"results": [{"session_id": "s1"}]})
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_search_sessions(store, _params(query="deploy strategy", limit=5))
+    assert out["success"] is True
+    assert out["query"] == "deploy strategy"
+    assert out["limit"] == 5
+    bridge.search_sessions.assert_awaited_once_with("deploy strategy", limit=5)
+
+
+@pytest.mark.asyncio
+async def test_search_sessions_rejects_missing_query(store: MagicMock) -> None:
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=MagicMock(),
+    ):
+        out = await _handle_search_sessions(store, _params())
+    assert out["success"] is False
+    assert out["error"] == "missing_query"
+
+
+@pytest.mark.asyncio
+async def test_session_end_passes_summary_tags_and_daily_note(
+    store: MagicMock,
+) -> None:
+    bridge = _http_bridge_with_method("session_end", {"recorded": True})
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_session_end(
+            store,
+            _params(
+                value="Wrote phase 5",
+                tag_list=["tap-1633", "platform"],
+                dry_run=True,  # repurposed as daily_note flag
+            ),
+        )
+    assert out["success"] is True
+    assert out["tags"] == ["tap-1633", "platform"]
+    assert out["daily_note"] is True
+    bridge.session_end.assert_awaited_once_with(
+        "Wrote phase 5", tags=["tap-1633", "platform"], daily_note=True
+    )
+
+
+@pytest.mark.asyncio
+async def test_session_end_rejects_missing_summary(store: MagicMock) -> None:
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=MagicMock(),
+    ):
+        out = await _handle_session_end(store, _params())
+    assert out["success"] is False
+    assert out["error"] == "missing_summary"
+
+
+@pytest.mark.asyncio
+async def test_session_end_degrades_when_bridge_lacks_method(
+    store: MagicMock,
+) -> None:
+    bridge = MagicMock(spec=["health"])
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_session_end(store, _params(value="summary"))
+    assert out["success"] is False
+    assert out["reason"] == "native_sessions_require_http_bridge"
