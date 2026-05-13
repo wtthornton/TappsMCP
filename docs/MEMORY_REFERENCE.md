@@ -78,9 +78,57 @@ Complete reference for the `tapps_memory` tool’s **33 actions** (single MCP to
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| **index_session** | `session_id` | Index session transcript chunks into memory for later retrieval |
+| **index_session** | `session_id`, `chunks` (JSON array) | Index session transcript chunks via the brain's `memory_index_session` tool (TAP-1633 — replaces the legacy local index). |
+| **search_sessions** | `query`, `limit` | Search indexed session chunks via the brain's `memory_search_sessions` tool (TAP-1633). |
+| **session_end** | `value` (summary), `tags`, `dry_run` (daily-note flag) | Record a session-end summary via the brain's `tapps_brain_session_end` tool (TAP-1633). |
 | **validate** | `key` | Validate a memory entry against current project state |
 | **maintain** | -- | Run full maintenance cycle (gc + contradictions + reseed) |
+
+## Knowledge graph (TAP-1630)
+
+Surface tapps-brain 3.17+ graph tools through `tapps_memory`. All four
+require the HTTP bridge; in-process bridges return a structured
+`knowledge_graph_requires_http_bridge` degraded payload.
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **related** | `key`, `max_hops` (default 2) | Walk the graph outward from `key`. Maps to `memory_find_related`. |
+| **relations** | `key` OR (`subject` / `predicate` / `object_entity`) | Relations attached to an entry (`memory_relations`) or matching an SPO triple (`memory_query_relations`). At least one filter is required. |
+| **neighbors** | `entry_ids` (comma-list), `max_hops`, `limit`, `predicate` | k-hop neighborhood of one or more entity ids. Maps to `brain_get_neighbors`. |
+| **explain_connection** | `subject`, `object_entity`, `max_hops` (default 3) | Path explanation between two entity ids. Maps to `brain_explain_connection`. |
+
+## Batch ops (TAP-1631)
+
+Single-round-trip wrappers around the brain's `memory_*_many` endpoints.
+In HTTP mode, `save_bulk` routes through `memory_save_many` automatically
+(one POST for N entries). New explicit actions:
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **recall_many** | `entries` (JSON array of query strings) | Batch recall via `memory_recall_many`. |
+| **reinforce_many** | `entries` (JSON array of `{key, confidence_boost?}` objects) | Batch confidence boost via `memory_reinforce_many`. |
+
+## Feedback flywheel (TAP-1632)
+
+Closes the loop on what the brain learned vs. what agents actually
+needed. `search` auto-emits `feedback_gap` on misses; the `rate` action
+records explicit per-entry feedback.
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| **rate** | `key` (entry_key), `rating` (default `helpful`), `session_id`, `details_json` | Score an entry via `feedback_rate`. |
+
+Auto-emit knobs in `.tapps-mcp.yaml`:
+
+```yaml
+memory:
+  feedback_auto_emit: true       # default; set false to silence search-miss emits
+  feedback_min_similarity: 0.0   # > 0 also emits when top hit < threshold
+```
+
+`tapps doctor` exposes the resulting state under the `tapps-brain
+health` row (gap / rating counts from `flywheel_report` plus
+`diagnostics_report` health_score).
 
 ## Security (Epic M1)
 

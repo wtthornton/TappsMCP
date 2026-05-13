@@ -134,13 +134,21 @@ Your project may have two complementary memory systems:
 
 RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
-### Memory actions (33 total)
+### Memory actions (42 total)
 
-**Core:** `save`, `save_bulk`, `get`, `list`, `delete` — CRUD with tier/scope/tag classification (`save` + architectural tier may **supersede** prior versions when `memory.auto_supersede_architectural` is true)
+**Core:** `save`, `save_bulk`, `get`, `list`, `delete` — CRUD with tier/scope/tag classification (`save` + architectural tier may **supersede** prior versions when `memory.auto_supersede_architectural` is true). In HTTP-bridge mode `save_bulk` now batches every entry into a single `memory_save_many` round trip (TAP-1631).
 
-**Search:** `search` — ranked BM25 retrieval with composite scoring (relevance + confidence + recency + frequency)
+**Search:** `search` — ranked BM25 retrieval with composite scoring (relevance + confidence + recency + frequency). Auto-emits `feedback_gap` on empty / low-similarity results to feed the brain's flywheel (toggle via `memory.feedback_auto_emit`; threshold via `memory.feedback_min_similarity`).
 
 **Intelligence:** `reinforce`, `gc`, `contradictions`, `reseed`
+
+**Knowledge graph (TAP-1630):** `related` (find entries connected to a key), `relations` (relations attached to a key OR matching an SPO triple via `subject` / `predicate` / `object_entity`), `neighbors` (k-hop neighborhood of one or more entity ids passed via `entry_ids`), `explain_connection` (path between `subject` and `object_entity`)
+
+**Batch ops (TAP-1631):** `recall_many` (queries via `entries` JSON array of strings), `reinforce_many` (entries via `entries` JSON array of `{key, confidence_boost?}` objects). Single round-trip wrappers around the brain's `memory_*_many` tools.
+
+**Feedback flywheel (TAP-1632):** `rate` — score an entry via `feedback_rate` (`key` + `rating` + optional `session_id` / `details_json`). The auto-emitted `feedback_gap` on `search` empties is governed here.
+
+**Native session memory (TAP-1633):** `index_session` (store session chunks via `memory_index_session`), `search_sessions` (search indexed sessions via `memory_search_sessions`), `session_end` (record a session-end summary via `tapps_brain_session_end`; summary in `value`, tags in `tags`, daily-note flag in `dry_run`). Replaces the legacy local session-index merge.
 
 **Consolidation:** `consolidate`, `unconsolidate`
 
@@ -148,13 +156,13 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Federation:** `federate_register`, `federate_publish`, `federate_subscribe`, `federate_sync`, `federate_search`, `federate_status`
 
-**Maintenance:** `index_session`, `validate`, `maintain`
+**Maintenance:** `validate`, `maintain`
 
 **Security:** `safety_check`, `verify_integrity`
 
 **Profiles:** `profile_info`, `profile_list`, `profile_switch`
 
-**Diagnostics:** `health`
+**Diagnostics:** `health` — surfaces a `brain_profile` block with the negotiated capability profile + gated bridge tools (TAP-1629).
 
 **Hive / Agent Teams:** `hive_status`, `hive_search`, `hive_propagate`, `agent_register` (opt-in; see `hive_status` when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is set)
 

@@ -440,11 +440,30 @@ async def tapps_memory(
     storage, retrieval, decay, and consolidation internals.
 
     Args:
-        action: One of "save", "save_bulk", "get", "list", "delete", "search",
-            "reinforce", "gc", "contradictions", "reseed", "import", "export",
-            "consolidate", "unconsolidate", "safety_check", "verify_integrity",
-            "profile_info", "profile_list", "profile_switch",
-            "hive_status", "hive_search", "hive_propagate", "agent_register".
+        action: One of:
+            - CRUD: "save", "save_bulk", "get", "list", "delete", "search",
+              "reinforce".
+            - Maintenance: "gc", "contradictions", "reseed", "import",
+              "export", "consolidate", "unconsolidate", "validate",
+              "maintain".
+            - Diagnostics: "health", "safety_check", "verify_integrity".
+            - Profiles: "profile_info", "profile_list", "profile_switch".
+            - Federation: "federate_register", "federate_publish",
+              "federate_subscribe", "federate_sync", "federate_search",
+              "federate_status".
+            - Hive / Agent Teams: "hive_status", "hive_search",
+              "hive_propagate", "agent_register".
+            - Knowledge graph (TAP-1630): "related", "relations",
+              "neighbors", "explain_connection".
+            - Batch ops (TAP-1631): single-round-trip wrappers around
+              the brain's *_many endpoints — "recall_many",
+              "reinforce_many". (``save_bulk`` also batches when running
+              in HTTP-bridge mode.)
+            - Feedback flywheel (TAP-1632): "rate". ``search`` also
+              auto-emits ``feedback_gap`` on empty / low-similarity
+              results (toggle via ``memory.feedback_auto_emit``).
+            - Native session memory (TAP-1633): "index_session",
+              "search_sessions", "session_end".
         key: Memory key (required for save/get/delete/reinforce). Lowercase slug.
         value: Memory content (required for save). Max 4096 chars.
         tier: "architectural", "pattern", or "context" (default: "pattern").
