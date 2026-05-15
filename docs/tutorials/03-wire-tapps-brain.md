@@ -115,5 +115,5 @@ The four pieces that have to line up: brain HTTP service running, `tapps-brain` 
 
 ## Going further
 
-- [docs/MEMORY_REFERENCE.md](../MEMORY_REFERENCE.md) — full memory reference (33 actions, tier and scope rules, federation).
+- [docs/MEMORY_REFERENCE.md](../MEMORY_REFERENCE.md) — full memory reference (42 actions, tier and scope rules, federation).
 - [docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md](../operations/TAPPS-BRAIN-LOCAL-SETUP.md) — production-grade setup, multi-project federation, operational notes.

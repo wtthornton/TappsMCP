@@ -1,6 +1,6 @@
 # TappsMCP Memory Reference
 
-Complete reference for the `tapps_memory` tool’s **33 actions** (single MCP tool, action dispatch via `action=`).
+Complete reference for the `tapps_memory` tool’s **42 actions** (single MCP tool, action dispatch via `action=`). Includes nine actions added by TAP-1628 in tapps-brain 3.17 — knowledge graph (`related`, `relations`, `neighbors`, `explain_connection`), batch ops (`recall_many`, `reinforce_many`), feedback flywheel (`rate`), and native session memory (`search_sessions`, `session_end`).
 
 **Pipeline defaults (POC-oriented):** shipped `default.yaml` enables `memory.auto_save_quality`, `memory.track_recurring_quick_check`, `memory.auto_supersede_architectural`, `memory.enrich_impact_analysis`, and `memory_hooks.auto_recall` / `auto_capture`. Override in `.tapps-mcp.yaml` to turn features off.
 

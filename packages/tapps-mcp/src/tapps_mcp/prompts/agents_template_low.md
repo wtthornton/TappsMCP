@@ -114,7 +114,7 @@ You were deployed into THIS repo by `tapps_init` / `tapps_upgrade`. Stay in scop
 Your project may have two complementary memory systems:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, cross-agent knowledge. **33 actions** (CRUD, search, intelligence, consolidation, import/export, federation, maintenance, security, profiles, hive, health). See `docs/MEMORY_REFERENCE.md`.
+- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, cross-agent knowledge. **42 actions** (CRUD, search, intelligence, consolidation, import/export, federation, maintenance, security, profiles, hive, health, knowledge graph, batch ops, feedback, native session memory). See `docs/MEMORY_REFERENCE.md`.
 
 OPTIONAL: Consider using `tapps_memory` for important architecture decisions.
 

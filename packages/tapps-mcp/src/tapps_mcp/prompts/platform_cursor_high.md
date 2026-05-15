@@ -73,7 +73,7 @@ This validates against security and operational best practices.
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **33 actions** (see AGENTS.md / docs/MEMORY_REFERENCE.md): CRUD, search, intelligence, consolidation, import/export, federation (6), maintenance (index_session, validate, maintain), security (safety_check, verify_integrity), profiles (3), health, Hive/Agent Teams (hive_status, hive_search, hive_propagate, agent_register).
+`tapps_memory` provides persistent cross-session knowledge with **42 actions** (see AGENTS.md / docs/MEMORY_REFERENCE.md): CRUD, search, intelligence, consolidation, import/export, federation (6), maintenance (validate, maintain), security (safety_check, verify_integrity), profiles (3), health, Hive/Agent Teams (hive_status, hive_search, hive_propagate, agent_register), knowledge graph (related, relations, neighbors, explain_connection), batch ops (recall_many, reinforce_many), feedback (rate), native session memory (index_session, search_sessions, session_end).
 
 **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session. Max 1500 entries. (Federation publishing has its own propagation tier — see federation actions, not a `scope=` value.)
 
