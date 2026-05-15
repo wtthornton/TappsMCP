@@ -9,6 +9,7 @@ and user stories.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,9 +38,75 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
+# TAP-1552: MCP function-call wire-format wrappers occasionally leak into
+# parameter values when a caller (or upstream wrapper) mis-encodes multi-line
+# content. The leaks observed in the wild are (a) `<parameter name="X">` /
+# `</parameter>` from the Anthropic tool-use envelope and (b) bare tags named
+# after the parameter itself, e.g. `</purpose_and_intent>`. We strip both
+# shapes — but only for the closed list of names we know docs_generate_epic /
+# docs_generate_story accept — so legitimate `<foo>` content in a user value
+# (HTML/XML examples, code fences) survives intact.
+_WIRE_TAG_NAMES = (
+    "parameter",
+    "purpose_and_intent",
+    "goal",
+    "motivation",
+    "role",
+    "want",
+    "so_that",
+    "description",
+    "acceptance_criteria",
+    "technical_notes",
+    "risks",
+    "non_goals",
+    "success_metrics",
+    "stakeholders",
+    "references",
+    "stories",
+    "tasks",
+    "dependencies",
+    "blocks",
+    "files",
+    "test_cases",
+    "estimated_loe",
+    "status",
+    "priority",
+    "points",
+    "size",
+    "title",
+    "number",
+    "story_number",
+    "epic_number",
+    "criteria_format",
+    "epic_path",
+)
+_STRIP_WIRE_TAGS = re.compile(
+    r"</?(?:" + "|".join(_WIRE_TAG_NAMES) + r")(?:\s+[^>]*)?>",
+    re.IGNORECASE,
+)
+
+
+def _strip_wire_tags(value: str) -> str:
+    """Strip MCP function-call wire-format wrappers from a parameter value.
+
+    See TAP-1552 — bare ``</purpose_and_intent>`` and ``<parameter name="X">``
+    tokens occasionally leak into multi-line string parameters and end up
+    rendered into the markdown body. The list of stripped names is closed
+    (see ``_WIRE_TAG_NAMES``) so unrelated XML/HTML in user content is left
+    alone.
+    """
+    return _STRIP_WIRE_TAGS.sub("", value) if value else value
+
+
 def _split_csv(value: str) -> list[str]:
-    """Split a comma-separated string into a trimmed list, dropping blanks."""
-    return [item.strip() for item in value.split(",") if item.strip()] if value else []
+    """Split a comma-separated string into a trimmed list, dropping blanks.
+
+    Each item is passed through :func:`_strip_wire_tags` so leaked wire-format
+    wrappers do not reach the generator's template (TAP-1552).
+    """
+    if not value:
+        return []
+    return [_strip_wire_tags(item.strip()) for item in value.split(",") if item.strip()]
 
 
 async def docs_generate_changelog(
@@ -1225,15 +1292,15 @@ async def docs_generate_epic(
                 str(exc),
             )
 
-    # Parse files list
-    files_list = [f.strip() for f in files.split(",") if f.strip()] if files else []
+    # Parse files list (TAP-1552: strip wire-format tags per item)
+    files_list = _split_csv(files)
 
     config = EpicConfig(
-        title=title,
+        title=_strip_wire_tags(title),
         number=number,
-        purpose_and_intent=purpose_and_intent.strip(),
-        goal=goal,
-        motivation=motivation,
+        purpose_and_intent=_strip_wire_tags(purpose_and_intent.strip()),
+        goal=_strip_wire_tags(goal),
+        motivation=_strip_wire_tags(motivation),
         status=status,
         priority=priority,
         estimated_loe=estimated_loe,
@@ -1458,14 +1525,14 @@ async def docs_generate_story(
             )
 
     config = StoryConfig(
-        title=title,
+        title=_strip_wire_tags(title),
         epic_number=epic_number,
         story_number=story_number,
-        purpose_and_intent=purpose_and_intent.strip(),
-        role=role,
-        want=want,
-        so_that=so_that,
-        description=description,
+        purpose_and_intent=_strip_wire_tags(purpose_and_intent.strip()),
+        role=_strip_wire_tags(role),
+        want=_strip_wire_tags(want),
+        so_that=_strip_wire_tags(so_that),
+        description=_strip_wire_tags(description),
         points=points,
         size=size,
         tasks=task_list,

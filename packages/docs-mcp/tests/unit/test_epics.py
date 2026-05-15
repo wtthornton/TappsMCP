@@ -1537,3 +1537,168 @@ class TestEpicRefsSection:
         assert "## Refs" in content
         assert "TAP-200" in content
         assert "TAP-201" in content
+
+
+# ---------------------------------------------------------------------------
+# TAP-1552 -- strip MCP function-call wire-format tags from parameter values
+# ---------------------------------------------------------------------------
+
+
+class TestStripWireTagsEpic:
+    """``docs_generate_epic`` must not leak MCP wire-format wrappers."""
+
+    @staticmethod
+    async def _call(**kwargs: Any) -> dict[str, Any]:
+        from docs_mcp.server_gen_tools import docs_generate_epic
+
+        return await docs_generate_epic(**kwargs)
+
+    @staticmethod
+    def _read(tmp_path: Path, result: dict[str, Any]) -> str:
+        return (tmp_path / result["data"]["written_to"]).read_text(encoding="utf-8")
+
+    async def test_strips_param_close_tag_from_multiline_body(self, tmp_path: Path) -> None:
+        """Multi-line `purpose_and_intent` with a leaked `</purpose_and_intent>`
+        produces a body that does not contain the wrapper."""
+        purpose = (
+            "We are doing this so PE-FUND verdicts can be trusted.\n"
+            "The highest-leverage credibility fix in the review.</purpose_and_intent>"
+        )
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(tmp_path),
+        ):
+            result = await self._call(
+                title="Tag Leak Repro",
+                purpose_and_intent=purpose,
+                goal="Add structural credibility gates.",
+                project_root=str(tmp_path),
+                write_to_disk=True,
+            )
+
+        content = self._read(tmp_path, result)
+        assert "</purpose_and_intent>" not in content
+        # User prose still survives.
+        assert "PE-FUND verdicts can be trusted" in content
+
+    async def test_strips_parameter_wrapper_tag(self, tmp_path: Path) -> None:
+        """`<parameter name="goal">` leaking into `purpose_and_intent` is stripped."""
+        purpose = 'Prose body.</purpose_and_intent>\n<parameter name="goal">'
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(tmp_path),
+        ):
+            result = await self._call(
+                title="Parameter Wrapper Repro",
+                purpose_and_intent=purpose,
+                goal="Real goal value.",
+                project_root=str(tmp_path),
+                write_to_disk=True,
+            )
+
+        content = self._read(tmp_path, result)
+        assert '<parameter name=' not in content
+        assert "</parameter>" not in content
+        # The actual goal value survives in its own section.
+        assert "Real goal value" in content
+
+    async def test_preserves_legitimate_angle_brackets(self, tmp_path: Path) -> None:
+        """Angle-bracket content that isn't a wire-format wrapper survives."""
+        purpose = "We support <unknown> placeholders and inline `<foo>` examples."
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(tmp_path),
+        ):
+            result = await self._call(
+                title="Angle Bracket Preserve",
+                purpose_and_intent=purpose,
+                project_root=str(tmp_path),
+                write_to_disk=True,
+            )
+
+        content = self._read(tmp_path, result)
+        assert "<unknown>" in content
+        assert "`<foo>`" in content
+
+    async def test_preserves_code_fences(self, tmp_path: Path) -> None:
+        """Code fences with backticks and angle brackets survive intact."""
+        motivation = (
+            "Example payload:\n"
+            "```python\n"
+            "tool_use = {'name': 'render', 'params': {'value': '<x>'}}\n"
+            "```\n"
+        )
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(tmp_path),
+        ):
+            result = await self._call(
+                title="Code Fence Preserve",
+                motivation=motivation,
+                project_root=str(tmp_path),
+                write_to_disk=True,
+            )
+
+        content = self._read(tmp_path, result)
+        assert "```python" in content
+        assert "<x>" in content
+
+    async def test_strips_tag_from_csv_list_item(self, tmp_path: Path) -> None:
+        """Wire-format tags inside a comma-separated list item are stripped."""
+        ac = "First criterion</acceptance_criteria>,Second criterion"
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(tmp_path),
+        ):
+            result = await self._call(
+                title="CSV Tag Leak Repro",
+                acceptance_criteria=ac,
+                project_root=str(tmp_path),
+                write_to_disk=True,
+            )
+
+        content = self._read(tmp_path, result)
+        assert "</acceptance_criteria>" not in content
+        assert "First criterion" in content
+        assert "Second criterion" in content
+
+    async def test_clean_inputs_unchanged_byte_for_byte(self, tmp_path: Path) -> None:
+        """Inputs without wire-format tags produce identical output before/after fix."""
+        from docs_mcp.server_gen_tools import _strip_wire_tags
+
+        # Direct helper invariant: clean strings pass through unchanged.
+        clean = "Just a plain sentence with no tags."
+        assert _strip_wire_tags(clean) == clean
+
+        single_line_clean = "Add login form validation"
+        assert _strip_wire_tags(single_line_clean) == single_line_clean
+
+
+class TestStripWireTagsStory:
+    """`docs_generate_story` shares the same renderer infra — verify parity."""
+
+    @staticmethod
+    async def _call(**kwargs: Any) -> dict[str, Any]:
+        from docs_mcp.server_gen_tools import docs_generate_story
+
+        return await docs_generate_story(**kwargs)
+
+    async def test_strips_param_close_tag_from_purpose(self, tmp_path: Path) -> None:
+        purpose = "This story exists so login is safer.</purpose_and_intent>"
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(tmp_path),
+        ):
+            result = await self._call(
+                title="Story Tag Leak Repro",
+                audience="human",
+                purpose_and_intent=purpose,
+                project_root=str(tmp_path),
+                write_to_disk=True,
+            )
+
+        written_to = result["data"].get("written_to")
+        assert written_to, result
+        content = (tmp_path / written_to).read_text(encoding="utf-8")
+        assert "</purpose_and_intent>" not in content
+        assert "login is safer" in content
