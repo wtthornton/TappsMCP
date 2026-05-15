@@ -4,7 +4,7 @@ Date: 2026-05-02
 
 ## Status
 
-accepted
+superseded by [ADR-0009](0009-pin-tapps-brain-version-floor-at-3170.md)
 
 ## Context
 

@@ -73,40 +73,40 @@ class TestCheckBrainVersion:
         from tapps_core.brain_bridge import check_brain_version
 
         fake_get = _mock_http_response(
-            json_payload={"status": "ok", "service": "tapps-brain", "version": "3.8.0"},
+            json_payload={"status": "ok", "service": "tapps-brain", "version": "3.18.0"},
         )
         with patch("tapps_core.brain_bridge.httpx.get", side_effect=fake_get):
             result = check_brain_version("http://brain.example/")
 
         assert result["ok"] is True
         assert result["skipped"] is False
-        assert result["version"] == "3.8.0"
+        assert result["version"] == "3.18.0"
         assert result["errors"] == []
 
     def test_version_check_passes_at_exact_floor(self) -> None:
         from tapps_core.brain_bridge import check_brain_version
 
         fake_get = _mock_http_response(
-            json_payload={"version": "3.7.2"},
+            json_payload={"version": "3.17.0"},
         )
         with patch("tapps_core.brain_bridge.httpx.get", side_effect=fake_get):
             result = check_brain_version("http://brain.example")
 
         assert result["ok"] is True
-        assert result["version"] == "3.7.2"
+        assert result["version"] == "3.17.0"
 
     def test_version_check_fails_when_below_floor(self) -> None:
         from tapps_core.brain_bridge import check_brain_version
 
-        fake_get = _mock_http_response(json_payload={"version": "3.6.0"})
+        fake_get = _mock_http_response(json_payload={"version": "3.16.0"})
         with patch("tapps_core.brain_bridge.httpx.get", side_effect=fake_get):
             result = check_brain_version("http://brain.example")
 
         assert result["ok"] is False
-        assert result["version"] == "3.6.0"
+        assert result["version"] == "3.16.0"
         assert len(result["errors"]) == 1
-        assert "3.6.0" in result["errors"][0]
-        assert ">=3.7.2" in result["errors"][0]
+        assert "3.16.0" in result["errors"][0]
+        assert ">=3.17.0" in result["errors"][0]
 
     def test_version_check_fails_at_or_above_ceiling(self) -> None:
         from tapps_core.brain_bridge import check_brain_version
@@ -242,7 +242,7 @@ class TestFactoryWiring:
         settings.memory.pg_pool_max_lifetime_seconds = 0
         settings.memory.brain_http_url = "http://brain.example"
 
-        fake_get = _mock_http_response(json_payload={"version": "3.8.0"})
+        fake_get = _mock_http_response(json_payload={"version": "3.18.0"})
         with (
             patch("tapps_brain.AgentBrain", return_value=_make_brain()),
             patch("tapps_core.brain_bridge.httpx.get", side_effect=fake_get),
@@ -251,7 +251,7 @@ class TestFactoryWiring:
 
         assert bridge is not None
         assert bridge.version_check["ok"] is True
-        assert bridge.version_check["version"] == "3.8.0"
+        assert bridge.version_check["version"] == "3.18.0"
         assert bridge.version_check["skipped"] is False
 
     def test_bridge_still_returned_when_version_below_floor(
