@@ -1240,18 +1240,60 @@ def _reset_settings_cache() -> None:
     _cached_settings = None
 
 
+# TAP-1787: surface the most recent .tapps-mcp.yaml load problem so callers
+# (tapps_doctor / tapps_session_start diagnostics) can warn the user instead
+# of silently falling back to defaults.
+_last_yaml_load_error: dict[str, str] | None = None
+
+
+def get_last_yaml_load_error() -> dict[str, str] | None:
+    """Return the most recent ``.tapps-mcp.yaml`` load error, if any.
+
+    The dict carries ``path`` and ``reason`` keys; resetting requires a new
+    successful load via :func:`_load_yaml_config`.
+    """
+    return _last_yaml_load_error
+
+
 def _load_yaml_config(project_root: Path) -> dict[str, Any]:
-    """Load project-level ``.tapps-mcp.yaml`` if it exists."""
+    """Load project-level ``.tapps-mcp.yaml`` if it exists.
+
+    TAP-1787: ``yaml.YAMLError`` is logged at WARNING (not debug) so a typo in
+    the config — which silently turns off ``linear_enforce_gate``,
+    ``memory.safety``, scoring weights, etc. — is visible. The error is also
+    cached on the module for ``tapps_doctor`` to surface.
+    """
+    global _last_yaml_load_error
+
     config_path = project_root / ".tapps-mcp.yaml"
     if not config_path.exists():
+        _last_yaml_load_error = None
         return {}
 
     try:
         with config_path.open(encoding="utf-8-sig") as f:
             data = yaml.safe_load(f)
+        _last_yaml_load_error = None
         return data if isinstance(data, dict) else {}
-    except Exception as e:
-        logger.debug("mcp_config_load_failed", path=str(config_path), reason=str(e))
+    except yaml.YAMLError as e:
+        _last_yaml_load_error = {"path": str(config_path), "reason": str(e)}
+        logger.warning(
+            "mcp_config_yaml_parse_error",
+            path=str(config_path),
+            reason=str(e),
+            hint=(
+                "Settings fell back to defaults; gate flags and weights were not "
+                "applied. Fix the YAML and reload."
+            ),
+        )
+        return {}
+    except OSError as e:
+        _last_yaml_load_error = {"path": str(config_path), "reason": str(e)}
+        logger.warning(
+            "mcp_config_read_failed",
+            path=str(config_path),
+            reason=str(e),
+        )
         return {}
 
 

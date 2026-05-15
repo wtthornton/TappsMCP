@@ -916,6 +916,41 @@ def check_karpathy_guidelines(project_root: Path) -> CheckResult:
     )
 
 
+def check_tapps_mcp_yaml(project_root: Path) -> CheckResult:
+    """TAP-1787: surface ``.tapps-mcp.yaml`` YAML parse / read failures.
+
+    Without this check, a typo in the config silently turns off
+    ``linear_enforce_gate``, ``memory.safety`` enforcement, and scoring
+    weights, because ``_load_yaml_config`` falls back to an empty dict.
+    """
+    from tapps_core.config.settings import _load_yaml_config, get_last_yaml_load_error
+
+    config_path = project_root / ".tapps-mcp.yaml"
+    if not config_path.exists():
+        return CheckResult(
+            ".tapps-mcp.yaml",
+            True,
+            ".tapps-mcp.yaml not present (defaults in effect)",
+        )
+
+    # Force a fresh load so the cached error reflects this invocation.
+    _load_yaml_config(project_root)
+    err = get_last_yaml_load_error()
+    if err is None:
+        return CheckResult(
+            ".tapps-mcp.yaml",
+            True,
+            ".tapps-mcp.yaml parses cleanly",
+        )
+
+    return CheckResult(
+        ".tapps-mcp.yaml",
+        False,
+        "Failed to parse .tapps-mcp.yaml — settings fell back to defaults",
+        err.get("reason", ""),
+    )
+
+
 def check_claude_settings(project_root: Path) -> CheckResult:
     """Check ``.claude/settings.json`` for permissions and hook schema validity.
 
@@ -1997,6 +2032,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_pretooluse_matchers(root))
     checks.append(check_agents_md(root))
     checks.append(check_karpathy_guidelines(root))
+    checks.append(check_tapps_mcp_yaml(root))
     checks.append(check_claude_settings(root))
     checks.append(check_claude_hook_scripts(root))
     checks.append(check_hooks(root))
