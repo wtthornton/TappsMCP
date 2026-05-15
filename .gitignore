@@ -105,3 +105,9 @@ packages/*/packages/
 # tapps_upgrade timestamped backups (local rollback only; never commit)
 *.pre-upgrade.*
 .ralph/.edits_this_loop
+
+# TAP-1712: temp / legacy session artifacts
+.mcp.json.backup-*
+.ralphrc.legacy-*
+.ralph/.audit.jsonl
+.ralph/.token_count
