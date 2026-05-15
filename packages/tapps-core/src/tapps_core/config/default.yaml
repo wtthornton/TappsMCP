@@ -55,8 +55,3 @@ memory:
     procedural_half_life_days: 30  # Epic 65.11: workflows, steps
     context_half_life_days: 14
     confidence_floor: 0.1
-  session_index:  # Epic 65.10
-    enabled: false
-    max_chunks_per_session: 50
-    max_chars_per_chunk: 500
-    ttl_days: 7

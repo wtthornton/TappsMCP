@@ -365,8 +365,7 @@ class _Params:
     export_format: str = "json"
     include_frontmatter: bool = True
     export_group_by: str = "tier"
-    # Session index (Epic 65.10)
-    include_session_index: bool = False
+    # Session memory (TAP-1633): brain-native session index
     session_id: str = ""
     chunks: str = ""
     # Safety bypass (H3c)
@@ -416,7 +415,6 @@ async def tapps_memory(
     format: str = "json",
     include_frontmatter: bool = True,
     group_by: str = "tier",
-    include_session_index: bool = False,
     session_id: str = "",
     chunks: str = "",
     safety_bypass: bool = False,
@@ -607,7 +605,6 @@ async def tapps_memory(
         export_format=format,
         include_frontmatter=include_frontmatter,
         export_group_by=group_by,
-        include_session_index=include_session_index,
         session_id=session_id,
         chunks=chunks,
         safety_bypass=safety_bypass,
@@ -1071,7 +1068,6 @@ def _handle_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
             effective_limit,
             p.include_summary,
             p.include_sources,
-            p.include_session_index,
         )
 
     # Unranked (legacy FTS5-only) search
@@ -1716,13 +1712,10 @@ def _find_entries_by_query(
 
 
 async def _handle_index_session(store: MemoryStore, p: _Params) -> dict[str, Any]:
-    """Index session chunks via the brain's ``memory_index_session`` tool.
+    """Index session chunks via the brain's ``memory_index_session`` tool (TAP-1633).
 
-    TAP-1633: replaces the legacy local ``tapps_core.memory.session_index``
-    path with the brain's native session-memory surface (BM25 + embeddings
-    + decay). The handler is async because it routes through BrainBridge —
-    the legacy ``memory.session_index.enabled`` config gate no longer
-    applies (the brain handles enable/disable server-side).
+    Routes through BrainBridge — enablement and indexing policy are
+    handled server-side by tapps-brain (BM25 + embeddings + decay).
     """
     if not p.session_id or not p.session_id.strip():
         return {
@@ -3602,13 +3595,8 @@ def _ranked_search(
     limit: int,
     include_summary: bool,
     include_sources: bool = False,
-    include_session_index: bool = False,
 ) -> dict[str, Any]:
-    """Execute ranked BM25 search via MemoryRetriever (hybrid + reranker when enabled).
-
-    When include_session_index and memory.session_index.enabled, merges session
-    index hits with memory results (Epic 65.10).
-    """
+    """Execute ranked BM25 search via MemoryRetriever (hybrid + reranker when enabled)."""
     from tapps_core.config.settings import load_settings
     from tapps_core.memory.reranker import get_reranker
     from tapps_core.memory.retrieval import MemoryRetriever
@@ -3681,13 +3669,6 @@ def _ranked_search(
         if graph_boosted and sm.entry.key in connected:
             entry_dict["graph_boosted"] = True
         result_entries.append(entry_dict)
-
-    # TAP-1633: removed the bespoke local session_index merge — agents that
-    # want session hits now call ``tapps_memory(action=search_sessions)``
-    # which routes to the brain's native ``memory_search_sessions`` tool.
-    # The ``include_session_index`` parameter is accepted for back-compat
-    # but is now a no-op; callers receive a flat memory search result.
-    _ = include_session_index
 
     result: dict[str, Any] = {
         "action": "search",

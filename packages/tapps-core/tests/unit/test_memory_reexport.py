@@ -106,10 +106,6 @@ _REEXPORT_MODULES: list[tuple[str, list[str]]] = [
         ["seed_from_profile"],
     ),
     (
-        "tapps_core.memory.session_index",
-        ["index_session", "search_session_index"],
-    ),
-    (
         "tapps_core.memory.similarity",
         ["compute_similarity", "find_similar", "is_same_topic"],
     ),

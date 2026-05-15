@@ -48,7 +48,6 @@ def _minimal_params(**kwargs: object) -> _Params:
         "export_format": "json",
         "include_frontmatter": True,
         "export_group_by": "tier",
-        "include_session_index": False,
         "session_id": "",
         "chunks": "",
         "safety_bypass": False,

@@ -325,25 +325,6 @@ class MemoryDocValidationSettings(BaseModel):
     )
 
 
-class MemorySessionIndexSettings(BaseModel):
-    """Settings for session indexing (Epic 65.10)."""
-
-    enabled: bool = Field(
-        default=False,
-        description="Enable session indexing (default: false). Trade-off: more coverage, more noise.",
-    )
-    max_chunks_per_session: int = Field(
-        default=50, ge=1, le=200, description="Maximum chunks per session (default: 50)."
-    )
-    max_chars_per_chunk: int = Field(
-        default=500, ge=50, le=2000, description="Maximum characters per chunk (default: 500)."
-    )
-    ttl_days: int | None = Field(
-        default=7,
-        description="TTL in days (default: 7). None = no expiry.",
-    )
-
-
 class MemoryRelationSettings(BaseModel):
     """Settings for entity/relationship extraction (Epic 65.12)."""
 
@@ -510,10 +491,6 @@ class MemorySettings(BaseSettings):
         description="Optional vector/semantic search (Epic 65.7).",
     )
     doc_validation: MemoryDocValidationSettings = Field(default_factory=MemoryDocValidationSettings)
-    session_index: MemorySessionIndexSettings = Field(
-        default_factory=MemorySessionIndexSettings,
-        description="Session indexing for searchable past sessions (Epic 65.10).",
-    )
     hybrid: MemoryHybridSettings = Field(
         default_factory=MemoryHybridSettings,
         description="Hybrid BM25+vector RRF settings (Epic 65.8).",
