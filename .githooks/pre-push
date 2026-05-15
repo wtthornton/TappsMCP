@@ -37,6 +37,10 @@
 # picked up automatically. No symlinks; no per-developer .git/hooks/ edits.
 
 set -e
+# TAP-1784: pipefail so `pytest ... | tail -20` surfaces pytest's exit code,
+# not tail's (always-zero) one. Without this, the `if !` branch below never
+# fires on red, and broken changes ship to master.
+set -o pipefail
 
 remote="$1"
 url="$2"
