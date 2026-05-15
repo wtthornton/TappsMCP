@@ -9,6 +9,7 @@ tools:
   - Write
   - Glob
   - Grep
+  - mcp__tapps-mcp__tapps_memory
   - mcp__tapps-brain__brain_recall
   - mcp__tapps-brain__brain_remember
   - mcp__tapps-brain__brain_learn_success
@@ -50,12 +51,22 @@ Run in one of three modes determined by your task input:
 
 1. Read the current task description (Linear issue body, fix_plan.md entry,
    or PROMPT.md context) from your input.
-2. Call `mcp__tapps-brain__brain_recall` with focused queries to surface
-   prior learnings (see Keyword Strategy below).
-3. Write `.ralph/brief.json` matching the schema in `lib/brief.sh`:
+2. Call `mcp__tapps-mcp__tapps_memory(action="recall_many", entries=...)`
+   ONCE, packing the three keyword-class queries (Linear ID, module
+   names, task-type keyword) into a single JSON-encoded `entries`
+   array. See Recall Strategy below. Do NOT issue serial
+   `brain_recall` calls in this path — one batch only.
+3. If the batched response surfaces ≥1 hit, follow up with ONE
+   `mcp__tapps-mcp__tapps_memory(action="related", key=<top-hit-key>,
+   max_hops=2)` to pull in knowledge-graph neighbors of the strongest
+   match. Merge those into the candidate set before filtering. Skip
+   this step entirely if every batched query returned zero entries.
+4. Write `.ralph/brief.json` matching the schema in `lib/brief.sh`:
    `task_id`, `task_title`, `prior_learnings[]`, `recommended_files[]`,
-   `risks[]`, `complexity`, `generated_at`.
-4. Return a ≤3-line summary to the caller: complexity verdict, top
+   `risks[]`, `complexity`, `generated_at`. Each `prior_learnings[]`
+   entry MUST include its source `key` (verbatim from the memory
+   response) so MODE=debrief can rate it via `feedback_rate`.
+5. Return a ≤3-line summary to the caller: complexity verdict, top
    learning, and one risk to watch.
 
 **MODE=debrief** (invoked at epic boundary or task close):
@@ -69,19 +80,31 @@ Run in one of three modes determined by your task input:
      `description=task_summary`, `tags=["task:$task_id", "module:$first_module"]`.
    - `mcp__tapps-brain__brain_learn_failure` with
      `description=task_summary`, `error=outcome_detail`, same tags.
-4. If `OUTCOME_DETAIL` carries a non-obvious insight (a workaround, a
+4. Rate each `prior_learnings[]` entry from the brief via the feedback
+   flywheel — one `tapps_memory(action="rate", ...)` call per entry:
+   - `key=<entry.key>` (verbatim from the brief)
+   - `rating="helpful"` when outcome=success (the surfaced learning
+     supported a successful task), `rating="not_helpful"` when
+     outcome=failure (the learning was insufficient or misleading).
+     Override per-entry if `OUTCOME_DETAIL` explicitly flips the
+     judgement (e.g. a learning that misled the agent on a successful
+     task should still be `not_helpful`).
+   - `session_id="ralph-<task_id>"`
+   - `details_json='{"task_id":"<id>","outcome":"<success|failure>","applied":true,"note":"<one-line why>"}'`
+   Skip this step if `prior_learnings[]` is empty — nothing to rate.
+5. If `OUTCOME_DETAIL` carries a non-obvious insight (a workaround, a
    surprising root cause, a constraint worth preserving), additionally
    call `mcp__tapps-brain__brain_remember` with the insight text,
    `tier=procedural`, `agent_scope=domain`.
-5. Clear the brief — delete `.ralph/brief.json` (brief_clear) so the
+6. Clear the brief — delete `.ralph/brief.json` (brief_clear) so the
    next loop starts fresh.
-6. Return a one-line confirmation.
+7. Return a one-line confirmation.
 
-## brain_recall Keyword Strategy
+## Recall Strategy
 
-Extract three classes of keywords from the task and run one recall per
-class. Cap at 3 recall calls per brief — over-querying inflates context
-without adding signal.
+Extract three classes of keywords from the task and pack them into a
+single `tapps_memory(action="recall_many", entries=...)` call. One
+batch round-trip per brief — no serial recalls, no looped queries.
 
 1. **Linear ID** if present (e.g. `TAP-915`) — surfaces explicit prior
    context for that ticket or its predecessors.
@@ -90,13 +113,26 @@ without adding signal.
 3. **Task-type keywords**: `refactor`, `test`, `hook`, `circuit breaker`,
    `rate limit`, `session`, `stream`, `optimizer`.
 
-Combine results, dedupe by content similarity, keep the top 5 most
+Encode as `entries='["TAP-915","ralph_loop.sh","circuit breaker"]'`.
+The response carries one result block per query, each with its own
+`memories[]` list.
+
+After the batch, if any block returned ≥1 entry, follow up with ONE
+`tapps_memory(action="related", key=<top-hit-key>, max_hops=2)` to pull
+in graph neighbors of the strongest match (highest `score`). Merge those
+neighbor entries into the candidate set before filtering.
+
+Combine results across blocks, dedupe by `key`, keep the top 5 most
 relevant entries for `prior_learnings[]`. Filter out entries with
 `tier=cache` (those are short-lived caches, not durable learnings); keep
 `tier=procedural` and `tier=semantic`. Within those, bias toward entries
 tagged `failure` — failures are more informative than successes for
-avoiding the same trap twice. If recall returns nothing relevant, emit
-`prior_learnings: []` rather than fabricating entries.
+avoiding the same trap twice. If the batch + follow-up return nothing
+relevant, emit `prior_learnings: []` rather than fabricating entries.
+
+Each surviving entry in `prior_learnings[]` MUST carry the verbatim
+`key` from the memory response. MODE=debrief uses these keys to emit
+`feedback_rate` calls — without them, the flywheel gets no signal.
 
 ## coordinator_confidence Rubric
 
@@ -113,6 +149,10 @@ quality of the brain_recall hits:
 
 Downstream agents use this to decide whether to trust `prior_learnings`
 or to re-explore from scratch.
+
+Compute confidence from the batched `recall_many` response (plus the
+optional `related` follow-up) — same rubric, same bands, just sourced
+from one round-trip instead of three serial calls.
 
 ## Risk Classification Rubric
 
