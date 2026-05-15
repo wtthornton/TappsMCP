@@ -1056,6 +1056,29 @@ class TappsMCPSettings(BaseSettings):
             "These take priority over Context7/LlmsTxt providers."
         ),
     )
+    doc_sources_allow_http: bool = Field(
+        default=False,
+        description=(
+            "TAP-1791: when True, allow http:// scheme for doc_sources URLs. "
+            "Default False forces https:// to prevent SSRF/credential leaks."
+        ),
+    )
+    doc_sources_allow_private_hosts: list[str] = Field(
+        default_factory=list,
+        description=(
+            "TAP-1791: explicit hostname allowlist for private/loopback/link-local "
+            "doc_sources URLs. Hostnames not on this list resolving to private, "
+            "loopback, or link-local IPs are rejected to prevent SSRF."
+        ),
+    )
+    doc_sources_max_bytes: int = Field(
+        default=5 * 1024 * 1024,
+        ge=1,
+        description=(
+            "TAP-1791: max bytes streamed from a doc_sources URL. "
+            "Defaults to 5 MB; bodies exceeding this are rejected."
+        ),
+    )
 
     # Tech stack RAG boost (Epic 54)
     tech_stack_boost: float = Field(

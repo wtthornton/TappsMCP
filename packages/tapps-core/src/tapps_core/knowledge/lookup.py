@@ -31,6 +31,11 @@ from tapps_core.knowledge.context7_client import Context7Client, Context7Error
 from tapps_core.knowledge.fuzzy_matcher import did_you_mean, fuzzy_match_library
 from tapps_core.knowledge.models import CacheEntry, LookupResult
 from tapps_core.knowledge.rag_safety import check_content_safety
+from tapps_core.knowledge.url_guard import (
+    UrlGuardConfig,
+    UrlGuardError,
+    validate_doc_source_url,
+)
 
 if TYPE_CHECKING:
     from pydantic import SecretStr
@@ -530,26 +535,9 @@ class LookupEngine:
 
         # Try URL if no file content
         if content is None and doc_config.url:
-            try:
-                import httpx
-
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    resp = await client.get(doc_config.url)
-                    resp.raise_for_status()
-                    content = resp.text
-                    source_label = "custom_url"
-                    logger.debug(
-                        "custom_doc_source_url",
-                        library=library,
-                        url=doc_config.url,
-                    )
-            except Exception as exc:
-                logger.warning(
-                    "custom_doc_source_url_error",
-                    library=library,
-                    url=doc_config.url,
-                    error=str(exc),
-                )
+            content = await self._fetch_custom_doc_url(library, doc_config.url)
+            if content is not None:
+                source_label = "custom_url"
 
         if content is None:
             return None
@@ -589,6 +577,81 @@ class LookupEngine:
             response_time_ms=round(elapsed, 1),
             cache_hit=False,
         )
+
+    async def _fetch_custom_doc_url(self, library: str, url: str) -> str | None:
+        """Fetch a custom doc-source URL with SSRF + size guards (TAP-1791)."""
+        import httpx
+
+        assert self._settings is not None  # guarded by caller
+        guard = UrlGuardConfig(
+            allow_http=self._settings.doc_sources_allow_http,
+            allow_private_hosts=frozenset(
+                h.lower() for h in self._settings.doc_sources_allow_private_hosts
+            ),
+            max_bytes=self._settings.doc_sources_max_bytes,
+        )
+
+        try:
+            await asyncio.to_thread(validate_doc_source_url, url, guard)
+        except UrlGuardError as exc:
+            logger.warning(
+                "custom_doc_source_url_blocked",
+                library=library,
+                url=url,
+                error=str(exc),
+            )
+            return None
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+                async with client.stream("GET", url) as resp:
+                    resp.raise_for_status()
+                    declared = resp.headers.get("content-length")
+                    if declared is not None:
+                        try:
+                            if int(declared) > guard.max_bytes:
+                                logger.warning(
+                                    "custom_doc_source_url_too_large",
+                                    library=library,
+                                    url=url,
+                                    declared_bytes=int(declared),
+                                    max_bytes=guard.max_bytes,
+                                )
+                                return None
+                        except ValueError:
+                            pass
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in resp.aiter_bytes():
+                        total += len(chunk)
+                        if total > guard.max_bytes:
+                            logger.warning(
+                                "custom_doc_source_url_too_large",
+                                library=library,
+                                url=url,
+                                received_bytes=total,
+                                max_bytes=guard.max_bytes,
+                            )
+                            return None
+                        chunks.append(chunk)
+                    body = b"".join(chunks)
+                    encoding = resp.encoding or "utf-8"
+            content = body.decode(encoding, errors="replace")
+            logger.debug(
+                "custom_doc_source_url",
+                library=library,
+                url=url,
+                bytes=len(body),
+            )
+            return content
+        except Exception as exc:
+            logger.warning(
+                "custom_doc_source_url_error",
+                library=library,
+                url=url,
+                error=str(exc),
+            )
+            return None
 
     async def _resolve_and_fetch(
         self,

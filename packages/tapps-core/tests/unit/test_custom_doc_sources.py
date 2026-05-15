@@ -124,6 +124,43 @@ class TestLocalFileDocSource:
         assert not result.success
 
 
+def _mock_httpx_stream(
+    body: bytes,
+    *,
+    content_length: str | None = None,
+    raise_for_status: Exception | None = None,
+) -> MagicMock:
+    """Build an AsyncClient that yields *body* via ``stream("GET", url)``."""
+    response = MagicMock()
+    response.headers = (
+        {"content-length": content_length} if content_length is not None else {}
+    )
+    response.encoding = "utf-8"
+
+    if raise_for_status is not None:
+        response.raise_for_status = MagicMock(side_effect=raise_for_status)
+    else:
+        response.raise_for_status = MagicMock()
+
+    async def _aiter_bytes() -> "object":  # noqa: D401 - test helper
+        for chunk in (body[i : i + 4096] for i in range(0, len(body), 4096)) or [b""]:
+            yield chunk
+
+    response.aiter_bytes = _aiter_bytes
+
+    stream_ctx = AsyncMock()
+    stream_ctx.__aenter__ = AsyncMock(return_value=response)
+    stream_ctx.__aexit__ = AsyncMock(return_value=False)
+
+    client = MagicMock()
+    client.stream = MagicMock(return_value=stream_ctx)
+
+    client_ctx = AsyncMock()
+    client_ctx.__aenter__ = AsyncMock(return_value=client)
+    client_ctx.__aexit__ = AsyncMock(return_value=False)
+    return client_ctx
+
+
 class TestUrlDocSource:
     """Custom doc source from a URL."""
 
@@ -138,16 +175,15 @@ class TestUrlDocSource:
         cache = _make_cache(tmp_path)
         engine = LookupEngine(cache, settings=settings)
 
-        mock_response = MagicMock()
-        mock_response.text = "# Remote Docs\n\nContent from URL."
-        mock_response.raise_for_status = MagicMock()
+        client_ctx = _mock_httpx_stream(b"# Remote Docs\n\nContent from URL.")
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-
-        with patch.object(real_httpx, "AsyncClient", return_value=mock_client):
+        with (
+            patch(
+                "tapps_core.knowledge.lookup.validate_doc_source_url",
+                lambda url, config: url,
+            ),
+            patch.object(real_httpx, "AsyncClient", return_value=client_ctx),
+        ):
             result = await engine.lookup("remote-lib", "overview")
         await engine.close()
 
@@ -169,11 +205,204 @@ class TestUrlDocSource:
         engine._registry.healthy_providers.return_value = []
         engine._api_key = None  # disable legacy Context7 fallback
 
-        with patch.object(real_httpx, "AsyncClient", side_effect=Exception("Connection failed")):
+        with (
+            patch(
+                "tapps_core.knowledge.lookup.validate_doc_source_url",
+                lambda url, config: url,
+            ),
+            patch.object(real_httpx, "AsyncClient", side_effect=Exception("Connection failed")),
+        ):
             result = await engine.lookup("remote-lib", "overview")
         await engine.close()
 
         assert not result.success
+
+
+class TestUrlDocSourceSsrfGuards:
+    """TAP-1791: SSRF / scheme / size guards on custom URL fetch."""
+
+    @pytest.mark.asyncio
+    async def test_imds_metadata_host_rejected(self, tmp_path: Path) -> None:
+        settings = _make_settings(
+            tmp_path,
+            doc_sources={
+                "creds": DocSourceConfig(
+                    url="http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+                ),
+            },
+        )
+        cache = _make_cache(tmp_path)
+        engine = LookupEngine(cache, settings=settings)
+        engine._registry = MagicMock()
+        engine._registry.healthy_providers.return_value = []
+        engine._api_key = None
+
+        result = await engine.lookup("creds", "overview")
+        await engine.close()
+
+        assert not result.success
+        cache.put.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_localhost_rejected(self, tmp_path: Path) -> None:
+        settings = _make_settings(
+            tmp_path,
+            doc_sources={
+                "admin": DocSourceConfig(url="http://localhost:8080/admin"),
+            },
+        )
+        # localhost passes scheme but should still fail on loopback resolve;
+        # also flip allow_http so the test isolates the SSRF guard:
+        settings = TappsMCPSettings(
+            project_root=tmp_path,
+            doc_sources=settings.doc_sources,
+            doc_sources_allow_http=True,
+        )
+        cache = _make_cache(tmp_path)
+        engine = LookupEngine(cache, settings=settings)
+        engine._registry = MagicMock()
+        engine._registry.healthy_providers.return_value = []
+        engine._api_key = None
+
+        result = await engine.lookup("admin", "overview")
+        await engine.close()
+
+        assert not result.success
+        cache.put.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_http_scheme_rejected_by_default(self, tmp_path: Path) -> None:
+        settings = _make_settings(
+            tmp_path,
+            doc_sources={
+                "lib": DocSourceConfig(url="http://example.com/docs"),
+            },
+        )
+        cache = _make_cache(tmp_path)
+        engine = LookupEngine(cache, settings=settings)
+        engine._registry = MagicMock()
+        engine._registry.healthy_providers.return_value = []
+        engine._api_key = None
+
+        result = await engine.lookup("lib", "overview")
+        await engine.close()
+
+        assert not result.success
+        cache.put.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_content_length_over_budget_rejected(self, tmp_path: Path) -> None:
+        import httpx as real_httpx
+
+        settings = TappsMCPSettings(
+            project_root=tmp_path,
+            doc_sources={"lib": DocSourceConfig(url="https://example.com/docs.md")},
+            doc_sources_max_bytes=1024,
+        )
+        cache = _make_cache(tmp_path)
+        engine = LookupEngine(cache, settings=settings)
+        engine._registry = MagicMock()
+        engine._registry.healthy_providers.return_value = []
+        engine._api_key = None
+
+        client_ctx = _mock_httpx_stream(
+            b"unused",
+            content_length=str(5 * 1024 * 1024 * 1024),  # 5 GB
+        )
+
+        with (
+            patch(
+                "tapps_core.knowledge.lookup.validate_doc_source_url",
+                lambda url, config: url,
+            ),
+            patch.object(real_httpx, "AsyncClient", return_value=client_ctx),
+        ):
+            result = await engine.lookup("lib", "overview")
+        await engine.close()
+
+        assert not result.success
+        cache.put.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_streamed_body_over_budget_aborts(self, tmp_path: Path) -> None:
+        import httpx as real_httpx
+
+        settings = TappsMCPSettings(
+            project_root=tmp_path,
+            doc_sources={"lib": DocSourceConfig(url="https://example.com/docs.md")},
+            doc_sources_max_bytes=128,
+        )
+        cache = _make_cache(tmp_path)
+        engine = LookupEngine(cache, settings=settings)
+        engine._registry = MagicMock()
+        engine._registry.healthy_providers.return_value = []
+        engine._api_key = None
+
+        # No Content-Length but the body exceeds the cap:
+        client_ctx = _mock_httpx_stream(b"x" * 4096)
+
+        with (
+            patch(
+                "tapps_core.knowledge.lookup.validate_doc_source_url",
+                lambda url, config: url,
+            ),
+            patch.object(real_httpx, "AsyncClient", return_value=client_ctx),
+        ):
+            result = await engine.lookup("lib", "overview")
+        await engine.close()
+
+        assert not result.success
+        cache.put.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_redirect_following_disabled(self, tmp_path: Path) -> None:
+        import httpx as real_httpx
+
+        settings = _make_settings(
+            tmp_path,
+            doc_sources={"lib": DocSourceConfig(url="https://example.com/docs.md")},
+        )
+        cache = _make_cache(tmp_path)
+        engine = LookupEngine(cache, settings=settings)
+
+        captured: dict[str, object] = {}
+
+        def _factory(*args: object, **kwargs: object) -> MagicMock:
+            captured.update(kwargs)
+            return _mock_httpx_stream(b"docs")
+
+        with (
+            patch(
+                "tapps_core.knowledge.lookup.validate_doc_source_url",
+                lambda url, config: url,
+            ),
+            patch.object(real_httpx, "AsyncClient", side_effect=_factory),
+        ):
+            await engine.lookup("lib", "overview")
+        await engine.close()
+
+        assert captured.get("follow_redirects") is False
+
+    @pytest.mark.asyncio
+    async def test_allowlisted_host_bypasses_guard(self, tmp_path: Path) -> None:
+        import httpx as real_httpx
+
+        settings = TappsMCPSettings(
+            project_root=tmp_path,
+            doc_sources={"lib": DocSourceConfig(url="http://localhost:8080/docs")},
+            doc_sources_allow_http=True,
+            doc_sources_allow_private_hosts=["localhost"],
+        )
+        cache = _make_cache(tmp_path)
+        engine = LookupEngine(cache, settings=settings)
+
+        client_ctx = _mock_httpx_stream(b"internal docs")
+        with patch.object(real_httpx, "AsyncClient", return_value=client_ctx):
+            result = await engine.lookup("lib", "overview")
+        await engine.close()
+
+        assert result.success
+        assert "internal docs" in (result.content or "")
 
 
 class TestCustomSourcePriority:
