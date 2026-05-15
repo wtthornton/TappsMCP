@@ -151,6 +151,32 @@ health` row (gap / rating counts from `flywheel_report` plus
 |--------|-----------|-------------|
 | **health** | -- | Store health / integrity-style signals when supported by tapps-brain. |
 
+## Brain health diagnostics
+
+`tapps_session_start` returns a `data.brain_bridge_health` block on every call so agents can verify the brain is reachable before issuing memory writes. The same probe powers `tapps doctor`'s brain-health row.
+
+| Field | Meaning |
+|-------|---------|
+| `enabled` | True when the memory pipeline is configured for this project. |
+| `ok` | Roll-up — True only when bridge can reach the brain *and* pass its native `health` self-check. |
+| `dsn_reachable` | HTTP mode: brain endpoint responded to a probe. In-process mode: pool was constructible. |
+| `pool_config_valid` | Connection-pool sizing / DSN parsed cleanly. |
+| `native_health_ok` | Result of the brain's own `health` tool — covers schema, embeddings, indexes. |
+| `errors` / `warnings` | Populated when one of the above failed; surface these to the user instead of swallowing them. |
+| `details` | `mode` (`http` / `in_process`), `http_url`, negotiated `brain_version`, and the brain's `brain_status`. |
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `errors: ["brain_auth_failed"]`, HTTP 401 / 403 | Brain server requires a bearer token, none supplied. | Set `TAPPS_BRAIN_AUTH_TOKEN` in your shell or `.mcp.json` env. For offline / no-brain workflows, set `memory.tolerate_brain_auth_failure: true` in `.tapps-mcp.yaml` to keep the soft-degraded behavior. See [ADR-0009](adr/0009-pin-tapps-brain-version-floor-at-3170.md) and CLAUDE.md. |
+| `errors: ["BrainBridgeUnavailable"]`, `enabled: false` | tapps-brain HTTP service is not running, or `memory.brain_url` points nowhere. | Start tapps-brain (`docker compose up -d` in the tapps-brain checkout) and confirm `localhost:8080` responds. Re-run `tapps doctor`. |
+| `details.brain_version` below the floor (e.g. `3.16.x`) | Installed brain is older than the version pinned by tapps-mcp. | Upgrade tapps-brain — see [ADR-0009](adr/0009-pin-tapps-brain-version-floor-at-3170.md) for the current floor. |
+| `native_health_ok: false`, `details.brain_status` not `ok` | Brain is reachable but its own self-check failed (schema drift, missing index, embedding model unavailable). | Inspect tapps-brain logs; restart the service. If schema drift, run the brain's migration. |
+| `enabled: true`, `ok: false`, no `errors` | The probe ran but returned an unexpected payload shape. | Check `details` for the raw response and file an issue against tapps-brain. |
+
+See [AGENTS.md](../AGENTS.md#brain-health-diagnostics-brain_bridge_health) for the agent-facing summary of the same block.
+
 ## Hive / Agent Teams (M3)
 
 Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` for live Hive usage; actions still return structured payloads when Hive is disabled.

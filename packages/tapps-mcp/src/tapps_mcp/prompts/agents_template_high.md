@@ -155,6 +155,8 @@ REQUIRED: Use `tapps_memory` for all architecture decisions and quality patterns
 
 **Diagnostics:** `health`
 
+**Brain health (`brain_bridge_health`):** every `tapps_session_start` response carries a `data.brain_bridge_health` block — `enabled`, `ok`, `dsn_reachable`, `pool_config_valid`, `native_health_ok`, `errors`, `warnings`, plus `details` (mode, `http_url`, `brain_version`, `brain_status`). `tapps doctor` mirrors the same probe. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md#brain-health-diagnostics) for troubleshooting.
+
 **Hive / Agent Teams:** `hive_status`, `hive_search`, `hive_propagate`, `agent_register`
 
 Shipped defaults enable expert auto-save, recurring quick_check memory, architectural supersede, impact enrichment, and memory_hooks — override in `.tapps-mcp.yaml`. See `docs/MEMORY_REFERENCE.md`.

@@ -168,6 +168,22 @@ RECOMMENDED: Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Default pipeline behavior (POC-oriented):** Shipped config turns on auto-save quality signals, recurring quick_check memory, architectural supersede, impact enrichment, and `memory_hooks` auto-recall/capture — set `false` in `.tapps-mcp.yaml` if you want a quieter setup. See `docs/MEMORY_REFERENCE.md`.
 
+### Brain health diagnostics (`brain_bridge_health`)
+
+Every `tapps_session_start` response includes a `data.brain_bridge_health` block describing the live state of the tapps-brain connection:
+
+| Field | Meaning |
+|-------|---------|
+| **enabled** | True when the bridge is configured (memory pipeline turned on). |
+| **ok** | Roll-up: True only when the bridge can both reach the brain and pass its native self-check. |
+| **dsn_reachable** | HTTP-bridge mode: brain endpoint responded to a probe. In-process mode: pool was constructible. |
+| **pool_config_valid** | Connection pool sizing / DSN parsed cleanly. |
+| **native_health_ok** | Result of the brain's own `health` tool — covers schema, embeddings, and indexes. |
+| **errors / warnings** | Non-empty when one of the checks above failed; agents should surface these instead of swallowing them. |
+| **details** | Mode (`http` / `in_process`), `http_url`, negotiated `brain_version`, and the brain's own `brain_status`. |
+
+`tapps doctor` runs the same probe in CLI form and adds a brain-health row to its summary, so agents and humans see the same signal. When `errors` mentions `brain_auth_failed`, set `TAPPS_BRAIN_AUTH_TOKEN` (or set `memory.tolerate_brain_auth_failure: true` for offline workflows) — see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md#brain-health-diagnostics) for the full troubleshooting matrix.
+
 ### Memory tiers and scopes
 
 **Tiers:** `architectural` (180-day half-life, stable decisions), `pattern` (60-day, conventions), `procedural` (30-day, workflows), `context` (14-day, short-lived)

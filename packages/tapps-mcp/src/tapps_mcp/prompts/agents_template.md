@@ -179,6 +179,8 @@ Use `tapps_memory` for architecture decisions and quality patterns.
 
 **Cross-session handoff:** when one session needs to pass a token, ID, or short payload to a later session in the same project, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing it to stdout. The default `project` scope is already cross-session within the same repo. Read it back from the next session with `tapps_memory(action="get", key="<slug>")` or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"`; for cross-project, use the federation actions.
 
+**Brain health (`brain_bridge_health`):** every `tapps_session_start` response carries a `data.brain_bridge_health` block — `enabled`, `ok`, `dsn_reachable`, `pool_config_valid`, `native_health_ok`, `errors`, `warnings`, plus `details` (mode, `http_url`, `brain_version`, `brain_status`). `tapps doctor` runs the same probe. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md#brain-health-diagnostics) for troubleshooting `brain_auth_failed`, `BrainBridgeUnavailable`, and version-floor mismatches.
+
 ---
 
 ## Platform hooks and automation
