@@ -87,26 +87,26 @@ class TestCheckBrainVersion:
         from tapps_core.brain_bridge import check_brain_version
 
         fake_get = _mock_http_response(
-            json_payload={"version": "3.17.0"},
+            json_payload={"version": "3.18.0"},
         )
         with patch("tapps_core.brain_bridge.httpx.get", side_effect=fake_get):
             result = check_brain_version("http://brain.example")
 
         assert result["ok"] is True
-        assert result["version"] == "3.17.0"
+        assert result["version"] == "3.18.0"
 
     def test_version_check_fails_when_below_floor(self) -> None:
         from tapps_core.brain_bridge import check_brain_version
 
-        fake_get = _mock_http_response(json_payload={"version": "3.16.0"})
+        fake_get = _mock_http_response(json_payload={"version": "3.17.0"})
         with patch("tapps_core.brain_bridge.httpx.get", side_effect=fake_get):
             result = check_brain_version("http://brain.example")
 
         assert result["ok"] is False
-        assert result["version"] == "3.16.0"
+        assert result["version"] == "3.17.0"
         assert len(result["errors"]) == 1
-        assert "3.16.0" in result["errors"][0]
-        assert ">=3.17.0" in result["errors"][0]
+        assert "3.17.0" in result["errors"][0]
+        assert ">=3.18.0" in result["errors"][0]
 
     def test_version_check_fails_at_or_above_ceiling(self) -> None:
         from tapps_core.brain_bridge import check_brain_version

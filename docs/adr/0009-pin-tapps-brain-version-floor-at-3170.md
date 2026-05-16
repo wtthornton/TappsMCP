@@ -4,7 +4,7 @@ Date: 2026-05-15
 
 ## Status
 
-accepted (supersedes [ADR-0002](0002-pin-tapps-brain-version-floor-at-372.md))
+superseded by [ADR-0010](0010-pin-tapps-brain-version-floor-at-3180.md) (originally supersedes [ADR-0002](0002-pin-tapps-brain-version-floor-at-372.md))
 
 ## Context
 

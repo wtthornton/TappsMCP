@@ -2,12 +2,13 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-# tapps-brain is sourced from its GitHub repo pinned to the v3.8.0 commit SHA so
-# both local dev and CI resolve the same artifact. When v3.8.0 is tagged/released
-# on GitHub (or published to PyPI), swap this for ``tag = "v3.8.0"`` or remove
-# the ``[tool.uv.sources]`` entry entirely and rely on the version pin in
+# tapps-brain is sourced from its GitHub repo pinned to the v3.18.0 commit SHA so
+# both local dev and CI resolve the same artifact. See ADR-0010 for the version
+# floor rationale (deprecated MCP aliases removed in 3.18.0). When v3.18.0 is
+# tagged on GitHub, swap this for ``tag = "v3.18.0"`` or remove the
+# ``[tool.uv.sources]`` entry entirely and rely on the version pin in
 # ``packages/tapps-core/pyproject.toml``.
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "a3654693df32d64f65cd3d97e7e28b2499a5308b" }
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "afb9fbe05f8befe0544399f9d824e891059a566f" }
 
 [tool.uv]
 dev-dependencies = [
@@ -181,7 +182,7 @@ markers = [
     "integration: marks tests as integration tests",
     "slow: marks tests as slow (subprocess-heavy, may be skipped with -m 'not slow')",
     "optional_deps: marks tests requiring optional dependencies (sentence-transformers, faiss-cpu, cohere)",
-    "brain_contract: marks tests requiring a running tapps-brain HTTP server (3.17+)",
+    "brain_contract: marks tests requiring a running tapps-brain HTTP server (3.18+)",
 ]
 addopts = "-v --tb=short -p randomly --randomly-seed=last"
 filterwarnings = [

@@ -65,7 +65,7 @@ _WRITE_QUEUE_CAP: int = 100
 # Keep in sync with the ``tapps-brain`` pin in
 # ``packages/tapps-core/pyproject.toml``. The floor is the minimum version
 # known to ship all fields tapps-mcp consumes; the ceiling is the next major.
-_BRAIN_VERSION_FLOOR: str = "3.17.0"
+_BRAIN_VERSION_FLOOR: str = "3.18.0"
 _BRAIN_VERSION_CEILING: str = "4.0.0"
 _BRAIN_HEALTH_TIMEOUT_SECONDS: float = 5.0
 

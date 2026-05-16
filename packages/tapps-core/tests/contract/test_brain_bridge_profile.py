@@ -39,7 +39,7 @@ pytestmark = pytest.mark.brain_contract
 
 
 _DEFAULT_URL = "http://127.0.0.1:8080"
-_REQUIRED_BRAIN_VERSION = (3, 17, 0)
+_REQUIRED_BRAIN_VERSION = (3, 18, 0)
 
 
 def _parse_version(value: str) -> tuple[int, ...]:
@@ -78,7 +78,7 @@ def _check_brain_reachable(url: str) -> str | None:
         return "tapps-brain /health returned non-JSON body"
     version = str(payload.get("version", ""))
     if _parse_version(version) < _REQUIRED_BRAIN_VERSION:
-        return f"tapps-brain version {version} below required 3.17.0"
+        return f"tapps-brain version {version} below required 3.18.0"
     return None
 
 
