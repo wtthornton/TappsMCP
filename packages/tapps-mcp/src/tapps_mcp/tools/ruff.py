@@ -99,19 +99,30 @@ def run_ruff_fix(file_path: str, *, cwd: str | None = None, timeout: int = 30) -
     """Run ``ruff check --fix`` and return the number of fixes applied.
 
     Returns 0 if ruff is not available or the run fails.
+
+    TAP-1789: ``ruff check --fix`` writes fixes to disk and prints the
+    *remaining* (post-fix) issues. The previous implementation treated that
+    output as the baseline, then ran a non-fix check for the "after" — both
+    reflected the already-fixed file, so ``len(before) - len(after)`` was
+    always 0. Mirror the async sibling's ordering: read-only check, fix,
+    read-only check.
     """
-    result = run_command(
-        ["ruff", "check", "--fix", "--output-format=json", file_path],
+    before_result = run_command(
+        ["ruff", "check", "--output-format=json", file_path],
         cwd=cwd,
         timeout=timeout,
     )
-    if not result.stdout.strip():
-        return 0
     try:
-        before = json.loads(result.stdout)
+        before = json.loads(before_result.stdout) if before_result.stdout.strip() else []
     except json.JSONDecodeError:
-        return 0
-    # ruff --fix returns remaining issues; compute fixes applied by comparing
+        before = []
+
+    run_command(
+        ["ruff", "check", "--fix", file_path],
+        cwd=cwd,
+        timeout=timeout,
+    )
+
     after_result = run_command(
         ["ruff", "check", "--output-format=json", file_path],
         cwd=cwd,
