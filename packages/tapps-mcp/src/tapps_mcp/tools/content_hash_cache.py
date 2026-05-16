@@ -23,6 +23,7 @@ per-server-process accelerator, not a durable store.
 from __future__ import annotations
 
 import hashlib
+import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
@@ -46,6 +47,12 @@ _cache: OrderedDict[tuple[str, str], tuple[dict[str, Any], float]] = OrderedDict
 # Telemetry counters (observed by tapps_doctor / tapps_stats in future slices).
 _stats: dict[str, int] = {"hits": 0, "misses": 0, "sets": 0, "evictions": 0}
 
+# TAP-1797: serialise all OrderedDict mutations + stats updates. Async tool
+# handlers offload hash+lookup work onto threads (`asyncio.to_thread`); without
+# this lock, concurrent `move_to_end` / `popitem` / `__setitem__` calls hit
+# `RuntimeError: OrderedDict mutated during iteration` and lose entries.
+_lock = threading.Lock()
+
 
 def content_hash(path: Path) -> str:
     """SHA-256 hex of a file's bytes. Raises FileNotFoundError if absent."""
@@ -58,43 +65,48 @@ def content_hash(path: Path) -> str:
 
 def get(kind: str, sha: str, *, ttl: float = _DEFAULT_TTL) -> dict[str, Any] | None:
     """Return a cached value if present and not expired; else ``None``."""
-    entry = _cache.get((kind, sha))
-    if entry is None:
-        _stats["misses"] += 1
-        return None
-    value, stored_at = entry
-    if ttl > 0 and (time.monotonic() - stored_at) > ttl:
-        _cache.pop((kind, sha), None)
-        _stats["misses"] += 1
-        return None
-    _stats["hits"] += 1
-    # Move to end (LRU-ish behavior for eviction).
-    _cache.move_to_end((kind, sha))
-    return value
+    with _lock:
+        entry = _cache.get((kind, sha))
+        if entry is None:
+            _stats["misses"] += 1
+            return None
+        value, stored_at = entry
+        if ttl > 0 and (time.monotonic() - stored_at) > ttl:
+            _cache.pop((kind, sha), None)
+            _stats["misses"] += 1
+            return None
+        _stats["hits"] += 1
+        # Move to end (LRU-ish behavior for eviction).
+        _cache.move_to_end((kind, sha))
+        return value
 
 
 def set(kind: str, sha: str, value: dict[str, Any]) -> None:  # noqa: A001
     """Store ``value`` under ``(kind, sha)``. Evicts FIFO when over cap."""
-    _cache[(kind, sha)] = (value, time.monotonic())
-    _cache.move_to_end((kind, sha))
-    _stats["sets"] += 1
-    while len(_cache) > _MAX_ENTRIES:
-        _cache.popitem(last=False)
-        _stats["evictions"] += 1
+    with _lock:
+        _cache[(kind, sha)] = (value, time.monotonic())
+        _cache.move_to_end((kind, sha))
+        _stats["sets"] += 1
+        while len(_cache) > _MAX_ENTRIES:
+            _cache.popitem(last=False)
+            _stats["evictions"] += 1
 
 
 def clear() -> None:
     """Empty the cache and reset stats (for tests and tapps_doctor reset)."""
-    _cache.clear()
-    for k in _stats:
-        _stats[k] = 0
+    with _lock:
+        _cache.clear()
+        for k in _stats:
+            _stats[k] = 0
 
 
 def stats() -> dict[str, int]:
     """Return a copy of hit/miss/set/eviction counters."""
-    return dict(_stats)
+    with _lock:
+        return dict(_stats)
 
 
 def size() -> int:
     """Current number of entries in the cache."""
-    return len(_cache)
+    with _lock:
+        return len(_cache)
