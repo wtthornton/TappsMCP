@@ -552,6 +552,10 @@ async def tapps_memory(
     t0 = time.perf_counter()
 
     if action not in _VALID_ACTIONS:
+        # TAP-1801: failure must override the eager success=True _record_call
+        # above; otherwise the checklist counts an error-only invocation as a
+        # satisfied tapps_memory slot.
+        _record_call("tapps_memory", success=False)
         return error_response(
             "tapps_memory",
             "invalid_action",
@@ -562,6 +566,8 @@ async def tapps_memory(
         store = _get_memory_store()
     except Exception as exc:
         sub_code = _classify_store_init_error(exc)
+        # TAP-1801: same — record store-init failure as success=False.
+        _record_call("tapps_memory", success=False)
         return error_response(
             "tapps_memory",
             "store_init_failed",
@@ -624,6 +630,8 @@ async def tapps_memory(
             # directly and would crash with "'NoneType' object has no
             # attribute ..." if we let store=None through.
             if store is None and action not in _ASYNC_HTTP_OK_ACTIONS:
+                # TAP-1801: error path — flip the success counter.
+                _record_call("tapps_memory", success=False)
                 return _requires_in_process_store_response(action)
             result_data = await _ASYNC_DISPATCH[action](store, params)
         elif store is None and action in _HTTP_BRIDGE_FALLBACK_ACTIONS:
@@ -633,9 +641,11 @@ async def tapps_memory(
             result_data = await _HTTP_BRIDGE_DISPATCH[action](params)
             classified = _classify_http_bridge_result(action, result_data)
             if classified is not None:
+                _record_call("tapps_memory", success=False)
                 return classified
         else:
             if store is None:
+                _record_call("tapps_memory", success=False)
                 return _requires_in_process_store_response(action)
             result_data = _DISPATCH[action](store, params)
             # TAP-1632: close the flywheel loop on sync search paths too —
@@ -654,6 +664,8 @@ async def tapps_memory(
                 if feedback is not None:
                     result_data["feedback"] = feedback
     except Exception as exc:
+        # TAP-1801: dispatch crash is a failed invocation, not a success.
+        _record_call("tapps_memory", success=False)
         return error_response(
             "tapps_memory",
             "action_failed",
