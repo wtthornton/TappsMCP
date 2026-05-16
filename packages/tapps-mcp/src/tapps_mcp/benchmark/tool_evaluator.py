@@ -78,7 +78,15 @@ class ToolRanking(BaseModel):
     tasks_helped: int = Field(ge=0, description="Tasks where removing the tool hurt resolution.")
     tasks_hurt: int = Field(ge=0, description="Tasks where removing the tool helped resolution.")
     tasks_neutral: int = Field(ge=0, description="Tasks unaffected by tool removal.")
-    avg_token_cost: int = Field(ge=0, description="Average additional tokens when tool is present.")
+    avg_token_cost: int = Field(
+        description=(
+            "Signed average token delta (with-tool minus without-tool). "
+            "Positive = the tool added tokens; "
+            "Negative = the tool saved tokens (the with-tool run was cheaper). "
+            "TAP-1799: the field is signed — earlier versions clamped to >=0 "
+            "which made cost-saving tools indistinguishable from no-effect ones."
+        ),
+    )
     pass_at_k: float | None = Field(
         default=None,
         ge=0.0,
@@ -367,7 +375,10 @@ class ToolImpactEvaluator:
                     tasks_helped=helped,
                     tasks_hurt=hurt,
                     tasks_neutral=neutral,
-                    avg_token_cost=max(avg_token_cost, 0),
+                    # TAP-1799: keep the sign — a negative value means the
+                    # tool saved tokens on average and downstream calibrators
+                    # should reward it.
+                    avg_token_cost=avg_token_cost,
                     pass_at_k=round(pass_at_k, 4) if pass_at_k is not None else None,
                 )
             )
