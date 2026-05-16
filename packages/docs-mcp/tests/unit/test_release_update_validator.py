@@ -170,3 +170,106 @@ class TestScoring:
     def test_empty_body_not_agent_ready(self) -> None:
         report = validate_release_update("   ")
         assert report.agent_ready is False
+
+
+# ---------------------------------------------------------------------------
+# TAP-1793: Highlights / Issues gates must search the section body, not the
+# whole document body — a bullet in another section must not satisfy them.
+# ---------------------------------------------------------------------------
+
+
+_EMPTY_HIGHLIGHTS_POPULATED_ISSUES = """\
+## Release v1.5.0 (2026-04-29)
+
+**Health:** On Track
+
+### Highlights
+
+### Issues Closed
+
+- TAP-1112: tapps_release_update MCP tool
+
+### Links
+
+- Changelog: https://example.com/CHANGELOG.md
+"""
+
+
+_POPULATED_HIGHLIGHTS_EMPTY_ISSUES = """\
+## Release v1.5.0 (2026-04-29)
+
+**Health:** On Track
+
+### Highlights
+
+- Added tapps_release_update tool
+
+### Issues Closed
+
+### Links
+
+- Changelog: https://example.com/CHANGELOG.md
+"""
+
+
+_NO_HIGHLIGHTS_PLACEHOLDER = """\
+## Release v1.5.0 (2026-04-29)
+
+**Health:** On Track
+
+### Highlights
+
+- No highlights
+
+### Issues Closed
+
+- TAP-1112: tapps_release_update MCP tool
+
+### Links
+
+- Changelog: https://example.com/CHANGELOG.md
+"""
+
+
+class TestEmptyHighlightsPopulatedIssues:
+    """TAP-1793: an empty Highlights section must fail even if Issues has bullets."""
+
+    def test_highlights_high_finding_fires(self) -> None:
+        report = validate_release_update(_EMPTY_HIGHLIGHTS_POPULATED_ISSUES)
+        highlight_findings = [f for f in report.findings if f.rule == RULE_MISSING_HIGHLIGHTS]
+        assert len(highlight_findings) == 1
+        assert highlight_findings[0].severity == SEVERITY_HIGH
+
+    def test_not_agent_ready(self) -> None:
+        report = validate_release_update(_EMPTY_HIGHLIGHTS_POPULATED_ISSUES)
+        assert report.agent_ready is False
+
+
+class TestPopulatedHighlightsEmptyIssues:
+    """TAP-1793: empty Issues section must fail even if Highlights has bullets."""
+
+    def test_issues_high_finding_fires(self) -> None:
+        report = validate_release_update(_POPULATED_HIGHLIGHTS_EMPTY_ISSUES)
+        issues_findings = [f for f in report.findings if f.rule == RULE_MISSING_ISSUES_CLOSED]
+        assert len(issues_findings) == 1
+        assert issues_findings[0].severity == SEVERITY_HIGH
+
+    def test_no_tap_ref_finding_also_fires(self) -> None:
+        # Empty Issues section ⇒ no TAP-### reference in it ⇒ medium finding too.
+        report = validate_release_update(_POPULATED_HIGHLIGHTS_EMPTY_ISSUES)
+        tap_findings = [f for f in report.findings if f.rule == RULE_NO_TAP_REF]
+        assert len(tap_findings) == 1
+        assert tap_findings[0].severity == SEVERITY_MEDIUM
+
+    def test_not_agent_ready(self) -> None:
+        report = validate_release_update(_POPULATED_HIGHLIGHTS_EMPTY_ISSUES)
+        assert report.agent_ready is False
+
+
+class TestNoHighlightsPlaceholder:
+    """Explicit 'No highlights' placeholder is still treated as missing bullets."""
+
+    def test_finding_fires(self) -> None:
+        report = validate_release_update(_NO_HIGHLIGHTS_PLACEHOLDER)
+        highlight_findings = [f for f in report.findings if f.rule == RULE_MISSING_HIGHLIGHTS]
+        assert len(highlight_findings) == 1

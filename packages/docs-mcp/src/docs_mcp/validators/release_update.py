@@ -47,6 +47,22 @@ class ReleaseUpdateReport(BaseModel):
     findings: list[ReleaseUpdateFinding]
 
 
+_NEXT_HEADING_RE = re.compile(r"^#{2,3}\s", re.MULTILINE)
+
+
+def _slice_section(body: str, heading_match: re.Match[str]) -> str:
+    """Return the body of a section delimited by *heading_match*.
+
+    The slice starts after the heading line and ends at the next ``## `` or
+    ``### `` heading (whichever comes first) or at EOF. Mirrors the pattern in
+    ``linters/linear_issue.py::_check_acceptance``.
+    """
+    start = heading_match.end()
+    next_heading = _NEXT_HEADING_RE.search(body, pos=start)
+    end = next_heading.start() if next_heading else len(body)
+    return body[start:end]
+
+
 def validate_release_update(body: str) -> ReleaseUpdateReport:
     """Validate a release update body as a pre-post gate.
 
@@ -73,8 +89,11 @@ def validate_release_update(body: str) -> ReleaseUpdateReport:
             )
         )
 
-    has_highlights_section = bool(_HIGHLIGHTS_RE.search(body))
-    if not has_highlights_section or not _HIGHLIGHT_ITEM_RE.search(body):
+    highlights_match = _HIGHLIGHTS_RE.search(body)
+    highlights_section = _slice_section(body, highlights_match) if highlights_match else None
+    # TAP-1793: search the Highlights section body, not the whole document — a
+    # populated Issues Closed bullet otherwise silently satisfied the gate.
+    if highlights_section is None or not _HIGHLIGHT_ITEM_RE.search(highlights_section):
         findings.append(
             ReleaseUpdateFinding(
                 severity=SEVERITY_HIGH,
@@ -83,8 +102,11 @@ def validate_release_update(body: str) -> ReleaseUpdateReport:
             )
         )
 
-    has_issues_section = bool(_ISSUES_RE.search(body))
-    if not has_issues_section:
+    issues_match = _ISSUES_RE.search(body)
+    issues_section = _slice_section(body, issues_match) if issues_match else None
+    # TAP-1793: use the previously-unused _ISSUES_ITEM_RE to verify the Issues
+    # Closed section has at least one non-placeholder bullet.
+    if issues_section is None:
         findings.append(
             ReleaseUpdateFinding(
                 severity=SEVERITY_HIGH,
@@ -92,8 +114,19 @@ def validate_release_update(body: str) -> ReleaseUpdateReport:
                 message="Body must have a '### Issues Closed' section.",
             )
         )
+    elif not _ISSUES_ITEM_RE.search(issues_section):
+        findings.append(
+            ReleaseUpdateFinding(
+                severity=SEVERITY_HIGH,
+                rule=RULE_MISSING_ISSUES_CLOSED,
+                message=(
+                    "'### Issues Closed' section must list at least one closed "
+                    "issue bullet (or 'None.' as an explicit placeholder)."
+                ),
+            )
+        )
 
-    if has_issues_section and not _TAP_REF_RE.search(body):
+    if issues_section is not None and not _TAP_REF_RE.search(issues_section):
         findings.append(
             ReleaseUpdateFinding(
                 severity=SEVERITY_MEDIUM,
