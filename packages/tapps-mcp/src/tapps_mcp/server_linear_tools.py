@@ -407,6 +407,139 @@ async def tapps_linear_snapshot_invalidate(
     )
 
 
+_OPEN_STATUS_TYPES: frozenset[str] = frozenset(
+    {"backlog", "unstarted", "started", "triage"}
+)
+_DONE_STATUS_TYPES: frozenset[str] = frozenset({"completed", "canceled"})
+
+
+async def tapps_linear_count(
+    team: str,
+    project: str,
+    max_age_seconds: int = 3600,
+) -> dict[str, Any]:
+    """Return open/done issue counts from the tapps-mcp Linear snapshot cache.
+
+    Reads existing snapshots populated by the ``linear-read`` skill and
+    counts issues without making any Linear API calls. This is the
+    WS3.3 credential-free alternative to WS3.1/WS3.2 — Ralph calls
+    this tool when ``LINEAR_API_KEY`` is not set.
+
+    Snapshots are considered fresh when their ``cached_at`` timestamp is
+    within *max_age_seconds* of now (default 3600 s = 1 h). If no such
+    snapshot exists for the given ``(team, project)`` pair the response
+    signals ``available=False`` so callers can degrade gracefully.
+
+    Issues are deduplicated across multiple state-slice snapshots using
+    their Linear ``id`` field. Classification uses the issue's own
+    ``statusType`` value: ``{"backlog","unstarted","started","triage"}``
+    counts as open; ``{"completed","canceled"}`` counts as done.
+
+    Args:
+        team: Linear team name (required).
+        project: Linear project name (required).
+        max_age_seconds: Maximum age of a snapshot to count as fresh.
+            Defaults to 3600 (one hour). Pass 0 to disable staleness
+            filtering and accept any non-expired snapshot.
+
+    Returns:
+        Envelope with:
+          - ``data.available``: ``True`` when a fresh snapshot was found.
+          - ``data.open``: count of open issues (backlog/unstarted/started/triage).
+          - ``data.done``: count of done/cancelled issues.
+          - ``data.age_seconds``: seconds since the freshest snapshot was written.
+          - ``data.snapshot_count``: number of cache files aggregated.
+          - ``data.reason``: explanation when ``available=False``.
+    """
+    _record_call("tapps_linear_count")
+    start_ns = time.perf_counter_ns()
+
+    if not team or not project:
+        return error_response(
+            "tapps_linear_count",
+            "invalid_input",
+            "team and project are required and must be non-empty",
+        )
+
+    settings = load_settings()
+    cache_dir = _cache_dir(settings.project_root)
+    prefix = f"{team.replace('/', '_')}__{project.replace('/', '_')}__"
+
+    now = time.time()
+    cutoff = now - max_age_seconds if max_age_seconds > 0 else 0.0
+
+    # Collect issues deduplicated by id across all matching cache files.
+    seen_ids: dict[str, str] = {}  # id → statusType
+    freshest_cached_at: float = 0.0
+    snapshot_count = 0
+
+    for cache_file in cache_dir.glob(f"{prefix}*.json"):
+        try:
+            raw = cache_file.read_text(encoding="utf-8")
+            payload = json.loads(raw)
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        cached_at = float(payload.get("cached_at", 0))
+        expires_at = float(payload.get("expires_at", 0))
+        # Skip expired or stale entries.
+        if expires_at <= now or cached_at < cutoff:
+            continue
+
+        snapshot_count += 1
+        freshest_cached_at = max(freshest_cached_at, cached_at)
+
+        for issue in payload.get("issues", []):
+            issue_id = issue.get("id") or issue.get("identifier")
+            if not issue_id or issue_id in seen_ids:
+                continue
+            status_type = (
+                issue.get("statusType")
+                or issue.get("status", {}).get("type", "")
+                if isinstance(issue.get("status"), dict)
+                else issue.get("statusType") or ""
+            )
+            seen_ids[issue_id] = status_type.lower() if status_type else ""
+
+    elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+
+    if snapshot_count == 0:
+        return success_response(
+            "tapps_linear_count",
+            elapsed_ms,
+            {
+                "available": False,
+                "open": None,
+                "done": None,
+                "age_seconds": None,
+                "snapshot_count": 0,
+                "reason": (
+                    f"No fresh Linear snapshot found for {team}/{project} "
+                    f"(max_age_seconds={max_age_seconds}). "
+                    "Run the linear-read skill to populate the cache."
+                ),
+            },
+        )
+
+    open_count = sum(1 for st in seen_ids.values() if st in _OPEN_STATUS_TYPES)
+    done_count = sum(1 for st in seen_ids.values() if st in _DONE_STATUS_TYPES)
+    age_seconds = max(0.0, now - freshest_cached_at)
+
+    return success_response(
+        "tapps_linear_count",
+        elapsed_ms,
+        {
+            "available": True,
+            "open": open_count,
+            "done": done_count,
+            "age_seconds": round(age_seconds, 1),
+            "snapshot_count": snapshot_count,
+            "team": team,
+            "project": project,
+        },
+    )
+
+
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register Linear tools on the shared *mcp_instance*."""
     if "tapps_linear_snapshot_get" in allowed_tools:
@@ -419,3 +552,5 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_INVALIDATE)(
             tapps_linear_snapshot_invalidate
         )
+    if "tapps_linear_count" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_linear_count)

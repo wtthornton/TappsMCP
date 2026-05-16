@@ -191,6 +191,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_linear_snapshot_get",
         "tapps_linear_snapshot_put",
         "tapps_linear_snapshot_invalidate",
+        "tapps_linear_count",
         "tapps_release_update",
     }
 )
