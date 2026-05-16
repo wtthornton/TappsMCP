@@ -202,9 +202,11 @@ class TestDaysSince:
         result = _days_since(yesterday, now)
         assert abs(result - 1.0) < 0.01
 
-    def test_invalid_timestamp_returns_zero(self) -> None:
+    def test_invalid_timestamp_returns_inf(self) -> None:
+        # tapps-brain 3.18.0 (TAP-725): malformed timestamps decay to the
+        # confidence floor rather than being treated as freshly updated.
         result = _days_since("not-a-timestamp")
-        assert result == 0.0
+        assert result == float("inf")
 
     def test_naive_timestamp_treated_as_utc(self) -> None:
         now = datetime.now(tz=UTC)
