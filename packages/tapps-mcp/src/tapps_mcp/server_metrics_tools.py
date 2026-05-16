@@ -318,6 +318,11 @@ _SCORING_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# TAP-1798: tools whose feedback updates the domain routing weight store.
+# Currently the docs-lookup tool is the only expert surface — the rest of
+# the catalogue routes via different mechanisms.
+_EXPERT_TOOLS: frozenset[str] = frozenset({"tapps_lookup_docs"})
+
 _WEIGHT_DELTA = 0.02
 
 
@@ -329,15 +334,19 @@ def tapps_feedback(
 ) -> dict[str, Any]:
     """Report whether a tool's output was helpful.
 
-    This feedback improves TappsMCP's adaptive scoring and expert weights
-    over time. For expert tools, also updates domain routing weights.
+    This feedback improves TappsMCP's adaptive scoring weights over time.
+    For expert tools (currently ``tapps_lookup_docs``), providing ``domain``
+    additionally nudges DomainWeightStore via ``_adjust_domain_weights``
+    (TAP-1798). The response ``domain_weight_adjusted`` flag reflects
+    whether that nudge actually occurred.
 
     Args:
         tool_name: Which tool to provide feedback on.
         helpful: Was the output helpful?
         context: Additional context about why it was or wasn't helpful.
         domain: Domain for expert feedback (e.g., "security", "acme-billing").
-            When provided with expert tools, updates domain routing weights.
+            When provided alongside an expert tool name, updates the
+            DomainWeightStore entry for that domain.
     """
     from tapps_mcp.server import _get_metrics_hub, _record_call, _record_execution, _with_nudges
 
@@ -377,6 +386,20 @@ def tapps_feedback(
     if not duplicate_skipped and tool_name in _SCORING_TOOLS:
         weight_adjusted = _adjust_scoring_weights(helpful)
 
+    # TAP-1798: actually invoke domain weight adjustment for expert tools.
+    # Previously the docstring advertised this but no call site existed —
+    # the response surfaced `domain` without ever moving DomainWeightStore.
+    domain_weight_adjusted = False
+    domain_weight_type: str | None = None
+    if (
+        not duplicate_skipped
+        and sanitized_domain
+        and tool_name in _EXPERT_TOOLS
+    ):
+        domain_weight_adjusted, domain_weight_type = _adjust_domain_weights(
+            sanitized_domain, helpful
+        )
+
     stats = tracker.get_statistics(tool_name=tool_name)
     overall_stats = tracker.get_statistics()
 
@@ -389,12 +412,15 @@ def tapps_feedback(
         "helpful": helpful,
         "duplicate_skipped": duplicate_skipped,
         "weight_adjusted": weight_adjusted,
+        "domain_weight_adjusted": domain_weight_adjusted,
         "tool_stats": stats,
         "overall_stats": overall_stats,
     }
 
     if sanitized_domain:
         result_data["domain"] = sanitized_domain
+    if domain_weight_type is not None:
+        result_data["domain_weight_type"] = domain_weight_type
 
     resp = success_response("tapps_feedback", elapsed_ms, result_data)
     return _with_nudges("tapps_feedback", resp)
