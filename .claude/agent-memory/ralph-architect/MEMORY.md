@@ -1,0 +1,1 @@
+- [Ralph agents belong in upstream](feedback_ralph_agents_belong_in_upstream.md) — `.claude/agents/ralph*.md` and `.claude/hooks/` are deployed from ralph-claude-code; protect-ralph-files.sh blocks edits in tapps-mcp by design
