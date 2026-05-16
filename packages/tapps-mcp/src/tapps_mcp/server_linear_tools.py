@@ -407,10 +407,9 @@ async def tapps_linear_snapshot_invalidate(
     )
 
 
-_OPEN_STATUS_TYPES: frozenset[str] = frozenset(
-    {"backlog", "unstarted", "started", "triage"}
-)
-_DONE_STATUS_TYPES: frozenset[str] = frozenset({"completed", "canceled"})
+# Reuse the state-bucket constants for open/done classification.
+# _OPEN_STATE_BUCKETS = {"backlog","unstarted","started","triage"} (defined above)
+# _CLOSED_STATE_BUCKETS = {"completed","canceled"} (defined above)
 
 
 async def tapps_linear_count(
@@ -493,11 +492,9 @@ async def tapps_linear_count(
             issue_id = issue.get("id") or issue.get("identifier")
             if not issue_id or issue_id in seen_ids:
                 continue
-            status_type = (
-                issue.get("statusType")
-                or issue.get("status", {}).get("type", "")
-                if isinstance(issue.get("status"), dict)
-                else issue.get("statusType") or ""
+            raw_status = issue.get("status") or {}
+            status_type = issue.get("statusType") or (
+                raw_status.get("type", "") if isinstance(raw_status, dict) else ""
             )
             seen_ids[issue_id] = status_type.lower() if status_type else ""
 
@@ -521,8 +518,8 @@ async def tapps_linear_count(
             },
         )
 
-    open_count = sum(1 for st in seen_ids.values() if st in _OPEN_STATUS_TYPES)
-    done_count = sum(1 for st in seen_ids.values() if st in _DONE_STATUS_TYPES)
+    open_count = sum(1 for st in seen_ids.values() if st in _OPEN_STATE_BUCKETS)
+    done_count = sum(1 for st in seen_ids.values() if st in _CLOSED_STATE_BUCKETS)
     age_seconds = max(0.0, now - freshest_cached_at)
 
     return success_response(
