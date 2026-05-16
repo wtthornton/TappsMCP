@@ -38,7 +38,13 @@ class ToolTierClassification(BaseModel):
 
     tool_name: str = Field(description="Name of the tool.")
     measured_impact: float = Field(description="Measured impact score from benchmark.")
-    measured_cost: float = Field(description="Measured cost ratio (token overhead).")
+    measured_cost: float = Field(
+        description=(
+            "TAP-1800: signed average token cost (tokens, not a ratio). "
+            "Negative values indicate token-saving tools. Stored as float for "
+            "back-compat with prior schema; values are integers in practice."
+        ),
+    )
     call_frequency: float = Field(
         ge=0.0,
         le=1.0,
@@ -100,7 +106,14 @@ _IMPACT_THRESHOLDS: dict[str, float] = {
     "low": 0.05,
 }
 
-_COST_THRESHOLD = 0.15
+# TAP-1800: replace the broken `x / (x + 1000)` "ratio" with an explicit token
+# budget. The old formula crossed 0.15 at x≈176 tokens, so any tool whose
+# average token cost was higher than ~176 tokens failed the "required" check
+# regardless of impact — and the `max(..., 1)` branch was always dead because
+# `avg_token_cost + 1000 >= 1000`. The new threshold is an absolute upper
+# bound in tokens; token-saving tools (negative avg_token_cost from TAP-1799)
+# always pass the cost check.
+_COST_THRESHOLD_TOKENS = 500
 
 # Frequency threshold: tools called in more than 30% of tasks are "frequent".
 _FREQUENCY_THRESHOLD = 0.3
@@ -123,9 +136,15 @@ class ChecklistCalibrator:
         """Classify tools into checklist tiers using measured data.
 
         Tier rules (before engagement-level adjustment):
-        - Impact > threshold AND cost < 15%: "required"
+        - Impact > threshold AND avg token cost < ``_COST_THRESHOLD_TOKENS``: "required"
         - Impact > 0% OR frequently called: "recommended"
         - Impact <= 0% or rarely called: "optional"
+
+        Note (TAP-1800): the previous "cost less than 15%" rule used a
+        ``x / (x + 1000)`` pseudo-ratio that crossed 0.15 at ~176 tokens, so
+        any moderately chatty tool was disqualified from "required" regardless
+        of impact. Cost is now an absolute token budget; token-saving tools
+        (signed negative cost from TAP-1799) always pass the cost check.
 
         Impact threshold varies by engagement level:
         - high: 1%
@@ -149,12 +168,14 @@ class ChecklistCalibrator:
 
         for ranking in tool_rankings:
             frequency = call_freq_map.get(ranking.tool_name, 0.0)
-            cost_ratio = ranking.avg_token_cost / max(ranking.avg_token_cost + 1000, 1)
+            # TAP-1800: avg_token_cost is the signed delta from TAP-1799 —
+            # use it directly as the cost signal (tokens, not a pseudo-ratio).
+            cost_tokens = ranking.avg_token_cost
 
             # Determine recommended tier
             recommended = self._classify_tier(
                 impact=ranking.impact_score,
-                cost=cost_ratio,
+                cost_tokens=cost_tokens,
                 frequency=frequency,
                 impact_threshold=impact_threshold,
             )
@@ -167,7 +188,7 @@ class ChecklistCalibrator:
                 ranking,
                 recommended,
                 frequency,
-                cost_ratio,
+                cost_tokens,
                 impact_threshold,
             )
 
@@ -175,7 +196,7 @@ class ChecklistCalibrator:
                 ToolTierClassification(
                     tool_name=ranking.tool_name,
                     measured_impact=ranking.impact_score,
-                    measured_cost=round(cost_ratio, 4),
+                    measured_cost=float(cost_tokens),
                     call_frequency=round(frequency, 4),
                     recommended_tier=recommended,
                     current_tier=current,
@@ -201,12 +222,16 @@ class ChecklistCalibrator:
     @staticmethod
     def _classify_tier(
         impact: float,
-        cost: float,
+        cost_tokens: int,
         frequency: float,
         impact_threshold: float,
     ) -> str:
-        """Classify a tool into a tier based on metrics."""
-        if impact > impact_threshold and cost < _COST_THRESHOLD:
+        """Classify a tool into a tier based on metrics.
+
+        ``cost_tokens`` is a signed average token delta (TAP-1799). Negative
+        values (token-saving tools) always satisfy the cost check.
+        """
+        if impact > impact_threshold and cost_tokens < _COST_THRESHOLD_TOKENS:
             return "required"
         if impact > 0 or frequency > _FREQUENCY_THRESHOLD:
             return "recommended"
@@ -217,7 +242,7 @@ class ChecklistCalibrator:
         ranking: ToolRanking,
         tier: str,
         frequency: float,
-        cost_ratio: float,
+        cost_tokens: int,
         impact_threshold: float,
     ) -> str:
         """Build a human-readable justification for a tier classification."""
@@ -226,8 +251,8 @@ class ChecklistCalibrator:
         if tier == "required":
             parts.append(
                 f"Impact {ranking.impact_score:.1%} exceeds threshold "
-                f"{impact_threshold:.1%} with acceptable cost ratio "
-                f"{cost_ratio:.1%}."
+                f"{impact_threshold:.1%} with token cost "
+                f"{cost_tokens:+d} (budget {_COST_THRESHOLD_TOKENS})."
             )
         elif tier == "recommended":
             if ranking.impact_score > 0:
