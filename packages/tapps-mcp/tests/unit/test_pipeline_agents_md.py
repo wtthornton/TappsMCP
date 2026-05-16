@@ -349,3 +349,41 @@ class TestMergePreservesKarpathyBlock:
         assert after_one.count("<!-- BEGIN: karpathy-guidelines") == 1
         assert after_one.count("<!-- END: karpathy-guidelines -->") == 1
         assert after_one.count("## Karpathy Behavioral Guidelines") == 1
+
+
+# ---------------------------------------------------------------------------
+# TAP-1795: merge_agents_md must rewrite a stale version stamp, not leave it.
+# ---------------------------------------------------------------------------
+
+
+class TestMergeUpdatesStaleVersionMarker:
+    """The merge rewrites canonical sections from the template; the version
+    stamp must follow or `is_up_to_date` lies and skip-merge heuristics lock
+    consumers on stale content."""
+
+    def test_stale_stamp_is_rewritten_to_current(self) -> None:
+        template = _template()
+        existing = _template_with_version("0.0.1")
+        merged, changes = merge_agents_md(existing, template)
+        assert f"<!-- tapps-agents-version: {__version__} -->" in merged
+        assert f"tapps-agents-version: 0.0.1" not in merged
+        assert "updated_version_marker" in changes
+
+    def test_current_stamp_is_left_alone(self) -> None:
+        template = _template()
+        merged, changes = merge_agents_md(template, template)
+        assert f"<!-- tapps-agents-version: {__version__} -->" in merged
+        assert "updated_version_marker" not in changes
+        assert "added_version_marker" not in changes
+
+    def test_no_stamp_falls_back_to_prepend(self) -> None:
+        # No stamp anywhere in the existing content. The prepend path must still
+        # fire (not the rewrite path) and record `added_version_marker`.
+        existing = "# TappsMCP\n\n## Essential tools (always-on workflow)\n\nSome content.\n"
+        template = _template()
+        merged, changes = merge_agents_md(existing, template)
+        assert f"<!-- tapps-agents-version: {__version__} -->" in merged
+        # When the preamble path runs, it writes the stamp itself, so the
+        # fallback `added_version_marker` may not be needed. Either way we must
+        # NOT see `updated_version_marker` because there was no stamp to update.
+        assert "updated_version_marker" not in changes

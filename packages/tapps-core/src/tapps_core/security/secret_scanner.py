@@ -34,6 +34,14 @@ class SecretScanResult(BaseModel):
     findings: list[SecretFinding] = Field(default_factory=list)
     scanned_files: int = Field(default=0)
     passed: bool = Field(default=True, description="True if no high-severity findings.")
+    error: str | None = Field(
+        default=None,
+        description=(
+            "TAP-1794: populated when the scanner could not read the target "
+            "file (OSError / PermissionError). When set, passed is False so "
+            "the file is not silently treated as clean."
+        ),
+    )
 
 
 class SecretScanner:
@@ -112,14 +120,28 @@ class SecretScanner:
         return findings
 
     def scan_file(self, file_path: str) -> SecretScanResult:
-        """Scan a single file for secrets."""
+        """Scan a single file for secrets.
+
+        TAP-1794: a file the scanner could not read must NOT be reported as a
+        clean pass. Returns ``passed=False`` with ``error`` populated so callers
+        (and ``run_security_scan``'s aggregator) can surface the failure.
+        """
         from pathlib import Path
 
         p = Path(file_path)
         try:
             content = p.read_text(encoding="utf-8", errors="ignore")
-        except (OSError, PermissionError):
-            return SecretScanResult(scanned_files=0)
+        except (OSError, PermissionError) as exc:
+            logger.warning(
+                "secret_scan_read_failed",
+                file_path=file_path,
+                error=str(exc),
+            )
+            return SecretScanResult(
+                scanned_files=0,
+                passed=False,
+                error=str(exc),
+            )
 
         findings = self.scan_content(content, file_path=file_path)
         return self._build_result(findings, scanned_files=1)

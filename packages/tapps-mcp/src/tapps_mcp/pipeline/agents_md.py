@@ -207,6 +207,11 @@ def merge_agents_md(
     """
     changes: list[str] = []
 
+    # TAP-1795: snapshot the existing stamp before any rewriting so we can
+    # report whether the merge actually moved it.
+    existing_stamp_match = _VERSION_RE.search(existing_content)
+    existing_stamp = existing_stamp_match.group(1) if existing_stamp_match else None
+
     # Excise Karpathy content before section-split (see _strip_karpathy_content).
     # install_or_refresh runs after merge_agents_md in the upgrade pipeline and
     # will re-install one clean block at end-of-file.
@@ -252,10 +257,31 @@ def merge_agents_md(
 
     merged = "".join(merged_parts)
 
-    # Ensure version marker is present
-    if not _VERSION_RE.search(merged):
+    # TAP-1795: keep the stamp aligned with the content. The merge above
+    # rewrote canonical sections from the current template; leaving an older
+    # stamp would make `is_up_to_date` lie and lock skip-merge heuristics on
+    # stale content forever.
+    stamp_match = _VERSION_RE.search(merged)
+    if stamp_match is None:
         merged = f"<!-- tapps-agents-version: {__version__} -->\n" + merged
         changes.append("added_version_marker")
+    elif stamp_match.group(1) != __version__:
+        merged = _VERSION_RE.sub(
+            f"<!-- tapps-agents-version: {__version__} -->",
+            merged,
+            count=1,
+        )
+        changes.append("updated_version_marker")
+
+    # If a prior rewrite (e.g. preamble replacement) silently moved the stamp,
+    # still surface the change so callers can observe it.
+    if (
+        existing_stamp is not None
+        and existing_stamp != __version__
+        and "updated_version_marker" not in changes
+        and "added_version_marker" not in changes
+    ):
+        changes.append("updated_version_marker")
 
     return merged, changes
 

@@ -38,6 +38,13 @@ class SecurityScanResult(BaseModel):
     low_count: int = Field(default=0)
     passed: bool = Field(default=True, description="True if no critical/high findings.")
     bandit_available: bool = Field(default=True)
+    secret_scan_error: str | None = Field(
+        default=None,
+        description=(
+            "TAP-1794: populated when the secret scan could not read the file "
+            "(OSError / PermissionError). When set, passed is False."
+        ),
+    )
 
 
 def _run_bandit_scan(
@@ -54,12 +61,19 @@ def _run_bandit_scan(
     return run_bandit_check(file_path, cwd=cwd, timeout=timeout), True
 
 
-def _run_secret_scan(file_path: str, *, scan_secrets: bool) -> list[SecretFinding]:
-    """Run secret scanning if enabled."""
+def _run_secret_scan(
+    file_path: str, *, scan_secrets: bool
+) -> tuple[list[SecretFinding], str | None]:
+    """Run secret scanning if enabled.
+
+    TAP-1794: return ``(findings, error)`` so the aggregator can surface a
+    file-read failure instead of treating the file as silently clean.
+    """
     if not scan_secrets:
-        return []
+        return [], None
     scanner = SecretScanner()
-    return scanner.scan_file(file_path).findings
+    result = scanner.scan_file(file_path)
+    return result.findings, result.error
 
 
 def _aggregate_severity_counts(
@@ -99,7 +113,7 @@ def run_security_scan(
         Unified ``SecurityScanResult``.
     """
     bandit_issues, bandit_available = _run_bandit_scan(file_path, cwd=cwd, timeout=timeout)
-    secret_findings = _run_secret_scan(file_path, scan_secrets=scan_secrets)
+    secret_findings, secret_error = _run_secret_scan(file_path, scan_secrets=scan_secrets)
     critical, high, medium, low = _aggregate_severity_counts(bandit_issues, secret_findings)
 
     return SecurityScanResult(
@@ -110,6 +124,9 @@ def run_security_scan(
         high_count=high,
         medium_count=medium,
         low_count=low,
-        passed=(critical + high) == 0,
+        # TAP-1794: a read error on the secret scanner must fail the gate,
+        # not silently leave passed=True.
+        passed=(critical + high) == 0 and secret_error is None,
         bandit_available=bandit_available,
+        secret_scan_error=secret_error,
     )
