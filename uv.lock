@@ -520,7 +520,7 @@ wheels = [
 
 [[package]]
 name = "docs-mcp"
-version = "3.10.10"
+version = "3.10.12"
 source = { editable = "packages/docs-mcp" }
 dependencies = [
     { name = "click" },
@@ -2529,7 +2529,7 @@ dependencies = [
 
 [[package]]
 name = "tapps-core"
-version = "3.10.10"
+version = "3.10.12"
 source = { editable = "packages/tapps-core" }
 dependencies = [
     { name = "httpx" },
