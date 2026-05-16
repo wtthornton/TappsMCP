@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tapps_mcp.gates.evaluator import (
-    _CATEGORY_WEIGHTS,
+    _DEFAULT_CATEGORY_WEIGHTS,
     _SECURITY_FLOOR_INDIVIDUAL,
     evaluate_gate,
 )
@@ -73,7 +73,7 @@ class TestFailureWeighting:
 
         # First failure should be the highest-weight category
         assert result.failures[0].category == "security"
-        assert result.failures[0].weight == _CATEGORY_WEIGHTS["security"]
+        assert result.failures[0].weight == _DEFAULT_CATEGORY_WEIGHTS["security"]
 
     def test_critical_security_floor(self) -> None:
         """Security score below 50 (5.0 on 0-10) fails gate even if overall passes."""
@@ -148,7 +148,7 @@ class TestGateFailureWeight:
         result = evaluate_gate(score, thresholds=thresholds)
 
         for failure in result.failures:
-            expected_weight = _CATEGORY_WEIGHTS.get(failure.category, 0.0)
+            expected_weight = _DEFAULT_CATEGORY_WEIGHTS.get(failure.category, 0.0)
             assert failure.weight == expected_weight, (
                 f"{failure.category} weight {failure.weight} != {expected_weight}"
             )

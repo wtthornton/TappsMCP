@@ -16,9 +16,13 @@ from tapps_mcp.gates.models import GateFailure, GateResult, GateThresholds
 from tapps_mcp.scoring.constants import INDIVIDUAL_MAX
 from tapps_mcp.scoring.models import CategoryScore
 
-# Category weights for failure priority ordering (from ScoringWeights defaults)
+# TAP-1796: failure-ordering weights are now built per call from
+# ``score_result.categories[*].weight`` so configured weights in
+# ``.tapps-mcp.yaml`` (e.g. security=0.10, performance=0.30) drive the
+# "Fix these in order of priority" hint. The defaults below are only the
+# fallback when a category is missing from the score result.
 _DEFAULT_WEIGHTS = ScoringWeights()
-_CATEGORY_WEIGHTS: dict[str, float] = {
+_DEFAULT_CATEGORY_WEIGHTS: dict[str, float] = {
     "security": _DEFAULT_WEIGHTS.security,
     "maintainability": _DEFAULT_WEIGHTS.maintainability,
     "complexity": _DEFAULT_WEIGHTS.complexity,
@@ -57,6 +61,7 @@ def _fail(
     actual: float,
     threshold: float,
     msg: str,
+    weights: Mapping[str, float],
 ) -> None:
     failures.append(
         GateFailure(
@@ -64,7 +69,7 @@ def _fail(
             actual=actual,
             threshold=threshold,
             message=msg,
-            weight=_CATEGORY_WEIGHTS.get(category, 0.0),
+            weight=weights.get(category, _DEFAULT_CATEGORY_WEIGHTS.get(category, 0.0)),
         )
     )
 
@@ -73,6 +78,7 @@ def _check_min_categories(
     cats: Mapping[str, CategoryScore],
     thresholds: GateThresholds,
     failures: list[GateFailure],
+    weights: Mapping[str, float],
 ) -> None:
     """Check category-minimum thresholds (score must be >= threshold)."""
     min_checks: list[tuple[str, str, float]] = [
@@ -90,6 +96,7 @@ def _check_min_categories(
                 cat.score,
                 threshold_val,
                 f"{label} {cat.score:.1f} < {threshold_val:.1f}",
+                weights,
             )
 
 
@@ -119,6 +126,13 @@ def evaluate_gate(
     for name, cat in cats.items():
         scores[name] = cat.score
 
+    # TAP-1796: priority weights come from the per-file score result so
+    # consumer-configured weights actually drive the failure ordering.
+    weights: dict[str, float] = {
+        name: cat.weight for name, cat in cats.items()
+    }
+    weights.setdefault("overall", 1.0)  # overall failures always sort first
+
     overall = score_result.overall_score
     scores["overall"] = overall
 
@@ -130,10 +144,11 @@ def evaluate_gate(
             overall,
             thresholds.overall_min,
             f"Overall {overall:.1f} < {thresholds.overall_min:.1f}",
+            weights,
         )
 
     # 2-5) Category minimum thresholds
-    _check_min_categories(cats, thresholds, failures)
+    _check_min_categories(cats, thresholds, failures, weights)
 
     # 6) Complexity (inverse: lower is better — fail if score > max)
     comp = cats.get("complexity")
@@ -148,6 +163,7 @@ def evaluate_gate(
             comp.score,
             thresholds.complexity_max,
             f"Complexity {comp.score:.1f} > {thresholds.complexity_max:.1f}",
+            weights,
         )
 
     # 7) Critical security floor — absolute minimum regardless of thresholds
@@ -161,6 +177,7 @@ def evaluate_gate(
                 sec_for_floor.score,
                 _SECURITY_FLOOR_INDIVIDUAL,
                 "CRITICAL: Security score below minimum threshold (50)",
+                weights,
             )
 
     # Sort failures by category weight (highest weight first)
