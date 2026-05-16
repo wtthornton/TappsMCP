@@ -780,10 +780,40 @@ async def tapps_quick_check(
             cache_key = _chc.content_hash(resolved)
             cached = _chc.get(_chc.KIND_QUICK_CHECK, cache_key)
             if cached is not None:
+                # TAP-1792: keep the cache-hit shape identical to the miss path —
+                # gate failures must still decrement the success counter, the
+                # structured output and next_steps must still ride along, and
+                # _record_execution must run so timings stay calibrated.
+                cached_gate_passed = bool(cached.get("gate_passed", True))
+                cached_security_passed = bool(cached.get("security_passed", True))
+                if not cached_gate_passed or not cached_security_passed:
+                    _record_call("tapps_quick_check", success=False)
+
                 elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-                hit = dict(cached)
-                hit["cache_hit"] = True
-                return success_response("tapps_quick_check", elapsed_ms, hit)
+                _record_execution(
+                    "tapps_quick_check",
+                    start,
+                    file_path=str(resolved),
+                    gate_passed=cached_gate_passed,
+                    score=round(float(cached.get("overall_score", 0.0)), 2),
+                )
+
+                hit_data = dict(cached)
+                hit_data["cache_hit"] = True
+                cached_structured = hit_data.pop("__structured_content__", None)
+                resp = success_response("tapps_quick_check", elapsed_ms, hit_data)
+                if cached_structured is not None:
+                    resp["structuredContent"] = cached_structured
+                return _with_nudges(
+                    "tapps_quick_check",
+                    resp,
+                    {
+                        "gate_passed": cached_gate_passed,
+                        "security_passed": cached_security_passed,
+                        "overall_score": round(float(cached.get("overall_score", 0.0)), 2),
+                        "security_issue_count": int(cached.get("security_issue_count", 0)),
+                    },
+                )
         except (OSError, FileNotFoundError):
             cache_key = None
 
@@ -907,8 +937,13 @@ async def tapps_quick_check(
     )
 
     # STORY-101.1 — populate cache for subsequent identical-content calls.
+    # TAP-1792: stash the structured payload alongside data so the cache-hit
+    # path can rehydrate `structuredContent` without re-running the scorer.
     if cache_key is not None:
-        _chc.set(_chc.KIND_QUICK_CHECK, cache_key, dict(data))
+        cache_payload = dict(data)
+        if "structuredContent" in resp:
+            cache_payload["__structured_content__"] = resp["structuredContent"]
+        _chc.set(_chc.KIND_QUICK_CHECK, cache_key, cache_payload)
 
     return _with_nudges(
         "tapps_quick_check",
