@@ -1,0 +1,312 @@
+"""Tests for the audit coverage manifest helpers."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import pytest
+
+from tapps_mcp.tools.audit_manifest import (
+    CoverageEntry,
+    FindingCounts,
+    _serialize_coverage,
+    campaign_key,
+    coverage_key,
+    is_fresh,
+    load_campaign_spec,
+    now_iso,
+    read_coverage_for,
+    save_campaign_spec,
+    write_coverage,
+)
+
+
+class FakeBridge:
+    """In-memory stand-in for BrainBridge used in tests."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, dict[str, Any]] = {}
+        self.save_calls: list[dict[str, Any]] = []
+
+    async def save(self, **kwargs: Any) -> dict[str, Any]:
+        self.save_calls.append(dict(kwargs))
+        self.store[kwargs["key"]] = {"value": kwargs["value"], **kwargs}
+        return self.store[kwargs["key"]]
+
+    async def get(self, key: str) -> dict[str, Any] | None:
+        return self.store.get(key)
+
+
+@pytest.fixture
+def fake_bridge(monkeypatch: pytest.MonkeyPatch) -> FakeBridge:
+    bridge = FakeBridge()
+    monkeypatch.setattr(
+        "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+        lambda: bridge,
+    )
+    return bridge
+
+
+class TestKeys:
+    def test_coverage_key(self) -> None:
+        assert coverage_key("src/foo.py") == "audit:coverage:src/foo.py"
+
+    def test_campaign_key(self) -> None:
+        assert campaign_key("audit-2026-05-17") == "audit:campaign:audit-2026-05-17"
+
+
+class TestIsFresh:
+    def _entry(self, sha: str, age_days: int = 0) -> CoverageEntry:
+        when = datetime.now(tz=UTC) - timedelta(days=age_days)
+        return CoverageEntry(
+            rel_path="src/foo.py",
+            audited_sha=sha,
+            audited_at=when.isoformat(),
+            session_ticket="TAP-1",
+            campaign_id="c1",
+        )
+
+    def test_matching_sha_within_window(self) -> None:
+        assert is_fresh(self._entry("abc1234", 5), "abc1234", max_age_days=30) is True
+
+    def test_mismatched_sha(self) -> None:
+        assert is_fresh(self._entry("abc1234", 5), "deadbee") is False
+
+    def test_outside_window(self) -> None:
+        assert is_fresh(self._entry("abc1234", 60), "abc1234", max_age_days=30) is False
+
+    def test_empty_sha(self) -> None:
+        assert is_fresh(self._entry("", 0), "abc1234") is False
+
+    def test_malformed_timestamp(self) -> None:
+        entry = CoverageEntry(
+            rel_path="src/foo.py",
+            audited_sha="abc1234",
+            audited_at="not-a-date",
+            session_ticket="TAP-1",
+            campaign_id="c1",
+        )
+        assert is_fresh(entry, "abc1234") is False
+
+
+class TestSerialization:
+    def test_serialize_omits_rel_path(self) -> None:
+        entry = CoverageEntry(
+            rel_path="src/foo.py",
+            audited_sha="abc1234",
+            audited_at="2026-05-17T18:00:00+00:00",
+            session_ticket="TAP-1",
+            campaign_id="c1",
+            findings=FindingCounts(p0=1, p2=3),
+            finding_tickets=["TAP-2"],
+        )
+        payload = _serialize_coverage(entry)
+        assert "rel_path" not in payload
+        assert payload["audited_sha"] == "abc1234"
+        assert payload["findings"]["p0"] == 1
+        assert payload["finding_tickets"] == ["TAP-2"]
+
+
+class TestReadCoverage:
+    @pytest.mark.asyncio
+    async def test_empty_input(self, fake_bridge: FakeBridge) -> None:
+        assert await read_coverage_for([]) == {}
+
+    @pytest.mark.asyncio
+    async def test_missing_returns_none(self, fake_bridge: FakeBridge) -> None:
+        result = await read_coverage_for(["src/foo.py"])
+        assert result == {"src/foo.py": None}
+
+    @pytest.mark.asyncio
+    async def test_round_trip(self, fake_bridge: FakeBridge) -> None:
+        entry = CoverageEntry(
+            rel_path="src/foo.py",
+            audited_sha="abc1234",
+            audited_at=now_iso(),
+            session_ticket="TAP-1",
+            campaign_id="c1",
+            findings=FindingCounts(p2=2),
+            finding_tickets=["TAP-2"],
+        )
+        assert await write_coverage(entry) is True
+        result = await read_coverage_for(["src/foo.py"])
+        loaded = result["src/foo.py"]
+        assert loaded is not None
+        assert loaded.audited_sha == "abc1234"
+        assert loaded.session_ticket == "TAP-1"
+        assert loaded.findings.p2 == 2
+        assert loaded.finding_tickets == ["TAP-2"]
+
+    @pytest.mark.asyncio
+    async def test_corrupt_value_returns_none(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        fake_bridge.store[coverage_key("src/foo.py")] = {"value": "not-json"}
+        result = await read_coverage_for(["src/foo.py"])
+        assert result["src/foo.py"] is None
+
+
+class TestCampaignSpec:
+    @pytest.mark.asyncio
+    async def test_save_and_load(self, fake_bridge: FakeBridge) -> None:
+        spec = {"campaign_id": "c1", "total_files": 3, "sessions": []}
+        assert await save_campaign_spec("c1", spec) is True
+        loaded = await load_campaign_spec("c1")
+        assert loaded == spec
+
+    @pytest.mark.asyncio
+    async def test_load_missing_returns_none(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        assert await load_campaign_spec("nope") is None
+
+    @pytest.mark.asyncio
+    async def test_corrupt_spec_returns_none(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        fake_bridge.store[campaign_key("c1")] = {"value": "not-json"}
+        assert await load_campaign_spec("c1") is None
+
+    @pytest.mark.asyncio
+    async def test_save_uses_procedural_tier(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        await save_campaign_spec("c1", {"k": "v"})
+        assert fake_bridge.save_calls[-1]["tier"] == "procedural"
+
+    @pytest.mark.asyncio
+    async def test_save_coverage_uses_pattern_tier(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        entry = CoverageEntry(
+            rel_path="src/foo.py",
+            audited_sha="abc1234",
+            audited_at=now_iso(),
+            session_ticket="TAP-1",
+            campaign_id="c1",
+        )
+        await write_coverage(entry)
+        assert fake_bridge.save_calls[-1]["tier"] == "pattern"
+
+
+class TestDegradedMode:
+    @pytest.mark.asyncio
+    async def test_read_when_bridge_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: None,
+        )
+        result = await read_coverage_for(["a.py", "b.py"])
+        assert result == {"a.py": None, "b.py": None}
+
+    @pytest.mark.asyncio
+    async def test_write_when_bridge_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: None,
+        )
+        entry = CoverageEntry(
+            rel_path="a.py",
+            audited_sha="abc",
+            audited_at=now_iso(),
+            session_ticket="TAP-1",
+            campaign_id="c1",
+        )
+        assert await write_coverage(entry) is False
+
+    @pytest.mark.asyncio
+    async def test_save_campaign_when_bridge_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: None,
+        )
+        assert await save_campaign_spec("c1", {}) is False
+
+
+class TestBridgeFailures:
+    """Bridge raises an exception (HTTP failure, circuit open, etc.) —
+    all manifest helpers must catch and return degraded results.
+    """
+
+    @pytest.fixture
+    def failing_bridge(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _Failing:
+            async def save(self, **_: Any) -> None:
+                raise RuntimeError("bridge unavailable: HTTP 401")
+
+            async def get(self, _: str) -> None:
+                raise RuntimeError("bridge unavailable: HTTP 401")
+
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: _Failing(),
+        )
+
+    @pytest.mark.asyncio
+    async def test_write_coverage_returns_false_on_exception(
+        self, failing_bridge: None
+    ) -> None:
+        entry = CoverageEntry(
+            rel_path="a.py",
+            audited_sha="abc",
+            audited_at=now_iso(),
+            session_ticket="TAP-1",
+            campaign_id="c1",
+        )
+        assert await write_coverage(entry) is False
+
+    @pytest.mark.asyncio
+    async def test_save_campaign_returns_false_on_exception(
+        self, failing_bridge: None
+    ) -> None:
+        assert await save_campaign_spec("c1", {"k": "v"}) is False
+
+    @pytest.mark.asyncio
+    async def test_load_campaign_returns_none_on_exception(
+        self, failing_bridge: None
+    ) -> None:
+        assert await load_campaign_spec("c1") is None
+
+    @pytest.mark.asyncio
+    async def test_read_coverage_returns_none_on_exception(
+        self, failing_bridge: None
+    ) -> None:
+        result = await read_coverage_for(["a.py"])
+        assert result == {"a.py": None}
+
+
+class TestStoreShapes:
+    """Bridge entries can be dict or pydantic-model — both work."""
+
+    @pytest.mark.asyncio
+    async def test_dict_value_with_value_field(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        bridge = FakeBridge()
+        bridge.store[coverage_key("a.py")] = {
+            "value": json.dumps(
+                {
+                    "audited_sha": "abc",
+                    "audited_at": now_iso(),
+                    "session_ticket": "TAP-1",
+                    "campaign_id": "c1",
+                    "findings": {"p0": 0, "p1": 0, "p2": 0, "p3": 0},
+                    "finding_tickets": [],
+                }
+            )
+        }
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: bridge,
+        )
+        result = await read_coverage_for(["a.py"])
+        assert result["a.py"] is not None
+        assert result["a.py"].audited_sha == "abc"

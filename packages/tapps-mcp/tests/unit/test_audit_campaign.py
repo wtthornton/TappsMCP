@@ -241,6 +241,9 @@ class TestMCPHandler:
         for session in data["sessions"]:
             assert session["title"].startswith("audit: ")
             assert session["body"].startswith("## What")
+        # persisted_to_brain key is present (value may be True or False
+        # depending on bridge availability in the test env).
+        assert "persisted_to_brain" in data
 
     @pytest.mark.asyncio
     async def test_unknown_category_returns_error_envelope(

@@ -1055,14 +1055,30 @@ async def tapps_audit_campaign(
             for s in spec.sessions
         ],
     }
+    persisted = await _persist_campaign_spec(spec.campaign_id, data)
+    data["persisted_to_brain"] = persisted
     await emit_ctx_info(
         ctx,
         f"Planned campaign {spec.campaign_id}: "
-        f"{spec.total_chunks} sessions across {spec.total_files} files",
+        f"{spec.total_chunks} sessions across {spec.total_files} files "
+        f"(persisted={persisted})",
     )
 
     resp = success_response("tapps_audit_campaign", elapsed_ms, data)
     return _with_nudges("tapps_audit_campaign", resp)
+
+
+async def _persist_campaign_spec(
+    campaign_id: str, spec_dict: dict[str, Any]
+) -> bool:
+    """Save the rendered spec to brain so dispatch can pick it up."""
+    from tapps_mcp.tools.audit_manifest import save_campaign_spec
+
+    try:
+        return await save_campaign_spec(campaign_id, spec_dict)
+    except (OSError, RuntimeError, ValueError) as exc:
+        logger.debug("audit_campaign_persist_failed", error=str(exc))
+        return False
 
 
 async def _resolve_git_short_sha(root: Path) -> str:
