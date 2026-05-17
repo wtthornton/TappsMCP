@@ -6,6 +6,14 @@ Facts are written as MemoryEntry records using the InsightEntry tagging
 convention so that :func:`tapps_core.insights.migration.bulk_migrate` can
 promote them later.
 
+Writes route through :class:`tapps_core.brain_bridge.BrainBridge` (TAP-1919,
+ADR-0001) so every save participates in the bridge's circuit-breaker,
+profile filter (TAP-1579), content-safety gate, Hive routing, and
+async-native Postgres write path (TAP-1117). Bypassing the bridge — e.g.
+importing :class:`tapps_brain.store.MemoryStore` directly — is a violation
+of ``.claude/rules/integration-hygiene.md`` and produces silent data loss
+into an embedded SQLite shadow.
+
 Key tagging convention
 ----------------------
 Every entry written by this module carries:
@@ -27,9 +35,10 @@ All keys are lowercase slugs matching ``^[a-z0-9][a-z0-9._-]{0,127}$``::
 
 tapps-brain availability
 ------------------------
-tapps-brain is an optional runtime dependency of docs-mcp. This module
-imports it inside functions and catches ``ImportError`` so that docs-mcp
-continues to work when tapps-brain is not installed.
+tapps-brain is an optional runtime dependency of docs-mcp; the BrainBridge
+factory in ``tapps_core.brain_bridge`` returns ``None`` when no transport is
+configured (no ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` and no
+``TAPPS_BRAIN_DATABASE_URL``). Callers receive ``BrainWriteResult(available=False)``.
 """
 
 from __future__ import annotations
@@ -138,24 +147,29 @@ class BrainWriteResult:
 
 
 class ArchitectureBrainWriter:
-    """Writes architecture facts into tapps-brain as InsightEntry-tagged records.
+    """Writes architecture facts into tapps-brain via :class:`BrainBridge`.
 
-    This class is instantiated once per tool call. It opens the MemoryStore
-    lazily and falls back to ``available=False`` when tapps-brain is absent.
+    Instantiated once per tool call. The bridge is opened lazily and the
+    writer falls back to ``BrainWriteResult(available=False)`` when no
+    bridge transport is configured (no HTTP URL, no in-process DSN). All
+    writes go through the bridge's circuit-breaker, profile filter,
+    content-safety gate, and async-native write path.
 
     Args:
-        project_root: Project root path (determines store location).
+        project_root: Project root path (passed to in-process bridge for
+            ``project_dir`` resolution; ignored by the HTTP bridge).
     """
 
     def __init__(self, project_root: Path) -> None:
         self._root = project_root
-        self._store: Any = None  # tapps_brain.store.MemoryStore | None
+        self._bridge: Any = None  # tapps_core.brain_bridge.BrainBridge | None
+        self._bridge_resolved: bool = False
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def write_from_architecture_result(
+    async def write_from_architecture_result(
         self,
         result: ArchitectureResult,
         project_name: str,
@@ -166,8 +180,8 @@ class ArchitectureBrainWriter:
         module, edge and class counts.
         """
         t0 = time.perf_counter()
-        store = self._get_store()
-        if store is None:
+        bridge = self._get_bridge()
+        if bridge is None:
             return BrainWriteResult(available=False)
 
         br = BrainWriteResult()
@@ -177,7 +191,7 @@ class ArchitectureBrainWriter:
             f"{result.package_count} packages, {result.module_count} modules, "
             f"{result.edge_count} import edges, {result.class_count} classes."
         )
-        self._save(store, br, key, value)
+        await self._save(bridge, br, key, value)
         br.elapsed_ms = (time.perf_counter() - t0) * 1000
         logger.info(
             "arch_brain_write_structure",
@@ -187,7 +201,7 @@ class ArchitectureBrainWriter:
         )
         return br
 
-    def write_from_module_map(self, module_map: ModuleMap) -> BrainWriteResult:
+    async def write_from_module_map(self, module_map: ModuleMap) -> BrainWriteResult:
         """Write per-package and entry-point facts from a ModuleMap result.
 
         Writes one ``arch.{project}.pkg.{name}`` entry per top-level package
@@ -195,8 +209,8 @@ class ArchitectureBrainWriter:
         entry when entry points are present.
         """
         t0 = time.perf_counter()
-        store = self._get_store()
-        if store is None:
+        bridge = self._get_bridge()
+        if bridge is None:
             return BrainWriteResult(available=False)
 
         br = BrainWriteResult()
@@ -206,7 +220,7 @@ class ArchitectureBrainWriter:
         for node in module_map.module_tree[:_MAX_PACKAGES]:
             key = _build_key("arch", project, "pkg", node.name)
             value = self._describe_node(project, node)
-            self._save(store, br, key, value)
+            await self._save(bridge, br, key, value)
 
         # Entry points
         if module_map.entry_points:
@@ -214,7 +228,7 @@ class ArchitectureBrainWriter:
             ep_value = _truncate(
                 f"Entry points for {project}: " + ", ".join(module_map.entry_points[:20])
             )
-            self._save(store, br, ep_key, ep_value)
+            await self._save(bridge, br, ep_key, ep_value)
 
         br.elapsed_ms = (time.perf_counter() - t0) * 1000
         logger.info(
@@ -229,36 +243,52 @@ class ArchitectureBrainWriter:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _get_store(self) -> Any:
-        """Return a cached MemoryStore, or None if tapps-brain is unavailable."""
-        if self._store is not None:
-            return self._store
-        try:
-            from tapps_brain.store import MemoryStore
+    def _get_bridge(self) -> Any:
+        """Return a cached BrainBridge, or None if no transport is configured.
 
-            self._store = MemoryStore(self._root)
-            return self._store
+        Delegates to :func:`tapps_core.brain_bridge.create_brain_bridge`. The
+        factory selects between HttpBrainBridge (when
+        ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` is set) and the in-process
+        BrainBridge (when ``TAPPS_BRAIN_DATABASE_URL`` is set), and returns
+        None when neither is configured. Result is cached for the lifetime
+        of this writer instance.
+        """
+        if self._bridge_resolved:
+            return self._bridge
+        self._bridge_resolved = True
+        try:
+            from tapps_core.brain_bridge import create_brain_bridge
+
+            self._bridge = create_brain_bridge(settings=None)
+            if self._bridge is None:
+                logger.debug("brain_bridge_unavailable", root=str(self._root))
+            return self._bridge
         except ImportError:
-            logger.debug("tapps_brain_not_available", root=str(self._root))
+            logger.debug("tapps_core_not_available", root=str(self._root))
             return None
         except Exception:
             logger.warning(
-                "tapps_brain_store_open_failed",
+                "brain_bridge_open_failed",
                 root=str(self._root),
                 exc_info=True,
             )
             return None
 
-    def _save(
+    async def _save(
         self,
-        store: Any,
+        bridge: Any,
         br: BrainWriteResult,
         key: str,
         value: str,
     ) -> None:
-        """Attempt a single store.save(); update BrainWriteResult in-place."""
+        """Attempt a single bridge.save(); update BrainWriteResult in-place.
+
+        Treats explicit ``success: False`` / ``degraded: True`` responses
+        from the bridge (e.g. circuit-open) as a failed write rather than
+        a silent success.
+        """
         try:
-            store.save(
+            result = await bridge.save(
                 key=key,
                 value=value,
                 tier=_MEMORY_TIER,
@@ -269,11 +299,23 @@ class ArchitectureBrainWriter:
                 memory_group=_MEMORY_GROUP,
                 skip_consolidation=True,
             )
-            br.written += 1
-            br.entries_written.append(key)
         except Exception:
             logger.warning("brain_write_failed", key=key, exc_info=True)
             br.failed += 1
+            return
+        if isinstance(result, dict) and (
+            result.get("success") is False or result.get("degraded") is True
+        ):
+            logger.warning(
+                "brain_write_degraded",
+                key=key,
+                reason=result.get("reason", ""),
+                queued=result.get("queued", False),
+            )
+            br.failed += 1
+            return
+        br.written += 1
+        br.entries_written.append(key)
 
     @staticmethod
     def _describe_node(project: str, node: ModuleNode) -> str:

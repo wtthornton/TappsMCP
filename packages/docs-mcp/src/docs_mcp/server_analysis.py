@@ -103,7 +103,7 @@ async def docs_module_map(
         from docs_mcp.integrations.brain_writer import ArchitectureBrainWriter
 
         writer = ArchitectureBrainWriter(root)
-        bw = writer.write_from_module_map(result)
+        bw = await writer.write_from_module_map(result)
         data.update(bw.to_dict())
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

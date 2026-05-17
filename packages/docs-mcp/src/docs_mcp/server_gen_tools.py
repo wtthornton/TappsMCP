@@ -1139,7 +1139,7 @@ async def docs_generate_architecture(
 
         writer = ArchitectureBrainWriter(root)
         project_name = root.name
-        bw = writer.write_from_architecture_result(result, project_name)
+        bw = await writer.write_from_architecture_result(result, project_name)
         data.update(bw.to_dict())
 
     return success_response(
