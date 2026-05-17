@@ -1,4 +1,15 @@
-"""Unit tests for MemoryStore (Epic 23, Story 3)."""
+"""Unit tests for MemoryStore (Epic 23, Story 3).
+
+Note (TAP-1884): the InMemoryPrivateBackend test double in
+``packages/tapps-mcp/tests/conftest.py`` must keep its method signatures
+aligned with the tapps-brain ``PrivateBackend`` protocol
+(``tapps_brain._protocols``). When ``MemoryStore.__init__`` started calling
+``self._persistence.load_all(limit=self._max_entries)`` in brain 3.17.x+,
+a missing kwarg on the test double surfaced as a ``TypeError`` through
+whichever test pytest-randomly happened to start with — easily mistaken
+for an order-dependent flake. The conftest backend now accepts and honors
+``limit=``; keep it that way when bumping the brain floor (ADR-0010).
+"""
 
 from __future__ import annotations
 
