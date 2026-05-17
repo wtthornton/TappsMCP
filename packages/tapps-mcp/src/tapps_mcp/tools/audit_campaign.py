@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from tapps_mcp.tools.audit_chunker import AuditChunk, chunk_scope
 from tapps_mcp.tools.audit_session_template import (
@@ -24,6 +25,27 @@ from tapps_mcp.tools.audit_session_template import (
 
 _DEFAULT_CATEGORIES: list[str] = ["quality", "security", "dead_code"]
 _EPIC_REF_PLACEHOLDER: str = "<campaign-epic>"
+
+
+def finalize_session_bodies(
+    spec_dict: dict[str, Any], epic_ref: str
+) -> dict[str, Any]:
+    """Substitute the real epic ref into every session body.
+
+    Returns a new spec dict with the placeholder replaced. Idempotent:
+    running twice with the same epic_ref is a no-op on already-substituted
+    bodies.
+    """
+    if not epic_ref:
+        msg = "epic_ref is required to finalize session bodies"
+        raise ValueError(msg)
+    sessions = spec_dict.get("sessions") or []
+    new_sessions = []
+    for session in sessions:
+        body = session.get("body", "")
+        new_body = body.replace(_EPIC_REF_PLACEHOLDER, epic_ref)
+        new_sessions.append({**session, "body": new_body})
+    return {**spec_dict, "sessions": new_sessions, "epic_ref": epic_ref}
 
 
 @dataclass

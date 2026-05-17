@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,6 +13,7 @@ from tapps_mcp.tools.audit_campaign import (
     _build_campaign_id,
     _slug,
     build_campaign_spec,
+    finalize_session_bodies,
 )
 
 
@@ -272,3 +274,177 @@ class TestMCPHandler:
         )
         assert resp["success"] is False
         assert resp["error"]["code"] == "invalid_scope"
+
+    @pytest.mark.asyncio
+    async def test_invalid_mode_returns_error_envelope(
+        self, tmp_path: Path
+    ) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_campaign
+
+        resp = await tapps_audit_campaign(
+            scope=str(tmp_path),
+            project_root=str(tmp_path),
+            mode="bogus",
+        )
+        assert resp["success"] is False
+        assert resp["error"]["code"] == "invalid_mode"
+
+
+class TestFinalizeSessionBodies:
+    def test_substitutes_placeholder_in_all_sessions(self) -> None:
+        spec = {
+            "campaign_id": "c1",
+            "sessions": [
+                {
+                    "session_index": 1,
+                    "body": "Parent epic: <campaign-epic>\nfoo",
+                },
+                {
+                    "session_index": 2,
+                    "body": "see <campaign-epic> for context",
+                },
+            ],
+        }
+        out = finalize_session_bodies(spec, "TAP-1234")
+        assert out["epic_ref"] == "TAP-1234"
+        assert out["sessions"][0]["body"] == "Parent epic: TAP-1234\nfoo"
+        assert out["sessions"][1]["body"] == "see TAP-1234 for context"
+
+    def test_preserves_session_metadata(self) -> None:
+        spec = {
+            "campaign_id": "c1",
+            "sessions": [
+                {
+                    "session_index": 1,
+                    "title": "audit: ...",
+                    "body": "x <campaign-epic> y",
+                    "files": ["a.py"],
+                    "intra_edges": 3,
+                }
+            ],
+        }
+        out = finalize_session_bodies(spec, "TAP-1234")
+        assert out["sessions"][0]["title"] == "audit: ..."
+        assert out["sessions"][0]["files"] == ["a.py"]
+        assert out["sessions"][0]["intra_edges"] == 3
+
+    def test_idempotent_when_no_placeholders_remain(self) -> None:
+        spec = {
+            "sessions": [{"body": "already TAP-1234 substituted"}],
+        }
+        out = finalize_session_bodies(spec, "TAP-1234")
+        assert out["sessions"][0]["body"] == "already TAP-1234 substituted"
+
+    def test_empty_epic_ref_raises(self) -> None:
+        spec = {"sessions": [{"body": "<campaign-epic>"}]}
+        with pytest.raises(ValueError, match="epic_ref is required"):
+            finalize_session_bodies(spec, "")
+
+    def test_empty_sessions_list(self) -> None:
+        spec = {"campaign_id": "c1", "sessions": []}
+        out = finalize_session_bodies(spec, "TAP-1234")
+        assert out["sessions"] == []
+        assert out["epic_ref"] == "TAP-1234"
+
+
+class TestDispatchMode:
+    """End-to-end: plan persists, dispatch loads + finalizes + re-persists."""
+
+    @pytest.mark.asyncio
+    async def test_missing_campaign_id_returns_error(
+        self, tmp_path: Path
+    ) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_campaign
+
+        resp = await tapps_audit_campaign(
+            mode="dispatch",
+            epic_ref="TAP-1234",
+            project_root=str(tmp_path),
+        )
+        assert resp["success"] is False
+        assert resp["error"]["code"] == "missing_campaign_id"
+
+    @pytest.mark.asyncio
+    async def test_missing_epic_ref_returns_error(
+        self, tmp_path: Path
+    ) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_campaign
+
+        resp = await tapps_audit_campaign(
+            mode="dispatch",
+            campaign_id="some-id",
+            project_root=str(tmp_path),
+        )
+        assert resp["success"] is False
+        assert resp["error"]["code"] == "missing_epic_ref"
+
+    @pytest.mark.asyncio
+    async def test_campaign_not_in_brain_returns_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Bridge returns None for any key.
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: None,
+        )
+
+        from tapps_mcp.server_analysis_tools import tapps_audit_campaign
+
+        resp = await tapps_audit_campaign(
+            mode="dispatch",
+            campaign_id="not-found",
+            epic_ref="TAP-1234",
+            project_root=str(tmp_path),
+        )
+        assert resp["success"] is False
+        assert resp["error"]["code"] == "campaign_not_found"
+
+    @pytest.mark.asyncio
+    async def test_round_trip_plan_then_dispatch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # In-memory bridge so plan persists and dispatch can load.
+        class _Bridge:
+            def __init__(self) -> None:
+                self.store: dict[str, dict[str, Any]] = {}
+
+            async def save(self, **kwargs: Any) -> dict[str, Any]:
+                self.store[kwargs["key"]] = {"value": kwargs["value"]}
+                return self.store[kwargs["key"]]
+
+            async def get(self, key: str) -> dict[str, Any] | None:
+                return self.store.get(key)
+
+        bridge = _Bridge()
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: bridge,
+        )
+
+        _write_two_cluster_project(tmp_path)
+        from tapps_mcp.server_analysis_tools import tapps_audit_campaign
+
+        plan_resp = await tapps_audit_campaign(
+            scope=str(tmp_path / "mypkg"),
+            categories="quality",
+            chunk_size=3,
+            project_root=str(tmp_path),
+        )
+        assert plan_resp["success"] is True
+        campaign_id = plan_resp["data"]["campaign_id"]
+        # Plan-mode bodies still carry the placeholder.
+        for session in plan_resp["data"]["sessions"]:
+            assert "<campaign-epic>" in session["body"]
+
+        dispatch_resp = await tapps_audit_campaign(
+            mode="dispatch",
+            campaign_id=campaign_id,
+            epic_ref="TAP-9999",
+            project_root=str(tmp_path),
+        )
+        assert dispatch_resp["success"] is True
+        assert dispatch_resp["data"]["epic_ref"] == "TAP-9999"
+        for session in dispatch_resp["data"]["sessions"]:
+            assert "<campaign-epic>" not in session["body"]
+            assert "TAP-9999" in session["body"]
+        assert dispatch_resp["data"]["persisted_to_brain"] is True

@@ -953,17 +953,25 @@ async def tapps_audit_campaign(
     graph_root: str = "",
     project_root: str = "",
     campaign_id: str = "",
+    mode: str = "plan",
+    epic_ref: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Plan an audit campaign for a project scope (mode=plan).
+    """Plan or finalize an audit campaign for a project scope.
 
-    Clusters Python files in ``scope`` into session-sized chunks by import
-    relationships and renders the parent epic + N session ticket bodies.
-    Returns a structured campaign spec the caller can inspect or hand to a
-    dispatch step. No Linear writes, no brain memory writes happen here.
+    ``mode="plan"`` clusters files in ``scope`` into session-sized chunks,
+    renders the parent epic + N session bodies (with an ``<campaign-epic>``
+    placeholder), persists the spec to brain memory, and returns it. No
+    Linear writes happen — the caller is expected to file the epic +
+    sessions via the ``linear-issue`` skill.
+
+    ``mode="dispatch"`` loads a previously-planned campaign from brain by
+    ``campaign_id``, substitutes the real ``epic_ref`` into every session
+    body, persists the finalized spec back, and returns it ready for
+    per-session ``save_issue`` calls with ``parent_id=epic_ref``.
 
     Args:
-        scope: Directory to audit (default: project root).
+        scope: Directory to audit (plan-mode default: project root).
         categories: Comma-separated subset of
             ``{"quality", "security", "dead_code", "docs"}``.
         chunk_size: Soft target files per session (default 6).
@@ -972,12 +980,30 @@ async def tapps_audit_campaign(
             (e.g. ``packages/tapps-mcp/src``) so module names resolve and
             edges are recorded — workaround for TAP-2035.
         project_root: Project root path (default: server's configured root).
-        campaign_id: Explicit campaign id. Empty = auto-generate from
-            scope + date + commit-sha-prefix.
+        campaign_id: Explicit campaign id. Required for ``mode="dispatch"``;
+            empty in plan-mode auto-generates from scope + date + SHA.
+        mode: ``"plan"`` (default) or ``"dispatch"``.
+        epic_ref: Linear identifier of the saved campaign epic
+            (e.g. ``"TAP-2050"``). Required for ``mode="dispatch"``.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_audit_campaign")
     await ensure_session_initialized()
+
+    if mode not in {"plan", "dispatch"}:
+        return error_response(
+            "tapps_audit_campaign",
+            "invalid_mode",
+            f"mode must be 'plan' or 'dispatch', got: {mode!r}",
+        )
+
+    if mode == "dispatch":
+        return await _handle_dispatch_mode(
+            start=start,
+            campaign_id=campaign_id,
+            epic_ref=epic_ref,
+            ctx=ctx,
+        )
 
     from tapps_mcp.tools.audit_campaign import build_campaign_spec
 
@@ -1079,6 +1105,63 @@ async def _persist_campaign_spec(
     except (OSError, RuntimeError, ValueError) as exc:
         logger.debug("audit_campaign_persist_failed", error=str(exc))
         return False
+
+
+async def _handle_dispatch_mode(
+    *,
+    start: int,
+    campaign_id: str,
+    epic_ref: str,
+    ctx: Context[Any, Any, Any] | None,
+) -> dict[str, Any]:
+    """Load a planned campaign, substitute epic_ref, return the finalized spec."""
+    from tapps_mcp.tools.audit_campaign import finalize_session_bodies
+    from tapps_mcp.tools.audit_manifest import (
+        load_campaign_spec,
+        save_campaign_spec,
+    )
+
+    if not campaign_id:
+        return error_response(
+            "tapps_audit_campaign",
+            "missing_campaign_id",
+            "mode='dispatch' requires campaign_id from a prior plan run",
+        )
+    if not epic_ref:
+        return error_response(
+            "tapps_audit_campaign",
+            "missing_epic_ref",
+            "mode='dispatch' requires epic_ref (e.g. 'TAP-2050')",
+        )
+
+    spec = await load_campaign_spec(campaign_id)
+    if spec is None:
+        return error_response(
+            "tapps_audit_campaign",
+            "campaign_not_found",
+            f"no campaign spec found in brain for campaign_id={campaign_id!r}. "
+            "Run mode='plan' first.",
+        )
+
+    try:
+        finalized = finalize_session_bodies(spec, epic_ref)
+    except ValueError as exc:
+        return error_response(
+            "tapps_audit_campaign", "invalid_epic_ref", str(exc)
+        )
+
+    re_persisted = await save_campaign_spec(campaign_id, finalized)
+    finalized["persisted_to_brain"] = re_persisted
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_audit_campaign", start)
+    await emit_ctx_info(
+        ctx,
+        f"Dispatched campaign {campaign_id} with epic_ref={epic_ref} "
+        f"({len(finalized.get('sessions') or [])} sessions ready to file)",
+    )
+    resp = success_response("tapps_audit_campaign", elapsed_ms, finalized)
+    return _with_nudges("tapps_audit_campaign", resp)
 
 
 async def _resolve_git_short_sha(root: Path) -> str:
