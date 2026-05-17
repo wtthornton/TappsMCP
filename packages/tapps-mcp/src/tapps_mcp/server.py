@@ -9,7 +9,7 @@ Tool handlers are split across modules for maintainability:
   - ``server_metrics_tools``: tapps_dashboard, tapps_stats, tapps_feedback
   - ``server_memory_tools``: tapps_memory
   - ``server_analysis_tools``: tapps_session_notes, tapps_impact_analysis, tapps_report,
-    tapps_dead_code, tapps_dependency_scan, tapps_dependency_graph
+    tapps_dead_code, tapps_dependency_scan, tapps_dependency_graph, tapps_audit_campaign
   - ``server_resources``: MCP resources and prompts
 """
 
@@ -185,6 +185,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_dead_code",
         "tapps_dependency_scan",
         "tapps_dependency_graph",
+        "tapps_audit_campaign",
         "tapps_memory",
         "tapps_pipeline",
         "tapps_decompose",
@@ -286,6 +287,7 @@ TAPPS_TOOL_PRESET_QUALITY: frozenset[str] = frozenset(
         "tapps_validate_config",
         "tapps_dependency_scan",
         "tapps_dependency_graph",
+        "tapps_audit_campaign",
     }
 )
 
@@ -1505,6 +1507,7 @@ tapps_report = _analysis.tapps_report
 tapps_dead_code = _analysis.tapps_dead_code
 tapps_dependency_scan = _analysis.tapps_dependency_scan
 tapps_dependency_graph = _analysis.tapps_dependency_graph
+tapps_audit_campaign = _analysis.tapps_audit_campaign
 _promote_note_to_memory = _analysis._promote_note_to_memory
 
 

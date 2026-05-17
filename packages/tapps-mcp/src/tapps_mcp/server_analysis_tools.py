@@ -942,6 +942,147 @@ async def tapps_dependency_graph(
 
 
 # ---------------------------------------------------------------------------
+# tapps_audit_campaign (mode=plan)
+# ---------------------------------------------------------------------------
+
+
+async def tapps_audit_campaign(
+    scope: str = "",
+    categories: str = "quality,security,dead_code",
+    chunk_size: int = 6,
+    graph_root: str = "",
+    project_root: str = "",
+    campaign_id: str = "",
+    ctx: Context[Any, Any, Any] | None = None,
+) -> dict[str, Any]:
+    """Plan an audit campaign for a project scope (mode=plan).
+
+    Clusters Python files in ``scope`` into session-sized chunks by import
+    relationships and renders the parent epic + N session ticket bodies.
+    Returns a structured campaign spec the caller can inspect or hand to a
+    dispatch step. No Linear writes, no brain memory writes happen here.
+
+    Args:
+        scope: Directory to audit (default: project root).
+        categories: Comma-separated subset of
+            ``{"quality", "security", "dead_code", "docs"}``.
+        chunk_size: Soft target files per session (default 6).
+        graph_root: Directory used to build the import graph. Empty =
+            project_root. Set to a package source root for monorepos
+            (e.g. ``packages/tapps-mcp/src``) so module names resolve and
+            edges are recorded — workaround for TAP-2035.
+        project_root: Project root path (default: server's configured root).
+        campaign_id: Explicit campaign id. Empty = auto-generate from
+            scope + date + commit-sha-prefix.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_audit_campaign")
+    await ensure_session_initialized()
+
+    from tapps_mcp.tools.audit_campaign import build_campaign_spec
+
+    settings = load_settings()
+    root = settings.project_root
+    if project_root:
+        custom = _Path(project_root).resolve()
+        if not custom.is_dir():
+            return error_response(
+                "tapps_audit_campaign",
+                "invalid_project_root",
+                f"project_root is not an existing directory: {custom}",
+            )
+        root = custom
+
+    scope_path = _Path(scope).resolve() if scope else root
+    if not scope_path.is_dir():
+        return error_response(
+            "tapps_audit_campaign",
+            "invalid_scope",
+            f"scope is not an existing directory: {scope_path}",
+        )
+
+    graph_root_path = _Path(graph_root).resolve() if graph_root else None
+    if graph_root_path is not None and not graph_root_path.is_dir():
+        return error_response(
+            "tapps_audit_campaign",
+            "invalid_graph_root",
+            f"graph_root is not an existing directory: {graph_root_path}",
+        )
+
+    cats = [c.strip() for c in categories.split(",") if c.strip()]
+    commit_sha = await _resolve_git_short_sha(root)
+
+    try:
+        spec = build_campaign_spec(
+            root,
+            scope_path,
+            graph_root=graph_root_path,
+            commit_sha=commit_sha,
+            categories=cats,
+            chunk_size=chunk_size,
+            campaign_id=campaign_id,
+        )
+    except ValueError as exc:
+        return error_response(
+            "tapps_audit_campaign", "invalid_categories", str(exc)
+        )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_audit_campaign", start)
+
+    data: dict[str, Any] = {
+        "campaign_id": spec.campaign_id,
+        "project_root": spec.project_root,
+        "scope": spec.scope,
+        "graph_root": spec.graph_root,
+        "commit_sha": spec.commit_sha,
+        "categories": spec.categories,
+        "total_files": spec.total_files,
+        "total_chunks": spec.total_chunks,
+        "skipped_trivial": spec.skipped_trivial,
+        "epic": {"title": spec.epic.title, "body": spec.epic.body},
+        "sessions": [
+            {
+                "session_index": s.session_index,
+                "title": s.title,
+                "body": s.body,
+                "files": s.files,
+                "modules": s.modules,
+                "intra_edges": s.intra_edges,
+                "boundary_edges": s.boundary_edges,
+                "rationale": s.rationale,
+            }
+            for s in spec.sessions
+        ],
+    }
+    await emit_ctx_info(
+        ctx,
+        f"Planned campaign {spec.campaign_id}: "
+        f"{spec.total_chunks} sessions across {spec.total_files} files",
+    )
+
+    resp = success_response("tapps_audit_campaign", elapsed_ms, data)
+    return _with_nudges("tapps_audit_campaign", resp)
+
+
+async def _resolve_git_short_sha(root: Path) -> str:
+    """Return ``git rev-parse --short HEAD`` from ``root``, or empty."""
+    from tapps_mcp.tools.subprocess_runner import run_command_async
+
+    try:
+        result = await run_command_async(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(root),
+            timeout=5,
+        )
+    except (OSError, RuntimeError):
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -967,4 +1108,8 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "tapps_dependency_graph" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K)(
             tapps_dependency_graph
+        )
+    if "tapps_audit_campaign" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K)(
+            tapps_audit_campaign
         )

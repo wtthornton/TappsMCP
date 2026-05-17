@@ -10,14 +10,27 @@ it is saved, so it must conform to the AGENT 5-section template
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from tapps_mcp.tools.audit_chunker import AuditChunk
 
 
-_VALID_CATEGORIES: frozenset[str] = frozenset(
+class _SessionLike(Protocol):
+    """Structural type for ``CampaignSession``-shaped objects.
+
+    Defined here to avoid importing :mod:`audit_campaign` (which itself
+    imports this module) at render time.
+    """
+
+    session_index: int
+    title: str
+    files: list[str]
+
+
+VALID_CATEGORIES: frozenset[str] = frozenset(
     {"quality", "security", "dead_code", "docs"}
 )
 
@@ -51,9 +64,9 @@ def render_session_ticket(
         file_line_counts: Map of relative file path to line count (used in
             ``## Where`` anchors).
     """
-    bad = sorted(set(categories) - _VALID_CATEGORIES)
+    bad = sorted(set(categories) - VALID_CATEGORIES)
     if bad:
-        msg = f"Unknown categories: {bad}. Valid: {sorted(_VALID_CATEGORIES)}"
+        msg = f"Unknown categories: {bad}. Valid: {sorted(VALID_CATEGORIES)}"
         raise ValueError(msg)
 
     cats_set = set(categories)
@@ -259,3 +272,80 @@ def _common_prefix(modules: list[str]) -> str:
         else:
             break
     return ".".join(common)
+
+
+def render_campaign_epic(
+    *,
+    scope: str,
+    campaign_id: str,
+    commit_sha: str,
+    categories: list[str],
+    sessions: Sequence[_SessionLike],
+    total_files: int,
+    skipped_trivial: list[str],
+) -> tuple[str, str]:
+    """Render the parent epic title + body for a campaign.
+
+    Returns a (title, body) tuple. Body conforms to the epic template
+    (Purpose & Intent / Goal / Motivation / Acceptance Criteria /
+    Technical Notes / Refs) and is intended to pass
+    ``docs_validate_linear_issue(is_epic=true)`` with ``agent_ready=true``.
+    """
+    title = f"audit campaign: {scope} ({campaign_id.split('-')[-1]})"
+    if len(title) > 80:
+        title = title[:77] + "..."
+
+    cats_display = ", ".join(sorted(categories))
+    session_count = len(sessions)
+    accept_lines = "\n".join(
+        f"- [ ] Session #{s.session_index}: `{s.title}` — "
+        f"{len(s.files)} files filed and reviewed"
+        for s in sessions
+    )
+    skipped_count = len(skipped_trivial)
+
+    body = (
+        "## Purpose & Intent\n\n"
+        f"We are doing this so that the {total_files} reviewable Python "
+        f"files under `{scope}` are audited as {session_count} cohesive "
+        "session(s) — each session gets a prescriptive playbook (which "
+        "tapps-mcp tools to run, what counts as a finding, how to file it) "
+        "and any findings land as new Linear issues parented to the session "
+        "ticket. Coverage is tracked in brain memory under "
+        f"`audit:coverage:<file>` keys so re-runs are idempotent.\n\n"
+        "## Goal\n\n"
+        f"Complete all {session_count} child session ticket(s) listed in "
+        "`## Acceptance Criteria` and update the coverage manifest. "
+        "The audit executor files findings; the orchestrator "
+        "(`tapps_audit_campaign`) closes session tickets and writes the "
+        "coverage entries.\n\n"
+        "## Motivation\n\n"
+        "Without an explicit campaign structure, code review on this scope "
+        "would be ad-hoc, inconsistent across sessions, and impossible to "
+        "track. This campaign produces a deterministic record of what was "
+        "audited, at which commit, by which session, and what was found.\n\n"
+        "## Acceptance Criteria\n\n"
+        f"{accept_lines}\n"
+        "- [ ] Coverage manifest entries written for every file in scope\n"
+        "- [ ] All P0 / P1 findings filed as individual child issues "
+        "parented to their session ticket\n"
+        "- [ ] All P2 / P3 findings bundled into per-session digest issues "
+        "parented to their session ticket\n\n"
+        "## Technical Notes\n\n"
+        f"1. Campaign id: `{campaign_id}`\n"
+        f"2. Audited at commit `{commit_sha}`\n"
+        f"3. Categories in scope: **{cats_display}**\n"
+        f"4. Scope: `{scope}`\n"
+        f"5. Files skipped as trivial (empty / re-export shim): "
+        f"{skipped_count}\n"
+        "6. Cluster strategy: undirected connected components, "
+        "size-aware split + package-affinity bin-pack (see "
+        "`packages/tapps-mcp/src/tapps_mcp/tools/audit_chunker.py:1-280`)\n\n"
+        "## Refs\n\n"
+        "1. `TAP-2036` — parent feature epic (`tapps_audit_campaign` tool)\n"
+        "2. `TAP-2035` — `build_import_graph` 0-edge bug on monorepo roots "
+        "(workaround via `graph_root` param)\n"
+        f"3. `packages/tapps-mcp/src/tapps_mcp/tools/audit_session_template.py`"
+        " — per-session ticket renderer\n"
+    )
+    return title, body
