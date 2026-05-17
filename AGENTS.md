@@ -49,6 +49,7 @@ Seven rules every agent in this project should follow.
 | **tapps_dead_code** | Find unused code during refactoring |
 | **tapps_dependency_scan** | Check for CVEs before releases |
 | **tapps_dependency_graph** | Understand module dependencies, circular imports |
+| **tapps_audit_campaign** | Plan a code-review campaign: cluster files into session-sized chunks, render parent epic + per-session ticket bodies. Read-only. |
 | **tapps_report** | Generate quality reports (JSON, Markdown, HTML) |
 | **tapps_dashboard** | Metrics dashboard for TappsMCP performance trends |
 | **tapps_stats** | Tool usage statistics and call counts |

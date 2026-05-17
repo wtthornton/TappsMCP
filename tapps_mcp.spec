@@ -123,6 +123,7 @@ a = Analysis(
         "tapps_mcp.tools.release_update",
         "tapps_mcp.tools.audit_campaign",
         "tapps_mcp.tools.audit_chunker",
+        "tapps_mcp.tools.audit_manifest",
         "tapps_mcp.tools.audit_session_template",
         "tapps_mcp.knowledge",
         "tapps_mcp.knowledge.models",

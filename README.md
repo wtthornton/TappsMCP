@@ -604,6 +604,7 @@ Quick index:
 | **tapps_dead_code** | Scan Python files for dead code — supports file, project-wide, or changed-files-only scanning with confidence scoring. |
 | **tapps_dependency_scan** | Scan project dependencies for known vulnerabilities (pip-audit). |
 | **tapps_dependency_graph** | Build import graph, detect circular imports, and calculate coupling metrics. |
+| **tapps_audit_campaign** | Plan a code-review campaign: cluster files in a scope into session-sized chunks, render a parent epic + N per-session ticket bodies (each with a prescriptive tool playbook), persist the spec to brain memory. Read-only — no Linear writes happen here. |
 | **tapps_init** | Bootstrap TappsMCP in a project: create AGENTS.md, TECH_STACK.md, platform rules, hooks, agents, skills. See [init options](#tapps-mcp-init-options). |
 | **tapps_set_engagement_level** | Set LLM engagement level (high/medium/low) in `.tapps-mcp.yaml`; then run init with overwrite to apply. |
 | **tapps_upgrade** | Validate and refresh all generated files (AGENTS.md, rules, hooks) after upgrading TappsMCP. Creates backup first. |

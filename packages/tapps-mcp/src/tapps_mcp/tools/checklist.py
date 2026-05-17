@@ -166,7 +166,12 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
     "review": {
         "required": ["tapps_score_file", "tapps_security_scan", "tapps_quality_gate"],
         "recommended": ["tapps_checklist", "tapps_dead_code"],
-        "optional": ["tapps_dependency_scan", "tapps_dependency_graph", "tapps_memory"],
+        "optional": [
+            "tapps_dependency_scan",
+            "tapps_dependency_graph",
+            "tapps_audit_campaign",
+            "tapps_memory",
+        ],
     },
     "epic": {
         "required": ["tapps_checklist"],
@@ -210,7 +215,11 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
             "tapps_checklist",
         ],
         "recommended": ["tapps_dead_code", "tapps_validate_changed"],
-        "optional": ["tapps_dependency_scan", "tapps_dependency_graph"],
+        "optional": [
+            "tapps_dependency_scan",
+            "tapps_dependency_graph",
+            "tapps_audit_campaign",
+        ],
     },
     "epic": {
         "required": ["tapps_checklist", "tapps_score_file"],
