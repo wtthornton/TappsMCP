@@ -394,6 +394,12 @@ def _collect_brain_bridge_health() -> dict[str, Any]:
     the cached BrainBridge singleton if available, otherwise reports
     ``{enabled: False}``. Failures inside ``health_check`` surface as
     ``ok: false`` with an ``errors`` list.
+
+    TAP-2098: when the bridge supports :meth:`auth_probe` and the probe
+    returns an ``out_of_profile`` envelope with ``suggested_profile`` set,
+    surface that into ``details`` so operators see "switch to profile X"
+    remediation directly in ``brain_bridge_health`` instead of having to dig
+    into ``memory_status.auth_probe``.
     """
     try:
         from tapps_mcp.server_helpers import _get_brain_bridge
@@ -407,7 +413,40 @@ def _collect_brain_bridge_health() -> dict[str, Any]:
         report = bridge.health_check()
     except Exception as exc:
         return {"enabled": True, "ok": False, "errors": [f"health_check_raised: {exc}"]}
+    _enrich_health_with_auth_probe(bridge, report)
     return {"enabled": True, **report}
+
+
+def _enrich_health_with_auth_probe(bridge: Any, report: dict[str, Any]) -> None:
+    """TAP-2098: surface ``suggested_profile`` (and gating context) from a
+    fresh ``auth_probe`` into ``report['details']`` when the brain reports
+    the probe tool is hidden by the active profile.
+
+    No-ops when the bridge does not expose ``auth_probe`` (e.g. in-process
+    mode) or when the probe response carries no ``suggested_profile``.
+    """
+    if not hasattr(bridge, "auth_probe"):
+        return
+    try:
+        probe = bridge.auth_probe()
+    except Exception:
+        return
+    if not isinstance(probe, dict):
+        return
+    suggested = probe.get("suggested_profile")
+    gated = probe.get("gated")
+    if not suggested and not gated:
+        return
+    details = dict(report.get("details") or {})
+    if suggested:
+        details["suggested_profile"] = suggested
+    if gated:
+        details["profile_gated"] = True
+        if probe.get("profile"):
+            details["active_profile"] = probe["profile"]
+        if probe.get("tool"):
+            details["denied_tool"] = probe["tool"]
+    report["details"] = details
 
 
 def _memory_status_http_mode(bridge: Any) -> dict[str, Any]:

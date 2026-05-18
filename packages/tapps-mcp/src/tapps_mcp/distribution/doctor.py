@@ -1245,6 +1245,29 @@ def check_tapps_brain() -> CheckResult:
         )
 
 
+def _run_auth_probe(http_url: str, settings: Any) -> dict[str, Any] | None:
+    """TAP-2098: run a synchronous :meth:`HttpBrainBridge.auth_probe` for the
+    doctor check.
+
+    Builds a transient ``HttpBrainBridge`` from doctor-resolved settings so
+    we never share state with the long-lived server bridge. Returns the
+    probe dict (carrying ``ok``, ``gated``, ``suggested_profile`` …) or
+    ``None`` when the probe cannot run.
+    """
+    try:
+        from tapps_core.brain_auth import build_brain_headers
+        from tapps_core.brain_bridge import HttpBrainBridge
+    except Exception:
+        return None
+    try:
+        headers = build_brain_headers(settings)
+        bridge = HttpBrainBridge(http_url, headers)
+        result = bridge.auth_probe()
+    except Exception:
+        return None
+    return result if isinstance(result, dict) else None
+
+
 def check_brain_http_auth(root: Path) -> CheckResult:
     """Verify that HTTP-bridge auth config is complete when HTTP mode is active.
 
@@ -1284,6 +1307,31 @@ def check_brain_http_auth(root: Path) -> CheckResult:
         )
 
     if token_present and project_id_present:
+        # TAP-2098: config looks good — actually probe the wire so the operator
+        # sees ``out_of_profile`` denials (server returns 200 with a JSON-RPC
+        # ``error.data.reason == "out_of_profile"`` envelope) before the first
+        # runtime memory call fails. ``suggested_profile`` (v3.19.0+) becomes
+        # the remediation hint.
+        probe = _run_auth_probe(http_url, settings)
+        if probe is not None and probe.get("gated"):
+            tool = probe.get("tool") or "probe tool"
+            profile = probe.get("profile") or "<unset>"
+            suggested = probe.get("suggested_profile")
+            hint = (
+                f"Set TAPPS_BRAIN_PROFILE (or memory.brain_profile in "
+                f".tapps-mcp.yaml) to {suggested!r} to expose {tool!r}."
+                if suggested
+                else (
+                    f"No profile suggested by brain — pick a profile that "
+                    f"exposes {tool!r} (e.g. ``operator`` or ``full``)."
+                )
+            )
+            return CheckResult(
+                "tapps-brain HTTP auth",
+                False,
+                f"HTTP auth ok but profile {profile!r} hides {tool!r}",
+                hint,
+            )
         return CheckResult(
             "tapps-brain HTTP auth",
             True,

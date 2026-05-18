@@ -2211,6 +2211,13 @@ class HttpBrainBridge(BrainBridge):
 
         - ``ok=True, http_status=200`` — auth works.
         - ``ok=False, http_status=401|403, detail=<body>`` — server rejected auth.
+        - ``ok=False, http_status=200, gated=True, tool, profile, suggested_profile``
+          — TAP-2098: server returned ``200`` but the JSON-RPC body carries an
+          ``out_of_profile`` error (TAP-1616 / TAP-1972, v3.19.0+). The probe
+          tool is hidden by the active profile; ``suggested_profile`` is the
+          smallest profile that exposes it (``None`` on brains <3.19.0).
+        - ``ok=False, http_status=200, detail=<rpc_error>`` — TAP-2098: ``200``
+          response but body carries a non-``out_of_profile`` JSON-RPC error.
         - ``ok=False, error=<str>`` — transport failed (DNS, connection refused, etc.).
         """
         # TAP-836: run the full initialize handshake synchronously. Brain
@@ -2265,12 +2272,62 @@ class HttpBrainBridge(BrainBridge):
         except Exception as exc:
             return {"ok": False, "error": f"probe_failed: {exc}"}
         if response.status_code == 200:
-            return {"ok": True, "http_status": 200}
+            # TAP-2098: a 200 with an ``out_of_profile`` JSON-RPC error body
+            # means the configured profile hides the probe tool — same
+            # caller-side fix as a 401/403, so report it as a probe failure
+            # rather than silently passing. Tolerates non-JSON or
+            # unstructured bodies (no error envelope ⇒ probe ok).
+            return self._parse_probe_body(response)
         detail = response.text[:200] if response.text else ""
         return {
             "ok": False,
             "http_status": response.status_code,
             "detail": detail,
+        }
+
+    @staticmethod
+    def _parse_probe_body(response: httpx.Response) -> dict[str, Any]:
+        """Classify a 200 ``tools/call`` probe response from its JSON-RPC body.
+
+        TAP-2098. Returns one of:
+
+        - ``{"ok": True, "http_status": 200}`` — body has no ``error`` field
+          (or is non-JSON / non-dict; the legacy behaviour is preserved).
+        - ``{"ok": False, "http_status": 200, "gated": True, "tool", "profile",
+          "suggested_profile"}`` — body carries an ``out_of_profile`` envelope
+          (TAP-1616 / TAP-1972). ``suggested_profile`` is ``None`` when the
+          brain pre-dates v3.19.0.
+        - ``{"ok": False, "http_status": 200, "detail": <str>}`` — body carries
+          a non-``out_of_profile`` JSON-RPC error.
+        """
+        try:
+            body = response.json()
+        except Exception:
+            return {"ok": True, "http_status": 200}
+        if not isinstance(body, dict):
+            return {"ok": True, "http_status": 200}
+        rpc_error = body.get("error")
+        if not isinstance(rpc_error, dict):
+            return {"ok": True, "http_status": 200}
+        err_code = rpc_error.get("code")
+        err_data = rpc_error.get("data")
+        if (
+            err_code == -32602
+            and isinstance(err_data, dict)
+            and err_data.get("reason") == "out_of_profile"
+        ):
+            return {
+                "ok": False,
+                "http_status": 200,
+                "gated": True,
+                "tool": err_data.get("tool") or "memory_list",
+                "profile": err_data.get("profile"),
+                "suggested_profile": err_data.get("suggested_profile"),
+            }
+        return {
+            "ok": False,
+            "http_status": 200,
+            "detail": str(rpc_error)[:200],
         }
 
     @property

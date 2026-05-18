@@ -1595,6 +1595,173 @@ class TestHttpHealthCheck:
 
 
 # ---------------------------------------------------------------------------
+# TAP-2098: auth_probe body-shape classification
+# ---------------------------------------------------------------------------
+
+
+def _probe_responses(
+    *, init_status: int = 200, call_status: int = 200, call_body: Any | None = None
+) -> tuple[MagicMock, MagicMock]:
+    """Build the (init, call) httpx response pair that ``auth_probe`` posts."""
+    init = MagicMock()
+    init.status_code = init_status
+    init.headers = {"mcp-session-id": "test-session"}
+    init.text = ""
+
+    call = MagicMock()
+    call.status_code = call_status
+    call.text = json.dumps(call_body) if call_body is not None else ""
+    call.json.return_value = call_body if call_body is not None else {}
+    return init, call
+
+
+class TestHttpAuthProbeBody:
+    """TAP-2098: ``auth_probe`` must parse the JSON-RPC body when
+    ``status_code == 200`` so ``out_of_profile`` denials don't slip through
+    as healthy. Status-only paths (401/403/transport errors) keep working.
+    """
+
+    def test_happy_path_returns_ok_true(self) -> None:
+        bridge = _make_http_bridge("http://brain:8080")
+        init, call = _probe_responses(
+            call_body={"jsonrpc": "2.0", "id": 2, "result": {"content": []}}
+        )
+        with patch("httpx.post", side_effect=[init, call]):
+            result = bridge.auth_probe()
+        assert result == {"ok": True, "http_status": 200}
+
+    def test_out_of_profile_envelope_with_suggested_profile(self) -> None:
+        """v3.19.0+ out_of_profile body with suggested_profile populated."""
+        bridge = _make_http_bridge("http://brain:8080")
+        init, call = _probe_responses(
+            call_body={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "error": {
+                    "code": -32602,
+                    "message": "Tool 'memory_list' is not available in profile 'minimal'.",
+                    "data": {
+                        "reason": "out_of_profile",
+                        "tool": "memory_list",
+                        "profile": "minimal",
+                        "suggested_profile": "operator",
+                    },
+                },
+            }
+        )
+        with patch("httpx.post", side_effect=[init, call]):
+            result = bridge.auth_probe()
+        assert result["ok"] is False
+        assert result["http_status"] == 200
+        assert result["gated"] is True
+        assert result["tool"] == "memory_list"
+        assert result["profile"] == "minimal"
+        assert result["suggested_profile"] == "operator"
+
+    def test_out_of_profile_envelope_without_suggested_profile(self) -> None:
+        """Back-compat: brains <3.19.0 omit suggested_profile; the absence
+        must surface as ``None`` rather than KeyError.
+        """
+        bridge = _make_http_bridge("http://brain:8080")
+        init, call = _probe_responses(
+            call_body={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "error": {
+                    "code": -32602,
+                    "message": "Tool 'memory_list' is not available in profile 'minimal'.",
+                    "data": {
+                        "reason": "out_of_profile",
+                        "tool": "memory_list",
+                        "profile": "minimal",
+                    },
+                },
+            }
+        )
+        with patch("httpx.post", side_effect=[init, call]):
+            result = bridge.auth_probe()
+        assert result["ok"] is False
+        assert result["gated"] is True
+        assert result["suggested_profile"] is None
+
+    def test_non_out_of_profile_rpc_error_surfaces_as_detail(self) -> None:
+        """200 with a non-out_of_profile JSON-RPC error: surface as ok=False
+        with the rpc_error string in ``detail`` (no gated flag).
+        """
+        bridge = _make_http_bridge("http://brain:8080")
+        init, call = _probe_responses(
+            call_body={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "error": {"code": -32603, "message": "internal error"},
+            }
+        )
+        with patch("httpx.post", side_effect=[init, call]):
+            result = bridge.auth_probe()
+        assert result["ok"] is False
+        assert result["http_status"] == 200
+        assert "gated" not in result
+        assert "internal error" in result["detail"]
+
+    def test_non_json_body_treated_as_happy_path(self) -> None:
+        """If the 200 body isn't JSON (e.g. an empty SSE chunk), preserve
+        the legacy happy-path behaviour rather than failing the probe.
+        """
+        bridge = _make_http_bridge("http://brain:8080")
+        init = MagicMock()
+        init.status_code = 200
+        init.headers = {"mcp-session-id": "test-session"}
+
+        call = MagicMock()
+        call.status_code = 200
+        call.text = "not-json"
+        call.json.side_effect = ValueError("not json")
+
+        with patch("httpx.post", side_effect=[init, call]):
+            result = bridge.auth_probe()
+        assert result == {"ok": True, "http_status": 200}
+
+    def test_401_still_surfaces_as_auth_failure(self) -> None:
+        """Existing 401 path: no JSON parsing, just status + detail."""
+        bridge = _make_http_bridge("http://brain:8080")
+        init = MagicMock()
+        init.status_code = 401
+        init.headers = {}
+        init.text = "Unauthorized"
+
+        with patch("httpx.post", return_value=init):
+            result = bridge.auth_probe()
+        assert result["ok"] is False
+        assert result["http_status"] == 401
+        assert result["detail"] == "Unauthorized"
+
+    def test_403_still_surfaces_as_auth_failure(self) -> None:
+        bridge = _make_http_bridge("http://brain:8080")
+        init = MagicMock()
+        init.status_code = 403
+        init.headers = {}
+        init.text = "Forbidden"
+
+        with patch("httpx.post", return_value=init):
+            result = bridge.auth_probe()
+        assert result["ok"] is False
+        assert result["http_status"] == 403
+
+    def test_non_200_non_auth_status_surfaces_with_detail(self) -> None:
+        """Regression: a 500 from the call leg still surfaces as ok=False
+        with status + detail (no JSON parsing, no false-gated flag).
+        """
+        bridge = _make_http_bridge("http://brain:8080")
+        init, call = _probe_responses(call_status=500)
+        call.text = "boom"
+        with patch("httpx.post", side_effect=[init, call]):
+            result = bridge.auth_probe()
+        assert result["ok"] is False
+        assert result["http_status"] == 500
+        assert result["detail"] == "boom"
+
+
+# ---------------------------------------------------------------------------
 # store property
 # ---------------------------------------------------------------------------
 

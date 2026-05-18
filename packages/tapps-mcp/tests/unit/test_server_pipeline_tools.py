@@ -268,6 +268,74 @@ class TestTappsSessionStart:
         data = result["data"]
         assert data["brain_bridge_health"]["enabled"] is True
 
+    @pytest.mark.asyncio
+    async def test_brain_bridge_health_details_carry_suggested_profile(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TAP-2098: when ``auth_probe`` returns an ``out_of_profile`` envelope
+        with ``suggested_profile``, ``brain_bridge_health.details`` exposes it
+        so operators see the remediation hint at session start.
+        """
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "test-token")
+        monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
+        monkeypatch.setattr(
+            "tapps_mcp.server_pipeline_tools._detect_brain_auth_failure",
+            lambda *_a, **_kw: None,
+        )
+
+        from tapps_mcp.server_helpers import _reset_brain_bridge_cache
+
+        _reset_brain_bridge_cache()
+
+        mock_health_response = MagicMock()
+        mock_health_response.raise_for_status = MagicMock()
+        mock_health_response.json.return_value = {"status": "ok", "version": "3.19.0"}
+
+        _skip_version_check = {
+            "ok": True,
+            "skipped": True,
+            "degraded": False,
+            "url": "",
+            "floor": "3.18.0",
+            "ceiling": "4.0.0",
+            "version": None,
+            "errors": [],
+            "warnings": [],
+        }
+
+        gated_probe = {
+            "ok": False,
+            "http_status": 200,
+            "gated": True,
+            "tool": "memory_list",
+            "profile": "minimal",
+            "suggested_profile": "operator",
+        }
+
+        with (
+            patch(
+                "tapps_core.brain_bridge.check_brain_version",
+                return_value=_skip_version_check,
+            ),
+            patch("httpx.get", return_value=mock_health_response),
+            patch(
+                "tapps_core.brain_bridge.HttpBrainBridge.auth_probe",
+                return_value=gated_probe,
+            ),
+        ):
+            result = await tapps_session_start()
+
+        _reset_brain_bridge_cache()
+
+        details = result["data"]["brain_bridge_health"]["details"]
+        assert details["suggested_profile"] == "operator"
+        assert details["profile_gated"] is True
+        assert details["active_profile"] == "minimal"
+        assert details["denied_tool"] == "memory_list"
+
 
 # ---------------------------------------------------------------------------
 # tapps_set_engagement_level
