@@ -17,7 +17,8 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0007](0007-linear-writes-default-assignee-to-the-agent-never-the-oauth-human.md) | Linear writes default assignee to the agent, never the OAuth human | Accepted |
 | [0008](0008-delete-sqlite-persistence-edge-case-tests.md) | Delete SQLite MemoryPersistence edge-case tests | Accepted |
 | [0009](0009-pin-tapps-brain-version-floor-at-3170.md) | Pin tapps-brain version floor at 3.17.0 | Superseded by [0010](0010-pin-tapps-brain-version-floor-at-3180.md) |
-| [0010](0010-pin-tapps-brain-version-floor-at-3180.md) | Pin tapps-brain version floor at 3.18.0 | Accepted |
+| [0010](0010-pin-tapps-brain-version-floor-at-3180.md) | Pin tapps-brain version floor at 3.18.0 | Superseded by [0011](0011-pin-tapps-brain-by-tag.md) |
+| [0011](0011-pin-tapps-brain-by-tag.md) | Pin tapps-brain by release tag instead of commit SHA | Accepted |
 
 ## Adding a new ADR
 

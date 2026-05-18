@@ -4,7 +4,9 @@ Date: 2026-05-16
 
 ## Status
 
-accepted (supersedes [ADR-0009](0009-pin-tapps-brain-version-floor-at-3170.md); historical chain: [ADR-0002](0002-pin-tapps-brain-version-floor-at-372.md) → ADR-0009 → ADR-0010)
+superseded by [ADR-0011](0011-pin-tapps-brain-by-tag.md) (supersedes [ADR-0009](0009-pin-tapps-brain-version-floor-at-3170.md); historical chain: [ADR-0002](0002-pin-tapps-brain-version-floor-at-372.md) → ADR-0009 → ADR-0010 → ADR-0011)
+
+The 3.18.0 version floor itself remains in force — ADR-0011 only changes the source-spec form (commit SHA → release tag) for the workspace `[tool.uv.sources]` pin. `packages/tapps-core/pyproject.toml`'s `tapps-brain>=3.18.0,<4` and `_BRAIN_VERSION_FLOOR = "3.18.0"` are unchanged.
 
 ## Context
 

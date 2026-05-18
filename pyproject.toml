@@ -2,13 +2,12 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-# tapps-brain is sourced from its GitHub repo pinned to the v3.18.0 commit SHA so
-# both local dev and CI resolve the same artifact. See ADR-0010 for the version
-# floor rationale (deprecated MCP aliases removed in 3.18.0). When v3.18.0 is
-# tagged on GitHub, swap this for ``tag = "v3.18.0"`` or remove the
-# ``[tool.uv.sources]`` entry entirely and rely on the version pin in
-# ``packages/tapps-core/pyproject.toml``.
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "afb9fbe05f8befe0544399f9d824e891059a566f" }
+# tapps-brain is sourced from its GitHub repo pinned to the v3.18.0 release tag.
+# See ADR-0011 for the tag-vs-SHA rationale (auditability; uv.lock retains the
+# commit-SHA-level determinism that ADR-0010 originally cited as the SHA-pin
+# justification). See ADR-0010 for the version floor rationale itself
+# (deprecated MCP aliases removed in 3.18.0).
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v3.18.0" }
 
 [tool.uv]
 dev-dependencies = [
