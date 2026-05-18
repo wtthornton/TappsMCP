@@ -15,7 +15,12 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import structlog
 
-from tapps_core.brain_bridge import BrainBridgeUnavailable
+from tapps_core.brain_bridge import (
+    BadJsonError,
+    BrainBridgeUnavailable,
+    BrainMcpError,
+    ToolNotInProfileError,
+)
 from tapps_mcp.server_helpers import (
     _agent_teams_env_enabled,
     _get_brain_bridge,
@@ -310,6 +315,73 @@ def _bridge_call_failed_response(
     if extra:
         payload.update(extra)
     return payload
+
+
+def _brain_mcp_error_response(
+    action: str,
+    exc: BrainMcpError,
+) -> dict[str, Any]:
+    """Translate a typed BrainMcpError to a structured agent-facing payload.
+
+    Covers two v3.19.0 envelopes that the bridge surfaces as typed subclasses:
+
+    * :class:`BadJsonError` (TAP-1967/1968/1969) — caller bug; surface
+      ``field`` + ``detail`` so the typo is visible. Non-retryable.
+    * :class:`ToolNotInProfileError` (TAP-1616 + TAP-1972) — tool gated by
+      the active brain profile; surface ``profile`` + ``suggested_profile``
+      so the caller can self-route via ``X-Brain-Profile`` retry.
+
+    Falls through to a generic structured payload for other ``BrainMcpError``
+    instances so the JSON-RPC ``code`` and ``data`` aren't lost.
+    """
+    if isinstance(exc, BadJsonError):
+        return {
+            "action": action,
+            "success": False,
+            "degraded": True,
+            "retryable": False,
+            "error": "bad_json",
+            "field": exc.field or "",
+            "detail": exc.detail or "",
+            "tool_name": exc.tool_name or "",
+            "remediation": (
+                f"The brain rejected the {exc.field!r} argument as malformed JSON. "
+                "Fix the caller; this is a permanent failure on this input."
+            ),
+        }
+    if isinstance(exc, ToolNotInProfileError):
+        payload: dict[str, Any] = {
+            "action": action,
+            "success": False,
+            "degraded": True,
+            "retryable": False,
+            "error": "out_of_profile",
+            "tool_name": exc.tool,
+            "profile": exc.profile,
+            "suggested_profile": exc.suggested_profile,
+        }
+        if exc.suggested_profile:
+            payload["remediation"] = (
+                f"Tool {exc.tool!r} is gated by profile {exc.profile!r}. "
+                f"Retry with X-Brain-Profile: {exc.suggested_profile!r}."
+            )
+        else:
+            payload["remediation"] = (
+                f"Tool {exc.tool!r} is gated by profile {exc.profile!r} and no "
+                "alternative profile exposes it on this brain."
+            )
+        return payload
+    return {
+        "action": action,
+        "success": False,
+        "degraded": True,
+        "retryable": False,
+        "error": "brain_mcp_error",
+        "code": exc.code,
+        "tool_name": exc.tool_name or "",
+        "detail": str(exc),
+        "data": exc.data,
+    }
 
 
 _BULK_SAVE_MAX_ENTRIES = 50
@@ -2290,6 +2362,8 @@ async def _handle_neighbors(store: MemoryStore, p: _Params) -> dict[str, Any]:
         )
     except BrainBridgeUnavailable as exc:
         return _bridge_call_failed_response("neighbors", exc)
+    except BrainMcpError as exc:
+        return _brain_mcp_error_response("neighbors", exc)
     return {
         "action": "neighbors",
         "success": True,
@@ -2612,6 +2686,8 @@ async def _handle_explain_connection(store: MemoryStore, p: _Params) -> dict[str
         )
     except BrainBridgeUnavailable as exc:
         return _bridge_call_failed_response("explain_connection", exc)
+    except BrainMcpError as exc:
+        return _brain_mcp_error_response("explain_connection", exc)
     return {
         "action": "explain_connection",
         "success": True,

@@ -508,6 +508,124 @@ async def test_neighbors_rejects_missing_entity_ids(store: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
+async def test_neighbors_translates_bad_json_error(store: MagicMock) -> None:
+    """TAP-2096: BadJsonError (v3.19.0 bad_json envelope) surfaces as a
+    structured payload with field+detail instead of propagating as a raw
+    exception."""
+    from tapps_core.brain_bridge import BadJsonError
+
+    bridge = _http_bridge_with_method("get_neighbors", {})
+    bridge.get_neighbors = AsyncMock(
+        side_effect=BadJsonError(
+            "tapps-brain rejected malformed JSON argument 'entity_ids_json': bad parse",
+            field="entity_ids_json",
+            detail="Expecting value: line 1 column 1 (char 0)",
+            tool_name="brain_get_neighbors",
+            data={"error": "bad_json", "field": "entity_ids_json", "detail": "bad parse"},
+        )
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_neighbors(store, _params(entry_ids=["e1"]))
+
+    assert out["success"] is False
+    assert out["error"] == "bad_json"
+    assert out["field"] == "entity_ids_json"
+    assert out["detail"] == "Expecting value: line 1 column 1 (char 0)"
+    assert out["tool_name"] == "brain_get_neighbors"
+    assert out["retryable"] is False
+    assert "remediation" in out
+
+
+@pytest.mark.asyncio
+async def test_neighbors_translates_out_of_profile_with_suggested(store: MagicMock) -> None:
+    """TAP-2096 + TAP-1972: ToolNotInProfileError surfaces with
+    suggested_profile so the agent can self-route via X-Brain-Profile retry."""
+    from tapps_core.brain_bridge import ToolNotInProfileError
+
+    bridge = _http_bridge_with_method("get_neighbors", {})
+    bridge.get_neighbors = AsyncMock(
+        side_effect=ToolNotInProfileError(
+            "tapps-brain tool 'brain_get_neighbors' is hidden by profile 'agent_brain'",
+            tool="brain_get_neighbors",
+            profile="agent_brain",
+            data={"reason": "out_of_profile"},
+            suggested_profile="coder",
+        )
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_neighbors(store, _params(entry_ids=["e1"]))
+
+    assert out["success"] is False
+    assert out["error"] == "out_of_profile"
+    assert out["profile"] == "agent_brain"
+    assert out["suggested_profile"] == "coder"
+    assert out["tool_name"] == "brain_get_neighbors"
+    assert "coder" in out["remediation"]
+
+
+@pytest.mark.asyncio
+async def test_neighbors_translates_out_of_profile_without_suggested(store: MagicMock) -> None:
+    """Back-compat: ToolNotInProfileError without suggested_profile (brains
+    <3.19.0) still produces a clean structured payload."""
+    from tapps_core.brain_bridge import ToolNotInProfileError
+
+    bridge = _http_bridge_with_method("get_neighbors", {})
+    bridge.get_neighbors = AsyncMock(
+        side_effect=ToolNotInProfileError(
+            "tapps-brain tool 'brain_get_neighbors' is hidden by profile 'agent_brain'",
+            tool="brain_get_neighbors",
+            profile="agent_brain",
+            data={"reason": "out_of_profile"},
+        )
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_neighbors(store, _params(entry_ids=["e1"]))
+
+    assert out["success"] is False
+    assert out["error"] == "out_of_profile"
+    assert out["suggested_profile"] is None
+    assert "no alternative profile exposes it" in out["remediation"]
+
+
+@pytest.mark.asyncio
+async def test_explain_connection_translates_bad_json_error(store: MagicMock) -> None:
+    """TAP-2096: BadJsonError on explain_connection path also surfaces structured."""
+    from tapps_core.brain_bridge import BadJsonError
+
+    bridge = _http_bridge_with_method("explain_connection", {})
+    bridge.explain_connection = AsyncMock(
+        side_effect=BadJsonError(
+            "tapps-brain rejected malformed JSON argument 'subject_id': bad parse",
+            field="subject_id",
+            detail="Expecting value",
+            tool_name="brain_explain_connection",
+            data={"error": "bad_json", "field": "subject_id"},
+        )
+    )
+    with patch(
+        "tapps_mcp.server_memory_tools._get_brain_bridge",
+        return_value=bridge,
+    ):
+        out = await _handle_explain_connection(
+            store, _params(subject="A", object_entity="B")
+        )
+
+    assert out["success"] is False
+    assert out["error"] == "bad_json"
+    assert out["field"] == "subject_id"
+    assert out["action"] == "explain_connection"
+
+
+@pytest.mark.asyncio
 async def test_explain_connection_passes_endpoints_and_max_hops(
     store: MagicMock,
 ) -> None:
