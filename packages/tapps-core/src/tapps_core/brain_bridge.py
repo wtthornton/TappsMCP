@@ -146,11 +146,26 @@ class BrainMcpError(RuntimeError):
         code: int | None = None,
         data: Any = None,
         tool_name: str | None = None,
+        field: str | None = None,
+        detail: str | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.data = data
         self.tool_name = tool_name
+        self.field = field
+        self.detail = detail
+
+
+class BadJsonError(BrainMcpError):
+    """Raised when the brain rejects a ``*_json`` argument as malformed
+    (TAP-1967 / TAP-1968 / TAP-1969, v3.19.0+).
+
+    Wire shape: JSON-RPC ``error.data == {"error": "bad_json",
+    "field": "<arg-name>", "detail": "<json-decode-message>"}``. Permanent,
+    non-retryable caller bug — the brain writes nothing on this path. Callers
+    should surface ``field`` + ``detail`` to the agent so the typo is visible.
+    """
 
 
 class ToolNotInProfileError(BrainMcpError):
@@ -175,10 +190,15 @@ class ToolNotInProfileError(BrainMcpError):
         tool: str,
         profile: str | None,
         data: Any = None,
+        suggested_profile: str | None = None,
     ) -> None:
         super().__init__(message, code=-32602, data=data, tool_name=tool)
         self.tool = tool
         self.profile = profile
+        # TAP-1972 (v3.19.0+): brain may include the smallest profile that
+        # exposes the denied tool. ``None`` when no profile exposes it or the
+        # brain pre-dates v3.19.0 — callers must tolerate either.
+        self.suggested_profile = suggested_profile
 
 
 class ProfileMismatchError(ToolNotInProfileError):
@@ -1503,6 +1523,21 @@ class HttpBrainBridge(BrainBridge):
         if rpc_error:
             err_code = rpc_error.get("code") if isinstance(rpc_error, dict) else None
             err_data = rpc_error.get("data") if isinstance(rpc_error, dict) else None
+            # TAP-1967 / TAP-1968 / TAP-1969 (v3.19.0+): malformed ``*_json``
+            # argument on KG MCP tools. Surface ``field`` + ``detail`` so the
+            # typo is visible to the caller instead of silent no-op.
+            if isinstance(err_data, dict) and err_data.get("error") == "bad_json":
+                bad_field = err_data.get("field") or ""
+                bad_detail = err_data.get("detail") or ""
+                raise BadJsonError(
+                    f"tapps-brain rejected malformed JSON argument "
+                    f"{bad_field!r}: {bad_detail}",
+                    code=err_code,
+                    data=err_data,
+                    tool_name=tool_name,
+                    field=bad_field,
+                    detail=bad_detail,
+                )
             # TAP-1616: ``-32602 INVALID_PARAMS`` with
             # ``data.reason == "out_of_profile"`` is the wire signal that the
             # tool is hidden by the active server-side profile (not removed
@@ -1515,11 +1550,15 @@ class HttpBrainBridge(BrainBridge):
             ):
                 gated_profile = err_data.get("profile")
                 gated_tool = err_data.get("tool") or tool_name
+                # TAP-1972 (v3.19.0+): server may include the smallest profile
+                # that exposes the denied tool; tolerate absence on older brains.
+                suggested = err_data.get("suggested_profile")
                 raise ToolNotInProfileError(
                     f"tapps-brain tool {gated_tool!r} is hidden by profile {gated_profile!r}",
                     tool=gated_tool,
                     profile=gated_profile,
                     data=err_data,
+                    suggested_profile=suggested,
                 )
             raise BrainMcpError(
                 f"tapps-brain MCP RPC error: {rpc_error}",

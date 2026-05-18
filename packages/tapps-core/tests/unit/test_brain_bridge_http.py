@@ -364,6 +364,116 @@ class TestDoMcpPost:
         assert not isinstance(excinfo.value, ToolNotInProfileError)
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("tool_name", "bad_field"),
+        [
+            ("brain_record_event", "payload_json"),
+            ("brain_get_neighbors", "entity_ids_json"),
+            ("brain_record_feedback", "details_json"),
+        ],
+    )
+    async def test_bad_json_envelope_raises_bad_json_error(
+        self, tool_name: str, bad_field: str
+    ) -> None:
+        """TAP-1967 / TAP-1968 / TAP-1969 (v3.19.0+): malformed ``*_json`` arg
+        surfaces as :class:`BadJsonError` with ``field`` + ``detail`` preserved
+        (no silent ``{}`` substitution).
+        """
+        from tapps_core.brain_bridge import BadJsonError, BrainMcpError
+
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32602,
+                    "message": "bad json",
+                    "data": {
+                        "error": "bad_json",
+                        "field": bad_field,
+                        "detail": "Expecting value: line 1 column 1 (char 0)",
+                    },
+                },
+            }
+        )
+
+        with pytest.raises(BadJsonError) as excinfo:
+            await bridge._do_mcp_post(tool_name, {bad_field: "not-json"})
+
+        exc = excinfo.value
+        assert isinstance(exc, BrainMcpError)
+        assert exc.field == bad_field
+        assert exc.detail == "Expecting value: line 1 column 1 (char 0)"
+        assert exc.tool_name == tool_name
+        assert isinstance(exc.data, dict)
+        assert exc.data["error"] == "bad_json"
+
+    @pytest.mark.asyncio
+    async def test_out_of_profile_carries_suggested_profile(self) -> None:
+        """TAP-1972 (v3.19.0+): out_of_profile data may include the smallest
+        profile that exposes the denied tool. Surface it on the exception so
+        callers can self-route via ``X-Brain-Profile`` retry.
+        """
+        from tapps_core.brain_bridge import ToolNotInProfileError
+
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32602,
+                    "message": "tool not in profile",
+                    "data": {
+                        "reason": "out_of_profile",
+                        "tool": "memory_consolidate",
+                        "profile": "coder",
+                        "suggested_profile": "operator",
+                    },
+                },
+            }
+        )
+
+        with pytest.raises(ToolNotInProfileError) as excinfo:
+            await bridge._do_mcp_post("memory_consolidate", {})
+
+        assert excinfo.value.suggested_profile == "operator"
+
+    @pytest.mark.asyncio
+    async def test_out_of_profile_without_suggested_profile_tolerates_null(self) -> None:
+        """Back-compat: brains <3.19.0 don't emit ``suggested_profile``; the
+        absence must parse cleanly with ``suggested_profile=None`` (TAP-1972
+        strict-superset contract — additive field).
+        """
+        from tapps_core.brain_bridge import ToolNotInProfileError
+
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32602,
+                    "message": "tool not in profile",
+                    "data": {
+                        "reason": "out_of_profile",
+                        "tool": "memory_save",
+                        "profile": "agent_brain",
+                    },
+                },
+            }
+        )
+
+        with pytest.raises(ToolNotInProfileError) as excinfo:
+            await bridge._do_mcp_post("memory_save", {"key": "k", "value": "v"})
+
+        assert excinfo.value.suggested_profile is None
+
+    @pytest.mark.asyncio
     async def test_tool_error_raises(self) -> None:
         bridge = _make_http_bridge()
         bridge._http_client = AsyncMock()
