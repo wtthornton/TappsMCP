@@ -1368,6 +1368,162 @@ def check_brain_http_auth(root: Path) -> CheckResult:
     )
 
 
+# TAP-2115: module-level ETag cache for /v1/tools/list responses, keyed by
+# (http_url, profile-header). Lets repeat `tapps doctor` invocations within
+# the brain's 300 s Cache-Control window short-circuit to 304 + cached set.
+_TOOLS_CATALOG_CACHE: dict[tuple[str, str], tuple[str, frozenset[str]]] = {}
+
+
+class _ProfileProbeError(Exception):
+    """Internal control-flow exception for check_brain_profile failures."""
+
+    def __init__(self, detail: str, hint: str = "") -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.hint = hint
+
+
+def _fetch_exposed_tools(
+    http_url: str,
+    headers: dict[str, str],
+    httpx_mod: Any,
+    mcp_accept_headers: dict[str, str],
+) -> tuple[set[str], str]:
+    """TAP-2115 (consumes TAP-1971): fetch the exposed tool set, preferring
+    the cacheable REST endpoint and falling back to the JSON-RPC handshake
+    on older brains.
+
+    Returns ``(exposed_tool_names, source_label)`` where ``source_label`` is
+    one of ``"rest"``, ``"rest-cached"`` (304 hit), or ``"jsonrpc"``.
+    """
+    try:
+        return _fetch_exposed_tools_rest(http_url, headers, httpx_mod)
+    except _ProfileProbeFallback:
+        return _fetch_exposed_tools_jsonrpc(http_url, headers, httpx_mod, mcp_accept_headers)
+
+
+class _ProfileProbeFallback(Exception):
+    """Internal signal that the REST path is unavailable; try JSON-RPC."""
+
+
+def _fetch_exposed_tools_rest(
+    http_url: str, headers: dict[str, str], httpx_mod: Any
+) -> tuple[set[str], str]:
+    """GET ``/v1/tools/list`` with ``If-None-Match`` from the module cache.
+
+    Sends only ``X-Brain-Profile`` and ``If-None-Match`` — the REST endpoint
+    is unauthenticated and Origin-exempt (TAP-1843), so we deliberately do
+    NOT forward the bearer token here. Raises :class:`_ProfileProbeFallback`
+    when the endpoint isn't available (404 ⇒ pre-TAP-1843 brain) so the
+    caller can switch to the JSON-RPC handshake.
+    """
+    profile_header = headers.get("X-Brain-Profile") or ""
+    cache_key = (http_url, profile_header)
+    cached = _TOOLS_CATALOG_CACHE.get(cache_key)
+    req_headers: dict[str, str] = {}
+    if profile_header:
+        req_headers["X-Brain-Profile"] = profile_header
+    if cached is not None:
+        req_headers["If-None-Match"] = cached[0]
+    try:
+        response = httpx_mod.get(
+            f"{http_url.rstrip('/')}/v1/tools/list",
+            headers=req_headers,
+            timeout=5.0,
+            follow_redirects=True,
+        )
+    except Exception:
+        raise _ProfileProbeFallback() from None
+    if response.status_code == 304 and cached is not None:
+        return set(cached[1]), "rest-cached"
+    if response.status_code == 404:
+        raise _ProfileProbeFallback()
+    if response.status_code != 200:
+        raise _ProfileProbeError(
+            f"/v1/tools/list returned {response.status_code}",
+            "Brain rejected the REST tool-list probe; check brain version + profile name.",
+        )
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise _ProfileProbeError(
+            f"/v1/tools/list returned non-JSON body: {exc}",
+            "Brain misconfigured; expected application/json with a `tools` array.",
+        ) from exc
+    tools = payload.get("tools", []) if isinstance(payload, dict) else []
+    exposed = {
+        str(t["name"])
+        for t in tools
+        if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]
+    }
+    etag = response.headers.get("etag") or response.headers.get("ETag") or ""
+    if etag:
+        _TOOLS_CATALOG_CACHE[cache_key] = (etag, frozenset(exposed))
+    return exposed, "rest"
+
+
+def _fetch_exposed_tools_jsonrpc(
+    http_url: str,
+    headers: dict[str, str],
+    httpx_mod: Any,
+    mcp_accept_headers: dict[str, str],
+) -> tuple[set[str], str]:
+    """Legacy fallback: full MCP handshake + JSON-RPC ``tools/list``.
+
+    Kept for brains <3.18.0 that don't expose the REST endpoint.
+    """
+    init_payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "tapps-mcp-doctor", "version": "1"},
+        },
+    }
+    try:
+        init_response = httpx_mod.post(
+            f"{http_url.rstrip('/')}/mcp/",
+            json=init_payload,
+            headers={**headers, **mcp_accept_headers},
+            timeout=5.0,
+            follow_redirects=True,
+        )
+        init_response.raise_for_status()
+    except Exception as exc:
+        raise _ProfileProbeError(
+            f"Could not initialize MCP session at {http_url}: {exc}",
+            "Brain may be down or unreachable; see brain logs.",
+        ) from exc
+    session_id = init_response.headers.get("mcp-session-id", "")
+    list_headers = {**headers, **mcp_accept_headers}
+    if session_id:
+        list_headers["Mcp-Session-Id"] = session_id
+    try:
+        list_response = httpx_mod.post(
+            f"{http_url.rstrip('/')}/mcp/",
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            headers=list_headers,
+            timeout=5.0,
+            follow_redirects=True,
+        )
+        list_response.raise_for_status()
+        payload = list_response.json()
+    except Exception as exc:
+        raise _ProfileProbeError(
+            f"tools/list failed: {exc}",
+            "Brain returned an error to tools/list; check brain version + auth.",
+        ) from exc
+    tools_meta = payload.get("result", {}).get("tools", [])
+    exposed = {
+        str(t["name"])
+        for t in tools_meta
+        if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]
+    }
+    return exposed, "jsonrpc"
+
+
 def check_brain_profile(root: Path) -> CheckResult:
     """TAP-1629 / TAP-2100: probe the tapps-brain capability profile via tools/list.
 
@@ -1430,71 +1586,31 @@ def check_brain_profile(root: Path) -> CheckResult:
             f"httpx unavailable: {exc}",
         )
 
-    init_payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2025-11-25",
-            "capabilities": {},
-            "clientInfo": {"name": "tapps-mcp-doctor", "version": "1"},
-        },
-    }
     try:
-        init_response = _httpx.post(
-            f"{http_url.rstrip('/')}/mcp/",
-            json=init_payload,
-            headers={**headers, **_MCP_ACCEPT_HEADERS},
-            timeout=5.0,
-            follow_redirects=True,
-        )
-        init_response.raise_for_status()
-    except Exception as exc:
+        exposed, source = _fetch_exposed_tools(http_url, headers, _httpx, _MCP_ACCEPT_HEADERS)
+    except _ProfileProbeError as exc:
         return CheckResult(
             "tapps-brain capability profile",
             False,
-            f"Could not initialize MCP session at {http_url}: {exc}",
-            "Brain may be down or unreachable; see brain logs.",
+            exc.detail,
+            exc.hint,
         )
 
-    session_id = init_response.headers.get("mcp-session-id", "")
-    list_headers = {**headers, **_MCP_ACCEPT_HEADERS}
-    if session_id:
-        list_headers["Mcp-Session-Id"] = session_id
-    try:
-        list_response = _httpx.post(
-            f"{http_url.rstrip('/')}/mcp/",
-            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-            headers=list_headers,
-            timeout=5.0,
-            follow_redirects=True,
-        )
-        list_response.raise_for_status()
-        payload = list_response.json()
-    except Exception as exc:
-        return CheckResult(
-            "tapps-brain capability profile",
-            False,
-            f"tools/list failed: {exc}",
-            "Brain returned an error to tools/list; check brain version + auth.",
-        )
-
-    tools_meta = payload.get("result", {}).get("tools", [])
-    exposed = {t.get("name") for t in tools_meta if isinstance(t, dict) and t.get("name")}
     gated_used = sorted(_BRIDGE_USED_TOOLS - exposed)
 
     if not gated_used:
         return CheckResult(
             "tapps-brain capability profile",
             True,
-            f"profile={declared}, exposed={len(exposed)} tools, no bridge mismatch",
+            f"profile={declared}, exposed={len(exposed)} tools "
+            f"({source}), no bridge mismatch",
         )
 
     return CheckResult(
         "tapps-brain capability profile",
         False,
-        f"profile={declared} hides {len(gated_used)} bridge tool(s) from eager tools/list: "
-        f"{', '.join(gated_used)}",
+        f"profile={declared} hides {len(gated_used)} bridge tool(s) from eager tools/list "
+        f"({source}): {', '.join(gated_used)}",
         "On tapps-brain v3.19.0+ this is expected for the 'full'/'operator' profiles — "
         "deferred tools remain callable via tools/call (TAP-1985). If memory operations are "
         "actually failing, set memory.brain_profile (or TAPPS_BRAIN_PROFILE) to a profile "

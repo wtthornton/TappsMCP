@@ -1595,6 +1595,111 @@ class TestHttpHealthCheck:
 
 
 # ---------------------------------------------------------------------------
+# TAP-2115: /healthz phased payload (TAP-1970)
+# ---------------------------------------------------------------------------
+
+
+def _healthz_response(status_code: int, body: dict[str, Any]) -> MagicMock:
+    mock = MagicMock()
+    mock.status_code = status_code
+    mock.json.return_value = body
+    mock.raise_for_status = MagicMock()
+    if status_code >= 400:
+        mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "error", request=MagicMock(), response=mock
+        )
+    return mock
+
+
+class TestHttpHealthCheckPhased:
+    """TAP-2115 (consumes TAP-1970): ``health_check`` prefers the v3.19.0
+    ``/healthz`` phased payload, falls back to legacy ``/health`` on 404.
+    """
+
+    def test_phased_200_surfaces_all_fields(self) -> None:
+        bridge = _make_http_bridge("http://brain:8080")
+        body = {
+            "ok": True,
+            "db_ok": True,
+            "mcp_ok": True,
+            "queue_depth": 0,
+            "circuit_state": "closed",
+            "brain_version": "3.19.0",
+        }
+        response = _healthz_response(200, body)
+        with patch("httpx.get", return_value=response) as get_mock:
+            result = bridge.health_check()
+        assert result["ok"] is True
+        details = result["details"]
+        assert details["db_ok"] is True
+        assert details["mcp_ok"] is True
+        assert details["queue_depth"] == 0
+        assert details["circuit_state"] == "closed"
+        assert details["brain_version"] == "3.19.0"
+        assert details["brain_status"] == "ok"
+        # Should hit /healthz, not /health (no fallback when 200).
+        get_mock.assert_called_once()
+        called_url = get_mock.call_args[0][0]
+        assert called_url.endswith("/healthz")
+
+    def test_phased_503_surfaces_offending_phase(self) -> None:
+        bridge = _make_http_bridge("http://brain:8080")
+        body = {
+            "ok": False,
+            "db_ok": False,
+            "mcp_ok": True,
+            "queue_depth": 5,
+            "circuit_state": "open",
+            "brain_version": "3.19.0",
+        }
+        response = _healthz_response(503, body)
+        with patch("httpx.get", return_value=response):
+            result = bridge.health_check()
+        assert result["ok"] is False
+        assert result["details"]["db_ok"] is False
+        assert result["details"]["circuit_state"] == "open"
+        assert any("db_ok" in err for err in result["errors"])
+
+    def test_404_falls_back_to_legacy_health(self) -> None:
+        """Pre-v3.19.0 brain returns 404 on /healthz; we re-probe /health."""
+        bridge = _make_http_bridge("http://brain:8080")
+        healthz_404 = MagicMock()
+        healthz_404.status_code = 404
+        healthz_404.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError("404", request=MagicMock(), response=healthz_404)
+        )
+        legacy_200 = MagicMock()
+        legacy_200.status_code = 200
+        legacy_200.raise_for_status = MagicMock()
+        legacy_200.json.return_value = {"status": "ok", "version": "3.18.0"}
+
+        with patch("httpx.get", side_effect=[healthz_404, legacy_200]) as get_mock:
+            result = bridge.health_check()
+        assert result["ok"] is True
+        assert result["details"]["brain_version"] == "3.18.0"
+        assert result["details"]["brain_status"] == "ok"
+        assert get_mock.call_count == 2
+        first_url = get_mock.call_args_list[0][0][0]
+        second_url = get_mock.call_args_list[1][0][0]
+        assert first_url.endswith("/healthz")
+        assert second_url.endswith("/health")
+        # Legacy path doesn't have phased fields.
+        assert "db_ok" not in result["details"]
+
+    def test_legacy_body_on_healthz_uses_version_fallback(self) -> None:
+        """Brains that route /healthz to the same handler as /health (or
+        emit ``{status, version}``) still surface brain_version via the
+        fallback reader.
+        """
+        bridge = _make_http_bridge("http://brain:8080")
+        response = _healthz_response(200, {"status": "ok", "version": "3.18.5"})
+        with patch("httpx.get", return_value=response):
+            result = bridge.health_check()
+        assert result["details"]["brain_version"] == "3.18.5"
+        assert result["details"]["brain_status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
 # TAP-2098: auth_probe body-shape classification
 # ---------------------------------------------------------------------------
 

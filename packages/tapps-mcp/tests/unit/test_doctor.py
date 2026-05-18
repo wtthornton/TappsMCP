@@ -1346,3 +1346,179 @@ class TestCheckFinishTaskSkill:
         assert result.ok is False
         assert "not found" in result.message
         assert "upgrade" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# TAP-2115: REST /v1/tools/list probe with ETag cache + JSON-RPC fallback
+# ---------------------------------------------------------------------------
+
+
+class TestFetchExposedToolsRest:
+    """``_fetch_exposed_tools_rest`` prefers cache-validated REST, falls back
+    to JSON-RPC handshake on 404/transport errors (pre-TAP-1843 brain).
+    """
+
+    def setup_method(self) -> None:
+        from tapps_mcp.distribution import doctor as _doctor_mod
+
+        _doctor_mod._TOOLS_CATALOG_CACHE.clear()
+
+    def _mock_response(self, status_code: int, body=None, etag: str = ""):
+        from unittest.mock import MagicMock
+
+        resp = MagicMock()
+        resp.status_code = status_code
+        resp.headers = {"ETag": etag} if etag else {}
+        if body is not None:
+            resp.json.return_value = body
+        return resp
+
+    def test_rest_200_populates_cache_and_returns_tools(self) -> None:
+        from unittest.mock import MagicMock
+
+        from tapps_mcp.distribution.doctor import (
+            _TOOLS_CATALOG_CACHE,
+            _fetch_exposed_tools_rest,
+        )
+
+        body = {"tools": [{"name": "memory_save"}, {"name": "memory_list"}]}
+        response = self._mock_response(200, body=body, etag='W/"abc123"')
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = response
+
+        exposed, source = _fetch_exposed_tools_rest(
+            "http://brain:8080", {"X-Brain-Profile": "operator"}, httpx_mod
+        )
+        assert exposed == {"memory_save", "memory_list"}
+        assert source == "rest"
+        # ETag cached for next call.
+        cached = _TOOLS_CATALOG_CACHE[("http://brain:8080", "operator")]
+        assert cached[0] == 'W/"abc123"'
+        # If-None-Match was NOT sent on first call (no prior cache entry).
+        assert "If-None-Match" not in httpx_mod.get.call_args.kwargs["headers"]
+
+    def test_rest_304_short_circuits_to_cached_tools(self) -> None:
+        from unittest.mock import MagicMock
+
+        from tapps_mcp.distribution.doctor import (
+            _TOOLS_CATALOG_CACHE,
+            _fetch_exposed_tools_rest,
+        )
+
+        _TOOLS_CATALOG_CACHE[("http://brain:8080", "operator")] = (
+            'W/"abc123"',
+            frozenset({"memory_save", "memory_list"}),
+        )
+        response = self._mock_response(304)
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = response
+
+        exposed, source = _fetch_exposed_tools_rest(
+            "http://brain:8080", {"X-Brain-Profile": "operator"}, httpx_mod
+        )
+        assert exposed == {"memory_save", "memory_list"}
+        assert source == "rest-cached"
+        assert httpx_mod.get.call_args.kwargs["headers"]["If-None-Match"] == 'W/"abc123"'
+
+    def test_rest_404_raises_fallback_signal(self) -> None:
+        from unittest.mock import MagicMock
+
+        from tapps_mcp.distribution.doctor import (
+            _ProfileProbeFallback,
+            _fetch_exposed_tools_rest,
+        )
+
+        response = self._mock_response(404)
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = response
+
+        with pytest.raises(_ProfileProbeFallback):
+            _fetch_exposed_tools_rest("http://brain:8080", {}, httpx_mod)
+
+    def test_rest_500_raises_probe_error(self) -> None:
+        from unittest.mock import MagicMock
+
+        from tapps_mcp.distribution.doctor import (
+            _fetch_exposed_tools_rest,
+            _ProfileProbeError,
+        )
+
+        response = self._mock_response(500)
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = response
+
+        with pytest.raises(_ProfileProbeError):
+            _fetch_exposed_tools_rest("http://brain:8080", {}, httpx_mod)
+
+
+class TestFetchExposedTools:
+    """``_fetch_exposed_tools`` dispatcher: REST happy path, JSON-RPC fallback
+    on 404, JSON-RPC fallback on transport error.
+    """
+
+    def setup_method(self) -> None:
+        from tapps_mcp.distribution import doctor as _doctor_mod
+
+        _doctor_mod._TOOLS_CATALOG_CACHE.clear()
+
+    def test_jsonrpc_fallback_on_404(self) -> None:
+        """A 404 on /v1/tools/list ⇒ probe falls back to MCP handshake."""
+        from unittest.mock import MagicMock
+
+        from tapps_mcp.distribution.doctor import _fetch_exposed_tools
+
+        rest_404 = MagicMock()
+        rest_404.status_code = 404
+        rest_404.headers = {}
+
+        init_response = MagicMock()
+        init_response.status_code = 200
+        init_response.headers = {"mcp-session-id": "abc"}
+        init_response.raise_for_status = MagicMock()
+
+        list_response = MagicMock()
+        list_response.status_code = 200
+        list_response.raise_for_status = MagicMock()
+        list_response.json.return_value = {
+            "result": {"tools": [{"name": "memory_save"}, {"name": "memory_list"}]}
+        }
+
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = rest_404
+        httpx_mod.post.side_effect = [init_response, list_response]
+
+        exposed, source = _fetch_exposed_tools(
+            "http://brain:8080",
+            {"Authorization": "Bearer t"},
+            httpx_mod,
+            {"Accept": "application/json"},
+        )
+        assert exposed == {"memory_save", "memory_list"}
+        assert source == "jsonrpc"
+        # REST was tried first, then both POST legs of the JSON-RPC handshake.
+        assert httpx_mod.get.call_count == 1
+        assert httpx_mod.post.call_count == 2
+
+    def test_rest_happy_path_skips_jsonrpc(self) -> None:
+        """A 200 from REST means we never even attempt the JSON-RPC handshake."""
+        from unittest.mock import MagicMock
+
+        from tapps_mcp.distribution.doctor import _fetch_exposed_tools
+
+        rest_response = MagicMock()
+        rest_response.status_code = 200
+        rest_response.headers = {"ETag": 'W/"v1"'}
+        rest_response.json.return_value = {"tools": [{"name": "memory_save"}]}
+
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = rest_response
+
+        exposed, source = _fetch_exposed_tools(
+            "http://brain:8080",
+            {"X-Brain-Profile": "minimal"},
+            httpx_mod,
+            {"Accept": "application/json"},
+        )
+        assert exposed == {"memory_save"}
+        assert source == "rest"
+        httpx_mod.post.assert_not_called()

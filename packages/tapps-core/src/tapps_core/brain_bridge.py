@@ -2167,36 +2167,128 @@ class HttpBrainBridge(BrainBridge):
             return {"status": "degraded", "error": str(exc)}
 
     def health_check(self) -> dict[str, Any]:
-        """Probe ``{brain_http_url}/health`` (replaces DSN-based health check)."""
-        health_url = f"{self._http_url}/health"
+        """Probe ``{brain_http_url}/healthz`` (TAP-2115 / TAP-1970).
+
+        Prefers the v3.19.0 phased ``/healthz`` endpoint (returns
+        ``{ok, db_ok, mcp_ok, queue_depth, circuit_state, brain_version}``)
+        so the operator can see WHY a brain is degraded — DB unreachable
+        vs MCP cold-starting vs queue flooded — without scraping
+        ``/metrics``. Falls back to the legacy 3-field ``/health`` route
+        on 404 (brains <3.19.0). The HTTP status is still authoritative
+        for the ``ok`` flag (200 ⇒ healthy, 503 ⇒ degraded) — the JSON
+        body just enriches ``details`` with the offending phase.
+        """
+        details: dict[str, Any] = {"http_url": self._http_url, "mode": "http"}
         try:
-            response = httpx.get(health_url, timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS)
-            response.raise_for_status()
-            details: dict[str, Any] = {"http_url": self._http_url, "mode": "http"}
-            with contextlib.suppress(Exception):
-                payload = response.json()
-                if isinstance(payload, dict):
-                    details["brain_version"] = payload.get("version")
-                    details["brain_status"] = payload.get("status")
-            return {
-                "ok": True,
-                "dsn_reachable": True,
-                "pool_config_valid": True,
-                "native_health_ok": True,
-                "errors": [],
-                "warnings": [],
-                "details": details,
-            }
+            response = httpx.get(
+                f"{self._http_url}/healthz", timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS
+            )
         except Exception as exc:
-            return {
-                "ok": False,
-                "dsn_reachable": False,
-                "pool_config_valid": True,
-                "native_health_ok": False,
-                "errors": [f"http_health_failed: {exc}"],
-                "warnings": [],
-                "details": {"http_url": self._http_url, "mode": "http"},
-            }
+            return self._health_check_failure(details, exc)
+        if response.status_code == 404:
+            # Pre-v3.19.0 brain: re-probe the legacy /health route.
+            return self._health_check_legacy(details)
+        body: dict[str, Any] | None = None
+        with contextlib.suppress(Exception):
+            parsed = response.json()
+            if isinstance(parsed, dict):
+                body = parsed
+        if body is not None:
+            self._merge_healthz_fields(details, body)
+        if response.status_code == 200:
+            return self._health_check_ok(details)
+        if response.status_code == 503:
+            return self._health_check_degraded(details, body)
+        try:
+            response.raise_for_status()
+        except Exception as exc:
+            return self._health_check_failure(details, exc)
+        return self._health_check_ok(details)
+
+    @staticmethod
+    def _merge_healthz_fields(details: dict[str, Any], body: dict[str, Any]) -> None:
+        """Copy phased ``/healthz`` fields (TAP-1970) into the details block.
+
+        Tolerates the legacy ``{"status": ..., "version": ...}`` shape (pre-
+        v3.19.0 brains, or brains that route ``/healthz`` to the same handler
+        as ``/health``) by reading ``version`` when ``brain_version`` is absent
+        and ``status`` when ``ok`` is absent.
+        """
+        for key in ("db_ok", "mcp_ok", "queue_depth", "circuit_state"):
+            if key in body:
+                details[key] = body[key]
+        if "brain_version" in body:
+            details["brain_version"] = body["brain_version"]
+        elif "version" in body:
+            details["brain_version"] = body["version"]
+        if "ok" in body:
+            details["brain_status"] = "ok" if body["ok"] else "degraded"
+        elif "status" in body:
+            details["brain_status"] = body["status"]
+
+    def _health_check_ok(self, details: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "dsn_reachable": True,
+            "pool_config_valid": True,
+            "native_health_ok": True,
+            "errors": [],
+            "warnings": [],
+            "details": details,
+        }
+
+    def _health_check_failure(
+        self, details: dict[str, Any], exc: BaseException
+    ) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "dsn_reachable": False,
+            "pool_config_valid": True,
+            "native_health_ok": False,
+            "errors": [f"http_health_failed: {exc}"],
+            "warnings": [],
+            "details": details,
+        }
+
+    def _health_check_degraded(
+        self, details: dict[str, Any], body: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        """Format a 503 response — preserves phased details so operators see
+        which phase failed (``db_ok=false``, ``mcp_ok=false`` …).
+        """
+        offending: list[str] = []
+        if isinstance(body, dict):
+            for key in ("db_ok", "mcp_ok"):
+                if body.get(key) is False:
+                    offending.append(key)
+        err = "brain_degraded"
+        if offending:
+            err = f"brain_degraded: {', '.join(offending)}=false"
+        return {
+            "ok": False,
+            "dsn_reachable": False,
+            "pool_config_valid": True,
+            "native_health_ok": False,
+            "errors": [err],
+            "warnings": [],
+            "details": details,
+        }
+
+    def _health_check_legacy(self, details: dict[str, Any]) -> dict[str, Any]:
+        """Fallback for pre-v3.19.0 brains that don't expose ``/healthz``."""
+        try:
+            response = httpx.get(
+                f"{self._http_url}/health", timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            return self._health_check_failure(details, exc)
+        with contextlib.suppress(Exception):
+            payload = response.json()
+            if isinstance(payload, dict):
+                details["brain_version"] = payload.get("version")
+                details["brain_status"] = payload.get("status")
+        return self._health_check_ok(details)
 
     def auth_probe(self) -> dict[str, Any]:
         """Probe ``{brain_http_url}/mcp`` with a cheap authenticated call.
