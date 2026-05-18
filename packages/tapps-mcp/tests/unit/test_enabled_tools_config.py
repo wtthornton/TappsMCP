@@ -212,5 +212,5 @@ class TestToolPresetConstants:
         from tapps_mcp.server import ALL_TOOL_NAMES
 
         # 26 core + 3 linear-snapshot (TAP-964, shipped 3.3.0) + 1 release_update
-        # + 1 tapps_linear_count (TAP-1847) = 31.
-        assert len(ALL_TOOL_NAMES) == 31
+        # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036) = 32.
+        assert len(ALL_TOOL_NAMES) == 32

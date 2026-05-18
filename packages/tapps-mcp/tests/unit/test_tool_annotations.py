@@ -165,9 +165,9 @@ class TestAnnotationCategories:
             if tool.annotations and tool.annotations.readOnlyHint
         ]
         # 18 closed-world + 2 open-world + 1 linear-snapshot-get + 1 release-update
-        # + 1 tapps_linear_count (TAP-1847) = 23
-        assert len(read_only) == 23, (
-            f"Expected 23 read-only tools, got {len(read_only)}"
+        # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036) = 24
+        assert len(read_only) == 24, (
+            f"Expected 24 read-only tools, got {len(read_only)}"
         )
 
     def test_side_effect_count(self) -> None:
@@ -200,9 +200,10 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.idempotentHint
         ]
-        # 22 prior + 3 linear-snapshot + 1 release-update + 1 tapps_linear_count (TAP-1847) = 27
-        assert len(idempotent) == 27, (
-            f"Expected 27 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # 22 prior + 3 linear-snapshot + 1 release-update + 1 tapps_linear_count (TAP-1847)
+        # + 1 tapps_audit_campaign (TAP-2036) = 28
+        assert len(idempotent) == 28, (
+            f"Expected 28 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 
