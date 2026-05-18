@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -10,6 +12,8 @@ from typing import TYPE_CHECKING
 from tapps_core.common.models import (
     CacheDiagnostic,
     Context7Diagnostic,
+    InstallDriftDiagnostic,
+    InstallDriftEntry,
     KnowledgeBaseDiagnostic,
     StartupDiagnostics,
 )
@@ -77,6 +81,80 @@ def check_knowledge_base() -> KnowledgeBaseDiagnostic:
     )
 
 
+def _probe_binary_version(binary_name: str) -> tuple[str, str]:
+    """Return (resolved_path, reported_version) or ('', '') if unavailable.
+
+    Looks up *binary_name* on PATH; runs ``<binary> --version`` with a tight
+    timeout; parses the last whitespace-delimited token of stdout as the
+    version. Any failure (not found, non-zero exit, timeout, parse error)
+    collapses to ('', ''), signalling the caller to skip the entry.
+    """
+    binary_path = shutil.which(binary_name)
+    if not binary_path:
+        return "", ""
+    try:
+        result = subprocess.run(
+            [binary_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return binary_path, ""
+    if result.returncode != 0 or not result.stdout.strip():
+        return binary_path, ""
+    return binary_path, result.stdout.strip().split()[-1]
+
+
+def check_install_drift() -> InstallDriftDiagnostic:
+    """TAP-2129: detect drift between in-process package versions and the
+    ``uv tool`` global install on PATH.
+
+    When ``uv tool install`` ships a copy (non-editable), the global binary
+    can lag the local checkout silently. This check compares each binary's
+    ``--version`` against the source ``__version__`` and reports drift.
+
+    Skipped silently when neither binary is found on PATH (e.g. dev running
+    purely from the project venv). Never raises.
+    """
+    from docs_mcp import __version__ as docs_mcp_version
+    from tapps_mcp import __version__ as tapps_mcp_version
+
+    targets = [
+        ("tapps-mcp", tapps_mcp_version),
+        ("docsmcp", docs_mcp_version),
+    ]
+    entries: list[InstallDriftEntry] = []
+    for binary, source_version in targets:
+        binary_path, binary_version = _probe_binary_version(binary)
+        if not binary_path:
+            continue
+        drifted = bool(binary_version) and binary_version != source_version
+        entries.append(
+            InstallDriftEntry(
+                binary=binary,
+                binary_path=binary_path,
+                binary_version=binary_version,
+                source_version=source_version,
+                drifted=drifted,
+            )
+        )
+
+    drift_detected = any(e.drifted for e in entries)
+    hint = ""
+    if drift_detected:
+        hint = (
+            "Refresh global tools: uv tool install -e --reinstall "
+            "<path-to-tapps-mcp>/packages/tapps-mcp "
+            "(and the same for packages/docs-mcp)"
+        )
+    return InstallDriftDiagnostic(
+        drift_detected=drift_detected,
+        entries=entries,
+        remediation_hint=hint,
+    )
+
+
 def collect_diagnostics(
     api_key: SecretStr | None,
     cache_dir: Path,
@@ -86,4 +164,5 @@ def collect_diagnostics(
         context7=check_context7(api_key),
         cache=check_cache(cache_dir),
         knowledge_base=check_knowledge_base(),
+        install_drift=check_install_drift(),
     )

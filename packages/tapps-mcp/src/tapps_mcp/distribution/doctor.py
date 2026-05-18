@@ -76,58 +76,85 @@ def check_binary_on_path() -> CheckResult:
     )
 
 
-def check_binary_version_mismatch() -> CheckResult:
-    """Warn when the global ``tapps-mcp`` binary is a different version than this server.
+def _check_binary_version_mismatch_for(
+    label: str,
+    binary_name: str,
+    source_version: str,
+    reinstall_path: str,
+) -> CheckResult:
+    """Compare the global ``<binary_name>`` version against *source_version*.
 
-    A stale global binary (e.g. from ``uv tool install``) can cause opaque
-    import errors when the server code references modules that no longer exist.
+    Returns a passing CheckResult when the binary is absent (silent skip) or
+    when versions match. Returns a failing CheckResult with the modern
+    ``uv tool install -e --reinstall`` remediation when versions differ.
     """
     import subprocess
 
-    from tapps_mcp import __version__
-
-    tapps_bin = shutil.which("tapps-mcp")
-    if not tapps_bin:
+    check_name = f"{label} binary version"
+    binary_path = shutil.which(binary_name)
+    if not binary_path:
         return CheckResult(
-            "Binary version",
+            check_name,
             True,
-            "tapps-mcp not on PATH (version check skipped)",
+            f"{binary_name} not on PATH (version check skipped)",
         )
 
     try:
         result = subprocess.run(
-            [tapps_bin, "--version"],
+            [binary_path, "--version"],
             capture_output=True,
             text=True,
             timeout=10,
         )
         if result.returncode != 0:
             return CheckResult(
-                "Binary version",
+                check_name,
                 True,
-                "Could not determine binary version (check skipped)",
+                f"Could not determine {binary_name} version (check skipped)",
             )
-        # Output format varies; extract version-like string
         bin_version = result.stdout.strip().split()[-1]
     except Exception:
         return CheckResult(
-            "Binary version",
+            check_name,
             True,
-            "Version check failed (skipped)",
+            f"{binary_name} version check failed (skipped)",
         )
 
-    if bin_version == __version__:
+    if bin_version == source_version:
         return CheckResult(
-            "Binary version",
+            check_name,
             True,
-            f"Binary and server versions match: {__version__}",
+            f"{binary_name} binary and server versions match: {source_version}",
         )
     return CheckResult(
-        "Binary version",
+        check_name,
         False,
-        f"Version mismatch: binary={bin_version}, server={__version__}",
-        f"Reinstall: uv tool install --force --editable <tapps-mcp-path> "
-        f"or: pip install --force-reinstall tapps-mcp=={__version__}",
+        f"Version mismatch: {binary_name}={bin_version}, server={source_version}",
+        f"Refresh: uv tool install -e --reinstall {reinstall_path}",
+    )
+
+
+def check_binary_version_mismatch() -> CheckResult:
+    """Warn when the global ``tapps-mcp`` binary differs from this server's version."""
+    from tapps_mcp import __version__
+
+    return _check_binary_version_mismatch_for(
+        label="tapps-mcp",
+        binary_name="tapps-mcp",
+        source_version=__version__,
+        reinstall_path="<tapps-mcp-checkout>/packages/tapps-mcp",
+    )
+
+
+def check_docsmcp_binary_version_mismatch() -> CheckResult:
+    """TAP-2129: warn when the global ``docsmcp`` binary differs from this server's docs-mcp version."""
+    from docs_mcp import __version__ as docs_mcp_version
+
+    return _check_binary_version_mismatch_for(
+        label="docsmcp",
+        binary_name="docsmcp",
+        source_version=docs_mcp_version,
+        reinstall_path="<tapps-mcp-checkout>/packages/docs-mcp",
     )
 
 
@@ -2182,6 +2209,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks: list[CheckResult] = []
     checks.append(check_binary_on_path())
     checks.append(check_binary_version_mismatch())
+    checks.append(check_docsmcp_binary_version_mismatch())
     checks.append(check_claude_code_user(project_root=root))
     checks.append(check_claude_code_project(root))
     checks.append(check_cursor_config(root))

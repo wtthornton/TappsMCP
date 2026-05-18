@@ -105,9 +105,41 @@ class KnowledgeBaseDiagnostic(BaseModel):
     )
 
 
+class InstallDriftEntry(BaseModel):
+    """Per-binary install-drift detail."""
+
+    binary: str = Field(description="Binary name (e.g. 'tapps-mcp', 'docsmcp').")
+    binary_path: str = Field(description="Resolved path of the global binary; '' if not found.")
+    binary_version: str = Field(description="Version reported by '<binary> --version'; '' if not found.")
+    source_version: str = Field(description="Version of the in-process package this server is running.")
+    drifted: bool = Field(description="True iff binary_version is non-empty and differs from source_version.")
+
+
+class InstallDriftDiagnostic(BaseModel):
+    """Detects whether ``uv tool`` global installs have drifted behind the source.
+
+    Skipped silently when no global binary is found (e.g. dev runs purely
+    from the project venv with no ``uv tool install`` performed).
+    """
+
+    drift_detected: bool = Field(description="True iff any binary in entries is drifted.")
+    entries: list[InstallDriftEntry] = Field(
+        default_factory=list,
+        description="Per-binary check results. Empty when no global binary is on PATH.",
+    )
+    remediation_hint: str = Field(
+        default="",
+        description="Copy-paste remediation command when drift_detected is True; '' otherwise.",
+    )
+
+
 class StartupDiagnostics(BaseModel):
     """Aggregate startup diagnostics for all subsystems."""
 
     context7: Context7Diagnostic = Field(description="Context7 API key status.")
     cache: CacheDiagnostic = Field(description="Cache directory health.")
     knowledge_base: KnowledgeBaseDiagnostic = Field(description="Knowledge base integrity.")
+    install_drift: InstallDriftDiagnostic | None = Field(
+        default=None,
+        description="TAP-2129: global vs source version drift; None when check skipped.",
+    )
