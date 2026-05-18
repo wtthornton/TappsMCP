@@ -43,10 +43,10 @@
 - **SBOM** - Supply chain security
 
 ## Architecture
-- **3-package monorepo**: tapps-core (library), tapps-mcp (30 tools), docs-mcp (38 tools) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module map and data flow
+- **3-package monorepo**: tapps-core (library), tapps-mcp (32 tools), docs-mcp (38 tools) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module map and data flow
 - **MCP Protocol**: 2025-11-25 (latest stable)
 - **7-category scoring**: complexity, security, maintainability, test coverage, performance, structure, devex — see [docs/CHECKLIST.md](docs/CHECKLIST.md) for category weights and [README.md](README.md) for scoring tool reference
-- **Memory subsystem**: see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) for the 33-action `tapps_memory` surface; [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for retrieval, decay, consolidation, and federation internals
+- **Memory subsystem**: see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) for the 42-action `tapps_memory` surface; [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for retrieval, decay, consolidation, and federation internals
 - **Adaptive learning** with domain weight persistence
 - **Config reference**: all Pydantic settings + env vars listed in [docs/CONFIG_REFERENCE.md](docs/CONFIG_REFERENCE.md)
 - **Troubleshooting**: common install / hook / Cursor issues covered in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)

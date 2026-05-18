@@ -6,7 +6,7 @@ When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor
 
 ## What TappsMCP is
 
-TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 26 tools for:
+TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 32 tools for:
 
 - **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Security scanning** (Bandit + secret detection with redacted context)
@@ -190,13 +190,14 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 
 ### Hooks (auto-generated)
 
-**Claude Code** (`.claude/hooks/`): 7 hook scripts that enforce quality automatically:
+**Claude Code** (`.claude/hooks/`): advisory hook scripts that fire on lifecycle events. Which scripts are wired depends on engagement level (`low` = SessionStart only; `medium` = 8 events; `high` = 10 events). Common entries:
 - **SessionStart** - Injects TappsMCP awareness on session start and after compaction
 - **PostToolUse (Edit/Write)** - Reminds you to run `tapps_quick_check` after Python edits
 - **Stop** - Reminds you to run `tapps_validate_changed` before session end (non-blocking)
 - **TaskCompleted** - Reminds you to validate before marking task complete (non-blocking)
 - **PreCompact** - Backs up scoring context before context window compaction
-- **SubagentStart** - Injects TappsMCP awareness into spawned subagents
+- **SubagentStart / SubagentStop** - Injects TappsMCP awareness into spawned subagents
+- **SessionEnd / PostToolUseFailure / UserPromptSubmit** (high only) - End-of-session capture, tool-failure logging, and per-prompt pipeline reminders
 
 **Cursor** (`.cursor/hooks/`): 3 hook scripts:
 - **beforeMCPExecution** - Logs MCP tool invocations for observability
@@ -205,21 +206,28 @@ When `tapps_init` generates platform-specific files, it also creates **hooks**, 
 
 ### Subagents (auto-generated)
 
-Three agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
+Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 - **tapps-reviewer** (sonnet) - Reviews code quality and runs security scans after edits
-- **tapps-researcher** (haiku) - Looks up documentation and consults domain experts
-- **tapps-validator** (sonnet) - Runs pre-completion validation on all changed files
+- **tapps-researcher** (sonnet) - Looks up documentation and researches best practices
+- **tapps-validator** (haiku) - Runs pre-completion validation on all changed files
+- **tapps-review-fixer** (sonnet, isolated worktree) - Combined score-fix-validate pass; designed for parallel multi-file pipelines
 
 ### Skills (auto-generated)
 
-Twelve SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
+Thirteen SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
 - **tapps-score** - Score a Python file across 7 quality categories
 - **tapps-gate** - Run a quality gate check and report pass/fail
 - **tapps-validate** - Validate all changed files before declaring work complete
+- **tapps-finish-task** - End-of-task pipeline: validate_changed + checklist + optional memory save
 - **tapps-review-pipeline** - Orchestrate a parallel review-fix-validate pipeline
-- **tapps-research** - Research a technical question using domain experts and docs
+- **tapps-research** - Look up library documentation and research best practices
 - **tapps-security** - Run a comprehensive security audit with vulnerability scanning
-- **tapps-memory** - Manage shared project memory for cross-session knowledge
+- **tapps-memory** - Manage shared project memory (42 actions, cross-session)
+- **tapps-report** - Generate quality reports across changed Python files
+- **tapps-tool-reference** - Full per-tool reference and when-to-use guidance
+- **tapps-init** - Bootstrap TappsMCP scaffolding in a project
+- **tapps-engagement** - Switch enforcement intensity (high/medium/low)
+- **tapps-apply-files** - Apply content-return file operations (Docker fallback)
 
 ### Agent Teams (opt-in, Claude Code only)
 

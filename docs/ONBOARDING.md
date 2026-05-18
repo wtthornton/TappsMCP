@@ -93,13 +93,13 @@ uv sync --all-packages
 packages/
   tapps-core/     # Shared library (config, security, logging, knowledge)
                   #   memory/ is a re-export shim to tapps-brain
-  tapps-mcp/      # Code quality MCP server (30 tools)
+  tapps-mcp/      # Code quality MCP server (32 tools)
   docs-mcp/       # Documentation MCP server (38 tools)
 ```
 
 **Dependency graph:**
 ```
-tapps-core (library)  <--  tapps-mcp (30 tools)
+tapps-core (library)  <--  tapps-mcp (32 tools)
                       <--  docs-mcp  (38 tools)
 ```
 

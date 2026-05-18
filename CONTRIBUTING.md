@@ -29,10 +29,10 @@ This is a **uv workspace monorepo** with three packages:
 | Package | Path | Purpose |
 |---|---|---|
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (32 tools) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (38 tools) |
 
-Together, **tapps-mcp** + **docs-mcp** expose **68** deterministic MCP tools. `tapps-mcp doctor` reports resolved memory pipeline flags for the project under test.
+Together, **tapps-mcp** + **docs-mcp** expose **70** deterministic MCP tools. `tapps-mcp doctor` reports resolved memory pipeline flags for the project under test.
 
 ## Running Tests
 

@@ -4,7 +4,7 @@
 
 **A quality and documentation toolset for AI coding assistants.**
 
-Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs **68 deterministic tools** for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and shared memory.
+Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs **70 deterministic tools** for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and shared memory.
 
 [![CI](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -12,7 +12,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/tests-6%2C900%2B_passing-brightgreen.svg)](#development)
 [![Tools](https://img.shields.io/badge/MCP_tools-68-blue.svg)](#tools-reference)
-[![Version](https://img.shields.io/badge/version-3.10.10-informational.svg)](#)
+[![Version](https://img.shields.io/badge/version-3.10.13-informational.svg)](#)
 
 **Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
 
@@ -24,7 +24,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 ## Overview
 
-**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **68 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
+**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **70 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
 ### What's new in v3.10
 
@@ -46,20 +46,20 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 |---|---|---|
 | **tapps-brain** | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). External repo — see [tapps-brain](https://github.com/wtthornton/tapps-brain) for the canonical storage/retrieval/federation docs. | 0 (library; brain_* MCP tools ship in the service) |
 | **tapps-core** | Shared infrastructure (config, security, logging, knowledge, metrics, adaptive) | 0 (library) |
-| **tapps-mcp** | Code quality MCP server (scoring, gates, tools, validation) | 30 |
+| **tapps-mcp** | Code quality MCP server (scoring, gates, tools, validation) | 32 |
 | **docs-mcp** | Documentation generation and maintenance MCP server | 38 |
 
 Install is from the local checkout (`uv tool install -e packages/tapps-mcp`); the packages are not published to PyPI. See [Install](#install).
 
 ```
-tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (30 tools)
+tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (32 tools)
                                                           <──  docs-mcp  (38 tools)
-                                                                      = 68 MCP tools
+                                                                      = 70 MCP tools
 ```
 
 ### Key highlights
 
-- **68 deterministic MCP tools** (30 TappsMCP + 38 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
+- **70 deterministic MCP tools** (32 TappsMCP + 38 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Documentation lookup** via Context7 and LlmsTxt providers with local caching
 - **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP and exposes it through `tapps_memory` (42 actions, including a knowledge graph, batch ops, and feedback flywheel added in tapps-brain 3.17). Retrieval, decay, consolidation, and federation internals are documented in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain).
@@ -437,7 +437,7 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 | Option | Description |
 |--------|-------------|
 | `--host claude-code \| cursor \| vscode \| auto` | Target MCP client (default: auto-detect). |
-| `--scope user \| project` | Config scope for Claude Code: `user` writes to `~/.claude.json`, `project` writes to `.mcp.json` (default: user). |
+| `--scope user \| project` | Config scope for Claude Code: `project` writes to `.mcp.json` in the project root (default), `user` writes to `~/.claude.json`. |
 | `--engagement-level high \| medium \| low` | LLM engagement level for AGENTS.md and rules. **high** = MUST/REQUIRED language; **low** = optional (default: medium). |
 | `--force` | Overwrite existing config without prompting. |
 | `--check` | Verify only; no writes. Returns pass/fail for each generated file. |
@@ -449,6 +449,7 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 | `--with-context7 KEY` | Write `TAPPS_MCP_CONTEXT7_API_KEY` to the env block (uses `${VAR}` interpolation). Pass `prompt` to be asked interactively. |
 | `--uv` / `--no-uv` | Force or disable `uv run` style MCP config (default: auto-detect from `uv.lock` + `pyproject.toml`). |
 | `--uv-extra NAME` | Optional-dependency group for `uv run --extra <name>` (default: auto-detect). |
+| `--allow-package-init` | Allow init when `--project-root` resolves to the tapps-mcp package directory itself. |
 
 **What `tapps-mcp init` creates:**
 
@@ -470,19 +471,16 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 
 **What `tapps_init` does (MCP tool):**
 
-The MCP tool version has all CLI options plus additional parameters for fine-grained control:
+The MCP tool exposes a richer parameter surface than the CLI (which auto-fills several from defaults / wizard prompts). The project root comes from the server's configuration, not a tool argument.
 
 | Parameter | Type | Default | Purpose |
 |-----------|------|---------|---------|
 | `platform` | str | `""` | Target platform: `"claude"`, `"cursor"`, `"vscode"`, or `""` for auto-detect. |
-| `project_root` | str | `"."` | Project root directory. |
-| `check` | bool | `false` | Verify only; no writes. |
-| `force` | bool | `false` | Overwrite existing config without prompting. |
-| `scope` | str | `"project"` | Config scope: `"user"` or `"project"`. |
-| `rules` | bool | `true` | Generate platform rule files. |
 | `dry_run` | bool | `false` | Preview without writing. |
-| `engagement_level` | str | `null` | Override LLM engagement level. |
+| `verify_only` | bool | `false` | Check which external checkers are installed without bootstrapping. |
+| `verify_server` | bool | `true` | Sanity-check the MCP server can start before declaring success. |
 | `minimal` | bool | `false` | Minimal init: MCP config + AGENTS.md only (faster, ~5-15s vs 10-35s). |
+| `mcp_config` | bool | `false` | Write MCP config file only (no other files). |
 | `create_handoff` | bool | `true` | Create docs/TAPPS_HANDOFF.md. |
 | `create_runlog` | bool | `true` | Create docs/TAPPS_RUNLOG.md. |
 | `create_agents_md` | bool | `true` | Create AGENTS.md. |
@@ -490,15 +488,25 @@ The MCP tool version has all CLI options plus additional parameters for fine-gra
 | `overwrite_platform_rules` | bool | `false` | Overwrite existing platform rules. |
 | `overwrite_agents_md` | bool | `false` | Overwrite existing AGENTS.md. |
 | `overwrite_tech_stack_md` | bool | `false` | Overwrite existing TECH_STACK.md. |
+| `llm_engagement_level` | str \| null | `null` | Override LLM engagement level (`"high"` / `"medium"` / `"low"`); when unset, the wizard or `.tapps-mcp.yaml` decides. |
 | `agent_teams` | bool | `false` | Generate Agent Teams hooks (Claude Code only). |
-| `warm_cache_from_tech_stack` | bool | `true` | Pre-fetch docs for detected libraries. |
-| `warm_expert_rag_from_tech_stack` | bool | `true` | Pre-build expert RAG indices for relevant domains. |
+| `memory_capture` | bool | `false` | Wire the Stop-hook memory-capture script. |
+| `memory_auto_capture` | bool | `false` | Wire the auto-capture Stop hook (durable-fact extraction). |
+| `memory_auto_recall` | bool | `false` | Wire the auto-recall pre-prompt hook. |
+| `destructive_guard` | bool \| null | `null` | Install the PreToolUse Bash gate; default follows engagement level. |
+| `linear_enforce_gate` | bool \| null | `null` | Install the PreToolUse `save_issue` gate; default follows engagement level. |
+| `linear_enforce_cache_gate` | str \| null | `null` | Cache-first Linear-list mode: `"off"` / `"warn"` / `"block"`; default follows engagement level. |
+| `install_git_hooks` | bool \| null | `null` | Install `.githooks/pre-commit` + set `core.hooksPath`. |
+| `linear_sdlc` | bool | `false` | Generate Linear SDLC scaffolding (epic/story templates). |
+| `linear_issue_prefix` | str | `"TAP"` | Issue-key prefix used by SDLC scaffolding. |
+| `linear_team_id` | str | `""` | Linear team UUID to scope SDLC scaffolding. |
+| `linear_project_id` | str | `""` | Linear project UUID to scope SDLC scaffolding. |
+| `warm_cache_from_tech_stack` | bool | `false` | Pre-fetch docs for detected libraries. |
+| `warm_expert_rag_from_tech_stack` | bool | `false` | Pre-build expert RAG indices for relevant domains. |
 | `install_missing_checkers` | bool | `false` | Auto-install missing ruff/mypy/bandit/radon. |
 | `scaffold_experts` | bool | `false` | Generate business expert scaffolding. |
 | `include_karpathy` | bool | `true` | Append the vendored [Karpathy behavioral guidelines](https://github.com/forrestchang/andrej-karpathy-skills) (MIT) to AGENTS.md and CLAUDE.md between idempotent BEGIN/END markers — content outside the markers is preserved. Both files are append/update only, never replaced. Set to `false` to opt out. `tapps_upgrade` refreshes the block when the vendored SHA changes; `tapps_doctor` reports `ok`/`stale`/`missing` per file. |
-| `mcp_config` | bool | `false` | Write MCP config file only (no other files). |
 | `output_mode` | str | `"auto"` | `"auto"` (write or return), `"content_return"` (always return file content), `"direct_write"` (always write). |
-| `verify_only` | bool | `false` | Check which external checkers are installed. |
 
 **Settings notes:**
 - `.claude/settings.json` (Claude Code): Auto-populated with denyList patterns (`Read(**/__pycache__/**)`, `Read(.venv/**)`, `Read(**/*.egg-info/**)`) to prevent reads of build artifacts, and `BASH_MAX_OUTPUT_LENGTH: 150000` to cap verbose output.
@@ -1071,7 +1079,7 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(30 tools)     (38 tools)
+(32 tools)     (38 tools)
 ```
 
 **[tapps-brain](https://github.com/wtthornton/tapps-brain)** is the standalone memory service extracted from tapps-core. It runs as a Dockerized Postgres-backed service that TappsMCP clients reach over HTTP at `localhost:8080`. Storage engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC internals all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) and its README/CHANGELOG — refer there for the authoritative description so this page doesn't drift. tapps-brain has its own release cycle and test suite.
@@ -1165,7 +1173,7 @@ packages/
 │       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export
 │       └── adaptive/                  # Adaptive scoring, expert voting, weight distribution
 │
-├── tapps-mcp/                         # Code quality MCP server (30 tools)
+├── tapps-mcp/                         # Code quality MCP server (32 tools)
 │   └── src/tapps_mcp/
 │       ├── server.py, cli.py          # Entry points and MCP server
 │       ├── server_*.py                # Tool modules (scoring, pipeline, metrics, memory, analysis)

@@ -13,7 +13,7 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(30 tools)     (38 tools)
+(32 tools)     (38 tools)
 ```
 
 **tapps-brain** is the standalone memory service extracted from tapps-core. It runs as a Dockerized PostgreSQL-backed service. tapps-mcp accesses it through `BrainBridge`, which supports two transports — **in-process** (default; see [ADR-0001](adr/0001-in-process-agentbrain-via-brainbridge.md)) and **HTTP** (selected automatically when `memory.brain_http_url` is set in `.tapps-mcp.yaml`, e.g. `http://localhost:8080`). Both modes share the same circuit-breaker / offline-queue / version-floor logic. Persistence engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) — refer there for the authoritative description. tapps-brain has its own repository, release cycle, and test suite.
@@ -29,23 +29,23 @@ The MCP server is split across ten files (server.py + 9 modules) sharing the sam
 - **`server.py`** -- Creates the `FastMCP("TappsMCP")` instance and 5 core tools (`tapps_server_info`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_validate_config`, `tapps_checklist`). Imports the other modules which register their tools/resources on the shared `mcp` object.
 - **`server_scoring_tools.py`** -- `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** -- `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`, `tapps_pipeline`, `tapps_decompose`
-- **`server_metrics_tools.py`** -- `tapps_dashboard`, `tapps_stats`, `tapps_feedback`. (`tapps_research` and `tapps_consult_expert` are deprecation stubs that return `TOOL_DEPRECATED`; they are kept in the registry for back-compat but are not counted toward the active tool surface.)
+- **`server_metrics_tools.py`** -- `tapps_dashboard`, `tapps_stats`, `tapps_feedback`
 - **`server_memory_tools.py`** -- `tapps_memory` (42 actions)
-- **`server_analysis_tools.py`** -- `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`
-- **`server_linear_tools.py`** -- `tapps_linear_snapshot_get`, `tapps_linear_snapshot_put`, `tapps_linear_snapshot_invalidate` (cache-first Linear read path; see [`.claude/rules/linear-standards.md`](../.claude/rules/linear-standards.md))
+- **`server_analysis_tools.py`** -- `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`, `tapps_audit_campaign`
+- **`server_linear_tools.py`** -- `tapps_linear_snapshot_get`, `tapps_linear_snapshot_put`, `tapps_linear_snapshot_invalidate`, `tapps_linear_count` (cache-first Linear read path; see [`.claude/rules/linear-standards.md`](../.claude/rules/linear-standards.md))
 - **`server_release_tools.py`** -- `tapps_release_update` (builds release-update payload for the `linear-release-update` skill)
 - **`server_resources.py`** -- MCP resources (knowledge, config) and prompts (pipeline, workflow)
 - **`server_helpers.py`** -- Shared utilities: `emit_ctx_info()`, response builders, singleton caches
 
 ## Mode-scoped server registration (TAP-1084)
 
-`tapps-mcp` exposes its 30 tools through a single binary registered three times in `.mcp.json` under different names, each scoped to a tool preset. The MCP client sees these as three "servers"; under the hood it's one `FastMCP("TappsMCP")` instance whose `_register_tool_modules()` filters by the `TAPPS_MCP_TOOL_PRESET` env var that the CLI sets from `--mode`.
+`tapps-mcp` exposes its 32 tools through a single binary registered three times in `.mcp.json` under different names, each scoped to a tool preset. The MCP client sees these as three "servers"; under the hood it's one `FastMCP("TappsMCP")` instance whose `_register_tool_modules()` filters by the `TAPPS_MCP_TOOL_PRESET` env var that the CLI sets from `--mode`.
 
 | `.mcp.json` name | CLI invocation | Preset | Tool count | Purpose |
 |---|---|---|---|---|
-| `tapps-mcp` | `serve` (default `--mode all`) | full | 30 | Canonical entry — backward-compatible, all tools registered |
-| `tapps-quality` | `serve --mode quality` | `TAPPS_TOOL_PRESET_QUALITY` | 14 | Coding-session tools only (scoring, gate, security, validate, memory, lookup_docs); reduces tool-list overhead during edit-loop work |
-| `tapps-admin` | `serve --mode admin` | `TAPPS_TOOL_PRESET_ADMIN` | 12 | Setup/troubleshooting tools (init, upgrade, doctor, dashboard, stats, decompose) |
+| `tapps-mcp` | `serve` (default `--mode all`) | full | 32 | Canonical entry — all tools registered (includes Linear cache + release-update) |
+| `tapps-quality` | `serve --mode quality` | `TAPPS_TOOL_PRESET_QUALITY` | 15 | Coding-session tools (scoring, gate, quick_check, validate_changed, security, memory, lookup_docs, dead_code, impact_analysis, validate_config, dependency_scan, dependency_graph, audit_campaign); reduces tool-list overhead during edit-loop work |
+| `tapps-admin` | `serve --mode admin` | `TAPPS_TOOL_PRESET_ADMIN` | 12 | Setup/troubleshooting tools (init, upgrade, doctor, server_info, set_engagement_level, dashboard, stats, feedback, report, pipeline, decompose, session_notes) |
 
 **Key contract**: identical tool names across servers refer to identical implementations — there is no semantic split between `mcp__tapps-mcp__tapps_lookup_docs` and `mcp__tapps-quality__tapps_lookup_docs`. The mode pattern is purely about which tools the client sees in its tool list, not what those tools do. Calling either name routes to the same handler.
 

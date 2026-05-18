@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## What is TappsMCP?
 
-TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs and AI coding assistants. It scores Python files, runs security scans, enforces quality gates, looks up library docs, and validates configs -- all via structured MCP tool calls (30 tools). Any MCP-capable client (Claude Code, Cursor, VS Code Copilot) can use it. If you are a consuming project, see [AGENTS.md](AGENTS.md) instead.
+TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs and AI coding assistants. It scores Python files, runs security scans, enforces quality gates, looks up library docs, and validates configs -- all via structured MCP tool calls (32 tools). Any MCP-capable client (Claude Code, Cursor, VS Code Copilot) can use it. If you are a consuming project, see [AGENTS.md](AGENTS.md) instead.
 
 ## Repository structure
 
@@ -14,7 +14,7 @@ This is a **uv workspace monorepo** with three packages plus an external depende
 |---|---|---|
 | **tapps-brain** | [github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain) | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). Accessed from tapps-mcp via `BrainBridge` and exposed through `tapps_memory`. See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for storage internals, retrieval, and operational docs — treat that as the source of truth. |
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, metrics, adaptive) |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (30 tools) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (32 tools) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (38 tools) |
 
 tapps-core's `memory/` modules are re-export shims delegating to tapps-brain (except `injection.py` which is a bridge adapter). tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
@@ -102,7 +102,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Ruff RUF012**: Mutable class-level attributes need `ClassVar` annotation.
 - **Windows testing**: Use `python -c "import time; time.sleep(N)"` for timeout tests -- Git Bash intercepts `cmd /c timeout`.
 - **Patching lazy imports**: Some imports happen inside tool handlers from `tapps_core`. Patch at source modules, not `tapps_mcp.server`.
-- **tapps-brain version pin**: see [ADR-0002](docs/adr/0002-pin-tapps-brain-version-floor-at-372.md) and [ADR-0001](docs/adr/0001-in-process-agentbrain-via-brainbridge.md) (in-process AgentBrain).
+- **tapps-brain version pin**: the floor is `>=3.18.0,<4` per [ADR-0010](docs/adr/0010-pin-tapps-brain-version-floor-at-3180.md) (supersedes [ADR-0009](docs/adr/0009-pin-tapps-brain-version-floor-at-3170.md) which superseded [ADR-0002](docs/adr/0002-pin-tapps-brain-version-floor-at-372.md)); the consuming repo pins by release tag per [ADR-0011](docs/adr/0011-pin-tapps-brain-by-tag.md). Transport selection is documented in [ADR-0001](docs/adr/0001-in-process-agentbrain-via-brainbridge.md) (in-process default; HTTP when `memory.brain_http_url` is set).
 - **MCP server zombies**: see [ADR-0005](docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md). Do not remove the cleanup block from `.claude/hooks/tapps-session-start.sh`.
 - **brain auth 401/403 (TAP-1082)**: `tapps_session_start` returns a hard error with `code: brain_auth_failed` when the tapps-brain auth probe returns 401 or 403, instead of silently degrading. Set `TAPPS_BRAIN_AUTH_TOKEN` in your env or `.mcp.json` to fix. For offline / no-brain workflows, set `memory.tolerate_brain_auth_failure: true` in `.tapps-mcp.yaml` to keep the old soft-degraded behavior.
 
