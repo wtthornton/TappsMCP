@@ -15,6 +15,13 @@ fresh clone to activate it (sets `core.hooksPath=.githooks`). For genuine
 emergencies, bypass with `TAPPS_SKIP_PREPUSH=1 git push` — bypasses are
 logged to `.tapps-mcp/.bypass-log.jsonl`. Do not bypass for routine work; if
 the suite is red, fix it or pause.
+
+The post-merge auto-sync hook (`.githooks/post-merge`) runs `uv sync
+--all-packages` after any merge / pull that touches `pyproject.toml`,
+`packages/*/pyproject.toml`, or `uv.lock` — so the project venv stays in
+lockstep with the merged tree. When none of those files changed, the hook
+exits in <1s. Bypass with `TAPPS_SKIP_POSTMERGE=1` (same `.bypass-log.jsonl`).
+Same install path as the pre-push gate (`scripts/install-git-hooks.sh`).
 - Still ask before destructive ops (force-push, `reset --hard`) — "no PRs" is a workflow preference, not a green light to skip the destructive-op confirmation rule.
 - Linear writes (epics, stories, comments) are unaffected — those go through the `linear-issue` skill as usual.
 

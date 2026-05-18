@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`feat(githooks): post-merge auto-runs uv sync --all-packages` ([TAP-2130](https://linear.app/tappscodingagents/issue/TAP-2130)).** New [`.githooks/post-merge`](.githooks/post-merge) script runs `uv sync --all-packages` after any merge / pull that touches `pyproject.toml`, `packages/*/pyproject.toml`, or `uv.lock`. Keeps the project `.venv` in lockstep with the merged tree without a manual sync step. When none of the dependency files changed, exits in <1s (no-op). Bypass via `TAPPS_SKIP_POSTMERGE=1`; logged to `.tapps-mcp/.bypass-log.jsonl` parallel to the existing pre-push gate's bypass pattern. `scripts/install-git-hooks.sh` already chmod +x's everything under `.githooks/`, so no install-script change required. Test coverage: [`test_post_merge_hook.py`](packages/tapps-mcp/tests/unit/test_post_merge_hook.py) — 8 assertions including a subprocess smoke test for the bypass path.
+
 ### Changed
 
 - **`chore(pyproject): pin tapps-brain by tag, not SHA` ([TAP-2132](https://linear.app/tappscodingagents/issue/TAP-2132)).** Swap `rev = "afb9fbe05f8..."` for `tag = "v3.18.0"` in `[tool.uv.sources]` ([pyproject.toml:11](pyproject.toml#L11)). Resolved artifact is byte-identical — `git rev-list -n 1 v3.18.0` in the upstream tapps-brain repo maps to the same commit SHA the previous pin specified. `uv.lock` regenerated; it still records the resolved SHA (`#afb9fbe05f8...`), preserving the commit-level determinism ADR-0010 originally cited as the SHA-pin justification. ADR-0011 documents the supersede and addresses ADR-0010's "Alternatives considered" rejection rationale directly. Version floor (`tapps-brain>=3.18.0,<4` in `packages/tapps-core/pyproject.toml`) and `_BRAIN_VERSION_FLOOR = "3.18.0"` in `brain_bridge.py:68` are unchanged.

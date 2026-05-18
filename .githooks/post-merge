@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# .githooks/post-merge
+#
+# Tapps-mcp post-merge auto-sync.
+#
+# Why this exists
+# ---------------
+# This repo's workflow is "commit directly to master, no feature branches"
+# (see .claude/rules/repo-workflow.md). After ``git pull`` brings in a
+# tapps-core or dependency bump, the .venv only refreshes if someone
+# remembers ``uv sync``. Forgetting means tests run against stale code --
+# a silent gap that accumulates across pulls until tests start failing
+# for reasons that have nothing to do with the change you're working on.
+#
+# What it does
+# ------------
+# After any merge that touches pyproject.toml, packages/*/pyproject.toml,
+# or uv.lock, runs ``uv sync --all-packages`` to bring the venv in lockstep
+# with the new tree. If those files didn't change, exits in <1s.
+#
+# Bypass
+# ------
+# Set TAPPS_SKIP_POSTMERGE=1 to skip. Bypasses are logged to
+# .tapps-mcp/.bypass-log.jsonl, same as the pre-push gate.
+#
+# Install
+# -------
+# scripts/install-git-hooks.sh chmod +x's everything under .githooks/, so
+# this hook is picked up automatically once core.hooksPath = .githooks.
+
+set -euo pipefail
+
+if [[ -n "${TAPPS_SKIP_POSTMERGE:-}" ]]; then
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+  log_dir=".tapps-mcp"
+  mkdir -p "$log_dir" 2>/dev/null || true
+  printf '{"ts":"%s","commit":"%s","reason":"TAPPS_SKIP_POSTMERGE=%s"}\n' \
+    "$ts" "$sha" "${TAPPS_SKIP_POSTMERGE}" \
+    >> "$log_dir/.bypass-log.jsonl" 2>/dev/null || true
+  echo "[post-merge] TAPPS_SKIP_POSTMERGE set; skipping sync. Logged to $log_dir/.bypass-log.jsonl" >&2
+  exit 0
+fi
+
+# Detect whether the merge touched dependency-relevant files. If nothing
+# changed, no sync is needed -- saves ~10s on every doc-only or src-only pull.
+# ORIG_HEAD is the pre-merge tip; HEAD is post-merge. Both exist when git
+# invokes this hook from a merge or pull.
+changed_files="$(git diff --name-only ORIG_HEAD HEAD 2>/dev/null || true)"
+
+needs_sync=0
+while IFS= read -r f; do
+  [[ -z "$f" ]] && continue
+  case "$f" in
+    pyproject.toml|packages/*/pyproject.toml|uv.lock)
+      needs_sync=1
+      break
+      ;;
+  esac
+done <<< "$changed_files"
+
+if [[ "$needs_sync" -eq 0 ]]; then
+  exit 0
+fi
+
+echo "[post-merge] pyproject.toml / uv.lock changed -- running uv sync --all-packages" >&2
+echo "[post-merge] Bypass with TAPPS_SKIP_POSTMERGE=1 (logged)." >&2
+
+if ! uv sync --all-packages 2>&1 | tail -5; then
+  echo "" >&2
+  echo "[post-merge] FAILED. Your .venv is now stale relative to the merged tree." >&2
+  echo "[post-merge] Investigate: uv sync --all-packages" >&2
+  exit 1
+fi
+
+echo "[post-merge] OK." >&2
+exit 0
