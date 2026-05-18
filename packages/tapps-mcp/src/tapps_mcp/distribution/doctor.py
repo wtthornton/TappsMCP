@@ -1321,19 +1321,22 @@ def check_brain_http_auth(root: Path) -> CheckResult:
 
 
 def check_brain_profile(root: Path) -> CheckResult:
-    """TAP-1629: probe the tapps-brain capability profile via tools/list.
+    """TAP-1629 / TAP-2100: probe the tapps-brain capability profile via tools/list.
 
     Surfaces (a) the declared ``X-Brain-Profile`` header, (b) the count of
-    tools the active profile exposes, and (c) any tools the HTTP bridge
-    actually invokes that are missing from the active profile. A mismatch
-    means the bridge will get :class:`ProfileMismatchError` /
-    :class:`ToolNotInProfileError` on those calls — e.g. switching to
-    ``coder`` profile hides the seven memory-write tools used by
-    ``tapps_memory(action=save)``.
+    tools the active profile's eager ``tools/list`` returns, and (c) any
+    tools the HTTP bridge invokes that are missing from that catalog.
 
-    Skipped (passing) when HTTP mode is not active. Failures are reported
-    as warnings rather than blocking — the bridge has degraded paths for
-    the gated tools that need them (gc, consolidate).
+    Under tapps-brain v3.19.0+ (TAP-1985), the ``full`` and ``operator``
+    profiles default to an 8-tool eager catalog with the remaining tools
+    deferred-loaded — these are still callable via ``tools/call`` but
+    absent from ``tools/list``. After TAP-2100 the bridge no longer
+    preflight-rejects on this list, so missing entries are diagnostic, not
+    runtime-blocking. A genuine profile mismatch (e.g. switching to
+    ``coder`` on a brain that hides ``memory_save``) still surfaces as
+    :class:`ToolNotInProfileError` on the first call.
+
+    Skipped (passing) when HTTP mode is not active.
     """
     import os
 
@@ -1442,10 +1445,12 @@ def check_brain_profile(root: Path) -> CheckResult:
     return CheckResult(
         "tapps-brain capability profile",
         False,
-        f"profile={declared} hides {len(gated_used)} bridge tool(s): {', '.join(gated_used)}",
-        "Set memory.brain_profile (or TAPPS_BRAIN_PROFILE) to a profile that exposes the "
-        "tools the bridge needs (e.g. 'full' or 'operator'), or adjust the brain server's "
-        "default profile.",
+        f"profile={declared} hides {len(gated_used)} bridge tool(s) from eager tools/list: "
+        f"{', '.join(gated_used)}",
+        "On tapps-brain v3.19.0+ this is expected for the 'full'/'operator' profiles — "
+        "deferred tools remain callable via tools/call (TAP-1985). If memory operations are "
+        "actually failing, set memory.brain_profile (or TAPPS_BRAIN_PROFILE) to a profile "
+        "that exposes the tools the bridge needs, or adjust the brain's default profile.",
     )
 
 

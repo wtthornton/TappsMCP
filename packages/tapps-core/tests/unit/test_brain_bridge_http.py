@@ -1884,34 +1884,57 @@ class TestNegotiateProfile:
         assert bridge._negotiation_error == "tools_list_empty"
 
 
-class TestProfileMismatchShortCircuit:
-    """``_do_mcp_post`` short-circuits gated bridge tools with the typed error."""
+class TestPreflightRemoved:
+    """TAP-2100: ``_do_mcp_post`` no longer short-circuits on ``_exposed_tools``.
+
+    Under tapps-brain v3.19.0+ (TAP-1985), the ``full``/``operator`` profiles
+    default to an 8-tool eager ``tools/list``; the remaining 51 tools are
+    deferred-loaded and remain callable via ``tools/call``. The bridge used
+    to preflight-reject anything missing from ``_exposed_tools`` — that
+    behaviour produced 22 false rejections out of 27 ``_BRIDGE_USED_TOOLS``
+    under the new catalog shape and has been removed. The wire is now
+    authoritative for the gating decision.
+    """
 
     @pytest.mark.asyncio
-    async def test_gated_bridge_tool_raises_profile_mismatch_before_wire(self) -> None:
-        from tapps_core.brain_bridge import ProfileMismatchError
+    async def test_gated_bridge_tool_reaches_wire_and_surfaces_wire_error(self) -> None:
+        """A bridge tool absent from ``_exposed_tools`` still goes to the wire;
+        the brain's ``out_of_profile`` response is then translated to the
+        typed exception."""
+        from tapps_core.brain_bridge import ProfileMismatchError, ToolNotInProfileError
 
         bridge = _make_http_bridge(
             headers={"Authorization": "Bearer t", "X-Brain-Profile": "coder"}
         )
         bridge._http_client = AsyncMock()
-        # No further post() will be made — the short-circuit fires before any
-        # tools/call goes over the wire.
-        bridge._http_client.post = AsyncMock(
-            side_effect=AssertionError("post must not be called for gated tools")
+        # Brain rejects on the wire — no preflight short-circuit anymore.
+        bridge._http_client.post = _make_async_post(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32602,
+                    "message": "tool not in profile",
+                    "data": {
+                        "reason": "out_of_profile",
+                        "tool": "memory_save",
+                        "profile": "coder",
+                    },
+                },
+            }
         )
         bridge._session_id = "test-session"
         bridge._exposed_tools = frozenset(_CODER_PROFILE_TOOLS)
         bridge._negotiated = True
 
-        with pytest.raises(ProfileMismatchError) as excinfo:
+        with pytest.raises(ToolNotInProfileError) as excinfo:
             await bridge._do_mcp_post("memory_save", {"key": "k", "value": "v"})
 
+        # Not the preflight subclass — the wire was hit.
+        assert not isinstance(excinfo.value, ProfileMismatchError)
         assert excinfo.value.tool == "memory_save"
         assert excinfo.value.profile == "coder"
-        # Bridge already knew the tool would be denied — the short-circuit
-        # MUST not call out to the wire.
-        bridge._http_client.post.assert_not_called()
+        bridge._http_client.post.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_exposed_bridge_tool_passes_through(self) -> None:
@@ -1927,10 +1950,43 @@ class TestProfileMismatchShortCircuit:
         assert result == {"key": "k1", "value": "v1"}
 
     @pytest.mark.asyncio
-    async def test_unknown_tool_is_not_short_circuited(self) -> None:
-        """Tools outside ``_BRIDGE_USED_TOOLS`` are not gated client-side —
-        the wire stays authoritative for anything we have not enumerated.
-        """
+    async def test_deferred_tool_under_v3_19_0_catalog_reaches_wire(self) -> None:
+        """TAP-2100 regression: simulate the v3.19.0 ``full`` 8-tool eager
+        catalog. A deferred tool (``memory_save``) used to be preflight-
+        rejected here; now it reaches ``tools/call`` and succeeds."""
+        from tapps_core.brain_bridge import ProfileMismatchError
+
+        v3_19_0_eager_catalog = frozenset(
+            {
+                "brain_recall",
+                "brain_remember",
+                "brain_status",
+                "brain_get_neighbors",
+                "brain_explain_connection",
+                "memory_search",
+                "memory_find_related",
+                "hive_search",
+            }
+        )
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(_mcp_response({"key": "k", "value": "v"}))
+        bridge._session_id = "test-session"
+        bridge._exposed_tools = v3_19_0_eager_catalog
+        bridge._negotiated = True
+
+        # No raise — would have raised ProfileMismatchError before TAP-2100.
+        result = await bridge._do_mcp_post("memory_save", {"key": "k", "value": "v"})
+        assert result == {"key": "k", "value": "v"}
+        bridge._http_client.post.assert_called_once()
+        # And ProfileMismatchError still exists as a class (preflight removed,
+        # not the type) — callers that ``except`` it stay compiling.
+        assert ProfileMismatchError is not None
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_reaches_wire(self) -> None:
+        """Tools outside ``_BRIDGE_USED_TOOLS`` were never gated client-side;
+        verify that the wire path still produces the expected result."""
         bridge = _make_http_bridge()
         bridge._http_client = AsyncMock()
         bridge._http_client.post = _make_async_post(_mcp_response({"ok": True}))
@@ -1938,9 +1994,6 @@ class TestProfileMismatchShortCircuit:
         bridge._exposed_tools = frozenset({"only_other_tool"})
         bridge._negotiated = True
 
-        # ``maintenance_gc`` is invoked by HttpBrainBridge.gc() but is NOT in
-        # _BRIDGE_USED_TOOLS — it has a degraded fallback. The short-circuit
-        # must not fire for it.
         result = await bridge._do_mcp_post("maintenance_gc", {})
 
         assert result == {"ok": True}

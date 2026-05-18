@@ -305,14 +305,17 @@ async def test_negotiation_against_full_profile_exposes_bridge_tools(
 
 
 @pytest.mark.asyncio
-async def test_negotiation_against_coder_profile_short_circuits_gated_tools(
+async def test_negotiation_against_coder_profile_surfaces_wire_denial(
     brain_url: str, auth_token: str, project_id: str
 ) -> None:
-    """TAP-1629 gated fallback: under ``coder``, ``memory_save`` is hidden
-    and the bridge must raise :class:`ProfileMismatchError` (a typed
-    ``ToolNotInProfileError`` subclass) BEFORE the wire round-trip.
+    """TAP-2100: under ``coder``, ``memory_save`` is hidden and the brain
+    rejects it on the wire with ``-32602 out_of_profile``. The bridge no
+    longer preflight-rejects — the wire is authoritative for the gating
+    decision (the preflight produced false rejections under v3.19.0's
+    deferred-loading catalog and was removed). ``profile_status`` still
+    reports the diagnostic mismatch.
     """
-    from tapps_core.brain_bridge import ProfileMismatchError, ToolNotInProfileError
+    from tapps_core.brain_bridge import ToolNotInProfileError
 
     skip_reason = _check_profile_loaded_lenient(brain_url, auth_token, project_id, "coder")
     if skip_reason:
@@ -328,20 +331,19 @@ async def test_negotiation_against_coder_profile_short_circuits_gated_tools(
         with pytest.raises(ToolNotInProfileError) as excinfo:
             await bridge._http_mcp_call(
                 "memory_save",
-                {"key": "tap-1629-should-not-write", "value": "blocked"},
+                {"key": "tap-2100-should-not-write", "value": "blocked"},
             )
     finally:
         bridge.close()
 
     exc = excinfo.value
-    # Specifically the preflight subclass — the wire was never hit because
-    # the bridge already knew the tool was gated.
-    assert isinstance(exc, ProfileMismatchError)
     assert exc.tool == "memory_save"
     assert exc.profile == "coder"
     assert isinstance(exc.data, dict)
-    assert exc.data.get("transport") == "client_preflight"
-    # profile_status reports the same gated tool.
+    # Wire-origin denial — NOT the client_preflight transport tag (that
+    # only came from the now-removed preflight short-circuit).
+    assert exc.data.get("transport") != "client_preflight"
+    # profile_status still reports the same gated tool for diagnostics.
     assert "memory_save" in status["gated_used_tools"]
     assert status["profile_mismatch"] is True
 

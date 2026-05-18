@@ -1477,22 +1477,17 @@ class HttpBrainBridge(BrainBridge):
         # TAP-1629: short-circuit calls to tools the negotiated profile does
         # not expose. Skips the wire round-trip and raises the same typed
         # error agents already handle (``ToolNotInProfileError`` subclass).
-        # ``_BRIDGE_USED_TOOLS`` is the guard list — we still let exotic /
-        # one-off tool names through so the wire stays authoritative for
-        # anything not in our known surface (covers brain-side additions
-        # we have not yet enumerated client-side).
-        if (
-            self._exposed_tools is not None
-            and tool_name in _BRIDGE_USED_TOOLS
-            and tool_name not in self._exposed_tools
-        ):
-            raise ProfileMismatchError(
-                f"tapps-brain tool {tool_name!r} is hidden by the active "
-                f"server profile {self._http_headers.get('X-Brain-Profile') or 'default'!r}",
-                tool=tool_name,
-                profile=self._http_headers.get("X-Brain-Profile") or None,
-                exposed_tools=self._exposed_tools,
-            )
+        # TAP-2100: preflight short-circuit removed. The brain's v3.19.0
+        # ``full``/``operator`` profiles default to an 8-tool eager
+        # ``tools/list`` (TAP-1985) — the remaining 51 tools carry
+        # ``defer_loading: true`` and are still callable via ``tools/call``,
+        # but absent from the catalog. Comparing against ``_exposed_tools``
+        # therefore produces false rejections on 22 of 27 ``_BRIDGE_USED_TOOLS``
+        # under v3.19.0+. ``_exposed_tools`` is still populated for
+        # diagnostics (``profile_status``, ``tapps doctor check_brain_profile``)
+        # but the wire is now authoritative — a genuinely gated tool still
+        # surfaces as :class:`ToolNotInProfileError` from the brain's
+        # ``-32602 INVALID_PARAMS`` response, just one round-trip later.
         extra_headers: dict[str, str] = {}
         if session_id and session_id != "__no_session__":
             extra_headers["Mcp-Session-Id"] = session_id
