@@ -25,6 +25,38 @@ Same install path as the pre-push gate (`scripts/install-git-hooks.sh`).
 - Still ask before destructive ops (force-push, `reset --hard`) — "no PRs" is a workflow preference, not a green light to skip the destructive-op confirmation rule.
 - Linear writes (epics, stories, comments) are unaffected — those go through the `linear-issue` skill as usual.
 
+## All three packages share the same version — use the unified bumper
+
+`packages/tapps-mcp`, `packages/docs-mcp`, and `packages/tapps-core` are
+released together and **must always share the same `version =` field in
+their `pyproject.toml`**. The npm wrappers (`npm/package.json`,
+`npm-docs-mcp/package.json`) and the `<!-- tapps-agents-version: X.Y.Z -->`
+stamp in `AGENTS.md` must also match. Drift between these is what
+TAP-2129 install-drift and `tapps_upgrade` assume cannot happen — fixing
+it after the fact requires re-shipping every divergent consumer.
+
+The pre-push hook (`.githooks/pre-push`) calls
+`scripts/bump-versions.py --check` and refuses to push on drift. Run
+`scripts/install-git-hooks.sh` once per fresh clone to activate it
+(same install path as the test gate). Bypass via `TAPPS_SKIP_PREPUSH=1`,
+logged to `.tapps-mcp/.bypass-log.jsonl`. Do not bypass for routine work.
+
+Always bump via the script — never edit `pyproject.toml` versions by hand:
+
+```bash
+python3 scripts/bump-versions.py --patch    # 3.10.16 -> 3.10.17
+python3 scripts/bump-versions.py --minor    # 3.10.16 -> 3.11.0
+python3 scripts/bump-versions.py --major    # 3.10.16 -> 4.0.0
+python3 scripts/bump-versions.py --sync     # re-align drifted versions
+python3 scripts/bump-versions.py --check    # CI gate (what pre-push runs)
+```
+
+The script bumps all three pyprojects, both npm `package.json` files, and
+the `AGENTS.md` stamp atomically in one commit, and refuses the bump if
+`_CANONICAL_HOOK_MANIFEST` references a phantom hook (the 79ef6e3 /
+2e2f378 root cause). `--sync` is the recovery path when something drifts
+anyway — re-aligns everything to the current max version without bumping.
+
 ## Bump the version when prompt templates change
 
 `tapps_upgrade` decides whether to refresh AGENTS.md / CLAUDE.md by comparing
