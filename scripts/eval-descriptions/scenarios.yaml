@@ -1,0 +1,314 @@
+# Tool-selection eval scenarios for tapps-mcp.
+#
+# Each scenario describes a user intent in plain language. The eval feeds
+# the prompt to a fresh `claude -p` agent with the live tapps-mcp MCP
+# tool catalog loaded (NO Bash/Edit/Write — the agent can only call MCP
+# tools). We record the FIRST MCP tool the agent calls and score against
+# `expected_tool` (exact match) or any tool in `acceptable_alternatives`.
+#
+# Design rules for new scenarios:
+#   1. Describe user intent, never name the tool.
+#      BAD:  "What tool fetches docs from Context7?"
+#      GOOD: "Before I write code using httpx's AsyncClient API, I want
+#             to check the current signatures."
+#   2. The prompt should be self-contained — the agent should not need
+#      to ask follow-up questions. If a real user would clarify, mark
+#      the scenario as `category: ambiguous` and accept more alternatives.
+#   3. Include a `rationale` so the report explains why this scenario
+#      maps to that tool — useful when the agent gets it wrong.
+#   4. Each scenario should map to a DIFFERENT tool when possible.
+#      Coverage matters more than redundancy.
+
+scenarios:
+  # ----- session bootstrap -----
+  - id: session_bootstrap_first_call
+    category: pipeline
+    prompt: |
+      I just opened this project. I want to make sure the tapps-mcp
+      pipeline knows about it before I start coding. What should I call?
+    expected_tool: mcp__tapps-mcp__tapps_session_start
+    acceptable_alternatives: []
+    rationale: |
+      tapps_session_start is the canonical first call; bootstraps server
+      info, brain auth, cache health, install-drift, pipeline progress.
+
+  # ----- lookup_docs (Context7 caching layer — the headline tool) -----
+  - id: lookup_docs_async_httpx
+    category: research
+    prompt: |
+      I'm about to write a function that uses httpx.AsyncClient. I don't
+      remember the exact signature for the timeout argument and I don't
+      want to hallucinate it.
+    expected_tool: mcp__tapps-mcp__tapps_lookup_docs
+    acceptable_alternatives: []
+    rationale: |
+      Trigger phrase in the new description: "Call this before writing
+      code that uses an external library API to avoid hallucinated
+      signatures."
+
+  - id: lookup_docs_fastapi_middleware
+    category: research
+    prompt: |
+      Need to write a FastAPI middleware that adds a request ID header.
+      Want to ground myself in the current FastAPI middleware patterns
+      before I write it.
+    expected_tool: mcp__tapps-mcp__tapps_lookup_docs
+    acceptable_alternatives: []
+    rationale: |
+      External library API + "current patterns" hits both the trigger
+      ("before writing code that uses an external library API") and the
+      anti-complacency anchor ("even when you think you know the answer").
+
+  - id: lookup_docs_pydantic_validators
+    category: research
+    prompt: |
+      Adding a Pydantic v2 model with a custom field validator. What's
+      the current API for that?
+    expected_tool: mcp__tapps-mcp__tapps_lookup_docs
+    acceptable_alternatives: []
+    rationale: |
+      Pydantic v2 syntax has changed from v1. Classic "training data may
+      be stale" case the description's anti-complacency line targets.
+
+  # ----- post-edit quality (the overlapping family) -----
+  - id: post_edit_single_file
+    category: validate
+    prompt: |
+      I just finished editing one Python file in this project — added a
+      few functions and fixed a couple lines. Lightweight check to make
+      sure I didn't introduce quality issues.
+    expected_tool: mcp__tapps-mcp__tapps_quick_check
+    acceptable_alternatives:
+      - mcp__tapps-mcp__tapps_score_file
+    rationale: |
+      Single-file post-edit verifier — quick_check is the right answer
+      per the new disambiguation ("the default per-file post-edit
+      verifier"). score_file is acceptable but lacks the gate.
+
+  - id: post_edit_multi_file
+    category: validate
+    prompt: |
+      I touched three Python files across the project in this task.
+      Before I declare it done, I want to confirm none of them regressed.
+    expected_tool: mcp__tapps-mcp__tapps_validate_changed
+    acceptable_alternatives: []
+    rationale: |
+      "Before declaring multi-file work complete" — exact trigger from
+      the new description.
+
+  - id: score_file_detail
+    category: validate
+    prompt: |
+      I want the per-category score breakdown for src/server.py — which
+      of complexity, security, maintainability, etc. is dragging it down.
+      I don't need a pass/fail right now, just the detail.
+    expected_tool: mcp__tapps-mcp__tapps_score_file
+    acceptable_alternatives: []
+    rationale: |
+      "When you need the *detail* — which category dropped — without a
+      pass/fail verdict." — verbatim trigger from the new description.
+
+  - id: quality_gate_formal_verdict
+    category: validate
+    prompt: |
+      I need the formal pass/fail verdict on src/scoring/engine.py
+      against the project's quality preset. One file, binding decision.
+    expected_tool: mcp__tapps-mcp__tapps_quality_gate
+    acceptable_alternatives:
+      - mcp__tapps-mcp__tapps_quick_check
+    rationale: |
+      Single-file formal gate — quality_gate is the explicit answer per
+      the new disambiguation. quick_check is acceptable because it also
+      runs a gate.
+
+  # ----- security -----
+  - id: security_scan_auth_code
+    category: security
+    prompt: |
+      I just added a new authentication handler in src/auth/login.py.
+      Want to make sure I didn't introduce a security issue.
+    expected_tool: mcp__tapps-mcp__tapps_security_scan
+    acceptable_alternatives:
+      - mcp__tapps-mcp__tapps_quick_check
+    rationale: |
+      "auth, payment, upload, API, or data-handling code paths" —
+      verbatim trigger from the new security_scan description.
+
+  - id: dependency_cve_scan
+    category: security
+    prompt: |
+      About to cut a release. Want to know if any of my Python
+      dependencies have unpatched CVEs.
+    expected_tool: mcp__tapps-mcp__tapps_dependency_scan
+    acceptable_alternatives: []
+    rationale: |
+      "Before any release, after upgrading any dependency" — exact
+      trigger from the new description.
+
+  # ----- analysis -----
+  - id: impact_before_refactor
+    category: analysis
+    prompt: |
+      I'm about to delete src/legacy/old_module.py. Want to know what
+      will break if I do.
+    expected_tool: mcp__tapps-mcp__tapps_impact_analysis
+    acceptable_alternatives: []
+    rationale: |
+      "Before refactoring or deleting any file" — verbatim trigger.
+
+  - id: dead_code_audit
+    category: analysis
+    prompt: |
+      Pre-release cleanup. Want to find functions and imports nobody
+      uses anywhere in the project.
+    expected_tool: mcp__tapps-mcp__tapps_dead_code
+    acceptable_alternatives: []
+    rationale: |
+      "During cleanup passes (after a refactor, before a release)" —
+      exact trigger.
+
+  - id: circular_import_triage
+    category: analysis
+    prompt: |
+      I'm getting an ImportError at startup that looks like a circular
+      import. Need to map the actual import structure.
+    expected_tool: mcp__tapps-mcp__tapps_dependency_graph
+    acceptable_alternatives: []
+    rationale: |
+      "When triaging an ImportError at startup" — exact trigger.
+
+  # ----- memory / persistence -----
+  - id: memory_recall_task_start
+    category: memory
+    prompt: |
+      Starting a non-trivial task on the brain bridge. I think we've
+      hit related issues before in past sessions. How do I check?
+    expected_tool: mcp__tapps-mcp__tapps_memory
+    acceptable_alternatives:
+      - mcp__tapps-brain__brain_recall
+      - mcp__tapps-brain__memory_search
+    rationale: |
+      "Call this with action='search' at the start of a non-trivial
+      task to surface prior learnings" — new trigger clause.
+
+  - id: memory_save_architectural_decision
+    category: memory
+    prompt: |
+      Just made an architectural decision about how to handle profile
+      gating. Want this to survive across sessions so future agents
+      see it.
+    expected_tool: mcp__tapps-mcp__tapps_memory
+    acceptable_alternatives:
+      - mcp__tapps-brain__brain_remember
+    rationale: |
+      "Call this with action='save' at the end to persist architectural
+      decisions or non-obvious patterns" — new trigger clause.
+
+  - id: session_notes_scratch
+    category: memory
+    prompt: |
+      Quick note to myself about which test file was failing — just
+      something for the rest of this session, don't need it to outlive
+      the MCP server restart.
+    expected_tool: mcp__tapps-mcp__tapps_session_notes
+    acceptable_alternatives: []
+    rationale: |
+      "Short-lived per-session notes... discarded when the MCP server
+      restarts" — exact disambiguation from the new description.
+
+  # ----- linear (cache-first reads) -----
+  - id: linear_list_open
+    category: linear
+    prompt: |
+      What's open in the TappsMCP Platform project right now?
+    expected_tool: mcp__tapps-mcp__tapps_linear_snapshot_get
+    acceptable_alternatives:
+      - mcp__tapps-mcp__tapps_linear_count
+    rationale: |
+      Multi-issue Linear read — must go through snapshot_get first per
+      the new description ("Call this FIRST for every multi-issue
+      Linear read"). linear_count is acceptable for pure counts.
+
+  - id: linear_credential_free_count
+    category: linear
+    prompt: |
+      Need a quick "how many open issues" number without burning a
+      Linear API call or hitting the credential.
+    expected_tool: mcp__tapps-mcp__tapps_linear_count
+    acceptable_alternatives: []
+    rationale: |
+      "Without making any Linear API calls — credential-free
+      monitoring" — exact trigger from the new description.
+
+  # ----- finalization -----
+  - id: checklist_before_done
+    category: pipeline
+    prompt: |
+      Validate_changed came back green. Last thing before I tell the
+      user the task is done — make sure I didn't skip any required tool
+      in the pipeline.
+    expected_tool: mcp__tapps-mcp__tapps_checklist
+    acceptable_alternatives: []
+    rationale: |
+      "The very last step before declaring work complete — after
+      tapps_validate_changed has passed" — verbatim trigger.
+
+  # ----- planning / decomposition -----
+  - id: decompose_vague_task
+    category: planning
+    prompt: |
+      User asked me to "add OAuth login to the API server, with tests
+      and docs." That's vague — I want a deterministic breakdown into
+      sized work units before I start.
+    expected_tool: mcp__tapps-mcp__tapps_decompose
+    acceptable_alternatives: []
+    rationale: |
+      "When the user gives a vague task ... and you want a deterministic
+      breakdown before starting" — verbatim trigger.
+
+  # ----- diagnostics -----
+  - id: doctor_triage_failure
+    category: diagnostics
+    prompt: |
+      My lookup_docs calls are coming back degraded. Want to know which
+      part of the install is broken — checker, brain, cache, network.
+    expected_tool: mcp__tapps-mcp__tapps_doctor
+    acceptable_alternatives: []
+    rationale: |
+      "Call this when something feels wrong (lookups returning
+      degraded, brain probes failing)" — verbatim trigger.
+
+  - id: stats_session_review
+    category: diagnostics
+    prompt: |
+      Curious what I actually ran during this session — per-tool call
+      counts and timings.
+    expected_tool: mcp__tapps-mcp__tapps_stats
+    acceptable_alternatives:
+      - mcp__tapps-mcp__tapps_dashboard
+    rationale: |
+      "What did I run this session?" — verbatim trigger from the new
+      stats description. dashboard is acceptable but heavier.
+
+  # ----- release / docs -----
+  - id: release_update_announce
+    category: release
+    prompt: |
+      Just cut v3.10.16. Need to post the release update to Linear.
+    expected_tool: mcp__tapps-mcp__tapps_release_update
+    acceptable_alternatives: []
+    rationale: |
+      "When announcing a release ('post the v1.5.0 update')" — exact
+      trigger.
+
+  - id: validate_config_dockerfile
+    category: validate
+    prompt: |
+      I just edited the project Dockerfile to switch the base image.
+      Want to check it's still well-formed and follows our base-image
+      pinning rules.
+    expected_tool: mcp__tapps-mcp__tapps_validate_config
+    acceptable_alternatives: []
+    rationale: |
+      "After editing Dockerfile, docker-compose, GitHub Actions" —
+      exact trigger.
