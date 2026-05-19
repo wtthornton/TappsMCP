@@ -446,7 +446,7 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 | `--project-root PATH` | Project root (default: current dir). |
 | `--overwrite-tech-stack` | Overwrite existing TECH_STACK.md (default: skip if present). |
 | `--with-docs-mcp` | Also register the docs-mcp server in the generated MCP config. |
-| `--with-context7 KEY` | Write `TAPPS_MCP_CONTEXT7_API_KEY` to the env block (uses `${VAR}` interpolation). Pass `prompt` to be asked interactively. |
+| `--with-context7 KEY` | Print the `export TAPPS_MCP_CONTEXT7_API_KEY=…` reminder for your shell profile. As of v3.10.15 the env-var interpolation (`${TAPPS_MCP_CONTEXT7_API_KEY}`) is always written to the `.mcp.json` env block by default, so this flag is only needed for the shell-export hint. Pass `prompt` to be asked interactively. |
 | `--uv` / `--no-uv` | Force or disable `uv run` style MCP config (default: auto-detect from `uv.lock` + `pyproject.toml`). |
 | `--uv-extra NAME` | Optional-dependency group for `uv run --extra <name>` (default: auto-detect). |
 | `--allow-package-init` | Allow init when `--project-root` resolves to the tapps-mcp package directory itself. |
